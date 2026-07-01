@@ -105,7 +105,9 @@ export const walletApi = {
     api<{ purchase: any; balance: number }>("/wallet/purchases/google-play/verify", { method: "POST", body: JSON.stringify(payload) }),
   recharge: (amount: number) => api<{ balance: number }>("/wallet/dev-recharge", { method: "POST", body: JSON.stringify({ amount }) }),
   sendGift: (roomId: string, giftId: string, receiverId: string) =>
-    api<{ giftTransaction: any }>(`/rooms/${roomId}/send-gift`, { method: "POST", body: JSON.stringify({ giftId, receiverId }) })
+    api<{ giftTransaction: any }>(`/rooms/${roomId}/send-gift`, { method: "POST", body: JSON.stringify({ giftId, receiverId }) }),
+  sendGiftDirect: (giftId: string, receiverId: string) =>
+    api<{ giftTransaction: any; message: any }>("/wallet/direct-send-gift", { method: "POST", body: JSON.stringify({ giftId, receiverId }) })
 };
 
 export const mediaApi = {
@@ -130,8 +132,25 @@ export const usersApi = {
   suggestedHosts: () => api<{ users: any[] }>("/users/hosts/suggested"),
   messages: () => api<{ messages: any[] }>("/users/messages"),
   conversation: (userId: string) => api<{ messages: any[] }>(`/users/messages/${userId}`),
+  sendMessage: (userId: string, message: string) => api<{ message: any }>(`/users/messages/${userId}`, { method: "POST", body: JSON.stringify({ message }) }),
   follow: (userId: string) => api<{ following: boolean }>(`/users/${userId}/follow`, { method: "POST" }),
   unfollow: (userId: string) => api<{ following: boolean }>(`/users/${userId}/follow`, { method: "DELETE" }),
   block: (userId: string) => api<{ blocked: boolean }>(`/users/${userId}/block`, { method: "POST" }),
-  unblock: (userId: string) => api<{ blocked: boolean }>(`/users/${userId}/block`, { method: "DELETE" })
+  unblock: (userId: string) => api<{ blocked: boolean }>(`/users/${userId}/block`, { method: "DELETE" }),
+  getBlocked: () => api<{ users: any[] }>("/users/me/blocked")
+};
+
+export const datingApi = {
+  explore: () => api<{ candidates: any[] }>("/dating/explore"),
+  like: (likedId: string, type: "LIKE" | "SUPER_LIKE" | "PASS" = "LIKE") =>
+    api<{ like: any; isMatch: boolean; match: any }>("/dating/like", {
+      method: "POST",
+      body: JSON.stringify({ likedId, type })
+    }),
+  pass: (likedId: string) =>
+    api<{ pass: any }>("/dating/pass", {
+      method: "POST",
+      body: JSON.stringify({ likedId })
+    }),
+  matches: () => api<{ matches: any[] }>("/dating/matches")
 };

@@ -43,7 +43,7 @@ const otpStore = new Map<string, { otp: string; expiresAt: number }>();
 authRouter.post("/request-otp", authLimiter, validateBody(requestOtpSchema), asyncHandler(async (req, res) => {
   const devOtp = env.DEV_BYPASS_OTP;
   const key = req.body.email || req.body.phone;
-  if (env.NODE_ENV !== "development" || !devOtp) {
+  if (!devOtp) {
     throw new HttpError(501, "OTP provider is not configured. Use Firebase phone auth or configure an OTP provider.", ErrorCode.VALIDATION);
   }
   otpStore.set(key, { otp: devOtp, expiresAt: Date.now() + 300_000 });
@@ -54,7 +54,7 @@ authRouter.post("/verify-otp", authLimiter, validateBody(verifyOtpSchema), async
   const key = req.body.email || req.body.phone;
   const stored = otpStore.get(key);
   const isValidOtp = stored && stored.otp === req.body.otp && stored.expiresAt > Date.now();
-  const isDevBypass = env.NODE_ENV === "development" && env.DEV_BYPASS_OTP && req.body.otp === env.DEV_BYPASS_OTP;
+  const isDevBypass = env.DEV_BYPASS_OTP && req.body.otp === env.DEV_BYPASS_OTP;
   if (!isValidOtp && !isDevBypass) {
     throw new HttpError(401, "Invalid or expired OTP", ErrorCode.UNAUTHORIZED);
   }

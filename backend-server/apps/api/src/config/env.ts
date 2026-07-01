@@ -5,6 +5,7 @@ const envSchema = z.object({
   NODE_ENV: z.string().default("development"),
   PORT: z.coerce.number().default(4000),
   MONGODB_URI: z.string().min(1, "MONGODB_URI is required"),
+  MONGODB_DB_NAME: z.string().min(1).default("Yugm"),
   REDIS_URL: z.string().optional(),
   JWT_SECRET: z.string().min(8).default("replace-me"),
   DEV_BYPASS_OTP: z.string().optional(),

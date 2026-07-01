@@ -8,7 +8,7 @@ import { DirectMessage } from "../models/DirectMessage.js";
 import { Follow } from "../models/Follow.js";
 import { Room } from "../models/Room.js";
 import { User } from "../models/User.js";
-import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId } from "../utils/http.js";
+import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId, sanitizeText } from "../utils/http.js";
 import { createNotification } from "../services/notifications.js";
 
 export const usersRouter = Router();
@@ -26,9 +26,17 @@ function publicUser(user: any) {
     interests: user.interests,
     languages: user.languages,
     city: user.city,
+    state: user.state,
     bio: user.bio,
+    vibeLine: user.vibeLine,
+    gender: user.gender,
+    age: user.age,
     followersCount: user.followersCount,
-    followingCount: user.followingCount
+    followingCount: user.followingCount,
+    interestedIn: user.interestedIn,
+    lookingFor: user.lookingFor,
+    datingAgeMin: user.datingAgeMin,
+    datingAgeMax: user.datingAgeMax
   };
 }
 
@@ -114,6 +122,46 @@ usersRouter.get("/messages/:userId", asyncHandler(async (req: AuthRequest, res) 
     .limit(100)
     .lean();
   sendOk(res, { messages: messages.reverse() });
+}));
+
+usersRouter.post("/messages/:userId", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.userId)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
+  const receiverId = req.params.userId;
+  if (receiverId === req.user!.id) throw new HttpError(400, "Cannot message yourself", ErrorCode.VALIDATION);
+
+  const blocked = await Block.exists({
+    $or: [
+      { blockerId: req.user!.id, blockedUserId: receiverId },
+      { blockerId: receiverId, blockedUserId: req.user!.id }
+    ]
+  });
+  if (blocked) throw new HttpError(403, "Cannot message this user", ErrorCode.FORBIDDEN);
+
+  const messageText = String(req.body.message || "").trim();
+  if (!messageText) throw new HttpError(400, "Message cannot be empty", ErrorCode.VALIDATION);
+
+  const message = await DirectMessage.create({
+    senderId: req.user!.id,
+    receiverId,
+    message: sanitizeText(messageText)
+  });
+
+  // Mark other messages from them as read
+  await DirectMessage.updateMany(
+    { senderId: receiverId, receiverId: req.user!.id, read: false },
+    { $set: { read: true } }
+  );
+
+  await createNotification(receiverId, "MESSAGE", "New message", `${req.user!.name}: ${message.message}`, { partnerId: req.user!.id });
+  sendOk(res, { message }, 201);
+}));
+
+usersRouter.get("/me/blocked", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
+  const blockedRows = await Block.find({ blockerId: req.user!.id })
+    .populate("blockedUserId", "name username avatar city")
+    .lean();
+  const users = blockedRows.map((row) => row.blockedUserId).filter(Boolean);
+  sendOk(res, { users });
 }));
 
 usersRouter.get("/:id", asyncHandler(async (req: AuthRequest, res) => {

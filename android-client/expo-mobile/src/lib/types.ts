@@ -5,7 +5,9 @@ export interface User {
   username: string;
   avatar?: string;
   city?: string;
+  state?: string;
   bio?: string;
+  vibeLine?: string;
   interests?: string[];
   languages?: string[];
   followersCount?: number;
@@ -13,6 +15,12 @@ export interface User {
   walletBalance?: number;
   isFollowing?: boolean;
   role?: "USER" | "HOST" | "MODERATOR" | "ADMIN";
+  age?: number;
+  gender?: string;
+  interestedIn?: string;
+  lookingFor?: string;
+  datingAgeMin?: number;
+  datingAgeMax?: number;
 }
 
 export interface Room {

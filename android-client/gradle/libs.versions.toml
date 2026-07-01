@@ -15,6 +15,9 @@ playServicesAuth = "21.2.0"
 livekitAndroid = "2.20.3"
 coilCompose = "2.7.0"
 socketioClient = "2.0.1"
+credentials = "1.6.0"
+credentialsPlayServicesAuth = "1.6.0"
+googleid = "1.2.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -39,6 +42,9 @@ play-services-auth = { group = "com.google.android.gms", name = "play-services-a
 livekit-android = { group = "io.livekit", name = "livekit-android", version.ref = "livekitAndroid" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coilCompose" }
 socketio-client = { group = "io.socket", name = "socket.io-client", version.ref = "socketioClient" }
+androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
+androidx-credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentialsPlayServicesAuth" }
+googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

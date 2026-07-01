@@ -76,13 +76,13 @@ export default function Login() {
       <View style={styles.wrap}>
         <BrandMark compact />
         <View>
-          <Text style={styles.title}>Login to live rooms</Text>
-          <Text style={styles.subtitle}>Use email, phone, or Google.</Text>
-          <TextInput value={identifier} onChangeText={setIdentifier} placeholder="Phone or email" placeholderTextColor={colors.muted} style={styles.input} autoCapitalize="none" keyboardType="email-address" />
+          <Text style={styles.title}>Welcome to Yugm</Text>
+          <Text style={styles.subtitle}>Match the vibe. Connect tonight.</Text>
+          <TextInput value={identifier} onChangeText={setIdentifier} placeholder="Email address" placeholderTextColor={colors.muted} style={styles.input} autoCapitalize="none" keyboardType="email-address" />
           {!!error && <Text style={styles.error}>{error}</Text>}
           <Pressable onPress={requestOtp} disabled={loading}>
             <LinearGradient colors={gradients.fire} style={styles.cta}>
-              {loading ? <ActivityIndicator color={colors.text} /> : <Text style={styles.ctaText}>Send OTP</Text>}
+              {loading ? <ActivityIndicator color={colors.text} /> : <Text style={styles.ctaText}>Continue with Email</Text>}
             </LinearGradient>
           </Pressable>
           <View style={styles.divider}>

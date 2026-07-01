@@ -26,6 +26,7 @@ The backend dev command starts the API server.
 ```env
 PORT=4000
 MONGODB_URI=mongodb+srv://<user>:<password>@cluster0.xxxxx.mongodb.net/yugm
+MONGODB_DB_NAME=Yugm
 REDIS_URL=
 JWT_SECRET=replace-me
 LIVEKIT_API_KEY=

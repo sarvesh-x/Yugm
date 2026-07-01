@@ -83,7 +83,9 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.tasks.Tasks
+import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.PhoneAuthCredential
 import com.google.firebase.auth.PhoneAuthOptions
 import com.google.firebase.auth.PhoneAuthProvider
@@ -108,6 +110,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        FirebaseApp.initializeApp(this)
         enableEdgeToEdge()
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val savedToken = prefs.getString(KEY_TOKEN, "") ?: ""
@@ -232,7 +235,17 @@ fun YugmApp(
             }
             scope.launch {
                 loadingRooms = true
-                runCatching { YugmApi.googleAuth(idToken) }
+                runCatching {
+                    val credential = GoogleAuthProvider.getCredential(idToken, null)
+                    val authResult = withContext(Dispatchers.IO) {
+                        Tasks.await(FirebaseAuth.getInstance().signInWithCredential(credential))
+                    }
+                    val tokenResult = withContext(Dispatchers.IO) {
+                        Tasks.await(authResult.user?.getIdToken(false) ?: throw IllegalStateException("No authenticated user found"))
+                    }
+                    val fbToken = tokenResult.token ?: throw IllegalStateException("Could not retrieve Firebase token")
+                    YugmApi.googleAuth(fbToken)
+                }
                     .onSuccess { session ->
                         authToken = session.token
                         currentUserId = session.user.id
@@ -319,7 +332,7 @@ fun YugmApp(
             runCatching { YugmApi.getUser(hostId, authToken.ifBlank { null }) }
                 .onSuccess { profileHost = it }
                 .onFailure { profileError = it.message ?: "Could not load profile" }
-            runCatching { YugmApi.getUserRooms(hostId) }
+            runCatching { YugmApi.getUserRooms(hostId, authToken.ifBlank { null }) }
                 .onSuccess { profileRooms = it }
                 .onFailure { if (profileError.isBlank()) profileError = it.message ?: "Could not load rooms" }
             profileLoading = false
@@ -462,10 +475,11 @@ fun YugmApp(
                     scope.launch {
                         runCatching {
                             val auth = FirebaseAuth.getInstance()
+                            val activity = context as? android.app.Activity ?: throw IllegalStateException("Cannot start phone auth from non-Activity context")
                             val options = PhoneAuthOptions.newBuilder(auth)
                                 .setPhoneNumber(phoneNumber)
                                 .setTimeout(60L, java.util.concurrent.TimeUnit.SECONDS)
-                                .setActivity((context as? android.app.Activity) ?: return@runCatching)
+                                .setActivity(activity)
                                 .setCallbacks(object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
                                     override fun onVerificationCompleted(credential: PhoneAuthCredential) {
                                         FirebaseAuth.getInstance().signInWithCredential(credential)
@@ -511,9 +525,10 @@ fun YugmApp(
                                 Tasks.await(FirebaseAuth.getInstance().signInWithCredential(credential))
                             }
                             val tokenResult = withContext(Dispatchers.IO) {
-                                Tasks.await(authResult.user?.getIdToken(false) ?: error("No user"))
+                                Tasks.await(authResult.user?.getIdToken(false) ?: throw IllegalStateException("No authenticated user found"))
                             }
-                            YugmApi.phoneAuth(tokenResult.token ?: error("No Firebase token"))
+                            val fbToken = tokenResult.token ?: throw IllegalStateException("Could not retrieve Firebase token")
+                            YugmApi.phoneAuth(fbToken)
                         }.onSuccess { session ->
                             authToken = session.token
                             currentUserId = session.user.id
@@ -1160,7 +1175,7 @@ fun NotificationsScreen(
                 }
             }
         }
-        items(notifications, key = { it.id }) { item ->
+        items(notifications, key = { it.id.ifBlank { it.createdAt + it.type + it.actorName } }) { item ->
             GlassCard {
                 Text(item.message, color = TextPrimary, fontWeight = FontWeight.Bold)
                 Text(item.actorName, color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
@@ -1322,5 +1337,4 @@ fun NavItem(label: String, selected: Boolean, onClick: () -> Unit) {
             .padding(horizontal = 6.dp, vertical = 10.dp)
     )
 }
-
 

@@ -6,6 +6,7 @@ import morgan from "morgan";
 import path from "path";
 import { env } from "./config/env.js";
 import { authRouter } from "./routes/auth.js";
+import { datingRouter } from "./routes/dating.js";
 import { livekitRouter } from "./routes/livekit.js";
 import { notificationsRouter } from "./routes/notifications.js";
 import { reportsRouter } from "./routes/reports.js";
@@ -34,6 +35,7 @@ export function createApp() {
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
   app.get("/health", (_req, res) => res.json({ ok: true, service: "yugm-api" }));
   app.use("/api/auth", authRouter);
+  app.use("/api/dating", datingRouter);
   app.use("/api/users", usersRouter);
   app.use("/api/rooms", roomsRouter);
   app.use("/api/livekit", livekitRouter);

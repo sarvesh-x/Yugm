@@ -34,8 +34,9 @@ export async function verifyIdToken(idToken: string) {
   if (!firebase.apps.length) throw Object.assign(new Error("Firebase not configured"), { status: 503 });
   try {
     return await firebase.auth().verifyIdToken(idToken);
-  } catch {
-    throw Object.assign(new Error("Invalid Firebase ID token"), { status: 401 });
+  } catch (err: any) {
+    console.error("Firebase ID token verification failed:", err);
+    throw Object.assign(new Error(`Invalid Firebase ID token: ${err.message}`), { status: 401 });
   }
 }
 

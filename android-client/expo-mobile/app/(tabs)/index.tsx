@@ -1,104 +1,338 @@
-import { useCallback, useState } from "react";
-import { Alert, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, Pressable } from "react-native";
+import { useCallback, useState, useEffect } from "react";
+import { Alert, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, Pressable, Image, ActivityIndicator } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, Plus, Search, Trophy, Users } from "lucide-react-native";
+import { Compass, Flame, Heart, MessageCircle, Mic, Plus, Radio, Search, Sparkles, User, Users, Video } from "lucide-react-native";
 import { categories } from "@yugm/shared";
 import { BrandMark } from "@/components/BrandMark";
-import { LoadingState } from "@/components/LoadingState";
-import { ErrorState } from "@/components/ErrorState";
-import { EmptyState } from "@/components/EmptyState";
 import { RoomCard } from "@/components/RoomCard";
 import { Screen, Section } from "@/components/Screen";
-import { roomsApi } from "@/lib/api";
+import { roomsApi, usersApi, datingApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
-import { colors } from "@/theme/colors";
+import { colors, gradients } from "@/theme/colors";
+import { LinearGradient } from "expo-linear-gradient";
 
 export default function Discover() {
   const user = useAuthStore((state) => state.user);
   const [selectedCategory, setSelectedCategory] = useState("Trending");
+  const [greeting, setGreeting] = useState("Hey there");
   const queryClient = useQueryClient();
+
+  // Set time-based greeting
+  useEffect(() => {
+    const hours = new Date().getHours();
+    if (hours >= 5 && hours < 12) setGreeting("Good morning");
+    else if (hours >= 12 && hours < 17) setGreeting("Good afternoon");
+    else setGreeting("Good evening");
+  }, []);
+
   const categoryFilter = selectedCategory === "Trending" ? undefined : selectedCategory;
-  const trending = useQuery({ queryKey: ["rooms", "trending", categoryFilter], queryFn: () => categoryFilter ? roomsApi.list({ category: categoryFilter }) : roomsApi.trending(), staleTime: 30000, gcTime: 60000 });
-  const voice = useQuery({ queryKey: ["rooms", "VOICE", categoryFilter], queryFn: () => roomsApi.list({ type: "VOICE", category: categoryFilter }), staleTime: 30000, gcTime: 60000 });
-  const video = useQuery({ queryKey: ["rooms", "VIDEO", categoryFilter], queryFn: () => roomsApi.list({ type: "VIDEO", category: categoryFilter }), staleTime: 30000, gcTime: 60000 });
-  const recommended = useQuery({ queryKey: ["rooms", "recommended"], queryFn: roomsApi.recommended, staleTime: 30000, gcTime: 60000 });
-  const scheduled = useQuery({ queryKey: ["rooms", "scheduled"], queryFn: roomsApi.scheduled, staleTime: 30000, gcTime: 60000 });
-  const leaderboard = useQuery({ queryKey: ["rooms", "leaderboard"], queryFn: roomsApi.leaderboard, staleTime: 30000, gcTime: 60000 });
 
-  useFocusEffect(useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["rooms"] });
-  }, [queryClient]));
+  // React Query feeds
+  const exploreQuery = useQuery({
+    queryKey: ["dating", "explore"],
+    queryFn: datingApi.explore,
+    staleTime: 30000,
+    gcTime: 60000
+  });
 
-  const anyLoading = trending.isLoading || voice.isLoading || video.isLoading || recommended.isLoading || scheduled.isLoading || leaderboard.isLoading;
-  const anyError = trending.error || voice.error || video.error;
-  const refetchAll = () => { trending.refetch(); voice.refetch(); video.refetch(); recommended.refetch(); scheduled.refetch(); leaderboard.refetch(); };
-  const hasAnyRooms = (trending.data?.rooms?.length ?? 0) > 0 || (voice.data?.rooms?.length ?? 0) > 0 || (video.data?.rooms?.length ?? 0) > 0 || (recommended.data?.rooms?.length ?? 0) > 0 || (scheduled.data?.rooms?.length ?? 0) > 0;
+  const trendingRooms = useQuery({
+    queryKey: ["rooms", "trending", categoryFilter],
+    queryFn: () => categoryFilter ? roomsApi.list({ category: categoryFilter }) : roomsApi.trending(),
+    staleTime: 30000,
+    gcTime: 60000
+  });
 
-  const allRooms = [...(trending.data?.rooms ?? []), ...(voice.data?.rooms ?? []), ...(video.data?.rooms ?? [])];
-  const uniqueHosts = allRooms.filter((r, i, a) => r.hostId?._id && a.findIndex((x) => x.hostId?._id === r.hostId?._id) === i).slice(0, 4);
+  const hostsQuery = useQuery({
+    queryKey: ["users", "suggestedHosts"],
+    queryFn: usersApi.suggestedHosts,
+    staleTime: 30000,
+    gcTime: 60000
+  });
+
+  useFocusEffect(
+    useCallback(() => {
+      queryClient.invalidateQueries({ queryKey: ["rooms"] });
+      queryClient.invalidateQueries({ queryKey: ["dating", "explore"] });
+      queryClient.invalidateQueries({ queryKey: ["users", "suggestedHosts"] });
+    }, [queryClient])
+  );
+
+  const isLoading = exploreQuery.isLoading || trendingRooms.isLoading || hostsQuery.isLoading;
+
+  const handleRefetch = () => {
+    exploreQuery.refetch();
+    trendingRooms.refetch();
+    hostsQuery.refetch();
+  };
+
+  const candidates = exploreQuery.data?.candidates ?? [];
+  const featuredCandidate = candidates[0];
+  const nearbyCandidates = candidates.slice(1, 8);
+  const rooms = trendingRooms.data?.rooms ?? [];
+  const popularHosts = hostsQuery.data?.users ?? [];
+
+  // Swipe Action
+  const handleLikeFeatured = async () => {
+    if (!featuredCandidate) return;
+    try {
+      const res = await datingApi.like(featuredCandidate.id, "LIKE");
+      if (res.isMatch) {
+        Alert.alert("It's a Yugm! 🎉", `You matched with ${featuredCandidate.name}! Go to chat to say hi.`);
+      } else {
+        Alert.alert("Liked! 👍", `We've sent your vibe to ${featuredCandidate.name}.`);
+      }
+      queryClient.invalidateQueries({ queryKey: ["dating", "explore"] });
+    } catch (err: any) {
+      Alert.alert("Error", err.message);
+    }
+  };
 
   return (
     <Screen>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={anyLoading} onRefresh={refetchAll} tintColor={colors.gold} />}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={handleRefetch} tintColor={colors.pink} />}
       >
         <Section>
+          {/* Header Row */}
           <View style={styles.header}>
             <View>
               <BrandMark compact />
-              <Text style={styles.greeting}>Hey {user?.name?.split(" ")[0] ?? ""}, find your room.</Text>
+              <Text style={styles.greeting}>
+                {greeting}, {user?.name?.split(" ")[0] ?? "friend"}!
+              </Text>
             </View>
             <View style={styles.headerActions}>
-              <Pressable style={styles.iconButton} onPress={() => router.push("/(tabs)/hosts")}>
-                <Users color={colors.text} size={22} />
+              <Pressable style={styles.notificationsBtn} onPress={() => router.push("/(tabs)/chat")}>
+                <MessageCircle color={colors.text} size={22} />
               </Pressable>
-              <Pressable style={styles.create} onPress={() => router.push("/room/create")}>
+              <Pressable style={styles.createBtn} onPress={() => router.push("/room/create")}>
                 <Plus color={colors.text} size={24} />
               </Pressable>
             </View>
           </View>
-          <Pressable style={styles.search} onPress={() => router.push("/(tabs)/search")}>
+
+          {/* Premium Search Bar */}
+          <Pressable style={styles.searchBar} onPress={() => router.push("/(tabs)/search")}>
             <Search color={colors.muted} size={18} />
-            <TextInput placeholder="Search rooms, hosts, tags" placeholderTextColor={colors.muted} style={styles.searchInput} keyboardType="default" editable={false} />
+            <TextInput
+              placeholder="Find matches, vibes, live rooms..."
+              placeholderTextColor={colors.muted}
+              style={styles.searchInput}
+              editable={false}
+            />
           </Pressable>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chips} nestedScrollEnabled>
+
+          {/* Quick Actions Grid */}
+          <View style={styles.quickGrid}>
+            <Pressable style={styles.quickCard} onPress={() => router.push("/(tabs)/match")}>
+              <LinearGradient colors={gradients.fire} style={styles.quickGradient}>
+                <Heart color={colors.text} size={24} fill={colors.text} />
+                <Text style={styles.quickTitle}>Find Match</Text>
+                <Text style={styles.quickSubtitle}>Match the vibe</Text>
+              </LinearGradient>
+            </Pressable>
+
+            <Pressable style={styles.quickCard} onPress={() => router.push("/room/create")}>
+              <LinearGradient colors={["#8A5CFF", "#FF3E93"]} style={styles.quickGradient}>
+                <Radio color={colors.text} size={24} />
+                <Text style={styles.quickTitle}>Go Live</Text>
+                <Text style={styles.quickSubtitle}>Host a lounge</Text>
+              </LinearGradient>
+            </Pressable>
+          </View>
+
+          {/* Quick Action Circle Buttons for Rooms */}
+          <View style={styles.roomsFilterRow}>
+            <Pressable
+              style={styles.filterCircleBtn}
+              onPress={() => router.push({ pathname: "/(tabs)/live", params: { type: "VOICE" } })}
+            >
+              <View style={[styles.filterIconCircle, { backgroundColor: "rgba(138,92,255,0.12)" }]}>
+                <Mic color={colors.purple} size={20} />
+              </View>
+              <Text style={styles.filterText}>Voice Lounges</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.filterCircleBtn}
+              onPress={() => router.push({ pathname: "/(tabs)/live", params: { type: "VIDEO" } })}
+            >
+              <View style={[styles.filterIconCircle, { backgroundColor: "rgba(39,211,255,0.12)" }]}>
+                <Video color={colors.cyan} size={20} />
+              </View>
+              <Text style={styles.filterText}>Video Tables</Text>
+            </Pressable>
+          </View>
+
+          {/* Category Chips */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRow}>
             {categories.map((item) => {
               const selected = item === selectedCategory;
               return (
-                <Pressable key={item} onPress={() => setSelectedCategory(item)} style={[styles.chip, selected && styles.chipActive]}>
+                <Pressable
+                  key={item}
+                  onPress={() => setSelectedCategory(item)}
+                  style={[styles.chip, selected && styles.chipActive]}
+                >
                   <Text style={[styles.chipText, selected && styles.chipTextActive]}>{item}</Text>
                 </Pressable>
               );
             })}
           </ScrollView>
         </Section>
-        {anyError ? (
-          <ErrorState message={"Failed to load rooms"} onRetry={refetchAll} />
-        ) : !hasAnyRooms && !anyLoading ? (
-          <EmptyState icon={<Users color={colors.gold} size={32} />} message="No rooms yet. Be the first to go live!" />
+
+        {isLoading ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator color={colors.pink} size="large" />
+            <Text style={styles.loadingText}>Tuning into the vibe...</Text>
+          </View>
         ) : (
           <>
-            {recommended.data?.rooms?.length ? <RoomRail title="For you" rooms={recommended.data.rooms} /> : null}
-            {trending.isLoading ? <LoadingState message="Loading featured rooms..." /> : trending.data?.rooms?.length ? <RoomRail title={categoryFilter ? `${categoryFilter} rooms` : "Featured live"} rooms={trending.data.rooms} /> : null}
-            {voice.isLoading ? <LoadingState message="Loading voice rooms..." /> : voice.data?.rooms?.length ? <RoomRail title="Voice rooms" rooms={voice.data.rooms} /> : null}
-            {video.isLoading ? <LoadingState message="Loading video rooms..." /> : video.data?.rooms?.length ? <RoomRail title="Video rooms" rooms={video.data.rooms} /> : null}
-            {scheduled.data?.rooms?.length ? <ScheduledRail rooms={scheduled.data.rooms} /> : null}
-            {leaderboard.data ? <Leaderboard topRooms={leaderboard.data.topRooms} topHosts={leaderboard.data.topHosts} /> : null}
-            {uniqueHosts.length > 0 && (
+            {/* 1. Featured Match Card */}
+            {featuredCandidate && (
               <Section>
-                <Text style={styles.sectionTitle}>Popular hosts</Text>
-                {uniqueHosts.map((room: any) => (
-                  <Pressable key={room._id} style={styles.hostRow} onPress={() => router.push({ pathname: "/(tabs)/profile", params: { userId: room.hostId?._id } })}>
-                    <View style={styles.avatar}><Text style={styles.avatarText}>{room.hostId?.name?.[0] ?? "Y"}</Text></View>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Featured Vibe Match</Text>
+                  <View style={styles.vibeBadge}>
+                    <Sparkles color={colors.gold} size={14} fill={colors.gold} />
+                    <Text style={styles.vibeBadgeText}>Hot Vibe</Text>
+                  </View>
+                </View>
+
+                <Pressable
+                  style={styles.featuredCard}
+                  onPress={() => router.push({ pathname: "/profile/[id]", params: { id: featuredCandidate.id } })}
+                >
+                  <Image source={{ uri: featuredCandidate.avatar }} style={styles.featuredImg} />
+                  <LinearGradient
+                    colors={["transparent", "rgba(5,7,19,0.95)"]}
+                    style={styles.featuredOverlay}
+                  >
+                    <View style={styles.featuredDetails}>
+                      <View style={styles.featuredHeaderRow}>
+                        <Text style={styles.featuredName}>
+                          {featuredCandidate.name}, {featuredCandidate.age}
+                        </Text>
+                        <View style={styles.compatibilityBadge}>
+                          <Text style={styles.compatibilityText}>
+                            {featuredCandidate.vibeScore}% Vibe Match
+                          </Text>
+                        </View>
+                      </View>
+
+                      {featuredCandidate.vibeLine && (
+                        <Text style={styles.featuredTagline}>“{featuredCandidate.vibeLine}”</Text>
+                      )}
+
+                      <View style={styles.tagsRow}>
+                        {featuredCandidate.interests?.slice(0, 3).map((interest: string) => (
+                          <View key={interest} style={styles.tag}>
+                            <Text style={styles.tagText}>{interest}</Text>
+                          </View>
+                        ))}
+                        <View style={styles.tag}>
+                          <Text style={styles.tagText}>{featuredCandidate.city}</Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.featuredActions}>
+                        <Pressable style={styles.swipeVibesBtn} onPress={handleLikeFeatured}>
+                          <LinearGradient colors={gradients.fire} style={styles.swipeGradient}>
+                            <Heart color={colors.text} size={18} fill={colors.text} />
+                            <Text style={styles.swipeText}>Swipe Vibes</Text>
+                          </LinearGradient>
+                        </Pressable>
+                      </View>
+                    </View>
+                  </LinearGradient>
+                </Pressable>
+              </Section>
+            )}
+
+            {/* 2. Live Now Rooms */}
+            {rooms.length > 0 && (
+              <Section>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Live Now Rooms</Text>
+                  <View style={styles.livePulseRow}>
+                    <View style={styles.liveDot} />
+                    <Text style={styles.liveText}>LIVE</Text>
+                  </View>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {rooms.map((room: any) => (
+                    <RoomCard
+                      key={room._id}
+                      room={room}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/room/[id]",
+                          params: { id: room._id, type: room.type }
+                        })
+                      }
+                    />
+                  ))}
+                </ScrollView>
+              </Section>
+            )}
+
+            {/* 3. People Near You */}
+            {nearbyCandidates.length > 0 && (
+              <Section>
+                <Text style={styles.sectionTitle}>People Near You</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
+                  {nearbyCandidates.map((cand: any) => (
+                    <Pressable
+                      key={cand.id}
+                      style={styles.candidateBubbleCard}
+                      onPress={() => router.push({ pathname: "/profile/[id]", params: { id: cand.id } })}
+                    >
+                      <Image source={{ uri: cand.avatar }} style={styles.bubbleImg} />
+                      <Text style={styles.bubbleName} numberOfLines={1}>
+                        {cand.name.split(" ")[0]}
+                      </Text>
+                      <Text style={styles.bubbleVibeScore}>{cand.vibeScore}% vibe</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </Section>
+            )}
+
+            {/* 4. Trending Hosts */}
+            {popularHosts.length > 0 && (
+              <Section>
+                <Text style={styles.sectionTitle}>Trending Hosts</Text>
+                {popularHosts.slice(0, 5).map((host: any) => (
+                  <Pressable
+                    key={host._id}
+                    style={styles.hostRow}
+                    onPress={() => router.push({ pathname: "/profile/[id]", params: { id: host._id } })}
+                  >
+                    <Image source={{ uri: host.avatar }} style={styles.hostRowAvatar} />
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.hostName}>{room.hostId?.name ?? ""}</Text>
-                      <Text style={styles.hostMeta}>{room.category} / {room.language}</Text>
+                      <Text style={styles.hostRowName}>{host.name}</Text>
+                      <Text style={styles.hostRowMeta}>
+                        {host.city} • {host.followersCount} followers
+                      </Text>
+                    </View>
+                    <View style={styles.vibeScoreBox}>
+                      <Flame color={colors.gold} size={16} fill={colors.gold} />
+                      <Text style={styles.vibeScoreText}>Top Host</Text>
                     </View>
                   </Pressable>
                 ))}
               </Section>
+            )}
+
+            {/* Empty states fallback */}
+            {rooms.length === 0 && candidates.length === 0 && (
+              <View style={styles.emptyState}>
+                <Users color={colors.muted} size={48} />
+                <Text style={styles.emptyTitle}>No vibe matches right now</Text>
+                <Text style={styles.emptySubtitle}>Update your interests in your profile setup to fetch matching users.</Text>
+              </View>
             )}
           </>
         )}
@@ -107,89 +341,92 @@ export default function Discover() {
   );
 }
 
-function RoomRail({ title, rooms }: { title: string; rooms: any[] }) {
-  return (
-    <Section>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        {rooms.map((room) => <RoomCard key={room._id} room={room} onPress={() => room.status === "SCHEDULED" ? Alert.alert("Reminder set", "We'll nudge you when this scheduled room starts.") : router.push({ pathname: "/room/[id]", params: { id: room._id, type: room.type } })} />)}
-      </ScrollView>
-    </Section>
-  );
-}
-
-function ScheduledRail({ rooms }: { rooms: any[] }) {
-  return (
-    <Section>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Scheduled rooms</Text>
-        <Bell color={colors.gold} size={18} />
-      </View>
-      {rooms.slice(0, 4).map((room) => (
-        <Pressable key={room._id} style={styles.scheduleRow} onPress={() => Alert.alert("Reminder set", `${room.title} is on your watchlist.`)}>
-          <View style={styles.scheduleIcon}><Bell color={colors.gold} size={18} /></View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.hostName}>{room.title}</Text>
-            <Text style={styles.hostMeta}>{room.hostId?.name ?? "Host"} / {room.scheduledFor ? new Date(room.scheduledFor).toLocaleString() : "Soon"}</Text>
-          </View>
-        </Pressable>
-      ))}
-    </Section>
-  );
-}
-
-function Leaderboard({ topRooms, topHosts }: { topRooms: any[]; topHosts: any[] }) {
-  if (!topRooms.length && !topHosts.length) return null;
-  return (
-    <Section>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Leaderboard</Text>
-        <Trophy color={colors.gold} size={20} />
-      </View>
-      {topRooms.slice(0, 3).map((room, index) => (
-        <Pressable key={room._id} style={styles.rankRow} onPress={() => router.push({ pathname: "/room/[id]", params: { id: room._id, type: room.type } })}>
-          <Text style={styles.rank}>{index + 1}</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.hostName}>{room.title}</Text>
-            <Text style={styles.hostMeta}>{room.participantCount} live / {room.hostId?.name ?? "Host"}</Text>
-          </View>
-        </Pressable>
-      ))}
-      {topHosts.slice(0, 3).map((host, index) => (
-        <Pressable key={host._id} style={styles.rankRow} onPress={() => router.push({ pathname: "/(tabs)/profile", params: { userId: host._id } })}>
-          <Text style={styles.rank}>{index + 1}</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.hostName}>{host.name}</Text>
-            <Text style={styles.hostMeta}>{host.followersCount ?? 0} followers / host score</Text>
-          </View>
-        </Pressable>
-      ))}
-    </Section>
-  );
-}
-
 const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8 },
-  greeting: { color: colors.muted, marginTop: 8 },
+  greeting: { color: colors.muted, marginTop: 4, fontSize: 14, fontWeight: "700" },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 10 },
-  iconButton: { height: 48, width: 48, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, alignItems: "center", justifyContent: "center" },
-  create: { height: 48, width: 48, borderRadius: 8, backgroundColor: colors.purple, alignItems: "center", justifyContent: "center" },
-  search: { marginTop: 20, height: 50, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, flexDirection: "row", alignItems: "center", paddingHorizontal: 14, gap: 10 },
-  searchInput: { flex: 1, color: colors.text },
-  chips: { marginTop: 14 },
-  chip: { backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 8, marginRight: 8 },
-  chipActive: { backgroundColor: colors.gold, borderColor: colors.gold },
-  chipText: { color: colors.text, fontWeight: "800" },
-  chipTextActive: { color: colors.ink },
+  notificationsBtn: {
+    height: 46,
+    width: 46,
+    borderRadius: 12,
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  createBtn: {
+    height: 46,
+    width: 46,
+    borderRadius: 12,
+    backgroundColor: colors.pink,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  searchBar: {
+    marginTop: 18,
+    height: 50,
+    borderRadius: 12,
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.line,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    gap: 10
+  },
+  searchInput: { flex: 1, color: colors.text, fontWeight: "700" },
+  quickGrid: { flexDirection: "row", gap: 12, marginTop: 18 },
+  quickCard: { flex: 1, height: 104, borderRadius: 16, overflow: "hidden" },
+  quickGradient: { flex: 1, padding: 14, justifyContent: "flex-end", gap: 2 },
+  quickTitle: { color: colors.text, fontSize: 16, fontWeight: "900" },
+  quickSubtitle: { color: "rgba(255,255,255,0.7)", fontSize: 11, fontWeight: "700" },
+  roomsFilterRow: { flexDirection: "row", justifyContent: "space-around", marginTop: 18, marginBottom: 8 },
+  filterCircleBtn: { alignItems: "center", gap: 6 },
+  filterIconCircle: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
+  filterText: { color: colors.text, fontSize: 12, fontWeight: "800" },
+  chipsRow: { marginTop: 16, marginHorizontal: -4 },
+  chip: { backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, marginRight: 8 },
+  chipActive: { backgroundColor: colors.pink, borderColor: colors.pink },
+  chipText: { color: colors.text, fontWeight: "800", fontSize: 13 },
+  chipTextActive: { color: colors.text },
+  loadingWrap: { padding: 48, alignItems: "center", justifyContent: "center", gap: 12 },
+  loadingText: { color: colors.muted, fontSize: 14, fontWeight: "700" },
+  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
   sectionTitle: { color: colors.text, fontSize: 20, fontWeight: "900", marginBottom: 12 },
-  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  scheduleRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.line },
-  scheduleIcon: { width: 38, height: 38, borderRadius: 8, backgroundColor: colors.panel, alignItems: "center", justifyContent: "center" },
-  rankRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10 },
-  rank: { width: 32, height: 32, borderRadius: 8, overflow: "hidden", textAlign: "center", textAlignVertical: "center", color: colors.ink, backgroundColor: colors.gold, fontWeight: "900" },
+  vibeBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(246,180,75,0.15)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+  vibeBadgeText: { color: colors.gold, fontSize: 11, fontWeight: "900" },
+  livePulseRow: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(255,62,147,0.15)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.pink },
+  liveText: { color: colors.pink, fontSize: 11, fontWeight: "900" },
+  featuredCard: { height: 320, borderRadius: 18, overflow: "hidden", borderWidth: 1, borderColor: colors.line, position: "relative" },
+  featuredImg: { width: "100%", height: "100%" },
+  featuredOverlay: { position: "absolute", left: 0, right: 0, bottom: 0, top: 0, justifyContent: "flex-end" },
+  featuredDetails: { padding: 18 },
+  featuredHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  featuredName: { color: colors.text, fontSize: 24, fontWeight: "900" },
+  compatibilityBadge: { backgroundColor: "rgba(255,62,147,0.22)", borderWidth: 1, borderColor: colors.pink, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
+  compatibilityText: { color: colors.text, fontSize: 12, fontWeight: "900" },
+  featuredTagline: { color: colors.text, fontSize: 14, fontStyle: "italic", marginVertical: 8, fontWeight: "700" },
+  tagsRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginVertical: 8 },
+  tag: { backgroundColor: "rgba(255,255,255,0.1)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
+  tagText: { color: colors.text, fontSize: 12, fontWeight: "800" },
+  featuredActions: { marginTop: 12 },
+  swipeVibesBtn: { height: 50, borderRadius: 12, overflow: "hidden" },
+  swipeGradient: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  swipeText: { color: colors.text, fontWeight: "900", fontSize: 15 },
+  horizontalScroll: { paddingVertical: 4 },
+  candidateBubbleCard: { width: 90, alignItems: "center", gap: 4, marginRight: 14 },
+  bubbleImg: { width: 68, height: 68, borderRadius: 34, borderWidth: 2, borderColor: colors.pink },
+  bubbleName: { color: colors.text, fontWeight: "800", fontSize: 13, marginTop: 4 },
+  bubbleVibeScore: { color: colors.pink, fontSize: 11, fontWeight: "800" },
   hostRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.line },
-  avatar: { height: 44, width: 44, borderRadius: 8, backgroundColor: colors.panelStrong, alignItems: "center", justifyContent: "center" },
-  avatarText: { color: colors.gold, fontWeight: "900", fontSize: 18 },
-  hostName: { color: colors.text, fontWeight: "900" },
-  hostMeta: { color: colors.muted, fontSize: 12, marginTop: 2 }
+  hostRowAvatar: { height: 50, width: 50, borderRadius: 12 },
+  hostRowName: { color: colors.text, fontWeight: "900", fontSize: 15 },
+  hostRowMeta: { color: colors.muted, fontSize: 12, marginTop: 2, fontWeight: "700" },
+  vibeScoreBox: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(246,180,75,0.1)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
+  vibeScoreText: { color: colors.gold, fontWeight: "900", fontSize: 11 },
+  emptyState: { padding: 40, alignItems: "center", gap: 8 },
+  emptyTitle: { color: colors.text, fontWeight: "900", fontSize: 16, marginTop: 8 },
+  emptySubtitle: { color: colors.muted, fontSize: 13, textAlign: "center", lineHeight: 18 }
 });

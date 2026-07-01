@@ -18,5 +18,7 @@ export const colors = {
 export const gradients = {
   screen: [colors.ink, "#080A19", "#101028"] as const,
   fire: [colors.saffron, colors.pink, colors.purple] as const,
-  calm: ["#18223A", "#25164C"] as const
+  calm: ["#18223A", "#25164C"] as const,
+  gold: ["#F6B44B", "#FF8A22"] as const
 };
+

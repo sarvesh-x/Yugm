@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { Bell, Radio, Search, User, Video, Wallet } from "lucide-react-native";
+import { Compass, Heart, Radio, MessageCircle, User } from "lucide-react-native";
 import { colors } from "@/theme/colors";
 
 export default function TabsLayout() {
@@ -7,20 +7,24 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: { backgroundColor: colors.ink2, borderTopColor: colors.line, height: 68 },
-        tabBarActiveTintColor: colors.gold,
+        tabBarStyle: { backgroundColor: colors.ink2, borderTopColor: colors.line, height: 68, paddingBottom: 6 },
+        tabBarActiveTintColor: colors.pink,
         tabBarInactiveTintColor: colors.muted,
         tabBarLabelStyle: { fontSize: 11, fontWeight: "800" }
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "Discover", tabBarIcon: ({ color }) => <Search color={color} size={20} /> }} />
-      <Tabs.Screen name="voice" options={{ title: "Voice", tabBarIcon: ({ color }) => <Radio color={color} size={20} /> }} />
-      <Tabs.Screen name="video" options={{ title: "Video", tabBarIcon: ({ color }) => <Video color={color} size={20} /> }} />
-      <Tabs.Screen name="wallet" options={{ title: "Wallet", tabBarIcon: ({ color }) => <Wallet color={color} size={20} /> }} />
-      <Tabs.Screen name="profile" options={{ title: "Profile", tabBarIcon: ({ color }) => <User color={color} size={20} /> }} />
+      <Tabs.Screen name="index" options={{ title: "Discover", tabBarIcon: ({ color }) => <Compass color={color} size={22} /> }} />
+      <Tabs.Screen name="match" options={{ title: "Match", tabBarIcon: ({ color }) => <Heart color={color} size={22} /> }} />
+      <Tabs.Screen name="live" options={{ title: "Live", tabBarIcon: ({ color }) => <Radio color={color} size={22} /> }} />
+      <Tabs.Screen name="chat" options={{ title: "Chat", tabBarIcon: ({ color }) => <MessageCircle color={color} size={22} /> }} />
+      <Tabs.Screen name="profile" options={{ title: "Profile", tabBarIcon: ({ color }) => <User color={color} size={22} /> }} />
+      
+      <Tabs.Screen name="voice" options={{ href: null }} />
+      <Tabs.Screen name="video" options={{ href: null }} />
+      <Tabs.Screen name="wallet" options={{ href: null }} />
       <Tabs.Screen name="search" options={{ href: null }} />
       <Tabs.Screen name="hosts" options={{ href: null }} />
-      <Tabs.Screen name="notifications" options={{ href: null, tabBarIcon: ({ color }) => <Bell color={color} size={20} /> }} />
+      <Tabs.Screen name="notifications" options={{ href: null }} />
       <Tabs.Screen name="settings" options={{ href: null }} />
     </Tabs>
   );

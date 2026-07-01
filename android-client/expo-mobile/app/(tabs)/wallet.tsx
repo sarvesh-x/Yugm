@@ -1,33 +1,33 @@
-import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, ActivityIndicator } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
-import { CreditCard, Gift, Plus, ShoppingBag } from "lucide-react-native";
-import { GlassCard } from "@/components/GlassCard";
-import { LoadingState } from "@/components/LoadingState";
-import { ErrorState } from "@/components/ErrorState";
-import { EmptyState } from "@/components/EmptyState";
+import { CreditCard, Gift, Plus, ShoppingBag, Coins, TrendingUp } from "lucide-react-native";
 import { Screen, Section } from "@/components/Screen";
 import { walletApi } from "@/lib/api";
 import { openRazorpayCheckout, startGooglePlayPurchase } from "@/lib/payments";
 import { colors, gradients } from "@/theme/colors";
-import { useState } from "react";
 
 export default function WalletScreen() {
   const queryClient = useQueryClient();
   const [error, setError] = useState("");
+
   const wallet = useQuery({ queryKey: ["wallet"], queryFn: () => walletApi.wallet(), staleTime: 30000, gcTime: 60000 });
   const transactions = useQuery({ queryKey: ["wallet", "transactions"], queryFn: () => walletApi.transactions(), staleTime: 30000, gcTime: 60000 });
   const packs = useQuery({ queryKey: ["wallet", "packs"], queryFn: () => walletApi.packs(), staleTime: 300000, gcTime: 600000 });
   const purchases = useQuery({ queryKey: ["wallet", "purchases"], queryFn: () => walletApi.purchases(), staleTime: 30000, gcTime: 60000 });
+
   const recharge = useMutation({
     mutationFn: (amount: number) => walletApi.recharge(amount ?? 500),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["wallet"] });
       queryClient.invalidateQueries({ queryKey: ["wallet", "transactions"] });
+      Alert.alert("Dev Recharge Success", "Successfully added test coins to your wallet!");
     },
     onError: (err: any) => { setError(err?.message ?? "Recharge failed"); }
   });
+
   const razorpayOrder = useMutation({
     mutationFn: (packId: string) => walletApi.createRazorpayOrder(packId),
     onSuccess: async (data) => {
@@ -49,6 +49,7 @@ export default function WalletScreen() {
     },
     onError: (err: any) => setError(err?.message ?? "Razorpay order failed")
   });
+
   const playStoreStart = useMutation({
     mutationFn: async (pack: any) => {
       const purchase = await startGooglePlayPurchase(pack.googleProductId);
@@ -78,92 +79,135 @@ export default function WalletScreen() {
 
   useFocusEffect(() => {
     queryClient.invalidateQueries({ queryKey: ["wallet"] });
+    queryClient.invalidateQueries({ queryKey: ["wallet", "transactions"] });
   });
 
   return (
     <Screen>
-      <ScrollView refreshControl={<RefreshControl refreshing={wallet.isLoading} onRefresh={() => { wallet.refetch(); transactions.refetch(); packs.refetch(); purchases.refetch(); }} tintColor={colors.gold} />}>
+      <ScrollView
+        contentContainerStyle={styles.scrollWrap}
+        refreshControl={
+          <RefreshControl
+            refreshing={wallet.isLoading}
+            onRefresh={() => {
+              wallet.refetch();
+              transactions.refetch();
+              packs.refetch();
+              purchases.refetch();
+            }}
+            tintColor={colors.gold}
+          />
+        }
+      >
         <Section>
-          <Text style={styles.title}>Wallet</Text>
-          {wallet.isLoading ? (
-            <LoadingState message="Loading balance..." />
-          ) : wallet.error ? (
-            <ErrorState message={(wallet.error as any)?.message} onRetry={() => wallet.refetch()} />
-          ) : (
-            <LinearGradient colors={gradients.fire} style={styles.balance}>
-              <Text style={styles.label}>Coin balance</Text>
-              <Text style={styles.coins}>{wallet.data?.balance ?? 0}</Text>
-              {__DEV__ && (
-                <Pressable style={styles.recharge} onPress={() => recharge.mutate(500)} disabled={recharge.isPending}>
-                  <Plus color={colors.text} size={18} />
-                  <Text style={styles.rechargeText}>{recharge.isPending ? "Recharging..." : "Dev recharge"}</Text>
-                </Pressable>
-              )}
-            </LinearGradient>
-          )}
-          {!!error && <Text style={{ color: colors.danger, fontWeight: "800", marginTop: 8 }}>{error}</Text>}
+          {/* Main Balance Card */}
+          <LinearGradient colors={gradients.gold} style={styles.balanceCard}>
+            <View style={styles.balanceHeader}>
+              <View style={styles.coinBadgeIcon}>
+                <Coins color={colors.gold} size={22} fill={colors.gold} />
+              </View>
+              <Text style={styles.balanceLabel}>Current Balances</Text>
+            </View>
+            
+            <Text style={styles.balanceCoins}>
+              {wallet.data?.balance ?? 0} <Text style={styles.coinSubtext}>Coins</Text>
+            </Text>
+
+            {__DEV__ && (
+              <Pressable
+                style={styles.devRechargeBtn}
+                onPress={() => recharge.mutate(1000)}
+                disabled={recharge.isPending}
+              >
+                <Plus color={colors.gold} size={16} />
+                <Text style={styles.devRechargeText}>
+                  {recharge.isPending ? "Adding..." : "Dev Recharge +1000 Coins"}
+                </Text>
+              </Pressable>
+            )}
+          </LinearGradient>
+
+          {!!error && <Text style={styles.errorText}>{error}</Text>}
         </Section>
+
+        {/* Buying Packs section */}
         <Section>
-          <Text style={styles.sectionTitle}>Buy coin packs</Text>
-          {packs.isLoading ? <LoadingState message="Loading packs..." /> : (
+          <Text style={styles.sectionTitle}>Recharge Packs</Text>
+          <Text style={styles.sectionSubtitle}>Send gifts to hosts in live rooms or direct messages.</Text>
+
+          {packs.isLoading ? (
+            <ActivityIndicator color={colors.gold} size="large" style={{ marginVertical: 20 }} />
+          ) : (
             <View style={styles.packGrid}>
               {(packs.data?.packs ?? []).map((pack: any) => (
-                <GlassCard key={pack.id} style={styles.pack}>
-                  <Text style={styles.packCoins}>{pack.coinAmount}</Text>
-                  <Text style={styles.packPrice}>INR {pack.priceInr}</Text>
-                  <View style={styles.payRow}>
-                    <Pressable style={styles.payButton} onPress={() => razorpayOrder.mutate(pack.id)} disabled={razorpayOrder.isPending}>
-                      <CreditCard color={colors.text} size={15} />
-                      <Text style={styles.payText}>Razorpay</Text>
+                <View key={pack.id} style={styles.packCard}>
+                  <View style={styles.packCoinsHeader}>
+                    <Coins color={colors.gold} size={20} fill={colors.gold} />
+                    <Text style={styles.packCoins}>{pack.coinAmount}</Text>
+                  </View>
+                  <Text style={styles.packPrice}>₹ {pack.priceInr}</Text>
+                  
+                  <View style={styles.payActions}>
+                    <Pressable
+                      style={styles.payBtn}
+                      onPress={() => razorpayOrder.mutate(pack.id)}
+                      disabled={razorpayOrder.isPending}
+                    >
+                      <CreditCard color={colors.text} size={12} />
+                      <Text style={styles.payBtnText}>Razorpay</Text>
                     </Pressable>
-                    <Pressable style={styles.payButton} onPress={() => playStoreStart.mutate(pack)} disabled={playStoreStart.isPending}>
-                      <ShoppingBag color={colors.text} size={15} />
-                      <Text style={styles.payText}>Play</Text>
+
+                    <Pressable
+                      style={[styles.payBtn, styles.payBtnAlt]}
+                      onPress={() => playStoreStart.mutate(pack)}
+                      disabled={playStoreStart.isPending}
+                    >
+                      <ShoppingBag color={colors.text} size={12} />
+                      <Text style={styles.payBtnText}>Play Store</Text>
                     </Pressable>
                   </View>
-                </GlassCard>
+                </View>
               ))}
             </View>
           )}
         </Section>
+
+        {/* Ledger & Transactions History */}
         <Section>
-          <Text style={styles.sectionTitle}>Purchases</Text>
-          {purchases.isLoading ? (
-            <LoadingState message="Loading purchases..." />
-          ) : !purchases.data?.purchases?.length ? (
-            <EmptyState icon={<ShoppingBag color={colors.gold} size={28} />} message="No purchases yet" />
-          ) : (
-            purchases.data.purchases.map((item: any) => (
-              <View key={item._id} style={styles.tx}>
-                <CreditCard color={item.status === "CREDITED" ? colors.success : colors.gold} size={18} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.txTitle}>{item.provider} / {item.status}</Text>
-                  <Text style={styles.txMeta}>{item.coinAmount} coins / INR {item.amountInr}</Text>
-                </View>
-                <Text style={styles.txAmount}>{item.packId}</Text>
-              </View>
-            ))
-          )}
-        </Section>
-        <Section>
-          <Text style={styles.sectionTitle}>Ledger</Text>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Transaction History</Text>
+            <TrendingUp color={colors.muted} size={16} />
+          </View>
+
           {transactions.isLoading ? (
-            <LoadingState message="Loading transactions..." />
-          ) : transactions.error ? (
-            <ErrorState message={(transactions.error as any)?.message} onRetry={() => transactions.refetch()} />
+            <ActivityIndicator color={colors.gold} size="small" />
           ) : !transactions.data?.transactions?.length ? (
-            <EmptyState icon="📒" message="No transactions yet" />
+            <View style={styles.emptyLedger}>
+              <Text style={styles.emptyLedgerText}>No coin transactions logged yet.</Text>
+            </View>
           ) : (
-            transactions.data.transactions.map((item: any) => (
-              <View key={item._id} style={styles.tx}>
-                <Gift color={item.type === "CREDIT" ? colors.success : colors.danger} size={18} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.txTitle}>{item.source}</Text>
-                  <Text style={styles.txMeta}>Balance {item.balanceBefore} to {item.balanceAfter}</Text>
-                </View>
-                <Text style={[styles.txAmount, { color: item.type === "CREDIT" ? colors.success : colors.danger }]}>{item.type === "CREDIT" ? "+" : "-"}{item.amount}</Text>
-              </View>
-            ))
+            <View style={styles.ledgerList}>
+              {transactions.data.transactions.map((item: any) => {
+                const isCredit = item.type === "CREDIT";
+                return (
+                  <View key={item._id} style={styles.ledgerRow}>
+                    <View style={[styles.ledgerIconCircle, isCredit ? styles.iconCredit : styles.iconDebit]}>
+                      <Gift color={isCredit ? colors.success : colors.danger} size={16} />
+                    </View>
+                    <View style={styles.ledgerInfo}>
+                      <Text style={styles.ledgerTitle}>{item.source}</Text>
+                      <Text style={styles.ledgerDate}>
+                        {new Date(item.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })} at{" "}
+                        {new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </Text>
+                    </View>
+                    <Text style={[styles.ledgerAmount, isCredit ? styles.amountCredit : styles.amountDebit]}>
+                      {isCredit ? "+" : "-"}{item.amount}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
           )}
         </Section>
       </ScrollView>
@@ -172,22 +216,111 @@ export default function WalletScreen() {
 }
 
 const styles = StyleSheet.create({
-  title: { color: colors.text, fontSize: 30, fontWeight: "900", marginBottom: 14 },
-  balance: { borderRadius: 8, padding: 20 },
-  label: { color: "rgba(255,255,255,0.75)", fontWeight: "800" },
-  coins: { color: colors.text, fontSize: 48, fontWeight: "900", marginVertical: 8 },
-  recharge: { alignSelf: "flex-start", height: 42, borderRadius: 8, paddingHorizontal: 12, backgroundColor: "rgba(0,0,0,0.28)", flexDirection: "row", alignItems: "center", gap: 8 },
-  rechargeText: { color: colors.text, fontWeight: "900" },
-  sectionTitle: { color: colors.text, fontWeight: "900", fontSize: 20, marginBottom: 12 },
-  packGrid: { gap: 10 },
-  pack: { alignItems: "center" },
-  packCoins: { color: colors.gold, fontSize: 18, fontWeight: "900" },
-  packPrice: { color: colors.muted, marginTop: 4 },
-  payRow: { flexDirection: "row", gap: 8, marginTop: 12 },
-  payButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, minWidth: 112, height: 38, borderRadius: 8, backgroundColor: colors.panelStrong },
-  payText: { color: colors.text, fontWeight: "900", fontSize: 12 },
-  tx: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.line },
-  txTitle: { color: colors.text, fontWeight: "900" },
-  txMeta: { color: colors.muted, fontSize: 12 },
-  txAmount: { fontWeight: "900" }
+  scrollWrap: { paddingBottom: 48 },
+  balanceCard: {
+    borderRadius: 20,
+    padding: 24,
+    shadowColor: "#F6B44B",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 15,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: "rgba(246,180,75,0.25)"
+  },
+  balanceHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  coinBadgeIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(5,7,19,0.3)",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  balanceLabel: { color: "rgba(255,255,255,0.85)", fontSize: 13, fontWeight: "900", textTransform: "uppercase", letterSpacing: 1 },
+  balanceCoins: { color: colors.text, fontSize: 44, fontWeight: "900", marginVertical: 14 },
+  coinSubtext: { fontSize: 18, fontWeight: "800", color: "rgba(255,255,255,0.75)" },
+  devRechargeBtn: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: colors.ink,
+    borderWidth: 1,
+    borderColor: "rgba(246,180,75,0.3)"
+  },
+  devRechargeText: { color: colors.gold, fontWeight: "900", fontSize: 13 },
+  errorText: { color: colors.danger, fontWeight: "800", marginTop: 12, textAlign: "center" },
+  sectionTitle: { color: colors.text, fontSize: 18, fontWeight: "900" },
+  sectionSubtitle: { color: colors.muted, fontSize: 13, fontWeight: "700", marginTop: 4, marginBottom: 16 },
+  packGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  packCard: {
+    width: "48%",
+    borderRadius: 16,
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.line,
+    padding: 16,
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
+  packCoinsHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
+  packCoins: { color: colors.text, fontSize: 18, fontWeight: "900" },
+  packPrice: { color: colors.muted, fontSize: 14, fontWeight: "800", marginVertical: 8 },
+  payActions: { width: "100%", gap: 6 },
+  payBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: colors.pink,
+    width: "100%"
+  },
+  payBtnAlt: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: colors.line
+  },
+  payBtnText: { color: colors.text, fontSize: 11, fontWeight: "900" },
+  sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
+  emptyLedger: {
+    padding: 30,
+    alignItems: "center",
+    borderRadius: 16,
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.line
+  },
+  emptyLedgerText: { color: colors.muted, fontWeight: "700", fontSize: 13 },
+  ledgerList: { gap: 8 },
+  ledgerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.line
+  },
+  ledgerIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12
+  },
+  iconCredit: { backgroundColor: "rgba(50,213,131,0.08)" },
+  iconDebit: { backgroundColor: "rgba(255,91,110,0.08)" },
+  ledgerInfo: { flex: 1 },
+  ledgerTitle: { color: colors.text, fontSize: 14, fontWeight: "900" },
+  ledgerDate: { color: colors.muted, fontSize: 11, fontWeight: "700", marginTop: 2 },
+  ledgerAmount: { fontSize: 15, fontWeight: "900" },
+  amountCredit: { color: colors.success },
+  amountDebit: { color: colors.danger }
 });

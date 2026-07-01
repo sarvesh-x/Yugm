@@ -81,10 +81,16 @@ export const profileSchema = z.object({
   gender: z.string().max(32).optional(),
   age: z.number().int().min(18).max(80).optional(),
   city: z.string().max(60).optional(),
+  state: z.string().max(60).optional(),
   bio: z.string().max(180).optional(),
+  vibeLine: z.string().max(120).optional(),
   interests: z.array(z.string().min(1).max(24)).default([]),
   languages: z.array(z.string().min(1).max(24)).default(["Hindi", "English"]),
-  avatar: z.string().url().optional()
+  avatar: z.string().url().optional(),
+  interestedIn: z.string().max(32).optional(),
+  lookingFor: z.string().max(60).optional(),
+  datingAgeMin: z.number().int().min(18).max(80).optional(),
+  datingAgeMax: z.number().int().min(18).max(80).optional()
 });
 
 export const createRoomSchema = z.object({

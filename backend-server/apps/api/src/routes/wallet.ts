@@ -245,3 +245,45 @@ walletRouter.post("/rooms/:id/send-gift", validateBody(sendGiftSchema), asyncHan
     throw err;
   }
 }));
+
+walletRouter.post("/direct-send-gift", asyncHandler(async (req: AuthRequest, res) => {
+  const { giftId, receiverId } = req.body;
+  if (!isValidObjectId(giftId) || !isValidObjectId(receiverId)) {
+    throw new HttpError(400, "Invalid IDs", ErrorCode.VALIDATION);
+  }
+  const gift = await Gift.findById(giftId).lean();
+  const receiver = await User.findById(receiverId).lean();
+  if (!gift || !receiver) throw new HttpError(404, "Gift or receiver not found", ErrorCode.NOT_FOUND);
+
+  const { DirectMessage } = await import("../models/DirectMessage.js");
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    await debitWallet(req.user!.id, gift.coinPrice, "GIFT_SENT_DM", { giftId: gift._id.toString() }, session);
+    await creditWallet(receiverId, gift.coinPrice, "GIFT_RECEIVED_DM", { giftId: gift._id.toString() }, session);
+    const giftTransaction = await GiftTransaction.create([{
+      senderId: req.user!.id,
+      receiverId,
+      giftId: gift._id,
+      coinAmount: gift.coinPrice
+    }], { session });
+    await session.commitTransaction();
+    session.endSession();
+
+    // Create a direct message indicating the gift was sent
+    const message = await DirectMessage.create({
+      senderId: req.user!.id,
+      receiverId,
+      message: `🎁 Sent you a ${gift.name}!`
+    });
+
+    await createNotification(receiverId, "GIFT", "Gift Received", `${req.user!.name} sent you a ${gift.name}!`, { partnerId: req.user!.id });
+    sendOk(res, { giftTransaction: giftTransaction[0], message }, 201);
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    throw err;
+  }
+}));
+

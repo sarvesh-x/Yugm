@@ -10,6 +10,7 @@ type EnvKey = {
 const keys: EnvKey[] = [
   { key: "PORT", group: "startup", required: false, note: "defaults to 4000" },
   { key: "MONGODB_URI", group: "startup", required: true },
+  { key: "MONGODB_DB_NAME", group: "startup", required: false, note: "defaults to Yugm" },
   { key: "JWT_SECRET", group: "auth", required: false, note: "set a strong value outside local dev" },
   { key: "DEV_BYPASS_OTP", group: "auth", required: false, note: "dev-only OTP bypass" },
   { key: "LIVEKIT_API_KEY", group: "livekit", required: false, note: "required for media tokens" },

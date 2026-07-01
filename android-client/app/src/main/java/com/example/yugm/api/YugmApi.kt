@@ -192,8 +192,8 @@ object YugmApi {
         return data.getJSONObject("user").toHost()
     }
 
-    suspend fun getUserRooms(userId: String): List<Room> {
-        val data = get("/users/$userId/rooms", auth = null).getJSONObject("data")
+    suspend fun getUserRooms(userId: String, token: String? = null): List<Room> {
+        val data = get("/users/$userId/rooms", auth = token).getJSONObject("data")
         return data.getJSONArray("rooms").toRooms()
     }
 

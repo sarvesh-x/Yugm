@@ -11,7 +11,9 @@ export interface IUser extends mongoose.Document {
   gender?: string;
   age?: number;
   city?: string;
+  state?: string;
   bio?: string;
+  vibeLine?: string;
   interests: string[];
   languages: string[];
   role: UserRole;
@@ -21,20 +23,26 @@ export interface IUser extends mongoose.Document {
   followingCount: number;
   walletBalance: number;
   tokenVersion: number;
+  interestedIn?: string;
+  lookingFor?: string;
+  datingAgeMin?: number;
+  datingAgeMax?: number;
 }
 
 const userSchema = new Schema<IUser>(
   {
     name: { type: String, required: true, trim: true },
     username: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    email: { type: String, sparse: true, unique: true, lowercase: true, trim: true },
-    phone: { type: String, sparse: true, unique: true, trim: true },
-    firebaseUid: { type: String, sparse: true, unique: true },
+    email: { type: String, lowercase: true, trim: true },
+    phone: { type: String, trim: true },
+    firebaseUid: String,
     avatar: String,
     gender: String,
     age: Number,
     city: String,
+    state: String,
     bio: String,
+    vibeLine: String,
     interests: [{ type: String }],
     languages: [{ type: String }],
     role: { type: String, enum: ["USER", "HOST", "MODERATOR", "ADMIN"], default: "USER" },
@@ -44,8 +52,16 @@ const userSchema = new Schema<IUser>(
     followingCount: { type: Number, default: 0 },
     walletBalance: { type: Number, default: 0 },
     tokenVersion: { type: Number, default: 0 },
+    interestedIn: String,
+    lookingFor: String,
+    datingAgeMin: Number,
+    datingAgeMax: Number,
   },
   { timestamps: true }
 );
+
+userSchema.index({ email: 1 }, { unique: true, partialFilterExpression: { email: { $type: "string" } } });
+userSchema.index({ phone: 1 }, { unique: true, partialFilterExpression: { phone: { $type: "string" } } });
+userSchema.index({ firebaseUid: 1 }, { unique: true, partialFilterExpression: { firebaseUid: { $type: "string" } } });
 
 export const User = mongoose.model<IUser>("User", userSchema);

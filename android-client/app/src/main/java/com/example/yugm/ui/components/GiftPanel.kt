@@ -41,7 +41,7 @@ fun GiftPanel(
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             containerColor = Ink2
         ) {
-            Column(Modifier.padding(18.dp)) {
+            Column(Modifier.fillMaxWidth().padding(18.dp)) {
                 Text("Gifts", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Black)
                 Text("Balance: $balance coins", color = TextMuted, modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
                 gifts.forEach { gift ->
