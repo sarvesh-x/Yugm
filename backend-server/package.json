@@ -1,5 +1,5 @@
 {
-  "name": "yugm",
+  "name": "yugm-backend-server",
   "version": "0.1.0",
   "private": true,
   "workspaces": [
@@ -7,18 +7,13 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -n api,mobile -c saffron,magenta \"npm run dev:api\" \"npm run dev:mobile\"",
+    "dev": "npm run dev:api",
     "dev:api": "npm --workspace apps/api run dev",
-    "dev:mobile": "npm --workspace apps/mobile run dev",
     "seed": "npm --workspace apps/api run seed",
     "typecheck": "npm --workspaces --if-present run typecheck"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2",
     "typescript": "~5.3.3"
-  },
-  "dependencies": {
-    "expo-build-properties": "^56.0.19"
   },
   "overrides": {
     "@xmldom/xmldom": "^0.8.13",

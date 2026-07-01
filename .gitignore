@@ -9,6 +9,8 @@
 /.idea/assetWizardSettings.xml
 .DS_Store
 /build
+android-client/build
+android-client/app/build
 /captures
 .externalNativeBuild
 .cxx
@@ -17,6 +19,6 @@ node_modules
 .expo
 .env
 dist
-apps/api/dist
-apps/mobile/.expo
+backend-server/apps/api/dist
+android-client/expo-mobile/.expo
 npm-debug.log*

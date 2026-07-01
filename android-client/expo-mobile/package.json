@@ -17,7 +17,7 @@
     "@react-native-firebase/app": "^25.1.0",
     "@react-native-firebase/auth": "^25.1.0",
     "@tanstack/react-query": "^5.40.1",
-    "@yugm/shared": "*",
+    "@yugm/shared": "file:../../backend-server/packages/shared",
     "expo": "^51.0.11",
     "expo-auth-session": "~5.5.2",
     "expo-blur": "~13.0.2",
