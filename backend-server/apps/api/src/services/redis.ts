@@ -35,34 +35,38 @@ export async function connectRedis() {
   }
 }
 
+function isRedisReady() {
+  return redis?.status === "ready";
+}
+
 export async function setUserPresence(userId: string, online: boolean) {
-  if (!redis) return;
+  if (!isRedisReady()) return;
   const key = `presence:user:${userId}`;
   if (online) {
-    await redis.set(key, "online", "EX", 300);
+    await redis!.set(key, "online", "EX", 300);
   } else {
-    await redis.del(key);
+    await redis!.del(key);
   }
 }
 
 export async function getCachedJson<T>(key: string): Promise<T | undefined> {
-  if (!redis) return undefined;
-  const raw = await redis.get(key);
+  if (!isRedisReady()) return undefined;
+  const raw = await redis!.get(key);
   return raw ? JSON.parse(raw) as T : undefined;
 }
 
 export async function setCachedJson(key: string, value: unknown, seconds: number) {
-  if (!redis) return;
-  await redis.set(key, JSON.stringify(value), "EX", seconds);
+  if (!isRedisReady()) return;
+  await redis!.set(key, JSON.stringify(value), "EX", seconds);
 }
 
 export async function invalidateCache(pattern: string) {
-  if (!redis) return;
+  if (!isRedisReady()) return;
   let cursor = "0";
   do {
-    const result = await redis.scan(cursor, "MATCH", pattern);
+    const result = await redis!.scan(cursor, "MATCH", pattern);
     cursor = result[0];
     const keys = result[1];
-    if (keys.length) await redis.del(keys);
+    if (keys.length) await redis!.del(keys);
   } while (cursor !== "0");
 }

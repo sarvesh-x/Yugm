@@ -5,8 +5,10 @@
 /.idea/libraries
 /.idea/modules.xml
 /.idea/workspace.xml
+/.idea/migrations.xml
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
+android-client/.idea/
 .DS_Store
 /build
 android-client/build

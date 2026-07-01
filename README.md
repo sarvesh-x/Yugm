@@ -127,6 +127,7 @@ Backend:
 cd backend-server
 npm run dev
 npm run dev:api
+npm run env:check
 npm run seed
 npm run typecheck
 ```

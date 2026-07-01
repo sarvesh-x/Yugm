@@ -3,6 +3,7 @@ import { connectDatabase, disconnectDatabase } from "./config/db.js";
 import { env } from "./config/env.js";
 import { createApp } from "./app.js";
 import { initFirebase } from "./services/firebase.js";
+import { ensureOfficialRooms } from "./services/officialRooms.js";
 import { connectRedis } from "./services/redis.js";
 import { initSocket } from "./services/socket.js";
 
@@ -17,6 +18,7 @@ process.on("uncaughtException", (err) => {
 async function bootstrap() {
   await connectDatabase();
   await connectRedis();
+  await ensureOfficialRooms();
   initFirebase();
   const app = createApp();
   const server = http.createServer(app);

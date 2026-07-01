@@ -1,0 +1,54 @@
+import "dotenv/config";
+
+type EnvKey = {
+  key: string;
+  group: string;
+  required: boolean;
+  note?: string;
+};
+
+const keys: EnvKey[] = [
+  { key: "PORT", group: "startup", required: false, note: "defaults to 4000" },
+  { key: "MONGODB_URI", group: "startup", required: true },
+  { key: "JWT_SECRET", group: "auth", required: false, note: "set a strong value outside local dev" },
+  { key: "DEV_BYPASS_OTP", group: "auth", required: false, note: "dev-only OTP bypass" },
+  { key: "LIVEKIT_API_KEY", group: "livekit", required: false, note: "required for media tokens" },
+  { key: "LIVEKIT_API_SECRET", group: "livekit", required: false, note: "required for media tokens" },
+  { key: "LIVEKIT_URL", group: "livekit", required: false, note: "defaults to ws://localhost:7880" },
+  { key: "FCM_PROJECT_ID", group: "firebase", required: false, note: "required for Google/Phone auth and push" },
+  { key: "FCM_CLIENT_EMAIL", group: "firebase", required: false, note: "required for Google/Phone auth and push" },
+  { key: "FCM_PRIVATE_KEY", group: "firebase", required: false, note: "required for Google/Phone auth and push" },
+  { key: "RAZORPAY_KEY_ID", group: "payments", required: false, note: "required for Razorpay orders" },
+  { key: "RAZORPAY_KEY_SECRET", group: "payments", required: false, note: "required for Razorpay verification" },
+  { key: "GOOGLE_PLAY_PACKAGE_NAME", group: "payments", required: false, note: "required for Google Play purchases" },
+  { key: "GOOGLE_PLAY_CLIENT_EMAIL", group: "payments", required: false, note: "required for Google Play purchases" },
+  { key: "GOOGLE_PLAY_PRIVATE_KEY", group: "payments", required: false, note: "required for Google Play purchases" },
+  { key: "REDIS_URL", group: "cache", required: false, note: "leave blank to disable Redis locally" },
+  { key: "CORS_ORIGIN", group: "http", required: false, note: "defaults to *" }
+];
+
+function statusFor(key: string) {
+  if (!(key in process.env)) return "MISSING";
+  return String(process.env[key]).trim() ? "SET" : "BLANK";
+}
+
+const rows = keys.map((item) => ({
+  group: item.group,
+  key: item.key,
+  status: statusFor(item.key),
+  required: item.required ? "yes" : "feature/default",
+  note: item.note ?? ""
+}));
+
+console.table(rows);
+
+const missingRequired = rows.filter((row) => row.required === "yes" && row.status !== "SET");
+if (missingRequired.length) {
+  console.error(`Required env missing: ${missingRequired.map((row) => row.key).join(", ")}`);
+  process.exit(1);
+}
+
+const blankFeatureKeys = rows.filter((row) => row.required !== "yes" && row.status !== "SET");
+if (blankFeatureKeys.length) {
+  console.log(`Feature/default env not set: ${blankFeatureKeys.map((row) => row.key).join(", ")}`);
+}
