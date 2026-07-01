@@ -1,0 +1,8 @@
+
+> @yugm/api@0.1.0 dev
+> tsx watch src/index.ts
+
+MongoDB connected: test
+Firebase disabled: service account env vars are not configured
+Yugm API listening on http://localhost:4000
+[0mGET /health [32m200[0m 0.872 ms - 32[0m

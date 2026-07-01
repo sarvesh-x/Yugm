@@ -1,0 +1,25 @@
+package com.example.yugm.util
+
+import android.content.Context
+import android.content.SharedPreferences
+
+object SessionPrefs {
+    private lateinit var prefs: SharedPreferences
+
+    fun init(context: Context) {
+        prefs = context.getSharedPreferences("yugm_session", Context.MODE_PRIVATE)
+    }
+
+    fun save(token: String, userId: String, name: String, username: String, balance: Int) {
+        prefs.edit()?.apply {
+            putString("authToken", token)
+            putString("userId", userId)
+            putString("userName", name)
+            putString("username", username)
+            putInt("balance", balance)
+            apply()
+        }
+    }
+
+    fun clear() { prefs.edit()?.clear()?.apply() }
+}

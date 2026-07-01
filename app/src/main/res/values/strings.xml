@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Yugm</string>
+    <!-- TODO: Replace with your actual Google Web Client ID from the Google Cloud Console.
+         This value must match the web client ID from your Firebase/Google Cloud project.
+         Leaving it as the placeholder will cause Google Sign-In to fail at runtime. -->
+    <string name="google_web_client_id">your_web_client_id_here</string>
+</resources>

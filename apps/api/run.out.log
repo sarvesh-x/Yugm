@@ -1,0 +1,11 @@
+
+> @yugm/api@0.1.0 dev
+> tsx watch src/index.ts
+
+MongoDB memory server connected for local demo mode
+Seeded Yugm demo data
+Yugm API listening on http://localhost:4000
+[0mGET /health [32m200[0m 0.788 ms - 32[0m
+[0mGET /health [32m200[0m 0.199 ms - 32[0m
+[0mGET /health [32m200[0m 0.703 ms - 32[0m
+[0mGET /health [32m200[0m 0.128 ms - 32[0m

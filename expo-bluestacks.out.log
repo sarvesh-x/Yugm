@@ -1,0 +1,4 @@
+Starting project at C:\Users\longl\AndroidStudioProjects\Yugm\apps\mobile
+env: load .env
+env: export EXPO_PUBLIC_API_URL EXPO_PUBLIC_SOCKET_URL EXPO_PUBLIC_LIVEKIT_URL
+Starting Metro Bundler

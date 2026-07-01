@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Yugm",
+    "slug": "yugm",
+    "scheme": "yugm",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#050713"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yugm.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Yugm uses your camera in live video rooms.",
+        "NSMicrophoneUsageDescription": "Yugm uses your microphone in live rooms."
+      }
+    },
+    "android": {
+      "package": "com.yugm.app",
+      "permissions": ["CAMERA", "RECORD_AUDIO"],
+      "googleServicesFile": "../../app/google-services.json"
+    }
+  }
+}
