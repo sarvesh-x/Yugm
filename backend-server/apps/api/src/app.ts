@@ -33,6 +33,7 @@ export function createApp() {
   app.use(morgan("dev"));
 
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+  app.get("/", (_req, res) => res.json({ ok: true, service: "yugm-api", health: "/health", api: "/api" }));
   app.get("/health", (_req, res) => res.json({ ok: true, service: "yugm-api" }));
   app.use("/api/auth", authRouter);
   app.use("/api/dating", datingRouter);
