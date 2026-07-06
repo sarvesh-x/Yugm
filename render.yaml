@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: yugm-api
+    runtime: node
+    rootDir: backend-server
+    buildCommand: npm install --include=dev && npm --workspace @yugm/api run build
+    startCommand: npm --workspace @yugm/api run start
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20
