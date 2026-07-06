@@ -7,8 +7,10 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev:api",
+    "dev": "node scripts/run-dev-or-start.cjs",
     "dev:api": "npm --workspace apps/api run dev",
+    "start": "npm run start:api",
+    "start:api": "npm --workspace apps/api run start",
     "env:check": "npm --workspace apps/api run env:check",
     "seed": "npm --workspace apps/api run seed",
     "typecheck": "npm --workspaces --if-present run typecheck"

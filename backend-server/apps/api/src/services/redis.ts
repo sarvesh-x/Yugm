@@ -1,8 +1,27 @@
 import { Redis } from "ioredis";
 import { env } from "../config/env.js";
 
-export const redis = env.REDIS_URL
-  ? new Redis(env.REDIS_URL, {
+function normalizeRedisUrl(rawUrl: string | undefined) {
+  const value = rawUrl?.trim();
+  if (!value) return undefined;
+
+  const matches = [...value.matchAll(/rediss?:\/\//g)];
+  const start = matches.at(-1)?.index;
+  const candidate = start === undefined ? value : value.slice(start).trim();
+
+  try {
+    new URL(candidate);
+    return candidate;
+  } catch {
+    console.warn("Redis disabled: REDIS_URL is not a valid URL");
+    return undefined;
+  }
+}
+
+const redisUrl = normalizeRedisUrl(env.REDIS_URL);
+
+export const redis = redisUrl
+  ? new Redis(redisUrl, {
       lazyConnect: true,
       maxRetriesPerRequest: 2,
       enableOfflineQueue: false,
