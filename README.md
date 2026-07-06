@@ -64,15 +64,21 @@ For Firebase Auth and FCM, download `google-services.json` from Firebase Console
 android-client/app/google-services.json
 ```
 
-The native client tries these API base URLs by default:
+Debug builds use the Android emulator backend by default:
 
 ```text
 http://10.0.2.2:4000/api
-http://192.168.1.3:4000/api
-http://127.0.0.1:4000/api
 ```
 
-Use `10.0.2.2` for the Android emulator when the backend is running on your machine.
+For production/release builds, provide the deployed backend URLs:
+
+```bash
+YUGM_API_BASE_URL=https://your-backend.onrender.com/api \
+YUGM_SOCKET_BASE_URL=https://your-backend.onrender.com \
+./gradlew :app:assembleRelease
+```
+
+Use `https://.../api` for `YUGM_API_BASE_URL` and the same host without `/api` for `YUGM_SOCKET_BASE_URL`.
 
 ## Expo Client Setup
 

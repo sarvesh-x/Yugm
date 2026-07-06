@@ -4,6 +4,28 @@ plugins {
     alias(libs.plugins.google.services)
 }
 
+fun configValue(name: String): String? {
+    return providers.gradleProperty(name).orNull
+        ?: providers.environmentVariable(name).orNull
+}
+
+fun quoted(value: String): String {
+    return "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+}
+
+val yugmApiBaseUrl = configValue("YUGM_API_BASE_URL")
+val yugmSocketBaseUrl = configValue("YUGM_SOCKET_BASE_URL")
+val isReleaseTaskRequested = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
+
+if (isReleaseTaskRequested) {
+    require(!yugmApiBaseUrl.isNullOrBlank()) {
+        "Set YUGM_API_BASE_URL to your deployed API URL, for example https://your-backend.onrender.com/api"
+    }
+    require(!yugmSocketBaseUrl.isNullOrBlank()) {
+        "Set YUGM_SOCKET_BASE_URL to your deployed socket URL, for example https://your-backend.onrender.com"
+    }
+}
+
 android {
     namespace = "com.example.yugm"
     compileSdk {
@@ -23,8 +45,19 @@ android {
     }
 
     buildTypes {
+        debug {
+            val apiBaseUrl = yugmApiBaseUrl ?: "http://10.0.2.2:4000/api"
+            val socketBaseUrl = yugmSocketBaseUrl ?: "http://10.0.2.2:4000"
+            buildConfigField("String", "API_BASE_URL", quoted(apiBaseUrl))
+            buildConfigField("String", "SOCKET_BASE_URL", quoted(socketBaseUrl))
+        }
+
         release {
             isMinifyEnabled = true
+            val apiBaseUrl = yugmApiBaseUrl.orEmpty()
+            val socketBaseUrl = yugmSocketBaseUrl.orEmpty()
+            buildConfigField("String", "API_BASE_URL", quoted(apiBaseUrl))
+            buildConfigField("String", "SOCKET_BASE_URL", quoted(socketBaseUrl))
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -37,6 +70,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

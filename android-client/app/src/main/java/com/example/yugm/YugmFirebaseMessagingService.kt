@@ -20,6 +20,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import com.example.yugm.api.YugmApi
 
 class YugmFirebaseMessagingService : FirebaseMessagingService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -46,8 +47,7 @@ class YugmFirebaseMessagingService : FirebaseMessagingService() {
                         val body = JSONObject().put("token", token).put("platform", "android").toString()
                             .toRequestBody(json)
                         val request = Request.Builder()
-                            .url("http://10.0.2.2:4000/api/notifications/device-token")
-                            // TODO: Use HTTPS in production
+                            .url(YugmApi.endpoint("/notifications/device-token"))
                             .header("Authorization", "Bearer $authToken")
                             .post(body)
                             .build()

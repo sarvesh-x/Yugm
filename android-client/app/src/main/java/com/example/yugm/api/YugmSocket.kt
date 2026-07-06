@@ -1,6 +1,7 @@
 package com.example.yugm.api
 
 import android.util.Log
+import com.example.yugm.BuildConfig
 
 object YugmSocket {
     private const val TAG = "YugmSocket"
@@ -9,8 +10,8 @@ object YugmSocket {
     fun connect(token: String, roomId: String, onMessage: (String, String) -> Unit) {
         disconnect()
         try {
-            val serverUrl = "http://10.0.2.2:4000"
-            // TODO: Use HTTPS in production
+            val serverUrl = BuildConfig.SOCKET_BASE_URL.trim().trimEnd('/')
+            if (serverUrl.isBlank()) throw IllegalStateException("SOCKET_BASE_URL is not configured for this build")
             socket = io.socket.client.IO.socket(serverUrl, io.socket.client.IO.Options().apply {
                 this.auth = mapOf("token" to token)
                 transports = arrayOf("websocket")

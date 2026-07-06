@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.util.Log
 import androidx.compose.ui.graphics.Color
+import com.example.yugm.BuildConfig
 import com.example.yugm.model.ChatMessage
 import com.example.yugm.model.GiftItem
 import com.example.yugm.model.Host
@@ -45,12 +46,21 @@ object YugmApi {
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
-    val baseCandidates = listOf(
-        "http://10.0.2.2:4000/api",
-        "http://192.168.1.3:4000/api",
-        "http://127.0.0.1:4000/api"
-    )
+    val baseCandidates = buildList {
+        val configuredBase = BuildConfig.API_BASE_URL.trim().trimEnd('/')
+        if (configuredBase.isNotBlank()) add(configuredBase)
+        if (BuildConfig.DEBUG) {
+            add("http://10.0.2.2:4000/api")
+            add("http://127.0.0.1:4000/api")
+        }
+    }.distinct()
     private var workingBaseUrl: String? = null
+
+    fun endpoint(path: String): String {
+        val base = workingBaseUrl ?: baseCandidates.firstOrNull()
+            ?: throw IllegalStateException("API_BASE_URL is not configured for this build")
+        return "$base$path"
+    }
 
     suspend fun requestOtp(identifier: String): String? {
         val response = post("/auth/request-otp", auth = null, body = contactPayload(identifier))
@@ -259,6 +269,7 @@ object YugmApi {
     private suspend fun request(method: String, path: String, auth: String?, body: JSONObject?): JSONObject = withContext(Dispatchers.IO) {
         if (!isOnline) throw IllegalStateException("No internet connection")
         val bases = listOfNotNull(workingBaseUrl) + baseCandidates.filter { it != workingBaseUrl }
+        if (bases.isEmpty()) throw IllegalStateException("API_BASE_URL is not configured for this build")
         var lastError: Throwable? = null
         for ((attempt, base) in bases.withIndex()) {
             try {
