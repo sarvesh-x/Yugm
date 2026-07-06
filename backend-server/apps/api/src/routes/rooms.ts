@@ -21,6 +21,7 @@ import { emitRoom } from "../services/socket.js";
 import { createNotification } from "../services/notifications.js";
 import { getCachedJson, invalidateCache, setCachedJson } from "../services/redis.js";
 import { grantXp } from "../services/levels.js";
+import { grantRelationshipXp } from "../services/relationships.js";
 
 const patchSchema = z.object({
   title: z.string().min(1).max(100).optional(),
@@ -386,7 +387,8 @@ roomsRouter.post("/:id/messages/direct", requireAuth, requireNotMuted, validateB
   });
   await createNotification(receiverId, "MESSAGE", "New message", `${req.user!.name}: ${message.message}`, { roomId: room._id.toString() });
   await grantXp(req.user!.id, "CHAT_MESSAGE", { roomId: room._id.toString(), direct: true });
-  sendOk(res, { message }, 201);
+  const relationship = await grantRelationshipXp(req.user!.id, receiverId, "ROOM_DM_SENT", { roomId: room._id.toString(), messageId: message._id.toString() });
+  sendOk(res, { message, relationship: relationship?.relationship }, 201);
 }));
 
 roomsRouter.post("/:id/messages", requireAuth, requireNotMuted, chatLimiter, validateBody(chatMessageSchema), asyncHandler(async (req: AuthRequest, res) => {

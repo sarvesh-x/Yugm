@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, View, Pressable, Image, ActivityIndicator } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { MessageSquare, Heart, Compass } from "lucide-react-native";
+import { MessageSquare, Sparkles } from "lucide-react-native";
 import { datingApi, usersApi } from "@/lib/api";
 import { Screen, Section } from "@/components/Screen";
 import { useAuthStore } from "@/store/auth";
@@ -64,6 +64,11 @@ export default function ChatList() {
 
   const activeConversations = Array.from(conversationsMap.values());
   activeConversations.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  const relationshipByPartnerId = new Map<string, any>(
+    matches
+      .map((match: any) => [match.partner?._id || match.partner?.id, match.relationship])
+      .filter(([partnerId, relationship]: any[]) => partnerId && relationship)
+  );
 
   // Filter "New Matches" who do NOT have an active conversation
   const newMatches = matches.filter((match: any) => {
@@ -100,6 +105,11 @@ export default function ChatList() {
                     <Text style={styles.matchName} numberOfLines={1}>
                       {match.partner.name.split(" ")[0]}
                     </Text>
+                    {match.relationship && (
+                      <Text style={styles.matchLevel} numberOfLines={1}>
+                        L{match.relationship.level}
+                      </Text>
+                    )}
                   </Pressable>
                 ))}
               </ScrollView>
@@ -129,6 +139,7 @@ export default function ChatList() {
               <View style={styles.conversationsList}>
                 {activeConversations.map((chat: any) => {
                   const partnerId = chat.partner._id || chat.partner.id;
+                  const relationship = relationshipByPartnerId.get(partnerId);
                   return (
                     <Pressable
                       key={partnerId}
@@ -139,7 +150,15 @@ export default function ChatList() {
                       
                       <View style={styles.chatInfo}>
                         <View style={styles.chatHeaderRow}>
-                          <Text style={styles.chatPartnerName}>{chat.partner.name}</Text>
+                          <View style={styles.chatNameRow}>
+                            <Text style={styles.chatPartnerName}>{chat.partner.name}</Text>
+                            {relationship && (
+                              <View style={styles.bondBadge}>
+                                <Sparkles color={colors.gold} size={11} />
+                                <Text style={styles.bondBadgeText}>L{relationship.level}</Text>
+                              </View>
+                            )}
+                          </View>
                           <Text style={styles.chatTime}>
                             {new Date(chat.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                           </Text>
@@ -188,6 +207,7 @@ const styles = StyleSheet.create({
   },
   matchAvatar: { width: "100%", height: "100%", borderRadius: 30 },
   matchName: { color: colors.text, fontSize: 13, fontWeight: "800", marginTop: 4 },
+  matchLevel: { color: colors.gold, fontSize: 11, fontWeight: "900" },
   center: { padding: 48, alignItems: "center" },
   emptyState: { padding: 40, alignItems: "center", gap: 8, marginTop: 20 },
   emptyTitle: { color: colors.text, fontWeight: "900", fontSize: 16, marginTop: 8 },
@@ -211,7 +231,10 @@ const styles = StyleSheet.create({
   chatAvatar: { width: 54, height: 54, borderRadius: 27 },
   chatInfo: { flex: 1, justifyContent: "center" },
   chatHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  chatNameRow: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1 },
   chatPartnerName: { color: colors.text, fontSize: 16, fontWeight: "900" },
+  bondBadge: { flexDirection: "row", alignItems: "center", gap: 3, borderRadius: 8, backgroundColor: "rgba(246,180,75,0.08)", borderWidth: 1, borderColor: "rgba(246,180,75,0.2)", paddingHorizontal: 6, paddingVertical: 2 },
+  bondBadgeText: { color: colors.gold, fontSize: 11, fontWeight: "900" },
   chatTime: { color: colors.muted, fontSize: 12, fontWeight: "700" },
   chatBodyRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
   chatPreview: { color: colors.muted, fontSize: 13, flex: 1, marginRight: 10, fontWeight: "700" },

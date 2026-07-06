@@ -8,6 +8,7 @@ import { User } from "../models/User.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId } from "../utils/http.js";
 import { createNotification } from "../services/notifications.js";
 import { getVipStatus } from "../services/vip.js";
+import { findRelationship, grantRelationshipXp } from "../services/relationships.js";
 
 export const datingRouter = Router();
 datingRouter.use(requireAuth);
@@ -139,6 +140,12 @@ datingRouter.post("/like", asyncHandler(async (req: AuthRequest, res) => {
       match = await Match.create({
         users: [currentUser.id, likedId]
       });
+      await grantRelationshipXp(
+        currentUser.id,
+        likedId,
+        type === "SUPER_LIKE" || mutualLike.type === "SUPER_LIKE" ? "SUPER_LIKE_MATCH" : "MATCH_CREATED",
+        { matchId: match._id.toString() }
+      );
 
       // Send match notifications to both users
       const otherUser = await User.findById(likedId).select("name").lean();
@@ -205,15 +212,17 @@ datingRouter.get("/matches", asyncHandler(async (req: AuthRequest, res) => {
   }).select("name username avatar city bio interests languages activeCosmetics vipTier vipStartedAt vipExpiresAt").lean();
 
   // Map back matching documents with details
-  const formattedMatches = matches.map(m => {
+  const formattedMatches = await Promise.all(matches.map(async (m) => {
     const partnerId = m.users.find((u: any) => u.toString() !== currentUser.id);
     if (!partnerId) return null;
     const partner = partners.find(p => p._id.toString() === partnerId.toString());
     if (!partner) return null;
+    const relationship = await findRelationship(currentUser.id, partnerId.toString());
     return {
       id: m._id.toString(),
       _id: m._id.toString(),
       matchDate: m.createdAt,
+      relationship,
       partner: {
         id: partner._id.toString(),
         _id: partner._id.toString(),
@@ -228,7 +237,7 @@ datingRouter.get("/matches", asyncHandler(async (req: AuthRequest, res) => {
         ...getVipStatus(partner)
       }
     };
-  }).filter(Boolean);
+  }));
 
-  sendOk(res, { matches: formattedMatches });
+  sendOk(res, { matches: formattedMatches.filter(Boolean) });
 }));

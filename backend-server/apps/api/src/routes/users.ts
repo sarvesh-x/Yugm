@@ -12,6 +12,7 @@ import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId, sanitizeTe
 import { createNotification } from "../services/notifications.js";
 import { getVipStatus } from "../services/vip.js";
 import { dailyCheckInStart, getLevelStatus, grantXp } from "../services/levels.js";
+import { findRelationship, grantRelationshipXp } from "../services/relationships.js";
 
 export const usersRouter = Router();
 usersRouter.use(requireAuth);
@@ -168,7 +169,8 @@ usersRouter.get("/messages/:userId", asyncHandler(async (req: AuthRequest, res) 
     .sort({ createdAt: -1 })
     .limit(100)
     .lean();
-  sendOk(res, { messages: messages.reverse() });
+  const relationship = await findRelationship(req.user!.id, req.params.userId);
+  sendOk(res, { messages: messages.reverse(), relationship });
 }));
 
 usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, asyncHandler(async (req: AuthRequest, res) => {
@@ -201,7 +203,8 @@ usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, asyncHandler
 
   await createNotification(receiverId, "MESSAGE", "New message", `${req.user!.name}: ${message.message}`, { partnerId: req.user!.id });
   await grantXp(req.user!.id, "CHAT_MESSAGE");
-  sendOk(res, { message }, 201);
+  const relationship = await grantRelationshipXp(req.user!.id, receiverId, "MESSAGE_SENT", { messageId: message._id.toString() });
+  sendOk(res, { message, relationship: relationship?.relationship }, 201);
 }));
 
 usersRouter.get("/me/blocked", requireAuth, asyncHandler(async (req: AuthRequest, res) => {

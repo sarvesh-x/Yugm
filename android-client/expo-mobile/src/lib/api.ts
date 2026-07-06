@@ -77,7 +77,7 @@ export const roomsApi = {
   votePoll: (roomId: string, pollId: string, optionIndex: number) => api<{ poll: any }>(`/rooms/${roomId}/polls/${pollId}/vote`, { method: "POST", body: JSON.stringify({ optionIndex }) }),
   invite: (roomId: string, userId: string) => api<{ invite: any }>(`/rooms/${roomId}/invites`, { method: "POST", body: JSON.stringify({ userId }) }),
   missions: (id: string) => api<{ missions: any[] }>(`/rooms/${id}/missions`),
-  directMessage: (roomId: string, message: string, receiverId?: string) => api<{ message: any }>(`/rooms/${roomId}/messages/direct`, { method: "POST", body: JSON.stringify({ message, receiverId }) }),
+  directMessage: (roomId: string, message: string, receiverId?: string) => api<{ message: any; relationship?: any }>(`/rooms/${roomId}/messages/direct`, { method: "POST", body: JSON.stringify({ message, receiverId }) }),
   requestSpeaker: (id: string) => api<{ request: any }>(`/rooms/${id}/request-speaker`, { method: "POST" }),
   approveSpeaker: (roomId: string, userId: string) => api<{ request: any }>(`/rooms/${roomId}/approve-speaker`, { method: "POST", body: JSON.stringify({ userId }) }),
   rejectSpeaker: (roomId: string, userId: string) => api<{ rejected: boolean }>(`/rooms/${roomId}/reject-speaker`, { method: "POST", body: JSON.stringify({ userId }) }),
@@ -121,7 +121,7 @@ export const walletApi = {
   sendGift: (roomId: string, giftId: string, receiverId: string) =>
     api<{ giftTransaction: any }>(`/rooms/${roomId}/send-gift`, { method: "POST", body: JSON.stringify({ giftId, receiverId }) }),
   sendGiftDirect: (giftId: string, receiverId: string) =>
-    api<{ giftTransaction: any; message: any }>("/wallet/direct-send-gift", { method: "POST", body: JSON.stringify({ giftId, receiverId }) })
+    api<{ giftTransaction: any; message: any; relationship?: any }>("/wallet/direct-send-gift", { method: "POST", body: JSON.stringify({ giftId, receiverId }) })
 };
 
 export const mediaApi = {
@@ -147,8 +147,8 @@ export const usersApi = {
   search: (query: string) => api<{ users: any[] }>(`/users/search?q=${encodeURIComponent(query)}`),
   suggestedHosts: () => api<{ users: any[] }>("/users/hosts/suggested"),
   messages: () => api<{ messages: any[] }>("/users/messages"),
-  conversation: (userId: string) => api<{ messages: any[] }>(`/users/messages/${userId}`),
-  sendMessage: (userId: string, message: string) => api<{ message: any }>(`/users/messages/${userId}`, { method: "POST", body: JSON.stringify({ message }) }),
+  conversation: (userId: string) => api<{ messages: any[]; relationship?: any }>(`/users/messages/${userId}`),
+  sendMessage: (userId: string, message: string) => api<{ message: any; relationship?: any }>(`/users/messages/${userId}`, { method: "POST", body: JSON.stringify({ message }) }),
   follow: (userId: string) => api<{ following: boolean }>(`/users/${userId}/follow`, { method: "POST" }),
   unfollow: (userId: string) => api<{ following: boolean }>(`/users/${userId}/follow`, { method: "DELETE" }),
   block: (userId: string) => api<{ blocked: boolean }>(`/users/${userId}/block`, { method: "POST" }),

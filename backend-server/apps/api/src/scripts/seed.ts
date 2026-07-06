@@ -12,6 +12,7 @@ import { Notification } from "../models/Notification.js";
 import { Poll } from "../models/Poll.js";
 import { Purchase } from "../models/Purchase.js";
 import { Report } from "../models/Report.js";
+import { Relationship } from "../models/Relationship.js";
 import { Room } from "../models/Room.js";
 import { RoomActivity } from "../models/RoomActivity.js";
 import { RoomInvite } from "../models/RoomInvite.js";
@@ -256,6 +257,7 @@ async function clearDemoData() {
     Poll.deleteMany({}),
     Purchase.deleteMany({}),
     Report.deleteMany({}),
+    Relationship.deleteMany({}),
     Room.deleteMany({}),
     RoomActivity.deleteMany({}),
     RoomInvite.deleteMany({}),

@@ -97,6 +97,27 @@ export const xpEvents = {
 
 export type XpEvent = keyof typeof xpEvents;
 
+export const relationshipLevelMilestones = [
+  { level: 1, requiredXp: 0, title: "First Spark" },
+  { level: 2, requiredXp: 50, title: "Good Vibes" },
+  { level: 3, requiredXp: 150, title: "Warm Bond" },
+  { level: 4, requiredXp: 350, title: "Close Connection" },
+  { level: 5, requiredXp: 700, title: "Yugm Duo" },
+  { level: 6, requiredXp: 1200, title: "Trusted Pair" },
+  { level: 7, requiredXp: 2000, title: "Deep Match" },
+  { level: 8, requiredXp: 3200, title: "Unbreakable Vibe" }
+] as const;
+
+export const relationshipXpEvents = {
+  MATCH_CREATED: 50,
+  SUPER_LIKE_MATCH: 75,
+  MESSAGE_SENT: 8,
+  ROOM_DM_SENT: 8,
+  GIFT_SENT: 25
+} as const;
+
+export type RelationshipXpEvent = keyof typeof relationshipXpEvents;
+
 export const vipPlans = [
   {
     id: "vip_7d",

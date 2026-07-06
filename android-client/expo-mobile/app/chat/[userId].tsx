@@ -57,6 +57,7 @@ export default function ChatRoom() {
 
   const partner = partnerData?.user;
   const messages = messagesData?.messages ?? [];
+  const relationship = messagesData?.relationship;
 
   // Mutations
   const sendMutation = useMutation({
@@ -64,6 +65,7 @@ export default function ChatRoom() {
     onSuccess: () => {
       setMessage("");
       refetch();
+      queryClient.invalidateQueries({ queryKey: ["dating", "matches"] });
       // Scroll to bottom
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
@@ -113,6 +115,7 @@ export default function ChatRoom() {
       refetch();
       // Invalidate wallet query so current balance updates
       queryClient.invalidateQueries({ queryKey: ["wallet"] });
+      queryClient.invalidateQueries({ queryKey: ["dating", "matches"] });
     } catch (err: any) {
       Alert.alert("Gifting Failed", err.message || "Make sure you have enough coins.");
     }
@@ -139,7 +142,9 @@ export default function ChatRoom() {
                 <Image source={{ uri: partner.avatar }} style={styles.headerAvatar as any} />
                 <View>
                   <Text style={styles.partnerName}>{partner.name}</Text>
-                  <Text style={styles.partnerStatus}>Vibe Score: {partner.vibeScore || 85}%</Text>
+                  <Text style={styles.partnerStatus}>
+                    {relationship ? `Bond L${relationship.level} / ${relationship.title}` : `Vibe Score: ${partner.vibeScore || 85}%`}
+                  </Text>
                 </View>
               </Pressable>
             )}
@@ -164,6 +169,26 @@ export default function ChatRoom() {
             Keep chats friendly. Do not share banking info, OTPs, or passwords.
           </Text>
         </View>
+
+        {relationship && (
+          <View style={styles.relationshipCard}>
+            <View style={styles.relationshipTop}>
+              <View style={styles.relationshipTitleRow}>
+                <Sparkles color={colors.gold} size={15} />
+                <Text style={styles.relationshipTitle}>Relationship Level {relationship.level}</Text>
+              </View>
+              <Text style={styles.relationshipName}>{relationship.title}</Text>
+            </View>
+            <View style={styles.relationshipTrack}>
+              <View style={[styles.relationshipFill, { width: `${Math.round((relationship.progress ?? 0) * 100)}%` }]} />
+            </View>
+            <Text style={styles.relationshipMeta}>
+              {relationship.requiredXp > 0
+                ? `${relationship.progressXp}/${relationship.requiredXp} bond XP to level ${relationship.nextLevel}`
+                : `${relationship.xp} bond XP total`}
+            </Text>
+          </View>
+        )}
 
         {/* Message Thread */}
         {loadingMessages && messages.length === 0 ? (
@@ -274,6 +299,20 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.line
   },
   safetyText: { color: colors.muted, fontSize: 11, fontWeight: "700", flex: 1 },
+  relationshipCard: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
+    backgroundColor: "rgba(246,180,75,0.06)"
+  },
+  relationshipTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  relationshipTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  relationshipTitle: { color: colors.text, fontSize: 12, fontWeight: "900" },
+  relationshipName: { color: colors.gold, fontSize: 12, fontWeight: "900" },
+  relationshipTrack: { height: 6, borderRadius: 6, overflow: "hidden", backgroundColor: "rgba(255,255,255,0.08)", marginTop: 8 },
+  relationshipFill: { height: "100%", borderRadius: 6, backgroundColor: colors.gold },
+  relationshipMeta: { color: colors.muted, fontSize: 11, fontWeight: "700", marginTop: 5 },
   messagesList: { padding: 16, gap: 12 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   bubbleWrap: { maxWidth: "80%", marginBottom: 4 },

@@ -20,6 +20,7 @@ import { getCachedJson, setCachedJson } from "../services/redis.js";
 import { addVipDays, findVipPlan, getVipStatus } from "../services/vip.js";
 import { activeCosmeticKey, findProfileCosmetic } from "../services/cosmetics.js";
 import { getLevelStatus, grantXp } from "../services/levels.js";
+import { grantRelationshipXp } from "../services/relationships.js";
 
 export const walletRouter = Router();
 walletRouter.use(requireAuth);
@@ -324,6 +325,7 @@ walletRouter.post("/rooms/:id/send-gift", validateBody(sendGiftSchema), asyncHan
     session.endSession();
     await grantXp(req.user!.id, "GIFT_SENT", { roomId: room._id.toString(), giftId: gift._id.toString() });
     await grantXp(req.body.receiverId, "GIFT_RECEIVED", { roomId: room._id.toString(), giftId: gift._id.toString() });
+    await grantRelationshipXp(req.user!.id, req.body.receiverId, "GIFT_SENT", { roomId: room._id.toString(), giftId: gift._id.toString() });
     await createNotification(req.body.receiverId, "GIFT", "Gift Received", `${req.user!.name} sent you a ${gift.name}!`, { roomId: room._id.toString(), giftId: gift._id.toString() });
     // NOTE: emitRoom is called after the socket room join for consistent ordering
     emitRoom(room._id.toString(), socketEvents.roomGiftSend, { giftTransaction: giftTransaction[0], gift });
@@ -369,6 +371,7 @@ walletRouter.post("/direct-send-gift", asyncHandler(async (req: AuthRequest, res
     session.endSession();
     await grantXp(req.user!.id, "GIFT_SENT", { giftId: gift._id.toString(), direct: true });
     await grantXp(receiverId, "GIFT_RECEIVED", { giftId: gift._id.toString(), direct: true });
+    const relationship = await grantRelationshipXp(req.user!.id, receiverId, "GIFT_SENT", { giftId: gift._id.toString(), direct: true });
 
     // Create a direct message indicating the gift was sent
     const message = await DirectMessage.create({
@@ -378,7 +381,7 @@ walletRouter.post("/direct-send-gift", asyncHandler(async (req: AuthRequest, res
     });
 
     await createNotification(receiverId, "GIFT", "Gift Received", `${req.user!.name} sent you a ${gift.name}!`, { partnerId: req.user!.id });
-    sendOk(res, { giftTransaction: giftTransaction[0], message }, 201);
+    sendOk(res, { giftTransaction: giftTransaction[0], message, relationship: relationship?.relationship }, 201);
   } catch (err) {
     await session.abortTransaction();
     session.endSession();

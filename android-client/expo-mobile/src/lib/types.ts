@@ -12,6 +12,19 @@ export interface LevelStatus {
   dailyCheckInXp: number;
 }
 
+export interface RelationshipStatus {
+  xp: number;
+  level: number;
+  title: string;
+  currentLevelXp: number;
+  nextLevel?: number;
+  nextLevelXp?: number;
+  progressXp: number;
+  requiredXp: number;
+  progress: number;
+  lastInteractionAt?: string;
+}
+
 export interface User {
   _id: string;
   id?: string;
