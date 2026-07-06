@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { chatMessageSchema, createPollSchema, createRoomSchema, directMessageSchema, inviteSchema, reactionSchema, reportSchema, socketEvents, votePollSchema } from "@yugm/shared";
-import { requireAuth, type AuthRequest } from "../middleware/auth.js";
+import { requireAuth, requireNotMuted, type AuthRequest } from "../middleware/auth.js";
 import { chatLimiter, reportLimiter } from "../middleware/rateLimit.js";
 import { validateBody } from "../middleware/validate.js";
 import { Block } from "../models/Block.js";
@@ -60,7 +60,7 @@ function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-roomsRouter.post("/", requireAuth, validateBody(createRoomSchema), asyncHandler(async (req: AuthRequest, res) => {
+roomsRouter.post("/", requireAuth, requireNotMuted, validateBody(createRoomSchema), asyncHandler(async (req: AuthRequest, res) => {
   const scheduledFor = req.body.scheduledFor ? new Date(req.body.scheduledFor) : undefined;
   const isScheduled = scheduledFor && scheduledFor.getTime() > Date.now() + 60_000;
   const room = await Room.create({
@@ -88,7 +88,7 @@ roomsRouter.get("/", asyncHandler(async (req, res) => {
   const cacheKey = `rooms:list:${JSON.stringify(filter)}`;
   const cached = await getCachedJson(cacheKey);
   if (cached) return sendOk(res, cached);
-  const rooms = await Room.find(filter).populate("hostId", "name username avatar city vipTier vipExpiresAt").sort({ participantCount: -1, createdAt: -1 }).limit(50).lean();
+  const rooms = await Room.find(filter).populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt").sort({ participantCount: -1, createdAt: -1 }).limit(50).lean();
   const payload = { rooms };
   await setCachedJson(cacheKey, payload, 20);
   sendOk(res, payload);
@@ -96,7 +96,7 @@ roomsRouter.get("/", asyncHandler(async (req, res) => {
 
 roomsRouter.get("/scheduled", asyncHandler(async (_req, res) => {
   const rooms = await Room.find({ status: "SCHEDULED", visibility: "PUBLIC" })
-    .populate("hostId", "name username avatar city vipTier vipExpiresAt")
+    .populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt")
     .sort({ scheduledFor: 1 })
     .limit(30)
     .lean();
@@ -119,7 +119,7 @@ roomsRouter.get("/recommended", requireAuth, asyncHandler(async (req: AuthReques
       { language: { $in: languages } }
     ]
   })
-    .populate("hostId", "name username avatar city vipTier vipExpiresAt")
+    .populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt")
     .sort({ participantCount: -1, createdAt: -1 })
     .limit(20)
     .lean();
@@ -128,13 +128,13 @@ roomsRouter.get("/recommended", requireAuth, asyncHandler(async (req: AuthReques
 
 roomsRouter.get("/leaderboard", asyncHandler(async (_req, res) => {
   const topRooms = await Room.find({ status: "LIVE", visibility: "PUBLIC" })
-    .populate("hostId", "name username avatar city vipTier vipExpiresAt")
+    .populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt")
     .sort({ participantCount: -1, createdAt: -1 })
     .limit(10)
     .lean();
   const topHosts = await User.find({ role: { $in: ["HOST", "USER"] } })
     .sort({ followersCount: -1, walletBalance: -1 })
-    .select("name username avatar city followersCount walletBalance vipTier vipExpiresAt")
+    .select("name username avatar city followersCount walletBalance activeCosmetics vipTier vipExpiresAt")
     .limit(10)
     .lean();
   sendOk(res, { topRooms, topHosts });
@@ -143,7 +143,7 @@ roomsRouter.get("/leaderboard", asyncHandler(async (_req, res) => {
 roomsRouter.get("/trending", asyncHandler(async (_req, res) => {
   const cached = await getCachedJson("rooms:trending");
   if (cached) return sendOk(res, cached);
-  const rooms = await Room.find({ status: "LIVE", visibility: "PUBLIC" }).populate("hostId", "name username avatar city vipTier vipExpiresAt").sort({ participantCount: -1 }).limit(12).lean();
+  const rooms = await Room.find({ status: "LIVE", visibility: "PUBLIC" }).populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt").sort({ participantCount: -1 }).limit(12).lean();
   const payload = { rooms };
   await setCachedJson("rooms:trending", payload, 20);
   sendOk(res, payload);
@@ -159,7 +159,7 @@ roomsRouter.get("/search", asyncHandler(async (req, res) => {
     visibility: "PUBLIC",
     $or: [{ title: regex }, { description: regex }, { tags: regex }, { category: regex }, { language: regex }]
   })
-    .populate("hostId", "name username avatar city vipTier vipExpiresAt")
+    .populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt")
     .sort({ participantCount: -1 })
     .limit(limit)
     .lean();
@@ -168,10 +168,10 @@ roomsRouter.get("/search", asyncHandler(async (req, res) => {
 
 roomsRouter.get("/:id", asyncHandler(async (req, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
-  const room = await Room.findById(req.params.id).populate("hostId", "name username avatar city vipTier vipExpiresAt").lean();
+  const room = await Room.findById(req.params.id).populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt").lean();
   if (!room) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
-  const participants = await RoomParticipant.find({ roomId: req.params.id, leftAt: null }).populate("userId", "name username avatar vipTier vipExpiresAt").lean();
-  const speakerRequests = await SpeakerRequest.find({ roomId: req.params.id, status: "PENDING" }).populate("userId", "name username avatar vipTier vipExpiresAt").lean();
+  const participants = await RoomParticipant.find({ roomId: req.params.id, leftAt: null }).populate("userId", "name username avatar activeCosmetics vipTier vipExpiresAt").lean();
+  const speakerRequests = await SpeakerRequest.find({ roomId: req.params.id, status: "PENDING" }).populate("userId", "name username avatar activeCosmetics vipTier vipExpiresAt").lean();
   sendOk(res, { room, participants, speakerRequests });
 }));
 
@@ -227,7 +227,7 @@ roomsRouter.patch("/:id", requireAuth, asyncHandler(async (req: AuthRequest, res
   sendOk(res, { room });
 }));
 
-roomsRouter.post("/:id/request-speaker", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
+roomsRouter.post("/:id/request-speaker", requireAuth, requireNotMuted, asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
   const room = await getRoomOrThrow(req.params.id);
   if (!room.allowAudienceMicRequests) throw new HttpError(400, "Mic requests are closed", ErrorCode.VALIDATION);
@@ -283,7 +283,7 @@ roomsRouter.post("/:id/report", requireAuth, reportLimiter, validateBody(reportS
 roomsRouter.get("/:id/messages", asyncHandler(async (req, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
   const limit = Math.min(Number(req.query.limit) || 80, 200);
-  const messages = await ChatMessage.find({ roomId: req.params.id }).populate("senderId", "name username avatar vipTier vipExpiresAt").sort({ createdAt: -1 }).limit(limit).lean();
+  const messages = await ChatMessage.find({ roomId: req.params.id }).populate("senderId", "name username avatar activeCosmetics vipTier vipExpiresAt").sort({ createdAt: -1 }).limit(limit).lean();
   sendOk(res, { messages: messages.reverse() });
 }));
 
@@ -335,7 +335,7 @@ roomsRouter.post("/:id/polls/:pollId/vote", requireAuth, validateBody(votePollSc
   sendOk(res, { poll });
 }));
 
-roomsRouter.post("/:id/invites", requireAuth, validateBody(inviteSchema), asyncHandler(async (req: AuthRequest, res) => {
+roomsRouter.post("/:id/invites", requireAuth, requireNotMuted, validateBody(inviteSchema), asyncHandler(async (req: AuthRequest, res) => {
   const room = await getRoomOrThrow(req.params.id);
   const invite = await RoomInvite.findOneAndUpdate(
     { roomId: room._id, inviterId: req.user!.id, inviteeId: req.body.userId, status: "PENDING" },
@@ -361,7 +361,7 @@ roomsRouter.get("/:id/missions", requireAuth, asyncHandler(async (req: AuthReque
   sendOk(res, { missions });
 }));
 
-roomsRouter.post("/:id/messages/direct", requireAuth, validateBody(directMessageSchema), asyncHandler(async (req: AuthRequest, res) => {
+roomsRouter.post("/:id/messages/direct", requireAuth, requireNotMuted, validateBody(directMessageSchema), asyncHandler(async (req: AuthRequest, res) => {
   const room = await getRoomOrThrow(req.params.id);
   const receiverId = room.hostId.toString() === req.user!.id ? String(req.body.receiverId || "") : room.hostId.toString();
   if (!isValidObjectId(receiverId)) throw new HttpError(400, "Invalid receiver", ErrorCode.VALIDATION);
@@ -385,7 +385,7 @@ roomsRouter.post("/:id/messages/direct", requireAuth, validateBody(directMessage
   sendOk(res, { message }, 201);
 }));
 
-roomsRouter.post("/:id/messages", requireAuth, chatLimiter, validateBody(chatMessageSchema), asyncHandler(async (req: AuthRequest, res) => {
+roomsRouter.post("/:id/messages", requireAuth, requireNotMuted, chatLimiter, validateBody(chatMessageSchema), asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
   const participant = await RoomParticipant.findOne({ roomId: req.params.id, userId: req.user!.id, leftAt: null }).lean();
   if (!participant) throw new HttpError(403, "You are not a participant in this room", ErrorCode.FORBIDDEN);

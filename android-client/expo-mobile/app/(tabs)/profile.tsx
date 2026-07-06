@@ -76,6 +76,11 @@ export default function Profile() {
             )}
           </View>
           <Text style={styles.username}>@{user?.username ?? ""}</Text>
+          {!!user?.activeCosmetics && Object.values(user.activeCosmetics).some(Boolean) && (
+            <Text style={styles.cosmeticsText}>
+              Cosmetics: {Object.values(user.activeCosmetics).filter(Boolean).join(" / ")}
+            </Text>
+          )}
           <Text style={styles.bio}>{user?.bio ?? ""}</Text>
           <View style={styles.stats}>
             <Stat label="Followers" value={user?.followersCount ?? 0} />
@@ -135,6 +140,7 @@ const styles = StyleSheet.create({
   vipBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.gold, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
   vipBadgeText: { color: colors.ink, fontSize: 11, fontWeight: "900" },
   username: { color: colors.gold, fontWeight: "800", marginTop: 2 },
+  cosmeticsText: { color: colors.pink, fontSize: 12, fontWeight: "800", marginTop: 8 },
   bio: { color: colors.muted, marginTop: 14, lineHeight: 21 },
   stats: { flexDirection: "row", marginVertical: 20, gap: 10 },
   stat: { flex: 1, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, borderRadius: 8, padding: 12 },

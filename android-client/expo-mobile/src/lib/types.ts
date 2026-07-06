@@ -13,6 +13,12 @@ export interface User {
   followersCount?: number;
   followingCount?: number;
   walletBalance?: number;
+  ownedCosmeticIds?: string[];
+  activeCosmetics?: {
+    avatarFrame?: string;
+    profileTheme?: string;
+    entranceEffect?: string;
+  };
   isVip?: boolean;
   vipTier?: string;
   vipStartedAt?: string;

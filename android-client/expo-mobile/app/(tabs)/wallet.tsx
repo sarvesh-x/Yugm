@@ -3,7 +3,7 @@ import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, A
 import { useFocusEffect } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
-import { CreditCard, Crown, Gift, Plus, ShoppingBag, Coins, TrendingUp } from "lucide-react-native";
+import { CreditCard, Crown, Gift, Plus, ShoppingBag, Coins, Sparkles, TrendingUp } from "lucide-react-native";
 import { Screen, Section } from "@/components/Screen";
 import { walletApi } from "@/lib/api";
 import { openRazorpayCheckout, startGooglePlayPurchase } from "@/lib/payments";
@@ -18,6 +18,7 @@ export default function WalletScreen() {
 
   const wallet = useQuery({ queryKey: ["wallet"], queryFn: () => walletApi.wallet(), staleTime: 30000, gcTime: 60000 });
   const vipPlans = useQuery({ queryKey: ["wallet", "vipPlans"], queryFn: () => walletApi.vipPlans(), staleTime: 300000, gcTime: 600000 });
+  const cosmetics = useQuery({ queryKey: ["wallet", "cosmetics"], queryFn: () => walletApi.cosmetics(), staleTime: 300000, gcTime: 600000 });
   const transactions = useQuery({ queryKey: ["wallet", "transactions"], queryFn: () => walletApi.transactions(), staleTime: 30000, gcTime: 60000 });
   const packs = useQuery({ queryKey: ["wallet", "packs"], queryFn: () => walletApi.packs(), staleTime: 300000, gcTime: 600000 });
   const purchases = useQuery({ queryKey: ["wallet", "purchases"], queryFn: () => walletApi.purchases(), staleTime: 30000, gcTime: 60000 });
@@ -92,6 +93,28 @@ export default function WalletScreen() {
     onError: (err: any) => setError(err?.message ?? "VIP activation failed")
   });
 
+  const purchaseCosmetic = useMutation({
+    mutationFn: (cosmeticId: string) => walletApi.purchaseCosmetic(cosmeticId),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["wallet"] });
+      queryClient.invalidateQueries({ queryKey: ["wallet", "cosmetics"] });
+      queryClient.invalidateQueries({ queryKey: ["wallet", "transactions"] });
+      if (currentUser) updateUser({ ...currentUser, walletBalance: data.balance, ownedCosmeticIds: data.ownedCosmeticIds, activeCosmetics: data.activeCosmetics });
+      Alert.alert("Cosmetic equipped", `${data.cosmetic.name} is now active on your profile.`);
+    },
+    onError: (err: any) => setError(err?.message ?? "Cosmetic purchase failed")
+  });
+
+  const equipCosmetic = useMutation({
+    mutationFn: ({ cosmeticId, type }: { cosmeticId: string | null; type: string }) => walletApi.equipCosmetic(cosmeticId, type),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["wallet"] });
+      queryClient.invalidateQueries({ queryKey: ["wallet", "cosmetics"] });
+      if (currentUser) updateUser({ ...currentUser, walletBalance: data.balance, ownedCosmeticIds: data.ownedCosmeticIds, activeCosmetics: data.activeCosmetics });
+    },
+    onError: (err: any) => setError(err?.message ?? "Could not equip cosmetic")
+  });
+
   useFocusEffect(() => {
     queryClient.invalidateQueries({ queryKey: ["wallet"] });
     queryClient.invalidateQueries({ queryKey: ["wallet", "transactions"] });
@@ -110,6 +133,7 @@ export default function WalletScreen() {
               packs.refetch();
               purchases.refetch();
               vipPlans.refetch();
+              cosmetics.refetch();
             }}
             tintColor={colors.gold}
           />
@@ -179,6 +203,41 @@ export default function WalletScreen() {
                   </Pressable>
                 </View>
               ))}
+            </View>
+          )}
+        </Section>
+
+        <Section>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Profile Cosmetics</Text>
+            <Sparkles color={colors.pink} size={18} />
+          </View>
+          <Text style={styles.sectionSubtitle}>Buy avatar frames, profile themes, and entrance effects with coins.</Text>
+
+          {cosmetics.isLoading ? (
+            <ActivityIndicator color={colors.gold} size="small" />
+          ) : (
+            <View style={styles.cosmeticGrid}>
+              {(cosmetics.data?.cosmetics ?? []).map((item: any) => {
+                const owned = cosmetics.data?.ownedCosmeticIds?.includes(item.id);
+                const key = item.type === "AVATAR_FRAME" ? "avatarFrame" : item.type === "PROFILE_THEME" ? "profileTheme" : "entranceEffect";
+                const active = cosmetics.data?.activeCosmetics?.[key] === item.id;
+                return (
+                  <View key={item.id} style={styles.cosmeticCard}>
+                    <Text style={styles.cosmeticRarity}>{item.rarity}</Text>
+                    <Text style={styles.cosmeticName}>{item.name}</Text>
+                    <Text style={styles.cosmeticType}>{item.type.replace("_", " ")}</Text>
+                    <Text style={styles.cosmeticPrice}>{item.coinPrice} coins</Text>
+                    <Pressable
+                      style={[styles.cosmeticBtn, active && styles.cosmeticBtnActive, (purchaseCosmetic.isPending || equipCosmetic.isPending) && styles.vipBtnDisabled]}
+                      disabled={purchaseCosmetic.isPending || equipCosmetic.isPending}
+                      onPress={() => owned ? equipCosmetic.mutate({ cosmeticId: item.id, type: item.type }) : purchaseCosmetic.mutate(item.id)}
+                    >
+                      <Text style={[styles.cosmeticBtnText, active && styles.cosmeticBtnActiveText]}>{active ? "Active" : owned ? "Equip" : "Buy"}</Text>
+                    </Pressable>
+                  </View>
+                );
+              })}
             </View>
           )}
         </Section>
@@ -339,6 +398,23 @@ const styles = StyleSheet.create({
   vipBtn: { marginTop: 12, height: 40, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: colors.gold },
   vipBtnDisabled: { opacity: 0.6 },
   vipBtnText: { color: colors.ink, fontWeight: "900" },
+  cosmeticGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  cosmeticCard: {
+    width: "48%",
+    borderRadius: 16,
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: "rgba(255,62,147,0.25)",
+    padding: 14
+  },
+  cosmeticRarity: { color: colors.gold, fontSize: 10, fontWeight: "900" },
+  cosmeticName: { color: colors.text, fontSize: 15, fontWeight: "900", marginTop: 6 },
+  cosmeticType: { color: colors.muted, fontSize: 10, fontWeight: "800", marginTop: 4 },
+  cosmeticPrice: { color: colors.pink, fontSize: 13, fontWeight: "900", marginTop: 8 },
+  cosmeticBtn: { marginTop: 10, height: 34, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: colors.pink },
+  cosmeticBtnActive: { backgroundColor: colors.gold },
+  cosmeticBtnText: { color: colors.text, fontWeight: "900", fontSize: 12 },
+  cosmeticBtnActiveText: { color: colors.ink },
   payActions: { width: "100%", gap: 6 },
   payBtn: {
     flexDirection: "row",

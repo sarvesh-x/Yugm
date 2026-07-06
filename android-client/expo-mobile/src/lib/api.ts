@@ -91,10 +91,19 @@ export const roomsApi = {
 
 export const walletApi = {
   gifts: () => api<{ gifts: any[] }>("/gifts"),
-  wallet: () => api<{ balance: number; vip?: any }>("/wallet"),
+  wallet: () => api<{ balance: number; vip?: any; cosmetics?: any }>("/wallet"),
   transactions: () => api<{ transactions: any[] }>("/wallet/transactions"),
   packs: () => api<{ packs: any[] }>("/wallet/packs"),
   purchases: () => api<{ purchases: any[] }>("/wallet/purchases"),
+  cosmetics: () => api<{ cosmetics: any[]; ownedCosmeticIds: string[]; activeCosmetics: any }>("/wallet/cosmetics"),
+  purchaseCosmetic: (cosmeticId: string) => api<{ cosmetic: any; balance: number; ownedCosmeticIds: string[]; activeCosmetics: any }>("/wallet/cosmetics/purchase", {
+    method: "POST",
+    body: JSON.stringify({ cosmeticId })
+  }),
+  equipCosmetic: (cosmeticId: string | null, type: string) => api<{ balance: number; ownedCosmeticIds: string[]; activeCosmetics: any }>("/wallet/cosmetics/equip", {
+    method: "POST",
+    body: JSON.stringify({ cosmeticId, type })
+  }),
   vipPlans: () => api<{ plans: any[]; vip?: any }>("/wallet/vip/plans"),
   activateVip: (planId: string) => api<{ balance: number; vip: any; plan: any }>("/wallet/vip/activate", {
     method: "POST",

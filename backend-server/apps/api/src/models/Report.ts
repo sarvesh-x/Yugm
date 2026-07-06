@@ -7,6 +7,9 @@ const reportSchema = new Schema(
     roomId: { type: Schema.Types.ObjectId, ref: "Room" },
     reason: { type: String, required: true },
     description: String,
+    moderatorNote: String,
+    reviewedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    reviewedAt: Date,
     status: {
       type: String,
       enum: ["PENDING", "REVIEWED", "ACTION_TAKEN", "DISMISSED"],

@@ -145,6 +145,12 @@ export default function UserProfileDetail() {
               </Text>
             </View>
 
+            {!!user.activeCosmetics && Object.values(user.activeCosmetics).some(Boolean) && (
+              <Text style={styles.cosmeticsText}>
+                Cosmetics: {Object.values(user.activeCosmetics).filter(Boolean).join(" / ")}
+              </Text>
+            )}
+
             {user.vibeLine && (
               <View style={styles.vibeBox}>
                 <Text style={styles.vibeLabel}>Vibe Line</Text>
@@ -346,6 +352,12 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 14,
     fontWeight: "800"
+  },
+  cosmeticsText: {
+    color: colors.pink,
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 8
   },
   vibeBox: {
     marginTop: 16,

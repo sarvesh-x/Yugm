@@ -47,10 +47,27 @@ export const giftCatalogSeed = [
 ] as const;
 
 export const coinPacks = [
+  { id: "coins_290", coinAmount: 290, priceInr: 29, googleProductId: "yugm_coins_290" },
+  { id: "coins_490", coinAmount: 490, priceInr: 49, googleProductId: "yugm_coins_490" },
   { id: "coins_990", coinAmount: 990, priceInr: 99, googleProductId: "yugm_coins_990" },
   { id: "coins_1990", coinAmount: 1990, priceInr: 199, googleProductId: "yugm_coins_1990" },
-  { id: "coins_4990", coinAmount: 4990, priceInr: 499, googleProductId: "yugm_coins_4990" }
+  { id: "coins_4990", coinAmount: 4990, priceInr: 499, googleProductId: "yugm_coins_4990" },
+  { id: "coins_9990", coinAmount: 9990, priceInr: 999, googleProductId: "yugm_coins_9990" },
+  { id: "coins_24990", coinAmount: 24990, priceInr: 2499, googleProductId: "yugm_coins_24990" }
 ] as const;
+
+export const profileCosmetics = [
+  { id: "frame_gold", type: "AVATAR_FRAME", name: "Golden Ring", coinPrice: 399, rarity: "RARE", preview: "gold" },
+  { id: "frame_neon", type: "AVATAR_FRAME", name: "Neon Pulse", coinPrice: 699, rarity: "EPIC", preview: "neon" },
+  { id: "theme_midnight", type: "PROFILE_THEME", name: "Midnight Glow", coinPrice: 499, rarity: "RARE", preview: "midnight" },
+  { id: "theme_saffron", type: "PROFILE_THEME", name: "Saffron Wave", coinPrice: 799, rarity: "EPIC", preview: "saffron" },
+  { id: "entrance_spark", type: "ENTRANCE_EFFECT", name: "Spark Entrance", coinPrice: 599, rarity: "RARE", preview: "spark" },
+  { id: "entrance_crown", type: "ENTRANCE_EFFECT", name: "Crown Drop", coinPrice: 999, rarity: "LEGENDARY", preview: "crown" }
+] as const;
+
+export const profileCosmeticIds = profileCosmetics.map((item) => item.id) as [typeof profileCosmetics[number]["id"], ...typeof profileCosmetics[number]["id"][]];
+export const profileCosmeticTypes = ["AVATAR_FRAME", "PROFILE_THEME", "ENTRANCE_EFFECT"] as const;
+export const moderationActionTypes = ["WARN", "MUTE", "SUSPEND", "BAN", "UNBAN"] as const;
 
 export const vipPlans = [
   {
@@ -158,6 +175,23 @@ export const createPurchaseOrderSchema = z.object({
 
 export const purchaseVipSchema = z.object({
   planId: z.enum(vipPlanIds)
+});
+
+export const purchaseProfileCosmeticSchema = z.object({
+  cosmeticId: z.enum(profileCosmeticIds)
+});
+
+export const equipProfileCosmeticSchema = z.object({
+  cosmeticId: z.enum(profileCosmeticIds).nullable(),
+  type: z.enum(profileCosmeticTypes)
+});
+
+export const moderationActionSchema = z.object({
+  targetUserId: z.string().regex(objectIdPattern, "Invalid targetUserId format"),
+  action: z.enum(moderationActionTypes),
+  reason: z.string().min(2).max(160),
+  durationHours: z.number().int().min(1).max(24 * 365).optional(),
+  reportId: z.string().regex(objectIdPattern, "Invalid reportId format").optional()
 });
 
 export const verifyRazorpayPurchaseSchema = z.object({

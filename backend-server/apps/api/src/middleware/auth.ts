@@ -21,7 +21,10 @@ export async function requireAuth(req: AuthRequest, _res: Response, next: NextFu
 
     const decoded = jwt.verify(token, env.JWT_SECRET) as { sub: string; tokenVersion?: number };
     const user = await User.findById(decoded.sub).select("-__v");
-    if (!user || user.isBlocked) throw new HttpError(401, "Invalid user");
+    if (!user || user.isBlocked) throw new HttpError(401, user?.moderationReason || "Invalid user");
+    if (user.suspendedUntil && user.suspendedUntil.getTime() > Date.now()) {
+      throw new HttpError(403, `Account suspended until ${user.suspendedUntil.toISOString()}`);
+    }
     if (decoded.tokenVersion !== undefined && user.tokenVersion !== decoded.tokenVersion) {
       throw new HttpError(401, "Token revoked");
     }
@@ -39,4 +42,12 @@ export function requireRole(...roles: UserRole[]) {
     if (!roles.includes(req.user.role)) return next(new HttpError(403, "Insufficient role"));
     next();
   };
+}
+
+export function requireNotMuted(req: AuthRequest, _res: Response, next: NextFunction) {
+  if (!req.user) return next(new HttpError(401, "Missing user"));
+  if (req.user.mutedUntil && req.user.mutedUntil.getTime() > Date.now()) {
+    return next(new HttpError(403, `Account muted until ${req.user.mutedUntil.toISOString()}`));
+  }
+  next();
 }

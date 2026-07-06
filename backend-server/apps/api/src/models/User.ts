@@ -22,9 +22,19 @@ export interface IUser extends mongoose.Document {
   followersCount: number;
   followingCount: number;
   walletBalance: number;
+  ownedCosmeticIds: string[];
+  activeCosmetics: {
+    avatarFrame?: string;
+    profileTheme?: string;
+    entranceEffect?: string;
+  };
   vipTier?: string;
   vipStartedAt?: Date;
   vipExpiresAt?: Date;
+  moderationStrikes: number;
+  mutedUntil?: Date;
+  suspendedUntil?: Date;
+  moderationReason?: string;
   tokenVersion: number;
   interestedIn?: string;
   lookingFor?: string;
@@ -54,9 +64,19 @@ const userSchema = new Schema<IUser>(
     followersCount: { type: Number, default: 0 },
     followingCount: { type: Number, default: 0 },
     walletBalance: { type: Number, default: 0 },
+    ownedCosmeticIds: [{ type: String }],
+    activeCosmetics: {
+      avatarFrame: String,
+      profileTheme: String,
+      entranceEffect: String
+    },
     vipTier: String,
     vipStartedAt: Date,
     vipExpiresAt: Date,
+    moderationStrikes: { type: Number, default: 0 },
+    mutedUntil: Date,
+    suspendedUntil: Date,
+    moderationReason: String,
     tokenVersion: { type: Number, default: 0 },
     interestedIn: String,
     lookingFor: String,
@@ -70,5 +90,7 @@ userSchema.index({ email: 1 }, { unique: true, partialFilterExpression: { email:
 userSchema.index({ phone: 1 }, { unique: true, partialFilterExpression: { phone: { $type: "string" } } });
 userSchema.index({ firebaseUid: 1 }, { unique: true, partialFilterExpression: { firebaseUid: { $type: "string" } } });
 userSchema.index({ vipExpiresAt: -1 });
+userSchema.index({ mutedUntil: 1 });
+userSchema.index({ suspendedUntil: 1 });
 
 export const User = mongoose.model<IUser>("User", userSchema);

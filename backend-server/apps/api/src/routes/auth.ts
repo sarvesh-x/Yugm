@@ -30,6 +30,8 @@ function publicUser(user: any) {
     avatar: user.avatar,
     role: user.role,
     walletBalance: user.walletBalance,
+    activeCosmetics: user.activeCosmetics,
+    ownedCosmeticIds: user.ownedCosmeticIds,
     ...getVipStatus(user),
     interests: user.interests,
     languages: user.languages,

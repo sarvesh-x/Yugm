@@ -80,6 +80,7 @@ datingRouter.get("/explore", asyncHandler(async (req: AuthRequest, res) => {
       languages: candidate.languages,
       followersCount: candidate.followersCount,
       role: candidate.role,
+      activeCosmetics: candidate.activeCosmetics,
       ...getVipStatus(candidate),
       vibeScore
     };
@@ -201,7 +202,7 @@ datingRouter.get("/matches", asyncHandler(async (req: AuthRequest, res) => {
   // Fetch user profiles for partners
   const partners = await User.find({
     _id: { $in: partnerIds }
-  }).select("name username avatar city bio interests languages vipTier vipStartedAt vipExpiresAt").lean();
+  }).select("name username avatar city bio interests languages activeCosmetics vipTier vipStartedAt vipExpiresAt").lean();
 
   // Map back matching documents with details
   const formattedMatches = matches.map(m => {
@@ -221,6 +222,7 @@ datingRouter.get("/matches", asyncHandler(async (req: AuthRequest, res) => {
         avatar: partner.avatar,
         city: partner.city,
         bio: partner.bio,
+        activeCosmetics: partner.activeCosmetics,
         interests: partner.interests,
         languages: partner.languages,
         ...getVipStatus(partner)

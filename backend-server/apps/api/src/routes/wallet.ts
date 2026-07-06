@@ -1,6 +1,6 @@
 import { Router } from "express";
 import mongoose from "mongoose";
-import { coinPacks, createPurchaseOrderSchema, purchaseVipSchema, sendGiftSchema, socketEvents, verifyGooglePlayPurchaseSchema, verifyRazorpayPurchaseSchema, vipPlans } from "@yugm/shared";
+import { coinPacks, createPurchaseOrderSchema, equipProfileCosmeticSchema, profileCosmetics, purchaseProfileCosmeticSchema, purchaseVipSchema, sendGiftSchema, socketEvents, verifyGooglePlayPurchaseSchema, verifyRazorpayPurchaseSchema, vipPlans } from "@yugm/shared";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import { Gift } from "../models/Gift.js";
@@ -18,6 +18,7 @@ import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId } from "../
 import { env } from "../config/env.js";
 import { getCachedJson, setCachedJson } from "../services/redis.js";
 import { addVipDays, findVipPlan, getVipStatus } from "../services/vip.js";
+import { activeCosmeticKey, findProfileCosmetic } from "../services/cosmetics.js";
 
 export const walletRouter = Router();
 walletRouter.use(requireAuth);
@@ -76,7 +77,14 @@ walletRouter.get("/gifts", asyncHandler(async (_req, res) => {
   sendOk(res, payload);
 }));
 
-walletRouter.get("/wallet", (req: AuthRequest, res) => sendOk(res, { balance: req.user!.walletBalance, vip: getVipStatus(req.user) }));
+walletRouter.get("/wallet", (req: AuthRequest, res) => sendOk(res, {
+  balance: req.user!.walletBalance,
+  vip: getVipStatus(req.user),
+  cosmetics: {
+    ownedCosmeticIds: req.user!.ownedCosmeticIds ?? [],
+    activeCosmetics: req.user!.activeCosmetics ?? {}
+  }
+}));
 
 walletRouter.get("/wallet/transactions", asyncHandler(async (req: AuthRequest, res) => {
   const limit = Math.min(Number(req.query.limit) || 100, 200);
@@ -85,6 +93,55 @@ walletRouter.get("/wallet/transactions", asyncHandler(async (req: AuthRequest, r
 }));
 
 walletRouter.get("/wallet/packs", (_req: AuthRequest, res) => sendOk(res, { packs: coinPacks }));
+
+walletRouter.get("/wallet/cosmetics", (req: AuthRequest, res) => {
+  sendOk(res, {
+    cosmetics: profileCosmetics,
+    ownedCosmeticIds: req.user!.ownedCosmeticIds ?? [],
+    activeCosmetics: req.user!.activeCosmetics ?? {}
+  });
+});
+
+walletRouter.post("/wallet/cosmetics/purchase", validateBody(purchaseProfileCosmeticSchema), asyncHandler(async (req: AuthRequest, res) => {
+  const cosmetic = findProfileCosmetic(req.body.cosmeticId);
+  if (!cosmetic) throw new HttpError(400, "Invalid profile cosmetic", ErrorCode.VALIDATION);
+  if ((req.user!.ownedCosmeticIds ?? []).includes(cosmetic.id)) {
+    return sendOk(res, { cosmetic, ownedCosmeticIds: req.user!.ownedCosmeticIds, activeCosmetics: req.user!.activeCosmetics, balance: req.user!.walletBalance });
+  }
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    await debitWallet(req.user!.id, cosmetic.coinPrice, "PROFILE_COSMETIC_PURCHASE", { cosmeticId: cosmetic.id, type: cosmetic.type }, session);
+    const key = activeCosmeticKey(cosmetic.type);
+    const update: Record<string, unknown> = { $addToSet: { ownedCosmeticIds: cosmetic.id } };
+    if (key) update.$set = { [`activeCosmetics.${key}`]: cosmetic.id };
+    await User.findByIdAndUpdate(req.user!.id, update, { session });
+    await session.commitTransaction();
+    session.endSession();
+    const user = await User.findById(req.user!.id).select("walletBalance ownedCosmeticIds activeCosmetics").lean();
+    sendOk(res, { cosmetic, balance: user?.walletBalance ?? 0, ownedCosmeticIds: user?.ownedCosmeticIds ?? [], activeCosmetics: user?.activeCosmetics ?? {} }, 201);
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    throw err;
+  }
+}));
+
+walletRouter.post("/wallet/cosmetics/equip", validateBody(equipProfileCosmeticSchema), asyncHandler(async (req: AuthRequest, res) => {
+  const key = activeCosmeticKey(req.body.type);
+  if (!key) throw new HttpError(400, "Invalid cosmetic type", ErrorCode.VALIDATION);
+  if (req.body.cosmeticId) {
+    const cosmetic = findProfileCosmetic(req.body.cosmeticId);
+    if (!cosmetic || cosmetic.type !== req.body.type) throw new HttpError(400, "Cosmetic type mismatch", ErrorCode.VALIDATION);
+    if (!(req.user!.ownedCosmeticIds ?? []).includes(req.body.cosmeticId)) throw new HttpError(403, "Cosmetic is not owned", ErrorCode.FORBIDDEN);
+  }
+  const update = req.body.cosmeticId
+    ? { $set: { [`activeCosmetics.${key}`]: req.body.cosmeticId } }
+    : { $unset: { [`activeCosmetics.${key}`]: "" } };
+  const user = await User.findByIdAndUpdate(req.user!.id, update, { new: true }).select("ownedCosmeticIds activeCosmetics walletBalance").lean();
+  sendOk(res, { ownedCosmeticIds: user?.ownedCosmeticIds ?? [], activeCosmetics: user?.activeCosmetics ?? {}, balance: user?.walletBalance ?? 0 });
+}));
 
 walletRouter.get("/wallet/vip/plans", (req: AuthRequest, res) => {
   sendOk(res, { plans: vipPlans, vip: getVipStatus(req.user) });
