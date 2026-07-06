@@ -2,6 +2,7 @@ import { Router } from "express";
 import mongoose from "mongoose";
 import { profileSchema } from "@yugm/shared";
 import { requireAuth, requireNotMuted, type AuthRequest } from "../middleware/auth.js";
+import { chatLimiter } from "../middleware/rateLimit.js";
 import { validateBody } from "../middleware/validate.js";
 import { Block } from "../models/Block.js";
 import { DirectMessage } from "../models/DirectMessage.js";
@@ -173,7 +174,7 @@ usersRouter.get("/messages/:userId", asyncHandler(async (req: AuthRequest, res) 
   sendOk(res, { messages: messages.reverse(), relationship });
 }));
 
-usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, asyncHandler(async (req: AuthRequest, res) => {
+usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, chatLimiter, asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.userId)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
   const receiverId = req.params.userId;
   if (receiverId === req.user!.id) throw new HttpError(400, "Cannot message yourself", ErrorCode.VALIDATION);
@@ -213,6 +214,15 @@ usersRouter.get("/me/blocked", requireAuth, asyncHandler(async (req: AuthRequest
     .lean();
   const users = blockedRows.map((row) => row.blockedUserId).filter(Boolean);
   sendOk(res, { users });
+}));
+
+usersRouter.get("/leaderboard/levels", asyncHandler(async (_req: AuthRequest, res) => {
+  const users = await User.find({ isBlocked: { $ne: true } })
+    .select("name username avatar city followersCount activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .sort({ level: -1, xp: -1, followersCount: -1 })
+    .limit(50)
+    .lean();
+  sendOk(res, { users: users.map(publicUser) });
 }));
 
 usersRouter.get("/:id", asyncHandler(async (req: AuthRequest, res) => {

@@ -7,6 +7,8 @@ const relationshipSchema = new Schema(
     xp: { type: Number, default: 0 },
     level: { type: Number, default: 1 },
     levelTitle: { type: String, default: "First Spark" },
+    streakDays: { type: Number, default: 0 },
+    lastStreakAt: Date,
     lastInteractionAt: Date
   },
   { timestamps: true }

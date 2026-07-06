@@ -7,6 +7,7 @@ import { validateBody } from "../middleware/validate.js";
 import { Report } from "../models/Report.js";
 import { ModerationAction } from "../models/ModerationAction.js";
 import { User } from "../models/User.js";
+import { createReportWithEvidence } from "../services/moderation.js";
 import { createNotification } from "../services/notifications.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId } from "../utils/http.js";
 
@@ -18,7 +19,7 @@ const updateReportStatusSchema = z.object({
 export const reportsRouter = Router();
 
 reportsRouter.post("/reports", requireAuth, reportLimiter, validateBody(reportSchema), asyncHandler(async (req: AuthRequest, res) => {
-  const report = await Report.create({ ...req.body, reporterId: req.user!.id });
+  const report = await createReportWithEvidence(req.body, req.user!.id);
   sendOk(res, { report }, 201);
 }));
 

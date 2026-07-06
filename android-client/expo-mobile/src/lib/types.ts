@@ -22,6 +22,9 @@ export interface RelationshipStatus {
   progressXp: number;
   requiredXp: number;
   progress: number;
+  perks?: string[];
+  nextPerk?: string;
+  streakDays?: number;
   lastInteractionAt?: string;
 }
 

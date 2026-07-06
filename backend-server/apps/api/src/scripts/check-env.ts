@@ -49,6 +49,32 @@ if (missingRequired.length) {
   process.exit(1);
 }
 
+const isProduction = process.env.NODE_ENV === "production";
+const productionErrors: string[] = [];
+if (isProduction) {
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET === "replace-me" || process.env.JWT_SECRET.length < 24) {
+    productionErrors.push("JWT_SECRET must be set to a strong value in production");
+  }
+  if (process.env.DEV_BYPASS_OTP) {
+    productionErrors.push("DEV_BYPASS_OTP must not be set in production");
+  }
+  if (!process.env.CORS_ORIGIN || process.env.CORS_ORIGIN === "*") {
+    productionErrors.push("CORS_ORIGIN should be an explicit comma-separated allowlist in production");
+  }
+  if (process.env.REDIS_URL) {
+    try {
+      new URL(process.env.REDIS_URL.trim().replace(/^redis-cli\s+-u\s+/, ""));
+    } catch {
+      productionErrors.push("REDIS_URL must be a valid redis:// or rediss:// URL");
+    }
+  }
+}
+
+if (productionErrors.length) {
+  console.error(`Production env problems:\n- ${productionErrors.join("\n- ")}`);
+  process.exit(1);
+}
+
 const blankFeatureKeys = rows.filter((row) => row.required !== "yes" && row.status !== "SET");
 if (blankFeatureKeys.length) {
   console.log(`Feature/default env not set: ${blankFeatureKeys.map((row) => row.key).join(", ")}`);

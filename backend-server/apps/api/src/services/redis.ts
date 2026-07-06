@@ -58,6 +58,14 @@ function isRedisReady() {
   return redis?.status === "ready";
 }
 
+export function getRedisHealth() {
+  return {
+    configured: Boolean(redis),
+    status: redis?.status ?? "disabled",
+    ready: isRedisReady()
+  };
+}
+
 export async function setUserPresence(userId: string, online: boolean) {
   if (!isRedisReady()) return;
   const key = `presence:user:${userId}`;

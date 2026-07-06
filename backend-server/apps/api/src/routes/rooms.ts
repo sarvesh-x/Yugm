@@ -9,7 +9,6 @@ import { ChatMessage } from "../models/ChatMessage.js";
 import { DirectMessage } from "../models/DirectMessage.js";
 import { Follow } from "../models/Follow.js";
 import { Poll } from "../models/Poll.js";
-import { Report } from "../models/Report.js";
 import { Room } from "../models/Room.js";
 import { RoomActivity } from "../models/RoomActivity.js";
 import { RoomInvite } from "../models/RoomInvite.js";
@@ -22,6 +21,8 @@ import { createNotification } from "../services/notifications.js";
 import { getCachedJson, invalidateCache, setCachedJson } from "../services/redis.js";
 import { grantXp } from "../services/levels.js";
 import { grantRelationshipXp } from "../services/relationships.js";
+import { createReportWithEvidence } from "../services/moderation.js";
+import { assertUsersCanInteract } from "../services/safety.js";
 
 const patchSchema = z.object({
   title: z.string().min(1).max(100).optional(),
@@ -280,7 +281,7 @@ roomsRouter.post("/:id/remove-user", requireAuth, asyncHandler(async (req: AuthR
 
 roomsRouter.post("/:id/report", requireAuth, reportLimiter, validateBody(reportSchema.omit({ roomId: true }).extend({ targetUserId: reportSchema.shape.targetUserId })), asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
-  const report = await Report.create({ ...req.body, roomId: req.params.id, reporterId: req.user!.id });
+  const report = await createReportWithEvidence({ ...req.body, roomId: req.params.id }, req.user!.id);
   sendOk(res, { report }, 201);
 }));
 
@@ -341,6 +342,7 @@ roomsRouter.post("/:id/polls/:pollId/vote", requireAuth, validateBody(votePollSc
 
 roomsRouter.post("/:id/invites", requireAuth, requireNotMuted, validateBody(inviteSchema), asyncHandler(async (req: AuthRequest, res) => {
   const room = await getRoomOrThrow(req.params.id);
+  await assertUsersCanInteract(req.user!.id, req.body.userId, "Cannot invite this user");
   const invite = await RoomInvite.findOneAndUpdate(
     { roomId: room._id, inviterId: req.user!.id, inviteeId: req.body.userId, status: "PENDING" },
     { roomId: room._id, inviterId: req.user!.id, inviteeId: req.body.userId, status: "PENDING" },
@@ -377,6 +379,7 @@ roomsRouter.post("/:id/messages/direct", requireAuth, requireNotMuted, validateB
     ]
   });
   if (blocked) throw new HttpError(403, "Cannot message this user", ErrorCode.FORBIDDEN);
+  await assertUsersCanInteract(req.user!.id, receiverId, "Cannot message this user");
   const receiverInRoom = await RoomParticipant.exists({ roomId: room._id, userId: receiverId, leftAt: null });
   if (!receiverInRoom) throw new HttpError(400, "Receiver is not in the room", ErrorCode.VALIDATION);
   const message = await DirectMessage.create({

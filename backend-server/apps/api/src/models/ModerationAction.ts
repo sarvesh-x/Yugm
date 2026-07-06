@@ -3,12 +3,13 @@ import mongoose, { Schema } from "mongoose";
 const moderationActionSchema = new Schema(
   {
     targetUserId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    moderatorId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    moderatorId: { type: Schema.Types.ObjectId, ref: "User" },
     reportId: { type: Schema.Types.ObjectId, ref: "Report" },
     action: { type: String, enum: ["WARN", "MUTE", "SUSPEND", "BAN", "UNBAN"], required: true },
     reason: { type: String, required: true },
     durationHours: Number,
-    expiresAt: Date
+    expiresAt: Date,
+    automated: { type: Boolean, default: false }
   },
   { timestamps: { createdAt: true, updatedAt: false } }
 );

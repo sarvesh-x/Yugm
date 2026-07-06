@@ -2,7 +2,7 @@ import compression from "compression";
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
-import morgan from "morgan";
+import mongoose from "mongoose";
 import path from "path";
 import { env } from "./config/env.js";
 import { authRouter } from "./routes/auth.js";
@@ -14,6 +14,7 @@ import { roomsRouter } from "./routes/rooms.js";
 import { uploadRouter } from "./routes/upload.js";
 import { usersRouter } from "./routes/users.js";
 import { walletRouter } from "./routes/wallet.js";
+import { getRedisHealth } from "./services/redis.js";
 import { ErrorCode, HttpError } from "./utils/http.js";
 
 export function createApp() {
@@ -30,11 +31,36 @@ export function createApp() {
   app.use(cors({ origin: env.CORS_ORIGIN === "*" ? "*" : env.CORS_ORIGIN.split(","), credentials: true }));
   // WARNING: If adding multer file uploads, always validate file type/size and scope upload routes with auth
   app.use(express.json({ limit: "1mb" }));
-  app.use(morgan("dev"));
+  app.use((req, res, next) => {
+    const start = Date.now();
+    res.on("finish", () => {
+      const ms = Date.now() - start;
+      if (res.statusCode >= 400 || ms > 750) {
+        console.log(`[${(req as any).requestId}] ${req.method} ${req.originalUrl} ${res.statusCode} ${ms}ms`);
+      }
+    });
+    next();
+  });
 
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
   app.get("/", (_req, res) => res.json({ ok: true, service: "yugm-api", health: "/health", api: "/api" }));
-  app.get("/health", (_req, res) => res.json({ ok: true, service: "yugm-api" }));
+  const healthHandler = (_req: express.Request, res: express.Response) => {
+    const mongoReady = mongoose.connection.readyState === 1;
+    const redis = getRedisHealth();
+    res.status(mongoReady ? 200 : 503).json({
+      ok: mongoReady,
+      service: "yugm-api",
+      uptimeSeconds: Math.round(process.uptime()),
+      db: {
+        ready: mongoReady,
+        name: mongoose.connection.name,
+        state: mongoose.connection.readyState
+      },
+      redis
+    });
+  };
+  app.get("/health", healthHandler);
+  app.get("/api/health", healthHandler);
   app.use("/api/auth", authRouter);
   app.use("/api/dating", datingRouter);
   app.use("/api/users", usersRouter);

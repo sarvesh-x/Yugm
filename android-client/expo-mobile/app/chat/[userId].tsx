@@ -187,6 +187,9 @@ export default function ChatRoom() {
                 ? `${relationship.progressXp}/${relationship.requiredXp} bond XP to level ${relationship.nextLevel}`
                 : `${relationship.xp} bond XP total`}
             </Text>
+            <Text style={styles.relationshipPerk}>
+              {relationship.streakDays ? `${relationship.streakDays}-day streak` : "Start a streak"}{relationship.nextPerk ? ` / Next perk: ${relationship.nextPerk}` : " / All perks unlocked"}
+            </Text>
           </View>
         )}
 
@@ -313,6 +316,7 @@ const styles = StyleSheet.create({
   relationshipTrack: { height: 6, borderRadius: 6, overflow: "hidden", backgroundColor: "rgba(255,255,255,0.08)", marginTop: 8 },
   relationshipFill: { height: "100%", borderRadius: 6, backgroundColor: colors.gold },
   relationshipMeta: { color: colors.muted, fontSize: 11, fontWeight: "700", marginTop: 5 },
+  relationshipPerk: { color: colors.gold, fontSize: 11, fontWeight: "800", marginTop: 3 },
   messagesList: { padding: 16, gap: 12 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   bubbleWrap: { maxWidth: "80%", marginBottom: 4 },

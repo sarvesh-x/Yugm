@@ -1,7 +1,8 @@
 import { Router } from "express";
 import mongoose from "mongoose";
-import { coinPacks, createPurchaseOrderSchema, equipProfileCosmeticSchema, profileCosmetics, purchaseProfileCosmeticSchema, purchaseVipSchema, sendGiftSchema, socketEvents, verifyGooglePlayPurchaseSchema, verifyRazorpayPurchaseSchema, vipPlans } from "@yugm/shared";
-import { requireAuth, type AuthRequest } from "../middleware/auth.js";
+import { z } from "zod";
+import { coinPacks, createPurchaseOrderSchema, equipProfileCosmeticSchema, profileCosmetics, purchaseProfileCosmeticSchema, purchaseVipSchema, sendGiftSchema, socketEvents, verifyGooglePlayPurchaseSchema, verifyRazorpayPurchaseSchema, vipPlans, walletSourceLabels } from "@yugm/shared";
+import { requireAuth, requireRole, type AuthRequest } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import { Gift } from "../models/Gift.js";
 import { GiftTransaction } from "../models/GiftTransaction.js";
@@ -21,9 +22,17 @@ import { addVipDays, findVipPlan, getVipStatus } from "../services/vip.js";
 import { activeCosmeticKey, findProfileCosmetic } from "../services/cosmetics.js";
 import { getLevelStatus, grantXp } from "../services/levels.js";
 import { grantRelationshipXp } from "../services/relationships.js";
+import { assertUsersCanInteract } from "../services/safety.js";
 
 export const walletRouter = Router();
 walletRouter.use(requireAuth);
+
+const adminWalletAdjustSchema = z.object({
+  userId: z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid userId format"),
+  amount: z.number().int().min(1).max(100000),
+  direction: z.enum(["CREDIT", "DEBIT"]).default("CREDIT"),
+  reason: z.string().min(2).max(160)
+});
 
 function findCoinPack(packId: string) {
   const pack = coinPacks.find((item) => item.id === packId);
@@ -92,7 +101,27 @@ walletRouter.get("/wallet", (req: AuthRequest, res) => sendOk(res, {
 walletRouter.get("/wallet/transactions", asyncHandler(async (req: AuthRequest, res) => {
   const limit = Math.min(Number(req.query.limit) || 100, 200);
   const transactions = await WalletTransaction.find({ userId: req.user!.id }).sort({ createdAt: -1 }).limit(limit).lean();
-  sendOk(res, { transactions });
+  sendOk(res, {
+    transactions: transactions.map((transaction) => ({
+      ...transaction,
+      label: walletSourceLabels[transaction.source as keyof typeof walletSourceLabels] ?? transaction.source
+    }))
+  });
+}));
+
+walletRouter.post("/admin/wallet/adjust", requireRole("ADMIN"), validateBody(adminWalletAdjustSchema), asyncHandler(async (req: AuthRequest, res) => {
+  const metadata = { reason: req.body.reason, adminId: req.user!.id };
+  const [tx] = req.body.direction === "CREDIT"
+    ? await creditWallet(req.body.userId, req.body.amount, "ADMIN_ADJUSTMENT", metadata)
+    : await debitWallet(req.body.userId, req.body.amount, "ADMIN_ADJUSTMENT", metadata);
+  const user = await User.findById(req.body.userId).select("walletBalance name username").lean();
+  sendOk(res, {
+    transaction: {
+      ...tx.toObject(),
+      label: walletSourceLabels.ADMIN_ADJUSTMENT
+    },
+    user
+  }, 201);
 }));
 
 walletRouter.get("/wallet/packs", (_req: AuthRequest, res) => sendOk(res, { packs: coinPacks }));
@@ -308,6 +337,7 @@ walletRouter.post("/rooms/:id/send-gift", validateBody(sendGiftSchema), asyncHan
 
   const receiver = await User.findById(req.body.receiverId).lean();
   if (!receiver) throw new HttpError(404, "Receiver not found", ErrorCode.NOT_FOUND);
+  await assertUsersCanInteract(req.user!.id, req.body.receiverId, "Cannot send gifts to this user");
 
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -353,6 +383,7 @@ walletRouter.post("/direct-send-gift", asyncHandler(async (req: AuthRequest, res
   const gift = await Gift.findById(giftId).lean();
   const receiver = await User.findById(receiverId).lean();
   if (!gift || !receiver) throw new HttpError(404, "Gift or receiver not found", ErrorCode.NOT_FOUND);
+  await assertUsersCanInteract(req.user!.id, receiverId, "Cannot send gifts to this user");
 
   const { DirectMessage } = await import("../models/DirectMessage.js");
 

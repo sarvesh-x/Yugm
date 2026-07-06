@@ -315,7 +315,7 @@ export default function WalletScreen() {
                       <Gift color={isCredit ? colors.success : colors.danger} size={16} />
                     </View>
                     <View style={styles.ledgerInfo}>
-                      <Text style={styles.ledgerTitle}>{item.source}</Text>
+                      <Text style={styles.ledgerTitle}>{item.label ?? item.source}</Text>
                       <Text style={styles.ledgerDate}>
                         {new Date(item.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })} at{" "}
                         {new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}

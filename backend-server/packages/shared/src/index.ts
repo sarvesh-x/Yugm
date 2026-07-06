@@ -98,14 +98,14 @@ export const xpEvents = {
 export type XpEvent = keyof typeof xpEvents;
 
 export const relationshipLevelMilestones = [
-  { level: 1, requiredXp: 0, title: "First Spark" },
-  { level: 2, requiredXp: 50, title: "Good Vibes" },
-  { level: 3, requiredXp: 150, title: "Warm Bond" },
-  { level: 4, requiredXp: 350, title: "Close Connection" },
-  { level: 5, requiredXp: 700, title: "Yugm Duo" },
-  { level: 6, requiredXp: 1200, title: "Trusted Pair" },
-  { level: 7, requiredXp: 2000, title: "Deep Match" },
-  { level: 8, requiredXp: 3200, title: "Unbreakable Vibe" }
+  { level: 1, requiredXp: 0, title: "First Spark", perk: "Bond badge" },
+  { level: 2, requiredXp: 50, title: "Good Vibes", perk: "Chat bond meter" },
+  { level: 3, requiredXp: 150, title: "Warm Bond", perk: "Duo profile tag" },
+  { level: 4, requiredXp: 350, title: "Close Connection", perk: "Priority match reminder" },
+  { level: 5, requiredXp: 700, title: "Yugm Duo", perk: "Special chat glow" },
+  { level: 6, requiredXp: 1200, title: "Trusted Pair", perk: "Duo streak badge" },
+  { level: 7, requiredXp: 2000, title: "Deep Match", perk: "Premium duo frame" },
+  { level: 8, requiredXp: 3200, title: "Unbreakable Vibe", perk: "Legendary duo badge" }
 ] as const;
 
 export const relationshipXpEvents = {
@@ -117,6 +117,20 @@ export const relationshipXpEvents = {
 } as const;
 
 export type RelationshipXpEvent = keyof typeof relationshipXpEvents;
+
+export const walletSourceLabels = {
+  RECHARGE: "Recharge",
+  GIFT_SENT: "Gift sent",
+  GIFT_RECEIVED: "Gift received",
+  GIFT_SENT_DM: "Direct gift sent",
+  GIFT_RECEIVED_DM: "Direct gift received",
+  VIP_PURCHASE: "VIP membership",
+  PROFILE_COSMETIC_PURCHASE: "Profile cosmetic",
+  LEVEL_REWARD: "Level reward",
+  ADMIN_ADJUSTMENT: "Admin adjustment",
+  RAZORPAY_PURCHASE: "Razorpay recharge",
+  GOOGLE_PLAY_PURCHASE: "Google Play recharge"
+} as const;
 
 export const vipPlans = [
   {

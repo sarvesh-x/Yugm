@@ -8,7 +8,8 @@ import { User } from "../models/User.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId } from "../utils/http.js";
 import { createNotification } from "../services/notifications.js";
 import { getVipStatus } from "../services/vip.js";
-import { findRelationship, grantRelationshipXp } from "../services/relationships.js";
+import { ensureRelationshipForMatch, grantRelationshipXp } from "../services/relationships.js";
+import { assertUsersCanInteract } from "../services/safety.js";
 
 export const datingRouter = Router();
 datingRouter.use(requireAuth);
@@ -104,6 +105,7 @@ datingRouter.post("/like", asyncHandler(async (req: AuthRequest, res) => {
   if (currentUser.id === likedId) {
     throw new HttpError(400, "You cannot like yourself", ErrorCode.VALIDATION);
   }
+  await assertUsersCanInteract(currentUser.id, likedId, "Cannot like this user");
 
   // Check if like already exists
   const existingLike = await Like.findOne({ likerId: currentUser.id, likedId });
@@ -217,12 +219,12 @@ datingRouter.get("/matches", asyncHandler(async (req: AuthRequest, res) => {
     if (!partnerId) return null;
     const partner = partners.find(p => p._id.toString() === partnerId.toString());
     if (!partner) return null;
-    const relationship = await findRelationship(currentUser.id, partnerId.toString());
+    const relationship = await ensureRelationshipForMatch(currentUser.id, partnerId.toString(), m._id.toString());
     return {
       id: m._id.toString(),
       _id: m._id.toString(),
       matchDate: m.createdAt,
-      relationship,
+      relationship: relationship.relationship,
       partner: {
         id: partner._id.toString(),
         _id: partner._id.toString(),

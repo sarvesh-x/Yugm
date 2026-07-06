@@ -1,6 +1,7 @@
 import type { XpEvent } from "@yugm/shared";
 import { levelMilestones, xpEvents } from "@yugm/shared";
 import { User } from "../models/User.js";
+import { createNotification } from "./notifications.js";
 import { creditWallet } from "./wallet.js";
 
 type LevelUser = {
@@ -15,6 +16,17 @@ type LevelUser = {
 type LevelMilestone = (typeof levelMilestones)[number];
 
 const firstMilestone: LevelMilestone = levelMilestones[0];
+const dailyXpCaps: Partial<Record<XpEvent, number>> = {
+  ROOM_CREATE: 200,
+  ROOM_JOIN: 50,
+  CHAT_MESSAGE: 100,
+  GIFT_SENT: 300,
+  GIFT_RECEIVED: 300,
+  FOLLOW_USER: 50,
+  COSMETIC_PURCHASE: 300,
+  VIP_PURCHASE: 200
+};
+const dailyXpAwards = new Map<string, { amount: number; resetAt: number }>();
 
 function startOfUtcDay(date = new Date()) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -59,7 +71,29 @@ export function getLevelStatus(user?: LevelUser | null) {
 }
 
 export async function grantXp(userId: string, event: XpEvent, metadata: Record<string, unknown> = {}) {
-  const xpAwarded = xpEvents[event];
+  let xpAwarded: number = xpEvents[event];
+  const cap = dailyXpCaps[event];
+  if (cap !== undefined) {
+    const key = `${userId}:${event}`;
+    const now = Date.now();
+    const resetAt = startOfUtcDay(new Date(now + 24 * 60 * 60 * 1000)).getTime();
+    const entry = dailyXpAwards.get(key);
+    const current = entry && entry.resetAt > now ? entry.amount : 0;
+    const allowed = Math.max(0, cap - current);
+    if (allowed <= 0) {
+      const user = await User.findById(userId).select("xp level levelTitle lastDailyCheckInAt walletBalance").lean();
+      return {
+        xpAwarded: 0,
+        capped: true,
+        levelUpReward: 0,
+        levelsGained: [],
+        level: getLevelStatus(user),
+        walletBalance: user?.walletBalance
+      };
+    }
+    xpAwarded = Math.min(xpAwarded, allowed);
+    dailyXpAwards.set(key, { amount: current + xpAwarded, resetAt });
+  }
   const updated = await User.findByIdAndUpdate(
     userId,
     { $inc: { xp: xpAwarded } },
@@ -90,6 +124,7 @@ export async function grantXp(userId: string, event: XpEvent, metadata: Record<s
     if (levelUpReward > 0) {
       await creditWallet(userId, levelUpReward, "LEVEL_REWARD", { event, levels: levelsGained, ...metadata });
     }
+    await createNotification(userId, "SYSTEM", "Level up!", `You reached Level ${status.level}: ${status.title}.`, { type: "LEVEL_UP", level: status.level, reward: levelUpReward });
   }
 
   const fresh = await User.findById(userId).select("xp level levelTitle lastDailyCheckInAt walletBalance").lean();
