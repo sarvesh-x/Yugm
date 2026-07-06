@@ -6,7 +6,7 @@ const walletTransactionSchema = new Schema(
     type: { type: String, enum: ["CREDIT", "DEBIT"], required: true },
     source: {
       type: String,
-      enum: ["RECHARGE", "GIFT_SENT", "GIFT_RECEIVED", "ADMIN_ADJUSTMENT", "RAZORPAY_PURCHASE", "GOOGLE_PLAY_PURCHASE"],
+      enum: ["RECHARGE", "GIFT_SENT", "GIFT_RECEIVED", "GIFT_SENT_DM", "GIFT_RECEIVED_DM", "VIP_PURCHASE", "ADMIN_ADJUSTMENT", "RAZORPAY_PURCHASE", "GOOGLE_PLAY_PURCHASE"],
       required: true
     },
     amount: { type: Number, required: true, min: 1 },

@@ -11,7 +11,9 @@ data class Host(
     val followers: Int = 0,
     val followingCount: Int = 0,
     val bio: String = "",
-    val avatar: String? = null
+    val avatar: String? = null,
+    val isVip: Boolean = false,
+    val vipTier: String = ""
 )
 
 data class Room(
@@ -38,7 +40,9 @@ data class YugmUser(
     val id: String = "",
     val name: String = "",
     val username: String = "",
-    val walletBalance: Int = 0
+    val walletBalance: Int = 0,
+    val isVip: Boolean = false,
+    val vipTier: String = ""
 )
 
 data class Session(val token: String, val user: YugmUser)

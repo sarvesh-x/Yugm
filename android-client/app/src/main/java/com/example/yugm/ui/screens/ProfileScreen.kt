@@ -125,7 +125,16 @@ fun ProfileScreen(
                         }
                     }
                 }
-                Text(host.name, color = TextPrimary, fontSize = 32.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(top = 18.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.padding(top = 18.dp)
+                ) {
+                    Text(host.name, color = TextPrimary, fontSize = 32.sp, fontWeight = FontWeight.Black)
+                    if (host.isVip) {
+                        Text("VIP", color = Gold, fontSize = 13.sp, fontWeight = FontWeight.Black)
+                    }
+                }
                 Text("@${host.username}", color = Gold, fontWeight = FontWeight.Bold)
                 if (host.bio.isNotBlank()) {
                     Text(host.bio, color = TextMuted, lineHeight = 21.sp, modifier = Modifier.padding(top = 12.dp))

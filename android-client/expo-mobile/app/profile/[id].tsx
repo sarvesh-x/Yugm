@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { Alert, StyleSheet, Text, View, Image, Pressable, ScrollView, ActivityIndicator } from "react-native";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, MessageCircle, UserPlus, UserMinus, ShieldAlert, Ban, Sparkles, MapPin, Radio } from "lucide-react-native";
+import { ArrowLeft, Crown, MessageCircle, UserPlus, UserMinus, ShieldAlert, Ban, Sparkles, MapPin, Radio } from "lucide-react-native";
 import { usersApi } from "@/lib/api";
 import { Screen, Section } from "@/components/Screen";
 import { useAuthStore } from "@/store/auth";
@@ -128,6 +128,12 @@ export default function UserProfileDetail() {
               {user.isVerified && (
                 <View style={styles.verifiedBadge}>
                   <Text style={styles.verifiedBadgeText}>✓ Verified</Text>
+                </View>
+              )}
+              {user.isVip && (
+                <View style={styles.vipBadge}>
+                  <Crown color={colors.ink} size={13} />
+                  <Text style={styles.vipBadgeText}>VIP</Text>
                 </View>
               )}
             </View>
@@ -315,6 +321,20 @@ const styles = StyleSheet.create({
     color: colors.success,
     fontSize: 11,
     fontWeight: "800"
+  },
+  vipBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.gold,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8
+  },
+  vipBadgeText: {
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: "900"
   },
   locRow: {
     flexDirection: "row",

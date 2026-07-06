@@ -3,17 +3,21 @@ import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, A
 import { useFocusEffect } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
-import { CreditCard, Gift, Plus, ShoppingBag, Coins, TrendingUp } from "lucide-react-native";
+import { CreditCard, Crown, Gift, Plus, ShoppingBag, Coins, TrendingUp } from "lucide-react-native";
 import { Screen, Section } from "@/components/Screen";
 import { walletApi } from "@/lib/api";
 import { openRazorpayCheckout, startGooglePlayPurchase } from "@/lib/payments";
+import { useAuthStore } from "@/store/auth";
 import { colors, gradients } from "@/theme/colors";
 
 export default function WalletScreen() {
   const queryClient = useQueryClient();
+  const currentUser = useAuthStore((s) => s.user);
+  const updateUser = useAuthStore((s) => s.updateUser);
   const [error, setError] = useState("");
 
   const wallet = useQuery({ queryKey: ["wallet"], queryFn: () => walletApi.wallet(), staleTime: 30000, gcTime: 60000 });
+  const vipPlans = useQuery({ queryKey: ["wallet", "vipPlans"], queryFn: () => walletApi.vipPlans(), staleTime: 300000, gcTime: 600000 });
   const transactions = useQuery({ queryKey: ["wallet", "transactions"], queryFn: () => walletApi.transactions(), staleTime: 30000, gcTime: 60000 });
   const packs = useQuery({ queryKey: ["wallet", "packs"], queryFn: () => walletApi.packs(), staleTime: 300000, gcTime: 600000 });
   const purchases = useQuery({ queryKey: ["wallet", "purchases"], queryFn: () => walletApi.purchases(), staleTime: 30000, gcTime: 60000 });
@@ -77,6 +81,17 @@ export default function WalletScreen() {
     }
   });
 
+  const activateVip = useMutation({
+    mutationFn: (planId: string) => walletApi.activateVip(planId),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["wallet"] });
+      queryClient.invalidateQueries({ queryKey: ["wallet", "transactions"] });
+      if (currentUser) updateUser({ ...currentUser, walletBalance: data.balance, ...data.vip });
+      Alert.alert("VIP activated", `You are VIP until ${new Date(data.vip.vipExpiresAt).toLocaleDateString()}.`);
+    },
+    onError: (err: any) => setError(err?.message ?? "VIP activation failed")
+  });
+
   useFocusEffect(() => {
     queryClient.invalidateQueries({ queryKey: ["wallet"] });
     queryClient.invalidateQueries({ queryKey: ["wallet", "transactions"] });
@@ -94,6 +109,7 @@ export default function WalletScreen() {
               transactions.refetch();
               packs.refetch();
               purchases.refetch();
+              vipPlans.refetch();
             }}
             tintColor={colors.gold}
           />
@@ -128,6 +144,43 @@ export default function WalletScreen() {
           </LinearGradient>
 
           {!!error && <Text style={styles.errorText}>{error}</Text>}
+        </Section>
+
+        <Section>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>VIP Membership</Text>
+            <Crown color={colors.gold} size={18} />
+          </View>
+          <Text style={styles.sectionSubtitle}>
+            {wallet.data?.vip?.isVip
+              ? `Active until ${new Date(wallet.data.vip.vipExpiresAt).toLocaleDateString()}`
+              : "Unlock a VIP badge, priority discovery, and a golden profile glow."}
+          </Text>
+
+          {vipPlans.isLoading ? (
+            <ActivityIndicator color={colors.gold} size="small" />
+          ) : (
+            <View style={styles.vipGrid}>
+              {(vipPlans.data?.plans ?? []).map((plan: any) => (
+                <View key={plan.id} style={styles.vipCard}>
+                  <View style={styles.vipTitleRow}>
+                    <Crown color={colors.gold} size={18} />
+                    <Text style={styles.vipName}>{plan.name}</Text>
+                  </View>
+                  <Text style={styles.vipMeta}>{plan.durationDays} days</Text>
+                  <Text style={styles.vipPrice}>{plan.coinPrice} coins</Text>
+                  <Text style={styles.vipBenefits}>{plan.benefits?.slice(0, 3).join(" / ")}</Text>
+                  <Pressable
+                    style={[styles.vipBtn, activateVip.isPending && styles.vipBtnDisabled]}
+                    onPress={() => activateVip.mutate(plan.id)}
+                    disabled={activateVip.isPending}
+                  >
+                    <Text style={styles.vipBtnText}>{activateVip.isPending ? "Activating..." : "Activate VIP"}</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          )}
         </Section>
 
         {/* Buying Packs section */}
@@ -270,6 +323,22 @@ const styles = StyleSheet.create({
   packCoinsHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
   packCoins: { color: colors.text, fontSize: 18, fontWeight: "900" },
   packPrice: { color: colors.muted, fontSize: 14, fontWeight: "800", marginVertical: 8 },
+  vipGrid: { gap: 12 },
+  vipCard: {
+    borderRadius: 16,
+    backgroundColor: "rgba(246,180,75,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(246,180,75,0.28)",
+    padding: 16
+  },
+  vipTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  vipName: { color: colors.text, fontSize: 16, fontWeight: "900" },
+  vipMeta: { color: colors.muted, fontSize: 12, fontWeight: "800", marginTop: 6 },
+  vipPrice: { color: colors.gold, fontSize: 22, fontWeight: "900", marginTop: 6 },
+  vipBenefits: { color: colors.muted, fontSize: 12, fontWeight: "700", marginTop: 8 },
+  vipBtn: { marginTop: 12, height: 40, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: colors.gold },
+  vipBtnDisabled: { opacity: 0.6 },
+  vipBtnText: { color: colors.ink, fontWeight: "900" },
   payActions: { width: "100%", gap: 6 },
   payBtn: {
     flexDirection: "row",

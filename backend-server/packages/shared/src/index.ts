@@ -52,6 +52,32 @@ export const coinPacks = [
   { id: "coins_4990", coinAmount: 4990, priceInr: 499, googleProductId: "yugm_coins_4990" }
 ] as const;
 
+export const vipPlans = [
+  {
+    id: "vip_7d",
+    name: "VIP Weekly",
+    durationDays: 7,
+    coinPrice: 299,
+    benefits: ["VIP badge", "Priority discovery", "Golden profile glow"]
+  },
+  {
+    id: "vip_30d",
+    name: "VIP Monthly",
+    durationDays: 30,
+    coinPrice: 999,
+    benefits: ["VIP badge", "Priority discovery", "Golden profile glow", "Best value"]
+  },
+  {
+    id: "vip_90d",
+    name: "VIP Season",
+    durationDays: 90,
+    coinPrice: 2499,
+    benefits: ["VIP badge", "Priority discovery", "Golden profile glow", "Longest boost"]
+  }
+] as const;
+
+export const vipPlanIds = vipPlans.map((plan) => plan.id) as [typeof vipPlans[number]["id"], ...typeof vipPlans[number]["id"][]];
+
 export const categories = [
   "Trending",
   "Nearby",
@@ -128,6 +154,10 @@ export const sendGiftSchema = z.object({
 export const createPurchaseOrderSchema = z.object({
   packId: z.string(),
   provider: z.enum(["RAZORPAY", "GOOGLE_PLAY"])
+});
+
+export const purchaseVipSchema = z.object({
+  planId: z.enum(vipPlanIds)
 });
 
 export const verifyRazorpayPurchaseSchema = z.object({

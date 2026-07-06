@@ -7,6 +7,7 @@ import { Block } from "../models/Block.js";
 import { User } from "../models/User.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId } from "../utils/http.js";
 import { createNotification } from "../services/notifications.js";
+import { getVipStatus } from "../services/vip.js";
 
 export const datingRouter = Router();
 datingRouter.use(requireAuth);
@@ -79,12 +80,13 @@ datingRouter.get("/explore", asyncHandler(async (req: AuthRequest, res) => {
       languages: candidate.languages,
       followersCount: candidate.followersCount,
       role: candidate.role,
+      ...getVipStatus(candidate),
       vibeScore
     };
   });
 
   // Sort by vibeScore desc
-  formattedCandidates.sort((a, b) => b.vibeScore - a.vibeScore);
+  formattedCandidates.sort((a, b) => Number(b.isVip) - Number(a.isVip) || b.vibeScore - a.vibeScore);
 
   sendOk(res, { candidates: formattedCandidates });
 }));
@@ -199,7 +201,7 @@ datingRouter.get("/matches", asyncHandler(async (req: AuthRequest, res) => {
   // Fetch user profiles for partners
   const partners = await User.find({
     _id: { $in: partnerIds }
-  }).select("name username avatar city bio interests languages").lean();
+  }).select("name username avatar city bio interests languages vipTier vipStartedAt vipExpiresAt").lean();
 
   // Map back matching documents with details
   const formattedMatches = matches.map(m => {
@@ -220,7 +222,8 @@ datingRouter.get("/matches", asyncHandler(async (req: AuthRequest, res) => {
         city: partner.city,
         bio: partner.bio,
         interests: partner.interests,
-        languages: partner.languages
+        languages: partner.languages,
+        ...getVipStatus(partner)
       }
     };
   }).filter(Boolean);

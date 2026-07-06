@@ -1,7 +1,7 @@
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Settings, UserPlus, UserCheck, Wallet } from "lucide-react-native";
+import { Crown, Settings, UserPlus, UserCheck, Wallet } from "lucide-react-native";
 import { GlassCard } from "@/components/GlassCard";
 import { LoadingState } from "@/components/LoadingState";
 import { ErrorState } from "@/components/ErrorState";
@@ -66,7 +66,15 @@ export default function Profile() {
             <View style={styles.avatar}><Text style={styles.avatarText}>{user?.name?.[0] ?? ""}</Text></View>
             {isOwn && <Pressable onPress={() => router.push("/(tabs)/settings")}><Settings color={colors.text} /></Pressable>}
           </View>
-          <Text style={styles.name}>{user?.name ?? ""}</Text>
+          <View style={styles.nameRow}>
+            <Text style={styles.name}>{user?.name ?? ""}</Text>
+            {user?.isVip && (
+              <View style={styles.vipBadge}>
+                <Crown color={colors.ink} size={13} />
+                <Text style={styles.vipBadgeText}>VIP</Text>
+              </View>
+            )}
+          </View>
           <Text style={styles.username}>@{user?.username ?? ""}</Text>
           <Text style={styles.bio}>{user?.bio ?? ""}</Text>
           <View style={styles.stats}>
@@ -122,7 +130,10 @@ const styles = StyleSheet.create({
   top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10 },
   avatar: { width: 92, height: 92, borderRadius: 8, backgroundColor: colors.panelStrong, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.line },
   avatarText: { color: colors.gold, fontSize: 42, fontWeight: "900" },
-  name: { color: colors.text, fontSize: 30, fontWeight: "900", marginTop: 18 },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 18, flexWrap: "wrap" },
+  name: { color: colors.text, fontSize: 30, fontWeight: "900" },
+  vipBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.gold, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  vipBadgeText: { color: colors.ink, fontSize: 11, fontWeight: "900" },
   username: { color: colors.gold, fontWeight: "800", marginTop: 2 },
   bio: { color: colors.muted, marginTop: 14, lineHeight: 21 },
   stats: { flexDirection: "row", marginVertical: 20, gap: 10 },

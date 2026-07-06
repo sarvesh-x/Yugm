@@ -5,6 +5,7 @@ import { requireAuth, signToken, type AuthRequest } from "../middleware/auth.js"
 import { authLimiter } from "../middleware/rateLimit.js";
 import { validateBody } from "../middleware/validate.js";
 import { verifyIdToken } from "../services/firebase.js";
+import { getVipStatus } from "../services/vip.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode } from "../utils/http.js";
 import { env } from "../config/env.js";
 
@@ -29,6 +30,7 @@ function publicUser(user: any) {
     avatar: user.avatar,
     role: user.role,
     walletBalance: user.walletBalance,
+    ...getVipStatus(user),
     interests: user.interests,
     languages: user.languages,
     city: user.city,

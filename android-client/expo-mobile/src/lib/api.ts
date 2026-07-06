@@ -91,10 +91,15 @@ export const roomsApi = {
 
 export const walletApi = {
   gifts: () => api<{ gifts: any[] }>("/gifts"),
-  wallet: () => api<{ balance: number }>("/wallet"),
+  wallet: () => api<{ balance: number; vip?: any }>("/wallet"),
   transactions: () => api<{ transactions: any[] }>("/wallet/transactions"),
   packs: () => api<{ packs: any[] }>("/wallet/packs"),
   purchases: () => api<{ purchases: any[] }>("/wallet/purchases"),
+  vipPlans: () => api<{ plans: any[]; vip?: any }>("/wallet/vip/plans"),
+  activateVip: (planId: string) => api<{ balance: number; vip: any; plan: any }>("/wallet/vip/activate", {
+    method: "POST",
+    body: JSON.stringify({ planId })
+  }),
   createRazorpayOrder: (packId: string) => api<{ purchase: any; order: any; checkout: any }>("/wallet/purchases/razorpay/order", {
     method: "POST",
     body: JSON.stringify({ packId, provider: "RAZORPAY" })

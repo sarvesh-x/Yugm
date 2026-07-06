@@ -1,6 +1,6 @@
 import { Router } from "express";
 import mongoose from "mongoose";
-import { coinPacks, createPurchaseOrderSchema, sendGiftSchema, socketEvents, verifyGooglePlayPurchaseSchema, verifyRazorpayPurchaseSchema } from "@yugm/shared";
+import { coinPacks, createPurchaseOrderSchema, purchaseVipSchema, sendGiftSchema, socketEvents, verifyGooglePlayPurchaseSchema, verifyRazorpayPurchaseSchema, vipPlans } from "@yugm/shared";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import { Gift } from "../models/Gift.js";
@@ -17,6 +17,7 @@ import { consumeGooglePlayProduct, createRazorpayOrder, fetchRazorpayPayment, ve
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId } from "../utils/http.js";
 import { env } from "../config/env.js";
 import { getCachedJson, setCachedJson } from "../services/redis.js";
+import { addVipDays, findVipPlan, getVipStatus } from "../services/vip.js";
 
 export const walletRouter = Router();
 walletRouter.use(requireAuth);
@@ -75,7 +76,7 @@ walletRouter.get("/gifts", asyncHandler(async (_req, res) => {
   sendOk(res, payload);
 }));
 
-walletRouter.get("/wallet", (req: AuthRequest, res) => sendOk(res, { balance: req.user!.walletBalance }));
+walletRouter.get("/wallet", (req: AuthRequest, res) => sendOk(res, { balance: req.user!.walletBalance, vip: getVipStatus(req.user) }));
 
 walletRouter.get("/wallet/transactions", asyncHandler(async (req: AuthRequest, res) => {
   const limit = Math.min(Number(req.query.limit) || 100, 200);
@@ -84,6 +85,39 @@ walletRouter.get("/wallet/transactions", asyncHandler(async (req: AuthRequest, r
 }));
 
 walletRouter.get("/wallet/packs", (_req: AuthRequest, res) => sendOk(res, { packs: coinPacks }));
+
+walletRouter.get("/wallet/vip/plans", (req: AuthRequest, res) => {
+  sendOk(res, { plans: vipPlans, vip: getVipStatus(req.user) });
+});
+
+walletRouter.post("/wallet/vip/activate", validateBody(purchaseVipSchema), asyncHandler(async (req: AuthRequest, res) => {
+  const plan = findVipPlan(req.body.planId);
+  if (!plan) throw new HttpError(400, "Invalid VIP plan", ErrorCode.VALIDATION);
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const user = await User.findById(req.user!.id).session(session);
+    if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+
+    await debitWallet(user.id, plan.coinPrice, "VIP_PURCHASE", { planId: plan.id, durationDays: plan.durationDays }, session);
+    const expiresAt = addVipDays(user, plan.durationDays);
+    user.vipTier = "VIP";
+    user.vipStartedAt = user.vipStartedAt ?? new Date();
+    user.vipExpiresAt = expiresAt;
+    await user.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    const fresh = await User.findById(user.id).select("walletBalance vipTier vipStartedAt vipExpiresAt").lean();
+    sendOk(res, { balance: fresh?.walletBalance ?? 0, vip: getVipStatus(fresh), plan });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    throw err;
+  }
+}));
 
 walletRouter.get("/wallet/purchases", asyncHandler(async (req: AuthRequest, res) => {
   const purchases = await Purchase.find({ userId: req.user!.id }).sort({ createdAt: -1 }).limit(50).lean();
@@ -286,4 +320,3 @@ walletRouter.post("/direct-send-gift", asyncHandler(async (req: AuthRequest, res
     throw err;
   }
 }));
-

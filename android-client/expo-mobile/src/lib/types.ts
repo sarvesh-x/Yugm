@@ -13,6 +13,10 @@ export interface User {
   followersCount?: number;
   followingCount?: number;
   walletBalance?: number;
+  isVip?: boolean;
+  vipTier?: string;
+  vipStartedAt?: string;
+  vipExpiresAt?: string;
   isFollowing?: boolean;
   role?: "USER" | "HOST" | "MODERATOR" | "ADMIN";
   age?: number;

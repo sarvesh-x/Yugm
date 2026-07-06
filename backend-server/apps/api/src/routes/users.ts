@@ -10,6 +10,7 @@ import { Room } from "../models/Room.js";
 import { User } from "../models/User.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId, sanitizeText } from "../utils/http.js";
 import { createNotification } from "../services/notifications.js";
+import { getVipStatus } from "../services/vip.js";
 
 export const usersRouter = Router();
 usersRouter.use(requireAuth);
@@ -23,6 +24,7 @@ function publicUser(user: any) {
     avatar: user.avatar,
     role: user.role,
     walletBalance: user.walletBalance,
+    ...getVipStatus(user),
     interests: user.interests,
     languages: user.languages,
     city: user.city,
@@ -66,13 +68,13 @@ usersRouter.get("/search", asyncHandler(async (req: AuthRequest, res) => {
     $or: [{ name: regex }, { username: regex }, { interests: regex }, { city: regex }],
     isBlocked: { $ne: true }
   })
-    .select("name username avatar city followersCount interests role")
-    .sort({ followersCount: -1, createdAt: -1 })
+    .select("name username avatar city followersCount interests role vipTier vipStartedAt vipExpiresAt")
+    .sort({ vipExpiresAt: -1, followersCount: -1, createdAt: -1 })
     .limit(limit)
     .lean();
   const followingRows = await Follow.find({ followerId: req.user!.id, followingId: { $in: users.map((user) => user._id) } }).lean();
   const followingIds = new Set(followingRows.map((row) => row.followingId.toString()));
-  sendOk(res, { users: users.map((user) => ({ ...user, isFollowing: followingIds.has(user._id.toString()) })) });
+  sendOk(res, { users: users.map((user) => ({ ...user, ...getVipStatus(user), isFollowing: followingIds.has(user._id.toString()) })) });
 }));
 
 usersRouter.get("/hosts/suggested", asyncHandler(async (req: AuthRequest, res) => {
@@ -84,18 +86,18 @@ usersRouter.get("/hosts/suggested", asyncHandler(async (req: AuthRequest, res) =
     isBlocked: { $ne: true },
     role: { $in: ["HOST", "MODERATOR", "ADMIN"] }
   })
-    .select("name username avatar city followersCount interests role")
-    .sort({ followersCount: -1, createdAt: -1 })
+    .select("name username avatar city followersCount interests role vipTier vipStartedAt vipExpiresAt")
+    .sort({ vipExpiresAt: -1, followersCount: -1, createdAt: -1 })
     .limit(limit)
     .lean();
-  sendOk(res, { users: users.map((user) => ({ ...user, isFollowing: false })) });
+  sendOk(res, { users: users.map((user) => ({ ...user, ...getVipStatus(user), isFollowing: false })) });
 }));
 
 usersRouter.get("/messages", asyncHandler(async (req: AuthRequest, res) => {
   const messages = await DirectMessage.find({
     $or: [{ senderId: req.user!.id }, { receiverId: req.user!.id }]
   })
-    .populate("senderId receiverId", "name username avatar")
+    .populate("senderId receiverId", "name username avatar vipTier vipExpiresAt")
     .sort({ createdAt: -1 })
     .limit(100)
     .lean();
@@ -117,7 +119,7 @@ usersRouter.get("/messages/:userId", asyncHandler(async (req: AuthRequest, res) 
       { senderId: req.params.userId, receiverId: req.user!.id }
     ]
   })
-    .populate("senderId receiverId", "name username avatar")
+    .populate("senderId receiverId", "name username avatar vipTier vipExpiresAt")
     .sort({ createdAt: -1 })
     .limit(100)
     .lean();
@@ -158,7 +160,7 @@ usersRouter.post("/messages/:userId", requireAuth, asyncHandler(async (req: Auth
 
 usersRouter.get("/me/blocked", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   const blockedRows = await Block.find({ blockerId: req.user!.id })
-    .populate("blockedUserId", "name username avatar city")
+    .populate("blockedUserId", "name username avatar city vipTier vipExpiresAt")
     .lean();
   const users = blockedRows.map((row) => row.blockedUserId).filter(Boolean);
   sendOk(res, { users });
@@ -178,7 +180,7 @@ usersRouter.get("/:id", asyncHandler(async (req: AuthRequest, res) => {
   const following = req.params.id === req.user!.id
     ? false
     : Boolean(await Follow.exists({ followerId: req.user!.id, followingId: req.params.id }));
-  sendOk(res, { user: { ...user, isFollowing: following } });
+  sendOk(res, { user: { ...user, ...getVipStatus(user), isFollowing: following } });
 }));
 
 usersRouter.post("/:id/follow", asyncHandler(async (req: AuthRequest, res) => {
@@ -237,7 +239,7 @@ usersRouter.get("/:id/rooms", asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
   const limit = Math.min(Number(req.query.limit) || 20, 50);
   const rooms = await Room.find({ hostId: req.params.id, status: "LIVE" })
-    .populate("hostId", "name username avatar city")
+    .populate("hostId", "name username avatar city vipTier vipExpiresAt")
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean();
@@ -248,7 +250,7 @@ usersRouter.get("/:id/followers", asyncHandler(async (req: AuthRequest, res) => 
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
   const limit = Math.min(Number(req.query.limit) || 50, 100);
   const followers = await Follow.find({ followingId: req.params.id })
-    .populate("followerId", "name username avatar city followersCount")
+    .populate("followerId", "name username avatar city followersCount vipTier vipExpiresAt")
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean();
@@ -260,7 +262,7 @@ usersRouter.get("/:id/following", asyncHandler(async (req: AuthRequest, res) => 
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
   const limit = Math.min(Number(req.query.limit) || 50, 100);
   const following = await Follow.find({ followerId: req.params.id })
-    .populate("followingId", "name username avatar city followersCount")
+    .populate("followingId", "name username avatar city followersCount vipTier vipExpiresAt")
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean();
