@@ -91,12 +91,12 @@ export const roomsApi = {
 
 export const walletApi = {
   gifts: () => api<{ gifts: any[] }>("/gifts"),
-  wallet: () => api<{ balance: number; vip?: any; cosmetics?: any }>("/wallet"),
+  wallet: () => api<{ balance: number; vip?: any; level?: any; cosmetics?: any }>("/wallet"),
   transactions: () => api<{ transactions: any[] }>("/wallet/transactions"),
   packs: () => api<{ packs: any[] }>("/wallet/packs"),
   purchases: () => api<{ purchases: any[] }>("/wallet/purchases"),
   cosmetics: () => api<{ cosmetics: any[]; ownedCosmeticIds: string[]; activeCosmetics: any }>("/wallet/cosmetics"),
-  purchaseCosmetic: (cosmeticId: string) => api<{ cosmetic: any; balance: number; ownedCosmeticIds: string[]; activeCosmetics: any }>("/wallet/cosmetics/purchase", {
+  purchaseCosmetic: (cosmeticId: string) => api<{ cosmetic: any; balance: number; ownedCosmeticIds: string[]; activeCosmetics: any; level?: any }>("/wallet/cosmetics/purchase", {
     method: "POST",
     body: JSON.stringify({ cosmeticId })
   }),
@@ -105,7 +105,7 @@ export const walletApi = {
     body: JSON.stringify({ cosmeticId, type })
   }),
   vipPlans: () => api<{ plans: any[]; vip?: any }>("/wallet/vip/plans"),
-  activateVip: (planId: string) => api<{ balance: number; vip: any; plan: any }>("/wallet/vip/activate", {
+  activateVip: (planId: string) => api<{ balance: number; vip: any; level?: any; plan: any }>("/wallet/vip/activate", {
     method: "POST",
     body: JSON.stringify({ planId })
   }),
@@ -139,6 +139,8 @@ export const notificationsApi = {
 
 export const usersApi = {
   get: (userId: string) => api<{ user: any }>(`/users/${userId}`),
+  level: () => api<{ level: any }>("/users/me/level"),
+  checkIn: () => api<{ alreadyClaimed: boolean; xpAwarded?: number; levelUpReward?: number; levelsGained?: number[]; level: any; walletBalance?: number; balance?: number }>("/users/me/check-in", { method: "POST" }),
   getUserRooms: (userId: string) => api<{ rooms: any[] }>(`/users/${userId}/rooms`),
   getFollowers: (userId: string) => api<{ users: any[] }>(`/users/${userId}/followers`),
   getFollowing: (userId: string) => api<{ users: any[] }>(`/users/${userId}/following`),

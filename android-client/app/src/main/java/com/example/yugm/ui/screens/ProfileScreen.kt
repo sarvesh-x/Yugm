@@ -145,9 +145,11 @@ fun ProfileScreen(
             }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    StatCard("Level", host.level.toString(), Modifier.weight(1f))
                     StatCard("Followers", formatCount(host.followers), Modifier.weight(1f))
                     StatCard("Following", formatCount(host.followingCount), Modifier.weight(1f))
                 }
+                Text("${host.levelTitle} / ${host.xp} XP", color = Gold, fontWeight = FontWeight.Bold, fontSize = 13.sp)
             }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {

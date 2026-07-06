@@ -19,6 +19,7 @@ import { env } from "../config/env.js";
 import { getCachedJson, setCachedJson } from "../services/redis.js";
 import { addVipDays, findVipPlan, getVipStatus } from "../services/vip.js";
 import { activeCosmeticKey, findProfileCosmetic } from "../services/cosmetics.js";
+import { getLevelStatus, grantXp } from "../services/levels.js";
 
 export const walletRouter = Router();
 walletRouter.use(requireAuth);
@@ -80,6 +81,7 @@ walletRouter.get("/gifts", asyncHandler(async (_req, res) => {
 walletRouter.get("/wallet", (req: AuthRequest, res) => sendOk(res, {
   balance: req.user!.walletBalance,
   vip: getVipStatus(req.user),
+  level: getLevelStatus(req.user),
   cosmetics: {
     ownedCosmeticIds: req.user!.ownedCosmeticIds ?? [],
     activeCosmetics: req.user!.activeCosmetics ?? {}
@@ -119,8 +121,9 @@ walletRouter.post("/wallet/cosmetics/purchase", validateBody(purchaseProfileCosm
     await User.findByIdAndUpdate(req.user!.id, update, { session });
     await session.commitTransaction();
     session.endSession();
-    const user = await User.findById(req.user!.id).select("walletBalance ownedCosmeticIds activeCosmetics").lean();
-    sendOk(res, { cosmetic, balance: user?.walletBalance ?? 0, ownedCosmeticIds: user?.ownedCosmeticIds ?? [], activeCosmetics: user?.activeCosmetics ?? {} }, 201);
+    const level = await grantXp(req.user!.id, "COSMETIC_PURCHASE", { cosmeticId: cosmetic.id });
+    const user = await User.findById(req.user!.id).select("walletBalance ownedCosmeticIds activeCosmetics xp level levelTitle lastDailyCheckInAt").lean();
+    sendOk(res, { cosmetic, balance: user?.walletBalance ?? 0, ownedCosmeticIds: user?.ownedCosmeticIds ?? [], activeCosmetics: user?.activeCosmetics ?? {}, level: level?.level ?? getLevelStatus(user) }, 201);
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
@@ -167,8 +170,9 @@ walletRouter.post("/wallet/vip/activate", validateBody(purchaseVipSchema), async
     await session.commitTransaction();
     session.endSession();
 
-    const fresh = await User.findById(user.id).select("walletBalance vipTier vipStartedAt vipExpiresAt").lean();
-    sendOk(res, { balance: fresh?.walletBalance ?? 0, vip: getVipStatus(fresh), plan });
+    const level = await grantXp(user.id, "VIP_PURCHASE", { planId: plan.id });
+    const fresh = await User.findById(user.id).select("walletBalance vipTier vipStartedAt vipExpiresAt xp level levelTitle lastDailyCheckInAt").lean();
+    sendOk(res, { balance: fresh?.walletBalance ?? 0, vip: getVipStatus(fresh), level: level?.level ?? getLevelStatus(fresh), plan });
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
@@ -318,6 +322,8 @@ walletRouter.post("/rooms/:id/send-gift", validateBody(sendGiftSchema), asyncHan
     }], { session });
     await session.commitTransaction();
     session.endSession();
+    await grantXp(req.user!.id, "GIFT_SENT", { roomId: room._id.toString(), giftId: gift._id.toString() });
+    await grantXp(req.body.receiverId, "GIFT_RECEIVED", { roomId: room._id.toString(), giftId: gift._id.toString() });
     await createNotification(req.body.receiverId, "GIFT", "Gift Received", `${req.user!.name} sent you a ${gift.name}!`, { roomId: room._id.toString(), giftId: gift._id.toString() });
     // NOTE: emitRoom is called after the socket room join for consistent ordering
     emitRoom(room._id.toString(), socketEvents.roomGiftSend, { giftTransaction: giftTransaction[0], gift });
@@ -361,6 +367,8 @@ walletRouter.post("/direct-send-gift", asyncHandler(async (req: AuthRequest, res
     }], { session });
     await session.commitTransaction();
     session.endSession();
+    await grantXp(req.user!.id, "GIFT_SENT", { giftId: gift._id.toString(), direct: true });
+    await grantXp(receiverId, "GIFT_RECEIVED", { giftId: gift._id.toString(), direct: true });
 
     // Create a direct message indicating the gift was sent
     const message = await DirectMessage.create({

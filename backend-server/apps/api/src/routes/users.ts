@@ -11,11 +11,13 @@ import { User } from "../models/User.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId, sanitizeText } from "../utils/http.js";
 import { createNotification } from "../services/notifications.js";
 import { getVipStatus } from "../services/vip.js";
+import { dailyCheckInStart, getLevelStatus, grantXp } from "../services/levels.js";
 
 export const usersRouter = Router();
 usersRouter.use(requireAuth);
 
 function publicUser(user: any) {
+  const levelStatus = getLevelStatus(user);
   return {
     id: user.id,
     _id: user._id?.toString?.() ?? user.id,
@@ -24,6 +26,10 @@ function publicUser(user: any) {
     avatar: user.avatar,
     role: user.role,
     walletBalance: user.walletBalance,
+    xp: levelStatus.xp,
+    level: levelStatus.level,
+    levelTitle: levelStatus.title,
+    levelStatus,
     activeCosmetics: user.activeCosmetics,
     ownedCosmeticIds: user.ownedCosmeticIds,
     ...getVipStatus(user),
@@ -40,15 +46,52 @@ function publicUser(user: any) {
     interestedIn: user.interestedIn,
     lookingFor: user.lookingFor,
     datingAgeMin: user.datingAgeMin,
-    datingAgeMax: user.datingAgeMax
+    datingAgeMax: user.datingAgeMax,
+    isFollowing: user.isFollowing
   };
+}
+
+function hasCompletedProfile(user: any) {
+  return Boolean(user?.name && user?.username && user?.bio && user?.city && (user?.interests?.length ?? 0) > 0);
 }
 
 usersRouter.get("/me", (req: AuthRequest, res) => sendOk(res, { user: publicUser(req.user) }));
 
 usersRouter.patch("/me", validateBody(profileSchema.partial()), asyncHandler(async (req: AuthRequest, res) => {
-  const user = await User.findByIdAndUpdate(req.user!.id, req.body, { new: true }).select("-__v");
+  let user: any = await User.findByIdAndUpdate(req.user!.id, req.body, { new: true }).select("-__v");
+  if (user && !user.profileCompletedAt && hasCompletedProfile(user)) {
+    user.profileCompletedAt = new Date();
+    await user.save();
+    await grantXp(user.id, "PROFILE_COMPLETE");
+    user = await User.findById(req.user!.id).select("-__v");
+  }
   sendOk(res, { user: publicUser(user) });
+}));
+
+usersRouter.get("/me/level", (req: AuthRequest, res) => {
+  sendOk(res, { level: getLevelStatus(req.user) });
+});
+
+usersRouter.post("/me/check-in", asyncHandler(async (req: AuthRequest, res) => {
+  const checkedIn = await User.findOneAndUpdate(
+    {
+      _id: req.user!.id,
+      $or: [
+        { lastDailyCheckInAt: { $exists: false } },
+        { lastDailyCheckInAt: { $lt: dailyCheckInStart() } }
+      ]
+    },
+    { $set: { lastDailyCheckInAt: new Date() } },
+    { new: true }
+  ).select("xp level levelTitle lastDailyCheckInAt walletBalance").lean();
+
+  if (!checkedIn) {
+    const user = await User.findById(req.user!.id).select("xp level levelTitle lastDailyCheckInAt walletBalance").lean();
+    return sendOk(res, { alreadyClaimed: true, level: getLevelStatus(user), balance: user?.walletBalance ?? 0 });
+  }
+
+  const reward = await grantXp(req.user!.id, "DAILY_CHECKIN");
+  sendOk(res, { alreadyClaimed: false, ...(reward ?? {}) });
 }));
 
 usersRouter.get("/search", asyncHandler(async (req: AuthRequest, res) => {
@@ -70,13 +113,13 @@ usersRouter.get("/search", asyncHandler(async (req: AuthRequest, res) => {
     $or: [{ name: regex }, { username: regex }, { interests: regex }, { city: regex }],
     isBlocked: { $ne: true }
   })
-    .select("name username avatar city followersCount interests role activeCosmetics vipTier vipStartedAt vipExpiresAt")
-    .sort({ vipExpiresAt: -1, followersCount: -1, createdAt: -1 })
+    .select("name username avatar city followersCount interests role activeCosmetics vipTier vipStartedAt vipExpiresAt xp level levelTitle lastDailyCheckInAt")
+    .sort({ vipExpiresAt: -1, level: -1, followersCount: -1, createdAt: -1 })
     .limit(limit)
     .lean();
   const followingRows = await Follow.find({ followerId: req.user!.id, followingId: { $in: users.map((user) => user._id) } }).lean();
   const followingIds = new Set(followingRows.map((row) => row.followingId.toString()));
-  sendOk(res, { users: users.map((user) => ({ ...user, ...getVipStatus(user), isFollowing: followingIds.has(user._id.toString()) })) });
+  sendOk(res, { users: users.map((user) => ({ ...user, ...getVipStatus(user), xp: getLevelStatus(user).xp, level: getLevelStatus(user).level, levelTitle: getLevelStatus(user).title, levelStatus: getLevelStatus(user), isFollowing: followingIds.has(user._id.toString()) })) });
 }));
 
 usersRouter.get("/hosts/suggested", asyncHandler(async (req: AuthRequest, res) => {
@@ -88,18 +131,18 @@ usersRouter.get("/hosts/suggested", asyncHandler(async (req: AuthRequest, res) =
     isBlocked: { $ne: true },
     role: { $in: ["HOST", "MODERATOR", "ADMIN"] }
   })
-    .select("name username avatar city followersCount interests role activeCosmetics vipTier vipStartedAt vipExpiresAt")
-    .sort({ vipExpiresAt: -1, followersCount: -1, createdAt: -1 })
+    .select("name username avatar city followersCount interests role activeCosmetics vipTier vipStartedAt vipExpiresAt xp level levelTitle lastDailyCheckInAt")
+    .sort({ vipExpiresAt: -1, level: -1, followersCount: -1, createdAt: -1 })
     .limit(limit)
     .lean();
-  sendOk(res, { users: users.map((user) => ({ ...user, ...getVipStatus(user), isFollowing: false })) });
+  sendOk(res, { users: users.map((user) => ({ ...user, ...getVipStatus(user), xp: getLevelStatus(user).xp, level: getLevelStatus(user).level, levelTitle: getLevelStatus(user).title, levelStatus: getLevelStatus(user), isFollowing: false })) });
 }));
 
 usersRouter.get("/messages", asyncHandler(async (req: AuthRequest, res) => {
   const messages = await DirectMessage.find({
     $or: [{ senderId: req.user!.id }, { receiverId: req.user!.id }]
   })
-    .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt")
+    .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .sort({ createdAt: -1 })
     .limit(100)
     .lean();
@@ -121,7 +164,7 @@ usersRouter.get("/messages/:userId", asyncHandler(async (req: AuthRequest, res) 
       { senderId: req.params.userId, receiverId: req.user!.id }
     ]
   })
-    .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt")
+    .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .sort({ createdAt: -1 })
     .limit(100)
     .lean();
@@ -157,12 +200,13 @@ usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, asyncHandler
   );
 
   await createNotification(receiverId, "MESSAGE", "New message", `${req.user!.name}: ${message.message}`, { partnerId: req.user!.id });
+  await grantXp(req.user!.id, "CHAT_MESSAGE");
   sendOk(res, { message }, 201);
 }));
 
 usersRouter.get("/me/blocked", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   const blockedRows = await Block.find({ blockerId: req.user!.id })
-    .populate("blockedUserId", "name username avatar city activeCosmetics vipTier vipExpiresAt")
+    .populate("blockedUserId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .lean();
   const users = blockedRows.map((row) => row.blockedUserId).filter(Boolean);
   sendOk(res, { users });
@@ -182,7 +226,7 @@ usersRouter.get("/:id", asyncHandler(async (req: AuthRequest, res) => {
   const following = req.params.id === req.user!.id
     ? false
     : Boolean(await Follow.exists({ followerId: req.user!.id, followingId: req.params.id }));
-  sendOk(res, { user: { ...user, ...getVipStatus(user), isFollowing: following } });
+  sendOk(res, { user: publicUser({ ...user, ...getVipStatus(user), isFollowing: following }) });
 }));
 
 usersRouter.post("/:id/follow", asyncHandler(async (req: AuthRequest, res) => {
@@ -196,6 +240,7 @@ usersRouter.post("/:id/follow", asyncHandler(async (req: AuthRequest, res) => {
   });
   if (blocked) throw new HttpError(403, "Cannot follow this user", ErrorCode.FORBIDDEN);
   const session = await mongoose.startSession();
+  let createdFollow = false;
   session.startTransaction();
   try {
     const existing = await Follow.findOne({ followerId: req.user!.id, followingId: req.params.id }).session(session);
@@ -204,6 +249,7 @@ usersRouter.post("/:id/follow", asyncHandler(async (req: AuthRequest, res) => {
       await User.findByIdAndUpdate(req.user!.id, { $inc: { followingCount: 1 } }, { session });
       await User.findByIdAndUpdate(req.params.id, { $inc: { followersCount: 1 } }, { session });
       await createNotification(req.params.id, "FOLLOW", "New Follower", `${req.user!.name} started following you`);
+      createdFollow = true;
     }
     await session.commitTransaction();
     session.endSession();
@@ -212,6 +258,7 @@ usersRouter.post("/:id/follow", asyncHandler(async (req: AuthRequest, res) => {
     session.endSession();
     throw err;
   }
+  if (createdFollow) await grantXp(req.user!.id, "FOLLOW_USER");
   sendOk(res, { following: true });
 }));
 
@@ -241,7 +288,7 @@ usersRouter.get("/:id/rooms", asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
   const limit = Math.min(Number(req.query.limit) || 20, 50);
   const rooms = await Room.find({ hostId: req.params.id, status: "LIVE" })
-    .populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt")
+    .populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean();
@@ -252,7 +299,7 @@ usersRouter.get("/:id/followers", asyncHandler(async (req: AuthRequest, res) => 
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
   const limit = Math.min(Number(req.query.limit) || 50, 100);
   const followers = await Follow.find({ followingId: req.params.id })
-    .populate("followerId", "name username avatar city followersCount activeCosmetics vipTier vipExpiresAt")
+    .populate("followerId", "name username avatar city followersCount activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean();
@@ -264,7 +311,7 @@ usersRouter.get("/:id/following", asyncHandler(async (req: AuthRequest, res) => 
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
   const limit = Math.min(Number(req.query.limit) || 50, 100);
   const following = await Follow.find({ followerId: req.params.id })
-    .populate("followingId", "name username avatar city followersCount activeCosmetics vipTier vipExpiresAt")
+    .populate("followingId", "name username avatar city followersCount activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean();

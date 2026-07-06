@@ -319,7 +319,10 @@ fun JSONObject.toUser(): YugmUser = YugmUser(
     username = optString("username", ""),
     walletBalance = optInt("walletBalance", 0),
     isVip = optBoolean("isVip", false),
-    vipTier = optString("vipTier", "")
+    vipTier = optString("vipTier", ""),
+    level = optInt("level", optJSONObject("levelStatus")?.optInt("level", 1) ?: 1),
+    levelTitle = optString("levelTitle", optJSONObject("levelStatus")?.optString("title", "New Vibe") ?: "New Vibe"),
+    xp = optInt("xp", optJSONObject("levelStatus")?.optInt("xp", 0) ?: 0)
 )
 
 fun JSONObject.toHost(): Host = Host(
@@ -333,7 +336,10 @@ fun JSONObject.toHost(): Host = Host(
     bio = optString("bio", ""),
     avatar = if (has("avatar") && !isNull("avatar")) optString("avatar", "") else null,
     isVip = optBoolean("isVip", false),
-    vipTier = optString("vipTier", "")
+    vipTier = optString("vipTier", ""),
+    level = optInt("level", optJSONObject("levelStatus")?.optInt("level", 1) ?: 1),
+    levelTitle = optString("levelTitle", optJSONObject("levelStatus")?.optString("title", "New Vibe") ?: "New Vibe"),
+    xp = optInt("xp", optJSONObject("levelStatus")?.optInt("xp", 0) ?: 0)
 )
 
 fun JSONObject.toRoom(): Room {

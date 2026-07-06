@@ -13,7 +13,10 @@ data class Host(
     val bio: String = "",
     val avatar: String? = null,
     val isVip: Boolean = false,
-    val vipTier: String = ""
+    val vipTier: String = "",
+    val level: Int = 1,
+    val levelTitle: String = "New Vibe",
+    val xp: Int = 0
 )
 
 data class Room(
@@ -42,7 +45,10 @@ data class YugmUser(
     val username: String = "",
     val walletBalance: Int = 0,
     val isVip: Boolean = false,
-    val vipTier: String = ""
+    val vipTier: String = "",
+    val level: Int = 1,
+    val levelTitle: String = "New Vibe",
+    val xp: Int = 0
 )
 
 data class Session(val token: String, val user: YugmUser)

@@ -87,7 +87,7 @@ export default function WalletScreen() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["wallet"] });
       queryClient.invalidateQueries({ queryKey: ["wallet", "transactions"] });
-      if (currentUser) updateUser({ ...currentUser, walletBalance: data.balance, ...data.vip });
+      if (currentUser) updateUser({ ...currentUser, walletBalance: data.balance, ...data.vip, xp: data.level?.xp, level: data.level?.level, levelTitle: data.level?.title, levelStatus: data.level });
       Alert.alert("VIP activated", `You are VIP until ${new Date(data.vip.vipExpiresAt).toLocaleDateString()}.`);
     },
     onError: (err: any) => setError(err?.message ?? "VIP activation failed")
@@ -99,7 +99,7 @@ export default function WalletScreen() {
       queryClient.invalidateQueries({ queryKey: ["wallet"] });
       queryClient.invalidateQueries({ queryKey: ["wallet", "cosmetics"] });
       queryClient.invalidateQueries({ queryKey: ["wallet", "transactions"] });
-      if (currentUser) updateUser({ ...currentUser, walletBalance: data.balance, ownedCosmeticIds: data.ownedCosmeticIds, activeCosmetics: data.activeCosmetics });
+      if (currentUser) updateUser({ ...currentUser, walletBalance: data.balance, ownedCosmeticIds: data.ownedCosmeticIds, activeCosmetics: data.activeCosmetics, xp: data.level?.xp, level: data.level?.level, levelTitle: data.level?.title, levelStatus: data.level });
       Alert.alert("Cosmetic equipped", `${data.cosmetic.name} is now active on your profile.`);
     },
     onError: (err: any) => setError(err?.message ?? "Cosmetic purchase failed")
@@ -152,6 +152,14 @@ export default function WalletScreen() {
             <Text style={styles.balanceCoins}>
               {wallet.data?.balance ?? 0} <Text style={styles.coinSubtext}>Coins</Text>
             </Text>
+
+            {wallet.data?.level && (
+              <View style={styles.walletLevelRow}>
+                <Sparkles color={colors.ink} size={16} />
+                <Text style={styles.walletLevelText}>Level {wallet.data.level.level} / {wallet.data.level.title}</Text>
+                <Text style={styles.walletLevelXp}>{wallet.data.level.xp} XP</Text>
+              </View>
+            )}
 
             {__DEV__ && (
               <Pressable
@@ -352,6 +360,19 @@ const styles = StyleSheet.create({
   balanceLabel: { color: "rgba(255,255,255,0.85)", fontSize: 13, fontWeight: "900", textTransform: "uppercase", letterSpacing: 1 },
   balanceCoins: { color: colors.text, fontSize: 44, fontWeight: "900", marginVertical: 14 },
   coinSubtext: { fontSize: 18, fontWeight: "800", color: "rgba(255,255,255,0.75)" },
+  walletLevelRow: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginBottom: 12
+  },
+  walletLevelText: { color: colors.ink, fontWeight: "900", fontSize: 12 },
+  walletLevelXp: { color: "rgba(5,7,19,0.72)", fontWeight: "900", fontSize: 11 },
   devRechargeBtn: {
     alignSelf: "flex-start",
     flexDirection: "row",

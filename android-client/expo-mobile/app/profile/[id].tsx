@@ -30,6 +30,7 @@ export default function UserProfileDetail() {
 
   const user = data?.user;
   const isFollowing = user?.isFollowing ?? false;
+  const level = user?.levelStatus ?? { level: user?.level ?? 1, title: user?.levelTitle ?? "New Vibe", xp: user?.xp ?? 0 };
 
   const followMutation = useMutation({
     mutationFn: () => isFollowing ? usersApi.unfollow(id) : usersApi.follow(id),
@@ -143,6 +144,12 @@ export default function UserProfileDetail() {
               <Text style={styles.locationText}>
                 {user.city || "Mumbai"}{user.state ? `, ${user.state}` : ""}
               </Text>
+            </View>
+
+            <View style={styles.levelPill}>
+              <Sparkles color={colors.gold} size={14} />
+              <Text style={styles.levelPillText}>Level {level.level} / {level.title}</Text>
+              <Text style={styles.levelXpText}>{level.xp} XP</Text>
             </View>
 
             {!!user.activeCosmetics && Object.values(user.activeCosmetics).some(Boolean) && (
@@ -351,6 +358,29 @@ const styles = StyleSheet.create({
   locationText: {
     color: colors.muted,
     fontSize: 14,
+    fontWeight: "800"
+  },
+  levelPill: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: "rgba(246,180,75,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(246,180,75,0.24)"
+  },
+  levelPillText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  levelXpText: {
+    color: colors.muted,
+    fontSize: 11,
     fontWeight: "800"
   },
   cosmeticsText: {

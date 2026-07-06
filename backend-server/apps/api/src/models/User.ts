@@ -22,6 +22,11 @@ export interface IUser extends mongoose.Document {
   followersCount: number;
   followingCount: number;
   walletBalance: number;
+  xp: number;
+  level: number;
+  levelTitle?: string;
+  lastDailyCheckInAt?: Date;
+  profileCompletedAt?: Date;
   ownedCosmeticIds: string[];
   activeCosmetics: {
     avatarFrame?: string;
@@ -64,6 +69,11 @@ const userSchema = new Schema<IUser>(
     followersCount: { type: Number, default: 0 },
     followingCount: { type: Number, default: 0 },
     walletBalance: { type: Number, default: 0 },
+    xp: { type: Number, default: 0 },
+    level: { type: Number, default: 1 },
+    levelTitle: { type: String, default: "New Vibe" },
+    lastDailyCheckInAt: Date,
+    profileCompletedAt: Date,
     ownedCosmeticIds: [{ type: String }],
     activeCosmetics: {
       avatarFrame: String,
@@ -92,5 +102,6 @@ userSchema.index({ firebaseUid: 1 }, { unique: true, partialFilterExpression: { 
 userSchema.index({ vipExpiresAt: -1 });
 userSchema.index({ mutedUntil: 1 });
 userSchema.index({ suspendedUntil: 1 });
+userSchema.index({ level: -1, xp: -1 });
 
 export const User = mongoose.model<IUser>("User", userSchema);

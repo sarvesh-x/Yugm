@@ -69,6 +69,34 @@ export const profileCosmeticIds = profileCosmetics.map((item) => item.id) as [ty
 export const profileCosmeticTypes = ["AVATAR_FRAME", "PROFILE_THEME", "ENTRANCE_EFFECT"] as const;
 export const moderationActionTypes = ["WARN", "MUTE", "SUSPEND", "BAN", "UNBAN"] as const;
 
+export const levelMilestones = [
+  { level: 1, requiredXp: 0, title: "New Vibe", coinReward: 0 },
+  { level: 2, requiredXp: 100, title: "Rising Vibe", coinReward: 25 },
+  { level: 3, requiredXp: 250, title: "Room Regular", coinReward: 50 },
+  { level: 4, requiredXp: 500, title: "Vibe Maker", coinReward: 75 },
+  { level: 5, requiredXp: 900, title: "Yugm Star", coinReward: 100 },
+  { level: 6, requiredXp: 1400, title: "Crowd Puller", coinReward: 150 },
+  { level: 7, requiredXp: 2100, title: "Gift Magnet", coinReward: 200 },
+  { level: 8, requiredXp: 3000, title: "Prime Host", coinReward: 250 },
+  { level: 9, requiredXp: 4200, title: "Vibe Icon", coinReward: 350 },
+  { level: 10, requiredXp: 6000, title: "Yugm Legend", coinReward: 500 }
+] as const;
+
+export const xpEvents = {
+  PROFILE_COMPLETE: 80,
+  DAILY_CHECKIN: 25,
+  ROOM_CREATE: 40,
+  ROOM_JOIN: 10,
+  CHAT_MESSAGE: 5,
+  GIFT_SENT: 15,
+  GIFT_RECEIVED: 10,
+  VIP_PURCHASE: 100,
+  COSMETIC_PURCHASE: 60,
+  FOLLOW_USER: 10
+} as const;
+
+export type XpEvent = keyof typeof xpEvents;
+
 export const vipPlans = [
   {
     id: "vip_7d",

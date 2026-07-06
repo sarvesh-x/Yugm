@@ -1,7 +1,7 @@
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Crown, Settings, UserPlus, UserCheck, Wallet } from "lucide-react-native";
+import { Crown, Settings, Sparkles, UserPlus, UserCheck, Wallet } from "lucide-react-native";
 import { GlassCard } from "@/components/GlassCard";
 import { LoadingState } from "@/components/LoadingState";
 import { ErrorState } from "@/components/ErrorState";
@@ -14,6 +14,7 @@ import { colors } from "@/theme/colors";
 export default function Profile() {
   const { userId } = useLocalSearchParams<{ userId?: string }>();
   const currentUser = useAuthStore((s) => s.user);
+  const updateUser = useAuthStore((s) => s.updateUser);
   const queryClient = useQueryClient();
   const profileId = userId ?? currentUser?._id ?? currentUser?.id ?? "";
   const isOwn = !userId || userId === currentUser?._id || userId === currentUser?.id;
@@ -36,6 +37,16 @@ export default function Profile() {
 
   const user = profile?.user;
   const followed = Boolean(user?.isFollowing);
+  const level = user?.levelStatus ?? {
+    level: user?.level ?? 1,
+    title: user?.levelTitle ?? "New Vibe",
+    xp: user?.xp ?? 0,
+    progress: 0,
+    progressXp: 0,
+    requiredXp: 100,
+    canDailyCheckIn: true,
+    dailyCheckInXp: 25
+  };
 
   const follow = useMutation({
     mutationFn: () => usersApi.follow(profileId),
@@ -53,6 +64,30 @@ export default function Profile() {
       queryClient.invalidateQueries({ queryKey: ["user", currentUser?._id ?? currentUser?.id, "following"] });
     },
     onError: (err: any) => console.error(err)
+  });
+
+  const checkIn = useMutation({
+    mutationFn: usersApi.checkIn,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["user", profileId] });
+      queryClient.invalidateQueries({ queryKey: ["wallet"] });
+      queryClient.invalidateQueries({ queryKey: ["wallet", "transactions"] });
+      if (currentUser) {
+        updateUser({
+          ...currentUser,
+          walletBalance: data.walletBalance ?? data.balance ?? currentUser.walletBalance,
+          xp: data.level?.xp,
+          level: data.level?.level,
+          levelTitle: data.level?.title,
+          levelStatus: data.level
+        });
+      }
+      Alert.alert(
+        data.alreadyClaimed ? "Already checked in" : "Check-in complete",
+        data.alreadyClaimed ? "Come back tomorrow for more XP." : `+${data.xpAwarded ?? level.dailyCheckInXp} XP${data.levelUpReward ? ` and +${data.levelUpReward} coins` : ""}.`
+      );
+    },
+    onError: (err: any) => Alert.alert("Check-in failed", err?.message ?? "Please try again.")
   });
 
   if (profileLoading) return <Screen><LoadingState /></Screen>;
@@ -81,6 +116,32 @@ export default function Profile() {
               Cosmetics: {Object.values(user.activeCosmetics).filter(Boolean).join(" / ")}
             </Text>
           )}
+          <View style={styles.levelCard}>
+            <View style={styles.levelHeader}>
+              <View style={styles.levelTitleRow}>
+                <Sparkles color={colors.gold} size={16} />
+                <Text style={styles.levelTitle}>Level {level.level}</Text>
+              </View>
+              <Text style={styles.levelName}>{level.title}</Text>
+            </View>
+            <View style={styles.levelBarTrack}>
+              <View style={[styles.levelBarFill, { width: `${Math.round((level.progress ?? 0) * 100)}%` }]} />
+            </View>
+            <Text style={styles.levelMeta}>
+              {level.requiredXp > 0 ? `${level.progressXp}/${level.requiredXp} XP to level ${level.nextLevel ?? level.level}` : `${level.xp} XP total`}
+            </Text>
+            {isOwn && (
+              <Pressable
+                style={[styles.checkInBtn, (!level.canDailyCheckIn || checkIn.isPending) && styles.checkInBtnDisabled]}
+                onPress={() => checkIn.mutate()}
+                disabled={!level.canDailyCheckIn || checkIn.isPending}
+              >
+                <Text style={styles.checkInText}>
+                  {checkIn.isPending ? "Checking in..." : level.canDailyCheckIn ? `Daily check-in +${level.dailyCheckInXp} XP` : "Checked in today"}
+                </Text>
+              </Pressable>
+            )}
+          </View>
           <Text style={styles.bio}>{user?.bio ?? ""}</Text>
           <View style={styles.stats}>
             <Stat label="Followers" value={user?.followersCount ?? 0} />
@@ -141,6 +202,17 @@ const styles = StyleSheet.create({
   vipBadgeText: { color: colors.ink, fontSize: 11, fontWeight: "900" },
   username: { color: colors.gold, fontWeight: "800", marginTop: 2 },
   cosmeticsText: { color: colors.pink, fontSize: 12, fontWeight: "800", marginTop: 8 },
+  levelCard: { marginTop: 14, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, padding: 12 },
+  levelHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
+  levelTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  levelTitle: { color: colors.text, fontWeight: "900" },
+  levelName: { color: colors.gold, fontWeight: "900", fontSize: 12 },
+  levelBarTrack: { height: 8, borderRadius: 8, backgroundColor: "rgba(255,255,255,0.08)", overflow: "hidden", marginTop: 10 },
+  levelBarFill: { height: "100%", borderRadius: 8, backgroundColor: colors.gold },
+  levelMeta: { color: colors.muted, fontSize: 12, fontWeight: "700", marginTop: 6 },
+  checkInBtn: { height: 36, borderRadius: 8, backgroundColor: colors.gold, alignItems: "center", justifyContent: "center", marginTop: 10 },
+  checkInBtnDisabled: { opacity: 0.55 },
+  checkInText: { color: colors.ink, fontWeight: "900", fontSize: 12 },
   bio: { color: colors.muted, marginTop: 14, lineHeight: 21 },
   stats: { flexDirection: "row", marginVertical: 20, gap: 10 },
   stat: { flex: 1, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, borderRadius: 8, padding: 12 },

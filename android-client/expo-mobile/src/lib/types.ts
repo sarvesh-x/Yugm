@@ -1,3 +1,17 @@
+export interface LevelStatus {
+  xp: number;
+  level: number;
+  title: string;
+  currentLevelXp: number;
+  nextLevel?: number;
+  nextLevelXp?: number;
+  progressXp: number;
+  requiredXp: number;
+  progress: number;
+  canDailyCheckIn: boolean;
+  dailyCheckInXp: number;
+}
+
 export interface User {
   _id: string;
   id?: string;
@@ -13,6 +27,10 @@ export interface User {
   followersCount?: number;
   followingCount?: number;
   walletBalance?: number;
+  xp?: number;
+  level?: number;
+  levelTitle?: string;
+  levelStatus?: LevelStatus;
   ownedCosmeticIds?: string[];
   activeCosmetics?: {
     avatarFrame?: string;

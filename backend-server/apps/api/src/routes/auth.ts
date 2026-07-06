@@ -6,6 +6,7 @@ import { authLimiter } from "../middleware/rateLimit.js";
 import { validateBody } from "../middleware/validate.js";
 import { verifyIdToken } from "../services/firebase.js";
 import { getVipStatus } from "../services/vip.js";
+import { getLevelStatus } from "../services/levels.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode } from "../utils/http.js";
 import { env } from "../config/env.js";
 
@@ -22,6 +23,7 @@ async function generateUniqueUsername(): Promise<string> {
 }
 
 function publicUser(user: any) {
+  const levelStatus = getLevelStatus(user);
   return {
     id: user.id,
     _id: user._id?.toString?.() ?? user.id,
@@ -30,6 +32,10 @@ function publicUser(user: any) {
     avatar: user.avatar,
     role: user.role,
     walletBalance: user.walletBalance,
+    xp: levelStatus.xp,
+    level: levelStatus.level,
+    levelTitle: levelStatus.title,
+    levelStatus,
     activeCosmetics: user.activeCosmetics,
     ownedCosmeticIds: user.ownedCosmeticIds,
     ...getVipStatus(user),
