@@ -1,6 +1,8 @@
 import { Notification, INotification } from "../models/Notification.js";
 import { DeviceToken } from "../models/DeviceToken.js";
 import { notifyUser } from "./firebase.js";
+import { emitUser } from "./socket.js";
+import { socketEvents } from "@yugm/shared";
 
 function stringifyNotificationData(data: Record<string, unknown> = {}) {
   return Object.fromEntries(
@@ -18,6 +20,7 @@ export async function createNotification(
   data?: Record<string, unknown>
 ) {
   const notification = await Notification.create({ userId, type, title, body, data });
+  emitUser(userId, socketEvents.notificationNew, { notification });
   const tokens = await DeviceToken.find({ userId }).lean();
   if (tokens.length > 0) {
     try {

@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Crown, MessageCircle, UserPlus, UserMinus, ShieldAlert, Ban, Sparkles, MapPin, Radio, Star } from "lucide-react-native";
 import { usersApi } from "@/lib/api";
 import { Screen, Section } from "@/components/Screen";
+import { ProfileMedia } from "@/components/ProfileMedia";
 import { CosmeticAvatar } from "@/components/CosmeticAvatar";
 import { useAuthStore } from "@/store/auth";
 import { cosmeticPreviewText, nameStyleColors, profileThemeColors } from "@/lib/cosmetics";
@@ -258,11 +259,7 @@ export default function UserProfileDetail() {
                 <View style={styles.mediaGrid}>
                   {user.profileMedia.map((item: any) => (
                     <Pressable key={item._id ?? item.url} style={styles.mediaTile} onPress={() => setSelectedMedia(item)}>
-                      {item.type === "VIDEO" ? (
-                        <View style={styles.videoTile}><Text style={styles.videoText}>VIDEO</Text></View>
-                      ) : (
-                        <Image source={{ uri: item.url }} style={styles.mediaImage as any} />
-                      )}
+                      <ProfileMedia item={item} />
                       {!!item.caption && <Text style={styles.mediaCaption}>{item.caption}</Text>}
                     </Pressable>
                   ))}
@@ -343,9 +340,9 @@ export default function UserProfileDetail() {
               <Text style={styles.viewerCloseText}>Close</Text>
             </Pressable>
             {selectedMedia?.type === "VIDEO" ? (
-              <View style={styles.viewerVideo}><Text style={styles.viewerVideoText}>VIDEO</Text></View>
+              <ProfileMedia item={selectedMedia} mode="viewer" />
             ) : (
-              <Image source={{ uri: selectedMedia?.url }} style={styles.viewerImage as any} resizeMode="contain" />
+              <ProfileMedia item={selectedMedia} mode="viewer" />
             )}
             {!!selectedMedia?.caption && <Text style={styles.viewerCaption}>{selectedMedia.caption}</Text>}
           </View>

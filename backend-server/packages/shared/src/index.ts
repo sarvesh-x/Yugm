@@ -38,6 +38,7 @@ export const socketEvents = {
   directTypingStart: "direct:typing:start",
   directTypingStop: "direct:typing:stop",
   directTypingUpdate: "direct:typing:update",
+  directMessageNew: "direct:message:new",
   clanTypingStart: "clan:typing:start",
   clanTypingStop: "clan:typing:stop",
   clanTypingUpdate: "clan:typing:update",

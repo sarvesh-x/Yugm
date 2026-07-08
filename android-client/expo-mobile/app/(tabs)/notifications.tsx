@@ -7,6 +7,7 @@ import { ErrorState } from "@/components/ErrorState";
 import { EmptyState } from "@/components/EmptyState";
 import { Screen, Section } from "@/components/Screen";
 import { notificationsApi } from "@/lib/api";
+import { openNotificationTarget } from "@/lib/notificationRouting";
 import { colors } from "@/theme/colors";
 
 const typeIcons: Record<string, any> = {
@@ -42,22 +43,7 @@ export default function Notifications() {
 
   const openNotification = (item: any) => {
     if (!item.read) markRead.mutate(item._id);
-    const payload = item.data ?? {};
-    if (payload.clanId) {
-      router.push("/(tabs)/clan");
-      return;
-    }
-    if (payload.partnerId) {
-      router.push({ pathname: "/chat/[userId]", params: { userId: String(payload.partnerId) } });
-      return;
-    }
-    if (payload.roomId) {
-      router.push({ pathname: "/room/[id]", params: { id: String(payload.roomId) } });
-      return;
-    }
-    if (item.type === "FOLLOW" && payload.userId) {
-      router.push({ pathname: "/profile/[id]", params: { id: String(payload.userId) } });
-    }
+    if (!openNotificationTarget(item)) router.push("/(tabs)");
   };
 
   return (

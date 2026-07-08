@@ -2,6 +2,7 @@ package com.example.yugm
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -110,6 +111,8 @@ private const val TAG = "YugmApp"
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    private val pendingPushRoute = androidx.compose.runtime.mutableStateOf<String?>(null)
+
     companion object {
         private const val TAG_ACTIVITY = "MainActivity"
         private const val PREFS = "yugm_session"
@@ -122,12 +125,20 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        pendingPushRoute.value = routeFromPushIntent(intent)
         FirebaseApp.initializeApp(this)
         enableEdgeToEdge()
         setContent {
             YugmTheme(dynamicColor = false) {
                 val navController = androidx.navigation.compose.rememberNavController()
                 val mainViewModel: com.example.yugm.ui.viewmodel.MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                val pushRoute = pendingPushRoute.value
+                LaunchedEffect(pushRoute, mainViewModel.authToken) {
+                    if (!pushRoute.isNullOrBlank() && mainViewModel.authToken.isNotBlank()) {
+                        navController.navigate(pushRoute)
+                        pendingPushRoute.value = null
+                    }
+                }
                 
                 // For now we still need these triggers in MainActivity until we have a proper AuthManager
                 val googleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -141,6 +152,21 @@ class MainActivity : ComponentActivity() {
                     onPhoneSignIn = { /* navigate to phone auth */ }
                 )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pendingPushRoute.value = routeFromPushIntent(intent)
+    }
+
+    private fun routeFromPushIntent(intent: Intent?): String? {
+        val roomId = intent?.getStringExtra("roomId")
+        return if (!roomId.isNullOrBlank()) {
+            com.example.yugm.navigation.Screen.Chat.createRoute(roomId)
+        } else {
+            null
         }
     }
 }

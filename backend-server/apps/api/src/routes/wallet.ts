@@ -12,7 +12,7 @@ import { RoomActivity } from "../models/RoomActivity.js";
 import { User } from "../models/User.js";
 import { WalletTransaction } from "../models/WalletTransaction.js";
 import { creditWallet, debitWallet } from "../services/wallet.js";
-import { emitRoom } from "../services/socket.js";
+import { emitRoom, emitUser } from "../services/socket.js";
 import { createNotification } from "../services/notifications.js";
 import { consumeGooglePlayProduct, createRazorpayOrder, fetchRazorpayPayment, verifyGooglePlayProduct, verifyRazorpaySignature } from "../services/payments.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId } from "../utils/http.js";
@@ -420,6 +420,10 @@ walletRouter.post("/direct-send-gift", asyncHandler(async (req: AuthRequest, res
       message: `🎁 Sent you a ${gift.name}!`
     }));
 
+    if (message) {
+      emitUser(receiverId, socketEvents.directMessageNew, { message, partnerId: req.user!.id });
+      emitUser(req.user!.id, socketEvents.directMessageNew, { message, partnerId: receiverId });
+    }
     await runWalletSideEffect("direct gift notification", () => createNotification(receiverId, "GIFT", "Gift Received", `${req.user!.name} sent you a ${gift.name}!`, { partnerId: req.user!.id }));
     sendOk(res, { giftTransaction: giftTransaction[0], message, relationship: relationship?.relationship }, 201);
   } catch (err) {

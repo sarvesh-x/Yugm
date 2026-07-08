@@ -54,7 +54,7 @@ export default function ChatRoom() {
     queryKey: ["users", "conversation", userId],
     queryFn: () => usersApi.conversation(userId),
     enabled: !!userId,
-    refetchInterval: 3000 // Poll every 3 seconds for new DMs
+    refetchInterval: 15000
   });
 
   useFocusEffect(
@@ -81,6 +81,23 @@ export default function ChatRoom() {
       if (payload?.userId === userId) setIsOnline(false);
     };
     const handleReaction = () => refetch();
+    const handleMessage = (payload: any) => {
+      const incoming = payload?.message;
+      if (!incoming) return;
+      const partnerId = String(payload?.partnerId ?? "");
+      const senderId = typeof incoming.senderId === "string" ? incoming.senderId : incoming.senderId?._id ?? incoming.senderId?.id;
+      const receiverId = typeof incoming.receiverId === "string" ? incoming.receiverId : incoming.receiverId?._id ?? incoming.receiverId?.id;
+      const belongsHere = partnerId === userId || senderId === userId || receiverId === userId;
+      if (!belongsHere) return;
+      queryClient.setQueryData(["users", "conversation", userId], (old: any) => {
+        const previous = old?.messages ?? [];
+        const id = incoming._id ?? incoming.id;
+        if (id && previous.some((item: any) => (item._id ?? item.id) === id)) return old;
+        return { ...(old ?? {}), messages: [...previous, incoming] };
+      });
+      queryClient.invalidateQueries({ queryKey: ["users", "messages"] });
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 80);
+    };
     const handleTyping = (payload: any) => {
       if (payload?.userId !== userId) return;
       setPartnerTyping(Boolean(payload.typing));
@@ -88,11 +105,13 @@ export default function ChatRoom() {
     socket.on("user:online", handleOnline);
     socket.on("user:offline", handleOffline);
     socket.on("direct:reaction:new", handleReaction);
+    socket.on("direct:message:new", handleMessage);
     socket.on("direct:typing:update", handleTyping);
     return () => {
       socket.off("user:online", handleOnline);
       socket.off("user:offline", handleOffline);
       socket.off("direct:reaction:new", handleReaction);
+      socket.off("direct:message:new", handleMessage);
       socket.off("direct:typing:update", handleTyping);
       socket.emit("direct:typing:stop", { userId });
     };
@@ -103,7 +122,7 @@ export default function ChatRoom() {
     mutationFn: (text: string) => usersApi.sendMessage(userId, text),
     onSuccess: () => {
       setMessage("");
-      refetch();
+      queryClient.invalidateQueries({ queryKey: ["users", "messages"] });
       queryClient.invalidateQueries({ queryKey: ["dating", "matches"] });
       // Scroll to bottom
       setTimeout(() => {

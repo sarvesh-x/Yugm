@@ -10,6 +10,7 @@ import { CosmeticAvatar } from "@/components/CosmeticAvatar";
 import { LoadingState } from "@/components/LoadingState";
 import { ErrorState } from "@/components/ErrorState";
 import { EmptyState } from "@/components/EmptyState";
+import { ProfileMedia } from "@/components/ProfileMedia";
 import { Screen, Section } from "@/components/Screen";
 import { uploadProfileMedia, usersApi } from "@/lib/api";
 import { cosmeticPreviewText, nameStyleColors, profileThemeColors } from "@/lib/cosmetics";
@@ -308,11 +309,7 @@ export default function Profile() {
             <View style={styles.mediaGrid}>
               {(user.profileMedia ?? []).map((item: any) => (
                 <Pressable key={item._id ?? item.url} style={styles.mediaTile} onPress={() => setSelectedMedia(item)}>
-                  {item.type === "VIDEO" ? (
-                    <View style={styles.videoTile}><Text style={styles.videoText}>VIDEO</Text></View>
-                  ) : (
-                    <Image source={{ uri: item.url }} style={styles.mediaImage as any} />
-                  )}
+                  <ProfileMedia item={item} />
                   {!!item.caption && <Text style={styles.mediaCaption}>{item.caption}</Text>}
                   {isOwn && (
                     <Pressable style={styles.removeMediaBtn} onPress={() => removeMedia.mutate(item._id)}>
@@ -348,9 +345,9 @@ export default function Profile() {
             <Text style={styles.viewerCloseText}>Close</Text>
           </Pressable>
           {selectedMedia?.type === "VIDEO" ? (
-            <View style={styles.viewerVideo}><Text style={styles.viewerVideoText}>VIDEO</Text></View>
+            <ProfileMedia item={selectedMedia} mode="viewer" />
           ) : (
-            <Image source={{ uri: selectedMedia?.url }} style={styles.viewerImage as any} resizeMode="contain" />
+            <ProfileMedia item={selectedMedia} mode="viewer" />
           )}
           {!!selectedMedia?.caption && <Text style={styles.viewerCaption}>{selectedMedia.caption}</Text>}
         </View>

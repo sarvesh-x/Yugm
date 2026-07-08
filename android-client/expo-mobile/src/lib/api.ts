@@ -161,6 +161,8 @@ export const mediaApi = {
 
 export const notificationsApi = {
   list: () => api<{ notifications: any[] }>("/notifications"),
+  registerDeviceToken: (token: string, platform: "android" | "ios" | "web") =>
+    api<{ token: any }>("/notifications/device-token", { method: "POST", body: JSON.stringify({ token, platform }) }),
   markRead: (id: string) => api<{ notification: any }>(`/notifications/${id}/read`, { method: "PATCH" }),
   markAllRead: () => api<{ success: boolean }>("/notifications/read-all", { method: "POST" })
 };

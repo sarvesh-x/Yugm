@@ -1,7 +1,7 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
-import { profileSchema, reactionSchema } from "@yugm/shared";
+import { profileSchema, reactionSchema, socketEvents } from "@yugm/shared";
 import { requireAuth, requireNotMuted, type AuthRequest } from "../middleware/auth.js";
 import { chatLimiter } from "../middleware/rateLimit.js";
 import { validateBody } from "../middleware/validate.js";
@@ -262,11 +262,14 @@ usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, chatLimiter,
   const messageText = String(req.body.message || "").trim();
   if (!messageText) throw new HttpError(400, "Message cannot be empty", ErrorCode.VALIDATION);
 
-  const message = await DirectMessage.create({
+  const created = await DirectMessage.create({
     senderId: req.user!.id,
     receiverId,
     message: sanitizeText(messageText)
   });
+  const message = await DirectMessage.findById(created._id)
+    .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .lean();
 
   // Mark other messages from them as read
   await DirectMessage.updateMany(
@@ -274,9 +277,11 @@ usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, chatLimiter,
     { $set: { read: true } }
   );
 
-  await createNotification(receiverId, "MESSAGE", "New message", `${req.user!.name}: ${message.message}`, { partnerId: req.user!.id });
+  emitUser(receiverId, socketEvents.directMessageNew, { message, partnerId: req.user!.id });
+  emitUser(req.user!.id, socketEvents.directMessageNew, { message, partnerId: receiverId });
+  await createNotification(receiverId, "MESSAGE", "New message", `${req.user!.name}: ${message?.message ?? ""}`, { partnerId: req.user!.id, messageId: created._id.toString() });
   await grantXp(req.user!.id, "CHAT_MESSAGE");
-  const relationship = await grantRelationshipXp(req.user!.id, receiverId, "MESSAGE_SENT", { messageId: message._id.toString() });
+  const relationship = await grantRelationshipXp(req.user!.id, receiverId, "MESSAGE_SENT", { messageId: created._id.toString() });
   sendOk(res, { message, relationship: relationship?.relationship }, 201);
 }));
 
@@ -340,6 +345,8 @@ usersRouter.post("/messages/:userId/call", requireAuth, requireNotMuted, validat
       `${req.user!.name} started a private ${type.toLowerCase()} call`,
       { roomId: room[0]._id.toString(), partnerId: req.user!.id, callType: type }
     );
+    emitUser(receiverId, socketEvents.directMessageNew, { message: message[0], partnerId: req.user!.id });
+    emitUser(req.user!.id, socketEvents.directMessageNew, { message: message[0], partnerId: receiverId });
 
     sendOk(res, { room: room[0], message: message[0] }, 201);
   } catch (err) {

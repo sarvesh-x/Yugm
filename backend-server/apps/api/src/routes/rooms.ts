@@ -16,7 +16,7 @@ import { RoomParticipant } from "../models/RoomParticipant.js";
 import { SpeakerRequest } from "../models/SpeakerRequest.js";
 import { User } from "../models/User.js";
 import { asyncHandler, sanitizeText, sendOk, HttpError, ErrorCode, isValidObjectId } from "../utils/http.js";
-import { emitRoom } from "../services/socket.js";
+import { emitRoom, emitUser } from "../services/socket.js";
 import { createNotification } from "../services/notifications.js";
 import { getCachedJson, invalidateCache, setCachedJson } from "../services/redis.js";
 import { grantXp } from "../services/levels.js";
@@ -431,7 +431,9 @@ roomsRouter.post("/:id/messages/direct", requireAuth, requireNotMuted, validateB
     roomId: room._id,
     message: sanitizeText(req.body.message)
   });
-  await createNotification(receiverId, "MESSAGE", "New message", `${req.user!.name}: ${message.message}`, { roomId: room._id.toString() });
+  emitUser(receiverId, socketEvents.directMessageNew, { message, partnerId: req.user!.id, roomId: room._id.toString() });
+  emitUser(req.user!.id, socketEvents.directMessageNew, { message, partnerId: receiverId, roomId: room._id.toString() });
+  await createNotification(receiverId, "MESSAGE", "New message", `${req.user!.name}: ${message.message}`, { roomId: room._id.toString(), partnerId: req.user!.id, messageId: message._id.toString() });
   await grantRoomXp(req.user!.id, "CHAT_MESSAGE", { roomId: room._id.toString(), direct: true });
   const relationship = await grantRelationshipXp(req.user!.id, receiverId, "ROOM_DM_SENT", { roomId: room._id.toString(), messageId: message._id.toString() });
   sendOk(res, { message, relationship: relationship?.relationship }, 201);
