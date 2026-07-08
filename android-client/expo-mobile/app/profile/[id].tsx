@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Alert, Image, StyleSheet, Text, View, Pressable, ScrollView, ActivityIndicator } from "react-native";
+import { Alert, Image, Modal, StyleSheet, Text, View, Pressable, ScrollView, ActivityIndicator } from "react-native";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Crown, MessageCircle, UserPlus, UserMinus, ShieldAlert, Ban, Sparkles, MapPin, Radio, Star } from "lucide-react-native";
@@ -17,6 +17,7 @@ export default function UserProfileDetail() {
   
   const queryClient = useQueryClient();
   const currentUser = useAuthStore((s) => s.user);
+  const [selectedMedia, setSelectedMedia] = useState<any | null>(null);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["users", id],
@@ -176,6 +177,7 @@ export default function UserProfileDetail() {
               <Text style={styles.locationText}>
                 {user.city || "Mumbai"}{user.state ? `, ${user.state}` : ""}
               </Text>
+              {user.isOnline && <Text style={styles.onlinePill}>Online</Text>}
             </View>
 
             <View style={styles.levelPill}>
@@ -255,14 +257,14 @@ export default function UserProfileDetail() {
                 <Text style={styles.blockTitle}>Profile Media</Text>
                 <View style={styles.mediaGrid}>
                   {user.profileMedia.map((item: any) => (
-                    <View key={item._id ?? item.url} style={styles.mediaTile}>
+                    <Pressable key={item._id ?? item.url} style={styles.mediaTile} onPress={() => setSelectedMedia(item)}>
                       {item.type === "VIDEO" ? (
                         <View style={styles.videoTile}><Text style={styles.videoText}>VIDEO</Text></View>
                       ) : (
                         <Image source={{ uri: item.url }} style={styles.mediaImage as any} />
                       )}
                       {!!item.caption && <Text style={styles.mediaCaption}>{item.caption}</Text>}
-                    </View>
+                    </Pressable>
                   ))}
                 </View>
               </View>
@@ -335,6 +337,19 @@ export default function UserProfileDetail() {
             </Pressable>
           </LinearGradient>
         </ScrollView>
+        <Modal visible={!!selectedMedia} transparent animationType="fade" onRequestClose={() => setSelectedMedia(null)}>
+          <View style={styles.viewerBackdrop}>
+            <Pressable style={styles.viewerClose} onPress={() => setSelectedMedia(null)}>
+              <Text style={styles.viewerCloseText}>Close</Text>
+            </Pressable>
+            {selectedMedia?.type === "VIDEO" ? (
+              <View style={styles.viewerVideo}><Text style={styles.viewerVideoText}>VIDEO</Text></View>
+            ) : (
+              <Image source={{ uri: selectedMedia?.url }} style={styles.viewerImage as any} resizeMode="contain" />
+            )}
+            {!!selectedMedia?.caption && <Text style={styles.viewerCaption}>{selectedMedia.caption}</Text>}
+          </View>
+        </Modal>
       </View>
     </Screen>
   );
@@ -465,6 +480,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800"
   },
+  onlinePill: { color: colors.ink, backgroundColor: colors.success, borderRadius: 8, overflow: "hidden", paddingHorizontal: 8, paddingVertical: 3, fontSize: 11, fontWeight: "900" },
   levelPill: {
     alignSelf: "flex-start",
     flexDirection: "row",
@@ -627,6 +643,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800"
   },
+  viewerBackdrop: { flex: 1, backgroundColor: "rgba(5,7,19,0.96)", alignItems: "center", justifyContent: "center", padding: 18 },
+  viewerClose: { position: "absolute", top: 48, right: 18, zIndex: 2, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 14, paddingVertical: 8 },
+  viewerCloseText: { color: colors.text, fontWeight: "900" },
+  viewerImage: { width: "100%", height: "72%" },
+  viewerVideo: { width: "100%", height: "60%", borderRadius: 8, backgroundColor: colors.panelStrong, alignItems: "center", justifyContent: "center" },
+  viewerVideoText: { color: colors.gold, fontSize: 24, fontWeight: "900" },
+  viewerCaption: { color: colors.text, marginTop: 16, textAlign: "center", fontWeight: "800", lineHeight: 22 },
   mutualBlock: {
     padding: 14,
     borderRadius: 14,

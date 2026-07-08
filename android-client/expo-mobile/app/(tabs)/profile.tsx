@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Crown, Image as ImageIcon, Settings, Sparkles, Star, Trash2, UserPlus, UserCheck, Wallet } from "lucide-react-native";
@@ -23,6 +23,7 @@ export default function Profile() {
   const [mediaUrl, setMediaUrl] = useState("");
   const [mediaCaption, setMediaCaption] = useState("");
   const [mediaType, setMediaType] = useState<"IMAGE" | "VIDEO">("IMAGE");
+  const [selectedMedia, setSelectedMedia] = useState<any | null>(null);
   const profileId = userId ?? currentUser?._id ?? currentUser?.id ?? "";
   const isOwn = !userId || userId === currentUser?._id || userId === currentUser?.id;
 
@@ -275,7 +276,7 @@ export default function Profile() {
           ) : (
             <View style={styles.mediaGrid}>
               {(user.profileMedia ?? []).map((item: any) => (
-                <View key={item._id ?? item.url} style={styles.mediaTile}>
+                <Pressable key={item._id ?? item.url} style={styles.mediaTile} onPress={() => setSelectedMedia(item)}>
                   {item.type === "VIDEO" ? (
                     <View style={styles.videoTile}><Text style={styles.videoText}>VIDEO</Text></View>
                   ) : (
@@ -287,7 +288,7 @@ export default function Profile() {
                       <Trash2 color={colors.text} size={14} />
                     </Pressable>
                   )}
-                </View>
+                </Pressable>
               ))}
             </View>
           )}
@@ -310,6 +311,19 @@ export default function Profile() {
           )}
         </Section>
       </ScrollView>
+      <Modal visible={!!selectedMedia} transparent animationType="fade" onRequestClose={() => setSelectedMedia(null)}>
+        <View style={styles.viewerBackdrop}>
+          <Pressable style={styles.viewerClose} onPress={() => setSelectedMedia(null)}>
+            <Text style={styles.viewerCloseText}>Close</Text>
+          </Pressable>
+          {selectedMedia?.type === "VIDEO" ? (
+            <View style={styles.viewerVideo}><Text style={styles.viewerVideoText}>VIDEO</Text></View>
+          ) : (
+            <Image source={{ uri: selectedMedia?.url }} style={styles.viewerImage as any} resizeMode="contain" />
+          )}
+          {!!selectedMedia?.caption && <Text style={styles.viewerCaption}>{selectedMedia.caption}</Text>}
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -418,6 +432,13 @@ const styles = StyleSheet.create({
   videoText: { color: colors.gold, fontWeight: "900" },
   mediaCaption: { color: colors.text, fontSize: 12, fontWeight: "800", padding: 8 },
   removeMediaBtn: { position: "absolute", top: 8, right: 8, width: 30, height: 30, borderRadius: 8, backgroundColor: "rgba(5,7,19,0.74)", alignItems: "center", justifyContent: "center" },
+  viewerBackdrop: { flex: 1, backgroundColor: "rgba(5,7,19,0.96)", alignItems: "center", justifyContent: "center", padding: 18 },
+  viewerClose: { position: "absolute", top: 48, right: 18, zIndex: 2, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 14, paddingVertical: 8 },
+  viewerCloseText: { color: colors.text, fontWeight: "900" },
+  viewerImage: { width: "100%", height: "72%" },
+  viewerVideo: { width: "100%", height: "60%", borderRadius: 8, backgroundColor: colors.panelStrong, alignItems: "center", justifyContent: "center" },
+  viewerVideoText: { color: colors.gold, fontSize: 24, fontWeight: "900" },
+  viewerCaption: { color: colors.text, marginTop: 16, textAlign: "center", fontWeight: "800", lineHeight: 22 },
   roomCard: { marginBottom: 10 },
   hosted: { color: colors.text, fontWeight: "900", fontSize: 16 },
   hostedMeta: { color: colors.muted, marginTop: 4 }

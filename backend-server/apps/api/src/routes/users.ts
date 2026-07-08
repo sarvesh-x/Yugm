@@ -1,7 +1,7 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
-import { profileSchema } from "@yugm/shared";
+import { profileSchema, reactionSchema } from "@yugm/shared";
 import { requireAuth, requireNotMuted, type AuthRequest } from "../middleware/auth.js";
 import { chatLimiter } from "../middleware/rateLimit.js";
 import { validateBody } from "../middleware/validate.js";
@@ -14,6 +14,7 @@ import { SupportMessage, SupportTicket } from "../models/SupportTicket.js";
 import { User } from "../models/User.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId, sanitizeText } from "../utils/http.js";
 import { createNotification } from "../services/notifications.js";
+import { emitUser, isUserOnline } from "../services/socket.js";
 import { getVipStatus } from "../services/vip.js";
 import { dailyCheckInStart, getLevelStatus, grantXp } from "../services/levels.js";
 import { findRelationship, grantRelationshipXp } from "../services/relationships.js";
@@ -56,6 +57,7 @@ function publicUser(user: any) {
     profileMedia: user.profileMedia,
     closeFriendsCount: user.closeFriendIds?.length ?? 0,
     clanId: user.clanId?.toString?.() ?? user.clanId,
+    isOnline: user.isOnline ?? isUserOnline(user._id?.toString?.() ?? user.id),
     city: user.city,
     state: user.state,
     bio: user.bio,
@@ -347,6 +349,32 @@ usersRouter.post("/messages/:userId/call", requireAuth, requireNotMuted, validat
   }
 }));
 
+usersRouter.post("/messages/:userId/:messageId/reactions", validateBody(reactionSchema), asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.userId) || !isValidObjectId(req.params.messageId)) throw new HttpError(400, "Invalid message", ErrorCode.VALIDATION);
+  const belongsToConversation = {
+    _id: req.params.messageId,
+    $or: [
+      { senderId: req.user!.id, receiverId: req.params.userId },
+      { senderId: req.params.userId, receiverId: req.user!.id }
+    ]
+  };
+  const message = await DirectMessage.findOne(belongsToConversation).select("_id senderId receiverId").lean();
+  if (!message) throw new HttpError(404, "Message not found", ErrorCode.NOT_FOUND);
+
+  await DirectMessage.updateOne({ _id: req.params.messageId }, { $pull: { reactions: { userId: req.user!.id } } });
+  const updated = await DirectMessage.findByIdAndUpdate(
+    req.params.messageId,
+    { $push: { reactions: { userId: req.user!.id, type: req.body.type, createdAt: new Date() } } },
+    { new: true }
+  )
+    .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .lean();
+
+  const partnerId = message.senderId.toString() === req.user!.id ? message.receiverId.toString() : message.senderId.toString();
+  emitUser(partnerId, "direct:reaction:new", { message: updated, partnerId: req.user!.id });
+  sendOk(res, { message: updated });
+}));
+
 usersRouter.get("/me/blocked", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   const blockedRows = await Block.find({ blockerId: req.user!.id })
     .populate("blockedUserId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
@@ -380,7 +408,7 @@ usersRouter.get("/:id", asyncHandler(async (req: AuthRequest, res) => {
     : Boolean(await Follow.exists({ followerId: req.user!.id, followingId: req.params.id }));
   const closeFriendIds = ((req.user as any)?.closeFriendIds ?? []).map((friendId: any) => friendId.toString());
   const isCloseFriend = closeFriendIds.includes(req.params.id);
-  sendOk(res, { user: publicUser({ ...user, ...getVipStatus(user), isFollowing: following, isCloseFriend }) });
+  sendOk(res, { user: publicUser({ ...user, ...getVipStatus(user), isFollowing: following, isCloseFriend, isOnline: isUserOnline(req.params.id) }) });
 }));
 
 usersRouter.post("/:id/follow", asyncHandler(async (req: AuthRequest, res) => {

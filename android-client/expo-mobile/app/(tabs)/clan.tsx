@@ -1,17 +1,22 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Crown, Search, Shield, Users } from "lucide-react-native";
+import { Crown, MessageCircle, Search, Send, Shield, Users } from "lucide-react-native";
 import { GlassCard } from "@/components/GlassCard";
 import { Screen, Section } from "@/components/Screen";
 import { clansApi } from "@/lib/api";
+import { getSocket } from "@/lib/socket";
 import { colors } from "@/theme/colors";
+
+const clanReactionTypes = ["heart", "fire", "laugh", "clap", "wow"] as const;
+const clanReactionLabels: Record<string, string> = { heart: "HEART", fire: "FIRE", laugh: "LAUGH", clap: "CLAP", wow: "WOW" };
 
 export default function ClanScreen() {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [search, setSearch] = useState("");
+  const [clanMessage, setClanMessage] = useState("");
 
   const mine = useQuery({ queryKey: ["clans", "me"], queryFn: clansApi.mine, staleTime: 30000, gcTime: 60000 });
   const clans = useQuery({
@@ -21,9 +26,34 @@ export default function ClanScreen() {
     gcTime: 60000
   });
 
+  const myClan = mine.data?.clan;
+
+  const clanMessages = useQuery({
+    queryKey: ["clans", myClan?._id, "messages"],
+    queryFn: () => clansApi.messages(myClan._id),
+    enabled: !!myClan?._id,
+    refetchInterval: 3000,
+    staleTime: 5000,
+    gcTime: 60000
+  });
+
+  useEffect(() => {
+    if (!myClan?._id) return;
+    const socket = getSocket();
+    socket.connect();
+    const handleClanMessage = (payload: any) => {
+      if (payload?.clanId === myClan._id) clanMessages.refetch();
+    };
+    socket.on("clan:message:new", handleClanMessage);
+    return () => {
+      socket.off("clan:message:new", handleClanMessage);
+    };
+  }, [myClan?._id, clanMessages.refetch]);
+
   const refresh = () => {
     mine.refetch();
     clans.refetch();
+    clanMessages.refetch();
   };
 
   const createClan = useMutation({
@@ -55,7 +85,21 @@ export default function ClanScreen() {
     onError: (err: any) => Alert.alert("Could not leave", err?.message ?? "Please try again.")
   });
 
-  const myClan = mine.data?.clan;
+  const sendClanMessage = useMutation({
+    mutationFn: () => clansApi.sendMessage(myClan._id, clanMessage.trim()),
+    onSuccess: () => {
+      setClanMessage("");
+      clanMessages.refetch();
+    },
+    onError: (err: any) => Alert.alert("Message failed", err?.message ?? "Please try again.")
+  });
+
+  const reactClanMessage = useMutation({
+    mutationFn: ({ messageId, type }: { messageId: string; type: typeof clanReactionTypes[number] }) => clansApi.reactToMessage(myClan._id, messageId, type),
+    onSuccess: () => clanMessages.refetch(),
+    onError: (err: any) => Alert.alert("Reaction failed", err?.message ?? "Please try again.")
+  });
+
   const busy = createClan.isPending || joinClan.isPending || leaveClan.isPending;
 
   return (
@@ -94,6 +138,56 @@ export default function ClanScreen() {
               <Pressable style={[styles.secondaryButton, busy && styles.disabled]} onPress={() => leaveClan.mutate(myClan._id)} disabled={busy}>
                 <Text style={styles.secondaryButtonText}>{leaveClan.isPending ? "Leaving..." : "Leave family"}</Text>
               </Pressable>
+              <View style={styles.chatPanel}>
+                <View style={styles.chatHeader}>
+                  <MessageCircle color={colors.gold} size={18} />
+                  <Text style={styles.chatTitle}>Family Chat</Text>
+                </View>
+                {clanMessages.isLoading ? (
+                  <ActivityIndicator color={colors.gold} />
+                ) : !(clanMessages.data?.messages ?? []).length ? (
+                  <Text style={styles.emptyText}>No messages yet. Start the family vibe.</Text>
+                ) : (
+                  <View style={styles.messageList}>
+                    {(clanMessages.data?.messages ?? []).slice(-12).map((message: any) => (
+                      <View key={message._id} style={styles.messageCard}>
+                        <Text style={styles.messageAuthor}>{message.senderId?.name ?? "Member"}</Text>
+                        <Text style={styles.messageText}>{message.message}</Text>
+                        {!!message.reactions?.length && (
+                          <View style={styles.reactionSummary}>
+                            {countClanReactions(message.reactions).map((reaction) => (
+                              <Text key={reaction.type} style={styles.reactionText}>{clanReactionLabels[reaction.type] ?? reaction.type} {reaction.count}</Text>
+                            ))}
+                          </View>
+                        )}
+                        <View style={styles.reactionRow}>
+                          {clanReactionTypes.map((type) => (
+                            <Pressable key={type} style={styles.reactionBtn} onPress={() => reactClanMessage.mutate({ messageId: message._id, type })}>
+                              <Text style={styles.reactionBtnText}>{clanReactionLabels[type]}</Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+                <View style={styles.composer}>
+                  <TextInput
+                    value={clanMessage}
+                    onChangeText={setClanMessage}
+                    placeholder="Message your family"
+                    placeholderTextColor={colors.muted}
+                    style={styles.composerInput}
+                  />
+                  <Pressable
+                    style={[styles.sendBtn, (!clanMessage.trim() || sendClanMessage.isPending) && styles.disabled]}
+                    onPress={() => sendClanMessage.mutate()}
+                    disabled={!clanMessage.trim() || sendClanMessage.isPending}
+                  >
+                    <Send color={colors.text} size={16} />
+                  </Pressable>
+                </View>
+              </View>
             </GlassCard>
           ) : (
             <GlassCard style={styles.formCard}>
@@ -167,6 +261,12 @@ export default function ClanScreen() {
   );
 }
 
+function countClanReactions(reactions: any[]) {
+  const counts = new Map<string, number>();
+  reactions.forEach((reaction) => counts.set(reaction.type, (counts.get(reaction.type) ?? 0) + 1));
+  return Array.from(counts.entries()).map(([type, count]) => ({ type, count }));
+}
+
 const styles = StyleSheet.create({
   scrollWrap: { paddingBottom: 48 },
   title: { color: colors.text, fontSize: 28, fontWeight: "900" },
@@ -196,5 +296,20 @@ const styles = StyleSheet.create({
   searchBox: { height: 46, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 },
   searchInput: { flex: 1, color: colors.text, fontWeight: "800" },
   emptyText: { color: colors.muted, fontWeight: "800" },
-  clanCard: { marginBottom: 12, gap: 12 }
+  clanCard: { marginBottom: 12, gap: 12 },
+  chatPanel: { gap: 10, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 14 },
+  chatHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  chatTitle: { color: colors.text, fontSize: 16, fontWeight: "900" },
+  messageList: { gap: 10 },
+  messageCard: { borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, padding: 10 },
+  messageAuthor: { color: colors.gold, fontSize: 12, fontWeight: "900" },
+  messageText: { color: colors.text, fontSize: 14, fontWeight: "800", marginTop: 4, lineHeight: 20 },
+  reactionSummary: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginTop: 8 },
+  reactionText: { color: colors.gold, fontSize: 10, fontWeight: "900", borderRadius: 8, overflow: "hidden", backgroundColor: "rgba(246,180,75,0.1)", paddingHorizontal: 6, paddingVertical: 3 },
+  reactionRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
+  reactionBtn: { borderRadius: 8, backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: colors.line, paddingHorizontal: 7, paddingVertical: 5 },
+  reactionBtnText: { color: colors.text, fontSize: 10, fontWeight: "900" },
+  composer: { flexDirection: "row", alignItems: "center", gap: 8 },
+  composerInput: { flex: 1, minHeight: 42, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, color: colors.text, paddingHorizontal: 12, fontWeight: "800" },
+  sendBtn: { width: 42, height: 42, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: colors.pink }
 });

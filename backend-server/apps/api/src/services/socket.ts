@@ -44,6 +44,7 @@ export function initSocket(server: HttpServer) {
     const userId = socket.data.userId as string | undefined;
     if (userId) {
       onlineUsers.set(userId, Date.now());
+      socket.join(`user:${userId}`);
       setUserPresence(userId, true).catch((err) => console.error("Presence error:", err));
       socket.broadcast.emit(socketEvents.userOnline, { userId });
     }
@@ -96,6 +97,14 @@ export function emitRoom(roomId: string, event: string, payload: unknown) {
   io?.to(`room:${roomId}`).emit(event, payload);
 }
 
+export function emitUser(userId: string, event: string, payload: unknown) {
+  io?.to(`user:${userId}`).emit(event, payload);
+}
+
 export function getPresenceCount() {
   return onlineUsers.size;
+}
+
+export function isUserOnline(userId: string) {
+  return onlineUsers.has(userId);
 }

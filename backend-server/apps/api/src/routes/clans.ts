@@ -1,9 +1,12 @@
 import { Router } from "express";
 import { z } from "zod";
+import { reactionSchema, socketEvents } from "@yugm/shared";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import { Clan } from "../models/Clan.js";
+import { ClanMessage } from "../models/ClanMessage.js";
 import { User } from "../models/User.js";
+import { emitUser } from "../services/socket.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId, sanitizeText } from "../utils/http.js";
 
 export const clansRouter = Router();
@@ -16,6 +19,7 @@ const clanSchema = z.object({
   privacy: z.enum(["PUBLIC", "PRIVATE"]).default("PUBLIC"),
   familyLabel: z.string().min(2).max(32).default("Family")
 });
+const clanMessageSchema = z.object({ message: z.string().min(1).max(600) });
 
 function slugify(name: string) {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 42) || "clan";
@@ -52,6 +56,15 @@ async function uniqueSlug(name: string) {
   return `${base}-${Date.now().toString(36)}`;
 }
 
+async function requireClanMember(clanId: string, userId: string) {
+  if (!isValidObjectId(clanId)) throw new HttpError(400, "Invalid clan ID", ErrorCode.VALIDATION);
+  const clan = await Clan.findById(clanId).select("memberIds name").lean();
+  if (!clan) throw new HttpError(404, "Clan not found", ErrorCode.NOT_FOUND);
+  const members = (clan.memberIds ?? []).map((memberId: any) => memberId.toString());
+  if (!members.includes(userId)) throw new HttpError(403, "Join this clan to chat", ErrorCode.FORBIDDEN);
+  return { clan, members };
+}
+
 clansRouter.get("/", asyncHandler(async (req: AuthRequest, res) => {
   const q = String(req.query.q || "").trim();
   const regex = q ? new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") : undefined;
@@ -72,6 +85,49 @@ clansRouter.get("/me", asyncHandler(async (req: AuthRequest, res) => {
     .populate("memberIds", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .lean();
   sendOk(res, { clan: clan ? publicClan(clan, req.user!.id) : null });
+}));
+
+clansRouter.get("/:id/messages", asyncHandler(async (req: AuthRequest, res) => {
+  await requireClanMember(req.params.id, req.user!.id);
+  const limit = Math.min(Number(req.query.limit) || 80, 120);
+  const messages = await ClanMessage.find({ clanId: req.params.id })
+    .populate("senderId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .lean();
+  sendOk(res, { messages: messages.reverse() });
+}));
+
+clansRouter.post("/:id/messages", validateBody(clanMessageSchema), asyncHandler(async (req: AuthRequest, res) => {
+  const { members } = await requireClanMember(req.params.id, req.user!.id);
+  const created = await ClanMessage.create({
+    clanId: req.params.id,
+    senderId: req.user!.id,
+    message: sanitizeText(req.body.message)
+  });
+  const message = await ClanMessage.findById(created._id)
+    .populate("senderId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .lean();
+  members.forEach((memberId) => {
+    if (memberId !== req.user!.id) emitUser(memberId, socketEvents.clanMessageNew, { clanId: req.params.id, message });
+  });
+  sendOk(res, { message }, 201);
+}));
+
+clansRouter.post("/:id/messages/:messageId/reactions", validateBody(reactionSchema), asyncHandler(async (req: AuthRequest, res) => {
+  await requireClanMember(req.params.id, req.user!.id);
+  if (!isValidObjectId(req.params.messageId)) throw new HttpError(400, "Invalid message ID", ErrorCode.VALIDATION);
+  const message = await ClanMessage.findOne({ _id: req.params.messageId, clanId: req.params.id }).select("_id").lean();
+  if (!message) throw new HttpError(404, "Message not found", ErrorCode.NOT_FOUND);
+  await ClanMessage.updateOne({ _id: req.params.messageId }, { $pull: { reactions: { userId: req.user!.id } } });
+  const updated = await ClanMessage.findByIdAndUpdate(
+    req.params.messageId,
+    { $push: { reactions: { userId: req.user!.id, type: req.body.type, createdAt: new Date() } } },
+    { new: true }
+  )
+    .populate("senderId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .lean();
+  sendOk(res, { message: updated });
 }));
 
 clansRouter.post("/", validateBody(clanSchema), asyncHandler(async (req: AuthRequest, res) => {

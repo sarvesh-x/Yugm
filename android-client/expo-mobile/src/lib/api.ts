@@ -190,6 +190,8 @@ export const usersApi = {
   messages: () => api<{ messages: any[] }>("/users/messages"),
   conversation: (userId: string) => api<{ messages: any[]; relationship?: any }>(`/users/messages/${userId}`),
   sendMessage: (userId: string, message: string) => api<{ message: any; relationship?: any }>(`/users/messages/${userId}`, { method: "POST", body: JSON.stringify({ message }) }),
+  reactToMessage: (userId: string, messageId: string, type: "heart" | "fire" | "laugh" | "clap" | "wow") =>
+    api<{ message: any }>(`/users/messages/${userId}/${messageId}/reactions`, { method: "POST", body: JSON.stringify({ type }) }),
   startPrivateCall: (userId: string, type: "VOICE" | "VIDEO") =>
     api<{ room: any; message: any }>(`/users/messages/${userId}/call`, { method: "POST", body: JSON.stringify({ type }) }),
   follow: (userId: string) => api<{ following: boolean }>(`/users/${userId}/follow`, { method: "POST" }),
@@ -207,6 +209,10 @@ export const clansApi = {
   list: (query = "") => api<{ clans: any[] }>(`/clans${query ? `?q=${encodeURIComponent(query)}` : ""}`),
   mine: () => api<{ clan: any | null }>("/clans/me"),
   detail: (clanId: string) => api<{ clan: any }>(`/clans/${clanId}`),
+  messages: (clanId: string) => api<{ messages: any[] }>(`/clans/${clanId}/messages`),
+  sendMessage: (clanId: string, message: string) => api<{ message: any }>(`/clans/${clanId}/messages`, { method: "POST", body: JSON.stringify({ message }) }),
+  reactToMessage: (clanId: string, messageId: string, type: "heart" | "fire" | "laugh" | "clap" | "wow") =>
+    api<{ message: any }>(`/clans/${clanId}/messages/${messageId}/reactions`, { method: "POST", body: JSON.stringify({ type }) }),
   create: (payload: { name: string; description?: string; avatar?: string; privacy?: "PUBLIC" | "PRIVATE"; familyLabel?: string }) =>
     api<{ clan: any }>("/clans", { method: "POST", body: JSON.stringify(payload) }),
   join: (clanId: string) => api<{ clan: any }>(`/clans/${clanId}/join`, { method: "POST" }),

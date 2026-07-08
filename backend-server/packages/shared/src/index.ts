@@ -35,6 +35,7 @@ export const socketEvents = {
   roomEnded: "room:ended",
   userOnline: "user:online",
   userOffline: "user:offline",
+  clanMessageNew: "clan:message:new",
   notificationNew: "notification:new"
 } as const;
 

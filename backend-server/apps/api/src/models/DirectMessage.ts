@@ -6,6 +6,11 @@ const directMessageSchema = new Schema(
     receiverId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     roomId: { type: Schema.Types.ObjectId, ref: "Room" },
     message: { type: String, required: true, trim: true },
+    reactions: [{
+      userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+      type: { type: String, enum: ["heart", "fire", "laugh", "clap", "wow"], required: true },
+      createdAt: { type: Date, default: Date.now }
+    }],
     read: { type: Boolean, default: false }
   },
   { timestamps: true }

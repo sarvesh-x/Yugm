@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
   Alert,
   FlatList,
@@ -17,10 +17,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Send, Sparkles, AlertTriangle, ShieldOff, Gift, Info, Phone, Video } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { usersApi, walletApi } from "@/lib/api";
+import { getSocket } from "@/lib/socket";
 import { Screen } from "@/components/Screen";
 import { GiftPanel } from "@/components/GiftPanel";
 import { useAuthStore } from "@/store/auth";
 import { colors, gradients } from "@/theme/colors";
+
+const reactionTypes = ["heart", "fire", "laugh", "clap", "wow"] as const;
+const reactionLabels: Record<string, string> = { heart: "HEART", fire: "FIRE", laugh: "LAUGH", clap: "CLAP", wow: "WOW" };
 
 export default function ChatRoom() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
@@ -32,6 +36,8 @@ export default function ChatRoom() {
 
   const [message, setMessage] = useState("");
   const [giftPanelOpen, setGiftPanelOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(false);
+  const [reactingTo, setReactingTo] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
 
@@ -58,6 +64,30 @@ export default function ChatRoom() {
   const partner = partnerData?.user;
   const messages = messagesData?.messages ?? [];
   const relationship = messagesData?.relationship;
+
+  useEffect(() => {
+    setIsOnline(Boolean(partner?.isOnline));
+  }, [partner?.isOnline]);
+
+  useEffect(() => {
+    const socket = getSocket();
+    socket.connect();
+    const handleOnline = (payload: any) => {
+      if (payload?.userId === userId) setIsOnline(true);
+    };
+    const handleOffline = (payload: any) => {
+      if (payload?.userId === userId) setIsOnline(false);
+    };
+    const handleReaction = () => refetch();
+    socket.on("user:online", handleOnline);
+    socket.on("user:offline", handleOffline);
+    socket.on("direct:reaction:new", handleReaction);
+    return () => {
+      socket.off("user:online", handleOnline);
+      socket.off("user:offline", handleOffline);
+      socket.off("direct:reaction:new", handleReaction);
+    };
+  }, [userId, refetch]);
 
   // Mutations
   const sendMutation = useMutation({
@@ -95,6 +125,15 @@ export default function ChatRoom() {
       }
     },
     onError: (err: any) => Alert.alert("Call failed", err.message || "Could not start private call")
+  });
+
+  const reactMutation = useMutation({
+    mutationFn: ({ messageId, type }: { messageId: string; type: typeof reactionTypes[number] }) => usersApi.reactToMessage(userId, messageId, type),
+    onSuccess: () => {
+      setReactingTo(null);
+      refetch();
+    },
+    onError: (err: any) => Alert.alert("Reaction failed", err.message || "Could not react")
   });
 
   const handleSend = () => {
@@ -156,7 +195,7 @@ export default function ChatRoom() {
                 <View>
                   <Text style={styles.partnerName}>{partner.name}</Text>
                   <Text style={styles.partnerStatus}>
-                    {relationship ? `Bond L${relationship.level} / ${relationship.title}` : `Vibe Score: ${partner.vibeScore || 85}%`}
+                    {isOnline ? "Online now" : relationship ? `Bond L${relationship.level} / ${relationship.title}` : `Vibe Score: ${partner.vibeScore || 85}%`}
                   </Text>
                 </View>
               </Pressable>
@@ -225,6 +264,15 @@ export default function ChatRoom() {
             contentContainerStyle={styles.messagesList}
             onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
             renderItem={({ item }) => {
+              return (
+                <MessageBubble
+                  item={item}
+                  currentUserId={currentUserId}
+                  reactingTo={reactingTo}
+                  setReactingTo={setReactingTo}
+                  onReact={(messageId, type) => reactMutation.mutate({ messageId, type })}
+                />
+              );
               const isMe = item.senderId?._id === currentUserId || item.senderId?.id === currentUserId || item.senderId === currentUserId;
               const isGift = item.message.startsWith("🎁");
               return (
@@ -290,6 +338,65 @@ export default function ChatRoom() {
       </KeyboardAvoidingView>
     </Screen>
   );
+}
+
+function MessageBubble({
+  item,
+  currentUserId,
+  reactingTo,
+  setReactingTo,
+  onReact
+}: {
+  item: any;
+  currentUserId: string;
+  reactingTo: string | null;
+  setReactingTo: (id: string | null) => void;
+  onReact: (messageId: string, type: typeof reactionTypes[number]) => void;
+}) {
+  const messageId = item._id || item.id;
+  const isMe = item.senderId?._id === currentUserId || item.senderId?.id === currentUserId || item.senderId === currentUserId;
+  const isGift = typeof item.message === "string" && item.message.includes("gift");
+  const reactionCounts = countReactions(item.reactions ?? []);
+  return (
+    <View style={[styles.bubbleWrap, isMe ? styles.bubbleRight : styles.bubbleLeft]}>
+      {isMe ? (
+        <Pressable onLongPress={() => setReactingTo(reactingTo === messageId ? null : messageId)}>
+          <LinearGradient colors={isGift ? gradients.gold : gradients.fire} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.bubble}>
+            <Text style={[styles.messageText, isGift && styles.giftText]}>{item.message}</Text>
+          </LinearGradient>
+        </Pressable>
+      ) : (
+        <Pressable onLongPress={() => setReactingTo(reactingTo === messageId ? null : messageId)} style={[styles.bubble, styles.bubblePartner, isGift && styles.bubbleGiftReceived]}>
+          <Text style={[styles.messageText, isGift && styles.giftText]}>{item.message}</Text>
+        </Pressable>
+      )}
+      {!!reactionCounts.length && (
+        <View style={[styles.reactionSummary, isMe && styles.reactionSummaryRight]}>
+          {reactionCounts.map((reaction) => (
+            <Text key={reaction.type} style={styles.reactionSummaryText}>{reactionLabels[reaction.type] ?? reaction.type} {reaction.count}</Text>
+          ))}
+        </View>
+      )}
+      {reactingTo === messageId && (
+        <View style={[styles.reactionPicker, isMe && styles.reactionPickerRight]}>
+          {reactionTypes.map((type) => (
+            <Pressable key={type} style={styles.reactionBtn} onPress={() => onReact(messageId, type)}>
+              <Text style={styles.reactionBtnText}>{reactionLabels[type]}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+      <Text style={styles.timeText}>
+        {new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+      </Text>
+    </View>
+  );
+}
+
+function countReactions(reactions: any[]) {
+  const counts = new Map<string, number>();
+  reactions.forEach((reaction) => counts.set(reaction.type, (counts.get(reaction.type) ?? 0) + 1));
+  return Array.from(counts.entries()).map(([type, count]) => ({ type, count }));
 }
 
 const styles = StyleSheet.create({
@@ -360,6 +467,13 @@ const styles = StyleSheet.create({
   messageText: { color: colors.text, fontSize: 15, fontWeight: "700", lineHeight: 20 },
   giftText: { color: colors.text, fontWeight: "800", fontStyle: "italic" },
   timeText: { color: colors.muted, fontSize: 10, fontWeight: "700", marginTop: 2, marginHorizontal: 4 },
+  reactionSummary: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 4, maxWidth: "82%" },
+  reactionSummaryRight: { alignSelf: "flex-end", justifyContent: "flex-end" },
+  reactionSummaryText: { color: colors.gold, fontSize: 10, fontWeight: "900", backgroundColor: "rgba(246,180,75,0.1)", borderWidth: 1, borderColor: "rgba(246,180,75,0.22)", borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3, overflow: "hidden" },
+  reactionPicker: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6, maxWidth: "88%" },
+  reactionPickerRight: { alignSelf: "flex-end", justifyContent: "flex-end" },
+  reactionBtn: { borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 8, paddingVertical: 5 },
+  reactionBtnText: { color: colors.text, fontSize: 10, fontWeight: "900" },
   composer: {
     flexDirection: "row",
     alignItems: "center",
