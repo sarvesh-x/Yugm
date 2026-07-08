@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.util.Collections
@@ -8,7 +10,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.gms.google-services")
-    id("com.google.dagger.hilt.android")
+    alias(libs.plugins.hilt.android)
     id("org.jetbrains.kotlin.kapt")
 }
 

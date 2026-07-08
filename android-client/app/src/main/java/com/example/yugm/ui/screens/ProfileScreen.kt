@@ -2,6 +2,9 @@ package com.example.yugm.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -12,6 +15,9 @@ import com.example.yugm.model.Host
 import com.example.yugm.ui.components.Avatar
 import com.example.yugm.ui.components.GlassCard
 import com.example.yugm.ui.components.StatCard
+import com.example.yugm.ui.theme.Gold
+import com.example.yugm.ui.theme.Ink
+import com.example.yugm.ui.theme.Line
 import com.example.yugm.ui.theme.TextMuted
 import com.example.yugm.ui.theme.TextPrimary
 
@@ -19,6 +25,8 @@ import com.example.yugm.ui.theme.TextPrimary
 fun ProfileScreen(
     host: Host?,
     isOwnProfile: Boolean = false,
+    followBusy: Boolean = false,
+    onFollowToggle: () -> Unit = {},
     onSettings: () -> Unit = {}
 ) {
     if (host == null) return
@@ -46,6 +54,30 @@ fun ProfileScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatCard("Followers", host.followers.toString(), Modifier.weight(1f))
                 StatCard("Following", host.followingCount.toString(), Modifier.weight(1f))
+            }
+        }
+        if (!isOwnProfile) {
+            item {
+                if (host.isFollowing) {
+                    OutlinedButton(
+                        onClick = onFollowToggle,
+                        enabled = !followBusy,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Line),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (followBusy) "Updating..." else "Following", fontWeight = FontWeight.Black)
+                    }
+                } else {
+                    Button(
+                        onClick = onFollowToggle,
+                        enabled = !followBusy,
+                        colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Ink),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (followBusy) "Following..." else "Follow", fontWeight = FontWeight.Black)
+                    }
+                }
             }
         }
         item {

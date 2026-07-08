@@ -386,6 +386,8 @@ usersRouter.get("/:id", asyncHandler(async (req: AuthRequest, res) => {
 usersRouter.post("/:id/follow", asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
   if (req.params.id === req.user!.id) throw new HttpError(400, "You cannot follow yourself", ErrorCode.VALIDATION);
+  const target = await User.findById(req.params.id).select("_id").lean();
+  if (!target) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
   const blocked = await Block.exists({
     $or: [
       { blockerId: req.user!.id, blockedUserId: req.params.id },
@@ -440,10 +442,20 @@ usersRouter.delete("/:id/close-friend", asyncHandler(async (req: AuthRequest, re
 
 usersRouter.delete("/:id/follow", asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
-  const deleted = await Follow.findOneAndDelete({ followerId: req.user!.id, followingId: req.params.id });
-  if (deleted) {
-    await User.findByIdAndUpdate(req.user!.id, { $inc: { followingCount: -1 }, $max: { followingCount: 0 } });
-    await User.findByIdAndUpdate(req.params.id, { $inc: { followersCount: -1 }, $max: { followersCount: 0 } });
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const deleted = await Follow.findOneAndDelete({ followerId: req.user!.id, followingId: req.params.id }).session(session);
+    if (deleted) {
+      await User.updateOne({ _id: req.user!.id, followingCount: { $gt: 0 } }, { $inc: { followingCount: -1 } }, { session });
+      await User.updateOne({ _id: req.params.id, followersCount: { $gt: 0 } }, { $inc: { followersCount: -1 } }, { session });
+    }
+    await session.commitTransaction();
+    session.endSession();
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    throw err;
   }
   sendOk(res, { following: false });
 }));

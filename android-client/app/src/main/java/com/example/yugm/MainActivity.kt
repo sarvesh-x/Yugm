@@ -206,6 +206,7 @@ fun YugmApp(
     var profileError by remember { mutableStateOf("") }
     var selectedProfileUserId by rememberSaveable { mutableStateOf(savedUserId) }
     var isFollowing by remember { mutableStateOf(false) }
+    var followBusy by remember { mutableStateOf(false) }
     var isBlocked by remember { mutableStateOf(false) }
     var walletLoading by remember { mutableStateOf(false) }
     var walletTransactions by remember { mutableStateOf<List<com.example.yugm.model.WalletTransaction>>(emptyList()) }
@@ -376,6 +377,31 @@ fun YugmApp(
         selectedProfileUserId = hostId
         loadProfile(hostId)
         screen = AppScreen.Profile
+    }
+
+    fun toggleProfileFollow() {
+        val host = profileHost ?: return
+        if (authToken.isBlank()) {
+            toast = "Login required to follow"
+            return
+        }
+        if (host.id == currentUserId) return
+        followBusy = true
+        scope.launch {
+            val wasFollowing = host.isFollowing
+            runCatching {
+                if (wasFollowing) YugmApi.unfollowUser(authToken, host.id) else YugmApi.followUser(authToken, host.id)
+            }.onSuccess {
+                val followers = (host.followers + if (wasFollowing) -1 else 1).coerceAtLeast(0)
+                profileHost = host.copy(isFollowing = !wasFollowing, followers = followers)
+                isFollowing = !wasFollowing
+                toast = if (wasFollowing) "Unfollowed ${host.name}" else "Following ${host.name}"
+                loadProfile(host.id)
+            }.onFailure {
+                toast = it.message ?: "Follow update failed"
+            }
+            followBusy = false
+        }
     }
 
     fun loadChat(userId: String) {
@@ -731,6 +757,8 @@ fun YugmApp(
             AppScreen.Profile -> ProfileScreen(
                 host = profileHost,
                 isOwnProfile = selectedProfileUserId == currentUserId || selectedProfileUserId.isBlank(),
+                followBusy = followBusy,
+                onFollowToggle = { toggleProfileFollow() },
                 onSettings = { screen = AppScreen.Settings }
             )
             AppScreen.Chat -> ChatScreen(
