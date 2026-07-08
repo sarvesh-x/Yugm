@@ -10,17 +10,32 @@ val Purple40 = Color(0xFF6650a4)
 val PurpleGrey40 = Color(0xFF625b71)
 val Pink40 = Color(0xFF7D5260)
 
-val Ink = Color(0xFF050713)
-val Ink2 = Color(0xFF0B1024)
+// Premium Theme Colors
+val Background = Color(0xFF050713)
+val Surface = Color(0xFF101323)
+val SurfaceElevated = Color(0xFF181B2E)
+val PrimaryPink = Color(0xFFFF4F8B)
+val PrimaryPurple = Color(0xFF8B5CF6)
+val SaffronGold = Color(0xFFF7B731)
+val SuccessGreen = Color(0xFF3BE477)
+val DangerRed = Color(0xFFFF3B4F)
+val TextPrimaryColor = Color(0xFFFFFFFF)
+val TextSecondaryColor = Color(0xFFA7AABC)
+val BorderColor = Color(0x1AFFFFFF)
+
+// Legacy mappings for backwards compatibility
+val Ink = Background
+val Ink2 = Surface
 val Panel = Color(0x1AFFFFFF)
 val PanelStrong = Color(0x2BFFFFFF)
-val Line = Color(0x26FFFFFF)
+val Line = BorderColor
 val TextPrimary = Color(0xFFF8FAFC)
-val TextMuted = Color(0xFFA9B1C7)
-val Gold = Color(0xFFF6B44B)
+val TextMuted = TextSecondaryColor
+val Gold = SaffronGold
 val Saffron = Color(0xFFFF8A22)
-val Pink = Color(0xFFFF3E93)
-val Purple = Color(0xFF8A5CFF)
+val Pink = PrimaryPink
+val Purple = PrimaryPurple
 val Cyan = Color(0xFF27D3FF)
-val Danger = Color(0xFFFF5B6E)
-val Success = Color(0xFF32D583)
+val Danger = DangerRed
+val Success = SuccessGreen
+

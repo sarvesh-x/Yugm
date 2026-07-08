@@ -19,7 +19,14 @@ data class Host(
     val xp: Int = 0,
     val levelStatus: LevelStatus = LevelStatus(),
     val activeCosmetics: ActiveCosmetics = ActiveCosmetics(),
-    val isFollowing: Boolean = false
+    val isFollowing: Boolean = false,
+    val age: Int = 0,
+    val gender: String = "",
+    val vibeScore: Int = 0,
+    val interestedIn: String = "",
+    val lookingFor: String = "",
+    val languages: List<String> = emptyList(),
+    val interests: List<String> = emptyList()
 )
 
 data class ActiveCosmetics(

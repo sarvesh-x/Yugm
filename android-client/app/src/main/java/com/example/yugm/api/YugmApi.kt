@@ -90,13 +90,30 @@ object YugmApi {
         return Session(token = data.getString("token"), user = data.getJSONObject("user").toUser())
     }
 
-    suspend fun updateProfile(token: String, name: String, username: String, bio: String? = null, city: String? = null, interests: List<String>? = null): YugmUser {
+    suspend fun updateProfile(
+        token: String,
+        name: String,
+        username: String,
+        bio: String? = null,
+        city: String? = null,
+        interests: List<String>? = null,
+        languages: List<String>? = null,
+        gender: String? = null,
+        age: Int? = null,
+        lookingFor: String? = null,
+        avatar: String? = null
+    ): YugmUser {
         val body = JSONObject()
             .put("name", name)
             .put("username", username.lowercase().replace(" ", "_"))
         if (city != null) body.put("city", city)
         if (bio != null) body.put("bio", bio)
         if (interests != null) body.put("interests", JSONArray(interests))
+        if (languages != null) body.put("languages", JSONArray(languages))
+        if (gender != null) body.put("gender", gender)
+        if (age != null) body.put("age", age)
+        if (lookingFor != null) body.put("lookingFor", lookingFor)
+        if (avatar != null) body.put("avatar", avatar)
         return patch("/users/me", token, body).getJSONObject("data").getJSONObject("user").toUser()
     }
 
@@ -343,6 +360,49 @@ object YugmApi {
         delete("/users/$userId/block", token)
     }
 
+    suspend fun getBlockedUsers(token: String): List<Host> {
+        val data = get("/users/me/blocked", token).getJSONObject("data")
+        return data.getJSONArray("users").toHosts()
+    }
+
+    suspend fun getRecentMessages(token: String): List<DirectMessage> {
+        val data = get("/users/messages", token).getJSONObject("data")
+        return data.getJSONArray("messages").toDirectMessages()
+    }
+
+    suspend fun datingExplore(token: String): List<Host> {
+        val data = get("/dating/explore", token).getJSONObject("data")
+        return data.getJSONArray("candidates").toHosts()
+    }
+
+    suspend fun datingLike(token: String, likedId: String, type: String): Pair<Boolean, String?> {
+        val body = JSONObject().put("likedId", likedId).put("type", type)
+        val data = post("/dating/like", token, body).getJSONObject("data")
+        val isMatch = data.optBoolean("isMatch", false)
+        val matchObj = data.optJSONObject("match")
+        val matchId = matchObj?.optString("_id") ?: matchObj?.optString("id")
+        return Pair(isMatch, matchId)
+    }
+
+    suspend fun datingPass(token: String, likedId: String) {
+        val body = JSONObject().put("likedId", likedId)
+        post("/dating/pass", token, body)
+    }
+
+    suspend fun datingMatches(token: String): List<Host> {
+        val data = get("/dating/matches", token).getJSONObject("data")
+        val matchesArray = data.getJSONArray("matches")
+        return buildList {
+            for (i in 0 until matchesArray.length()) {
+                val matchItem = matchesArray.getJSONObject(i)
+                val partnerObj = matchItem.optJSONObject("partner")
+                if (partnerObj != null) {
+                    add(partnerObj.toHost())
+                }
+            }
+        }
+    }
+
     suspend fun endRoom(roomId: String, token: String) {
         post("/rooms/$roomId/end", token, JSONObject())
     }
@@ -439,7 +499,7 @@ fun JSONObject.toHost(): Host = Host(
     name = optString("name", ""),
     username = optString("username", ""),
     city = optString("city", ""),
-    vibe = optString("bio", ""),
+    vibe = optString("bio", optString("vibeLine", "")),
     followers = optInt("followersCount", 0),
     followingCount = optInt("followingCount", 0),
     bio = optString("bio", ""),
@@ -451,7 +511,14 @@ fun JSONObject.toHost(): Host = Host(
     xp = optJSONObject("levelStatus")?.optInt("xp", optInt("xp", 0)) ?: optInt("xp", 0),
     levelStatus = optJSONObject("levelStatus")?.toLevelStatus() ?: LevelStatus(level = optInt("level", 1), title = optString("levelTitle", "New Vibe"), xp = optInt("xp", 0)),
     activeCosmetics = optJSONObject("activeCosmetics")?.toActiveCosmetics() ?: ActiveCosmetics(),
-    isFollowing = optBoolean("isFollowing", false)
+    isFollowing = optBoolean("isFollowing", false),
+    age = optInt("age", 0),
+    gender = optString("gender", ""),
+    vibeScore = optInt("vibeScore", 0),
+    interestedIn = optString("interestedIn", ""),
+    lookingFor = optString("lookingFor", ""),
+    languages = optJSONArray("languages")?.let { arr -> List(arr.length()) { arr.optString(it) } } ?: emptyList(),
+    interests = optJSONArray("interests")?.let { arr -> List(arr.length()) { arr.optString(it) } } ?: emptyList()
 )
 
 fun JSONObject.toLevelStatus(): LevelStatus = LevelStatus(

@@ -4,19 +4,39 @@ sealed class Screen(val route: String) {
     object Splash : Screen("splash")
     object Onboarding : Screen("onboarding")
     object Login : Screen("login")
-    object Otp : Screen("otp/{username}") {
-        fun createRoute(username: String) = "otp/$username"
+    object PhoneLogin : Screen("phone_login")
+    object OtpVerify : Screen("otp_verify/{username}/{devOtp}") {
+        fun createRoute(username: String, devOtp: String) = "otp_verify/$username/$devOtp"
     }
-    object PhoneAuth : Screen("phone_auth")
-    object CreateProfile : Screen("create_profile")
+    object ProfileSetup : Screen("profile_setup")
     object Discover : Screen("discover")
     object Search : Screen("search")
-    object Notifications : Screen("notifications")
-    object Wallet : Screen("wallet")
-    object Profile : Screen("profile")
-    object Settings : Screen("settings")
-    object CreateRoom : Screen("create_room")
-    object Chat : Screen("chat/{roomId}") {
-        fun createRoute(roomId: String) = "chat/$roomId"
+    object DatingDiscovery : Screen("dating_discovery")
+    object ProfileDetail : Screen("profile_detail/{userId}") {
+        fun createRoute(userId: String) = "profile_detail/$userId"
     }
+    object Matches : Screen("matches")
+    object ChatList : Screen("chat_list")
+    object Chat : Screen("chat/{conversationId}") {
+        fun createRoute(conversationId: String) = "chat/$conversationId"
+    }
+    object LiveHome : Screen("live_home")
+    object VoiceRooms : Screen("voice_rooms")
+    object VideoRooms : Screen("video_rooms")
+    object VoiceRoom : Screen("voice_room/{roomId}") {
+        fun createRoute(roomId: String) = "voice_room/$roomId"
+    }
+    object VideoRoom : Screen("video_room/{roomId}") {
+        fun createRoute(roomId: String) = "video_room/$roomId"
+    }
+    object CreateRoom : Screen("create_room")
+    object Wallet : Screen("wallet")
+    object GiftCatalog : Screen("gift_catalog")
+    object Vip : Screen("vip")
+    object Cosmetics : Screen("cosmetics")
+    object Notifications : Screen("notifications")
+    object Settings : Screen("settings")
+    object Safety : Screen("safety")
+    object BlockedUsers : Screen("blocked_users")
+    object Support : Screen("support")
 }

@@ -25,11 +25,17 @@ class ChatViewModel @Inject constructor(
                     is SocketEvent.ChatMessage -> {
                         messages.add(ChatMessage(event.senderName, event.message))
                     }
+                    is SocketEvent.DirectMessageReceived -> {
+                        messages.add(ChatMessage(event.message.senderId, event.message.message))
+                    }
                     is SocketEvent.Connected -> {
                         // Handle connection
                     }
                     is SocketEvent.Disconnected -> {
                         // Handle disconnection
+                    }
+                    else -> {
+                        // Ignore typing indicators or online updates in this viewmodel
                     }
                 }
             }

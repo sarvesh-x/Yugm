@@ -42,6 +42,11 @@ class MainViewModel @Inject constructor(
         sessionManager.balance = balance
     }
 
+    fun updateBalance(newBalance: Int) {
+        this.balance = newBalance
+        sessionManager.balance = newBalance
+    }
+
     fun logout() {
         sessionManager.logout()
         authToken = ""
