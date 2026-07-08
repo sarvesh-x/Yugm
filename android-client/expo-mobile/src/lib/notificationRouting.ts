@@ -16,7 +16,10 @@ export function routeNotificationTarget(input: NotificationLike | Record<string,
   const roomId = stringValue(data.roomId);
   const partnerId = stringValue(data.partnerId);
   const userId = stringValue(data.userId);
+  const gameId = stringValue(data.gameId);
+  const challengeId = stringValue(data.challengeId);
 
+  if (gameId || challengeId) return { pathname: "/(tabs)/games" as const };
   if (clanId) return { pathname: "/(tabs)/clan" as const };
   if (roomId) return { pathname: "/room/[id]" as const, params: { id: roomId, type: stringValue(data.callType) } };
   if (partnerId) return { pathname: "/chat/[userId]" as const, params: { userId: partnerId } };

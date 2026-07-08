@@ -203,9 +203,15 @@ export const experienceApi = {
 
 export const gamesApi = {
   catalog: () => api<{ games: any[]; recent: any[] }>("/games/catalog"),
+  missions: () => api<{ date: string; missions: any[] }>("/games/missions"),
   leaderboard: (gameId: string) => api<{ gameId: string; leaderboard: any[]; personalBest?: any }>(`/games/leaderboard?gameId=${encodeURIComponent(gameId)}`),
+  challenges: () => api<{ incoming: any[]; outgoing: any[]; clan: any[] }>("/games/challenges"),
   submitScore: (payload: { gameId: string; score: number; durationMs?: number; rounds?: number; metadata?: Record<string, unknown> }) =>
-    api<{ score: any; isPersonalBest: boolean; personalBest: any; reward?: any }>("/games/scores", { method: "POST", body: JSON.stringify(payload) })
+    api<{ score: any; isPersonalBest: boolean; personalBest: any; reward?: any }>("/games/scores", { method: "POST", body: JSON.stringify(payload) }),
+  challenge: (payload: { gameId: string; score: number; scoreId?: string; targetUserId?: string; clanId?: string; message?: string }) =>
+    api<{ challenge: any }>("/games/challenges", { method: "POST", body: JSON.stringify(payload) }),
+  shareScore: (scoreId: string, targetUserId: string) =>
+    api<{ message: any }>(`/games/scores/${scoreId}/share`, { method: "POST", body: JSON.stringify({ targetUserId }) })
 };
 
 export const usersApi = {
