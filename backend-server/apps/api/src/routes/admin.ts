@@ -15,6 +15,7 @@ import { AdminUser } from "../models/AdminUser.js";
 import { AppConfig } from "../models/AppConfig.js";
 import { ChatMessage } from "../models/ChatMessage.js";
 import { DirectMessage } from "../models/DirectMessage.js";
+import { Follow } from "../models/Follow.js";
 import { Gift } from "../models/Gift.js";
 import { GiftTransaction } from "../models/GiftTransaction.js";
 import { ModerationAction } from "../models/ModerationAction.js";
@@ -23,7 +24,9 @@ import { Notification } from "../models/Notification.js";
 import { Purchase } from "../models/Purchase.js";
 import { Report } from "../models/Report.js";
 import { Room } from "../models/Room.js";
+import { RoomInvite } from "../models/RoomInvite.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
+import { SpeakerRequest } from "../models/SpeakerRequest.js";
 import { SupportMessage, SupportTicket } from "../models/SupportTicket.js";
 import { User } from "../models/User.js";
 import { UserSafetyStatus } from "../models/UserSafetyStatus.js";
@@ -307,6 +310,75 @@ adminRouter.get("/dashboard/top-gifts", requirePermission("analytics.read"), asy
   const gifts = await GiftTransaction.aggregate([{ $group: { _id: "$giftId", count: { $sum: 1 }, value: { $sum: "$coinAmount" } } }, { $sort: { value: -1 } }, { $limit: 20 }]);
   await Gift.populate(gifts, { path: "_id", select: "name icon coinPrice" });
   adminOk(res, gifts);
+}));
+
+adminRouter.get("/dashboard/experience", requirePermission("analytics.read"), asyncHandler(async (_req, res) => {
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const [
+    scheduledRooms,
+    privateRooms,
+    speakerRequests,
+    invites,
+    follows,
+    giftIncome,
+    unreadNotifications,
+    topCreators,
+    levelLeaders,
+    pendingModeration
+  ] = await Promise.all([
+    Room.countDocuments({ status: "SCHEDULED" }),
+    Room.countDocuments({ visibility: "PRIVATE", createdAt: { $gte: since } }),
+    SpeakerRequest.countDocuments({ createdAt: { $gte: since } }),
+    RoomInvite.countDocuments({ createdAt: { $gte: since } }),
+    Follow.countDocuments({ createdAt: { $gte: since } }),
+    GiftTransaction.aggregate([
+      { $match: { createdAt: { $gte: since } } },
+      { $group: { _id: null, coins: { $sum: "$coinAmount" }, count: { $sum: 1 } } }
+    ]),
+    Notification.countDocuments({ read: false }),
+    GiftTransaction.aggregate([
+      { $match: { createdAt: { $gte: since } } },
+      { $group: { _id: "$receiverId", coins: { $sum: "$coinAmount" }, gifts: { $sum: 1 } } },
+      { $sort: { coins: -1 } },
+      { $limit: 8 }
+    ]),
+    User.find({ isBlocked: { $ne: true } }).select("name username avatar level xp followersCount").sort({ level: -1, xp: -1 }).limit(8).lean(),
+    ModerationQueue.countDocuments({ status: { $in: ["OPEN", "IN_REVIEW", "ESCALATED"] } })
+  ]);
+  const creatorIds = topCreators.map((row) => row._id);
+  const creators = await User.find({ _id: { $in: creatorIds } }).select("name username avatar city").lean();
+  const creatorMap = new Map(creators.map((creator) => [creator._id.toString(), creator]));
+  const giftSummary = giftIncome[0] ?? { coins: 0, count: 0 };
+  adminOk(res, {
+    windowDays: 30,
+    adoption: {
+      scheduledRooms,
+      privateRooms,
+      speakerRequests,
+      invites,
+      follows,
+      unreadNotifications,
+      pendingModeration
+    },
+    creatorEconomy: {
+      giftCoins: giftSummary.coins,
+      giftCount: giftSummary.count,
+      estimatedInr: Math.round((giftSummary.coins / 10) * 100) / 100,
+      topCreators: topCreators.map((row) => ({
+        ...row,
+        creator: creatorMap.get(row._id?.toString?.() ?? "")
+      }))
+    },
+    gamification: {
+      levelLeaders,
+      missions: ["Daily check-in", "Room hosting", "Gift streaks", "Follow graph", "Speaker requests"]
+    },
+    recommendations: [
+      scheduledRooms < 5 ? "Promote scheduled-room creation in creator onboarding." : "Scheduled rooms are gaining traction.",
+      pendingModeration > 20 ? "Moderation queue needs attention before growth pushes." : "Safety queue is currently manageable.",
+      giftSummary.coins < 1000 ? "Run a small gift campaign to activate creator earnings." : "Creator gifting is active."
+    ]
+  });
 }));
 
 adminRouter.get("/users", requirePermission("users.read"), asyncHandler(async (req: AdminAuthRequest, res) => {

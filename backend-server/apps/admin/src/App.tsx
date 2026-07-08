@@ -4,10 +4,12 @@ import {
   AlertTriangle,
   BarChart3,
   Bell,
+  CheckCircle2,
   Coins,
   Crown,
   Gauge,
   Gift,
+  LineChart,
   LifeBuoy,
   Lock,
   LogOut,
@@ -35,6 +37,7 @@ type ViewKey =
   | "payments"
   | "gifts"
   | "notifications"
+  | "growth"
   | "support"
   | "analytics"
   | "fraud"
@@ -56,6 +59,7 @@ const navItems: Array<{ key: ViewKey; label: string; icon: ReactNode; group: str
   { key: "payments", label: "Payments", icon: <Coins />, group: "Money" },
   { key: "gifts", label: "Gifts", icon: <Gift />, group: "Money" },
   { key: "notifications", label: "Notifications", icon: <Bell />, group: "Operations" },
+  { key: "growth", label: "Growth OS", icon: <LineChart />, group: "Operations" },
   { key: "support", label: "Support", icon: <LifeBuoy />, group: "Operations" },
   { key: "analytics", label: "Analytics", icon: <BarChart3 />, group: "Intelligence" },
   { key: "fraud", label: "Fraud radar", icon: <Activity />, group: "Intelligence" },
@@ -230,6 +234,7 @@ function ViewRenderer({ view, session, setNotice, onLogout }: { view: ViewKey; s
   if (view === "payments") return <SimpleResource token={session.accessToken} title="Recharges" endpoint="/payments/recharges" columns={paymentColumns} />;
   if (view === "gifts") return <GiftsPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "notifications") return <NotificationsPage token={session.accessToken} setNotice={setNotice} />;
+  if (view === "growth") return <GrowthPage token={session.accessToken} />;
   if (view === "support") return <SimpleResource token={session.accessToken} title="Support Tickets" endpoint="/support/tickets" columns={supportColumns} />;
   if (view === "analytics") return <AnalyticsPage token={session.accessToken} />;
   if (view === "fraud") return <FraudPage token={session.accessToken} />;
@@ -556,6 +561,79 @@ function NotificationsPage({ token, setNotice }: { token: string; setNotice: (no
         <button className="primary-action compact" onClick={send}>Send notification</button>
       </div>
     </Panel>
+  );
+}
+
+function GrowthPage({ token }: { token: string }) {
+  const { data, loading, error, refresh } = useResource<any>("/dashboard/experience", token);
+  if (loading) return <LoadingState />;
+  if (error) return <ErrorState message={error} onRetry={refresh} />;
+
+  const adoption = data?.adoption || {};
+  const economy = data?.creatorEconomy || {};
+  const leaders = data?.gamification?.levelLeaders || [];
+  const creators = economy.topCreators || [];
+
+  return (
+    <div className="page-grid">
+      <section className="hero-panel">
+        <div>
+          <div className="eyebrow">Experience growth</div>
+          <h1>Creator, retention, and safety signals</h1>
+          <p>One operating view for the new social graph, scheduled rooms, creator earnings, missions, notifications, and safety load.</p>
+        </div>
+        <div className="hero-grid compact">
+          <MiniSignal label="Gift coins" value={formatNumber(economy.giftCoins)} />
+          <MiniSignal label="Gift events" value={formatNumber(economy.giftCount)} />
+          <MiniSignal label="Est. INR" value={formatNumber(economy.estimatedInr)} />
+          <MiniSignal label="Window" value={`${data?.windowDays || 30} days`} />
+        </div>
+      </section>
+
+      <div className="stats-grid">
+        <StatsCard label="Scheduled rooms" value={formatNumber(adoption.scheduledRooms)} sub="Upcoming creator sessions" icon={<Radio />} />
+        <StatsCard label="Private rooms" value={formatNumber(adoption.privateRooms)} sub="Locked or invite-led spaces" icon={<Lock />} />
+        <StatsCard label="Speaker requests" value={formatNumber(adoption.speakerRequests)} sub="Audience to stage intent" icon={<MessageSquare />} />
+        <StatsCard label="Room invites" value={formatNumber(adoption.invites)} sub="Social graph activation" icon={<Users />} />
+        <StatsCard label="New follows" value={formatNumber(adoption.follows)} sub="30-day graph growth" icon={<Sparkles />} />
+        <StatsCard label="Safety queue" value={formatNumber(adoption.pendingModeration)} sub="Open moderation work" icon={<Shield />} />
+      </div>
+
+      <div className="split-grid">
+        <Panel title="Top creators" action="Gift income">
+          <DataTable
+            rows={creators}
+            columns={[
+              { key: "creator.name", label: "Creator" },
+              { key: "coins", label: "Coins" },
+              { key: "gifts", label: "Gifts" }
+            ]}
+          />
+        </Panel>
+        <Panel title="Level leaders" action="Gamification">
+          <DataTable
+            rows={leaders}
+            columns={[
+              { key: "name", label: "User" },
+              { key: "level", label: "Level" },
+              { key: "xp", label: "XP" },
+              { key: "followersCount", label: "Followers" }
+            ]}
+          />
+        </Panel>
+      </div>
+
+      <Panel title="Recommendations" action="Next moves">
+        <div className="signal-list">
+          {(data?.recommendations || []).map((item: string) => (
+            <div className="signal-row" key={item}>
+              <CheckCircle2 />
+              <span>{item}</span>
+            </div>
+          ))}
+        </div>
+      </Panel>
+    </div>
   );
 }
 

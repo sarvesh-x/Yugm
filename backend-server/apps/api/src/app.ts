@@ -8,6 +8,7 @@ import { env } from "./config/env.js";
 import { adminRouter } from "./routes/admin.js";
 import { authRouter } from "./routes/auth.js";
 import { datingRouter } from "./routes/dating.js";
+import { experienceRouter } from "./routes/experience.js";
 import { livekitRouter } from "./routes/livekit.js";
 import { notificationsRouter } from "./routes/notifications.js";
 import { reportsRouter } from "./routes/reports.js";
@@ -65,6 +66,7 @@ export function createApp() {
   app.use("/api/admin", adminRouter);
   app.use("/api/auth", authRouter);
   app.use("/api/dating", datingRouter);
+  app.use("/api/experience", experienceRouter);
   app.use("/api/users", usersRouter);
   app.use("/api/rooms", roomsRouter);
   app.use("/api/livekit", livekitRouter);

@@ -137,6 +137,40 @@ export const notificationsApi = {
   markAllRead: () => api<{ success: boolean }>("/notifications/read-all", { method: "POST" })
 };
 
+export const experienceApi = {
+  home: () => api<{
+    user: any;
+    profileCompletion: any;
+    level: any;
+    achievements: any[];
+    feed: any[];
+    rooms: { live: any[]; scheduled: any[]; following: any[] };
+    people: { suggestedHosts: any[] };
+    notifications: { unreadCount: number; recent: any[] };
+    invites: any[];
+    quickActions: any[];
+  }>("/experience/home"),
+  creatorDashboard: () => api<{
+    windowDays: number;
+    summary: { giftCoins: number; giftCount: number; hostedRooms: number; participants: number; estimatedInr: number };
+    rooms: any[];
+    gifts: any[];
+    transactions: any[];
+    nextSteps: string[];
+  }>("/experience/creator-dashboard"),
+  safetyCenter: () => api<{
+    trust: any;
+    checklist: any[];
+    blockedUsers: any[];
+  }>("/experience/safety-center"),
+  notificationPreferences: () => api<{ preferences: Record<string, boolean> }>("/experience/notification-preferences"),
+  updateNotificationPreferences: (preferences: Record<string, boolean>) =>
+    api<{ preferences: Record<string, boolean> }>("/experience/notification-preferences", {
+      method: "PUT",
+      body: JSON.stringify(preferences)
+    })
+};
+
 export const usersApi = {
   get: (userId: string) => api<{ user: any }>(`/users/${userId}`),
   level: () => api<{ level: any }>("/users/me/level"),

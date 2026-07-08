@@ -58,6 +58,16 @@ export interface IUser extends mongoose.Document {
   suspendedUntil?: Date;
   moderationReason?: string;
   tokenVersion: number;
+  notificationPreferences?: {
+    roomInvites?: boolean;
+    messages?: boolean;
+    gifts?: boolean;
+    follows?: boolean;
+    hostGoingLive?: boolean;
+    wallet?: boolean;
+    safety?: boolean;
+    marketing?: boolean;
+  };
   interestedIn?: string;
   lookingFor?: string;
   datingAgeMin?: number;
@@ -122,6 +132,16 @@ const userSchema = new Schema<IUser>(
     suspendedUntil: Date,
     moderationReason: String,
     tokenVersion: { type: Number, default: 0 },
+    notificationPreferences: {
+      roomInvites: { type: Boolean, default: true },
+      messages: { type: Boolean, default: true },
+      gifts: { type: Boolean, default: true },
+      follows: { type: Boolean, default: true },
+      hostGoingLive: { type: Boolean, default: true },
+      wallet: { type: Boolean, default: true },
+      safety: { type: Boolean, default: true },
+      marketing: { type: Boolean, default: false }
+    },
     interestedIn: String,
     lookingFor: String,
     datingAgeMin: Number,
