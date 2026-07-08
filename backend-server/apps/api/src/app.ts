@@ -10,6 +10,7 @@ import { authRouter } from "./routes/auth.js";
 import { clansRouter } from "./routes/clans.js";
 import { datingRouter } from "./routes/dating.js";
 import { experienceRouter } from "./routes/experience.js";
+import { gamesRouter } from "./routes/games.js";
 import { livekitRouter } from "./routes/livekit.js";
 import { notificationsRouter } from "./routes/notifications.js";
 import { reportsRouter } from "./routes/reports.js";
@@ -69,6 +70,7 @@ export function createApp() {
   app.use("/api/clans", clansRouter);
   app.use("/api/dating", datingRouter);
   app.use("/api/experience", experienceRouter);
+  app.use("/api/games", gamesRouter);
   app.use("/api/users", usersRouter);
   app.use("/api/rooms", roomsRouter);
   app.use("/api/livekit", livekitRouter);

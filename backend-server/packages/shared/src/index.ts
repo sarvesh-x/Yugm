@@ -9,6 +9,7 @@ export const roomStatuses = ["LIVE", "ENDED", "SCHEDULED"] as const;
 export const roomVisibilities = ["PUBLIC", "PRIVATE"] as const;
 export const roomParticipantRoles = ["HOST", "SPEAKER", "AUDIENCE", "MODERATOR"] as const;
 export const reactionTypes = ["heart", "fire", "laugh", "clap", "wow"] as const;
+export const miniGameIds = ["vibe_tap", "memory_match", "reflex_ring"] as const;
 
 export type UserRole = (typeof roles)[number];
 export type RoomType = (typeof roomTypes)[number];
@@ -16,6 +17,31 @@ export type RoomStatus = (typeof roomStatuses)[number];
 export type RoomVisibility = (typeof roomVisibilities)[number];
 export type RoomParticipantRole = (typeof roomParticipantRoles)[number];
 export type ReactionType = (typeof reactionTypes)[number];
+export type MiniGameId = (typeof miniGameIds)[number];
+
+export const miniGames = [
+  {
+    id: "vibe_tap",
+    title: "Vibe Tap",
+    description: "Tap fast, hold a streak, and climb the daily arcade board.",
+    durationSeconds: 10,
+    scoring: "Higher score wins"
+  },
+  {
+    id: "memory_match",
+    title: "Memory Match",
+    description: "Flip pairs and clear the board with fewer moves.",
+    durationSeconds: 60,
+    scoring: "Higher efficiency score wins"
+  },
+  {
+    id: "reflex_ring",
+    title: "Reflex Ring",
+    description: "Wait for the signal and tap before the glow fades.",
+    durationSeconds: 15,
+    scoring: "Fast reactions score higher"
+  }
+] as const;
 
 export const socketEvents = {
   roomJoin: "room:join",
@@ -164,7 +190,8 @@ export const xpEvents = {
   GIFT_RECEIVED: 10,
   VIP_PURCHASE: 100,
   COSMETIC_PURCHASE: 60,
-  FOLLOW_USER: 10
+  FOLLOW_USER: 10,
+  MINI_GAME_PLAY: 8
 } as const;
 
 export type XpEvent = keyof typeof xpEvents;

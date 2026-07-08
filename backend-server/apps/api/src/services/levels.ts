@@ -24,6 +24,7 @@ const dailyXpCaps: Partial<Record<XpEvent, number>> = {
   GIFT_RECEIVED: 300,
   FOLLOW_USER: 50,
   COSMETIC_PURCHASE: 300,
+  MINI_GAME_PLAY: 80,
   VIP_PURCHASE: 200
 };
 const dailyXpAwards = new Map<string, { amount: number; resetAt: number }>();

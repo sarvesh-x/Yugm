@@ -2,7 +2,7 @@ import { useCallback, useState, useEffect } from "react";
 import { Alert, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, Pressable, Image, ActivityIndicator } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Compass, Flame, Heart, MessageCircle, Mic, Plus, Radio, Search, Sparkles, User, Users, Video } from "lucide-react-native";
+import { Compass, Flame, Gamepad2, Heart, MessageCircle, Mic, Plus, Radio, Search, Sparkles, User, Users, Video } from "lucide-react-native";
 import { categories } from "@yugm/shared";
 import { BrandMark } from "@/components/BrandMark";
 import { RoomCard } from "@/components/RoomCard";
@@ -139,6 +139,14 @@ export default function Discover() {
                 <Radio color={colors.text} size={24} />
                 <Text style={styles.quickTitle}>Go Live</Text>
                 <Text style={styles.quickSubtitle}>Host a lounge</Text>
+              </LinearGradient>
+            </Pressable>
+
+            <Pressable style={styles.quickCard} onPress={() => router.push("/(tabs)/games")}>
+              <LinearGradient colors={["#27D3FF", "#8A5CFF"]} style={styles.quickGradient}>
+                <Gamepad2 color={colors.text} size={24} />
+                <Text style={styles.quickTitle}>Mini Games</Text>
+                <Text style={styles.quickSubtitle}>Play quick rounds</Text>
               </LinearGradient>
             </Pressable>
           </View>
@@ -377,7 +385,7 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, color: colors.text, fontWeight: "700" },
   quickGrid: { flexDirection: "row", gap: 12, marginTop: 18 },
-  quickCard: { flex: 1, height: 104, borderRadius: 16, overflow: "hidden" },
+  quickCard: { flex: 1, minHeight: 104, borderRadius: 16, overflow: "hidden" },
   quickGradient: { flex: 1, padding: 14, justifyContent: "flex-end", gap: 2 },
   quickTitle: { color: colors.text, fontSize: 16, fontWeight: "900" },
   quickSubtitle: { color: "rgba(255,255,255,0.7)", fontSize: 11, fontWeight: "700" },

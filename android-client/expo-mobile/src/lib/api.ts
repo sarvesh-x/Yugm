@@ -201,6 +201,13 @@ export const experienceApi = {
     })
 };
 
+export const gamesApi = {
+  catalog: () => api<{ games: any[]; recent: any[] }>("/games/catalog"),
+  leaderboard: (gameId: string) => api<{ gameId: string; leaderboard: any[]; personalBest?: any }>(`/games/leaderboard?gameId=${encodeURIComponent(gameId)}`),
+  submitScore: (payload: { gameId: string; score: number; durationMs?: number; rounds?: number; metadata?: Record<string, unknown> }) =>
+    api<{ score: any; isPersonalBest: boolean; personalBest: any; reward?: any }>("/games/scores", { method: "POST", body: JSON.stringify(payload) })
+};
+
 export const usersApi = {
   get: (userId: string) => api<{ user: any }>(`/users/${userId}`),
   level: () => api<{ level: any }>("/users/me/level"),
