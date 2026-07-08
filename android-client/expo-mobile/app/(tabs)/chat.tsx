@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, View, Pressable, Image, ActivityIndicator } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { MessageSquare, Sparkles } from "lucide-react-native";
+import { Lock, MessageSquare, Phone, Sparkles, Video } from "lucide-react-native";
 import { datingApi, usersApi } from "@/lib/api";
 import { Screen, Section } from "@/components/Screen";
 import { useAuthStore } from "@/store/auth";
@@ -81,7 +81,8 @@ export default function ChatList() {
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Conversations</Text>
+          <Text style={styles.headerTitle}>Private Chats</Text>
+          <Text style={styles.headerSubtitle}>Individual messages, voice calls, and video calls</Text>
         </View>
 
         <ScrollView
@@ -118,7 +119,17 @@ export default function ChatList() {
 
           {/* Active Conversations List */}
           <Section>
-            <Text style={styles.sectionTitle}>Recent Chats</Text>
+            <View style={styles.privateSectionHeader}>
+              <View>
+                <Text style={styles.sectionTitle}>Individual Chats</Text>
+                <Text style={styles.sectionMeta}>Tap a chat to message or start a private call.</Text>
+              </View>
+              <View style={styles.privateBadges}>
+                <Lock color={colors.gold} size={14} />
+                <Phone color={colors.success} size={14} />
+                <Video color={colors.cyan} size={14} />
+              </View>
+            </View>
 
             {isLoading && activeConversations.length === 0 ? (
               <View style={styles.center}>
@@ -187,14 +198,18 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
     paddingHorizontal: 20,
-    height: 52,
+    minHeight: 66,
     justifyContent: "center",
     borderBottomWidth: 1,
     borderBottomColor: colors.line
   },
   headerTitle: { color: colors.text, fontSize: 20, fontWeight: "900" },
+  headerSubtitle: { color: colors.muted, fontSize: 12, fontWeight: "700", marginTop: 3 },
   scrollWrap: { paddingTop: 14, paddingBottom: 48 },
   sectionTitle: { color: colors.text, fontSize: 16, fontWeight: "900", marginBottom: 12 },
+  sectionMeta: { color: colors.muted, fontSize: 12, fontWeight: "700", marginTop: -8, marginBottom: 12 },
+  privateSectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  privateBadges: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 14, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line },
   matchesRail: { paddingVertical: 4 },
   matchBubble: { width: 78, alignItems: "center", gap: 4, marginRight: 12 },
   avatarBorder: {

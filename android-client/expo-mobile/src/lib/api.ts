@@ -183,6 +183,8 @@ export const usersApi = {
   messages: () => api<{ messages: any[] }>("/users/messages"),
   conversation: (userId: string) => api<{ messages: any[]; relationship?: any }>(`/users/messages/${userId}`),
   sendMessage: (userId: string, message: string) => api<{ message: any; relationship?: any }>(`/users/messages/${userId}`, { method: "POST", body: JSON.stringify({ message }) }),
+  startPrivateCall: (userId: string, type: "VOICE" | "VIDEO") =>
+    api<{ room: any; message: any }>(`/users/messages/${userId}/call`, { method: "POST", body: JSON.stringify({ type }) }),
   follow: (userId: string) => api<{ following: boolean }>(`/users/${userId}/follow`, { method: "POST" }),
   unfollow: (userId: string) => api<{ following: boolean }>(`/users/${userId}/follow`, { method: "DELETE" }),
   block: (userId: string) => api<{ blocked: boolean }>(`/users/${userId}/block`, { method: "POST" }),

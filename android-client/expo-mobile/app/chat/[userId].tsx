@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Send, Sparkles, AlertTriangle, ShieldOff, Gift, Info } from "lucide-react-native";
+import { ArrowLeft, Send, Sparkles, AlertTriangle, ShieldOff, Gift, Info, Phone, Video } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { usersApi, walletApi } from "@/lib/api";
 import { Screen } from "@/components/Screen";
@@ -84,6 +84,19 @@ export default function ChatRoom() {
     onError: (err: any) => Alert.alert("Error", err.message)
   });
 
+  const startCallMutation = useMutation({
+    mutationFn: (type: "VOICE" | "VIDEO") => usersApi.startPrivateCall(userId, type),
+    onSuccess: (res) => {
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["users", "messages"] });
+      const roomId = res.room?._id || res.room?.id;
+      if (roomId) {
+        router.push({ pathname: "/room/[id]", params: { id: roomId, type: res.room.type } });
+      }
+    },
+    onError: (err: any) => Alert.alert("Call failed", err.message || "Could not start private call")
+  });
+
   const handleSend = () => {
     if (!message.trim()) return;
     sendMutation.mutate(message);
@@ -150,6 +163,12 @@ export default function ChatRoom() {
             )}
           </View>
           <View style={styles.headerRight}>
+            <Pressable onPress={() => startCallMutation.mutate("VOICE")} style={styles.headerBtn} disabled={startCallMutation.isPending}>
+              <Phone color={colors.success} size={19} />
+            </Pressable>
+            <Pressable onPress={() => startCallMutation.mutate("VIDEO")} style={styles.headerBtn} disabled={startCallMutation.isPending}>
+              <Video color={colors.cyan} size={20} />
+            </Pressable>
             <Pressable onPress={() => setGiftPanelOpen(true)} style={styles.headerBtn}>
               <Gift color={colors.gold} size={20} />
             </Pressable>

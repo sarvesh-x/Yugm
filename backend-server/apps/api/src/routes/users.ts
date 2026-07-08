@@ -1,5 +1,6 @@
 import { Router } from "express";
 import mongoose from "mongoose";
+import { z } from "zod";
 import { profileSchema } from "@yugm/shared";
 import { requireAuth, requireNotMuted, type AuthRequest } from "../middleware/auth.js";
 import { chatLimiter } from "../middleware/rateLimit.js";
@@ -8,6 +9,7 @@ import { Block } from "../models/Block.js";
 import { DirectMessage } from "../models/DirectMessage.js";
 import { Follow } from "../models/Follow.js";
 import { Room } from "../models/Room.js";
+import { RoomParticipant } from "../models/RoomParticipant.js";
 import { User } from "../models/User.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId, sanitizeText } from "../utils/http.js";
 import { createNotification } from "../services/notifications.js";
@@ -17,6 +19,8 @@ import { findRelationship, grantRelationshipXp } from "../services/relationships
 
 export const usersRouter = Router();
 usersRouter.use(requireAuth);
+
+const privateCallSchema = z.object({ type: z.enum(["VOICE", "VIDEO"]) });
 
 function publicUser(user: any) {
   const levelStatus = getLevelStatus(user);
@@ -206,6 +210,75 @@ usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, chatLimiter,
   await grantXp(req.user!.id, "CHAT_MESSAGE");
   const relationship = await grantRelationshipXp(req.user!.id, receiverId, "MESSAGE_SENT", { messageId: message._id.toString() });
   sendOk(res, { message, relationship: relationship?.relationship }, 201);
+}));
+
+usersRouter.post("/messages/:userId/call", requireAuth, requireNotMuted, validateBody(privateCallSchema), asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.userId)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
+  const receiverId = req.params.userId;
+  if (receiverId === req.user!.id) throw new HttpError(400, "Cannot call yourself", ErrorCode.VALIDATION);
+
+  const receiver = await User.findById(receiverId).select("name username avatar").lean();
+  if (!receiver) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+
+  const blocked = await Block.exists({
+    $or: [
+      { blockerId: req.user!.id, blockedUserId: receiverId },
+      { blockerId: receiverId, blockedUserId: req.user!.id }
+    ]
+  });
+  if (blocked) throw new HttpError(403, "Cannot call this user", ErrorCode.FORBIDDEN);
+
+  const type = req.body.type as "VOICE" | "VIDEO";
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const room = await Room.create([{
+      title: `${req.user!.name} and ${receiver.name}`,
+      description: `Private ${type.toLowerCase()} call`,
+      type,
+      hostId: req.user!.id,
+      category: "Private",
+      tags: ["private-call", "direct"],
+      language: req.user!.languages?.[0] ?? "English",
+      status: "LIVE",
+      visibility: "PRIVATE",
+      maxSpeakers: 2,
+      participantCount: 2,
+      speakerIds: [req.user!.id, receiverId],
+      livekitRoomName: `yugm-private-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      allowAudienceMicRequests: false,
+      startedAt: new Date()
+    }], { session });
+
+    await RoomParticipant.create([
+      { roomId: room[0]._id, userId: req.user!.id, role: "HOST", micEnabled: true, cameraEnabled: type === "VIDEO" },
+      { roomId: room[0]._id, userId: receiverId, role: "SPEAKER", micEnabled: true, cameraEnabled: type === "VIDEO" }
+    ], { session });
+
+    const message = await DirectMessage.create([{
+      senderId: req.user!.id,
+      receiverId,
+      roomId: room[0]._id,
+      message: `Private ${type.toLowerCase()} call started`
+    }], { session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    await createNotification(
+      receiverId,
+      "MESSAGE",
+      type === "VOICE" ? "Private voice call" : "Private video call",
+      `${req.user!.name} started a private ${type.toLowerCase()} call`,
+      { roomId: room[0]._id.toString(), partnerId: req.user!.id, callType: type }
+    );
+
+    sendOk(res, { room: room[0], message: message[0] }, 201);
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    throw err;
+  }
 }));
 
 usersRouter.get("/me/blocked", requireAuth, asyncHandler(async (req: AuthRequest, res) => {

@@ -64,6 +64,24 @@ async function assertHost(req: AuthRequest, roomId: string) {
   return room;
 }
 
+function roomObjectIdListIncludes(values: unknown[] | undefined, userId: string) {
+  return Boolean(values?.some((value: any) => value?.toString?.() === userId));
+}
+
+function privateRoomRole(room: any, userId: string) {
+  if (room.hostId?.toString?.() === userId) return "HOST";
+  if (roomObjectIdListIncludes(room.moderatorIds, userId)) return "MODERATOR";
+  if (roomObjectIdListIncludes(room.speakerIds, userId)) return "SPEAKER";
+  return undefined;
+}
+
+function assertPrivateRoomAccess(room: any, userId?: string) {
+  if (room.visibility !== "PRIVATE") return;
+  if (!userId || !privateRoomRole(room, userId)) {
+    throw new HttpError(403, "This private room is invite only", ErrorCode.FORBIDDEN);
+  }
+}
+
 function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -191,8 +209,11 @@ roomsRouter.get("/search", asyncHandler(async (req, res) => {
   sendOk(res, { rooms });
 }));
 
-roomsRouter.get("/:id", asyncHandler(async (req, res) => {
+roomsRouter.get("/:id", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
+  const rawRoom = await Room.findById(req.params.id).lean();
+  if (!rawRoom) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
+  assertPrivateRoomAccess(rawRoom, req.user!.id);
   const room = await Room.findById(req.params.id).populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle").lean();
   if (!room) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
   const participants = await RoomParticipant.find({ roomId: req.params.id, leftAt: null }).populate("userId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle").lean();
@@ -202,11 +223,12 @@ roomsRouter.get("/:id", asyncHandler(async (req, res) => {
 
 roomsRouter.post("/:id/join", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   const room = await getRoomOrThrow(req.params.id);
+  assertPrivateRoomAccess(room, req.user!.id);
   if (room.status === "SCHEDULED") throw new HttpError(400, "This room is scheduled for later", ErrorCode.VALIDATION);
   const blocked = await Block.exists({ blockerId: room.hostId, blockedUserId: req.user!.id });
   if (blocked) throw new HttpError(403, "You cannot join this room", ErrorCode.FORBIDDEN);
 
-  const role = room.hostId.toString() === req.user!.id ? "HOST" : "AUDIENCE";
+  const role = privateRoomRole(room, req.user!.id) ?? "AUDIENCE";
   const existingParticipant = await RoomParticipant.findOne({ roomId: room._id, userId: req.user!.id, leftAt: null });
   if (existingParticipant) {
     existingParticipant.role = role;

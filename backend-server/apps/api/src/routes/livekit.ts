@@ -5,16 +5,19 @@ import { validateBody } from "../middleware/validate.js";
 import { Room } from "../models/Room.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
 import { mediaProvider } from "../services/livekit.js";
-import { asyncHandler, sendOk } from "../utils/http.js";
+import { asyncHandler, ErrorCode, HttpError, sendOk } from "../utils/http.js";
 
 export const livekitRouter = Router();
 livekitRouter.use(requireAuth);
 
 livekitRouter.post("/token", validateBody(livekitTokenSchema), asyncHandler(async (req: AuthRequest, res) => {
   const room = await Room.findById(req.body.roomId);
-  if (!room || room.status !== "LIVE") throw { status: 404, message: "Live room not found" };
+  if (!room || room.status !== "LIVE") throw new HttpError(404, "Live room not found", ErrorCode.NOT_FOUND);
 
   const participant = await RoomParticipant.findOne({ roomId: room.id, userId: req.user!.id, leftAt: null });
+  if (room.visibility === "PRIVATE" && !participant) {
+    throw new HttpError(403, "This private room is invite only", ErrorCode.FORBIDDEN);
+  }
   const role = participant?.role ?? "AUDIENCE";
   const canPublish = role === "HOST" || role === "SPEAKER" || role === "MODERATOR";
   const token = await mediaProvider.createToken({
