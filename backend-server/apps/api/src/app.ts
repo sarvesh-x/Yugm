@@ -7,6 +7,7 @@ import path from "path";
 import { env } from "./config/env.js";
 import { adminRouter } from "./routes/admin.js";
 import { authRouter } from "./routes/auth.js";
+import { clansRouter } from "./routes/clans.js";
 import { datingRouter } from "./routes/dating.js";
 import { experienceRouter } from "./routes/experience.js";
 import { livekitRouter } from "./routes/livekit.js";
@@ -65,6 +66,7 @@ export function createApp() {
   app.get("/api/health", healthHandler);
   app.use("/api/admin", adminRouter);
   app.use("/api/auth", authRouter);
+  app.use("/api/clans", clansRouter);
   app.use("/api/dating", datingRouter);
   app.use("/api/experience", experienceRouter);
   app.use("/api/users", usersRouter);

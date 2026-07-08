@@ -255,6 +255,7 @@ export const profileSchema = z.object({
   bio: z.string().max(180).optional(),
   vibeLine: z.string().max(120).optional(),
   interests: z.array(z.string().min(1).max(24)).default([]),
+  hobbies: z.array(z.string().min(1).max(32)).max(16).default([]),
   languages: z.array(z.string().min(1).max(24)).default(["Hindi", "English"]),
   avatar: z.string().url().optional(),
   interestedIn: z.string().max(32).optional(),

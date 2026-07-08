@@ -15,7 +15,16 @@ export interface IUser extends mongoose.Document {
   bio?: string;
   vibeLine?: string;
   interests: string[];
+  hobbies: string[];
   languages: string[];
+  profileMedia: Array<{
+    url: string;
+    type: "IMAGE" | "VIDEO";
+    caption?: string;
+    createdAt: Date;
+  }>;
+  closeFriendIds: mongoose.Types.ObjectId[];
+  clanId?: mongoose.Types.ObjectId;
   role: UserRole;
   isVerified: boolean;
   isBlocked: boolean;
@@ -89,7 +98,16 @@ const userSchema = new Schema<IUser>(
     bio: String,
     vibeLine: String,
     interests: [{ type: String }],
+    hobbies: [{ type: String }],
     languages: [{ type: String }],
+    profileMedia: [{
+      url: { type: String, required: true },
+      type: { type: String, enum: ["IMAGE", "VIDEO"], default: "IMAGE" },
+      caption: { type: String, trim: true },
+      createdAt: { type: Date, default: Date.now }
+    }],
+    closeFriendIds: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    clanId: { type: Schema.Types.ObjectId, ref: "Clan" },
     role: { type: String, enum: ["USER", "HOST", "MODERATOR", "ADMIN"], default: "USER" },
     isVerified: { type: Boolean, default: false },
     isBlocked: { type: Boolean, default: false },
@@ -157,5 +175,6 @@ userSchema.index({ vipExpiresAt: -1 });
 userSchema.index({ mutedUntil: 1 });
 userSchema.index({ suspendedUntil: 1 });
 userSchema.index({ level: -1, xp: -1 });
+userSchema.index({ clanId: 1 });
 
 export const User = mongoose.model<IUser>("User", userSchema);

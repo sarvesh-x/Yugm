@@ -39,7 +39,17 @@ export interface User {
   bio?: string;
   vibeLine?: string;
   interests?: string[];
+  hobbies?: string[];
   languages?: string[];
+  profileMedia?: Array<{
+    _id?: string;
+    url: string;
+    type: "IMAGE" | "VIDEO";
+    caption?: string;
+    createdAt?: string;
+  }>;
+  closeFriendsCount?: number;
+  clanId?: string;
   followersCount?: number;
   followingCount?: number;
   walletBalance?: number;
@@ -75,6 +85,7 @@ export interface User {
   vipStartedAt?: string;
   vipExpiresAt?: string;
   isFollowing?: boolean;
+  isCloseFriend?: boolean;
   role?: "USER" | "HOST" | "MODERATOR" | "ADMIN";
   age?: number;
   gender?: string;

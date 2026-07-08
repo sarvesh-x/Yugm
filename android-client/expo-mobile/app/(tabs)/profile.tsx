@@ -1,7 +1,8 @@
-import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Crown, Settings, Sparkles, UserPlus, UserCheck, Wallet } from "lucide-react-native";
+import { Crown, Image as ImageIcon, Settings, Sparkles, Star, Trash2, UserPlus, UserCheck, Wallet } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { GlassCard } from "@/components/GlassCard";
 import { CosmeticAvatar } from "@/components/CosmeticAvatar";
@@ -19,6 +20,9 @@ export default function Profile() {
   const currentUser = useAuthStore((s) => s.user);
   const updateUser = useAuthStore((s) => s.updateUser);
   const queryClient = useQueryClient();
+  const [mediaUrl, setMediaUrl] = useState("");
+  const [mediaCaption, setMediaCaption] = useState("");
+  const [mediaType, setMediaType] = useState<"IMAGE" | "VIDEO">("IMAGE");
   const profileId = userId ?? currentUser?._id ?? currentUser?.id ?? "";
   const isOwn = !userId || userId === currentUser?._id || userId === currentUser?.id;
 
@@ -43,6 +47,7 @@ export default function Profile() {
   const themeColors = profileThemeColors(active?.seasonalEvent ?? active?.profileTheme);
   const nameColors = nameStyleColors(active?.nameStyle);
   const followed = Boolean(user?.isFollowing);
+  const isCloseFriend = Boolean(user?.isCloseFriend);
   const level = user?.levelStatus ?? {
     level: user?.level ?? 1,
     title: user?.levelTitle ?? "New Vibe",
@@ -70,6 +75,38 @@ export default function Profile() {
       queryClient.invalidateQueries({ queryKey: ["user", currentUser?._id ?? currentUser?.id, "following"] });
     },
     onError: (err: any) => console.error(err)
+  });
+
+  const addCloseFriend = useMutation({
+    mutationFn: () => usersApi.addCloseFriend(profileId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["user", profileId] }),
+    onError: (err: any) => Alert.alert("Close friend failed", err?.message ?? "Please try again.")
+  });
+
+  const removeCloseFriend = useMutation({
+    mutationFn: () => usersApi.removeCloseFriend(profileId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["user", profileId] }),
+    onError: (err: any) => Alert.alert("Close friend failed", err?.message ?? "Please try again.")
+  });
+
+  const addMedia = useMutation({
+    mutationFn: () => usersApi.addProfileMedia({ url: mediaUrl.trim(), caption: mediaCaption.trim() || undefined, type: mediaType }),
+    onSuccess: (data) => {
+      setMediaUrl("");
+      setMediaCaption("");
+      queryClient.invalidateQueries({ queryKey: ["user", profileId] });
+      if (currentUser) updateUser({ ...currentUser, profileMedia: data.user.profileMedia });
+    },
+    onError: (err: any) => Alert.alert("Could not post media", err?.message ?? "Use a valid image or video URL.")
+  });
+
+  const removeMedia = useMutation({
+    mutationFn: (mediaId: string) => usersApi.removeProfileMedia(mediaId),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["user", profileId] });
+      if (currentUser) updateUser({ ...currentUser, profileMedia: data.user.profileMedia });
+    },
+    onError: (err: any) => Alert.alert("Could not remove media", err?.message ?? "Please try again.")
   });
 
   const checkIn = useMutation({
@@ -176,15 +213,25 @@ export default function Profile() {
             <Stat label="Hosted" value={hostedRooms?.rooms?.length ?? 0} />
           </View>
           {!isOwn && (
-            <Pressable
-              style={[styles.followBtn, followed && styles.followingBtn, (follow.isPending || unfollow.isPending) && styles.followBtnDisabled]}
-              onPress={() => (follow.isPending || unfollow.isPending ? null : followed ? unfollow.mutate() : follow.mutate())}
-            >
-              {followed ? <UserCheck color={colors.ink} size={18} /> : <UserPlus color={colors.ink} size={18} />}
-              <Text style={styles.followText}>
-                {follow.isPending ? "Following..." : unfollow.isPending ? "Unfollowing..." : followed ? "Following" : "Follow"}
-              </Text>
-            </Pressable>
+            <View style={styles.actionStack}>
+              <Pressable
+                style={[styles.followBtn, followed && styles.followingBtn, (follow.isPending || unfollow.isPending) && styles.followBtnDisabled]}
+                onPress={() => (follow.isPending || unfollow.isPending ? null : followed ? unfollow.mutate() : follow.mutate())}
+              >
+                {followed ? <UserCheck color={colors.ink} size={18} /> : <UserPlus color={colors.ink} size={18} />}
+                <Text style={styles.followText}>
+                  {follow.isPending ? "Following..." : unfollow.isPending ? "Unfollowing..." : followed ? "Following" : "Follow"}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.closeFriendBtn, isCloseFriend && styles.closeFriendActive, (addCloseFriend.isPending || removeCloseFriend.isPending) && styles.followBtnDisabled]}
+                onPress={() => isCloseFriend ? removeCloseFriend.mutate() : addCloseFriend.mutate()}
+                disabled={addCloseFriend.isPending || removeCloseFriend.isPending}
+              >
+                <Star color={isCloseFriend ? colors.ink : colors.gold} size={18} fill={isCloseFriend ? colors.ink : "transparent"} />
+                <Text style={[styles.closeFriendText, isCloseFriend && styles.closeFriendActiveText]}>{isCloseFriend ? "Close friend" : "Add close friend"}</Text>
+              </Pressable>
+            </View>
           )}
           {isOwn && (
             <Pressable style={styles.wallet} onPress={() => router.push("/(tabs)/wallet")}>
@@ -193,6 +240,57 @@ export default function Profile() {
             </Pressable>
           )}
           </LinearGradient>
+        </Section>
+        <Section>
+          <Text style={styles.sectionTitle}>Detailed profile</Text>
+          <View style={styles.detailBlock}>
+            <ChipGroup title="Interests" items={user?.interests ?? []} />
+            <ChipGroup title="Hobbies" items={user?.hobbies ?? []} />
+            <ChipGroup title="Languages" items={user?.languages ?? []} />
+          </View>
+        </Section>
+        <Section>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Profile media</Text>
+            <ImageIcon color={colors.pink} size={18} />
+          </View>
+          {isOwn && (
+            <View style={styles.mediaComposer}>
+              <View style={styles.mediaTypeRow}>
+                {(["IMAGE", "VIDEO"] as const).map((type) => (
+                  <Pressable key={type} style={[styles.mediaTypeBtn, mediaType === type && styles.mediaTypeActive]} onPress={() => setMediaType(type)}>
+                    <Text style={[styles.mediaTypeText, mediaType === type && styles.mediaTypeActiveText]}>{type === "IMAGE" ? "Image" : "Video"}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <TextInput value={mediaUrl} onChangeText={setMediaUrl} placeholder="Paste media URL" placeholderTextColor={colors.muted} style={styles.input} />
+              <TextInput value={mediaCaption} onChangeText={setMediaCaption} placeholder="Caption" placeholderTextColor={colors.muted} style={styles.input} />
+              <Pressable style={[styles.postMediaBtn, (!mediaUrl.trim() || addMedia.isPending) && styles.followBtnDisabled]} onPress={() => addMedia.mutate()} disabled={!mediaUrl.trim() || addMedia.isPending}>
+                <Text style={styles.postMediaText}>{addMedia.isPending ? "Posting..." : "Post to profile"}</Text>
+              </Pressable>
+            </View>
+          )}
+          {!(user?.profileMedia ?? []).length ? (
+            <EmptyState icon="IMG" message="No profile media yet" />
+          ) : (
+            <View style={styles.mediaGrid}>
+              {(user.profileMedia ?? []).map((item: any) => (
+                <View key={item._id ?? item.url} style={styles.mediaTile}>
+                  {item.type === "VIDEO" ? (
+                    <View style={styles.videoTile}><Text style={styles.videoText}>VIDEO</Text></View>
+                  ) : (
+                    <Image source={{ uri: item.url }} style={styles.mediaImage as any} />
+                  )}
+                  {!!item.caption && <Text style={styles.mediaCaption}>{item.caption}</Text>}
+                  {isOwn && (
+                    <Pressable style={styles.removeMediaBtn} onPress={() => removeMedia.mutate(item._id)}>
+                      <Trash2 color={colors.text} size={14} />
+                    </Pressable>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
         </Section>
         <Section>
           <Text style={styles.sectionTitle}>Hosted rooms</Text>
@@ -236,6 +334,21 @@ function PersonalCard({ title, value }: { title: string; value?: string }) {
   );
 }
 
+function ChipGroup({ title, items }: { title: string; items: string[] }) {
+  return (
+    <View style={styles.chipGroup}>
+      <Text style={styles.chipTitle}>{title}</Text>
+      {!items.length ? (
+        <Text style={styles.emptyInline}>Not added yet</Text>
+      ) : (
+        <View style={styles.chipRow}>
+          {items.map((item) => <View key={item} style={styles.chip}><Text style={styles.chipText}>{item}</Text></View>)}
+        </View>
+      )}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10 },
   themePanel: { borderRadius: 8, borderWidth: 1, borderColor: colors.line, padding: 14 },
@@ -270,12 +383,41 @@ const styles = StyleSheet.create({
   statValue: { color: colors.text, fontSize: 20, fontWeight: "900" },
   statLabel: { color: colors.muted, fontSize: 12, marginTop: 2 },
   followBtn: { height: 50, borderRadius: 8, backgroundColor: colors.gold, alignItems: "center", justifyContent: "center", marginBottom: 10, flexDirection: "row", gap: 8 },
+  actionStack: { gap: 10, marginBottom: 10 },
   followingBtn: { backgroundColor: colors.gold },
   followBtnDisabled: { opacity: 0.5 },
   followText: { color: colors.ink, fontWeight: "900", fontSize: 16 },
+  closeFriendBtn: { height: 46, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
+  closeFriendActive: { backgroundColor: colors.gold, borderColor: colors.gold },
+  closeFriendText: { color: colors.text, fontWeight: "900" },
+  closeFriendActiveText: { color: colors.ink },
   wallet: { height: 50, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 10 },
   walletText: { color: colors.text, fontWeight: "900" },
+  sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
   sectionTitle: { color: colors.text, fontSize: 20, fontWeight: "900", marginBottom: 12 },
+  detailBlock: { gap: 14 },
+  chipGroup: { gap: 8 },
+  chipTitle: { color: colors.muted, fontSize: 12, fontWeight: "900", textTransform: "uppercase" },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line },
+  chipText: { color: colors.text, fontSize: 12, fontWeight: "800" },
+  emptyInline: { color: colors.muted, fontSize: 13, fontWeight: "700" },
+  mediaComposer: { gap: 10, marginBottom: 14 },
+  mediaTypeRow: { flexDirection: "row", gap: 8 },
+  mediaTypeBtn: { flex: 1, height: 38, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line },
+  mediaTypeActive: { backgroundColor: colors.gold, borderColor: colors.gold },
+  mediaTypeText: { color: colors.text, fontWeight: "900" },
+  mediaTypeActiveText: { color: colors.ink },
+  input: { height: 44, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, color: colors.text, paddingHorizontal: 12, fontWeight: "800" },
+  postMediaBtn: { height: 44, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: colors.pink },
+  postMediaText: { color: colors.text, fontWeight: "900" },
+  mediaGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  mediaTile: { width: "48%", minHeight: 150, borderRadius: 8, overflow: "hidden", backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, position: "relative" },
+  mediaImage: { width: "100%", height: 118, backgroundColor: colors.panelStrong },
+  videoTile: { height: 118, alignItems: "center", justifyContent: "center", backgroundColor: colors.panelStrong },
+  videoText: { color: colors.gold, fontWeight: "900" },
+  mediaCaption: { color: colors.text, fontSize: 12, fontWeight: "800", padding: 8 },
+  removeMediaBtn: { position: "absolute", top: 8, right: 8, width: 30, height: 30, borderRadius: 8, backgroundColor: "rgba(5,7,19,0.74)", alignItems: "center", justifyContent: "center" },
   roomCard: { marginBottom: 10 },
   hosted: { color: colors.text, fontWeight: "900", fontSize: 16 },
   hostedMeta: { color: colors.muted, marginTop: 4 }

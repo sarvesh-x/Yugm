@@ -175,6 +175,13 @@ export const usersApi = {
   get: (userId: string) => api<{ user: any }>(`/users/${userId}`),
   level: () => api<{ level: any }>("/users/me/level"),
   checkIn: () => api<{ alreadyClaimed: boolean; xpAwarded?: number; levelUpReward?: number; levelsGained?: number[]; level: any; walletBalance?: number; balance?: number }>("/users/me/check-in", { method: "POST" }),
+  closeFriends: () => api<{ users: any[] }>("/users/me/close-friends"),
+  addProfileMedia: (payload: { url: string; type?: "IMAGE" | "VIDEO"; caption?: string }) =>
+    api<{ user: any; media: any }>("/users/me/profile-media", { method: "POST", body: JSON.stringify(payload) }),
+  removeProfileMedia: (mediaId: string) =>
+    api<{ user: any }>(`/users/me/profile-media/${mediaId}`, { method: "DELETE" }),
+  sendFeedback: (payload: { category?: string; subject: string; message: string }) =>
+    api<{ ticket: any; message: any }>("/users/me/feedback", { method: "POST", body: JSON.stringify(payload) }),
   getUserRooms: (userId: string) => api<{ rooms: any[] }>(`/users/${userId}/rooms`),
   getFollowers: (userId: string) => api<{ users: any[] }>(`/users/${userId}/followers`),
   getFollowing: (userId: string) => api<{ users: any[] }>(`/users/${userId}/following`),
@@ -187,11 +194,23 @@ export const usersApi = {
     api<{ room: any; message: any }>(`/users/messages/${userId}/call`, { method: "POST", body: JSON.stringify({ type }) }),
   follow: (userId: string) => api<{ following: boolean }>(`/users/${userId}/follow`, { method: "POST" }),
   unfollow: (userId: string) => api<{ following: boolean }>(`/users/${userId}/follow`, { method: "DELETE" }),
+  addCloseFriend: (userId: string) => api<{ closeFriend: boolean }>(`/users/${userId}/close-friend`, { method: "POST" }),
+  removeCloseFriend: (userId: string) => api<{ closeFriend: boolean }>(`/users/${userId}/close-friend`, { method: "DELETE" }),
   block: (userId: string) => api<{ blocked: boolean }>(`/users/${userId}/block`, { method: "POST" }),
   unblock: (userId: string) => api<{ blocked: boolean }>(`/users/${userId}/block`, { method: "DELETE" }),
   getBlocked: () => api<{ users: any[] }>("/users/me/blocked"),
   report: (targetUserId: string, reason: string) =>
     api<{ report: any }>("/reports", { method: "POST", body: JSON.stringify({ targetUserId, reason }) })
+};
+
+export const clansApi = {
+  list: (query = "") => api<{ clans: any[] }>(`/clans${query ? `?q=${encodeURIComponent(query)}` : ""}`),
+  mine: () => api<{ clan: any | null }>("/clans/me"),
+  detail: (clanId: string) => api<{ clan: any }>(`/clans/${clanId}`),
+  create: (payload: { name: string; description?: string; avatar?: string; privacy?: "PUBLIC" | "PRIVATE"; familyLabel?: string }) =>
+    api<{ clan: any }>("/clans", { method: "POST", body: JSON.stringify(payload) }),
+  join: (clanId: string) => api<{ clan: any }>(`/clans/${clanId}/join`, { method: "POST" }),
+  leave: (clanId: string) => api<{ clan: any | null }>(`/clans/${clanId}/leave`, { method: "POST" })
 };
 
 export const datingApi = {

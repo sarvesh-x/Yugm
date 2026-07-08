@@ -10,6 +10,7 @@ import { DirectMessage } from "../models/DirectMessage.js";
 import { Follow } from "../models/Follow.js";
 import { Room } from "../models/Room.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
+import { SupportMessage, SupportTicket } from "../models/SupportTicket.js";
 import { User } from "../models/User.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId, sanitizeText } from "../utils/http.js";
 import { createNotification } from "../services/notifications.js";
@@ -21,6 +22,16 @@ export const usersRouter = Router();
 usersRouter.use(requireAuth);
 
 const privateCallSchema = z.object({ type: z.enum(["VOICE", "VIDEO"]) });
+const profileMediaSchema = z.object({
+  url: z.string().url(),
+  type: z.enum(["IMAGE", "VIDEO"]).default("IMAGE"),
+  caption: z.string().max(140).optional()
+});
+const feedbackSchema = z.object({
+  category: z.enum(["LOGIN", "PAYMENT", "WITHDRAWAL", "ROOM", "CHAT", "MATCHING", "SAFETY", "REPORT", "BUG", "OTHER"]).default("OTHER"),
+  subject: z.string().min(3).max(120),
+  message: z.string().min(5).max(1200)
+});
 
 function publicUser(user: any) {
   const levelStatus = getLevelStatus(user);
@@ -40,7 +51,11 @@ function publicUser(user: any) {
     ownedCosmeticIds: user.ownedCosmeticIds,
     ...getVipStatus(user),
     interests: user.interests,
+    hobbies: user.hobbies,
     languages: user.languages,
+    profileMedia: user.profileMedia,
+    closeFriendsCount: user.closeFriendIds?.length ?? 0,
+    clanId: user.clanId?.toString?.() ?? user.clanId,
     city: user.city,
     state: user.state,
     bio: user.bio,
@@ -53,7 +68,8 @@ function publicUser(user: any) {
     lookingFor: user.lookingFor,
     datingAgeMin: user.datingAgeMin,
     datingAgeMax: user.datingAgeMax,
-    isFollowing: user.isFollowing
+    isFollowing: user.isFollowing,
+    isCloseFriend: user.isCloseFriend
   };
 }
 
@@ -72,6 +88,56 @@ usersRouter.patch("/me", validateBody(profileSchema.partial()), asyncHandler(asy
     user = await User.findById(req.user!.id).select("-__v");
   }
   sendOk(res, { user: publicUser(user) });
+}));
+
+usersRouter.get("/me/close-friends", asyncHandler(async (req: AuthRequest, res) => {
+  const user = await User.findById(req.user!.id)
+    .populate("closeFriendIds", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .select("closeFriendIds")
+    .lean();
+  const users = (user?.closeFriendIds ?? []).filter(Boolean);
+  sendOk(res, { users });
+}));
+
+usersRouter.post("/me/profile-media", validateBody(profileMediaSchema), asyncHandler(async (req: AuthRequest, res) => {
+  const media = {
+    url: req.body.url,
+    type: req.body.type,
+    caption: req.body.caption ? sanitizeText(req.body.caption) : undefined,
+    createdAt: new Date()
+  };
+  const user = await User.findByIdAndUpdate(
+    req.user!.id,
+    { $push: { profileMedia: { $each: [media], $position: 0, $slice: 24 } } },
+    { new: true }
+  ).select("-__v");
+  sendOk(res, { user: publicUser(user), media: user?.profileMedia?.[0] }, 201);
+}));
+
+usersRouter.delete("/me/profile-media/:mediaId", asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.mediaId)) throw new HttpError(400, "Invalid media ID", ErrorCode.VALIDATION);
+  const user = await User.findByIdAndUpdate(
+    req.user!.id,
+    { $pull: { profileMedia: { _id: req.params.mediaId } } },
+    { new: true }
+  ).select("-__v");
+  sendOk(res, { user: publicUser(user) });
+}));
+
+usersRouter.post("/me/feedback", validateBody(feedbackSchema), asyncHandler(async (req: AuthRequest, res) => {
+  const ticket = await SupportTicket.create({
+    userId: req.user!.id,
+    category: req.body.category,
+    subject: sanitizeText(req.body.subject),
+    lastMessageAt: new Date()
+  });
+  const message = await SupportMessage.create({
+    ticketId: ticket._id,
+    senderType: "USER",
+    senderUserId: req.user!.id,
+    message: sanitizeText(req.body.message)
+  });
+  sendOk(res, { ticket, message }, 201);
 }));
 
 usersRouter.get("/me/level", (req: AuthRequest, res) => {
@@ -312,7 +378,9 @@ usersRouter.get("/:id", asyncHandler(async (req: AuthRequest, res) => {
   const following = req.params.id === req.user!.id
     ? false
     : Boolean(await Follow.exists({ followerId: req.user!.id, followingId: req.params.id }));
-  sendOk(res, { user: publicUser({ ...user, ...getVipStatus(user), isFollowing: following }) });
+  const closeFriendIds = ((req.user as any)?.closeFriendIds ?? []).map((friendId: any) => friendId.toString());
+  const isCloseFriend = closeFriendIds.includes(req.params.id);
+  sendOk(res, { user: publicUser({ ...user, ...getVipStatus(user), isFollowing: following, isCloseFriend }) });
 }));
 
 usersRouter.post("/:id/follow", asyncHandler(async (req: AuthRequest, res) => {
@@ -348,6 +416,28 @@ usersRouter.post("/:id/follow", asyncHandler(async (req: AuthRequest, res) => {
   sendOk(res, { following: true });
 }));
 
+usersRouter.post("/:id/close-friend", asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
+  if (req.params.id === req.user!.id) throw new HttpError(400, "You cannot add yourself as a close friend", ErrorCode.VALIDATION);
+  const blocked = await Block.exists({
+    $or: [
+      { blockerId: req.user!.id, blockedUserId: req.params.id },
+      { blockerId: req.params.id, blockedUserId: req.user!.id }
+    ]
+  });
+  if (blocked) throw new HttpError(403, "Cannot add this user", ErrorCode.FORBIDDEN);
+  const target = await User.findById(req.params.id).select("_id name").lean();
+  if (!target) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+  await User.findByIdAndUpdate(req.user!.id, { $addToSet: { closeFriendIds: req.params.id } });
+  sendOk(res, { closeFriend: true });
+}));
+
+usersRouter.delete("/:id/close-friend", asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
+  await User.findByIdAndUpdate(req.user!.id, { $pull: { closeFriendIds: req.params.id } });
+  sendOk(res, { closeFriend: false });
+}));
+
 usersRouter.delete("/:id/follow", asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
   const deleted = await Follow.findOneAndDelete({ followerId: req.user!.id, followingId: req.params.id });
@@ -361,6 +451,7 @@ usersRouter.delete("/:id/follow", asyncHandler(async (req: AuthRequest, res) => 
 usersRouter.post("/:id/block", asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
   await Block.updateOne({ blockerId: req.user!.id, blockedUserId: req.params.id }, {}, { upsert: true });
+  await User.findByIdAndUpdate(req.user!.id, { $pull: { closeFriendIds: req.params.id } });
   sendOk(res, { blocked: true });
 }));
 

@@ -1,8 +1,8 @@
 import { useState, useCallback } from "react";
-import { Alert, StyleSheet, Text, View, Pressable, ScrollView, ActivityIndicator } from "react-native";
+import { Alert, Image, StyleSheet, Text, View, Pressable, ScrollView, ActivityIndicator } from "react-native";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Crown, MessageCircle, UserPlus, UserMinus, ShieldAlert, Ban, Sparkles, MapPin, Radio } from "lucide-react-native";
+import { ArrowLeft, Crown, MessageCircle, UserPlus, UserMinus, ShieldAlert, Ban, Sparkles, MapPin, Radio, Star } from "lucide-react-native";
 import { usersApi } from "@/lib/api";
 import { Screen, Section } from "@/components/Screen";
 import { CosmeticAvatar } from "@/components/CosmeticAvatar";
@@ -35,6 +35,7 @@ export default function UserProfileDetail() {
   const themeColors = profileThemeColors(active?.seasonalEvent ?? active?.profileTheme);
   const nameColors = nameStyleColors(active?.nameStyle);
   const isFollowing = user?.isFollowing ?? false;
+  const isCloseFriend = user?.isCloseFriend ?? false;
   const level = user?.levelStatus ?? { level: user?.level ?? 1, title: user?.levelTitle ?? "New Vibe", xp: user?.xp ?? 0 };
 
   const followMutation = useMutation({
@@ -52,6 +53,15 @@ export default function UserProfileDetail() {
       queryClient.invalidateQueries({ queryKey: ["dating", "explore"] });
       Alert.alert("Blocked", `${user?.name} has been blocked and hidden.`);
       router.replace("/(tabs)");
+    },
+    onError: (err: any) => Alert.alert("Error", err.message)
+  });
+
+  const closeFriendMutation = useMutation({
+    mutationFn: () => isCloseFriend ? usersApi.removeCloseFriend(id) : usersApi.addCloseFriend(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users", id] });
+      Alert.alert(isCloseFriend ? "Removed" : "Close friend", isCloseFriend ? `${user?.name} was removed from close friends.` : `${user?.name} is now a close friend.`);
     },
     onError: (err: any) => Alert.alert("Error", err.message)
   });
@@ -221,11 +231,40 @@ export default function UserProfileDetail() {
               </Pressable>
             </View>
 
+            <Pressable
+              onPress={() => closeFriendMutation.mutate()}
+              disabled={closeFriendMutation.isPending}
+              style={[styles.closeFriendBtn, isCloseFriend && styles.closeFriendActive]}
+            >
+              <Star color={isCloseFriend ? colors.ink : colors.gold} size={18} fill={isCloseFriend ? colors.ink : "transparent"} />
+              <Text style={[styles.closeFriendText, isCloseFriend && styles.closeFriendActiveText]}>
+                {closeFriendMutation.isPending ? "Updating..." : isCloseFriend ? "Close friend" : "Add to close friends"}
+              </Text>
+            </Pressable>
+
             {/* Bio */}
             {user.bio && (
               <View style={styles.infoBlock}>
                 <Text style={styles.blockTitle}>About Me</Text>
                 <Text style={styles.bioText}>{user.bio}</Text>
+              </View>
+            )}
+
+            {user.profileMedia && user.profileMedia.length > 0 && (
+              <View style={styles.infoBlock}>
+                <Text style={styles.blockTitle}>Profile Media</Text>
+                <View style={styles.mediaGrid}>
+                  {user.profileMedia.map((item: any) => (
+                    <View key={item._id ?? item.url} style={styles.mediaTile}>
+                      {item.type === "VIDEO" ? (
+                        <View style={styles.videoTile}><Text style={styles.videoText}>VIDEO</Text></View>
+                      ) : (
+                        <Image source={{ uri: item.url }} style={styles.mediaImage as any} />
+                      )}
+                      {!!item.caption && <Text style={styles.mediaCaption}>{item.caption}</Text>}
+                    </View>
+                  ))}
+                </View>
               </View>
             )}
 
@@ -256,6 +295,19 @@ export default function UserProfileDetail() {
                   {user.interests.map((interest: string) => (
                     <View key={interest} style={styles.chip}>
                       <Text style={styles.chipText}>{interest}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {user.hobbies && user.hobbies.length > 0 && (
+              <View style={styles.infoBlock}>
+                <Text style={styles.blockTitle}>Hobbies</Text>
+                <View style={styles.chipsRow}>
+                  {user.hobbies.map((hobby: string) => (
+                    <View key={hobby} style={styles.chip}>
+                      <Text style={styles.chipText}>{hobby}</Text>
                     </View>
                   ))}
                 </View>
@@ -503,6 +555,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900"
   },
+  closeFriendBtn: {
+    minHeight: 46,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(246,180,75,0.35)",
+    backgroundColor: "rgba(246,180,75,0.08)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8
+  },
+  closeFriendActive: {
+    backgroundColor: colors.gold,
+    borderColor: colors.gold
+  },
+  closeFriendText: {
+    color: colors.gold,
+    fontWeight: "900"
+  },
+  closeFriendActiveText: {
+    color: colors.ink
+  },
   infoBlock: {
     marginTop: 20
   },
@@ -517,6 +591,41 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
     fontWeight: "700"
+  },
+  mediaGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10
+  },
+  mediaTile: {
+    width: "48%",
+    minHeight: 150,
+    borderRadius: 8,
+    overflow: "hidden",
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.line
+  },
+  mediaImage: {
+    width: "100%",
+    height: 118,
+    backgroundColor: colors.panelStrong
+  },
+  videoTile: {
+    height: 118,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.panelStrong
+  },
+  videoText: {
+    color: colors.gold,
+    fontWeight: "900"
+  },
+  mediaCaption: {
+    color: colors.text,
+    padding: 8,
+    fontSize: 12,
+    fontWeight: "800"
   },
   mutualBlock: {
     padding: 14,

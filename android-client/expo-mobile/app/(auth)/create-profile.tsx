@@ -15,6 +15,7 @@ const AVAILABLE_INTERESTS = [
 ];
 
 const AVAILABLE_LANGUAGES = ["Hindi", "English", "Tamil", "Telugu", "Kannada", "Marathi", "Bengali", "Punjabi", "Urdu"];
+const AVAILABLE_HOBBIES = ["Singing", "Dancing", "Podcasting", "Photography", "Cooking", "Reading", "Writing", "Cricket", "Football", "Badminton", "Drawing", "Streaming", "Gym", "Coding", "Memes", "Volunteering"];
 
 const PRESET_AVATARS = [
   "https://images.unsplash.com/photo-1494790108377-be9c29b29330", // Female 1
@@ -44,6 +45,7 @@ export default function CreateProfile() {
   const [vibeLine, setVibeLine] = useState(current?.vibeLine ?? "");
   const [avatar, setAvatar] = useState(current?.avatar ?? PRESET_AVATARS[0]);
   const [selectedInterests, setSelectedInterests] = useState<string[]>(current?.interests ?? []);
+  const [selectedHobbies, setSelectedHobbies] = useState<string[]>(current?.hobbies ?? []);
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>(current?.languages ?? ["Hindi", "English"]);
 
   // Dating preferences
@@ -68,6 +70,7 @@ export default function CreateProfile() {
     }
     if (step === 3) {
       if (selectedInterests.length < 2) return "Please choose at least 2 interests.";
+      if (selectedHobbies.length < 1) return "Please choose at least 1 hobby.";
     }
     if (step === 4) {
       if (!bio.trim() || bio.length < 10) return "Bio must be at least 10 characters.";
@@ -111,6 +114,7 @@ export default function CreateProfile() {
         vibeLine,
         avatar,
         interests: selectedInterests,
+        hobbies: selectedHobbies,
         languages: selectedLanguages,
         interestedIn,
         lookingFor,
@@ -258,9 +262,10 @@ export default function CreateProfile() {
 
           {step === 3 && (
             <View style={styles.card}>
-              <Text style={styles.stepTitle}>Pick your interests</Text>
-              <Text style={styles.stepSubtitle}>We use these to calculate vibe match compatibility percentages.</Text>
+              <Text style={styles.stepTitle}>Pick your interests and hobbies</Text>
+              <Text style={styles.stepSubtitle}>We use these to calculate vibe match compatibility percentages and fill your detailed profile.</Text>
 
+              <Text style={styles.label}>Interests</Text>
               <View style={styles.chipsWrap}>
                 {AVAILABLE_INTERESTS.map((interest) => {
                   const selected = selectedInterests.includes(interest);
@@ -275,6 +280,26 @@ export default function CreateProfile() {
                       }
                     >
                       <Text style={[styles.chipText, selected && styles.chipTextActive]}>{interest}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <Text style={styles.label}>Hobbies</Text>
+              <View style={styles.chipsWrap}>
+                {AVAILABLE_HOBBIES.map((hobby) => {
+                  const selected = selectedHobbies.includes(hobby);
+                  return (
+                    <Pressable
+                      key={hobby}
+                      style={[styles.chip, selected && styles.chipActive]}
+                      onPress={() =>
+                        setSelectedHobbies((prev) =>
+                          selected ? prev.filter((item) => item !== hobby) : [...prev, hobby]
+                        )
+                      }
+                    >
+                      <Text style={[styles.chipText, selected && styles.chipTextActive]}>{hobby}</Text>
                     </Pressable>
                   );
                 })}

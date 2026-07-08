@@ -142,6 +142,11 @@ export default function WalletScreen() {
         }
       >
         <Section>
+          <Text style={styles.storeTitle}>Store & Wallet</Text>
+          <Text style={styles.storeSubtitle}>Recharge coins, unlock VIP, buy profile cosmetics, and review every transaction.</Text>
+        </Section>
+
+        <Section>
           {/* Main Balance Card */}
           <LinearGradient colors={gradients.gold} style={styles.balanceCard}>
             <View style={styles.balanceHeader}>
@@ -350,6 +355,8 @@ export default function WalletScreen() {
 
 const styles = StyleSheet.create({
   scrollWrap: { paddingBottom: 48 },
+  storeTitle: { color: colors.text, fontSize: 28, fontWeight: "900" },
+  storeSubtitle: { color: colors.muted, marginTop: 8, lineHeight: 20, fontWeight: "700" },
   balanceCard: {
     borderRadius: 20,
     padding: 24,

@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { Compass, Heart, Radio, MessageCircle, Sparkles, User } from "lucide-react-native";
+import { Compass, Heart, Radio, MessageCircle, ShoppingBag, Sparkles, User } from "lucide-react-native";
 import { colors } from "@/theme/colors";
 
 export default function TabsLayout() {
@@ -16,6 +16,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ title: "Discover", tabBarIcon: ({ color }) => <Compass color={color} size={22} /> }} />
       <Tabs.Screen name="match" options={{ title: "Match", tabBarIcon: ({ color }) => <Heart color={color} size={22} /> }} />
       <Tabs.Screen name="live" options={{ title: "Live", tabBarIcon: ({ color }) => <Radio color={color} size={22} /> }} />
+      <Tabs.Screen name="store" options={{ title: "Store", tabBarIcon: ({ color }) => <ShoppingBag color={color} size={22} /> }} />
       <Tabs.Screen name="grow" options={{ title: "Grow", tabBarIcon: ({ color }) => <Sparkles color={color} size={22} /> }} />
       <Tabs.Screen name="chat" options={{ title: "Chat", tabBarIcon: ({ color }) => <MessageCircle color={color} size={22} /> }} />
       <Tabs.Screen name="profile" options={{ title: "Profile", tabBarIcon: ({ color }) => <User color={color} size={22} /> }} />
@@ -27,6 +28,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="hosts" options={{ href: null }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
       <Tabs.Screen name="settings" options={{ href: null }} />
+      <Tabs.Screen name="clan" options={{ href: null }} />
     </Tabs>
   );
 }
