@@ -4,6 +4,7 @@ import path from "path";
 import fs from "fs";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode } from "../utils/http.js";
+import { persistUploadedFile, safeUploadName } from "../services/storage.js";
 
 export const uploadRouter = Router();
 
@@ -13,9 +14,7 @@ if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const name = `${(req as AuthRequest).user!.id}_${Date.now()}${ext}`;
-    cb(null, name);
+    cb(null, safeUploadName((req as AuthRequest).user!.id, file.originalname));
   },
 });
 
@@ -96,21 +95,21 @@ function assertSafeProfileMedia(file?: Express.Multer.File) {
 uploadRouter.post("/upload/avatar", requireAuth, upload.single("avatar"), asyncHandler(async (req: AuthRequest, res) => {
   assertSafeImage(req.file);
   const file = req.file!;
-  const url = `/uploads/${file.filename}`;
+  const { url, storage } = await persistUploadedFile(file, "avatars");
   await req.user!.updateOne({ avatar: url });
-  sendOk(res, { url });
+  sendOk(res, { url, storage });
 }));
 
 uploadRouter.post("/upload/cover", requireAuth, upload.single("cover"), asyncHandler(async (req: AuthRequest, res) => {
   assertSafeImage(req.file);
   const file = req.file!;
-  const url = `/uploads/${file.filename}`;
-  sendOk(res, { url });
+  const { url, storage } = await persistUploadedFile(file, "covers");
+  sendOk(res, { url, storage });
 }));
 
 uploadRouter.post("/upload/profile-media", requireAuth, profileMediaUpload.single("media"), asyncHandler(async (req: AuthRequest, res) => {
   const type = assertSafeProfileMedia(req.file);
   const file = req.file!;
-  const url = `/uploads/${file.filename}`;
-  sendOk(res, { url, type });
+  const { url, storage } = await persistUploadedFile(file, "profile-media");
+  sendOk(res, { url, type, storage });
 }));

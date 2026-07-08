@@ -1,13 +1,14 @@
 import type { Server as HttpServer } from "http";
 import jwt from "jsonwebtoken";
 import { Server } from "socket.io";
+import { createAdapter } from "@socket.io/redis-adapter";
 import { socketEvents } from "@yugm/shared";
 import { env } from "../config/env.js";
 import { Block } from "../models/Block.js";
 import { Clan } from "../models/Clan.js";
 import { Room } from "../models/Room.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
-import { setUserPresence } from "./redis.js";
+import { createRedisConnection, setUserPresence } from "./redis.js";
 
 export let io: Server;
 
@@ -24,10 +25,29 @@ function cleanupStaleConnections() {
 }
 setInterval(cleanupStaleConnections, 60_000);
 
-export function initSocket(server: HttpServer) {
+async function configureRedisAdapter(server: Server) {
+  const pubClient = createRedisConnection({ maxRetriesPerRequest: null });
+  const subClient = pubClient?.duplicate();
+  if (!pubClient || !subClient) {
+    console.log("Socket.IO Redis adapter disabled: REDIS_URL is empty");
+    return;
+  }
+  try {
+    await Promise.all([pubClient.connect(), subClient.connect()]);
+    server.adapter(createAdapter(pubClient, subClient));
+    console.log("Socket.IO Redis adapter enabled");
+  } catch (error) {
+    console.warn("Socket.IO Redis adapter unavailable; using single-node adapter:", error instanceof Error ? error.message : String(error));
+    pubClient.disconnect();
+    subClient.disconnect();
+  }
+}
+
+export async function initSocket(server: HttpServer) {
   io = new Server(server, {
     cors: { origin: env.CORS_ORIGIN === "*" ? "*" : env.CORS_ORIGIN.split(",") }
   });
+  await configureRedisAdapter(io);
 
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token as string | undefined;

@@ -4,7 +4,9 @@ import { env } from "./config/env.js";
 import { createApp } from "./app.js";
 import { ensureAuthIndexes } from "./services/authIndexes.js";
 import { initFirebase } from "./services/firebase.js";
+import { closeJobWorkers, startJobWorkers } from "./services/jobs.js";
 import { ensureOfficialRooms } from "./services/officialRooms.js";
+import { ensureProductionIndexes } from "./services/productionIndexes.js";
 import { connectRedis } from "./services/redis.js";
 import { initSocket } from "./services/socket.js";
 
@@ -19,12 +21,14 @@ process.on("uncaughtException", (err) => {
 async function bootstrap() {
   await connectDatabase();
   await ensureAuthIndexes();
+  await ensureProductionIndexes();
   await connectRedis();
   await ensureOfficialRooms();
   initFirebase();
+  await startJobWorkers();
   const app = createApp();
   const server = http.createServer(app);
-  initSocket(server);
+  await initSocket(server);
   server.listen(env.PORT, () => {
     console.log(`Yugm API listening on http://localhost:${env.PORT}`);
   });
@@ -32,6 +36,7 @@ async function bootstrap() {
   async function shutdown() {
     console.log("Shutting down gracefully...");
     server.close();
+    await closeJobWorkers();
     await disconnectDatabase();
     process.exit(0);
   }

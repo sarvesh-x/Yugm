@@ -17,6 +17,7 @@
     "seed:admin": "npm --workspace apps/api run seed:admin",
     "test": "npm --workspaces --if-present run test",
     "typecheck": "npm --workspaces --if-present run typecheck",
+    "load:test": "node scripts/load-test-api.mjs",
     "build:admin": "npm --workspace apps/admin run build"
   },
   "devDependencies": {

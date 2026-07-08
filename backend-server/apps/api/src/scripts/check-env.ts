@@ -32,6 +32,13 @@ const keys: EnvKey[] = [
   { key: "GOOGLE_PLAY_CLIENT_EMAIL", group: "payments", required: false, note: "required for Google Play purchases" },
   { key: "GOOGLE_PLAY_PRIVATE_KEY", group: "payments", required: false, note: "required for Google Play purchases" },
   { key: "REDIS_URL", group: "cache", required: false, note: "leave blank to disable Redis locally" },
+  { key: "STORAGE_DRIVER", group: "storage", required: false, note: "local or s3; defaults to local" },
+  { key: "S3_BUCKET", group: "storage", required: false, note: "required when STORAGE_DRIVER=s3" },
+  { key: "S3_REGION", group: "storage", required: false, note: "required when STORAGE_DRIVER=s3" },
+  { key: "S3_ENDPOINT", group: "storage", required: false, note: "optional S3-compatible endpoint" },
+  { key: "S3_ACCESS_KEY_ID", group: "storage", required: false, note: "optional IAM/access key" },
+  { key: "S3_SECRET_ACCESS_KEY", group: "storage", required: false, note: "optional IAM/access secret" },
+  { key: "S3_PUBLIC_BASE_URL", group: "storage", required: false, note: "optional CDN/public base URL" },
   { key: "CORS_ORIGIN", group: "http", required: false, note: "defaults to *" }
 ];
 
@@ -73,6 +80,17 @@ if (isProduction) {
   }
   if (!process.env.CORS_ORIGIN || process.env.CORS_ORIGIN === "*") {
     productionErrors.push("CORS_ORIGIN should be an explicit comma-separated allowlist in production");
+  }
+  if (!process.env.REDIS_URL) {
+    productionErrors.push("REDIS_URL must be set in production for socket fan-out, queues, rate limits, and cache");
+  }
+  if (process.env.STORAGE_DRIVER !== "s3") {
+    productionErrors.push("STORAGE_DRIVER=s3 is recommended for production media storage");
+  }
+  if (process.env.STORAGE_DRIVER === "s3") {
+    for (const key of ["S3_BUCKET", "S3_REGION"]) {
+      if (!process.env[key]) productionErrors.push(`${key} must be set when STORAGE_DRIVER=s3`);
+    }
   }
   for (const key of ["FCM_PROJECT_ID", "FCM_CLIENT_EMAIL", "FCM_PRIVATE_KEY"]) {
     if (!process.env[key]) {

@@ -1,8 +1,8 @@
 import { Notification, INotification } from "../models/Notification.js";
 import { DeviceToken } from "../models/DeviceToken.js";
-import { notifyUser } from "./firebase.js";
 import { emitUser } from "./socket.js";
 import { socketEvents } from "@yugm/shared";
+import { enqueuePushNotification } from "./jobs.js";
 
 function stringifyNotificationData(data: Record<string, unknown> = {}) {
   return Object.fromEntries(
@@ -24,7 +24,7 @@ export async function createNotification(
   const tokens = await DeviceToken.find({ userId }).lean();
   if (tokens.length > 0) {
     try {
-      await notifyUser(userId, title, body, { ...stringifyNotificationData(data), notificationId: notification.id });
+      await enqueuePushNotification({ userId, title, body, data: { ...stringifyNotificationData(data), notificationId: notification.id } });
     } catch (error) {
       console.warn("Push notification failed (non-fatal):", error instanceof Error ? error.message : String(error));
     }

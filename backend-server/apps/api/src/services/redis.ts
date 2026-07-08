@@ -1,4 +1,4 @@
-import { Redis } from "ioredis";
+import { Redis, type RedisOptions } from "ioredis";
 import { env } from "../config/env.js";
 
 function normalizeRedisUrl(rawUrl: string | undefined) {
@@ -19,6 +19,27 @@ function normalizeRedisUrl(rawUrl: string | undefined) {
 }
 
 const redisUrl = normalizeRedisUrl(env.REDIS_URL);
+
+export function getRedisUrl() {
+  return redisUrl;
+}
+
+export function createRedisConnection(options: RedisOptions = {}) {
+  if (!redisUrl) return undefined;
+  const client = new Redis(redisUrl, {
+    lazyConnect: true,
+    enableOfflineQueue: false,
+    retryStrategy: () => null,
+    ...options
+  });
+  client.on("error", (err) => {
+    if (!warnedRedisError) {
+      warnedRedisError = true;
+      console.warn("Redis connection error:", err.message);
+    }
+  });
+  return client;
+}
 
 export const redis = redisUrl
   ? new Redis(redisUrl, {
