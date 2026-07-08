@@ -29,9 +29,26 @@ export interface IUser extends mongoose.Document {
   profileCompletedAt?: Date;
   ownedCosmeticIds: string[];
   activeCosmetics: {
+    avatarAsset?: string;
     avatarFrame?: string;
+    speakingWave?: string;
     profileTheme?: string;
     entranceEffect?: string;
+    profileBadge?: string;
+    nameStyle?: string;
+    roomEntry?: string;
+    moodStatus?: string;
+    profileMusic?: string;
+    voiceBadge?: string;
+    roomTheme?: string;
+    avatarDecoration?: string;
+    reactionPack?: string;
+    profileLayout?: string;
+    introCard?: string;
+    collectibleTitle?: string;
+    giftShelf?: string;
+    chatBubble?: string;
+    seasonalEvent?: string;
   };
   vipTier?: string;
   vipStartedAt?: Date;
@@ -76,9 +93,26 @@ const userSchema = new Schema<IUser>(
     profileCompletedAt: Date,
     ownedCosmeticIds: [{ type: String }],
     activeCosmetics: {
+      avatarAsset: String,
       avatarFrame: String,
+      speakingWave: String,
       profileTheme: String,
-      entranceEffect: String
+      entranceEffect: String,
+      profileBadge: String,
+      nameStyle: String,
+      roomEntry: String,
+      moodStatus: String,
+      profileMusic: String,
+      voiceBadge: String,
+      roomTheme: String,
+      avatarDecoration: String,
+      reactionPack: String,
+      profileLayout: String,
+      introCard: String,
+      collectibleTitle: String,
+      giftShelf: String,
+      chatBubble: String,
+      seasonalEvent: String
     },
     vipTier: String,
     vipStartedAt: Date,

@@ -1,11 +1,13 @@
 import { useState, useCallback } from "react";
-import { Alert, StyleSheet, Text, View, Image, Pressable, ScrollView, ActivityIndicator } from "react-native";
+import { Alert, StyleSheet, Text, View, Pressable, ScrollView, ActivityIndicator } from "react-native";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Crown, MessageCircle, UserPlus, UserMinus, ShieldAlert, Ban, Sparkles, MapPin, Radio } from "lucide-react-native";
 import { usersApi } from "@/lib/api";
 import { Screen, Section } from "@/components/Screen";
+import { CosmeticAvatar } from "@/components/CosmeticAvatar";
 import { useAuthStore } from "@/store/auth";
+import { cosmeticPreviewText, nameStyleColors, profileThemeColors } from "@/lib/cosmetics";
 import { colors, gradients } from "@/theme/colors";
 import { LinearGradient } from "expo-linear-gradient";
 
@@ -29,6 +31,9 @@ export default function UserProfileDetail() {
   );
 
   const user = data?.user;
+  const active = user?.activeCosmetics;
+  const themeColors = profileThemeColors(active?.seasonalEvent ?? active?.profileTheme);
+  const nameColors = nameStyleColors(active?.nameStyle);
   const isFollowing = user?.isFollowing ?? false;
   const level = user?.levelStatus ?? { level: user?.level ?? 1, title: user?.levelTitle ?? "New Vibe", xp: user?.xp ?? 0 };
 
@@ -52,11 +57,11 @@ export default function UserProfileDetail() {
   });
 
   const reportMutation = useMutation({
-    // Using simple mock report submission for dating profiles
-    mutationFn: () => new Promise((resolve) => setTimeout(resolve, 800)),
+    mutationFn: (reason: string) => usersApi.report(id, reason),
     onSuccess: () => {
       Alert.alert("Report Submitted", "We will investigate this profile within 24 hours.");
-    }
+    },
+    onError: (err: any) => Alert.alert("Error", err.message)
   });
 
   const handleBlock = () => {
@@ -71,9 +76,9 @@ export default function UserProfileDetail() {
       "Report User",
       "Why are you reporting this user?",
       [
-        { text: "Fake profile", onPress: () => reportMutation.mutate() },
-        { text: "Harassment", onPress: () => reportMutation.mutate() },
-        { text: "Spam", onPress: () => reportMutation.mutate() },
+        { text: "Fake profile", onPress: () => reportMutation.mutate("Fake profile") },
+        { text: "Harassment", onPress: () => reportMutation.mutate("Harassment") },
+        { text: "Spam", onPress: () => reportMutation.mutate("Spam") },
         { text: "Cancel", style: "cancel" }
       ]
     );
@@ -115,17 +120,29 @@ export default function UserProfileDetail() {
         <ScrollView contentContainerStyle={styles.scrollWrap} showsVerticalScrollIndicator={false}>
           {/* Cover image / Large Avatar */}
           <View style={styles.heroSection}>
-            <Image source={{ uri: user.avatar }} style={styles.avatarImg as any} />
             <LinearGradient
-              colors={["transparent", "rgba(5,7,19,0.95)"]}
+              colors={["rgba(255,255,255,0.03)", "rgba(5,7,19,0.95)"]}
               style={styles.heroOverlay}
+            />
+            <CosmeticAvatar
+              name={user.name}
+              imageUrl={user.avatar}
+              cosmetics={user.activeCosmetics}
+              size={180}
+              showEntry
             />
           </View>
 
           {/* Details Section */}
-          <View style={styles.detailsContent}>
+          <LinearGradient colors={themeColors} style={styles.detailsContent}>
             <View style={styles.nameRow}>
-              <Text style={styles.name}>{user.name}, {user.age || 22}</Text>
+              {active?.nameStyle ? (
+                <LinearGradient colors={nameColors} style={styles.namePlate}>
+                  <Text style={styles.styledName}>{user.name}, {user.age || 22}</Text>
+                </LinearGradient>
+              ) : (
+                <Text style={styles.name}>{user.name}, {user.age || 22}</Text>
+              )}
               {user.isVerified && (
                 <View style={styles.verifiedBadge}>
                   <Text style={styles.verifiedBadgeText}>✓ Verified</Text>
@@ -137,6 +154,11 @@ export default function UserProfileDetail() {
                   <Text style={styles.vipBadgeText}>VIP</Text>
                 </View>
               )}
+            </View>
+            <View style={styles.identityRow}>
+              {active?.collectibleTitle && <IdentityPill label={cosmeticPreviewText(active.collectibleTitle)} tone="gold" />}
+              {active?.profileBadge && <IdentityPill label={cosmeticPreviewText(active.profileBadge)} tone="pink" />}
+              {active?.moodStatus && <IdentityPill label={cosmeticPreviewText(active.moodStatus)} tone="cyan" />}
             </View>
 
             <View style={styles.locRow}>
@@ -152,11 +174,14 @@ export default function UserProfileDetail() {
               <Text style={styles.levelXpText}>{level.xp} XP</Text>
             </View>
 
-            {!!user.activeCosmetics && Object.values(user.activeCosmetics).some(Boolean) && (
-              <Text style={styles.cosmeticsText}>
-                Cosmetics: {Object.values(user.activeCosmetics).filter(Boolean).join(" / ")}
-              </Text>
-            )}
+            <View style={styles.personalGrid}>
+              {active?.introCard && <PersonalCard title="Intro" value={cosmeticPreviewText(active.introCard)} />}
+              {active?.profileMusic && <PersonalCard title="Profile music" value={cosmeticPreviewText(active.profileMusic)} />}
+              {active?.giftShelf && <PersonalCard title="Gift shelf" value={cosmeticPreviewText(active.giftShelf)} />}
+              {active?.reactionPack && <PersonalCard title="Reactions" value={cosmeticPreviewText(active.reactionPack)} />}
+              {active?.chatBubble && <PersonalCard title="Chat style" value={cosmeticPreviewText(active.chatBubble)} />}
+              {active?.roomEntry && <PersonalCard title="Room entry" value={cosmeticPreviewText(active.roomEntry)} />}
+            </View>
 
             {user.vibeLine && (
               <View style={styles.vibeBox}>
@@ -256,10 +281,26 @@ export default function UserProfileDetail() {
               <Ban color={colors.danger} size={16} />
               <Text style={styles.blockUserText}>Block {user.name}</Text>
             </Pressable>
-          </View>
+          </LinearGradient>
         </ScrollView>
       </View>
     </Screen>
+  );
+}
+
+function IdentityPill({ label, tone }: { label?: string; tone: "gold" | "pink" | "cyan" }) {
+  if (!label) return null;
+  const backgroundColor = tone === "pink" ? colors.pink : tone === "cyan" ? colors.cyan : colors.gold;
+  return <View style={[styles.identityPill, { backgroundColor }]}><Text style={styles.identityPillText}>{label}</Text></View>;
+}
+
+function PersonalCard({ title, value }: { title: string; value?: string }) {
+  if (!value) return null;
+  return (
+    <View style={styles.personalCard}>
+      <Text style={styles.personalTitle}>{title}</Text>
+      <Text style={styles.personalValue}>{value}</Text>
+    </View>
   );
 }
 
@@ -295,11 +336,10 @@ const styles = StyleSheet.create({
   errorText: { color: colors.danger, fontWeight: "800", fontSize: 16 },
   heroSection: {
     height: 380,
-    position: "relative"
-  },
-  avatarImg: {
-    width: "100%",
-    height: "100%"
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.panelStrong
   },
   heroOverlay: {
     position: "absolute",
@@ -322,6 +362,19 @@ const styles = StyleSheet.create({
     fontSize: 30,
     fontWeight: "900"
   },
+  namePlate: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5
+  },
+  styledName: {
+    color: colors.ink,
+    fontSize: 28,
+    fontWeight: "900"
+  },
+  identityRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10 },
+  identityPill: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  identityPillText: { color: colors.ink, fontSize: 11, fontWeight: "900" },
   verifiedBadge: {
     backgroundColor: "rgba(50,213,131,0.15)",
     paddingHorizontal: 8,
@@ -383,12 +436,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800"
   },
-  cosmeticsText: {
-    color: colors.pink,
-    fontSize: 12,
-    fontWeight: "800",
-    marginTop: 8
-  },
+  personalGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
+  personalCard: { width: "48%", minWidth: 130, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, padding: 10 },
+  personalTitle: { color: colors.muted, fontSize: 10, fontWeight: "800", textTransform: "uppercase" },
+  personalValue: { color: colors.text, fontSize: 12, fontWeight: "900", marginTop: 3 },
   vibeBox: {
     marginTop: 16,
     padding: 14,

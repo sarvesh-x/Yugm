@@ -8,6 +8,13 @@ const envSchema = z.object({
   MONGODB_DB_NAME: z.string().min(1).default("Yugm"),
   REDIS_URL: z.string().optional(),
   JWT_SECRET: z.string().min(8).default("replace-me"),
+  ADMIN_JWT_SECRET: z.string().min(8).optional(),
+  ADMIN_REFRESH_SECRET: z.string().min(8).optional(),
+  ADMIN_PANEL_ORIGIN: z.string().optional(),
+  SEED_SUPER_ADMIN_EMAIL: z.string().email().optional(),
+  SEED_SUPER_ADMIN_NAME: z.string().optional(),
+  SEED_SUPER_ADMIN_FIREBASE_UID: z.string().optional(),
+  SEED_SUPER_ADMIN_PASSWORD: z.string().min(8).optional(),
   DEV_BYPASS_OTP: z.string().optional(),
   LIVEKIT_API_KEY: z.string().optional(),
   LIVEKIT_API_SECRET: z.string().optional(),
@@ -27,4 +34,8 @@ export const env = envSchema.parse(process.env);
 
 if (env.JWT_SECRET === "replace-me" && env.NODE_ENV === "production") {
   console.warn("WARNING: JWT_SECRET is still the default value. Set a strong secret in production.");
+}
+
+if (!env.ADMIN_JWT_SECRET && env.NODE_ENV === "production") {
+  console.warn("WARNING: ADMIN_JWT_SECRET is not set. Admin auth will fall back to JWT_SECRET.");
 }

@@ -5,7 +5,7 @@ const script = process.env.NODE_ENV === "production" ? "start:api" : "dev:api";
 
 const child = spawn(command, ["run", script], {
   stdio: "inherit",
-  shell: false
+  shell: process.platform === "win32"
 });
 
 child.on("exit", (code, signal) => {

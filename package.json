@@ -8,8 +8,11 @@
   ],
   "scripts": {
     "build": "npm --workspace @yugm/api run build",
+    "build:admin": "npm --workspace @yugm/admin run build",
+    "dev:admin": "npm --workspace @yugm/admin run dev",
     "start": "npm --workspace @yugm/api run start",
     "env:check": "npm --workspace @yugm/api run env:check",
+    "test": "npm --workspaces --if-present run test",
     "typecheck": "npm --workspaces --if-present run typecheck"
   },
   "devDependencies": {

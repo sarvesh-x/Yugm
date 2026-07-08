@@ -30,6 +30,7 @@ export const redis = redisUrl
   : undefined;
 
 let warnedRedisError = false;
+const warnedRedisCommandErrors = new Set<string>();
 
 if (redis) {
   redis.on("error", (err) => {
@@ -58,6 +59,31 @@ function isRedisReady() {
   return redis?.status === "ready";
 }
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function warnRedisCommandFailure(operation: string, error: unknown) {
+  if (warnedRedisCommandErrors.has(operation)) return;
+  warnedRedisCommandErrors.add(operation);
+  console.warn(`Redis ${operation} failed (non-fatal):`, getErrorMessage(error));
+}
+
+async function runRedisCommand<T>(
+  operation: string,
+  fallback: T,
+  command: (client: Redis) => Promise<T>
+): Promise<T> {
+  if (!isRedisReady() || !redis) return fallback;
+
+  try {
+    return await command(redis);
+  } catch (error) {
+    warnRedisCommandFailure(operation, error);
+    return fallback;
+  }
+}
+
 export function getRedisHealth() {
   return {
     configured: Boolean(redis),
@@ -67,33 +93,37 @@ export function getRedisHealth() {
 }
 
 export async function setUserPresence(userId: string, online: boolean) {
-  if (!isRedisReady()) return;
   const key = `presence:user:${userId}`;
-  if (online) {
-    await redis!.set(key, "online", "EX", 300);
-  } else {
-    await redis!.del(key);
-  }
+  await runRedisCommand("presence update", undefined, async (client) => {
+    if (online) {
+      await client.set(key, "online", "EX", 300);
+    } else {
+      await client.del(key);
+    }
+  });
 }
 
 export async function getCachedJson<T>(key: string): Promise<T | undefined> {
-  if (!isRedisReady()) return undefined;
-  const raw = await redis!.get(key);
-  return raw ? JSON.parse(raw) as T : undefined;
+  return runRedisCommand<T | undefined>("cache read", undefined, async (client) => {
+    const raw = await client.get(key);
+    return raw ? JSON.parse(raw) as T : undefined;
+  });
 }
 
 export async function setCachedJson(key: string, value: unknown, seconds: number) {
-  if (!isRedisReady()) return;
-  await redis!.set(key, JSON.stringify(value), "EX", seconds);
+  await runRedisCommand("cache write", undefined, async (client) => {
+    await client.set(key, JSON.stringify(value), "EX", seconds);
+  });
 }
 
 export async function invalidateCache(pattern: string) {
-  if (!isRedisReady()) return;
-  let cursor = "0";
-  do {
-    const result = await redis!.scan(cursor, "MATCH", pattern);
-    cursor = result[0];
-    const keys = result[1];
-    if (keys.length) await redis!.del(keys);
-  } while (cursor !== "0");
+  await runRedisCommand("cache invalidation", undefined, async (client) => {
+    let cursor = "0";
+    do {
+      const result = await client.scan(cursor, "MATCH", pattern);
+      cursor = result[0];
+      const keys = result[1];
+      if (keys.length) await client.del(keys);
+    } while (cursor !== "0");
+  });
 }

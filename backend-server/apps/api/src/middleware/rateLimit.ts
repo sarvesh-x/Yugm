@@ -1,6 +1,10 @@
 import rateLimit from "express-rate-limit";
+import type { Request } from "express";
+import type { AuthRequest } from "./auth.js";
 
-// TODO: In production, switch from IP-based to per-user rate limiting using a custom keyGenerator
+function userOrIpKey(req: Request) {
+  return (req as AuthRequest).user?.id ?? req.ip ?? "unknown";
+}
 
 export const authLimiter = rateLimit({
   windowMs: 60_000,
@@ -12,6 +16,7 @@ export const authLimiter = rateLimit({
 export const chatLimiter = rateLimit({
   windowMs: 10_000,
   max: 12,
+  keyGenerator: userOrIpKey,
   standardHeaders: true,
   legacyHeaders: false
 });
@@ -19,6 +24,7 @@ export const chatLimiter = rateLimit({
 export const reportLimiter = rateLimit({
   windowMs: 60_000,
   max: 5,
+  keyGenerator: userOrIpKey,
   standardHeaders: true,
   legacyHeaders: false
 });

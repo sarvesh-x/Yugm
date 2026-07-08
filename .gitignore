@@ -27,3 +27,9 @@ dist
 backend-server/apps/api/dist
 android-client/expo-mobile/.expo
 npm-debug.log*
+*.log
+*.err.log
+hs_err_pid*.log
+replay_pid*.log
+*firebase-adminsdk*.json
+service-account*.json

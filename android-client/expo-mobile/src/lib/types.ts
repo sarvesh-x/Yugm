@@ -49,9 +49,26 @@ export interface User {
   levelStatus?: LevelStatus;
   ownedCosmeticIds?: string[];
   activeCosmetics?: {
+    avatarAsset?: string;
     avatarFrame?: string;
+    speakingWave?: string;
     profileTheme?: string;
     entranceEffect?: string;
+    profileBadge?: string;
+    nameStyle?: string;
+    roomEntry?: string;
+    moodStatus?: string;
+    profileMusic?: string;
+    voiceBadge?: string;
+    roomTheme?: string;
+    avatarDecoration?: string;
+    reactionPack?: string;
+    profileLayout?: string;
+    introCard?: string;
+    collectibleTitle?: string;
+    giftShelf?: string;
+    chatBubble?: string;
+    seasonalEvent?: string;
   };
   isVip?: boolean;
   vipTier?: string;

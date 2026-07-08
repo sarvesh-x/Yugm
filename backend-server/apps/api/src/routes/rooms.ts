@@ -39,9 +39,14 @@ const patchSchema = z.object({
 export const roomsRouter = Router();
 
 async function addActivity(roomId: string, type: "JOIN" | "LEAVE" | "GIFT" | "REACTION" | "SPEAKER_REQUEST" | "POLL" | "INVITE" | "MISSION", label: string, userId?: string, metadata: Record<string, unknown> = {}) {
-  const activity = await RoomActivity.create({ roomId, type, label, userId, metadata });
-  emitRoom(roomId, socketEvents.roomActivityNew, { activity });
-  return activity;
+  try {
+    const activity = await RoomActivity.create({ roomId, type, label, userId, metadata });
+    emitRoom(roomId, socketEvents.roomActivityNew, { activity });
+    return activity;
+  } catch (error) {
+    console.warn("Room activity failed (non-fatal):", error instanceof Error ? error.message : String(error));
+    return undefined;
+  }
 }
 
 async function getRoomOrThrow(id: string) {
@@ -63,6 +68,22 @@ function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+async function grantRoomXp(userId: string, event: Parameters<typeof grantXp>[1], metadata: Record<string, unknown>) {
+  try {
+    return await grantXp(userId, event, metadata);
+  } catch (error) {
+    console.warn("Room XP grant failed (non-fatal):", error instanceof Error ? error.message : String(error));
+    return undefined;
+  }
+}
+
+async function decrementRoomParticipantCount(roomId: unknown) {
+  await Room.updateOne(
+    { _id: roomId, participantCount: { $gt: 0 } },
+    { $inc: { participantCount: -1 } }
+  );
+}
+
 roomsRouter.post("/", requireAuth, requireNotMuted, validateBody(createRoomSchema), asyncHandler(async (req: AuthRequest, res) => {
   const scheduledFor = req.body.scheduledFor ? new Date(req.body.scheduledFor) : undefined;
   const isScheduled = scheduledFor && scheduledFor.getTime() > Date.now() + 60_000;
@@ -81,7 +102,7 @@ roomsRouter.post("/", requireAuth, requireNotMuted, validateBody(createRoomSchem
     await addActivity(room.id, "MISSION", `${req.user!.name} started the room`, req.user!.id);
   }
   await invalidateCache("rooms:*");
-  await grantXp(req.user!.id, "ROOM_CREATE", { roomId: room.id });
+  await grantRoomXp(req.user!.id, "ROOM_CREATE", { roomId: room.id });
   sendOk(res, { room }, 201);
 }));
 
@@ -195,7 +216,7 @@ roomsRouter.post("/:id/join", requireAuth, asyncHandler(async (req: AuthRequest,
     await RoomParticipant.create({ roomId: room._id, userId: req.user!.id, role });
     await Room.findByIdAndUpdate(room._id, { $inc: { participantCount: 1 } });
     await invalidateCache("rooms:*");
-    await grantXp(req.user!.id, "ROOM_JOIN", { roomId: room._id.toString() });
+    await grantRoomXp(req.user!.id, "ROOM_JOIN", { roomId: room._id.toString() });
   }
   // NOTE: emitRoom is called after the socket room join for consistent ordering
   emitRoom(room._id.toString(), socketEvents.roomParticipantUpdate, { userId: req.user!.id, action: "join" });
@@ -207,7 +228,7 @@ roomsRouter.post("/:id/leave", requireAuth, asyncHandler(async (req: AuthRequest
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
   const result = await RoomParticipant.findOneAndUpdate({ roomId: req.params.id, userId: req.user!.id, leftAt: null }, { leftAt: new Date() });
   if (result) {
-    await Room.findByIdAndUpdate(req.params.id, { $inc: { participantCount: -1 }, $max: { participantCount: 0 } });
+    await decrementRoomParticipantCount(req.params.id);
     await invalidateCache("rooms:*");
   }
   emitRoom(req.params.id, socketEvents.roomParticipantUpdate, { userId: req.user!.id, action: "leave" });
@@ -272,7 +293,7 @@ roomsRouter.post("/:id/remove-user", requireAuth, asyncHandler(async (req: AuthR
   const room = await assertHost(req, req.params.id);
   const result = await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId: req.body.userId, leftAt: null }, { leftAt: new Date() });
   if (result) {
-    await Room.findByIdAndUpdate(room._id, { $inc: { participantCount: -1 }, $max: { participantCount: 0 } });
+    await decrementRoomParticipantCount(room._id);
     await invalidateCache("rooms:*");
   }
   emitRoom(room._id.toString(), socketEvents.roomUserRemove, { userId: req.body.userId });
@@ -389,7 +410,7 @@ roomsRouter.post("/:id/messages/direct", requireAuth, requireNotMuted, validateB
     message: sanitizeText(req.body.message)
   });
   await createNotification(receiverId, "MESSAGE", "New message", `${req.user!.name}: ${message.message}`, { roomId: room._id.toString() });
-  await grantXp(req.user!.id, "CHAT_MESSAGE", { roomId: room._id.toString(), direct: true });
+  await grantRoomXp(req.user!.id, "CHAT_MESSAGE", { roomId: room._id.toString(), direct: true });
   const relationship = await grantRelationshipXp(req.user!.id, receiverId, "ROOM_DM_SENT", { roomId: room._id.toString(), messageId: message._id.toString() });
   sendOk(res, { message, relationship: relationship?.relationship }, 201);
 }));
@@ -406,6 +427,6 @@ roomsRouter.post("/:id/messages", requireAuth, requireNotMuted, chatLimiter, val
   });
   // NOTE: emitRoom is called after the socket room join for consistent ordering
   emitRoom(req.params.id, socketEvents.roomChatMessage, { message });
-  await grantXp(req.user!.id, "CHAT_MESSAGE", { roomId: req.params.id });
+  await grantRoomXp(req.user!.id, "CHAT_MESSAGE", { roomId: req.params.id });
   sendOk(res, { message }, 201);
 }));

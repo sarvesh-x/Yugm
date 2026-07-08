@@ -59,6 +59,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.yugm.api.Categories
+import com.example.yugm.model.ActiveCosmetics
 import com.example.yugm.model.GiftItem
 import com.example.yugm.model.Host
 import com.example.yugm.model.Room
@@ -187,7 +188,10 @@ fun RoomCard(room: Room, wide: Boolean, onClick: () -> Unit) {
             }
             Column(modifier = Modifier.align(Alignment.BottomStart)) {
                 Text(room.title, color = TextPrimary, fontSize = 20.sp, lineHeight = 23.sp, fontWeight = FontWeight.Black, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(room.host?.name ?: "", color = TextPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                    room.host?.let { Avatar(initial = it.name.firstOrNull()?.toString() ?: "?", size = 34, imageUrl = it.avatar, cosmetics = it.activeCosmetics, isSpeaking = room.type == RoomType.Voice) }
+                    Text(room.host?.name ?: "", color = TextPrimary, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
                 Text("${room.participants} live / ${room.language}", color = TextMuted, fontSize = 12.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                     Chip(room.category)
@@ -199,7 +203,7 @@ fun RoomCard(room: Room, wide: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-fun HostRow(host: Host, onFollow: ((String) -> Unit)? = null) {
+fun HostRow(host: Host, onFollow: ((String) -> Unit)? = null, onClick: ((Host) -> Unit)? = null) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -207,9 +211,10 @@ fun HostRow(host: Host, onFollow: ((String) -> Unit)? = null) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(Panel)
+            .then(if (onClick != null) Modifier.clickable { onClick(host) } else Modifier)
             .padding(12.dp)
     ) {
-        Avatar(initial = host.name.firstOrNull()?.toString() ?: "?", size = 48, imageUrl = host.avatar)
+        Avatar(initial = host.name.firstOrNull()?.toString() ?: "?", size = 48, imageUrl = host.avatar, cosmetics = host.activeCosmetics)
         Column(Modifier.weight(1f)) {
             Text(host.name, color = TextPrimary, fontWeight = FontWeight.Black)
             Text("${host.vibe} / ${host.city}", color = TextMuted, fontSize = 12.sp)
@@ -224,7 +229,7 @@ fun HostRow(host: Host, onFollow: ((String) -> Unit)? = null) {
 fun HostCard(host: Host) {
     GlassCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Avatar(host.name.firstOrNull()?.toString() ?: "?", 58, imageUrl = host.avatar)
+            Avatar(host.name.firstOrNull()?.toString() ?: "?", 58, imageUrl = host.avatar, cosmetics = host.activeCosmetics, isSpeaking = true, showEntry = true)
             Column(Modifier.weight(1f)) {
                 Text(host.name, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp)
                 Text("${host.username} / ${host.city}", color = TextMuted, fontSize = 12.sp)
@@ -249,6 +254,9 @@ fun SpeakerGrid(room: Room) {
                                 2 -> "Moderator"
                                 else -> "Open seat"
                             },
+                            cosmetics = if (index == 0) room.host?.activeCosmetics ?: ActiveCosmetics() else ActiveCosmetics(),
+                            isSpeaking = index == 0,
+                            showEntry = index == 0,
                             modifier = Modifier.weight(1f)
                         )
                     } else {
@@ -261,7 +269,7 @@ fun SpeakerGrid(room: Room) {
 }
 
 @Composable
-fun SeatCard(name: String, modifier: Modifier = Modifier) {
+fun SeatCard(name: String, cosmetics: ActiveCosmetics = ActiveCosmetics(), isSpeaking: Boolean = false, showEntry: Boolean = false, modifier: Modifier = Modifier) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -271,7 +279,7 @@ fun SeatCard(name: String, modifier: Modifier = Modifier) {
             .background(Panel)
             .padding(8.dp)
     ) {
-        Avatar(initial = name.firstOrNull()?.toString() ?: "?", size = 42)
+        Avatar(initial = name.firstOrNull()?.toString() ?: "?", size = 42, cosmetics = cosmetics, isSpeaking = isSpeaking, showEntry = showEntry)
         Text(name, color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 7.dp))
     }
 }
@@ -286,6 +294,7 @@ fun VideoGrid(room: Room, camera: Boolean) {
                     VideoTile(
                         label = if (index == 0) (room.host?.name ?: "") else if (camera) "Speaker ${index + 1}" else "Camera off",
                         highlighted = index == 0,
+                        cosmetics = if (index == 0) room.host?.activeCosmetics ?: ActiveCosmetics() else ActiveCosmetics(),
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -295,7 +304,7 @@ fun VideoGrid(room: Room, camera: Boolean) {
 }
 
 @Composable
-fun VideoTile(label: String, highlighted: Boolean, modifier: Modifier = Modifier) {
+fun VideoTile(label: String, highlighted: Boolean, cosmetics: ActiveCosmetics = ActiveCosmetics(), modifier: Modifier = Modifier) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
@@ -305,10 +314,7 @@ fun VideoTile(label: String, highlighted: Boolean, modifier: Modifier = Modifier
             .padding(10.dp)
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Canvas(Modifier.size(46.dp)) {
-                drawCircle(if (highlighted) Gold else TextMuted, style = Stroke(width = 4.dp.toPx()))
-                drawCircle(Color.White.copy(alpha = 0.2f), radius = size.minDimension * 0.22f)
-            }
+            Avatar(initial = label.firstOrNull()?.toString() ?: "?", size = 58, cosmetics = cosmetics, isSpeaking = highlighted, showEntry = highlighted)
             Text(label, color = TextPrimary, fontWeight = FontWeight.Black, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 10.dp))
         }
     }

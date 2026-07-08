@@ -3,11 +3,12 @@ import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet,
 import * as Haptics from "expo-haptics";
 import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Camera, CameraOff, DoorOpen, Gift, Mic, MicOff, Radio, RefreshCcw, Send, ShieldAlert, Sparkles, Smile, UserPlus, UserX, Video, VolumeX } from "lucide-react-native";
+import { Camera, CameraOff, DoorOpen, Gift, Mic, MicOff, Radio, RefreshCcw, Send, ShieldAlert, Sparkles, Smile, UserPlus, UserX, VolumeX } from "lucide-react-native";
 import { reactionTypes, socketEvents } from "@yugm/shared";
 import { ChatComposer } from "@/components/ChatComposer";
 import { ControlButton } from "@/components/ControlButton";
 import { GiftPanel } from "@/components/GiftPanel";
+import { CosmeticAvatar } from "@/components/CosmeticAvatar";
 import { GlassCard } from "@/components/GlassCard";
 import { LoadingState } from "@/components/LoadingState";
 import { ErrorState } from "@/components/ErrorState";
@@ -247,7 +248,18 @@ export default function ActiveRoom() {
                 <View style={styles.seatGrid}>
                   {[...speakers, ...Array(Math.max((room?.maxSpeakers ?? 6) - speakers.length, 0)).fill(null)].slice(0, room?.maxSpeakers ?? 6).map((item: any, index) => (
                     <View key={item?._id ?? index} style={styles.seat}>
-                      <View style={styles.seatAvatar}><Text style={styles.seatInitial}>{item?.userId?.name?.[0] ?? "+"}</Text></View>
+                      {item ? (
+                        <CosmeticAvatar
+                          name={item.userId?.name}
+                          imageUrl={item.userId?.avatar}
+                          cosmetics={item.userId?.activeCosmetics}
+                          size={42}
+                          isSpeaking={item.micEnabled !== false}
+                          showEntry
+                        />
+                      ) : (
+                        <View style={styles.seatAvatar}><Text style={styles.seatInitial}>+</Text></View>
+                      )}
                       <Text style={styles.seatName} numberOfLines={1}>{item?.userId?.name ?? "Open seat"}</Text>
                       {isHost && item && item.userId?._id !== currentUserId && (
                         <View style={styles.seatActions}>
@@ -279,7 +291,16 @@ export default function ActiveRoom() {
                 <View style={styles.videoGrid}>
                   {[...speakers, ...Array(4).fill(null)].slice(0, 4).map((item: any, index) => (
                     <View key={item?._id ?? index} style={[styles.videoTile, index === 0 && styles.hostTile]}>
-                      {item ? <Video color={colors.gold} size={32} /> : <CameraOff color={colors.muted} size={28} />}
+                      {item ? (
+                        <CosmeticAvatar
+                          name={item.userId?.name}
+                          imageUrl={item.userId?.avatar}
+                          cosmetics={item.userId?.activeCosmetics}
+                          size={68}
+                          isSpeaking={item.micEnabled !== false}
+                          showEntry
+                        />
+                      ) : <CameraOff color={colors.muted} size={28} />}
                       <Text style={styles.videoName}>{item?.userId?.name ?? "Audience mode"}</Text>
                       {isHost && item && item.userId?._id !== currentUserId && (
                         <View style={styles.videoActions}>
@@ -361,11 +382,19 @@ export default function ActiveRoom() {
 }
 
 function HostCard({ room }: { room: any }) {
+  const host = room?.hostId;
   return (
     <GlassCard style={styles.hostCard}>
-      <View style={styles.hostAvatar}><Text style={styles.hostInitial}>{room?.hostId?.name?.[0] ?? "Y"}</Text></View>
+      <CosmeticAvatar
+        name={host?.name ?? "Yugm Host"}
+        imageUrl={host?.avatar}
+        cosmetics={host?.activeCosmetics}
+        size={54}
+        isSpeaking
+        showEntry
+      />
       <View style={{ flex: 1 }}>
-        <Text style={styles.hostName}>{room?.hostId?.name ?? "Yugm Host"}</Text>
+        <Text style={styles.hostName}>{host?.name ?? "Yugm Host"}</Text>
         <Text style={styles.hostMeta}>{room?.category ?? "Live"} host / {room?.tags?.join(", ")}</Text>
       </View>
       <Radio color={colors.gold} />
@@ -438,8 +467,6 @@ const styles = StyleSheet.create({
   close: { width: 44, height: 44, borderRadius: 8, backgroundColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center" },
   main: { flex: 1, padding: 18 },
   hostCard: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 18 },
-  hostAvatar: { width: 54, height: 54, borderRadius: 8, backgroundColor: colors.panelStrong, alignItems: "center", justifyContent: "center" },
-  hostInitial: { color: colors.gold, fontWeight: "900", fontSize: 24 },
   hostName: { color: colors.text, fontWeight: "900", fontSize: 16 },
   hostMeta: { color: colors.muted, marginTop: 3 },
   sectionTitle: { color: colors.text, fontWeight: "900", fontSize: 18, marginBottom: 12 },

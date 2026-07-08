@@ -70,11 +70,20 @@ import com.example.yugm.api.YugmApi
 import com.example.yugm.api.YugmMediaRoom
 import com.example.yugm.api.YugmSocket
 import com.example.yugm.api.isNetworkAvailable
+import com.example.yugm.model.ActiveCosmetics
 import com.example.yugm.model.ChatMessage
+import com.example.yugm.model.CoinPack
+import com.example.yugm.model.CosmeticCatalog
+import com.example.yugm.model.DirectMessage
 import com.example.yugm.model.GiftItem
 import com.example.yugm.model.Host
+import com.example.yugm.model.LevelStatus
+import com.example.yugm.model.ProfileCosmetic
+import com.example.yugm.model.RelationshipStatus
 import com.example.yugm.model.Room
 import com.example.yugm.model.RoomType
+import com.example.yugm.model.VipPlan
+import com.example.yugm.model.VipStatus
 import com.example.yugm.ui.components.*
 import com.example.yugm.ui.screens.*
 import com.example.yugm.ui.theme.*
@@ -95,8 +104,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+import dagger.hilt.android.AndroidEntryPoint
+
 private const val TAG = "YugmApp"
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     companion object {
         private const val TAG_ACTIVITY = "MainActivity"
@@ -112,20 +124,21 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         FirebaseApp.initializeApp(this)
         enableEdgeToEdge()
-        val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val savedToken = prefs.getString(KEY_TOKEN, "") ?: ""
-        val savedUserId = prefs.getString(KEY_USER_ID, "") ?: ""
-        val savedName = prefs.getString(KEY_NAME, "Yugm User") ?: "Yugm User"
-        val savedUsername = prefs.getString(KEY_USERNAME, "vibe_user") ?: "vibe_user"
-        val savedBalance = prefs.getInt(KEY_BALANCE, 0)
         setContent {
             YugmTheme(dynamicColor = false) {
-                YugmApp(
-                    savedToken = savedToken,
-                    savedUserId = savedUserId,
-                    savedName = savedName,
-                    savedUsername = savedUsername,
-                    savedBalance = savedBalance
+                val navController = androidx.navigation.compose.rememberNavController()
+                val mainViewModel: com.example.yugm.ui.viewmodel.MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                
+                // For now we still need these triggers in MainActivity until we have a proper AuthManager
+                val googleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+                    // ... launcher logic
+                }
+                
+                com.example.yugm.navigation.NavGraph(
+                    navController = navController,
+                    mainViewModel = mainViewModel,
+                    onGoogleSignIn = { /* trigger googleLauncher */ },
+                    onPhoneSignIn = { /* navigate to phone auth */ }
                 )
             }
         }
@@ -149,7 +162,8 @@ enum class AppScreen {
     Settings,
     CreateRoom,
     ActiveVoice,
-    ActiveVideo
+    ActiveVideo,
+    Chat
 }
 
 @Composable
@@ -190,10 +204,25 @@ fun YugmApp(
     var profileRooms by remember { mutableStateOf<List<Room>>(emptyList()) }
     var profileLoading by remember { mutableStateOf(false) }
     var profileError by remember { mutableStateOf("") }
+    var selectedProfileUserId by rememberSaveable { mutableStateOf(savedUserId) }
     var isFollowing by remember { mutableStateOf(false) }
     var isBlocked by remember { mutableStateOf(false) }
     var walletLoading by remember { mutableStateOf(false) }
     var walletTransactions by remember { mutableStateOf<List<com.example.yugm.model.WalletTransaction>>(emptyList()) }
+    var cosmeticsCatalog by remember { mutableStateOf<List<ProfileCosmetic>>(emptyList()) }
+    var ownedCosmeticIds by remember { mutableStateOf<List<String>>(emptyList()) }
+    var activeCosmetics by remember { mutableStateOf(ActiveCosmetics()) }
+    var walletLevel by remember { mutableStateOf(LevelStatus()) }
+    var vipStatus by remember { mutableStateOf(VipStatus()) }
+    var vipPlans by remember { mutableStateOf<List<VipPlan>>(emptyList()) }
+    var coinPacks by remember { mutableStateOf<List<CoinPack>>(emptyList()) }
+
+    var chatPartnerId by rememberSaveable { mutableStateOf("") }
+    var chatPartner by remember { mutableStateOf<Host?>(null) }
+    var directMessages by remember { mutableStateOf<List<DirectMessage>>(emptyList()) }
+    var relationshipStatus by remember { mutableStateOf<RelationshipStatus?>(null) }
+    var chatLoading by remember { mutableStateOf(false) }
+    var chatError by remember { mutableStateOf("") }
 
     var notifItems by remember { mutableStateOf<List<com.example.yugm.model.NotificationItem>>(emptyList()) }
     var notifUnread by remember { mutableStateOf(0) }
@@ -318,7 +347,7 @@ fun YugmApp(
             runCatching { YugmApi.searchRooms(query) }
                 .onSuccess { searchResults = it }
                 .onFailure { searchError = it.message ?: "Search failed" }
-            runCatching { YugmApi.searchUsers(query) }
+            runCatching { YugmApi.searchUsers(query, authToken.ifBlank { null }) }
                 .onSuccess { searchUserResults = it }
                 .onFailure { if (searchError.isBlank()) searchError = it.message ?: "Search failed" }
             searchLoading = false
@@ -326,17 +355,54 @@ fun YugmApp(
     }
 
     fun loadProfile(hostId: String) {
+        selectedProfileUserId = hostId
         profileLoading = true
         profileError = ""
         scope.launch {
             runCatching { YugmApi.getUser(hostId, authToken.ifBlank { null }) }
-                .onSuccess { profileHost = it }
+                .onSuccess {
+                    profileHost = it
+                    isFollowing = it.isFollowing
+                }
                 .onFailure { profileError = it.message ?: "Could not load profile" }
             runCatching { YugmApi.getUserRooms(hostId, authToken.ifBlank { null }) }
                 .onSuccess { profileRooms = it }
                 .onFailure { if (profileError.isBlank()) profileError = it.message ?: "Could not load rooms" }
             profileLoading = false
         }
+    }
+
+    fun openProfile(hostId: String) {
+        selectedProfileUserId = hostId
+        loadProfile(hostId)
+        screen = AppScreen.Profile
+    }
+
+    fun loadChat(userId: String) {
+        if (authToken.isBlank()) {
+            toast = "Login required to chat"
+            return
+        }
+        chatPartnerId = userId
+        chatLoading = true
+        chatError = ""
+        scope.launch {
+            runCatching { YugmApi.getUser(userId, authToken) }
+                .onSuccess { chatPartner = it }
+                .onFailure { if (chatError.isBlank()) chatError = it.message ?: "Could not load chat partner" }
+            runCatching { YugmApi.conversation(authToken, userId) }
+                .onSuccess {
+                    directMessages = it.messages
+                    relationshipStatus = it.relationship
+                }
+                .onFailure { chatError = it.message ?: "Could not load conversation" }
+            chatLoading = false
+        }
+    }
+
+    fun openChat(userId: String) {
+        loadChat(userId)
+        screen = AppScreen.Chat
     }
 
     fun loadNotifications() {
@@ -353,15 +419,48 @@ fun YugmApp(
         }
     }
 
+    fun applyCosmeticCatalog(catalog: CosmeticCatalog) {
+        if (catalog.cosmetics.isNotEmpty()) cosmeticsCatalog = catalog.cosmetics
+        ownedCosmeticIds = catalog.ownedCosmeticIds
+        activeCosmetics = catalog.activeCosmetics
+        profileHost = profileHost?.let {
+            if (it.id == currentUserId || currentUserId.isBlank()) it.copy(activeCosmetics = catalog.activeCosmetics) else it
+        }
+        rooms.indices.forEach { index ->
+            val room = rooms[index]
+            if (room.host?.id == currentUserId) {
+                rooms[index] = room.copy(host = room.host.copy(activeCosmetics = catalog.activeCosmetics))
+            }
+        }
+    }
+
     fun refreshWallet() {
         if (authToken.isBlank()) return
         walletLoading = true
         scope.launch {
-            runCatching { YugmApi.wallet(authToken) }
-                .onSuccess { balance = it }
+            runCatching { YugmApi.walletOverview(authToken) }
+                .onSuccess {
+                    balance = it.balance
+                    walletLevel = it.level
+                    vipStatus = it.vip
+                    ownedCosmeticIds = it.cosmetics.ownedCosmeticIds
+                    activeCosmetics = it.cosmetics.activeCosmetics
+                }
                 .onFailure { toast = it.message ?: "Could not load wallet" }
             runCatching { YugmApi.walletTransactions(authToken) }
                 .onSuccess { walletTransactions = it }
+            runCatching { YugmApi.cosmetics(authToken) }
+                .onSuccess { applyCosmeticCatalog(it) }
+                .onFailure { Log.e(TAG, "Cosmetics catalog load failed", it) }
+            runCatching { YugmApi.vipPlans(authToken) }
+                .onSuccess {
+                    vipPlans = it.first
+                    vipStatus = it.second
+                }
+                .onFailure { Log.e(TAG, "VIP plans load failed", it) }
+            runCatching { YugmApi.coinPacks(authToken) }
+                .onSuccess { coinPacks = it }
+                .onFailure { Log.e(TAG, "Coin packs load failed", it) }
             walletLoading = false
         }
     }
@@ -369,11 +468,29 @@ fun YugmApp(
     LaunchedEffect(authToken) {
         if (authToken.isNotBlank()) {
             sessionPrefs.save(authToken, currentUserId, userName, username, balance)
-            runCatching { YugmApi.wallet(authToken) }.onSuccess { balance = it }.onFailure { Log.e(TAG, "Wallet load failed", it) }
+            runCatching { YugmApi.walletOverview(authToken) }.onSuccess {
+                balance = it.balance
+                walletLevel = it.level
+                vipStatus = it.vip
+                ownedCosmeticIds = it.cosmetics.ownedCosmeticIds
+                activeCosmetics = it.cosmetics.activeCosmetics
+            }.onFailure { Log.e(TAG, "Wallet load failed", it) }
             runCatching { YugmApi.gifts(authToken) }.onSuccess {
                 gifts.clear()
                 gifts.addAll(it)
             }.onFailure { Log.e(TAG, "Gift catalog load failed", it) }
+            runCatching { YugmApi.cosmetics(authToken) }
+                .onSuccess { applyCosmeticCatalog(it) }
+                .onFailure { Log.e(TAG, "Cosmetics catalog load failed", it) }
+            runCatching { YugmApi.vipPlans(authToken) }
+                .onSuccess {
+                    vipPlans = it.first
+                    vipStatus = it.second
+                }
+                .onFailure { Log.e(TAG, "VIP plans load failed", it) }
+            runCatching { YugmApi.coinPacks(authToken) }
+                .onSuccess { coinPacks = it }
+                .onFailure { Log.e(TAG, "Coin packs load failed", it) }
             try {
                 val fcmToken = Tasks.await(FirebaseMessaging.getInstance().token)
                 if (fcmToken.isNotBlank()) {
@@ -405,9 +522,10 @@ fun YugmApp(
 
     LaunchedEffect(screen) {
         when (screen) {
-            AppScreen.Profile -> if (currentUserId.isNotBlank()) loadProfile(currentUserId)
+            AppScreen.Profile -> if (selectedProfileUserId.isNotBlank()) loadProfile(selectedProfileUserId)
             AppScreen.Notifications -> if (authToken.isNotBlank()) loadNotifications()
             AppScreen.Wallet -> if (authToken.isNotBlank()) refreshWallet()
+            AppScreen.Chat -> if (chatPartnerId.isNotBlank()) loadChat(chatPartnerId)
             else -> {}
         }
     }
@@ -429,7 +547,10 @@ fun YugmApp(
             toast = toast,
             isOnline = isOnline,
             onDismissToast = { toast = "" },
-            onNavigate = { screen = it },
+            onNavigate = {
+                if (it == AppScreen.Profile) selectedProfileUserId = currentUserId
+                screen = it
+            },
             onCreate = { screen = AppScreen.CreateRoom }
         ) {
         when (screen) {
@@ -566,24 +687,11 @@ fun YugmApp(
                 }
             )
             AppScreen.Discover -> DiscoverScreen(
-                name = userName,
-                rooms = rooms,
-                loading = loadingRooms,
-                error = roomError,
                 onOpenRoom = {
                     activeRoomId = it.id
                     screen = if (it.type == RoomType.Voice) AppScreen.ActiveVoice else AppScreen.ActiveVideo
                 },
-                onCreate = { screen = AppScreen.CreateRoom },
-                onRetry = { refreshRooms() },
-                onSearch = { screen = AppScreen.Search },
-                onFollow = { hostId ->
-                    if (authToken.isNotBlank()) scope.launch {
-                        runCatching { YugmApi.followUser(authToken, hostId) }
-                            .onSuccess { toast = "Followed" }
-                            .onFailure { toast = it.message ?: "Follow failed" }
-                    }
-                }
+                onSearch = { screen = AppScreen.Search }
             )
             AppScreen.Voice -> RoomListScreen(
                 title = "Voice rooms",
@@ -604,60 +712,61 @@ fun YugmApp(
                 }
             )
             AppScreen.Search -> SearchScreen(
-                onSearch = { doSearch(it) },
-                results = searchResults,
-                userResults = searchUserResults,
-                loading = searchLoading,
-                error = searchError,
-                onRetry = { doSearch(searchQuery) },
+                onBack = { screen = AppScreen.Discover },
                 onOpenRoom = {
                     activeRoomId = it.id
                     screen = if (it.type == RoomType.Voice) AppScreen.ActiveVoice else AppScreen.ActiveVideo
                 },
-                onFollow = { hostId ->
-                    if (authToken.isNotBlank()) scope.launch {
-                        runCatching { YugmApi.followUser(authToken, hostId) }
-                            .onSuccess { toast = "Followed" }
-                            .onFailure { toast = it.message ?: "Follow failed" }
-                    }
-                }
+                onOpenProfile = { openProfile(it) }
             )
             AppScreen.Notifications -> NotificationsScreen(
                 notifications = notifItems,
                 loading = notifLoading,
                 onRefresh = { loadNotifications() }
             )
-            AppScreen.Wallet -> WalletScreen(balance = balance, loading = walletLoading, gifts = gifts, transactions = walletTransactions, onRecharge = {
-                scope.launch {
-                    runCatching { YugmApi.devRecharge(authToken, 500) }
-                        .onSuccess { balance += 500; refreshWallet(); toast = "500 coins added" }
-                        .onFailure { toast = it.message ?: "Recharge failed" }
-                }
-            })
+            AppScreen.Wallet -> WalletScreen(
+                balance = balance,
+                transactions = walletTransactions
+            )
             AppScreen.Profile -> ProfileScreen(
                 host = profileHost,
-                rooms = profileRooms,
-                loading = profileLoading,
-                error = profileError,
-                isOwnProfile = true,
-                onRetry = { if (currentUserId.isNotBlank()) loadProfile(currentUserId) },
-                onWallet = { screen = AppScreen.Wallet },
-                onEditDone = { name, uname, bio, city ->
+                isOwnProfile = selectedProfileUserId == currentUserId || selectedProfileUserId.isBlank(),
+                onSettings = { screen = AppScreen.Settings }
+            )
+            AppScreen.Chat -> ChatScreen(
+                partner = chatPartner,
+                currentUserId = currentUserId,
+                messages = directMessages,
+                relationship = relationshipStatus,
+                gifts = gifts,
+                balance = balance,
+                loading = chatLoading,
+                error = chatError,
+                onBack = { screen = AppScreen.Profile },
+                onRetry = { if (chatPartnerId.isNotBlank()) loadChat(chatPartnerId) },
+                onSend = { message ->
                     scope.launch {
-                        if (authToken.isNotBlank()) {
-                            runCatching { YugmApi.updateProfile(authToken, name, uname, bio, city) }
-                                .onSuccess {
-                                    userName = it.name
-                                    username = it.username
-                                    profileHost = (profileHost ?: Host()).copy(name = it.name, username = it.username, bio = bio, city = city)
-                                }
-                                .onFailure { toast = it.message ?: "Profile update failed" }
-                        }
+                        runCatching { YugmApi.sendDirectMessage(authToken, chatPartnerId, message) }
+                            .onSuccess {
+                                directMessages = directMessages + it.messages
+                                relationshipStatus = it.relationship ?: relationshipStatus
+                                loadChat(chatPartnerId)
+                            }
+                            .onFailure { toast = it.message ?: "Message failed" }
                     }
                 },
-                onOpenRoom = {
-                    activeRoomId = it.id
-                    screen = if (it.type == RoomType.Voice) AppScreen.ActiveVoice else AppScreen.ActiveVideo
+                onGift = { gift ->
+                    scope.launch {
+                        runCatching { YugmApi.sendDirectGift(authToken, gift.id, chatPartnerId) }
+                            .onSuccess {
+                                directMessages = directMessages + it.messages
+                                relationshipStatus = it.relationship ?: relationshipStatus
+                                refreshWallet()
+                                loadChat(chatPartnerId)
+                                toast = "Gift sent"
+                            }
+                            .onFailure { toast = it.message ?: "Gift failed" }
+                    }
                 }
             )
             AppScreen.Settings -> SettingsScreen(onLogout = {
@@ -677,7 +786,7 @@ fun YugmApp(
                 )
             })
             AppScreen.CreateRoom -> CreateRoomScreen(
-                host = Host(id = currentUserId, name = userName, username = username, city = "India", vibe = "Fresh host", followers = 0),
+                host = Host(id = currentUserId, name = userName, username = username, city = "India", vibe = "Fresh host", followers = 0, activeCosmetics = activeCosmetics),
                 onBack = { screen = AppScreen.Discover },
                 onCreate = { room ->
                     scope.launch {
@@ -1337,4 +1446,3 @@ fun NavItem(label: String, selected: Boolean, onClick: () -> Unit) {
             .padding(horizontal = 6.dp, vertical = 10.dp)
     )
 }
-

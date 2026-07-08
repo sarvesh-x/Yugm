@@ -12,6 +12,13 @@ const keys: EnvKey[] = [
   { key: "MONGODB_URI", group: "startup", required: true },
   { key: "MONGODB_DB_NAME", group: "startup", required: false, note: "defaults to Yugm" },
   { key: "JWT_SECRET", group: "auth", required: false, note: "set a strong value outside local dev" },
+  { key: "ADMIN_JWT_SECRET", group: "admin", required: false, note: "set a strong admin access token secret in production" },
+  { key: "ADMIN_REFRESH_SECRET", group: "admin", required: false, note: "set a strong admin refresh token secret in production" },
+  { key: "ADMIN_PANEL_ORIGIN", group: "admin", required: false, note: "admin web origin allowlist" },
+  { key: "SEED_SUPER_ADMIN_EMAIL", group: "admin", required: false, note: "used by npm run seed:admin" },
+  { key: "SEED_SUPER_ADMIN_NAME", group: "admin", required: false, note: "used by npm run seed:admin" },
+  { key: "SEED_SUPER_ADMIN_FIREBASE_UID", group: "admin", required: false, note: "Firebase admin login binding" },
+  { key: "SEED_SUPER_ADMIN_PASSWORD", group: "admin", required: false, note: "local/backend admin password seed" },
   { key: "DEV_BYPASS_OTP", group: "auth", required: false, note: "dev-only OTP bypass" },
   { key: "LIVEKIT_API_KEY", group: "livekit", required: false, note: "required for media tokens" },
   { key: "LIVEKIT_API_SECRET", group: "livekit", required: false, note: "required for media tokens" },
@@ -55,11 +62,27 @@ if (isProduction) {
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET === "replace-me" || process.env.JWT_SECRET.length < 24) {
     productionErrors.push("JWT_SECRET must be set to a strong value in production");
   }
+  if (!process.env.ADMIN_JWT_SECRET || process.env.ADMIN_JWT_SECRET.length < 24) {
+    productionErrors.push("ADMIN_JWT_SECRET must be set to a strong value in production");
+  }
+  if (!process.env.ADMIN_REFRESH_SECRET || process.env.ADMIN_REFRESH_SECRET.length < 24) {
+    productionErrors.push("ADMIN_REFRESH_SECRET must be set to a strong value in production");
+  }
   if (process.env.DEV_BYPASS_OTP) {
     productionErrors.push("DEV_BYPASS_OTP must not be set in production");
   }
   if (!process.env.CORS_ORIGIN || process.env.CORS_ORIGIN === "*") {
     productionErrors.push("CORS_ORIGIN should be an explicit comma-separated allowlist in production");
+  }
+  for (const key of ["FCM_PROJECT_ID", "FCM_CLIENT_EMAIL", "FCM_PRIVATE_KEY"]) {
+    if (!process.env[key]) {
+      productionErrors.push(`${key} must be set for Firebase auth and push in production`);
+    }
+  }
+  for (const key of ["LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "LIVEKIT_URL"]) {
+    if (!process.env[key]) {
+      productionErrors.push(`${key} must be set for media rooms in production`);
+    }
   }
   if (process.env.REDIS_URL) {
     try {

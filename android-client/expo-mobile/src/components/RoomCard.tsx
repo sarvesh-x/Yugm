@@ -2,26 +2,47 @@ import { ImageBackground, Pressable, StyleSheet, Text, View } from "react-native
 import { LinearGradient } from "expo-linear-gradient";
 import { Radio, Video } from "lucide-react-native";
 import type { Room } from "@/lib/types";
+import { cosmeticPreviewText, nameStyleColors, roomThemeColors } from "@/lib/cosmetics";
 import { colors } from "@/theme/colors";
+import { CosmeticAvatar } from "@/components/CosmeticAvatar";
 
 export function RoomCard({ room, onPress, wide = false }: { room: Room; onPress: () => void; wide?: boolean }) {
   const Icon = room.type === "VOICE" ? Radio : Video;
+  const hostCosmetics = room.hostId?.activeCosmetics;
+  const roomColors = roomThemeColors(hostCosmetics?.roomTheme ?? hostCosmetics?.seasonalEvent);
+  const hostNameColors = nameStyleColors(hostCosmetics?.nameStyle);
   return (
     <Pressable onPress={onPress} style={[styles.wrap, wide && styles.wide]}>
       <ImageBackground source={{ uri: room.coverImage }} resizeMode="cover" style={styles.image} imageStyle={styles.imageRadius}>
-        <LinearGradient colors={["rgba(5,7,19,0.05)", "rgba(5,7,19,0.92)"]} style={styles.overlay}>
+        <LinearGradient colors={room.coverImage ? ["rgba(5,7,19,0.05)", "rgba(5,7,19,0.92)"] : roomColors} style={styles.overlay}>
           <View style={styles.top}>
             <View style={styles.live}><Text style={styles.liveText}>LIVE</Text></View>
             <View style={styles.type}><Icon color={colors.text} size={14} /><Text style={styles.typeText}>{room.type}</Text></View>
           </View>
           <Text style={styles.title} numberOfLines={2}>{room.title}</Text>
           <View style={styles.meta}>
-            <Text style={styles.host} numberOfLines={1}>{room.hostId?.name ?? "Yugm Host"}</Text>
-            <Text style={styles.count}>{room.participantCount} listening</Text>
+            <CosmeticAvatar
+              name={room.hostId?.name}
+              imageUrl={room.hostId?.avatar}
+              cosmetics={room.hostId?.activeCosmetics}
+              size={34}
+              isSpeaking={room.type === "VOICE"}
+            />
+            <View style={{ flex: 1 }}>
+              {hostCosmetics?.nameStyle ? (
+                <LinearGradient colors={hostNameColors} style={styles.hostPlate}>
+                  <Text style={styles.hostStyled} numberOfLines={1}>{room.hostId?.name ?? "Yugm Host"}</Text>
+                </LinearGradient>
+              ) : (
+                <Text style={styles.host} numberOfLines={1}>{room.hostId?.name ?? "Yugm Host"}</Text>
+              )}
+              <Text style={styles.count}>{room.participantCount} listening</Text>
+            </View>
           </View>
           <View style={styles.tags}>
             <Text style={styles.pill}>{room.language}</Text>
             <Text style={styles.pill}>{room.category}</Text>
+            {hostCosmetics?.roomTheme && <Text style={styles.pill}>{cosmeticPreviewText(hostCosmetics.roomTheme)}</Text>}
           </View>
         </LinearGradient>
       </ImageBackground>
@@ -41,8 +62,10 @@ const styles = StyleSheet.create({
   type: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "rgba(0,0,0,0.38)", paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6 },
   typeText: { color: colors.text, fontSize: 11, fontWeight: "800" },
   title: { color: colors.text, fontSize: 20, fontWeight: "900" },
-  meta: { gap: 2 },
+  meta: { flexDirection: "row", alignItems: "center", gap: 8 },
   host: { color: colors.text, fontWeight: "800" },
+  hostPlate: { alignSelf: "flex-start", maxWidth: "100%", borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  hostStyled: { color: colors.ink, fontWeight: "900", fontSize: 12 },
   count: { color: colors.muted, fontSize: 12 },
   tags: { flexDirection: "row", gap: 8 },
   pill: { color: colors.gold, fontSize: 11, fontWeight: "800", backgroundColor: "rgba(246,180,75,0.13)", paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6 }

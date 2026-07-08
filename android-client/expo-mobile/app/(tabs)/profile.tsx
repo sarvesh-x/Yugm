@@ -2,12 +2,15 @@ import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } 
 import { router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Crown, Settings, Sparkles, UserPlus, UserCheck, Wallet } from "lucide-react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { GlassCard } from "@/components/GlassCard";
+import { CosmeticAvatar } from "@/components/CosmeticAvatar";
 import { LoadingState } from "@/components/LoadingState";
 import { ErrorState } from "@/components/ErrorState";
 import { EmptyState } from "@/components/EmptyState";
 import { Screen, Section } from "@/components/Screen";
 import { usersApi } from "@/lib/api";
+import { cosmeticPreviewText, nameStyleColors, profileThemeColors } from "@/lib/cosmetics";
 import { useAuthStore } from "@/store/auth";
 import { colors } from "@/theme/colors";
 
@@ -36,6 +39,9 @@ export default function Profile() {
   });
 
   const user = profile?.user;
+  const active = user?.activeCosmetics;
+  const themeColors = profileThemeColors(active?.seasonalEvent ?? active?.profileTheme);
+  const nameColors = nameStyleColors(active?.nameStyle);
   const followed = Boolean(user?.isFollowing);
   const level = user?.levelStatus ?? {
     level: user?.level ?? 1,
@@ -97,12 +103,25 @@ export default function Profile() {
     <Screen>
       <ScrollView refreshControl={<RefreshControl refreshing={profileLoading} onRefresh={refetchProfile} tintColor={colors.gold} />}>
         <Section>
+          <LinearGradient colors={themeColors} style={styles.themePanel}>
           <View style={styles.top}>
-            <View style={styles.avatar}><Text style={styles.avatarText}>{user?.name?.[0] ?? ""}</Text></View>
+            <CosmeticAvatar
+              name={user?.name}
+              imageUrl={user?.avatar}
+              cosmetics={user?.activeCosmetics}
+              size={92}
+              showEntry={isOwn}
+            />
             {isOwn && <Pressable onPress={() => router.push("/(tabs)/settings")}><Settings color={colors.text} /></Pressable>}
           </View>
           <View style={styles.nameRow}>
-            <Text style={styles.name}>{user?.name ?? ""}</Text>
+            {active?.nameStyle ? (
+              <LinearGradient colors={nameColors} style={styles.namePlate}>
+                <Text style={styles.styledName}>{user?.name ?? ""}</Text>
+              </LinearGradient>
+            ) : (
+              <Text style={styles.name}>{user?.name ?? ""}</Text>
+            )}
             {user?.isVip && (
               <View style={styles.vipBadge}>
                 <Crown color={colors.ink} size={13} />
@@ -110,12 +129,20 @@ export default function Profile() {
               </View>
             )}
           </View>
+          <View style={styles.identityRow}>
+            {active?.collectibleTitle && <IdentityPill label={cosmeticPreviewText(active.collectibleTitle)} tone="gold" />}
+            {active?.profileBadge && <IdentityPill label={cosmeticPreviewText(active.profileBadge)} tone="pink" />}
+            {active?.moodStatus && <IdentityPill label={cosmeticPreviewText(active.moodStatus)} tone="cyan" />}
+          </View>
           <Text style={styles.username}>@{user?.username ?? ""}</Text>
-          {!!user?.activeCosmetics && Object.values(user.activeCosmetics).some(Boolean) && (
-            <Text style={styles.cosmeticsText}>
-              Cosmetics: {Object.values(user.activeCosmetics).filter(Boolean).join(" / ")}
-            </Text>
-          )}
+          <View style={styles.personalGrid}>
+            {active?.introCard && <PersonalCard title="Intro" value={cosmeticPreviewText(active.introCard)} />}
+            {active?.profileMusic && <PersonalCard title="Profile music" value={cosmeticPreviewText(active.profileMusic)} />}
+            {active?.giftShelf && <PersonalCard title="Gift shelf" value={cosmeticPreviewText(active.giftShelf)} />}
+            {active?.reactionPack && <PersonalCard title="Reactions" value={cosmeticPreviewText(active.reactionPack)} />}
+            {active?.chatBubble && <PersonalCard title="Chat style" value={cosmeticPreviewText(active.chatBubble)} />}
+            {active?.roomEntry && <PersonalCard title="Room entry" value={cosmeticPreviewText(active.roomEntry)} />}
+          </View>
           <View style={styles.levelCard}>
             <View style={styles.levelHeader}>
               <View style={styles.levelTitleRow}>
@@ -165,6 +192,7 @@ export default function Profile() {
               <Text style={styles.walletText}>Wallet shortcut</Text>
             </Pressable>
           )}
+          </LinearGradient>
         </Section>
         <Section>
           <Text style={styles.sectionTitle}>Hosted rooms</Text>
@@ -192,16 +220,39 @@ function Stat({ label, value }: { label: string; value: number }) {
   return <View style={styles.stat}><Text style={styles.statValue}>{value}</Text><Text style={styles.statLabel}>{label}</Text></View>;
 }
 
+function IdentityPill({ label, tone }: { label?: string; tone: "gold" | "pink" | "cyan" }) {
+  if (!label) return null;
+  const backgroundColor = tone === "pink" ? colors.pink : tone === "cyan" ? colors.cyan : colors.gold;
+  return <View style={[styles.identityPill, { backgroundColor }]}><Text style={styles.identityPillText}>{label}</Text></View>;
+}
+
+function PersonalCard({ title, value }: { title: string; value?: string }) {
+  if (!value) return null;
+  return (
+    <View style={styles.personalCard}>
+      <Text style={styles.personalTitle}>{title}</Text>
+      <Text style={styles.personalValue}>{value}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10 },
-  avatar: { width: 92, height: 92, borderRadius: 8, backgroundColor: colors.panelStrong, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.line },
-  avatarText: { color: colors.gold, fontSize: 42, fontWeight: "900" },
+  themePanel: { borderRadius: 8, borderWidth: 1, borderColor: colors.line, padding: 14 },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 18, flexWrap: "wrap" },
   name: { color: colors.text, fontSize: 30, fontWeight: "900" },
+  namePlate: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
+  styledName: { color: colors.ink, fontSize: 28, fontWeight: "900" },
   vipBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.gold, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
   vipBadgeText: { color: colors.ink, fontSize: 11, fontWeight: "900" },
+  identityRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
+  identityPill: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  identityPillText: { color: colors.ink, fontSize: 11, fontWeight: "900" },
   username: { color: colors.gold, fontWeight: "800", marginTop: 2 },
-  cosmeticsText: { color: colors.pink, fontSize: 12, fontWeight: "800", marginTop: 8 },
+  personalGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
+  personalCard: { width: "48%", minWidth: 130, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, padding: 10 },
+  personalTitle: { color: colors.muted, fontSize: 10, fontWeight: "800", textTransform: "uppercase" },
+  personalValue: { color: colors.text, fontSize: 12, fontWeight: "900", marginTop: 3 },
   levelCard: { marginTop: 14, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, padding: 12 },
   levelHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
   levelTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },

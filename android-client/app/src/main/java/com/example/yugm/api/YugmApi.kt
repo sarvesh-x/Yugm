@@ -7,13 +7,26 @@ import android.util.Log
 import androidx.compose.ui.graphics.Color
 import com.example.yugm.BuildConfig
 import com.example.yugm.model.ChatMessage
+import com.example.yugm.model.ActiveCosmetics
+import com.example.yugm.model.CoinPack
+import com.example.yugm.model.Conversation
+import com.example.yugm.model.CosmeticCatalog
+import com.example.yugm.model.DailyCheckInResult
+import com.example.yugm.model.DirectMessage
 import com.example.yugm.model.GiftItem
 import com.example.yugm.model.Host
+import com.example.yugm.model.LevelStatus
 import com.example.yugm.model.MediaSession
 import com.example.yugm.model.NotificationItem
+import com.example.yugm.model.ProfileCosmetic
+import com.example.yugm.model.RelationshipStatus
 import com.example.yugm.model.Room
 import com.example.yugm.model.RoomType
 import com.example.yugm.model.Session
+import com.example.yugm.model.VipPlan
+import com.example.yugm.model.VipStatus
+import com.example.yugm.model.WalletOverview
+import com.example.yugm.model.WalletProgressResult
 import com.example.yugm.model.YugmUser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -51,6 +64,8 @@ object YugmApi {
         if (configuredBase.isNotBlank()) add(configuredBase)
         if (BuildConfig.DEBUG) {
             add("http://10.0.2.2:4000/api")
+            add("http://10.0.3.2:4000/api")
+            if (BuildConfig.LAN_API_BASE_URL.isNotBlank()) add(BuildConfig.LAN_API_BASE_URL.trim().trimEnd('/'))
             add("http://127.0.0.1:4000/api")
         }
     }.distinct()
@@ -143,6 +158,38 @@ object YugmApi {
         return get("/wallet", token).getJSONObject("data").optInt("balance", 0)
     }
 
+    suspend fun walletOverview(token: String): WalletOverview {
+        return get("/wallet", token).getJSONObject("data").toWalletOverview()
+    }
+
+    suspend fun coinPacks(token: String): List<CoinPack> {
+        val data = get("/wallet/packs", token).getJSONObject("data").optJSONArray("packs") ?: JSONArray()
+        return data.toCoinPacks()
+    }
+
+    suspend fun vipPlans(token: String): Pair<List<VipPlan>, VipStatus> {
+        val data = get("/wallet/vip/plans", token).getJSONObject("data")
+        return Pair(data.optJSONArray("plans")?.toVipPlans() ?: emptyList(), data.optJSONObject("vip")?.toVipStatus() ?: VipStatus())
+    }
+
+    suspend fun activateVip(token: String, planId: String): WalletProgressResult {
+        val data = post("/wallet/vip/activate", token, JSONObject().put("planId", planId)).getJSONObject("data")
+        return WalletProgressResult(
+            balance = data.optInt("balance", 0),
+            vip = data.optJSONObject("vip")?.toVipStatus() ?: VipStatus(),
+            level = data.optJSONObject("level")?.toLevelStatus() ?: LevelStatus()
+        )
+    }
+
+    suspend fun createRazorpayOrder(token: String, packId: String): String {
+        val data = post(
+            "/wallet/purchases/razorpay/order",
+            token,
+            JSONObject().put("packId", packId).put("provider", "RAZORPAY")
+        ).getJSONObject("data")
+        return data.optJSONObject("order")?.optString("id").orEmpty()
+    }
+
     suspend fun gifts(token: String): List<GiftItem> {
         val data = get("/gifts", token).getJSONObject("data").getJSONArray("gifts")
         return buildList {
@@ -153,6 +200,25 @@ object YugmApi {
                 if (gid.isNotBlank()) add(GiftItem(gid, gname, item.optInt("coinPrice")))
             }
         }
+    }
+
+    suspend fun cosmetics(token: String): CosmeticCatalog {
+        val data = get("/wallet/cosmetics", token).getJSONObject("data")
+        return data.toCosmeticCatalog()
+    }
+
+    suspend fun purchaseCosmetic(token: String, cosmeticId: String): CosmeticCatalog {
+        val data = post("/wallet/cosmetics/purchase", token, JSONObject().put("cosmeticId", cosmeticId)).getJSONObject("data")
+        return data.toCosmeticCatalog()
+    }
+
+    suspend fun equipCosmetic(token: String, cosmeticId: String, type: String): CosmeticCatalog {
+        val data = post(
+            "/wallet/cosmetics/equip",
+            token,
+            JSONObject().put("cosmeticId", cosmeticId).put("type", type)
+        ).getJSONObject("data")
+        return data.toCosmeticCatalog()
     }
 
     suspend fun sendGift(token: String, roomId: String, gift: GiftItem, receiverId: String) {
@@ -192,8 +258,8 @@ object YugmApi {
         return data.getJSONArray("rooms").toRooms()
     }
 
-    suspend fun searchUsers(query: String): List<Host> {
-        val data = get("/users/search?q=$query", auth = null).getJSONObject("data")
+    suspend fun searchUsers(query: String, token: String? = null): List<Host> {
+        val data = get("/users/search?q=$query", auth = token).getJSONObject("data")
         return data.getJSONArray("users").toHosts()
     }
 
@@ -226,6 +292,47 @@ object YugmApi {
 
     suspend fun reportUser(token: String, roomId: String, targetUserId: String, reason: String) {
         post("/rooms/$roomId/report", token, JSONObject().put("targetUserId", targetUserId).put("reason", reason).put("roomId", roomId))
+    }
+
+    suspend fun level(token: String): LevelStatus {
+        return get("/users/me/level", token).getJSONObject("data").getJSONObject("level").toLevelStatus()
+    }
+
+    suspend fun checkIn(token: String): DailyCheckInResult {
+        val data = post("/users/me/check-in", token, JSONObject()).getJSONObject("data")
+        return DailyCheckInResult(
+            alreadyClaimed = data.optBoolean("alreadyClaimed", false),
+            xpAwarded = data.optInt("xpAwarded", 0),
+            levelUpReward = data.optInt("levelUpReward", 0),
+            level = data.optJSONObject("level")?.toLevelStatus() ?: LevelStatus(),
+            balance = data.optInt("walletBalance", data.optInt("balance", 0))
+        )
+    }
+
+    suspend fun conversation(token: String, userId: String): Conversation {
+        val data = get("/users/messages/$userId", token).getJSONObject("data")
+        return Conversation(
+            messages = data.optJSONArray("messages")?.toDirectMessages() ?: emptyList(),
+            relationship = data.optJSONObject("relationship")?.toRelationshipStatus()
+        )
+    }
+
+    suspend fun sendDirectMessage(token: String, userId: String, message: String): Conversation {
+        val data = post("/users/messages/$userId", token, JSONObject().put("message", message)).getJSONObject("data")
+        val direct = data.optJSONObject("message")?.toDirectMessage()
+        return Conversation(
+            messages = if (direct != null) listOf(direct) else emptyList(),
+            relationship = data.optJSONObject("relationship")?.toRelationshipStatus()
+        )
+    }
+
+    suspend fun sendDirectGift(token: String, giftId: String, receiverId: String): Conversation {
+        val data = post("/direct-send-gift", token, JSONObject().put("giftId", giftId).put("receiverId", receiverId)).getJSONObject("data")
+        val direct = data.optJSONObject("message")?.toDirectMessage()
+        return Conversation(
+            messages = if (direct != null) listOf(direct) else emptyList(),
+            relationship = data.optJSONObject("relationship")?.toRelationshipStatus()
+        )
     }
 
     suspend fun blockUser(userId: String, token: String) {
@@ -320,9 +427,11 @@ fun JSONObject.toUser(): YugmUser = YugmUser(
     walletBalance = optInt("walletBalance", 0),
     isVip = optBoolean("isVip", false),
     vipTier = optString("vipTier", ""),
-    level = optInt("level", optJSONObject("levelStatus")?.optInt("level", 1) ?: 1),
-    levelTitle = optString("levelTitle", optJSONObject("levelStatus")?.optString("title", "New Vibe") ?: "New Vibe"),
-    xp = optInt("xp", optJSONObject("levelStatus")?.optInt("xp", 0) ?: 0)
+    level = optJSONObject("levelStatus")?.optInt("level", optInt("level", 1)) ?: optInt("level", 1),
+    levelTitle = optJSONObject("levelStatus")?.optString("title", optString("levelTitle", "New Vibe")) ?: optString("levelTitle", "New Vibe"),
+    xp = optJSONObject("levelStatus")?.optInt("xp", optInt("xp", 0)) ?: optInt("xp", 0),
+    levelStatus = optJSONObject("levelStatus")?.toLevelStatus() ?: LevelStatus(level = optInt("level", 1), title = optString("levelTitle", "New Vibe"), xp = optInt("xp", 0)),
+    activeCosmetics = optJSONObject("activeCosmetics")?.toActiveCosmetics() ?: ActiveCosmetics()
 )
 
 fun JSONObject.toHost(): Host = Host(
@@ -337,10 +446,152 @@ fun JSONObject.toHost(): Host = Host(
     avatar = if (has("avatar") && !isNull("avatar")) optString("avatar", "") else null,
     isVip = optBoolean("isVip", false),
     vipTier = optString("vipTier", ""),
-    level = optInt("level", optJSONObject("levelStatus")?.optInt("level", 1) ?: 1),
-    levelTitle = optString("levelTitle", optJSONObject("levelStatus")?.optString("title", "New Vibe") ?: "New Vibe"),
-    xp = optInt("xp", optJSONObject("levelStatus")?.optInt("xp", 0) ?: 0)
+    level = optJSONObject("levelStatus")?.optInt("level", optInt("level", 1)) ?: optInt("level", 1),
+    levelTitle = optJSONObject("levelStatus")?.optString("title", optString("levelTitle", "New Vibe")) ?: optString("levelTitle", "New Vibe"),
+    xp = optJSONObject("levelStatus")?.optInt("xp", optInt("xp", 0)) ?: optInt("xp", 0),
+    levelStatus = optJSONObject("levelStatus")?.toLevelStatus() ?: LevelStatus(level = optInt("level", 1), title = optString("levelTitle", "New Vibe"), xp = optInt("xp", 0)),
+    activeCosmetics = optJSONObject("activeCosmetics")?.toActiveCosmetics() ?: ActiveCosmetics(),
+    isFollowing = optBoolean("isFollowing", false)
 )
+
+fun JSONObject.toLevelStatus(): LevelStatus = LevelStatus(
+    level = optInt("level", 1),
+    title = optString("title", optString("levelTitle", "New Vibe")),
+    xp = optInt("xp", 0),
+    progress = optDouble("progress", 0.0).toFloat().coerceIn(0f, 1f),
+    progressXp = optInt("progressXp", 0),
+    requiredXp = optInt("requiredXp", 0),
+    nextLevel = if (has("nextLevel") && !isNull("nextLevel")) optInt("nextLevel") else null,
+    canDailyCheckIn = optBoolean("canDailyCheckIn", false),
+    dailyCheckInXp = optInt("dailyCheckInXp", 25)
+)
+
+fun JSONObject.toVipStatus(): VipStatus = VipStatus(
+    isVip = optBoolean("isVip", false),
+    vipTier = optString("vipTier", ""),
+    vipStartedAt = optString("vipStartedAt", ""),
+    vipExpiresAt = optString("vipExpiresAt", "")
+)
+
+fun JSONObject.toActiveCosmetics(): ActiveCosmetics = ActiveCosmetics(
+    avatarAsset = optString("avatarAsset", ""),
+    avatarFrame = optString("avatarFrame", ""),
+    speakingWave = optString("speakingWave", ""),
+    profileTheme = optString("profileTheme", ""),
+    entranceEffect = optString("entranceEffect", ""),
+    profileBadge = optString("profileBadge", ""),
+    nameStyle = optString("nameStyle", ""),
+    roomEntry = optString("roomEntry", ""),
+    moodStatus = optString("moodStatus", ""),
+    profileMusic = optString("profileMusic", ""),
+    voiceBadge = optString("voiceBadge", ""),
+    roomTheme = optString("roomTheme", ""),
+    avatarDecoration = optString("avatarDecoration", ""),
+    reactionPack = optString("reactionPack", ""),
+    profileLayout = optString("profileLayout", ""),
+    introCard = optString("introCard", ""),
+    collectibleTitle = optString("collectibleTitle", ""),
+    giftShelf = optString("giftShelf", ""),
+    chatBubble = optString("chatBubble", ""),
+    seasonalEvent = optString("seasonalEvent", "")
+)
+
+fun JSONObject.toCosmeticCatalog(): CosmeticCatalog {
+    val cosmeticArray = optJSONArray("cosmetics") ?: JSONArray()
+    val ownedArray = optJSONArray("ownedCosmeticIds") ?: JSONArray()
+    return CosmeticCatalog(
+        cosmetics = buildList {
+            for (index in 0 until cosmeticArray.length()) {
+                val item = cosmeticArray.getJSONObject(index)
+                add(ProfileCosmetic(
+                    id = item.optString("id", ""),
+                    type = item.optString("type", ""),
+                    name = item.optString("name", "Cosmetic"),
+                    coinPrice = item.optInt("coinPrice", 0),
+                    rarity = item.optString("rarity", "COMMON")
+                ))
+            }
+        },
+        ownedCosmeticIds = buildList {
+            for (index in 0 until ownedArray.length()) add(ownedArray.optString(index))
+        },
+        activeCosmetics = optJSONObject("activeCosmetics")?.toActiveCosmetics() ?: ActiveCosmetics()
+    )
+}
+
+fun JSONObject.toWalletOverview(): WalletOverview {
+    val cosmeticsJson = optJSONObject("cosmetics") ?: JSONObject()
+    return WalletOverview(
+        balance = optInt("balance", 0),
+        vip = optJSONObject("vip")?.toVipStatus() ?: VipStatus(),
+        level = optJSONObject("level")?.toLevelStatus() ?: LevelStatus(),
+        cosmetics = CosmeticCatalog(
+            ownedCosmeticIds = buildList {
+                val owned = cosmeticsJson.optJSONArray("ownedCosmeticIds") ?: JSONArray()
+                for (index in 0 until owned.length()) add(owned.optString(index))
+            },
+            activeCosmetics = cosmeticsJson.optJSONObject("activeCosmetics")?.toActiveCosmetics() ?: ActiveCosmetics()
+        )
+    )
+}
+
+fun JSONArray.toVipPlans(): List<VipPlan> = buildList {
+    for (index in 0 until length()) {
+        val item = getJSONObject(index)
+        val benefits = item.optJSONArray("benefits") ?: JSONArray()
+        add(VipPlan(
+            id = item.optString("id", ""),
+            name = item.optString("name", "VIP"),
+            durationDays = item.optInt("durationDays", 0),
+            coinPrice = item.optInt("coinPrice", 0),
+            benefits = buildList {
+                for (benefitIndex in 0 until benefits.length()) add(benefits.optString(benefitIndex))
+            }
+        ))
+    }
+}
+
+fun JSONArray.toCoinPacks(): List<CoinPack> = buildList {
+    for (index in 0 until length()) {
+        val item = getJSONObject(index)
+        add(CoinPack(
+            id = item.optString("id", ""),
+            coinAmount = item.optInt("coinAmount", 0),
+            priceInr = item.optInt("priceInr", 0),
+            googleProductId = item.optString("googleProductId", "")
+        ))
+    }
+}
+
+fun JSONObject.toRelationshipStatus(): RelationshipStatus = RelationshipStatus(
+    level = optInt("level", 1),
+    title = optString("title", "First Spark"),
+    xp = optInt("xp", 0),
+    progress = optDouble("progress", 0.0).toFloat().coerceIn(0f, 1f),
+    progressXp = optInt("progressXp", 0),
+    requiredXp = optInt("requiredXp", 0),
+    nextLevel = if (has("nextLevel") && !isNull("nextLevel")) optInt("nextLevel") else null,
+    nextPerk = optString("nextPerk", ""),
+    streakDays = optInt("streakDays", 0)
+)
+
+fun JSONObject.entityId(): String = when {
+    has("_id") -> optString("_id", "")
+    has("id") -> optString("id", "")
+    else -> ""
+}
+
+fun JSONObject.toDirectMessage(): DirectMessage = DirectMessage(
+    id = optString("_id", optString("id", "")),
+    senderId = optJSONObject("senderId")?.entityId() ?: optString("senderId", ""),
+    receiverId = optJSONObject("receiverId")?.entityId() ?: optString("receiverId", ""),
+    message = optString("message", ""),
+    createdAt = optString("createdAt", "")
+)
+
+fun JSONArray.toDirectMessages(): List<DirectMessage> = buildList {
+    for (index in 0 until length()) add(getJSONObject(index).toDirectMessage())
+}
 
 fun JSONObject.toRoom(): Room {
     val hostJson = optJSONObject("hostId")
@@ -391,7 +642,7 @@ fun JSONArray.toWalletTransactions(): List<com.example.yugm.model.WalletTransact
         add(com.example.yugm.model.WalletTransaction(
             type = item.optString("type", ""),
             amount = item.optInt("amount", 0),
-            description = item.optString("description", ""),
+            description = item.optString("label", item.optString("description", item.optString("source", ""))),
             balanceAfter = item.optInt("balanceAfter", 0),
             createdAt = item.optString("createdAt", "")
         ))

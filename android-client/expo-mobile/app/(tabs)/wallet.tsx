@@ -5,7 +5,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { CreditCard, Crown, Gift, Plus, ShoppingBag, Coins, Sparkles, TrendingUp } from "lucide-react-native";
 import { Screen, Section } from "@/components/Screen";
+import { CosmeticAvatar } from "@/components/CosmeticAvatar";
 import { walletApi } from "@/lib/api";
+import { cosmeticSlot, cosmeticTypeLabel } from "@/lib/cosmetics";
 import { openRazorpayCheckout, startGooglePlayPurchase } from "@/lib/payments";
 import { useAuthStore } from "@/store/auth";
 import { colors, gradients } from "@/theme/colors";
@@ -220,7 +222,7 @@ export default function WalletScreen() {
             <Text style={styles.sectionTitle}>Profile Cosmetics</Text>
             <Sparkles color={colors.pink} size={18} />
           </View>
-          <Text style={styles.sectionSubtitle}>Buy avatar frames, profile themes, and entrance effects with coins.</Text>
+          <Text style={styles.sectionSubtitle}>Buy avatars, animated GIF looks, frames, speaking waves, profile themes, and entry effects with coins.</Text>
 
           {cosmetics.isLoading ? (
             <ActivityIndicator color={colors.gold} size="small" />
@@ -228,13 +230,24 @@ export default function WalletScreen() {
             <View style={styles.cosmeticGrid}>
               {(cosmetics.data?.cosmetics ?? []).map((item: any) => {
                 const owned = cosmetics.data?.ownedCosmeticIds?.includes(item.id);
-                const key = item.type === "AVATAR_FRAME" ? "avatarFrame" : item.type === "PROFILE_THEME" ? "profileTheme" : "entranceEffect";
+                const key = cosmeticSlot(item.type);
                 const active = cosmetics.data?.activeCosmetics?.[key] === item.id;
+                const previewCosmetics = { ...cosmetics.data?.activeCosmetics, [key]: item.id };
                 return (
                   <View key={item.id} style={styles.cosmeticCard}>
+                    <View style={styles.cosmeticPreview}>
+                      <CosmeticAvatar
+                        name={currentUser?.name}
+                        imageUrl={currentUser?.avatar}
+                        cosmetics={previewCosmetics}
+                        size={58}
+                        isSpeaking={item.type === "SPEAKING_WAVE"}
+                        showEntry={item.type === "ENTRANCE_EFFECT"}
+                      />
+                    </View>
                     <Text style={styles.cosmeticRarity}>{item.rarity}</Text>
                     <Text style={styles.cosmeticName}>{item.name}</Text>
-                    <Text style={styles.cosmeticType}>{item.type.replace("_", " ")}</Text>
+                    <Text style={styles.cosmeticType}>{cosmeticTypeLabel(item.type)}</Text>
                     <Text style={styles.cosmeticPrice}>{item.coinPrice} coins</Text>
                     <Pressable
                       style={[styles.cosmeticBtn, active && styles.cosmeticBtnActive, (purchaseCosmetic.isPending || equipCosmetic.isPending) && styles.vipBtnDisabled]}
@@ -428,6 +441,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,62,147,0.25)",
     padding: 14
   },
+  cosmeticPreview: { alignItems: "center", minHeight: 76, justifyContent: "center", marginBottom: 8 },
   cosmeticRarity: { color: colors.gold, fontSize: 10, fontWeight: "900" },
   cosmeticName: { color: colors.text, fontSize: 15, fontWeight: "900", marginTop: 6 },
   cosmeticType: { color: colors.muted, fontSize: 10, fontWeight: "800", marginTop: 4 },

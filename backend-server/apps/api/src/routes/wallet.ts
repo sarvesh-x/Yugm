@@ -40,6 +40,15 @@ function findCoinPack(packId: string) {
   return pack;
 }
 
+async function runWalletSideEffect<T>(label: string, task: () => Promise<T>) {
+  try {
+    return await task();
+  } catch (error) {
+    console.warn(`Wallet side effect failed (${label}, non-fatal):`, error instanceof Error ? error.message : String(error));
+    return undefined;
+  }
+}
+
 async function creditPurchase(purchaseId: string, userId: string, metadata: Record<string, unknown>) {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -151,7 +160,7 @@ walletRouter.post("/wallet/cosmetics/purchase", validateBody(purchaseProfileCosm
     await User.findByIdAndUpdate(req.user!.id, update, { session });
     await session.commitTransaction();
     session.endSession();
-    const level = await grantXp(req.user!.id, "COSMETIC_PURCHASE", { cosmeticId: cosmetic.id });
+    const level = await runWalletSideEffect("cosmetic purchase XP", () => grantXp(req.user!.id, "COSMETIC_PURCHASE", { cosmeticId: cosmetic.id }));
     const user = await User.findById(req.user!.id).select("walletBalance ownedCosmeticIds activeCosmetics xp level levelTitle lastDailyCheckInAt").lean();
     sendOk(res, { cosmetic, balance: user?.walletBalance ?? 0, ownedCosmeticIds: user?.ownedCosmeticIds ?? [], activeCosmetics: user?.activeCosmetics ?? {}, level: level?.level ?? getLevelStatus(user) }, 201);
   } catch (err) {
@@ -200,7 +209,7 @@ walletRouter.post("/wallet/vip/activate", validateBody(purchaseVipSchema), async
     await session.commitTransaction();
     session.endSession();
 
-    const level = await grantXp(user.id, "VIP_PURCHASE", { planId: plan.id });
+    const level = await runWalletSideEffect("VIP purchase XP", () => grantXp(user.id, "VIP_PURCHASE", { planId: plan.id }));
     const fresh = await User.findById(user.id).select("walletBalance vipTier vipStartedAt vipExpiresAt xp level levelTitle lastDailyCheckInAt").lean();
     sendOk(res, { balance: fresh?.walletBalance ?? 0, vip: getVipStatus(fresh), level: level?.level ?? getLevelStatus(fresh), plan });
   } catch (err) {
@@ -353,20 +362,20 @@ walletRouter.post("/rooms/:id/send-gift", validateBody(sendGiftSchema), asyncHan
     }], { session });
     await session.commitTransaction();
     session.endSession();
-    await grantXp(req.user!.id, "GIFT_SENT", { roomId: room._id.toString(), giftId: gift._id.toString() });
-    await grantXp(req.body.receiverId, "GIFT_RECEIVED", { roomId: room._id.toString(), giftId: gift._id.toString() });
-    await grantRelationshipXp(req.user!.id, req.body.receiverId, "GIFT_SENT", { roomId: room._id.toString(), giftId: gift._id.toString() });
-    await createNotification(req.body.receiverId, "GIFT", "Gift Received", `${req.user!.name} sent you a ${gift.name}!`, { roomId: room._id.toString(), giftId: gift._id.toString() });
+    await runWalletSideEffect("sender gift XP", () => grantXp(req.user!.id, "GIFT_SENT", { roomId: room._id.toString(), giftId: gift._id.toString() }));
+    await runWalletSideEffect("receiver gift XP", () => grantXp(req.body.receiverId, "GIFT_RECEIVED", { roomId: room._id.toString(), giftId: gift._id.toString() }));
+    await runWalletSideEffect("gift relationship XP", () => grantRelationshipXp(req.user!.id, req.body.receiverId, "GIFT_SENT", { roomId: room._id.toString(), giftId: gift._id.toString() }));
+    await runWalletSideEffect("gift notification", () => createNotification(req.body.receiverId, "GIFT", "Gift Received", `${req.user!.name} sent you a ${gift.name}!`, { roomId: room._id.toString(), giftId: gift._id.toString() }));
     // NOTE: emitRoom is called after the socket room join for consistent ordering
     emitRoom(room._id.toString(), socketEvents.roomGiftSend, { giftTransaction: giftTransaction[0], gift });
-    const activity = await RoomActivity.create({
+    const activity = await runWalletSideEffect("gift activity", () => RoomActivity.create({
       roomId: room._id,
       userId: req.user!.id,
       type: "GIFT",
       label: `${req.user!.name} sent ${gift.name}`,
       metadata: { giftId: gift._id.toString(), receiverId: req.body.receiverId, coinPrice: gift.coinPrice }
-    });
-    emitRoom(room._id.toString(), socketEvents.roomActivityNew, { activity });
+    }));
+    if (activity) emitRoom(room._id.toString(), socketEvents.roomActivityNew, { activity });
     sendOk(res, { giftTransaction: giftTransaction[0] }, 201);
   } catch (err) {
     await session.abortTransaction();
@@ -400,18 +409,18 @@ walletRouter.post("/direct-send-gift", asyncHandler(async (req: AuthRequest, res
     }], { session });
     await session.commitTransaction();
     session.endSession();
-    await grantXp(req.user!.id, "GIFT_SENT", { giftId: gift._id.toString(), direct: true });
-    await grantXp(receiverId, "GIFT_RECEIVED", { giftId: gift._id.toString(), direct: true });
-    const relationship = await grantRelationshipXp(req.user!.id, receiverId, "GIFT_SENT", { giftId: gift._id.toString(), direct: true });
+    await runWalletSideEffect("direct sender gift XP", () => grantXp(req.user!.id, "GIFT_SENT", { giftId: gift._id.toString(), direct: true }));
+    await runWalletSideEffect("direct receiver gift XP", () => grantXp(receiverId, "GIFT_RECEIVED", { giftId: gift._id.toString(), direct: true }));
+    const relationship = await runWalletSideEffect("direct gift relationship XP", () => grantRelationshipXp(req.user!.id, receiverId, "GIFT_SENT", { giftId: gift._id.toString(), direct: true }));
 
     // Create a direct message indicating the gift was sent
-    const message = await DirectMessage.create({
+    const message = await runWalletSideEffect("direct gift message", () => DirectMessage.create({
       senderId: req.user!.id,
       receiverId,
       message: `🎁 Sent you a ${gift.name}!`
-    });
+    }));
 
-    await createNotification(receiverId, "GIFT", "Gift Received", `${req.user!.name} sent you a ${gift.name}!`, { partnerId: req.user!.id });
+    await runWalletSideEffect("direct gift notification", () => createNotification(receiverId, "GIFT", "Gift Received", `${req.user!.name} sent you a ${gift.name}!`, { partnerId: req.user!.id }));
     sendOk(res, { giftTransaction: giftTransaction[0], message, relationship: relationship?.relationship }, 201);
   } catch (err) {
     await session.abortTransaction();

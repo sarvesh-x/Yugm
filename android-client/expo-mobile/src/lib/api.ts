@@ -153,7 +153,9 @@ export const usersApi = {
   unfollow: (userId: string) => api<{ following: boolean }>(`/users/${userId}/follow`, { method: "DELETE" }),
   block: (userId: string) => api<{ blocked: boolean }>(`/users/${userId}/block`, { method: "POST" }),
   unblock: (userId: string) => api<{ blocked: boolean }>(`/users/${userId}/block`, { method: "DELETE" }),
-  getBlocked: () => api<{ users: any[] }>("/users/me/blocked")
+  getBlocked: () => api<{ users: any[] }>("/users/me/blocked"),
+  report: (targetUserId: string, reason: string) =>
+    api<{ report: any }>("/reports", { method: "POST", body: JSON.stringify({ targetUserId, reason }) })
 };
 
 export const datingApi = {

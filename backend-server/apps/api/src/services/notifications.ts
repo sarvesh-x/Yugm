@@ -2,6 +2,14 @@ import { Notification, INotification } from "../models/Notification.js";
 import { DeviceToken } from "../models/DeviceToken.js";
 import { notifyUser } from "./firebase.js";
 
+function stringifyNotificationData(data: Record<string, unknown> = {}) {
+  return Object.fromEntries(
+    Object.entries(data)
+      .filter((entry): entry is [string, NonNullable<unknown>] => entry[1] !== undefined && entry[1] !== null)
+      .map(([key, value]) => [key, String(value)])
+  );
+}
+
 export async function createNotification(
   userId: string,
   type: INotification["type"],
@@ -12,7 +20,11 @@ export async function createNotification(
   const notification = await Notification.create({ userId, type, title, body, data });
   const tokens = await DeviceToken.find({ userId }).lean();
   if (tokens.length > 0) {
-    await notifyUser(userId, title, body, { ...data as Record<string, string>, notificationId: notification.id });
+    try {
+      await notifyUser(userId, title, body, { ...stringifyNotificationData(data), notificationId: notification.id });
+    } catch (error) {
+      console.warn("Push notification failed (non-fatal):", error instanceof Error ? error.message : String(error));
+    }
   }
   return notification;
 }

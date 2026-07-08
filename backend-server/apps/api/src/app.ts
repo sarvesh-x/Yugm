@@ -5,6 +5,7 @@ import helmet from "helmet";
 import mongoose from "mongoose";
 import path from "path";
 import { env } from "./config/env.js";
+import { adminRouter } from "./routes/admin.js";
 import { authRouter } from "./routes/auth.js";
 import { datingRouter } from "./routes/dating.js";
 import { livekitRouter } from "./routes/livekit.js";
@@ -61,6 +62,7 @@ export function createApp() {
   };
   app.get("/health", healthHandler);
   app.get("/api/health", healthHandler);
+  app.use("/api/admin", adminRouter);
   app.use("/api/auth", authRouter);
   app.use("/api/dating", datingRouter);
   app.use("/api/users", usersRouter);
@@ -77,6 +79,10 @@ export function createApp() {
     const message = error instanceof Error ? error.message : "Unexpected server error";
     const code = error instanceof HttpError && error.code ? error.code : ErrorCode.INTERNAL;
     console.error(`[${(req as any).requestId}] ${message}`);
+    if (req.originalUrl.startsWith("/api/admin")) {
+      res.status(status).json({ success: false, error: { message, code, requestId: (req as any).requestId } });
+      return;
+    }
     res.status(status).json({ ok: false, error: { message, code, requestId: (req as any).requestId } });
   });
 

@@ -11,8 +11,17 @@ object YugmSocket {
         disconnect()
         try {
             val serverUrl = BuildConfig.SOCKET_BASE_URL.trim().trimEnd('/')
-            if (serverUrl.isBlank()) throw IllegalStateException("SOCKET_BASE_URL is not configured for this build")
-            socket = io.socket.client.IO.socket(serverUrl, io.socket.client.IO.Options().apply {
+            val candidates = buildList {
+                if (serverUrl.isNotBlank()) add(serverUrl)
+                if (BuildConfig.DEBUG) {
+                    add("http://10.0.2.2:4000")
+                    add("http://10.0.3.2:4000")
+                    if (BuildConfig.LAN_SOCKET_BASE_URL.isNotBlank()) add(BuildConfig.LAN_SOCKET_BASE_URL.trim().trimEnd('/'))
+                    add("http://127.0.0.1:4000")
+                }
+            }.distinct()
+            val targetUrl = candidates.firstOrNull() ?: throw IllegalStateException("SOCKET_BASE_URL is not configured for this build")
+            socket = io.socket.client.IO.socket(targetUrl, io.socket.client.IO.Options().apply {
                 this.auth = mapOf("token" to token)
                 transports = arrayOf("websocket")
             })

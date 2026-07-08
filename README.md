@@ -37,6 +37,45 @@ CORS_ORIGIN=http://localhost:8081
 
 Redis is optional for the MVP; the API uses in-memory presence if `REDIS_URL` is empty.
 
+### Admin And Moderation Backend
+
+The backend exposes a secure admin system under `/api/admin/*` for internal staff operations: dashboard stats, user moderation, report review, live room controls, wallet/payment review, gifts, notifications, support, analytics, app config, fraud review, and audit logs.
+
+Admin auth is separate from normal app users and supports Firebase ID token admin login or backend email/password admin login. Seed the first super admin with:
+
+```bash
+cd backend-server
+npm run seed:admin
+```
+
+The native admin UI lives in `backend-server/apps/admin`. Run it next to the API during local development:
+
+```bash
+cd backend-server
+npm run dev:api
+npm run dev:admin
+```
+
+Then open `http://127.0.0.1:5173` and sign in with a seeded admin account. The panel talks to `http://127.0.0.1:4000/api/admin` by default; override that with `VITE_ADMIN_API_URL` in `backend-server/apps/admin/.env` for hosted APIs.
+
+Set these env vars before seeding a real super admin:
+
+```env
+ADMIN_JWT_SECRET=
+ADMIN_REFRESH_SECRET=
+SEED_SUPER_ADMIN_EMAIL=
+SEED_SUPER_ADMIN_NAME=
+SEED_SUPER_ADMIN_FIREBASE_UID=
+SEED_SUPER_ADMIN_PASSWORD=
+```
+
+More details:
+
+- `docs/admin-system.md`
+- `docs/permissions.md`
+- `docs/moderation-workflow.md`
+- `docs/wallet-ledger.md`
+
 ### Database Options
 
 Yugm requires a real MongoDB database. Use Atlas for hosted development/production, or run MongoDB locally with Docker.
@@ -157,7 +196,7 @@ cd android-client
 
 ## MVP Notes
 
-- OTP is mocked with code `123456`, but auth routes are structured for a real provider.
+- Email OTP uses `DEV_BYPASS_OTP` only in development; Firebase Google/Phone auth is the production path.
 - Wallets are ledger-based. Coin movement is handled by the API, not the client.
 - Socket.IO handles room chat, gifts, reactions, moderation, and presence.
 - LiveKit is abstracted behind backend token generation and mobile media client modules so Agora/Twilio/Daily can be added later.

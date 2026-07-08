@@ -1,7 +1,15 @@
+import java.net.Inet4Address
+import java.net.NetworkInterface
+import java.util.Collections
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
-    alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.google.services)
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.gms.google-services")
+    id("com.google.dagger.hilt.android")
+    id("org.jetbrains.kotlin.kapt")
 }
 
 fun configValue(name: String): String? {
@@ -13,8 +21,20 @@ fun quoted(value: String): String {
     return "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
 }
 
+fun localLanIpv4(): String? {
+    return Collections.list(NetworkInterface.getNetworkInterfaces())
+        .filter { it.isUp && !it.isLoopback && !it.isVirtual }
+        .flatMap { Collections.list(it.inetAddresses) }
+        .filterIsInstance<Inet4Address>()
+        .map { it.hostAddress }
+        .firstOrNull { address: String ->
+            address.startsWith("192.168.") || address.startsWith("10.") || address.startsWith("172.")
+        }
+}
+
 val yugmApiBaseUrl = configValue("YUGM_API_BASE_URL")
 val yugmSocketBaseUrl = configValue("YUGM_SOCKET_BASE_URL")
+val localLanHost = localLanIpv4()
 val isReleaseTaskRequested = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
 
 if (isReleaseTaskRequested) {
@@ -50,6 +70,8 @@ android {
             val socketBaseUrl = yugmSocketBaseUrl ?: "http://10.0.2.2:4000"
             buildConfigField("String", "API_BASE_URL", quoted(apiBaseUrl))
             buildConfigField("String", "SOCKET_BASE_URL", quoted(socketBaseUrl))
+            buildConfigField("String", "LAN_API_BASE_URL", quoted(localLanHost?.let { "http://$it:4000/api" }.orEmpty()))
+            buildConfigField("String", "LAN_SOCKET_BASE_URL", quoted(localLanHost?.let { "http://$it:4000" }.orEmpty()))
         }
 
         release {
@@ -58,6 +80,8 @@ android {
             val socketBaseUrl = yugmSocketBaseUrl.orEmpty()
             buildConfigField("String", "API_BASE_URL", quoted(apiBaseUrl))
             buildConfigField("String", "SOCKET_BASE_URL", quoted(socketBaseUrl))
+            buildConfigField("String", "LAN_API_BASE_URL", quoted(""))
+            buildConfigField("String", "LAN_SOCKET_BASE_URL", quoted(""))
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -71,6 +95,12 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_11)
     }
 }
 
@@ -94,6 +124,10 @@ dependencies {
     implementation(libs.firebase.auth)
     implementation(libs.play.services.auth)
     implementation(libs.livekit.android)
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.hilt.android)
+    kapt(libs.hilt.compiler)
+    implementation(libs.androidx.hilt.navigation.compose)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
