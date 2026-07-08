@@ -38,8 +38,10 @@ export default function ChatRoom() {
   const [giftPanelOpen, setGiftPanelOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(false);
   const [reactingTo, setReactingTo] = useState<string | null>(null);
+  const [partnerTyping, setPartnerTyping] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Queries
   const { data: partnerData, isLoading: loadingPartner } = useQuery({
@@ -79,13 +81,20 @@ export default function ChatRoom() {
       if (payload?.userId === userId) setIsOnline(false);
     };
     const handleReaction = () => refetch();
+    const handleTyping = (payload: any) => {
+      if (payload?.userId !== userId) return;
+      setPartnerTyping(Boolean(payload.typing));
+    };
     socket.on("user:online", handleOnline);
     socket.on("user:offline", handleOffline);
     socket.on("direct:reaction:new", handleReaction);
+    socket.on("direct:typing:update", handleTyping);
     return () => {
       socket.off("user:online", handleOnline);
       socket.off("user:offline", handleOffline);
       socket.off("direct:reaction:new", handleReaction);
+      socket.off("direct:typing:update", handleTyping);
+      socket.emit("direct:typing:stop", { userId });
     };
   }, [userId, refetch]);
 
@@ -138,7 +147,16 @@ export default function ChatRoom() {
 
   const handleSend = () => {
     if (!message.trim()) return;
+    getSocket().emit("direct:typing:stop", { userId });
     sendMutation.mutate(message);
+  };
+
+  const handleMessageChange = (text: string) => {
+    setMessage(text);
+    const socket = getSocket();
+    if (text.trim()) socket.emit("direct:typing:start", { userId });
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = setTimeout(() => socket.emit("direct:typing:stop", { userId }), 1200);
   };
 
   const handleBlock = () => {
@@ -250,6 +268,11 @@ export default function ChatRoom() {
             </Text>
           </View>
         )}
+        {partnerTyping && (
+          <View style={styles.typingBanner}>
+            <Text style={styles.typingText}>{partner?.name ?? "They"} is typing...</Text>
+          </View>
+        )}
 
         {/* Message Thread */}
         {loadingMessages && messages.length === 0 ? (
@@ -263,43 +286,17 @@ export default function ChatRoom() {
             keyExtractor={(item) => item._id || item.id}
             contentContainerStyle={styles.messagesList}
             onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-            renderItem={({ item }) => {
-              return (
-                <MessageBubble
-                  item={item}
-                  currentUserId={currentUserId}
-                  reactingTo={reactingTo}
-                  setReactingTo={setReactingTo}
-                  onReact={(messageId, type) => reactMutation.mutate({ messageId, type })}
-                />
-              );
-              const isMe = item.senderId?._id === currentUserId || item.senderId?.id === currentUserId || item.senderId === currentUserId;
-              const isGift = item.message.startsWith("🎁");
-              return (
-                <View style={[styles.bubbleWrap, isMe ? styles.bubbleRight : styles.bubbleLeft]}>
-                  {isMe ? (
-                    <LinearGradient
-                      colors={isGift ? gradients.gold : gradients.fire}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.bubble}
-                    >
-                      <Text style={[styles.messageText, isGift && styles.giftText]}>{item.message}</Text>
-                    </LinearGradient>
-                  ) : (
-                    <View style={[styles.bubble, styles.bubblePartner, isGift && styles.bubbleGiftReceived]}>
-                      <Text style={[styles.messageText, isGift && styles.giftText]}>{item.message}</Text>
-                    </View>
-                  )}
-                  <Text style={styles.timeText}>
-                    {new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </Text>
-                </View>
-              );
-            }}
+            renderItem={({ item }) => (
+              <MessageBubble
+                item={item}
+                currentUserId={currentUserId}
+                reactingTo={reactingTo}
+                setReactingTo={setReactingTo}
+                onReact={(messageId, type) => reactMutation.mutate({ messageId, type })}
+              />
+            )}
           />
         )}
-
         {/* Input Composer */}
         <View style={styles.composer}>
           <Pressable style={styles.giftIconBtn} onPress={() => setGiftPanelOpen(true)}>
@@ -308,7 +305,7 @@ export default function ChatRoom() {
 
           <TextInput
             value={message}
-            onChangeText={setMessage}
+            onChangeText={handleMessageChange}
             placeholder={`Message ${partner?.name || "partner"}...`}
             placeholderTextColor={colors.muted}
             style={styles.input}
@@ -443,6 +440,8 @@ const styles = StyleSheet.create({
   relationshipFill: { height: "100%", borderRadius: 6, backgroundColor: colors.gold },
   relationshipMeta: { color: colors.muted, fontSize: 11, fontWeight: "700", marginTop: 5 },
   relationshipPerk: { color: colors.gold, fontSize: 11, fontWeight: "800", marginTop: 3 },
+  typingBanner: { paddingHorizontal: 16, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: colors.line, backgroundColor: "rgba(39,211,255,0.06)" },
+  typingText: { color: colors.cyan, fontSize: 12, fontWeight: "900" },
   messagesList: { padding: 16, gap: 12 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   bubbleWrap: { maxWidth: "80%", marginBottom: 4 },

@@ -1,11 +1,14 @@
 import { Router } from "express";
 import { z } from "zod";
 import { reactionSchema, socketEvents } from "@yugm/shared";
-import { requireAuth, type AuthRequest } from "../middleware/auth.js";
+import { requireAuth, requireNotMuted, type AuthRequest } from "../middleware/auth.js";
+import { chatLimiter, reportLimiter } from "../middleware/rateLimit.js";
 import { validateBody } from "../middleware/validate.js";
 import { Clan } from "../models/Clan.js";
 import { ClanMessage } from "../models/ClanMessage.js";
+import { Report } from "../models/Report.js";
 import { User } from "../models/User.js";
+import { createNotification } from "../services/notifications.js";
 import { emitUser } from "../services/socket.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId, sanitizeText } from "../utils/http.js";
 
@@ -20,6 +23,10 @@ const clanSchema = z.object({
   familyLabel: z.string().min(2).max(32).default("Family")
 });
 const clanMessageSchema = z.object({ message: z.string().min(1).max(600) });
+const clanMessageReportSchema = z.object({
+  reason: z.string().min(2).max(80),
+  description: z.string().max(500).optional()
+});
 
 function slugify(name: string) {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 42) || "clan";
@@ -58,7 +65,7 @@ async function uniqueSlug(name: string) {
 
 async function requireClanMember(clanId: string, userId: string) {
   if (!isValidObjectId(clanId)) throw new HttpError(400, "Invalid clan ID", ErrorCode.VALIDATION);
-  const clan = await Clan.findById(clanId).select("memberIds name").lean();
+  const clan = await Clan.findById(clanId).select("memberIds name ownerId").lean();
   if (!clan) throw new HttpError(404, "Clan not found", ErrorCode.NOT_FOUND);
   const members = (clan.memberIds ?? []).map((memberId: any) => memberId.toString());
   if (!members.includes(userId)) throw new HttpError(403, "Join this clan to chat", ErrorCode.FORBIDDEN);
@@ -98,7 +105,7 @@ clansRouter.get("/:id/messages", asyncHandler(async (req: AuthRequest, res) => {
   sendOk(res, { messages: messages.reverse() });
 }));
 
-clansRouter.post("/:id/messages", validateBody(clanMessageSchema), asyncHandler(async (req: AuthRequest, res) => {
+clansRouter.post("/:id/messages", requireNotMuted, chatLimiter, validateBody(clanMessageSchema), asyncHandler(async (req: AuthRequest, res) => {
   const { members } = await requireClanMember(req.params.id, req.user!.id);
   const created = await ClanMessage.create({
     clanId: req.params.id,
@@ -111,10 +118,14 @@ clansRouter.post("/:id/messages", validateBody(clanMessageSchema), asyncHandler(
   members.forEach((memberId) => {
     if (memberId !== req.user!.id) emitUser(memberId, socketEvents.clanMessageNew, { clanId: req.params.id, message });
   });
+  await Promise.all(members
+    .filter((memberId) => memberId !== req.user!.id)
+    .slice(0, 50)
+    .map((memberId) => createNotification(memberId, "MESSAGE", "New family message", `${req.user!.name}: ${message?.message ?? ""}`, { clanId: req.params.id, messageId: message?._id?.toString?.() })));
   sendOk(res, { message }, 201);
 }));
 
-clansRouter.post("/:id/messages/:messageId/reactions", validateBody(reactionSchema), asyncHandler(async (req: AuthRequest, res) => {
+clansRouter.post("/:id/messages/:messageId/reactions", chatLimiter, validateBody(reactionSchema), asyncHandler(async (req: AuthRequest, res) => {
   await requireClanMember(req.params.id, req.user!.id);
   if (!isValidObjectId(req.params.messageId)) throw new HttpError(400, "Invalid message ID", ErrorCode.VALIDATION);
   const message = await ClanMessage.findOne({ _id: req.params.messageId, clanId: req.params.id }).select("_id").lean();
@@ -127,7 +138,43 @@ clansRouter.post("/:id/messages/:messageId/reactions", validateBody(reactionSche
   )
     .populate("senderId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .lean();
+  const senderId = (updated?.senderId as any)?._id?.toString?.() ?? (updated?.senderId as any)?.toString?.();
+  if (senderId && senderId !== req.user!.id) {
+    await createNotification(senderId, "MESSAGE", "New family reaction", `${req.user!.name} reacted to your family message`, { clanId: req.params.id, messageId: req.params.messageId });
+  }
   sendOk(res, { message: updated });
+}));
+
+clansRouter.delete("/:id/messages/:messageId", asyncHandler(async (req: AuthRequest, res) => {
+  const { clan } = await requireClanMember(req.params.id, req.user!.id);
+  if (!isValidObjectId(req.params.messageId)) throw new HttpError(400, "Invalid message ID", ErrorCode.VALIDATION);
+  const message = await ClanMessage.findOne({ _id: req.params.messageId, clanId: req.params.id }).select("senderId").lean();
+  if (!message) throw new HttpError(404, "Message not found", ErrorCode.NOT_FOUND);
+  const isOwner = clan.ownerId?.toString?.() === req.user!.id;
+  if (message.senderId.toString() !== req.user!.id && !isOwner) throw new HttpError(403, "You can only delete your own messages", ErrorCode.FORBIDDEN);
+  await ClanMessage.deleteOne({ _id: req.params.messageId, clanId: req.params.id });
+  sendOk(res, { deleted: true });
+}));
+
+clansRouter.post("/:id/messages/:messageId/report", reportLimiter, validateBody(clanMessageReportSchema), asyncHandler(async (req: AuthRequest, res) => {
+  await requireClanMember(req.params.id, req.user!.id);
+  if (!isValidObjectId(req.params.messageId)) throw new HttpError(400, "Invalid message ID", ErrorCode.VALIDATION);
+  const message = await ClanMessage.findOne({ _id: req.params.messageId, clanId: req.params.id }).select("senderId message createdAt").lean();
+  if (!message) throw new HttpError(404, "Message not found", ErrorCode.NOT_FOUND);
+  const report = await Report.create({
+    reporterId: req.user!.id,
+    targetUserId: message.senderId,
+    reason: req.body.reason,
+    description: req.body.description,
+    evidence: {
+      clanId: req.params.id,
+      clanMessageId: req.params.messageId,
+      message: message.message,
+      createdAt: message.createdAt
+    },
+    riskScore: 10
+  });
+  sendOk(res, { report }, 201);
 }));
 
 clansRouter.post("/", validateBody(clanSchema), asyncHandler(async (req: AuthRequest, res) => {

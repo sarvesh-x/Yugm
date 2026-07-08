@@ -4,13 +4,14 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Crown, Image as ImageIcon, Settings, Sparkles, Star, Trash2, UserPlus, UserCheck, Wallet } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import * as ImagePicker from "expo-image-picker";
 import { GlassCard } from "@/components/GlassCard";
 import { CosmeticAvatar } from "@/components/CosmeticAvatar";
 import { LoadingState } from "@/components/LoadingState";
 import { ErrorState } from "@/components/ErrorState";
 import { EmptyState } from "@/components/EmptyState";
 import { Screen, Section } from "@/components/Screen";
-import { usersApi } from "@/lib/api";
+import { uploadProfileMedia, usersApi } from "@/lib/api";
 import { cosmeticPreviewText, nameStyleColors, profileThemeColors } from "@/lib/cosmetics";
 import { useAuthStore } from "@/store/auth";
 import { colors } from "@/theme/colors";
@@ -109,6 +110,32 @@ export default function Profile() {
     },
     onError: (err: any) => Alert.alert("Could not remove media", err?.message ?? "Please try again.")
   });
+
+  const pickMedia = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission needed", "Allow media access to upload profile photos or videos.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      allowsEditing: false,
+      quality: 0.9,
+      videoMaxDuration: 60
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    try {
+      const asset = result.assets[0];
+      const mime = asset.mimeType ?? (asset.type === "video" ? "video/mp4" : "image/jpeg");
+      const extension = mime.includes("/") ? mime.split("/")[1].replace("quicktime", "mov") : "jpg";
+      const uploaded = await uploadProfileMedia({ uri: asset.uri, type: mime, name: asset.fileName ?? `profile-media.${extension}` });
+      setMediaUrl(uploaded.url);
+      setMediaType(uploaded.type);
+      Alert.alert("Media uploaded", "Add a caption and post it to your profile.");
+    } catch (err: any) {
+      Alert.alert("Upload failed", err?.message ?? "Please try another file.");
+    }
+  };
 
   const checkIn = useMutation({
     mutationFn: usersApi.checkIn,
@@ -264,6 +291,10 @@ export default function Profile() {
                   </Pressable>
                 ))}
               </View>
+              <Pressable style={styles.pickMediaBtn} onPress={pickMedia}>
+                <ImageIcon color={colors.gold} size={17} />
+                <Text style={styles.pickMediaText}>Choose from gallery</Text>
+              </Pressable>
               <TextInput value={mediaUrl} onChangeText={setMediaUrl} placeholder="Paste media URL" placeholderTextColor={colors.muted} style={styles.input} />
               <TextInput value={mediaCaption} onChangeText={setMediaCaption} placeholder="Caption" placeholderTextColor={colors.muted} style={styles.input} />
               <Pressable style={[styles.postMediaBtn, (!mediaUrl.trim() || addMedia.isPending) && styles.followBtnDisabled]} onPress={() => addMedia.mutate()} disabled={!mediaUrl.trim() || addMedia.isPending}>
@@ -425,6 +456,8 @@ const styles = StyleSheet.create({
   input: { height: 44, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, color: colors.text, paddingHorizontal: 12, fontWeight: "800" },
   postMediaBtn: { height: 44, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: colors.pink },
   postMediaText: { color: colors.text, fontWeight: "900" },
+  pickMediaBtn: { height: 42, borderRadius: 8, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line },
+  pickMediaText: { color: colors.text, fontWeight: "900" },
   mediaGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   mediaTile: { width: "48%", minHeight: 150, borderRadius: 8, overflow: "hidden", backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, position: "relative" },
   mediaImage: { width: "100%", height: 118, backgroundColor: colors.panelStrong },

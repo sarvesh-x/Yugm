@@ -31,6 +31,18 @@ const upload = multer({
   },
 });
 
+const profileMediaUpload = multer({
+  storage,
+  limits: { fileSize: 25 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".mov", ".m4v", ".webm"];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!allowed.includes(ext)) return cb(new Error("Only image/video uploads are allowed"));
+    if (!file.mimetype.startsWith("image/") && !file.mimetype.startsWith("video/")) return cb(new Error("Only image/video uploads are allowed"));
+    cb(null, true);
+  },
+});
+
 function hasImageSignature(filePath: string) {
   const fd = fs.openSync(filePath, "r");
   try {
@@ -58,6 +70,29 @@ function assertSafeImage(file?: Express.Multer.File) {
   }
 }
 
+function hasVideoSignature(filePath: string) {
+  const fd = fs.openSync(filePath, "r");
+  try {
+    const buffer = Buffer.alloc(64);
+    fs.readSync(fd, buffer, 0, buffer.length, 0);
+    const ascii = buffer.toString("ascii");
+    return ascii.includes("ftyp") || ascii.includes("webm") || ascii.includes("matroska");
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function assertSafeProfileMedia(file?: Express.Multer.File) {
+  if (!file) throw new HttpError(400, "No file uploaded", ErrorCode.VALIDATION);
+  const isImage = file.mimetype.startsWith("image/");
+  const valid = isImage ? hasImageSignature(file.path) : hasVideoSignature(file.path);
+  if (!valid) {
+    fs.unlink(file.path, () => {});
+    throw new HttpError(400, "Invalid media file", ErrorCode.VALIDATION);
+  }
+  return isImage ? "IMAGE" : "VIDEO";
+}
+
 uploadRouter.post("/upload/avatar", requireAuth, upload.single("avatar"), asyncHandler(async (req: AuthRequest, res) => {
   assertSafeImage(req.file);
   const file = req.file!;
@@ -71,4 +106,11 @@ uploadRouter.post("/upload/cover", requireAuth, upload.single("cover"), asyncHan
   const file = req.file!;
   const url = `/uploads/${file.filename}`;
   sendOk(res, { url });
+}));
+
+uploadRouter.post("/upload/profile-media", requireAuth, profileMediaUpload.single("media"), asyncHandler(async (req: AuthRequest, res) => {
+  const type = assertSafeProfileMedia(req.file);
+  const file = req.file!;
+  const url = `/uploads/${file.filename}`;
+  sendOk(res, { url, type });
 }));

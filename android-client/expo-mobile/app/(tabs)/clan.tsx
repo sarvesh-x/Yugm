@@ -6,6 +6,7 @@ import { GlassCard } from "@/components/GlassCard";
 import { Screen, Section } from "@/components/Screen";
 import { clansApi } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
+import { useAuthStore } from "@/store/auth";
 import { colors } from "@/theme/colors";
 
 const clanReactionTypes = ["heart", "fire", "laugh", "clap", "wow"] as const;
@@ -13,10 +14,13 @@ const clanReactionLabels: Record<string, string> = { heart: "HEART", fire: "FIRE
 
 export default function ClanScreen() {
   const queryClient = useQueryClient();
+  const currentUser = useAuthStore((s) => s.user);
+  const currentUserId = currentUser?._id || currentUser?.id || "";
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [search, setSearch] = useState("");
   const [clanMessage, setClanMessage] = useState("");
+  const [clanTypingUser, setClanTypingUser] = useState("");
 
   const mine = useQuery({ queryKey: ["clans", "me"], queryFn: clansApi.mine, staleTime: 30000, gcTime: 60000 });
   const clans = useQuery({
@@ -44,11 +48,18 @@ export default function ClanScreen() {
     const handleClanMessage = (payload: any) => {
       if (payload?.clanId === myClan._id) clanMessages.refetch();
     };
+    const handleTyping = (payload: any) => {
+      if (payload?.clanId !== myClan._id || payload?.userId === currentUserId) return;
+      setClanTypingUser(payload.typing ? "Someone is typing..." : "");
+    };
     socket.on("clan:message:new", handleClanMessage);
+    socket.on("clan:typing:update", handleTyping);
     return () => {
       socket.off("clan:message:new", handleClanMessage);
+      socket.off("clan:typing:update", handleTyping);
+      socket.emit("clan:typing:stop", { clanId: myClan._id });
     };
-  }, [myClan?._id, clanMessages.refetch]);
+  }, [myClan?._id, clanMessages.refetch, currentUserId]);
 
   const refresh = () => {
     mine.refetch();
@@ -88,6 +99,7 @@ export default function ClanScreen() {
   const sendClanMessage = useMutation({
     mutationFn: () => clansApi.sendMessage(myClan._id, clanMessage.trim()),
     onSuccess: () => {
+      getSocket().emit("clan:typing:stop", { clanId: myClan._id });
       setClanMessage("");
       clanMessages.refetch();
     },
@@ -99,6 +111,26 @@ export default function ClanScreen() {
     onSuccess: () => clanMessages.refetch(),
     onError: (err: any) => Alert.alert("Reaction failed", err?.message ?? "Please try again.")
   });
+
+  const deleteClanMessage = useMutation({
+    mutationFn: (messageId: string) => clansApi.deleteMessage(myClan._id, messageId),
+    onSuccess: () => clanMessages.refetch(),
+    onError: (err: any) => Alert.alert("Delete failed", err?.message ?? "Please try again.")
+  });
+
+  const reportClanMessage = useMutation({
+    mutationFn: (messageId: string) => clansApi.reportMessage(myClan._id, messageId, "Clan message report", "Reported from family chat"),
+    onSuccess: () => Alert.alert("Reported", "Thanks. The moderation team can review this message."),
+    onError: (err: any) => Alert.alert("Report failed", err?.message ?? "Please try again.")
+  });
+
+  const handleClanMessageChange = (text: string) => {
+    setClanMessage(text);
+    if (!myClan?._id) return;
+    const socket = getSocket();
+    if (text.trim()) socket.emit("clan:typing:start", { clanId: myClan._id });
+    setTimeout(() => socket.emit("clan:typing:stop", { clanId: myClan._id }), 1200);
+  };
 
   const busy = createClan.isPending || joinClan.isPending || leaveClan.isPending;
 
@@ -167,14 +199,27 @@ export default function ClanScreen() {
                             </Pressable>
                           ))}
                         </View>
+                        <View style={styles.messageActions}>
+                          {(message.senderId?._id === currentUserId || message.senderId?.id === currentUserId || myClan.isOwner) && (
+                            <Pressable onPress={() => deleteClanMessage.mutate(message._id)}>
+                              <Text style={styles.deleteText}>Delete</Text>
+                            </Pressable>
+                          )}
+                          {message.senderId?._id !== currentUserId && message.senderId?.id !== currentUserId && (
+                            <Pressable onPress={() => reportClanMessage.mutate(message._id)}>
+                              <Text style={styles.reportText}>Report</Text>
+                            </Pressable>
+                          )}
+                        </View>
                       </View>
                     ))}
                   </View>
                 )}
+                {!!clanTypingUser && <Text style={styles.typingText}>{clanTypingUser}</Text>}
                 <View style={styles.composer}>
                   <TextInput
                     value={clanMessage}
-                    onChangeText={setClanMessage}
+                    onChangeText={handleClanMessageChange}
                     placeholder="Message your family"
                     placeholderTextColor={colors.muted}
                     style={styles.composerInput}
@@ -309,6 +354,10 @@ const styles = StyleSheet.create({
   reactionRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
   reactionBtn: { borderRadius: 8, backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: colors.line, paddingHorizontal: 7, paddingVertical: 5 },
   reactionBtnText: { color: colors.text, fontSize: 10, fontWeight: "900" },
+  messageActions: { flexDirection: "row", gap: 14, marginTop: 8 },
+  deleteText: { color: colors.danger, fontSize: 11, fontWeight: "900" },
+  reportText: { color: colors.muted, fontSize: 11, fontWeight: "900" },
+  typingText: { color: colors.cyan, fontSize: 12, fontWeight: "900" },
   composer: { flexDirection: "row", alignItems: "center", gap: 8 },
   composerInput: { flex: 1, minHeight: 42, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, color: colors.text, paddingHorizontal: 12, fontWeight: "800" },
   sendBtn: { width: 42, height: 42, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: colors.pink }

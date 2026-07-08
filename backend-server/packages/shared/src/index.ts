@@ -35,6 +35,12 @@ export const socketEvents = {
   roomEnded: "room:ended",
   userOnline: "user:online",
   userOffline: "user:offline",
+  directTypingStart: "direct:typing:start",
+  directTypingStop: "direct:typing:stop",
+  directTypingUpdate: "direct:typing:update",
+  clanTypingStart: "clan:typing:start",
+  clanTypingStop: "clan:typing:stop",
+  clanTypingUpdate: "clan:typing:update",
   clanMessageNew: "clan:message:new",
   notificationNew: "notification:new"
 } as const;

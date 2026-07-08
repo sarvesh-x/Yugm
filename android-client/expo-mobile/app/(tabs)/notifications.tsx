@@ -1,4 +1,5 @@
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { router } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, CheckCheck, Gift, UserPlus, Mic, ShieldAlert } from "lucide-react-native";
 import { LoadingState } from "@/components/LoadingState";
@@ -39,6 +40,26 @@ export default function Notifications() {
 
   const notifications = data?.notifications ?? [];
 
+  const openNotification = (item: any) => {
+    if (!item.read) markRead.mutate(item._id);
+    const payload = item.data ?? {};
+    if (payload.clanId) {
+      router.push("/(tabs)/clan");
+      return;
+    }
+    if (payload.partnerId) {
+      router.push({ pathname: "/chat/[userId]", params: { userId: String(payload.partnerId) } });
+      return;
+    }
+    if (payload.roomId) {
+      router.push({ pathname: "/room/[id]", params: { id: String(payload.roomId) } });
+      return;
+    }
+    if (item.type === "FOLLOW" && payload.userId) {
+      router.push({ pathname: "/profile/[id]", params: { id: String(payload.userId) } });
+    }
+  };
+
   return (
     <Screen>
       <ScrollView refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={colors.gold} />}>
@@ -67,7 +88,7 @@ export default function Notifications() {
                 <Pressable
                   key={item._id}
                   style={[styles.notif, !item.read && styles.unread]}
-                  onPress={() => { if (!item.read) markRead.mutate(item._id); }}
+                  onPress={() => openNotification(item)}
                 >
                   <Icon color={item.read ? colors.muted : colors.gold} size={20} />
                   <View style={{ flex: 1 }}>

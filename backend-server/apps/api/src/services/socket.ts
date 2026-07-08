@@ -4,6 +4,7 @@ import { Server } from "socket.io";
 import { socketEvents } from "@yugm/shared";
 import { env } from "../config/env.js";
 import { Block } from "../models/Block.js";
+import { Clan } from "../models/Clan.js";
 import { Room } from "../models/Room.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
 import { setUserPresence } from "./redis.js";
@@ -63,6 +64,36 @@ export function initSocket(server: HttpServer) {
 
     socket.on(socketEvents.roomLeave, ({ roomId }) => {
       socket.leave(`room:${roomId}`);
+    });
+
+    socket.on(socketEvents.directTypingStart, ({ userId: targetUserId }) => {
+      if (!userId || !/^[0-9a-fA-F]{24}$/.test(String(targetUserId))) return;
+      emitUser(String(targetUserId), socketEvents.directTypingUpdate, { userId, typing: true });
+    });
+
+    socket.on(socketEvents.directTypingStop, ({ userId: targetUserId }) => {
+      if (!userId || !/^[0-9a-fA-F]{24}$/.test(String(targetUserId))) return;
+      emitUser(String(targetUserId), socketEvents.directTypingUpdate, { userId, typing: false });
+    });
+
+    socket.on(socketEvents.clanTypingStart, async ({ clanId }) => {
+      if (!userId || !/^[0-9a-fA-F]{24}$/.test(String(clanId))) return;
+      const clan = await Clan.findOne({ _id: clanId, memberIds: userId }).select("memberIds").lean();
+      if (!clan) return;
+      (clan.memberIds ?? []).forEach((memberId: any) => {
+        const target = memberId.toString();
+        if (target !== userId) emitUser(target, socketEvents.clanTypingUpdate, { clanId, userId, typing: true });
+      });
+    });
+
+    socket.on(socketEvents.clanTypingStop, async ({ clanId }) => {
+      if (!userId || !/^[0-9a-fA-F]{24}$/.test(String(clanId))) return;
+      const clan = await Clan.findOne({ _id: clanId, memberIds: userId }).select("memberIds").lean();
+      if (!clan) return;
+      (clan.memberIds ?? []).forEach((memberId: any) => {
+        const target = memberId.toString();
+        if (target !== userId) emitUser(target, socketEvents.clanTypingUpdate, { clanId, userId, typing: false });
+      });
     });
 
     socket.on("disconnect", () => {

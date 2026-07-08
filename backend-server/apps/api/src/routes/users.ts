@@ -349,7 +349,7 @@ usersRouter.post("/messages/:userId/call", requireAuth, requireNotMuted, validat
   }
 }));
 
-usersRouter.post("/messages/:userId/:messageId/reactions", validateBody(reactionSchema), asyncHandler(async (req: AuthRequest, res) => {
+usersRouter.post("/messages/:userId/:messageId/reactions", chatLimiter, validateBody(reactionSchema), asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.userId) || !isValidObjectId(req.params.messageId)) throw new HttpError(400, "Invalid message", ErrorCode.VALIDATION);
   const belongsToConversation = {
     _id: req.params.messageId,
@@ -372,6 +372,7 @@ usersRouter.post("/messages/:userId/:messageId/reactions", validateBody(reaction
 
   const partnerId = message.senderId.toString() === req.user!.id ? message.receiverId.toString() : message.senderId.toString();
   emitUser(partnerId, "direct:reaction:new", { message: updated, partnerId: req.user!.id });
+  await createNotification(partnerId, "MESSAGE", "New reaction", `${req.user!.name} reacted to your message`, { partnerId: req.user!.id, messageId: req.params.messageId });
   sendOk(res, { message: updated });
 }));
 
@@ -432,7 +433,7 @@ usersRouter.post("/:id/follow", asyncHandler(async (req: AuthRequest, res) => {
       await Follow.create([{ followerId: req.user!.id, followingId: req.params.id }], { session });
       await User.findByIdAndUpdate(req.user!.id, { $inc: { followingCount: 1 } }, { session });
       await User.findByIdAndUpdate(req.params.id, { $inc: { followersCount: 1 } }, { session });
-      await createNotification(req.params.id, "FOLLOW", "New Follower", `${req.user!.name} started following you`);
+      await createNotification(req.params.id, "FOLLOW", "New Follower", `${req.user!.name} started following you`, { userId: req.user!.id });
       createdFollow = true;
     }
     await session.commitTransaction();
@@ -459,6 +460,7 @@ usersRouter.post("/:id/close-friend", asyncHandler(async (req: AuthRequest, res)
   const target = await User.findById(req.params.id).select("_id name").lean();
   if (!target) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
   await User.findByIdAndUpdate(req.user!.id, { $addToSet: { closeFriendIds: req.params.id } });
+  await createNotification(req.params.id, "SYSTEM", "Close friend", `${req.user!.name} added you as a close friend`, { userId: req.user!.id });
   sendOk(res, { closeFriend: true });
 }));
 

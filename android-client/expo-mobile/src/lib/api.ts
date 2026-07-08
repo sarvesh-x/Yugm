@@ -38,6 +38,34 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   throw lastError;
 }
 
+export function absoluteMediaUrl(url: string) {
+  if (!url) return url;
+  if (/^https?:\/\//i.test(url)) return url;
+  const base = apiBaseUrl.replace(/\/api\/?$/, "");
+  return `${base}${url.startsWith("/") ? url : `/${url}`}`;
+}
+
+export async function uploadProfileMedia(file: { uri: string; name?: string; type?: string }) {
+  const token = useAuthStore.getState().token;
+  const formData = new FormData();
+  formData.append("media", {
+    uri: file.uri,
+    name: file.name ?? `profile-media-${Date.now()}`,
+    type: file.type ?? "image/jpeg"
+  } as any);
+  const response = await fetch(`${apiBaseUrl}/upload/profile-media`, {
+    method: "POST",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
+    body: formData
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok || json.ok === false) throw new ApiError(json.error?.message ?? "Upload failed", response.status);
+  const data = json.data as { url: string; type: "IMAGE" | "VIDEO" };
+  return { ...data, url: absoluteMediaUrl(data.url) };
+}
+
 export const authApi = {
   requestOtp: (payload: { email?: string; phone?: string }) =>
     api<{ devOtp: string }>("/auth/request-otp", { method: "POST", body: JSON.stringify(payload) }),
@@ -213,6 +241,9 @@ export const clansApi = {
   sendMessage: (clanId: string, message: string) => api<{ message: any }>(`/clans/${clanId}/messages`, { method: "POST", body: JSON.stringify({ message }) }),
   reactToMessage: (clanId: string, messageId: string, type: "heart" | "fire" | "laugh" | "clap" | "wow") =>
     api<{ message: any }>(`/clans/${clanId}/messages/${messageId}/reactions`, { method: "POST", body: JSON.stringify({ type }) }),
+  deleteMessage: (clanId: string, messageId: string) => api<{ deleted: boolean }>(`/clans/${clanId}/messages/${messageId}`, { method: "DELETE" }),
+  reportMessage: (clanId: string, messageId: string, reason: string, description?: string) =>
+    api<{ report: any }>(`/clans/${clanId}/messages/${messageId}/report`, { method: "POST", body: JSON.stringify({ reason, description }) }),
   create: (payload: { name: string; description?: string; avatar?: string; privacy?: "PUBLIC" | "PRIVATE"; familyLabel?: string }) =>
     api<{ clan: any }>("/clans", { method: "POST", body: JSON.stringify(payload) }),
   join: (clanId: string) => api<{ clan: any }>(`/clans/${clanId}/join`, { method: "POST" }),
