@@ -61,6 +61,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -261,7 +262,7 @@ fun YugmApp(
     val context = androidx.compose.ui.platform.LocalContext.current
     val sessionPrefs = remember { SessionPrefs }
     LaunchedEffect(Unit) { sessionPrefs.init(context) }
-    val googleClientId = context.getString(com.example.yugm.R.string.google_web_client_id)
+    val googleClientId = stringResource(com.example.yugm.R.string.google_web_client_id)
     val googleConfigured = googleClientId.isNotBlank() && googleClientId != "your_web_client_id_here"
     val gso = remember(context) {
         if (googleConfigured) {

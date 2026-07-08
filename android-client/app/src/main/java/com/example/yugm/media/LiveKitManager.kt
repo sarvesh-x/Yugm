@@ -22,7 +22,7 @@ sealed class MediaStatus {
 
 @Singleton
 class LiveKitManager @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
     private var room: Room? = null
     private val _status = MutableStateFlow<MediaStatus>(MediaStatus.Idle)

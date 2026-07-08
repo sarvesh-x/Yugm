@@ -16,6 +16,7 @@ import com.example.yugm.ui.components.StatCard
 import com.example.yugm.ui.theme.Gold
 import com.example.yugm.ui.theme.TextMuted
 import com.example.yugm.ui.theme.TextPrimary
+import java.util.Locale
 
 @Composable
 fun WalletScreen(
@@ -46,7 +47,7 @@ fun WalletScreen(
         }
         items(transactions) { tx ->
             LedgerRow(
-                title = tx.type.replace("_", " ").capitalize(),
+                title = tx.type.replace("_", " ").replaceFirstChar { it.titlecase(Locale.ROOT) },
                 subtitle = tx.createdAt,
                 amount = "${if (tx.amount > 0) "+" else ""}${tx.amount}",
                 amountColor = if (tx.amount > 0) Color.Green else Gold
