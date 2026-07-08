@@ -1,5 +1,7 @@
 *.iml
 .gradle
+.kotlin/
+android-client/.kotlin/
 /local.properties
 /.idea/caches
 /.idea/compiler.xml
