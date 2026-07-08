@@ -52,3 +52,11 @@ export function safeUploadName(userId: string, originalName: string) {
   return `${userId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`;
 }
 
+export function getStorageHealth() {
+  return {
+    driver: env.STORAGE_DRIVER,
+    ready: env.STORAGE_DRIVER === "local" || Boolean(env.S3_BUCKET && env.S3_REGION),
+    bucketConfigured: Boolean(env.S3_BUCKET),
+    publicBaseUrlConfigured: Boolean(env.S3_PUBLIC_BASE_URL)
+  };
+}

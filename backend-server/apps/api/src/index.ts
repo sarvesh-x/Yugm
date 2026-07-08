@@ -8,7 +8,7 @@ import { closeJobWorkers, startJobWorkers } from "./services/jobs.js";
 import { ensureOfficialRooms } from "./services/officialRooms.js";
 import { ensureProductionIndexes } from "./services/productionIndexes.js";
 import { connectRedis } from "./services/redis.js";
-import { initSocket } from "./services/socket.js";
+import { closeSocketInfrastructure, initSocket } from "./services/socket.js";
 
 process.on("unhandledRejection", (err) => {
   console.error("Unhandled rejection:", err);
@@ -36,6 +36,7 @@ async function bootstrap() {
   async function shutdown() {
     console.log("Shutting down gracefully...");
     server.close();
+    await closeSocketInfrastructure();
     await closeJobWorkers();
     await disconnectDatabase();
     process.exit(0);

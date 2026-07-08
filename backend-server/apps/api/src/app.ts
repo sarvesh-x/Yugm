@@ -18,7 +18,10 @@ import { roomsRouter } from "./routes/rooms.js";
 import { uploadRouter } from "./routes/upload.js";
 import { usersRouter } from "./routes/users.js";
 import { walletRouter } from "./routes/wallet.js";
+import { getJobHealth } from "./services/jobs.js";
+import { getMetricsSnapshot, recordHttpRequest } from "./services/metrics.js";
 import { getRedisHealth } from "./services/redis.js";
+import { getStorageHealth } from "./services/storage.js";
 import { ErrorCode, HttpError } from "./utils/http.js";
 
 export function createApp() {
@@ -39,8 +42,16 @@ export function createApp() {
     const start = Date.now();
     res.on("finish", () => {
       const ms = Date.now() - start;
+      recordHttpRequest(req.method, req.path, res.statusCode, ms);
       if (res.statusCode >= 400 || ms > 750) {
-        console.log(`[${(req as any).requestId}] ${req.method} ${req.originalUrl} ${res.statusCode} ${ms}ms`);
+        console.log(JSON.stringify({
+          level: res.statusCode >= 500 ? "error" : "info",
+          requestId: (req as any).requestId,
+          method: req.method,
+          path: req.path,
+          statusCode: res.statusCode,
+          durationMs: ms
+        }));
       }
     });
     next();
@@ -60,7 +71,10 @@ export function createApp() {
         name: mongoose.connection.name,
         state: mongoose.connection.readyState
       },
-      redis
+      redis,
+      jobs: getJobHealth(),
+      storage: getStorageHealth(),
+      metrics: getMetricsSnapshot()
     });
   };
   app.get("/health", healthHandler);
@@ -84,7 +98,15 @@ export function createApp() {
     const status = error instanceof HttpError ? error.status : 500;
     const message = error instanceof Error ? error.message : "Unexpected server error";
     const code = error instanceof HttpError && error.code ? error.code : ErrorCode.INTERNAL;
-    console.error(`[${(req as any).requestId}] ${message}`);
+    console.error(JSON.stringify({
+      level: "error",
+      requestId: (req as any).requestId,
+      method: req.method,
+      path: req.path,
+      status,
+      code,
+      message
+    }));
     if (req.originalUrl.startsWith("/api/admin")) {
       res.status(status).json({ success: false, error: { message, code, requestId: (req as any).requestId } });
       return;

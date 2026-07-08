@@ -19,6 +19,7 @@ function normalizeRedisUrl(rawUrl: string | undefined) {
 }
 
 const redisUrl = normalizeRedisUrl(env.REDIS_URL);
+const presenceScanMatch = "presence:user:*";
 
 export function getRedisUrl() {
   return redisUrl;
@@ -122,6 +123,76 @@ export async function setUserPresence(userId: string, online: boolean) {
       await client.del(key);
     }
   });
+}
+
+export async function setUserConnectionPresence(userId: string, connectionId: string, online: boolean) {
+  const userKey = `presence:user:${userId}`;
+  const connectionKey = `presence:user:${userId}:socket:${connectionId}`;
+  await runRedisCommand("connection presence update", undefined, async (client) => {
+    if (online) {
+      await client
+        .multi()
+        .set(userKey, "online", "EX", 300)
+        .set(connectionKey, "online", "EX", 300)
+        .exec();
+      return;
+    }
+
+    await client.del(connectionKey);
+    let cursor = "0";
+    let hasOtherConnection = false;
+    do {
+      const result = await client.scan(cursor, "MATCH", `presence:user:${userId}:socket:*`, "COUNT", 50);
+      cursor = result[0];
+      if (result[1].length) {
+        hasOtherConnection = true;
+        break;
+      }
+    } while (cursor !== "0");
+
+    if (hasOtherConnection) {
+      await client.set(userKey, "online", "EX", 300);
+    } else {
+      await client.del(userKey);
+    }
+  });
+}
+
+export async function getOnlinePresenceIds(limit = 10_000) {
+  return runRedisCommand<string[]>("presence scan", [], async (client) => {
+    const ids = new Set<string>();
+    let cursor = "0";
+    do {
+      const result = await client.scan(cursor, "MATCH", presenceScanMatch, "COUNT", 500);
+      cursor = result[0];
+      for (const key of result[1]) {
+        if (key.includes(":socket:")) continue;
+        const userId = key.slice("presence:user:".length);
+        if (userId) ids.add(userId);
+        if (ids.size >= limit) return [...ids];
+      }
+    } while (cursor !== "0");
+    return [...ids];
+  });
+}
+
+export async function isUserPresent(userId: string) {
+  return runRedisCommand<boolean>("presence read", false, async (client) => Boolean(await client.exists(`presence:user:${userId}`)));
+}
+
+export async function consumeRedisRateLimit(key: string, limit: number, seconds: number) {
+  return runRedisCommand<{ allowed: boolean; totalHits: number; resetTime: Date } | undefined>(
+    "rate limit",
+    undefined,
+    async (client) => {
+      const redisKey = `rate:${key}`;
+      const totalHits = await client.incr(redisKey);
+      if (totalHits === 1) await client.expire(redisKey, seconds);
+      const ttl = await client.ttl(redisKey);
+      const resetTime = new Date(Date.now() + Math.max(ttl, seconds, 1) * 1000);
+      return { allowed: totalHits <= limit, totalHits, resetTime };
+    }
+  );
 }
 
 export async function getCachedJson<T>(key: string): Promise<T | undefined> {

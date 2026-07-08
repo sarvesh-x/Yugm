@@ -13,6 +13,8 @@ const redisUrl = getRedisUrl();
 let pushQueue: Queue | undefined;
 let pushWorker: Worker | undefined;
 const workerStartupTimeoutMs = 3000;
+let jobsMode: "redis" | "inline" = "inline";
+let lastJobError: string | undefined;
 
 function bullConnectionOptions() {
   if (!redisUrl) return undefined;
@@ -48,6 +50,7 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
 export async function startJobWorkers() {
   const connection = bullConnectionOptions();
   if (!connection) {
+    jobsMode = "inline";
     console.log("Background jobs disabled: REDIS_URL is empty; running jobs inline");
     return;
   }
@@ -57,8 +60,8 @@ export async function startJobWorkers() {
       defaultJobOptions: {
         attempts: 3,
         backoff: { type: "exponential", delay: 5000 },
-        removeOnComplete: 1000,
-        removeOnFail: 5000
+        removeOnComplete: { age: 3600, count: 1000 },
+        removeOnFail: { age: 86_400, count: 5000 }
       }
     });
     pushWorker = new Worker(
@@ -72,15 +75,20 @@ export async function startJobWorkers() {
       "Job queue Redis connection timed out"
     );
     pushWorker.on("failed", (job, error) => {
+      lastJobError = error.message;
       console.warn(`Push job failed (${job?.id ?? "unknown"}):`, error.message);
     });
+    jobsMode = "redis";
+    lastJobError = undefined;
     console.log("Background job workers started");
   } catch (error) {
-    console.warn("Background jobs unavailable; running jobs inline:", error instanceof Error ? error.message : String(error));
+    lastJobError = error instanceof Error ? error.message : String(error);
+    console.warn("Background jobs unavailable; running jobs inline:", lastJobError);
     await pushWorker?.close().catch(() => {});
     await pushQueue?.close().catch(() => {});
     pushQueue = undefined;
     pushWorker = undefined;
+    jobsMode = "inline";
   }
 }
 
@@ -95,4 +103,16 @@ export async function enqueuePushNotification(payload: PushPayload) {
 export async function closeJobWorkers() {
   await pushWorker?.close();
   await pushQueue?.close();
+  pushWorker = undefined;
+  pushQueue = undefined;
+  jobsMode = "inline";
+}
+
+export function getJobHealth() {
+  return {
+    mode: jobsMode,
+    queueReady: Boolean(pushQueue),
+    workerReady: Boolean(pushWorker),
+    lastError: lastJobError
+  };
 }
