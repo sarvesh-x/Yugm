@@ -21,6 +21,8 @@ import { GiftTransaction } from "../models/GiftTransaction.js";
 import { ModerationAction } from "../models/ModerationAction.js";
 import { ModerationQueue } from "../models/ModerationQueue.js";
 import { Notification } from "../models/Notification.js";
+import { PkBattle } from "../models/PkBattle.js";
+import { PkEvent } from "../models/PkEvent.js";
 import { Purchase } from "../models/Purchase.js";
 import { Report } from "../models/Report.js";
 import { Room } from "../models/Room.js";
@@ -36,6 +38,7 @@ import { createNotification } from "../services/notifications.js";
 import { emitRoom } from "../services/socket.js";
 import { creditWallet, debitWallet } from "../services/wallet.js";
 import { auditLog } from "../services/adminAudit.js";
+import { endPkBattle, pkState } from "../services/pk.js";
 import { flagSafetyState, refreshUserSafetyStatus } from "../services/safetyScore.js";
 import { asyncHandler, ErrorCode, HttpError, isValidObjectId, sanitizeText } from "../utils/http.js";
 
@@ -276,6 +279,37 @@ adminRouter.get("/dashboard/overview", requirePermission("analytics.read"), asyn
 adminRouter.get("/dashboard/live-rooms", requirePermission("rooms.read"), asyncHandler(async (_req, res) => {
   const rooms = await Room.find({ status: "LIVE" }).populate("hostId", "name username avatar isBlocked suspendedUntil").sort({ participantCount: -1 }).limit(50).lean();
   adminOk(res, rooms);
+}));
+
+adminRouter.get("/pk/battles", requirePermission("rooms.read"), asyncHandler(async (req, res) => {
+  const filter: Record<string, unknown> = {};
+  if (req.query.status) filter.status = req.query.status;
+  const battles = await PkBattle.find(filter).sort({ createdAt: -1 }).limit(100).lean();
+  adminOk(res, await Promise.all(battles.map((battle) => pkState(battle))));
+}));
+
+adminRouter.get("/pk/battles/live", requirePermission("rooms.read"), asyncHandler(async (_req, res) => {
+  const battles = await PkBattle.find({ status: "ACTIVE" }).sort({ startedAt: -1 }).limit(100).lean();
+  adminOk(res, await Promise.all(battles.map((battle) => pkState(battle))));
+}));
+
+adminRouter.get("/pk/battles/:battleId", requirePermission("rooms.read"), asyncHandler(async (req, res) => {
+  adminOk(res, { battle: await pkState(req.params.battleId) });
+}));
+
+adminRouter.get("/pk/battles/:battleId/events", requirePermission("rooms.read"), asyncHandler(async (req, res) => {
+  adminOk(res, await PkEvent.find({ battleId: req.params.battleId }).sort({ createdAt: -1 }).limit(200).lean());
+}));
+
+adminRouter.post("/pk/battles/:battleId/end", requirePermission("rooms.end"), validateBody(z.object({ reason: z.string().min(3).max(500).optional() })), asyncHandler(async (req: AdminAuthRequest, res) => {
+  const result = await endPkBattle({ battleId: req.params.battleId, force: true, reason: req.body.reason ?? "Admin force end" });
+  await auditLog({ adminId: req.admin!.id, action: "pk.force_ended", entityType: "pk_battle", entityId: req.params.battleId, metadata: { reason: req.body.reason }, req });
+  adminOk(res, result);
+}));
+
+adminRouter.post("/pk/battles/:battleId/flag", requirePermission("reports.resolve"), validateBody(z.object({ reason: z.string().min(3).max(500) })), asyncHandler(async (req: AdminAuthRequest, res) => {
+  const log = await auditLog({ adminId: req.admin!.id, action: "pk.flagged", entityType: "pk_battle", entityId: req.params.battleId, metadata: { reason: req.body.reason }, req });
+  adminOk(res, { flagged: true, auditLog: log });
 }));
 
 adminRouter.get("/dashboard/system-health", requirePermission("analytics.read"), (_req, res) => {

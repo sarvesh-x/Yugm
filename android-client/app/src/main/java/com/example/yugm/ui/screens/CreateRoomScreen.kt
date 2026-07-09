@@ -12,12 +12,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.yugm.model.Host
 import com.example.yugm.model.Room
 import com.example.yugm.model.RoomType
 import com.example.yugm.ui.components.PrimaryButton
+import com.example.yugm.ui.components.ToggleRow
 import com.example.yugm.ui.components.YugmTextField
 import com.example.yugm.ui.theme.*
 
@@ -26,7 +28,7 @@ import com.example.yugm.ui.theme.*
 fun CreateRoomScreen(
     host: Host,
     onBack: () -> Unit,
-    onCreate: (Room) -> Unit
+    onCreate: (Room, Boolean, String, Boolean, String?) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -34,6 +36,11 @@ fun CreateRoomScreen(
     var language by remember { mutableStateOf("English") }
     var type by remember { mutableStateOf(RoomType.Voice) }
     var maxSpeakers by remember { mutableStateOf(6) }
+    var tags by remember { mutableStateOf("") }
+    var coverImage by remember { mutableStateOf("") }
+    var isPublic by remember { mutableStateOf(true) }
+    var allowMicRequests by remember { mutableStateOf(true) }
+    var scheduleLater by remember { mutableStateOf(false) }
 
     val categories = listOf("Chill", "Gaming", "Music", "Late Night", "Chitchat", "Dating")
     val languages = listOf("English", "Hindi", "Punjabi", "Marathi", "Tamil")
@@ -70,6 +77,16 @@ fun CreateRoomScreen(
 
             item { YugmTextField(title, { title = it }, "Room Title") }
             item { YugmTextField(description, { description = it }, "Description (Optional)") }
+            item { YugmTextField(tags, { tags = it }, "Tags (comma separated)") }
+            item { YugmTextField(coverImage, { coverImage = it }, "Cover Image URL (Optional)") }
+            item {
+                YugmTextField(
+                    value = maxSpeakers.toString(),
+                    onValueChange = { value -> maxSpeakers = value.filter { it.isDigit() }.toIntOrNull()?.coerceIn(1, 50) ?: 1 },
+                    label = "Max Speakers",
+                    keyboardType = KeyboardType.Number
+                )
+            }
 
             // Room Type Selector
             item {
@@ -157,10 +174,14 @@ fun CreateRoomScreen(
                 }
             }
 
+            item { ToggleRow("Public Room", checked = isPublic, onCheckedChange = { isPublic = it }) }
+            item { ToggleRow("Audience Mic Requests", checked = allowMicRequests, onCheckedChange = { allowMicRequests = it }) }
+            item { ToggleRow("Schedule in 1 Hour", checked = scheduleLater, onCheckedChange = { scheduleLater = it }) }
+
             item {
                 Spacer(modifier = Modifier.height(20.dp))
                 PrimaryButton(
-                    text = "Go Live Now",
+                    text = if (scheduleLater) "Schedule Lounge" else "Go Live Now",
                     onClick = {
                         if (title.isNotBlank()) {
                             onCreate(
@@ -171,8 +192,13 @@ fun CreateRoomScreen(
                                     category = category,
                                     language = language,
                                     maxSpeakers = maxSpeakers,
+                                    tags = tags.split(",").map { it.trim() }.filter { it.isNotBlank() },
                                     host = host
-                                )
+                                ),
+                                scheduleLater,
+                                if (isPublic) "PUBLIC" else "PRIVATE",
+                                allowMicRequests,
+                                coverImage.ifBlank { null }
                             )
                         }
                     }

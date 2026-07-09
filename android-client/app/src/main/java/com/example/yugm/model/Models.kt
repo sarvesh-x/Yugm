@@ -26,7 +26,8 @@ data class Host(
     val interestedIn: String = "",
     val lookingFor: String = "",
     val languages: List<String> = emptyList(),
-    val interests: List<String> = emptyList()
+    val interests: List<String> = emptyList(),
+    val isOnline: Boolean = false
 )
 
 data class ActiveCosmetics(
@@ -67,6 +68,187 @@ data class Room(
 )
 
 enum class RoomType { Voice, Video }
+
+data class RoomParticipant(
+    val id: String = "",
+    val user: Host = Host(),
+    val role: String = "AUDIENCE",
+    val micEnabled: Boolean = true,
+    val cameraEnabled: Boolean = false
+)
+
+data class SpeakerRequest(
+    val id: String = "",
+    val user: Host = Host()
+)
+
+data class RoomDetail(
+    val room: Room = Room(),
+    val participants: List<RoomParticipant> = emptyList(),
+    val speakerRequests: List<SpeakerRequest> = emptyList()
+)
+
+data class PollOption(
+    val text: String = "",
+    val votes: Int = 0
+)
+
+data class RoomPoll(
+    val id: String = "",
+    val question: String = "",
+    val options: List<PollOption> = emptyList(),
+    val isActive: Boolean = true
+)
+
+data class RoomMission(
+    val id: String = "",
+    val title: String = "",
+    val progress: Int = 0,
+    val target: Int = 0,
+    val reward: Int = 0,
+    val complete: Boolean = false
+)
+
+data class RoomActivityItem(
+    val id: String = "",
+    val label: String = "",
+    val type: String = "",
+    val createdAt: String = ""
+)
+
+data class RoomLeaderboard(
+    val topRooms: List<Room> = emptyList(),
+    val topHosts: List<Host> = emptyList()
+)
+
+enum class PkStatus { INVITED, WAITING, ACTIVE, ENDED, CANCELLED, DECLINED, EXPIRED, FORCE_ENDED }
+enum class PkMode { GIFT, REACTION, MIXED }
+enum class PkBattleType { VOICE, VIDEO }
+enum class PkSideType { LEFT, RIGHT, DRAW }
+
+data class PkSide(
+    val roomId: String = "",
+    val roomTitle: String = "",
+    val hostId: String = "",
+    val hostName: String = "",
+    val hostAvatar: String? = null,
+    val score: Int = 0,
+    val participantCount: Int = 0,
+    val activeCosmetics: ActiveCosmetics = ActiveCosmetics()
+)
+
+data class PkBattle(
+    val id: String = "",
+    val battleCode: String = "",
+    val title: String = "",
+    val status: PkStatus = PkStatus.INVITED,
+    val mode: PkMode = PkMode.GIFT,
+    val battleType: PkBattleType = PkBattleType.VOICE,
+    val durationSeconds: Int = 180,
+    val remainingSeconds: Int = 180,
+    val left: PkSide = PkSide(),
+    val right: PkSide = PkSide(),
+    val leader: PkSideType? = null,
+    val winnerSide: PkSideType? = null
+)
+
+data class PkStats(
+    val played: Int = 0,
+    val wins: Int = 0,
+    val losses: Int = 0,
+    val draws: Int = 0,
+    val totalScore: Int = 0,
+    val bestBattle: Int = 0,
+    val bestStreak: Int = 0,
+    val winRate: Int = 0
+)
+
+data class PkMediaSession(
+    val token: String = "",
+    val url: String = "",
+    val roomId: String = "",
+    val roomName: String = "",
+    val title: String = "",
+    val role: String = ""
+)
+
+data class PkLiveEffect(
+    val label: String = "",
+    val side: PkSideType = PkSideType.LEFT,
+    val points: Int = 0,
+    val combo: Int = 0
+)
+
+data class PkInvite(
+    val id: String = "",
+    val battleId: String = "",
+    val status: String = "PENDING",
+    val expiresAt: String = ""
+)
+
+data class PkOpponent(
+    val roomId: String = "",
+    val roomTitle: String = "",
+    val hostId: String = "",
+    val hostName: String = "",
+    val hostAvatar: String? = null,
+    val battleType: PkBattleType = PkBattleType.VOICE,
+    val category: String = "",
+    val language: String = "",
+    val participantCount: Int = 0,
+    val activeCosmetics: ActiveCosmetics = ActiveCosmetics()
+)
+
+data class PkLeaderboardEntry(
+    val userId: String = "",
+    val name: String = "",
+    val avatar: String? = null,
+    val side: PkSideType = PkSideType.LEFT,
+    val totalPoints: Int = 0,
+    val totalGiftsSent: Int = 0
+)
+
+data class ProfileCheck(
+    val id: String = "",
+    val label: String = "",
+    val done: Boolean = false
+)
+
+data class ProfileCompletion(
+    val checks: List<ProfileCheck> = emptyList(),
+    val completed: Int = 0,
+    val total: Int = 0,
+    val percent: Int = 0
+)
+
+data class Achievement(
+    val id: String = "",
+    val title: String = "",
+    val description: String = "",
+    val target: Int = 0,
+    val rewardCoins: Int = 0,
+    val progress: Int = 0,
+    val complete: Boolean = false
+)
+
+data class ExperienceFeedItem(
+    val type: String = "",
+    val title: String = "",
+    val room: Room? = null,
+    val user: Host? = null
+)
+
+data class ExperienceHome(
+    val profileCompletion: ProfileCompletion = ProfileCompletion(),
+    val level: LevelStatus = LevelStatus(),
+    val achievements: List<Achievement> = emptyList(),
+    val feed: List<ExperienceFeedItem> = emptyList(),
+    val liveRooms: List<Room> = emptyList(),
+    val scheduledRooms: List<Room> = emptyList(),
+    val followingRooms: List<Room> = emptyList(),
+    val suggestedHosts: List<Host> = emptyList(),
+    val unreadNotifications: Int = 0
+)
 
 data class ChatMessage(val author: String, val text: String)
 
@@ -198,6 +380,7 @@ data class NotificationItem(
     val message: String,
     val actorName: String,
     val actorId: String = "",
+    val partnerId: String = "",
     val roomId: String = "",
     val read: Boolean = false,
     val createdAt: String = ""

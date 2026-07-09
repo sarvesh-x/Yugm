@@ -1,6 +1,9 @@
 package com.example.yugm.ui.viewmodel
 
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.yugm.model.ChatMessage
@@ -18,6 +21,12 @@ class ChatViewModel @Inject constructor(
 
     val messages = mutableStateListOf<ChatMessage>()
 
+    var partnerUserId: String? = null
+        private set
+
+    var isPartnerTyping by mutableStateOf(false)
+        private set
+
     init {
         viewModelScope.launch {
             socketManager.events.collectLatest { event ->
@@ -28,6 +37,11 @@ class ChatViewModel @Inject constructor(
                     is SocketEvent.DirectMessageReceived -> {
                         messages.add(ChatMessage(event.message.senderId, event.message.message))
                     }
+                    is SocketEvent.TypingUpdate -> {
+                        if (event.userId == partnerUserId) {
+                            isPartnerTyping = event.typing
+                        }
+                    }
                     is SocketEvent.Connected -> {
                         // Handle connection
                     }
@@ -35,7 +49,7 @@ class ChatViewModel @Inject constructor(
                         // Handle disconnection
                     }
                     else -> {
-                        // Ignore typing indicators or online updates in this viewmodel
+                        // Ignore other events
                     }
                 }
             }
@@ -43,11 +57,17 @@ class ChatViewModel @Inject constructor(
     }
 
     fun connect(token: String, roomId: String) {
+        partnerUserId = roomId
         socketManager.connect(token, roomId)
     }
 
     fun sendMessage(roomId: String, text: String) {
         socketManager.sendMessage(roomId, text)
+    }
+
+    fun sendTypingStatus(isTyping: Boolean) {
+        val partnerId = partnerUserId ?: return
+        socketManager.sendTypingStatus(partnerId, isTyping)
     }
 
     override fun onCleared() {

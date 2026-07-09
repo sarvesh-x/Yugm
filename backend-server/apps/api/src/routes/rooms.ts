@@ -9,6 +9,7 @@ import { ChatMessage } from "../models/ChatMessage.js";
 import { DirectMessage } from "../models/DirectMessage.js";
 import { Follow } from "../models/Follow.js";
 import { Poll } from "../models/Poll.js";
+import { PkBattle } from "../models/PkBattle.js";
 import { Room } from "../models/Room.js";
 import { RoomActivity } from "../models/RoomActivity.js";
 import { RoomInvite } from "../models/RoomInvite.js";
@@ -190,6 +191,14 @@ roomsRouter.get("/trending", asyncHandler(async (_req, res) => {
   const payload = { rooms };
   await setCachedJson("rooms:trending", payload, 20);
   sendOk(res, payload);
+}));
+
+roomsRouter.get("/:roomId/pk-history", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.roomId)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
+  const battles = await PkBattle.find({
+    $or: [{ leftRoomId: req.params.roomId }, { rightRoomId: req.params.roomId }]
+  }).sort({ createdAt: -1 }).limit(50).lean();
+  sendOk(res, { battles });
 }));
 
 roomsRouter.get("/search", asyncHandler(async (req, res) => {

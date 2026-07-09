@@ -13,6 +13,7 @@ import { experienceRouter } from "./routes/experience.js";
 import { gamesRouter } from "./routes/games.js";
 import { livekitRouter } from "./routes/livekit.js";
 import { notificationsRouter } from "./routes/notifications.js";
+import { pkRouter } from "./routes/pk.js";
 import { reportsRouter } from "./routes/reports.js";
 import { roomsRouter } from "./routes/rooms.js";
 import { uploadRouter } from "./routes/upload.js";
@@ -89,6 +90,7 @@ export function createApp() {
   app.use("/api/rooms", roomsRouter);
   app.use("/api/livekit", livekitRouter);
   app.use("/api/notifications", notificationsRouter);
+  app.use("/api/pk", pkRouter);
   app.use("/api", walletRouter);
   app.use("/api", uploadRouter);
   app.use("/api", reportsRouter);
