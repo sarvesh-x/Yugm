@@ -3,7 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Radio, Video } from "lucide-react-native";
 import type { Room } from "@/lib/types";
 import { cosmeticPreviewText, nameStyleColors, roomThemeColors } from "@/lib/cosmetics";
-import { colors } from "@/theme/colors";
+import { colors, radii } from "@/theme/colors";
 import { CosmeticAvatar } from "@/components/CosmeticAvatar";
 
 export function RoomCard({ room, onPress, wide = false }: { room: Room; onPress: () => void; wide?: boolean }) {
@@ -12,7 +12,7 @@ export function RoomCard({ room, onPress, wide = false }: { room: Room; onPress:
   const roomColors = roomThemeColors(hostCosmetics?.roomTheme ?? hostCosmetics?.seasonalEvent);
   const hostNameColors = nameStyleColors(hostCosmetics?.nameStyle);
   return (
-    <Pressable onPress={onPress} style={[styles.wrap, wide && styles.wide]}>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`Join ${room.title}`} style={({ pressed }) => [styles.wrap, wide && styles.wide, pressed && styles.pressed]}>
       <ImageBackground source={{ uri: room.coverImage }} resizeMode="cover" style={styles.image} imageStyle={styles.imageRadius}>
         <LinearGradient colors={room.coverImage ? ["rgba(5,7,19,0.05)", "rgba(5,7,19,0.92)"] : roomColors} style={styles.overlay}>
           <View style={styles.top}>
@@ -51,10 +51,11 @@ export function RoomCard({ room, onPress, wide = false }: { room: Room; onPress:
 }
 
 const styles = StyleSheet.create({
-  wrap: { width: 220, height: 210, marginRight: 14, borderRadius: 8, overflow: "hidden", backgroundColor: colors.panel },
+  wrap: { width: 228, height: 220, marginRight: 14, borderRadius: radii.lg, overflow: "hidden", backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line },
+  pressed: { opacity: 0.88, transform: [{ scale: 0.985 }] },
   wide: { width: "100%", height: 176, marginRight: 0, marginBottom: 14 },
   image: { flex: 1 },
-  imageRadius: { borderRadius: 8 },
+  imageRadius: { borderRadius: radii.lg },
   overlay: { flex: 1, padding: 14, justifyContent: "space-between" },
   top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   live: { backgroundColor: colors.pink, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },

@@ -11,7 +11,12 @@ import { openNotificationTarget } from "@/lib/notificationRouting";
 import { getSocket } from "@/lib/socket";
 import { useAuthStore } from "@/store/auth";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { staleTime: 30_000, gcTime: 5 * 60_000, retry: 2, refetchOnReconnect: true },
+    mutations: { retry: 0 }
+  }
+});
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({

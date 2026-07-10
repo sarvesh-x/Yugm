@@ -2,19 +2,23 @@ import { useAuthStore } from "@/store/auth";
 import { apiBaseUrl } from "@/lib/config";
 
 export class ApiError extends Error {
-  constructor(message: string, public status?: number) {
+  constructor(message: string, public status?: number, public code?: string) {
     super(message);
+    this.name = "ApiError";
   }
 }
 
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = useAuthStore.getState().token;
+  const method = (options.method ?? "GET").toUpperCase();
+  const canRetry = method === "GET" || method === "HEAD" || method === "OPTIONS";
+  const maxAttempts = canRetry ? 3 : 1;
   let lastError: unknown;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
       const response = await fetch(`${apiBaseUrl}${path}`, {
         ...options,
         signal: controller.signal,
@@ -24,15 +28,27 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
           ...options.headers
         }
       });
-      clearTimeout(timeout);
       const json = await response.json().catch(() => ({}));
       if (!response.ok || json.ok === false) {
-        throw new ApiError(json.error?.message ?? "Request failed", response.status);
+        if (response.status === 401 && token) {
+          await useAuthStore.getState().logout().catch(() => undefined);
+        }
+        throw new ApiError(
+          json.error?.message ?? (response.status === 401 ? "Your session has expired. Please sign in again." : "Request failed"),
+          response.status,
+          json.error?.code
+        );
       }
       return json.data as T;
     } catch (err) {
-      lastError = err;
+      lastError = err instanceof Error && err.name === "AbortError"
+        ? new ApiError("The request took too long. Please check your connection and try again.")
+        : err instanceof TypeError
+          ? new ApiError("Unable to reach Yugm. Check your internet connection and try again.")
+          : err;
       if (err instanceof ApiError && err.status && err.status < 500) throw err;
+    } finally {
+      clearTimeout(timeout);
     }
   }
   throw lastError;
@@ -53,17 +69,27 @@ export async function uploadProfileMedia(file: { uri: string; name?: string; typ
     name: file.name ?? `profile-media-${Date.now()}`,
     type: file.type ?? "image/jpeg"
   } as any);
-  const response = await fetch(`${apiBaseUrl}/upload/profile-media`, {
-    method: "POST",
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
-    },
-    body: formData
-  });
-  const json = await response.json().catch(() => ({}));
-  if (!response.ok || json.ok === false) throw new ApiError(json.error?.message ?? "Upload failed", response.status);
-  const data = json.data as { url: string; type: "IMAGE" | "VIDEO" };
-  return { ...data, url: absoluteMediaUrl(data.url) };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 45_000);
+  try {
+    const response = await fetch(`${apiBaseUrl}/upload/profile-media`, {
+      method: "POST",
+      signal: controller.signal,
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: formData
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok || json.ok === false) throw new ApiError(json.error?.message ?? "Upload failed", response.status);
+    const data = json.data as { url: string; type: "IMAGE" | "VIDEO" };
+    return { ...data, url: absoluteMediaUrl(data.url) };
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new ApiError("The upload took too long. Try a smaller file or a stronger connection.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export const authApi = {

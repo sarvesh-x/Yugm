@@ -1,11 +1,13 @@
 import { useCallback, useState, useEffect } from "react";
 import { Alert, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, Pressable, Image, ActivityIndicator } from "react-native";
+import * as Haptics from "expo-haptics";
 import { router, useFocusEffect } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Compass, Flame, Gamepad2, Heart, MessageCircle, Mic, Plus, Radio, Search, Sparkles, User, Users, Video } from "lucide-react-native";
+import { Bell, Flame, Gamepad2, Heart, Mic, Plus, Radio, Search, Sparkles, Users, Video } from "lucide-react-native";
 import { categories } from "@yugm/shared";
 import { BrandMark } from "@/components/BrandMark";
 import { RoomCard } from "@/components/RoomCard";
+import { ErrorState } from "@/components/ErrorState";
 import { Screen, Section } from "@/components/Screen";
 import { roomsApi, usersApi, datingApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
@@ -59,6 +61,8 @@ export default function Discover() {
   );
 
   const isLoading = exploreQuery.isLoading || trendingRooms.isLoading || hostsQuery.isLoading;
+  const isRefreshing = exploreQuery.isRefetching || trendingRooms.isRefetching || hostsQuery.isRefetching;
+  const hasError = exploreQuery.isError && trendingRooms.isError && hostsQuery.isError;
 
   const handleRefetch = () => {
     exploreQuery.refetch();
@@ -76,11 +80,13 @@ export default function Discover() {
   const handleLikeFeatured = async () => {
     if (!featuredCandidate) return;
     try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       const res = await datingApi.like(featuredCandidate.id, "LIKE");
       if (res.isMatch) {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert("It's a Yugm! 🎉", `You matched with ${featuredCandidate.name}! Go to chat to say hi.`);
       } else {
-        Alert.alert("Liked! 👍", `We've sent your vibe to ${featuredCandidate.name}.`);
+        Alert.alert("Vibe sent", `We let ${featuredCandidate.name} know you're interested.`);
       }
       queryClient.invalidateQueries({ queryKey: ["dating", "explore"] });
     } catch (err: any) {
@@ -92,7 +98,8 @@ export default function Discover() {
     <Screen>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={handleRefetch} tintColor={colors.pink} />}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefetch} tintColor={colors.pink} />}
       >
         <Section>
           {/* Header Row */}
@@ -104,8 +111,8 @@ export default function Discover() {
               </Text>
             </View>
             <View style={styles.headerActions}>
-              <Pressable style={styles.notificationsBtn} onPress={() => router.push("/(tabs)/chat")}>
-                <MessageCircle color={colors.text} size={22} />
+              <Pressable accessibilityRole="button" accessibilityLabel="Open notifications" style={styles.notificationsBtn} onPress={() => router.push("/(tabs)/notifications")}>
+                <Bell color={colors.text} size={21} />
               </Pressable>
               <Pressable style={styles.createBtn} onPress={() => router.push("/room/create")}>
                 <Plus color={colors.text} size={24} />
@@ -114,7 +121,7 @@ export default function Discover() {
           </View>
 
           {/* Premium Search Bar */}
-          <Pressable style={styles.searchBar} onPress={() => router.push("/(tabs)/search")}>
+          <Pressable accessibilityRole="search" style={styles.searchBar} onPress={() => router.push("/(tabs)/search")}>
             <Search color={colors.muted} size={18} />
             <TextInput
               placeholder="Find matches, vibes, live rooms..."
@@ -196,6 +203,8 @@ export default function Discover() {
             <ActivityIndicator color={colors.pink} size="large" />
             <Text style={styles.loadingText}>Tuning into the vibe...</Text>
           </View>
+        ) : hasError ? (
+          <ErrorState message="We couldn't tune into Yugm right now. Check your connection and try again." onRetry={handleRefetch} />
         ) : (
           <>
             {/* 1. Featured Match Card */}
@@ -246,7 +255,7 @@ export default function Discover() {
                       </View>
 
                       <View style={styles.featuredActions}>
-                        <Pressable style={styles.swipeVibesBtn} onPress={handleLikeFeatured}>
+                        <Pressable accessibilityRole="button" accessibilityLabel={`Send a vibe to ${featuredCandidate.name}`} style={styles.swipeVibesBtn} onPress={(event) => { event.stopPropagation(); handleLikeFeatured(); }}>
                           <LinearGradient colors={gradients.fire} style={styles.swipeGradient}>
                             <Heart color={colors.text} size={18} fill={colors.text} />
                             <Text style={styles.swipeText}>Swipe Vibes</Text>
@@ -350,6 +359,7 @@ export default function Discover() {
 }
 
 const styles = StyleSheet.create({
+  scrollContent: { paddingBottom: 96 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8 },
   greeting: { color: colors.muted, marginTop: 4, fontSize: 14, fontWeight: "700" },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 10 },

@@ -1,10 +1,11 @@
 import { useState, useCallback } from "react";
 import { Alert, StyleSheet, Text, View, Image, Pressable, ActivityIndicator, Modal } from "react-native";
+import * as Haptics from "expo-haptics";
 import { router, useFocusEffect } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { Heart, X, Star, Sparkles, MessageCircle, Compass, ShieldAlert } from "lucide-react-native";
-import { datingApi, roomsApi } from "@/lib/api";
+import { datingApi, usersApi } from "@/lib/api";
 import { Screen, Section } from "@/components/Screen";
 import { useAuthStore } from "@/store/auth";
 import { colors, gradients } from "@/theme/colors";
@@ -16,6 +17,7 @@ export default function MatchSwipe() {
   // Modal Match States
   const [matchModalVisible, setMatchModalVisible] = useState(false);
   const [matchedPartner, setMatchedPartner] = useState<any>(null);
+  const [actionPending, setActionPending] = useState(false);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["dating", "explore"],
@@ -34,28 +36,34 @@ export default function MatchSwipe() {
   const topCard = candidates[0];
 
   const handleSwipe = async (type: "LIKE" | "SUPER_LIKE" | "PASS") => {
-    if (!topCard) return;
+    if (!topCard || actionPending) return;
+    const candidate = topCard;
+    setActionPending(true);
+    queryClient.setQueryData(["dating", "explore"], (old: any) => ({
+      ...old,
+      candidates: (old?.candidates ?? []).filter((item: any) => item.id !== candidate.id)
+    }));
 
     try {
+      await Haptics.impactAsync(type === "SUPER_LIKE" ? Haptics.ImpactFeedbackStyle.Heavy : Haptics.ImpactFeedbackStyle.Light);
       if (type === "PASS") {
-        await datingApi.pass(topCard.id);
-        queryClient.setQueryData(["dating", "explore"], (old: any) => ({
-          ...old,
-          candidates: old.candidates.slice(1)
-        }));
+        await datingApi.pass(candidate.id);
       } else {
-        const res = await datingApi.like(topCard.id, type);
+        const res = await datingApi.like(candidate.id, type);
         if (res.isMatch) {
-          setMatchedPartner(topCard);
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          setMatchedPartner(candidate);
           setMatchModalVisible(true);
         }
-        queryClient.setQueryData(["dating", "explore"], (old: any) => ({
-          ...old,
-          candidates: old.candidates.slice(1)
-        }));
       }
     } catch (err: any) {
+      queryClient.setQueryData(["dating", "explore"], (old: any) => ({
+        ...old,
+        candidates: [candidate, ...(old?.candidates ?? []).filter((item: any) => item.id !== candidate.id)]
+      }));
       Alert.alert("Swipe Action Failed", err.message);
+    } finally {
+      setActionPending(false);
     }
   };
 
@@ -66,7 +74,18 @@ export default function MatchSwipe() {
       {
         text: "Report",
         style: "destructive",
-        onPress: () => Alert.alert("Report submitted", "Thank you, we are reviewing this profile.")
+        onPress: async () => {
+          try {
+            await usersApi.report(topCard.id, "INAPPROPRIATE_PROFILE");
+            queryClient.setQueryData(["dating", "explore"], (old: any) => ({
+              ...old,
+              candidates: (old?.candidates ?? []).filter((item: any) => item.id !== topCard.id)
+            }));
+            Alert.alert("Report submitted", "Thank you. Our safety team will review this profile.");
+          } catch (error: any) {
+            Alert.alert("Report failed", error?.message ?? "Please try again.");
+          }
+        }
       }
     ]);
   };
@@ -77,7 +96,7 @@ export default function MatchSwipe() {
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Vibe Discovery</Text>
-          <Pressable style={styles.reportBtn} onPress={handleReport} disabled={!topCard}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Report this profile" style={styles.reportBtn} onPress={handleReport} disabled={!topCard || actionPending}>
             <ShieldAlert color={topCard ? colors.danger : colors.muted} size={20} />
           </Pressable>
         </View>
@@ -148,15 +167,15 @@ export default function MatchSwipe() {
 
             {/* Action Row */}
             <View style={styles.actionRow}>
-              <Pressable style={[styles.actionCircle, styles.passCircle]} onPress={() => handleSwipe("PASS")}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Pass" disabled={actionPending} style={[styles.actionCircle, styles.passCircle, actionPending && styles.disabled]} onPress={() => handleSwipe("PASS")}>
                 <X color={colors.danger} size={28} strokeWidth={3} />
               </Pressable>
 
-              <Pressable style={[styles.actionCircle, styles.superCircle]} onPress={() => handleSwipe("SUPER_LIKE")}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Send a super vibe" disabled={actionPending} style={[styles.actionCircle, styles.superCircle, actionPending && styles.disabled]} onPress={() => handleSwipe("SUPER_LIKE")}>
                 <Star color={colors.gold} size={24} fill={colors.gold} />
               </Pressable>
 
-              <Pressable style={[styles.actionCircle, styles.likeCircle]} onPress={() => handleSwipe("LIKE")}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Like this profile" disabled={actionPending} style={[styles.actionCircle, styles.likeCircle, actionPending && styles.disabled]} onPress={() => handleSwipe("LIKE")}>
                 <Heart color={colors.success} size={28} fill={colors.success} />
               </Pressable>
             </View>
@@ -293,6 +312,7 @@ const styles = StyleSheet.create({
     elevation: 4
   },
   passCircle: { borderColor: "rgba(255,91,110,0.3)" },
+  disabled: { opacity: 0.5 },
   superCircle: { width: 52, height: 52, borderRadius: 26, borderColor: "rgba(246,180,75,0.3)" },
   likeCircle: { borderColor: "rgba(50,213,131,0.3)" },
   
