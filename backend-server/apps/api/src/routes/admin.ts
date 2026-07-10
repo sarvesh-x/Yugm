@@ -21,6 +21,9 @@ import { GiftTransaction } from "../models/GiftTransaction.js";
 import { ModerationAction } from "../models/ModerationAction.js";
 import { ModerationQueue } from "../models/ModerationQueue.js";
 import { Notification } from "../models/Notification.js";
+import { PkBattle } from "../models/PkBattle.js";
+import { PkEvent } from "../models/PkEvent.js";
+import { PayoutReview } from "../models/PayoutReview.js";
 import { Purchase } from "../models/Purchase.js";
 import { Report } from "../models/Report.js";
 import { Room } from "../models/Room.js";
@@ -31,11 +34,13 @@ import { SupportMessage, SupportTicket } from "../models/SupportTicket.js";
 import { User } from "../models/User.js";
 import { UserSafetyStatus } from "../models/UserSafetyStatus.js";
 import { WalletTransaction } from "../models/WalletTransaction.js";
+import { WithdrawalRequest } from "../models/WithdrawalRequest.js";
 import { verifyIdToken } from "../services/firebase.js";
 import { createNotification } from "../services/notifications.js";
 import { emitRoom } from "../services/socket.js";
 import { creditWallet, debitWallet } from "../services/wallet.js";
 import { auditLog } from "../services/adminAudit.js";
+import { endPkBattle, pkState } from "../services/pk.js";
 import { flagSafetyState, refreshUserSafetyStatus } from "../services/safetyScore.js";
 import { asyncHandler, ErrorCode, HttpError, isValidObjectId, sanitizeText } from "../utils/http.js";
 
@@ -52,6 +57,16 @@ const adminUserSchema = z.object({
   firebaseUid: z.string().optional(),
   password: z.string().min(8).optional()
 });
+
+for (const param of ["adminId", "battleId", "giftId", "messageId", "queueId", "reportId", "roomId", "ticketId", "userId"] as const) {
+  adminRouter.param(param, (_req, _res, next, value) => {
+    if (!isValidObjectId(String(value))) {
+      next(new HttpError(400, `Invalid ${param}`, ErrorCode.VALIDATION));
+      return;
+    }
+    next();
+  });
+}
 
 function startOfDay(date = new Date()) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -143,6 +158,13 @@ function queryDate(value: unknown) {
 function textRegex(value: unknown) {
   const text = String(value || "").trim();
   return text ? new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") : undefined;
+}
+
+function objectIdQuery(value: unknown, label: string) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const id = String(value);
+  if (!isValidObjectId(id)) throw new HttpError(400, `Invalid ${label}`, ErrorCode.VALIDATION);
+  return id;
 }
 
 adminRouter.post("/auth/login", adminAuthLimiter, validateBody(z.object({
@@ -276,6 +298,41 @@ adminRouter.get("/dashboard/overview", requirePermission("analytics.read"), asyn
 adminRouter.get("/dashboard/live-rooms", requirePermission("rooms.read"), asyncHandler(async (_req, res) => {
   const rooms = await Room.find({ status: "LIVE" }).populate("hostId", "name username avatar isBlocked suspendedUntil").sort({ participantCount: -1 }).limit(50).lean();
   adminOk(res, rooms);
+}));
+
+adminRouter.get("/pk/battles", requirePermission("rooms.read"), asyncHandler(async (req, res) => {
+  const filter: Record<string, unknown> = {};
+  if (req.query.status) filter.status = req.query.status;
+  const battles = await PkBattle.find(filter).sort({ createdAt: -1 }).limit(100).lean();
+  adminOk(res, await Promise.all(battles.map((battle) => pkState(battle))));
+}));
+
+adminRouter.get("/pk/battles/live", requirePermission("rooms.read"), asyncHandler(async (_req, res) => {
+  const battles = await PkBattle.find({ status: "ACTIVE" }).sort({ startedAt: -1 }).limit(100).lean();
+  adminOk(res, await Promise.all(battles.map((battle) => pkState(battle))));
+}));
+
+adminRouter.get("/pk/battles/:battleId", requirePermission("rooms.read"), asyncHandler(async (req, res) => {
+  adminOk(res, { battle: await pkState(req.params.battleId) });
+}));
+
+adminRouter.get("/pk/battles/:battleId/events", requirePermission("rooms.read"), asyncHandler(async (req, res) => {
+  if (!isValidObjectId(req.params.battleId)) throw new HttpError(400, "Invalid battle id", ErrorCode.VALIDATION);
+  adminOk(res, await PkEvent.find({ battleId: req.params.battleId }).sort({ createdAt: -1 }).limit(200).lean());
+}));
+
+adminRouter.post("/pk/battles/:battleId/end", requirePermission("rooms.end"), validateBody(z.object({ reason: z.string().min(3).max(500).optional() })), asyncHandler(async (req: AdminAuthRequest, res) => {
+  const result = await endPkBattle({ battleId: req.params.battleId, force: true, reason: req.body.reason ?? "Admin force end" });
+  await auditLog({ adminId: req.admin!.id, action: "pk.force_ended", entityType: "pk_battle", entityId: req.params.battleId, metadata: { reason: req.body.reason }, req });
+  adminOk(res, result);
+}));
+
+adminRouter.post("/pk/battles/:battleId/flag", requirePermission("reports.resolve"), validateBody(z.object({ reason: z.string().min(3).max(500) })), asyncHandler(async (req: AdminAuthRequest, res) => {
+  if (!isValidObjectId(req.params.battleId)) throw new HttpError(400, "Invalid battle id", ErrorCode.VALIDATION);
+  const battleExists = await PkBattle.exists({ _id: req.params.battleId });
+  if (!battleExists) throw new HttpError(404, "PK battle not found", ErrorCode.NOT_FOUND);
+  const log = await auditLog({ adminId: req.admin!.id, action: "pk.flagged", entityType: "pk_battle", entityId: req.params.battleId, metadata: { reason: req.body.reason }, req });
+  adminOk(res, { flagged: true, auditLog: log });
 }));
 
 adminRouter.get("/dashboard/system-health", requirePermission("analytics.read"), (_req, res) => {
@@ -553,7 +610,8 @@ adminRouter.get("/rooms", requirePermission("rooms.read"), asyncHandler(async (r
   if (req.query.status) filter.status = req.query.status;
   if (req.query.category) filter.category = textRegex(req.query.category);
   if (req.query.language) filter.language = textRegex(req.query.language);
-  if (req.query.hostId && isValidObjectId(String(req.query.hostId))) filter.hostId = req.query.hostId;
+  const hostId = objectIdQuery(req.query.hostId, "hostId");
+  if (hostId) filter.hostId = hostId;
   const search = textRegex(req.query.search);
   if (search) filter.$or = [{ title: search }, { description: search }, { tags: search }];
   const [rooms, total] = await Promise.all([
@@ -701,7 +759,8 @@ adminRouter.get("/moderation/queue", requirePermission("reports.read"), asyncHan
   const filter: Record<string, unknown> = {};
   if (req.query.status) filter.status = req.query.status;
   if (req.query.priority) filter.priority = req.query.priority;
-  if (req.query.assignedTo) filter.assignedTo = req.query.assignedTo;
+  const assignedTo = objectIdQuery(req.query.assignedTo, "assignedTo");
+  if (assignedTo) filter.assignedTo = assignedTo;
   const [items, total] = await Promise.all([ModerationQueue.find(filter).populate("reportId targetUserId assignedTo").sort({ priority: -1, createdAt: -1 }).skip(skip).limit(limit).lean(), ModerationQueue.countDocuments(filter)]);
   adminOk(res, items, paginationMeta(page, limit, total));
 }));
@@ -721,8 +780,10 @@ adminRouter.post("/moderation/queue/:queueId/escalate", requirePermission("repor
 adminRouter.get("/messages", requirePermission("messages.read"), asyncHandler(async (req: AdminAuthRequest, res) => {
   const { page, limit, skip } = pageParams(req.query);
   const filter: Record<string, unknown> = {};
-  if (req.query.senderId) filter.senderId = req.query.senderId;
-  if (req.query.roomId) filter.roomId = req.query.roomId;
+  const senderId = objectIdQuery(req.query.senderId, "senderId");
+  const roomId = objectIdQuery(req.query.roomId, "roomId");
+  if (senderId) filter.senderId = senderId;
+  if (roomId) filter.roomId = roomId;
   if (req.query.containsKeyword) filter.message = textRegex(req.query.containsKeyword);
   const [messages, total] = await Promise.all([ChatMessage.find(filter).populate("senderId roomId").sort({ createdAt: -1 }).skip(skip).limit(limit).lean(), ChatMessage.countDocuments(filter)]);
   adminOk(res, messages, paginationMeta(page, limit, total));
@@ -794,7 +855,8 @@ adminRouter.post("/wallet/users/:userId/unfreeze", requirePermission("wallet.adj
 adminRouter.get("/wallet/transactions", requirePermission("wallet.read"), asyncHandler(async (req, res) => {
   const { page, limit, skip } = pageParams(req.query);
   const filter: Record<string, unknown> = {};
-  if (req.query.userId) filter.userId = req.query.userId;
+  const walletUserId = objectIdQuery(req.query.userId, "userId");
+  if (walletUserId) filter.userId = walletUserId;
   if (req.query.type) filter.type = req.query.type;
   const [transactions, total] = await Promise.all([WalletTransaction.find(filter).populate("userId", "name username").sort({ createdAt: -1 }).skip(skip).limit(limit).lean(), WalletTransaction.countDocuments(filter)]);
   adminOk(res, transactions, paginationMeta(page, limit, total));
@@ -809,7 +871,8 @@ adminRouter.get("/payments/recharges", requirePermission("payments.read"), async
   const filter: Record<string, unknown> = {};
   if (req.query.platform) filter.provider = req.query.platform;
   if (req.query.status) filter.status = req.query.status;
-  if (req.query.userId) filter.userId = req.query.userId;
+  const paymentUserId = objectIdQuery(req.query.userId, "userId");
+  if (paymentUserId) filter.userId = paymentUserId;
   const [purchases, total] = await Promise.all([Purchase.find(filter).populate("userId", "name username").sort({ createdAt: -1 }).skip(skip).limit(limit).lean(), Purchase.countDocuments(filter)]);
   adminOk(res, purchases, paginationMeta(page, limit, total));
 }));
@@ -843,11 +906,45 @@ adminRouter.get("/payments/refunds", requirePermission("payments.read"), asyncHa
 
 adminRouter.get("/earnings", requirePermission("withdrawals.read"), asyncHandler(async (_req, res) => adminOk(res, await GiftTransaction.aggregate([{ $group: { _id: "$receiverId", giftIncome: { $sum: "$coinAmount" }, count: { $sum: 1 } } }, { $sort: { giftIncome: -1 } }, { $limit: 100 }]))));
 adminRouter.get("/earnings/users/:userId", requirePermission("withdrawals.read"), asyncHandler(async (req, res) => adminOk(res, await GiftTransaction.find({ receiverId: req.params.userId }).populate("senderId giftId").sort({ createdAt: -1 }).limit(100).lean())));
-adminRouter.get("/withdrawals", requirePermission("withdrawals.read"), (_req, res) => adminOk(res, [], { note: "Withdrawal model is not present yet; route is reserved and permissioned." }));
-adminRouter.get("/withdrawals/:withdrawalId", requirePermission("withdrawals.read"), (req, res) => adminOk(res, { id: req.params.withdrawalId, status: "NOT_IMPLEMENTED" }));
-adminRouter.post("/withdrawals/:withdrawalId/approve", requirePermission("withdrawals.approve"), asyncHandler(async (req: AdminAuthRequest, res) => { await auditLog({ adminId: req.admin!.id, action: "withdrawal.approved", entityType: "withdrawal", metadata: { withdrawalId: req.params.withdrawalId }, req }); adminOk(res, { approved: true }); }));
-adminRouter.post("/withdrawals/:withdrawalId/reject", requirePermission("withdrawals.reject"), validateBody(reasonSchema), asyncHandler(async (req: AdminAuthRequest, res) => { await auditLog({ adminId: req.admin!.id, action: "withdrawal.rejected", entityType: "withdrawal", metadata: { withdrawalId: req.params.withdrawalId, reason: req.body.reason }, req }); adminOk(res, { rejected: true }); }));
-adminRouter.post("/withdrawals/:withdrawalId/mark-paid", requirePermission("withdrawals.approve"), asyncHandler(async (req: AdminAuthRequest, res) => { await auditLog({ adminId: req.admin!.id, action: "withdrawal.marked_paid", entityType: "withdrawal", metadata: { withdrawalId: req.params.withdrawalId }, req }); adminOk(res, { paid: true }); }));
+adminRouter.get("/withdrawals", requirePermission("withdrawals.read"), asyncHandler(async (req, res) => {
+  const { page, limit, skip } = pageParams(req.query);
+  const filter = req.query.status ? { status: String(req.query.status) } : {};
+  const [withdrawals, total] = await Promise.all([
+    WithdrawalRequest.find(filter).populate("userId", "name username avatar role").sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    WithdrawalRequest.countDocuments(filter)
+  ]);
+  adminOk(res, { withdrawals }, paginationMeta(page, limit, total));
+}));
+adminRouter.get("/withdrawals/:withdrawalId", requirePermission("withdrawals.read"), asyncHandler(async (req, res) => {
+  if (!isValidObjectId(req.params.withdrawalId)) throw new HttpError(400, "Invalid withdrawal ID", ErrorCode.VALIDATION);
+  const withdrawal = await WithdrawalRequest.findById(req.params.withdrawalId).populate("userId", "name username avatar role").lean();
+  if (!withdrawal) throw new HttpError(404, "Withdrawal not found", ErrorCode.NOT_FOUND);
+  const payoutReview = await PayoutReview.findOne({ withdrawalRequestId: req.params.withdrawalId }).lean();
+  adminOk(res, { withdrawal, payoutReview });
+}));
+adminRouter.post("/withdrawals/:withdrawalId/approve", requirePermission("withdrawals.approve"), asyncHandler(async (req: AdminAuthRequest, res) => {
+  if (!isValidObjectId(req.params.withdrawalId)) throw new HttpError(400, "Invalid withdrawal ID", ErrorCode.VALIDATION);
+  const withdrawal = await WithdrawalRequest.findByIdAndUpdate(req.params.withdrawalId, { status: "APPROVED", approvedAt: new Date(), reviewedByAdminId: req.admin!.id }, { new: true });
+  if (!withdrawal) throw new HttpError(404, "Withdrawal not found", ErrorCode.NOT_FOUND);
+  await PayoutReview.findOneAndUpdate({ withdrawalRequestId: withdrawal.id }, { status: "APPROVED", reviewedAt: new Date(), reviewedByAdminId: req.admin!.id });
+  await auditLog({ adminId: req.admin!.id, action: "withdrawal.approved", entityType: "withdrawal", entityId: withdrawal.id, targetUserId: withdrawal.userId.toString(), req });
+  adminOk(res, { withdrawal });
+}));
+adminRouter.post("/withdrawals/:withdrawalId/reject", requirePermission("withdrawals.reject"), validateBody(reasonSchema), asyncHandler(async (req: AdminAuthRequest, res) => {
+  if (!isValidObjectId(req.params.withdrawalId)) throw new HttpError(400, "Invalid withdrawal ID", ErrorCode.VALIDATION);
+  const withdrawal = await WithdrawalRequest.findByIdAndUpdate(req.params.withdrawalId, { status: "REJECTED", rejectedAt: new Date(), reviewedByAdminId: req.admin!.id, rejectionReason: req.body.reason }, { new: true });
+  if (!withdrawal) throw new HttpError(404, "Withdrawal not found", ErrorCode.NOT_FOUND);
+  await PayoutReview.findOneAndUpdate({ withdrawalRequestId: withdrawal.id }, { status: "REJECTED", reviewedAt: new Date(), reviewedByAdminId: req.admin!.id, rejectionReason: req.body.reason });
+  await auditLog({ adminId: req.admin!.id, action: "withdrawal.rejected", entityType: "withdrawal", entityId: withdrawal.id, targetUserId: withdrawal.userId.toString(), metadata: { reason: req.body.reason }, req });
+  adminOk(res, { withdrawal });
+}));
+adminRouter.post("/withdrawals/:withdrawalId/mark-paid", requirePermission("withdrawals.approve"), asyncHandler(async (req: AdminAuthRequest, res) => {
+  if (!isValidObjectId(req.params.withdrawalId)) throw new HttpError(400, "Invalid withdrawal ID", ErrorCode.VALIDATION);
+  const withdrawal = await WithdrawalRequest.findOneAndUpdate({ _id: req.params.withdrawalId, status: "APPROVED" }, { status: "PAID", paidAt: new Date(), reviewedByAdminId: req.admin!.id }, { new: true });
+  if (!withdrawal) throw new HttpError(404, "Approved withdrawal not found", ErrorCode.NOT_FOUND);
+  await auditLog({ adminId: req.admin!.id, action: "withdrawal.marked_paid", entityType: "withdrawal", entityId: withdrawal.id, targetUserId: withdrawal.userId.toString(), req });
+  adminOk(res, { withdrawal });
+}));
 adminRouter.post("/withdrawals/:withdrawalId/request-info", requirePermission("withdrawals.read"), validateBody(reasonSchema), asyncHandler(async (req: AdminAuthRequest, res) => { await auditLog({ adminId: req.admin!.id, action: "withdrawal.info_requested", entityType: "withdrawal", metadata: { withdrawalId: req.params.withdrawalId, reason: req.body.reason }, req }); adminOk(res, { requested: true }); }));
 
 adminRouter.get("/gifts", requirePermission("gifts.manage"), asyncHandler(async (_req, res) => adminOk(res, await Gift.find().sort({ coinPrice: 1 }).lean())));
@@ -901,7 +998,8 @@ adminRouter.get("/support/tickets", requirePermission("support.read"), asyncHand
   if (req.query.status) filter.status = req.query.status;
   if (req.query.category) filter.category = req.query.category;
   if (req.query.priority) filter.priority = req.query.priority;
-  if (req.query.userId) filter.userId = req.query.userId;
+  const supportUserId = objectIdQuery(req.query.userId, "userId");
+  if (supportUserId) filter.userId = supportUserId;
   adminOk(res, await SupportTicket.find(filter).populate("userId assignedTo").sort({ updatedAt: -1 }).limit(100).lean());
 }));
 adminRouter.get("/support/tickets/:ticketId", requirePermission("support.read"), asyncHandler(async (req, res) => adminOk(res, { ticket: await SupportTicket.findById(req.params.ticketId).populate("userId assignedTo").lean(), messages: await SupportMessage.find({ ticketId: req.params.ticketId }).sort({ createdAt: 1 }).lean() })));
@@ -953,10 +1051,12 @@ adminRouter.delete("/config/:key", requirePermission("settings.manage"), asyncHa
 adminRouter.get("/audit-logs", requirePermission("audit.read"), asyncHandler(async (req, res) => {
   const { page, limit, skip } = pageParams(req.query);
   const filter: Record<string, unknown> = {};
-  if (req.query.adminId) filter.adminId = req.query.adminId;
+  const adminId = objectIdQuery(req.query.adminId, "adminId");
+  const targetUserId = objectIdQuery(req.query.targetUserId, "targetUserId");
+  if (adminId) filter.adminId = adminId;
   if (req.query.action) filter.action = textRegex(req.query.action);
   if (req.query.entityType) filter.entityType = req.query.entityType;
-  if (req.query.targetUserId) filter.targetUserId = req.query.targetUserId;
+  if (targetUserId) filter.targetUserId = targetUserId;
   const [logs, total] = await Promise.all([AdminAuditLog.find(filter).populate("adminId", "email displayName role").sort({ createdAt: -1 }).skip(skip).limit(limit).lean(), AdminAuditLog.countDocuments(filter)]);
   adminOk(res, logs, paginationMeta(page, limit, total));
 }));

@@ -102,6 +102,9 @@ The prompt mentions Firebase SQL Connect/PostgreSQL, but this repository current
 - `/api/admin/wallet/*`
 - `/api/admin/payments/*`
 - `/api/admin/withdrawals/*`
+- `/api/admin/trust-verifications/*`
+- `/api/admin/creator-kyc/*`
+- `/api/admin/payout-reviews/*`
 - `/api/admin/gifts/*`
 - `/api/admin/notifications/*`
 - `/api/admin/support/*`
@@ -115,6 +118,6 @@ The prompt mentions Firebase SQL Connect/PostgreSQL, but this repository current
 
 - Add a full admin web panel.
 - Add provider-backed refund execution.
-- Add a real withdrawal model and KYC/payment rail integration.
+- Connect approved withdrawals to the production payout rail and reconciliation process.
 - Enforce 2FA after TOTP/SMS provider setup.
 - Add privacy/legal review for private chat access workflows.

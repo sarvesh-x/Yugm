@@ -25,7 +25,7 @@ function assertS3Ready() {
   }
 }
 
-export async function persistUploadedFile(file: Express.Multer.File, folder: "avatars" | "covers" | "profile-media") {
+export async function persistUploadedFile(file: Express.Multer.File, folder: "avatars" | "covers" | "profile-media" | "trust-verification") {
   if (env.STORAGE_DRIVER !== "s3") {
     return { url: `/uploads/${file.filename}`, storage: "local" as const };
   }

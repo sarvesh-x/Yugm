@@ -9,6 +9,7 @@ import { GiftTransaction } from "../models/GiftTransaction.js";
 import { Purchase } from "../models/Purchase.js";
 import { Room } from "../models/Room.js";
 import { RoomActivity } from "../models/RoomActivity.js";
+import { RoomParticipant } from "../models/RoomParticipant.js";
 import { User } from "../models/User.js";
 import { WalletTransaction } from "../models/WalletTransaction.js";
 import { creditWallet, debitWallet } from "../services/wallet.js";
@@ -341,11 +342,19 @@ walletRouter.post("/rooms/:id/send-gift", validateBody(sendGiftSchema), asyncHan
   if (!isValidObjectId(req.body.receiverId)) throw new HttpError(400, "Invalid receiver ID", ErrorCode.VALIDATION);
 
   const room = await Room.findById(req.params.id).lean();
-  const gift = await Gift.findById(req.body.giftId).lean();
+  const gift = await Gift.findOne({ _id: req.body.giftId, isActive: true }).lean();
   if (!room || !gift) throw new HttpError(404, "Room or gift not found", ErrorCode.NOT_FOUND);
+  if (room.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
+  if (req.body.receiverId === req.user!.id) throw new HttpError(400, "Cannot send gifts to yourself", ErrorCode.VALIDATION);
 
   const receiver = await User.findById(req.body.receiverId).lean();
   if (!receiver) throw new HttpError(404, "Receiver not found", ErrorCode.NOT_FOUND);
+  const [senderParticipant, receiverParticipant] = await Promise.all([
+    RoomParticipant.exists({ roomId: room._id, userId: req.user!.id, leftAt: null }),
+    RoomParticipant.exists({ roomId: room._id, userId: req.body.receiverId, leftAt: null })
+  ]);
+  if (!senderParticipant) throw new HttpError(403, "You are not a participant in this room", ErrorCode.FORBIDDEN);
+  if (!receiverParticipant) throw new HttpError(400, "Receiver is not in the room", ErrorCode.VALIDATION);
   await assertUsersCanInteract(req.user!.id, req.body.receiverId, "Cannot send gifts to this user");
 
   const session = await mongoose.startSession();
@@ -389,7 +398,8 @@ walletRouter.post("/direct-send-gift", asyncHandler(async (req: AuthRequest, res
   if (!isValidObjectId(giftId) || !isValidObjectId(receiverId)) {
     throw new HttpError(400, "Invalid IDs", ErrorCode.VALIDATION);
   }
-  const gift = await Gift.findById(giftId).lean();
+  if (receiverId === req.user!.id) throw new HttpError(400, "Cannot send gifts to yourself", ErrorCode.VALIDATION);
+  const gift = await Gift.findOne({ _id: giftId, isActive: true }).lean();
   const receiver = await User.findById(receiverId).lean();
   if (!gift || !receiver) throw new HttpError(404, "Gift or receiver not found", ErrorCode.NOT_FOUND);
   await assertUsersCanInteract(req.user!.id, receiverId, "Cannot send gifts to this user");

@@ -103,7 +103,22 @@ fun Avatar(
                     topLeft = Offset((this.size.width - waveWidth) / 2f, (this.size.height - waveHeight) / 2f),
                     size = Size(waveWidth, waveHeight),
                     cornerRadius = androidx.compose.ui.geometry.CornerRadius(radius.toPx() + 18.dp.toPx()),
-                    style = Stroke(width = 2.5.dp.toPx())
+                    style = Stroke(width = 2.dp.toPx())
+                )
+            }
+
+            // Second concentric ripple with offset phase
+            val wave2 = (wave + 0.15f).let { if (it > 1.22f) it - 0.32f else it }
+            val waveAlpha2 = (waveAlpha + 0.3f).let { if (it > 0.58f) it - 0.58f else it }
+            Canvas(Modifier.fillMaxSize()) {
+                val waveWidth = this.size.width * wave2
+                val waveHeight = this.size.height * wave2
+                drawRoundRect(
+                    color = waveColor.copy(alpha = waveAlpha2),
+                    topLeft = Offset((this.size.width - waveWidth) / 2f, (this.size.height - waveHeight) / 2f),
+                    size = Size(waveWidth, waveHeight),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(radius.toPx() + 18.dp.toPx()),
+                    style = Stroke(width = 1.5.dp.toPx())
                 )
             }
         }

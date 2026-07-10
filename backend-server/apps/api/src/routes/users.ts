@@ -8,6 +8,8 @@ import { validateBody } from "../middleware/validate.js";
 import { Block } from "../models/Block.js";
 import { DirectMessage } from "../models/DirectMessage.js";
 import { Follow } from "../models/Follow.js";
+import { PkBattle } from "../models/PkBattle.js";
+import { pkState } from "../services/pk.js";
 import { Room } from "../models/Room.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
 import { SupportMessage, SupportTicket } from "../models/SupportTicket.js";
@@ -398,6 +400,47 @@ usersRouter.get("/leaderboard/levels", asyncHandler(async (_req: AuthRequest, re
     .limit(50)
     .lean();
   sendOk(res, { users: users.map(publicUser) });
+}));
+
+usersRouter.get("/:userId/pk-stats", asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.userId)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
+  const userObjectId = new mongoose.Types.ObjectId(req.params.userId);
+  const battles = await PkBattle.find({
+    status: { $in: ["ENDED", "FORCE_ENDED"] },
+    $or: [{ leftHostId: userObjectId }, { rightHostId: userObjectId }]
+  }).lean();
+  const wins = battles.filter((battle: any) => battle.winnerUserId?.toString?.() === req.params.userId).length;
+  const draws = battles.filter((battle: any) => battle.winnerSide === "DRAW").length;
+  const losses = battles.length - wins - draws;
+  const ordered = [...battles].sort((a: any, b: any) => new Date(a.endedAt ?? a.createdAt).getTime() - new Date(b.endedAt ?? b.createdAt).getTime());
+  let currentStreak = 0;
+  let bestStreak = 0;
+  for (const battle of ordered) {
+    if (battle.winnerUserId?.toString?.() === req.params.userId) {
+      currentStreak += 1;
+      bestStreak = Math.max(bestStreak, currentStreak);
+    } else if (battle.winnerSide !== "DRAW") {
+      currentStreak = 0;
+    }
+  }
+  const totalScore = battles.reduce((sum: number, battle: any) => {
+    const ownScore = battle.leftHostId?.toString?.() === req.params.userId ? battle.leftScore : battle.rightScore;
+    return sum + (ownScore ?? 0);
+  }, 0);
+  const bestBattle = battles.reduce((best: number, battle: any) => {
+    const ownScore = battle.leftHostId?.toString?.() === req.params.userId ? battle.leftScore : battle.rightScore;
+    return Math.max(best, ownScore ?? 0);
+  }, 0);
+  sendOk(res, { stats: { played: battles.length, wins, losses, draws, totalScore, bestBattle, bestStreak, winRate: battles.length ? Math.round((wins / battles.length) * 100) : 0 } });
+}));
+
+usersRouter.get("/:userId/pk-history", asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.userId)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
+  const battles = await PkBattle.find({
+    status: { $in: ["ENDED", "FORCE_ENDED"] },
+    $or: [{ leftHostId: req.params.userId }, { rightHostId: req.params.userId }]
+  }).sort({ createdAt: -1 }).limit(50).lean();
+  sendOk(res, { battles: await Promise.all(battles.map((battle) => pkState(battle))) });
 }));
 
 usersRouter.get("/:id", asyncHandler(async (req: AuthRequest, res) => {

@@ -31,6 +31,7 @@ const keys: EnvKey[] = [
   { key: "GOOGLE_PLAY_PACKAGE_NAME", group: "payments", required: false, note: "required for Google Play purchases" },
   { key: "GOOGLE_PLAY_CLIENT_EMAIL", group: "payments", required: false, note: "required for Google Play purchases" },
   { key: "GOOGLE_PLAY_PRIVATE_KEY", group: "payments", required: false, note: "required for Google Play purchases" },
+  { key: "PAYOUT_KYC_ENCRYPTION_KEY", group: "payout-kyc", required: false, note: "strong key for encrypted PAN/UPI/bank fields" },
   { key: "REDIS_URL", group: "cache", required: false, note: "leave blank to disable Redis locally" },
   { key: "STORAGE_DRIVER", group: "storage", required: false, note: "local or s3; defaults to local" },
   { key: "S3_BUCKET", group: "storage", required: false, note: "required when STORAGE_DRIVER=s3" },
@@ -77,6 +78,9 @@ if (isProduction) {
   }
   if (process.env.DEV_BYPASS_OTP) {
     productionErrors.push("DEV_BYPASS_OTP must not be set in production");
+  }
+  if (!process.env.PAYOUT_KYC_ENCRYPTION_KEY || process.env.PAYOUT_KYC_ENCRYPTION_KEY.length < 24) {
+    productionErrors.push("PAYOUT_KYC_ENCRYPTION_KEY must be set to a strong value in production");
   }
   if (!process.env.CORS_ORIGIN || process.env.CORS_ORIGIN === "*") {
     productionErrors.push("CORS_ORIGIN should be an explicit comma-separated allowlist in production");

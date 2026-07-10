@@ -1,6 +1,7 @@
 package com.example.yugm.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -40,18 +41,40 @@ fun ChatScreen(
     gifts: List<com.example.yugm.model.GiftItem> = emptyList(),
     balance: Int = 0,
     loading: Boolean = false,
+    isPartnerTyping: Boolean = false,
     error: String = "",
     onBack: () -> Unit = {},
     onRetry: () -> Unit = {},
     onSend: (String) -> Unit = {},
-    onGift: (com.example.yugm.model.GiftItem) -> Unit = {}
+    onGift: (com.example.yugm.model.GiftItem) -> Unit = {},
+    onTyping: (Boolean) -> Unit = {}
 ) {
     var draft by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     var showGiftSheet by remember { mutableStateOf(false) }
 
+    var isTyping by remember { mutableStateOf(false) }
+
+    LaunchedEffect(draft) {
+        if (draft.isNotBlank()) {
+            if (!isTyping) {
+                isTyping = true
+                onTyping(true)
+            }
+            // Debounce for 2 seconds of inactivity
+            kotlinx.coroutines.delay(2000)
+            isTyping = false
+            onTyping(false)
+        } else {
+            if (isTyping) {
+                isTyping = false
+                onTyping(false)
+            }
+        }
+    }
+
     // Scroll to bottom when new messages arrive
-    LaunchedEffect(messages.size) {
+    LaunchedEffect(messages.size, isPartnerTyping) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.size - 1)
         }
@@ -113,78 +136,92 @@ fun ChatScreen(
                     LoadingState("Retrieving conversation history...")
                 }
             } else {
-                LazyColumn(
-                    state = listState,
+                Box(
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxWidth(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                        .fillMaxWidth()
                 ) {
-                    // Relationship Bond Indicator Card
-                    relationship?.let { bond ->
-                        item {
-                            GlassCard(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-                                Row(
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text("Bonding Rank ${bond.level}", color = Color.White, fontWeight = FontWeight.Black, fontSize = 13.sp)
-                                    Text(bond.title, color = Gold, fontWeight = FontWeight.Black, fontSize = 12.sp)
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 8.dp)
-                                        .height(6.dp)
-                                        .clip(RoundedCornerShape(3.dp))
-                                        .background(Color.White.copy(alpha = 0.1f))
-                                ) {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // Relationship Bond Indicator Card
+                        relationship?.let { bond ->
+                            item {
+                                GlassCard(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                                    Row(
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("Bonding Rank ${bond.level}", color = Color.White, fontWeight = FontWeight.Black, fontSize = 13.sp)
+                                        Text(bond.title, color = Gold, fontWeight = FontWeight.Black, fontSize = 12.sp)
+                                    }
                                     Box(
                                         modifier = Modifier
-                                            .fillMaxWidth(bond.progress.coerceIn(0f, 1f))
+                                            .fillMaxWidth()
+                                            .padding(top = 8.dp)
                                             .height(6.dp)
-                                            .background(Brush.horizontalGradient(listOf(Gold, PrimaryPink)))
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(Color.White.copy(alpha = 0.1f))
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth(bond.progress.coerceIn(0f, 1f))
+                                                .height(6.dp)
+                                                .background(Brush.horizontalGradient(listOf(Gold, PrimaryPink)))
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        items(messages) { message ->
+                            val isMine = message.senderId == currentUserId
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(
+                                            RoundedCornerShape(
+                                                topStart = 16.dp,
+                                                topEnd = 16.dp,
+                                                bottomStart = if (isMine) 16.dp else 2.dp,
+                                                bottomEnd = if (isMine) 2.dp else 16.dp
+                                            )
+                                        )
+                                        .background(
+                                            if (isMine) {
+                                                Brush.linearGradient(listOf(PrimaryPink, PrimaryPurple))
+                                            } else {
+                                                Brush.linearGradient(listOf(SurfaceElevated, Surface))
+                                            }
+                                        )
+                                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                                        .widthIn(max = 260.dp)
+                                ) {
+                                    Text(
+                                        text = message.message,
+                                        color = Color.White,
+                                        fontSize = 14.sp,
+                                        lineHeight = 18.sp,
+                                        fontWeight = FontWeight.Medium
                                     )
                                 }
                             }
                         }
                     }
 
-                    items(messages) { message ->
-                        val isMine = message.senderId == currentUserId
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start
+                    if (isPartnerTyping) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(
-                                        RoundedCornerShape(
-                                            topStart = 16.dp,
-                                            topEnd = 16.dp,
-                                            bottomStart = if (isMine) 16.dp else 2.dp,
-                                            bottomEnd = if (isMine) 2.dp else 16.dp
-                                        )
-                                    )
-                                    .background(
-                                        if (isMine) {
-                                            Brush.linearGradient(listOf(PrimaryPink, PrimaryPurple))
-                                        } else {
-                                            Brush.linearGradient(listOf(SurfaceElevated, Surface))
-                                        }
-                                    )
-                                    .padding(horizontal = 14.dp, vertical = 10.dp)
-                                    .widthIn(max = 260.dp)
-                            ) {
-                                Text(
-                                    text = message.message,
-                                    color = Color.White,
-                                    fontSize = 14.sp,
-                                    lineHeight = 18.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
+                            TypingBubble()
                         }
                     }
                 }
@@ -294,5 +331,41 @@ fun ChatScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun TypingIndicatorDot(delay: Int) {
+    val infiniteTransition = rememberInfiniteTransition()
+    val offsetY by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = -8f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 300, delayMillis = delay, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        )
+    )
+    Box(
+        modifier = Modifier
+            .size(6.dp)
+            .offset(y = offsetY.dp)
+            .clip(CircleShape)
+            .background(Color.White)
+    )
+}
+
+@Composable
+fun TypingBubble() {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 2.dp, bottomEnd = 16.dp))
+            .background(Brush.linearGradient(listOf(SurfaceElevated, Surface)))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TypingIndicatorDot(delay = 0)
+        TypingIndicatorDot(delay = 100)
+        TypingIndicatorDot(delay = 200)
     }
 }

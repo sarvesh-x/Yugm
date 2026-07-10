@@ -4,6 +4,8 @@ Yugm is a production-minded MVP for a Gen Z Indian live social discovery app.
 
 Tagline: **Match the vibe.**
 
+Yugm uses **Yugm Trust Verification** for user safety, fake-profile prevention, host credibility, and verified badges. **Creator Payout KYC** is required only for real-money creator withdrawals. These systems are separate by design; normal dating/social users are not forced through payout KYC.
+
 ## Project Layout
 
 - `backend-server/`: Node.js API server, shared TypeScript schemas/constants, npm workspace, and Docker Compose services.
@@ -29,6 +31,7 @@ MONGODB_URI=mongodb+srv://<user>:<password>@cluster0.xxxxx.mongodb.net/yugm
 MONGODB_DB_NAME=Yugm
 REDIS_URL=
 JWT_SECRET=replace-me
+PAYOUT_KYC_ENCRYPTION_KEY=
 LIVEKIT_API_KEY=
 LIVEKIT_API_SECRET=
 LIVEKIT_URL=ws://localhost:7880

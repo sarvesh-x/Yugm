@@ -16,11 +16,16 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.example.yugm.api.YugmApi
 import com.example.yugm.navigation.NavGraph
 import com.example.yugm.navigation.Screen
+import com.example.yugm.ui.theme.Background
 import com.example.yugm.ui.theme.YugmTheme
 import com.example.yugm.ui.viewmodel.MainViewModel
 import com.example.yugm.util.SessionPrefs
@@ -130,16 +135,18 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                NavGraph(
-                    navController = navController,
-                    mainViewModel = mainViewModel,
-                    onGoogleSignIn = {
-                        googleLauncher.launch(googleSignInClient.signInIntent)
-                    },
-                    onPhoneSignIn = {
-                        navController.navigate(Screen.PhoneLogin.route)
-                    }
-                )
+                Box(Modifier.fillMaxSize().background(Background)) {
+                    NavGraph(
+                        navController = navController,
+                        mainViewModel = mainViewModel,
+                        onGoogleSignIn = {
+                            googleLauncher.launch(googleSignInClient.signInIntent)
+                        },
+                        onPhoneSignIn = {
+                            navController.navigate(Screen.PhoneLogin.route)
+                        }
+                    )
+                }
             }
         }
     }

@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,10 +22,15 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.yugm.api.YugmApi
 import com.example.yugm.model.Host
+import com.example.yugm.model.PkBattle
+import com.example.yugm.model.PkSideType
+import com.example.yugm.model.PkStats
 import com.example.yugm.model.Room
 import com.example.yugm.ui.components.Avatar
 import com.example.yugm.ui.components.GlassCard
 import com.example.yugm.ui.components.LoadingState
+import com.example.yugm.ui.components.PkHistoryCard
+import com.example.yugm.ui.components.StatCard
 import com.example.yugm.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -40,9 +46,13 @@ fun ProfileDetailScreen(
     val coroutineScope = rememberCoroutineScope()
     var host by remember { mutableStateOf<Host?>(null) }
     var rooms by remember { mutableStateOf<List<Room>>(emptyList()) }
+    var followers by remember { mutableStateOf<List<Host>>(emptyList()) }
+    var following by remember { mutableStateOf<List<Host>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var isFollowing by remember { mutableStateOf(false) }
     var followBusy by remember { mutableStateOf(false) }
+    var pkStats by remember { mutableStateOf(PkStats()) }
+    var pkHistory by remember { mutableStateOf<List<PkBattle>>(emptyList()) }
 
     var showReportDialog by remember { mutableStateOf(false) }
     var reportReason by remember { mutableStateOf("") }
@@ -60,6 +70,20 @@ fun ProfileDetailScreen(
             YugmApi.getUserRooms(userId, token.ifBlank { null })
         }.onSuccess {
             rooms = it
+        }
+        runCatching {
+            YugmApi.getFollowers(userId, token.ifBlank { null })
+        }.onSuccess {
+            followers = it
+        }
+        runCatching {
+            YugmApi.getFollowing(userId, token.ifBlank { null })
+        }.onSuccess {
+            following = it
+        }
+        if (token.isNotBlank()) {
+            runCatching { YugmApi.pkStats(token, userId) }.onSuccess { pkStats = it }
+            runCatching { YugmApi.pkHistory(token, userId) }.onSuccess { pkHistory = it }
         }
         isLoading = false
     }
@@ -193,6 +217,68 @@ fun ProfileDetailScreen(
                                     Text("Premium VIP Member", color = Gold, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                     Text("This user has active profile boost and cosmetics priority.", color = TextMuted, fontSize = 12.sp)
                                 }
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        StatCard("Followers", "${profile.followers.coerceAtLeast(followers.size)}", Modifier.weight(1f))
+                        StatCard("Following", "${profile.followingCount.coerceAtLeast(following.size)}", Modifier.weight(1f))
+                        StatCard("Level", "${profile.level}", Modifier.weight(1f))
+                    }
+                }
+
+                item {
+                    GlassCard(Modifier.fillMaxWidth()) {
+                        Text("PK record", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
+                            StatCard("Wins", "${pkStats.wins}", Modifier.weight(1f))
+                            StatCard("Rate", "${pkStats.winRate}%", Modifier.weight(1f))
+                            StatCard("Streak", "${pkStats.bestStreak}", Modifier.weight(1f))
+                        }
+                        Text("${pkStats.played} played / best battle ${pkStats.bestBattle} / total score ${pkStats.totalScore}", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                    }
+                }
+
+                if (pkHistory.isNotEmpty()) {
+                    item {
+                        Text("Recent PK battles", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                    }
+                    items(pkHistory.take(5), key = { it.id }) { battle ->
+                        val ownSide = if (battle.left.hostId == userId) PkSideType.LEFT else PkSideType.RIGHT
+                        val opponent = if (ownSide == PkSideType.LEFT) battle.right else battle.left
+                        val outcome = when {
+                            battle.winnerSide == PkSideType.DRAW -> "Draw"
+                            battle.winnerSide == ownSide -> "Won"
+                            else -> "Lost"
+                        }
+                        PkHistoryCard(
+                            title = "$outcome vs ${opponent.hostName}",
+                            subtitle = "${battle.left.score} - ${battle.right.score} / ${battle.mode.name.lowercase()} / ${battle.battleType.name.lowercase()}"
+                        )
+                    }
+                }
+
+                if (followers.isNotEmpty() || following.isNotEmpty()) {
+                    item {
+                        Text("Social Proof", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        GlassCard(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                text = "Followed by ${followers.take(3).joinToString { it.name.ifBlank { it.username } }.ifBlank { "new people" }}",
+                                color = TextPrimary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                            if (following.isNotEmpty()) {
+                                Text(
+                                    text = "Recently followed ${following.take(3).joinToString { it.name.ifBlank { it.username } }}",
+                                    color = TextMuted,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
                             }
                         }
                     }

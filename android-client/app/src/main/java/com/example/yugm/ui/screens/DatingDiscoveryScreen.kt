@@ -2,6 +2,8 @@ package com.example.yugm.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -30,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.example.yugm.model.Host
 import com.example.yugm.ui.components.Avatar
@@ -51,6 +53,7 @@ fun DatingDiscoveryScreen(
 ) {
     val coroutineScope = rememberCoroutineScope()
     var matchedCandidate by remember { mutableStateOf<Host?>(null) }
+    val dragOffset = remember { Animatable(0f) }
 
     LaunchedEffect(token) {
         if (token.isNotBlank()) {
@@ -153,15 +156,22 @@ fun DatingDiscoveryScreen(
                         .padding(horizontal = 20.dp, vertical = 10.dp),
                     contentAlignment = Alignment.Center
                 ) {
+                    val width = LocalConfiguration.current.screenWidthDp.toFloat()
+                    val density = LocalDensity.current.density
+                    val swipeThreshold = width * 0.4f * density
+
                     // Display back candidate card
                     if (viewModel.candidates.size > 1) {
+                        val progress = (kotlin.math.abs(dragOffset.value) / swipeThreshold).coerceIn(0f, 1f)
+                        val currentScale = 0.92f + (0.08f * progress)
+                        val currentTranslationY = 30f * (1f - progress)
                         DiscoveryCard(
                             candidate = viewModel.candidates[1],
                             isTopCard = false,
                             modifier = Modifier.graphicsLayer {
-                                scaleX = 0.95f
-                                scaleY = 0.95f
-                                translationY = 30f
+                                scaleX = currentScale
+                                scaleY = currentScale
+                                translationY = currentTranslationY
                             },
                             onProfileClick = {}
                         )
@@ -172,9 +182,15 @@ fun DatingDiscoveryScreen(
                     var swipedRight by remember { mutableStateOf(false) }
                     var swipedLeft by remember { mutableStateOf(false) }
 
+                    // Reset dragOffset on new candidate
+                    LaunchedEffect(topCandidate.id) {
+                        dragOffset.snapTo(0f)
+                    }
+
                     DiscoveryCard(
                         candidate = topCandidate,
                         isTopCard = true,
+                        dragOffset = dragOffset,
                         onSwipeRight = {
                             swipedRight = true
                             viewModel.like(token, topCandidate, "LIKE")
@@ -215,6 +231,7 @@ fun DiscoveryCard(
     candidate: Host,
     isTopCard: Boolean,
     modifier: Modifier = Modifier,
+    dragOffset: Animatable<Float, *>? = null,
     onSwipeRight: () -> Unit = {},
     onSwipeLeft: () -> Unit = {},
     onProfileClick: () -> Unit = {}
@@ -224,7 +241,8 @@ fun DiscoveryCard(
     val density = LocalDensity.current.density
     val swipeThreshold = width * 0.4f * density
 
-    val offsetX = remember { Animatable(0f) }
+    val localOffsetX = remember { Animatable(0f) }
+    val offsetX = dragOffset ?: localOffsetX
     val offsetY = remember { Animatable(0f) }
 
     val dragModifier = if (isTopCard) {
@@ -250,8 +268,8 @@ fun DiscoveryCard(
                         }
                     } else {
                         coroutineScope.launch {
-                            offsetX.animateTo(0f, animationSpec = tween(300))
-                            offsetY.animateTo(0f, animationSpec = tween(300))
+                            offsetX.animateTo(0f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow))
+                            offsetY.animateTo(0f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow))
                         }
                     }
                 }
@@ -281,6 +299,38 @@ fun DiscoveryCard(
             modifier = Modifier.fillMaxSize(),
             contentScale = androidx.compose.ui.layout.ContentScale.Crop
         )
+
+        // PASS indicator badge (fades in as user drags left)
+        val passAlpha = ((-offsetX.value) / swipeThreshold).coerceIn(0f, 1f)
+        if (passAlpha > 0f) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(24.dp)
+                    .graphicsLayer { alpha = passAlpha }
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.Red.copy(alpha = 0.8f))
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
+            ) {
+                Text("PASS", color = Color.White, fontWeight = FontWeight.Black, fontSize = 20.sp)
+            }
+        }
+
+        // LIKE indicator badge (fades in as user drags right)
+        val likeAlpha = ((offsetX.value) / swipeThreshold).coerceIn(0f, 1f)
+        if (likeAlpha > 0f) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(24.dp)
+                    .graphicsLayer { alpha = likeAlpha }
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(SuccessGreen.copy(alpha = 0.8f))
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
+            ) {
+                Text("LIKE", color = Color.White, fontWeight = FontWeight.Black, fontSize = 20.sp)
+            }
+        }
 
         // Vignette Shadow Overlay
         Box(

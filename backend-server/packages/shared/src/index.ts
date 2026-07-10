@@ -317,14 +317,16 @@ export const chatMessageSchema = z.object({
   message: z.string().min(1).max(500)
 });
 
-export const reportSchema = z.object({
-  targetUserId: z.string().optional(),
-  roomId: z.string().optional(),
+const objectIdPattern = /^[0-9a-fA-F]{24}$/;
+
+export const reportBaseSchema = z.object({
+  targetUserId: z.string().regex(objectIdPattern, "Invalid targetUserId format").optional(),
+  roomId: z.string().regex(objectIdPattern, "Invalid roomId format").optional(),
   reason: z.string().min(2).max(80),
   description: z.string().max(500).optional()
 });
 
-const objectIdPattern = /^[0-9a-fA-F]{24}$/;
+export const reportSchema = reportBaseSchema.refine((value) => Boolean(value.targetUserId || value.roomId), "Report must target a user or room");
 
 export const sendGiftSchema = z.object({
   giftId: z.string().regex(objectIdPattern, "Invalid giftId format"),

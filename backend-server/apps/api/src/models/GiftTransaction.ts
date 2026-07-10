@@ -2,7 +2,7 @@ import mongoose, { Schema } from "mongoose";
 
 const giftTransactionSchema = new Schema(
   {
-    roomId: { type: Schema.Types.ObjectId, ref: "Room", required: true },
+    roomId: { type: Schema.Types.ObjectId, ref: "Room" },
     senderId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     receiverId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     giftId: { type: Schema.Types.ObjectId, ref: "Gift", required: true },

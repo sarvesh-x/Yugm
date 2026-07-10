@@ -1,5 +1,13 @@
 package com.example.yugm.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -41,8 +49,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,6 +62,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -168,6 +179,19 @@ fun RoomCarousel(rooms: List<Room>, onOpenRoom: (Room) -> Unit) {
 
 @Composable
 fun RoomCard(room: Room, wide: Boolean, onClick: () -> Unit) {
+    val entryScale = remember(room.id) { Animatable(0.97f) }
+    val entryAlpha = remember(room.id) { Animatable(0f) }
+    LaunchedEffect(room.id) {
+        entryAlpha.animateTo(1f, tween(180))
+        entryScale.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 420f))
+    }
+    val shimmer = rememberInfiniteTransition(label = "room-shimmer")
+    val shimmerX by shimmer.animateFloat(
+        initialValue = -0.45f,
+        targetValue = 1.45f,
+        animationSpec = infiniteRepeatable(tween(2400), RepeatMode.Restart),
+        label = "room-shimmer-x"
+    )
     Card(
         onClick = onClick,
         colors = CardDefaults.cardColors(containerColor = Panel),
@@ -175,6 +199,11 @@ fun RoomCard(room: Room, wide: Boolean, onClick: () -> Unit) {
         border = BorderStroke(1.dp, Line),
         modifier = Modifier
             .then(if (wide) Modifier.fillMaxWidth().height(178.dp) else Modifier.width(230.dp).height(214.dp))
+            .graphicsLayer {
+                scaleX = entryScale.value
+                scaleY = entryScale.value
+                alpha = entryAlpha.value
+            }
     ) {
         Box(
             modifier = Modifier
@@ -198,29 +227,55 @@ fun RoomCard(room: Room, wide: Boolean, onClick: () -> Unit) {
                     if (room.tags.isNotEmpty()) Chip(room.tags.first())
                 }
             }
+            Canvas(Modifier.fillMaxSize()) {
+                val x = size.width * shimmerX
+                drawRect(
+                    brush = Brush.linearGradient(
+                        colors = listOf(Color.Transparent, Color.White.copy(alpha = 0.13f), Color.Transparent),
+                        start = Offset(x - size.width * 0.28f, 0f),
+                        end = Offset(x + size.width * 0.28f, size.height)
+                    )
+                )
+            }
         }
     }
 }
 
 @Composable
 fun HostRow(host: Host, onFollow: ((String) -> Unit)? = null, onClick: ((Host) -> Unit)? = null) {
+    val rowColor by animateColorAsState(
+        targetValue = if (host.isFollowing) Gold.copy(alpha = 0.12f) else Panel,
+        label = "host-row-color"
+    )
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .background(Panel)
+            .background(rowColor)
             .then(if (onClick != null) Modifier.clickable { onClick(host) } else Modifier)
             .padding(12.dp)
     ) {
         Avatar(initial = host.name.firstOrNull()?.toString() ?: "?", size = 48, imageUrl = host.avatar, cosmetics = host.activeCosmetics)
         Column(Modifier.weight(1f)) {
-            Text(host.name, color = TextPrimary, fontWeight = FontWeight.Black)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(host.name, color = TextPrimary, fontWeight = FontWeight.Black)
+                if (host.isOnline) {
+                    Canvas(Modifier.size(8.dp)) {
+                        drawCircle(Success)
+                    }
+                }
+            }
             Text("${host.vibe} / ${host.city}", color = TextMuted, fontSize = 12.sp)
         }
         if (onFollow != null) {
-            Text("Follow", color = Gold, fontWeight = FontWeight.Black, modifier = Modifier.clickable { onFollow(host.id) })
+            Text(
+                if (host.isFollowing) "Following" else "Follow",
+                color = if (host.isFollowing) TextPrimary else Gold,
+                fontWeight = FontWeight.Black,
+                modifier = Modifier.clickable { onFollow(host.id) }
+            )
         }
     }
 }
@@ -346,8 +401,37 @@ fun SectionTitle(text: String) {
 
 @Composable
 fun LiveBadge() {
+    val pulse = rememberInfiniteTransition(label = "live-pulse")
+    val alpha by pulse.animateFloat(
+        initialValue = 0.42f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(620), RepeatMode.Reverse),
+        label = "live-alpha"
+    )
+    val scale by pulse.animateFloat(
+        initialValue = 0.72f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(620), RepeatMode.Reverse),
+        label = "live-scale"
+    )
     Surface(color = Pink, shape = RoundedCornerShape(6.dp)) {
-        Text("LIVE", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Canvas(
+                Modifier
+                    .size(7.dp)
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                    }
+            ) {
+                drawCircle(Color.White.copy(alpha = alpha))
+            }
+            Text("LIVE", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black)
+        }
     }
 }
 

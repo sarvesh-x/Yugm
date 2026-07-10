@@ -1,32 +1,178 @@
 package com.example.yugm.ui.screens
 
+import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.yugm.api.YugmApi
+import com.example.yugm.model.Host
+import com.example.yugm.ui.components.Avatar
+import com.example.yugm.ui.components.ConfirmDialog
 import com.example.yugm.ui.components.GlassCard
-import com.example.yugm.ui.theme.*
+import com.example.yugm.ui.components.LoadingState
+import com.example.yugm.ui.components.SectionTitle
+import com.example.yugm.ui.components.YugmTextField
+import com.example.yugm.ui.theme.Background
+import com.example.yugm.ui.theme.Danger
+import com.example.yugm.ui.theme.Gold
+import com.example.yugm.ui.theme.Line
+import com.example.yugm.ui.theme.Panel
+import com.example.yugm.ui.theme.PanelStrong
+import com.example.yugm.ui.theme.Pink
+import com.example.yugm.ui.theme.Purple
+import com.example.yugm.ui.theme.TextMuted
+import com.example.yugm.ui.theme.TextPrimary
+import kotlinx.coroutines.launch
+
+private enum class SettingsPane { Home, Blocked, Notifications, Feedback, About, Terms, Privacy, Guidelines }
+
+private val docs = mapOf(
+    SettingsPane.About to "Yugm is a social voice, video, chat, dating, and community app built around live connection, private conversations, creator growth, gifts, and families.",
+    SettingsPane.Terms to "Use Yugm respectfully. Do not harass, impersonate, exploit payment systems, share illegal content, or attempt to bypass safety controls. Accounts may be restricted when platform rules are violated.",
+    SettingsPane.Privacy to "Yugm uses profile, room, chat, wallet, safety, and device data to run the service, protect users, process purchases, personalize recommendations, and respond to support requests.",
+    SettingsPane.Guidelines to "Keep rooms and chats respectful. No hateful conduct, explicit abuse, spam, fake accounts, threats, or attempts to move unsafe activity off-platform. Report anything that feels wrong."
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
+    token: String,
+    userName: String,
+    username: String,
     onLogout: () -> Unit,
     onBack: () -> Unit,
-    onNavigateToSafety: () -> Unit
+    onNavigateToSafety: () -> Unit,
+    onNavigateToBlocked: () -> Unit,
+    onNavigateToProfileSetup: () -> Unit,
+    onNavigateToGames: () -> Unit,
+    onNavigateToTrustVerification: () -> Unit
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var pane by remember { mutableStateOf(SettingsPane.Home) }
+    var blockedUsers by remember { mutableStateOf<List<Host>>(emptyList()) }
+    var preferences by remember { mutableStateOf(defaultNotificationPreferences()) }
+    var loading by remember { mutableStateOf(true) }
+    var busy by remember { mutableStateOf(false) }
+    var feedbackSubject by remember { mutableStateOf("") }
+    var feedbackMessage by remember { mutableStateOf("") }
+    var showLogoutConfirm by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    fun refreshSettings() {
+        loading = true
+        error = null
+        scope.launch {
+            runCatching {
+                blockedUsers = YugmApi.getBlockedUsers(token)
+                preferences = defaultNotificationPreferences() + YugmApi.notificationPreferences(token).values
+            }.onFailure {
+                error = it.message ?: "Could not load settings"
+            }
+            loading = false
+        }
+    }
+
+    fun updatePreference(key: String, value: Boolean) {
+        val next = preferences + (key to value)
+        preferences = next
+        busy = true
+        scope.launch {
+            runCatching { YugmApi.updateNotificationPreferences(token, next) }
+                .onSuccess { preferences = defaultNotificationPreferences() + it.values }
+                .onFailure {
+                    Toast.makeText(context, it.message ?: "Notification update failed", Toast.LENGTH_SHORT).show()
+                    refreshSettings()
+                }
+            busy = false
+        }
+    }
+
+    fun unblock(userId: String) {
+        busy = true
+        scope.launch {
+            runCatching { YugmApi.unblockUser(userId, token) }
+                .onSuccess {
+                    blockedUsers = blockedUsers.filterNot { it.id == userId }
+                    Toast.makeText(context, "User unblocked", Toast.LENGTH_SHORT).show()
+                }
+                .onFailure { Toast.makeText(context, it.message ?: "Could not unblock user", Toast.LENGTH_SHORT).show() }
+            busy = false
+        }
+    }
+
+    fun submitFeedback() {
+        val subject = feedbackSubject.trim()
+        val message = feedbackMessage.trim()
+        if (subject.isBlank() || message.isBlank()) return
+        busy = true
+        scope.launch {
+            runCatching { YugmApi.sendFeedback(token, subject, message) }
+                .onSuccess {
+                    feedbackSubject = ""
+                    feedbackMessage = ""
+                    pane = SettingsPane.Home
+                    Toast.makeText(context, "Feedback sent", Toast.LENGTH_SHORT).show()
+                }
+                .onFailure { Toast.makeText(context, it.message ?: "Could not send feedback", Toast.LENGTH_SHORT).show() }
+            busy = false
+        }
+    }
+
+    LaunchedEffect(token) {
+        if (token.isNotBlank()) refreshSettings()
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings & Privacy", color = Color.White, fontWeight = FontWeight.Bold) },
+                title = { Text(paneTitle(pane), color = TextPrimary, fontWeight = FontWeight.Black) },
                 navigationIcon = {
-                    TextButton(onClick = onBack) {
+                    TextButton(onClick = { if (pane == SettingsPane.Home) onBack() else pane = SettingsPane.Home }) {
                         Text("Back", color = Gold, fontWeight = FontWeight.Bold)
                     }
                 },
@@ -35,83 +181,317 @@ fun SettingsScreen(
         },
         containerColor = Background
     ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            item {
-                Text(
-                    text = "Account settings",
-                    color = Gold,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
-                )
+        if (loading && pane == SettingsPane.Home) {
+            Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
+                LoadingState("Loading settings...")
             }
+        } else {
+            when (pane) {
+                SettingsPane.Home -> SettingsHome(
+                    modifier = Modifier.padding(innerPadding),
+                    userName = userName,
+                    username = username,
+                    blockedCount = blockedUsers.size,
+                    error = error,
+                    onProfile = onNavigateToProfileSetup,
+                    onGames = onNavigateToGames,
+                    onTrustVerification = onNavigateToTrustVerification,
+                    onSafety = onNavigateToSafety,
+                    onBlocked = { pane = SettingsPane.Blocked },
+                    onBlockedRoute = onNavigateToBlocked,
+                    onNotifications = { pane = SettingsPane.Notifications },
+                    onFeedback = { pane = SettingsPane.Feedback },
+                    onDoc = { pane = it },
+                    onLogout = { showLogoutConfirm = true }
+                )
+                SettingsPane.Blocked -> BlockedPane(Modifier.padding(innerPadding), blockedUsers, busy, onUnblock = { unblock(it) })
+                SettingsPane.Notifications -> NotificationsPane(Modifier.padding(innerPadding), preferences, busy, onToggle = { key, value -> updatePreference(key, value) })
+                SettingsPane.Feedback -> FeedbackPane(
+                    modifier = Modifier.padding(innerPadding),
+                    subject = feedbackSubject,
+                    message = feedbackMessage,
+                    busy = busy,
+                    onSubjectChange = { feedbackSubject = it },
+                    onMessageChange = { feedbackMessage = it },
+                    onSubmit = { submitFeedback() }
+                )
+                SettingsPane.About, SettingsPane.Terms, SettingsPane.Privacy, SettingsPane.Guidelines -> DocumentPane(Modifier.padding(innerPadding), pane)
+            }
+        }
+    }
 
-            item {
-                GlassCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onNavigateToSafety() }
+    if (showLogoutConfirm) {
+        ConfirmDialog(
+            title = "Log out",
+            message = "Are you sure you want to log out of Yugm?",
+            confirmLabel = "Log out",
+            onConfirm = {
+                showLogoutConfirm = false
+                onLogout()
+            },
+            onDismiss = { showLogoutConfirm = false }
+        )
+    }
+}
+
+@Composable
+private fun SettingsHome(
+    modifier: Modifier,
+    userName: String,
+    username: String,
+    blockedCount: Int,
+    error: String?,
+    onProfile: () -> Unit,
+    onGames: () -> Unit,
+    onTrustVerification: () -> Unit,
+    onSafety: () -> Unit,
+    onBlocked: () -> Unit,
+    onBlockedRoute: () -> Unit,
+    onNotifications: () -> Unit,
+    onFeedback: () -> Unit,
+    onDoc: (SettingsPane) -> Unit,
+    onLogout: () -> Unit
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Box(
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Brush.linearGradient(listOf(Purple, Pink))).padding(16.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Avatar(userName.firstOrNull()?.toString() ?: "Y", 52)
+                    Column(Modifier.weight(1f)) {
+                        Text(userName.ifBlank { "Yugm User" }, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                        Text("@${username.ifBlank { "yugm" }}", color = TextPrimary.copy(alpha = 0.74f), fontWeight = FontWeight.Bold)
+                    }
+                    OutlinedButton(onClick = onProfile, border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)), shape = RoundedCornerShape(8.dp)) {
+                        Text("Edit", color = TextPrimary, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            if (!error.isNullOrBlank()) {
+                Text(error, color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
+            }
+        }
+        item {
+            SettingsGroup("Account") {
+                SettingsNavRow("Detailed profile", "Edit your public profile and interests.", onProfile)
+                SettingsNavRow("Yugm Trust Verification", "Verify your face and voice to show people you're real.", onTrustVerification)
+                SettingsNavRow("Yugm Arcade", "Play mini games and manage challenges.", onGames)
+                SettingsNavRow("Notification settings", "Control messages, rooms, gifts, safety, and updates.", onNotifications)
+            }
+        }
+        item {
+            SettingsGroup("Privacy & Safety") {
+                SettingsNavRow("Blocked list", "$blockedCount people blocked.", onBlocked)
+                SettingsNavRow("Safety center", "Reports, trust checks, and privacy actions.", onSafety)
+                SettingsNavRow("Blocked list route", "Open the dedicated block management screen.", onBlockedRoute)
+                SettingsNavRow("Community guidelines", "Read the rules for rooms, chats, and profiles.") { onDoc(SettingsPane.Guidelines) }
+                SettingsNavRow("Privacy policy", "How Yugm uses data to run and protect the service.") { onDoc(SettingsPane.Privacy) }
+            }
+        }
+        item {
+            SettingsGroup("Help & Legal") {
+                SettingsNavRow("Help and feedback", "Send a support note using the backend ticket flow.", onFeedback)
+                SettingsNavRow("About", "Yugm app summary and product scope.") { onDoc(SettingsPane.About) }
+                SettingsNavRow("Terms of use", "Respect, safety, and account rules.") { onDoc(SettingsPane.Terms) }
+            }
+        }
+        item {
+            Button(
+                onClick = onLogout,
+                colors = ButtonDefaults.buttonColors(containerColor = Danger),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth().height(50.dp)
+            ) {
+                Text("Logout from Yugm", color = TextPrimary, fontWeight = FontWeight.Black)
+            }
+            Text("Yugm v1.2.0 / Match the vibe.", color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp).fillMaxWidth())
+        }
+    }
+}
+
+@Composable
+private fun BlockedPane(modifier: Modifier, blockedUsers: List<Host>, busy: Boolean, onUnblock: (String) -> Unit) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Text("People you unblock can view eligible public activity and interact again unless they have blocked you.", color = TextMuted, fontWeight = FontWeight.Bold, lineHeight = 20.sp)
+        }
+        if (blockedUsers.isEmpty()) {
+            item { GlassCard { Text("No blocked users.", color = TextMuted) } }
+        } else {
+            items(blockedUsers, key = { it.id }) { user ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Panel).padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                    Avatar(user.name.firstOrNull()?.toString() ?: "?", 44, imageUrl = user.avatar, cosmetics = user.activeCosmetics)
+                    Column(Modifier.weight(1f)) {
+                        Text(user.name, color = TextPrimary, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("@${user.username.ifBlank { user.city }}", color = TextMuted, fontSize = 12.sp)
+                    }
+                    Button(
+                        onClick = { onUnblock(user.id) },
+                        enabled = !busy,
+                        colors = ButtonDefaults.buttonColors(containerColor = Gold),
+                        shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text("Privacy & Safety Center", color = Color.White, fontWeight = FontWeight.Bold)
-                        Text("❯", color = Gold)
+                        Text("Unblock", color = Background, fontWeight = FontWeight.Black, fontSize = 12.sp)
                     }
-                }
-            }
-
-            item {
-                GlassCard(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Notifications status: Enabled", color = Color.White)
-                        Text("Online presence: Visible", color = Color.White)
-                    }
-                }
-            }
-
-            item {
-                Text(
-                    text = "Help & Support",
-                    color = Gold,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
-                )
-            }
-
-            item {
-                GlassCard(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Community Guidelines", color = Color.White)
-                        Text("Terms of Service", color = Color.White)
-                        Text("Version: 1.2.0 (Stable)", color = TextMuted)
-                    }
-                }
-            }
-
-            item {
-                Spacer(modifier = Modifier.height(20.dp))
-                Button(
-                    onClick = onLogout,
-                    colors = ButtonDefaults.buttonColors(containerColor = DangerRed),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                ) {
-                    Text("Logout from Yugm", color = Color.White, fontWeight = FontWeight.Black)
                 }
             }
         }
     }
+}
+
+@Composable
+private fun NotificationsPane(
+    modifier: Modifier,
+    preferences: Map<String, Boolean>,
+    busy: Boolean,
+    onToggle: (String, Boolean) -> Unit
+) {
+    val rows = listOf(
+        "messages" to "Direct messages",
+        "roomInvites" to "Room invites",
+        "gifts" to "Gifts and wallet",
+        "follows" to "Followers",
+        "hostGoingLive" to "Hosts going live",
+        "wallet" to "Wallet activity",
+        "safety" to "Safety alerts",
+        "marketing" to "Product updates"
+    )
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(rows, key = { it.first }) { (key, title) ->
+            Row(
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Panel).padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(title, color = TextPrimary, fontWeight = FontWeight.Black)
+                    Text(if (preferences[key] == true) "Enabled" else "Muted", color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+                Switch(
+                    checked = preferences[key] == true,
+                    onCheckedChange = { onToggle(key, it) },
+                    enabled = !busy
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FeedbackPane(
+    modifier: Modifier,
+    subject: String,
+    message: String,
+    busy: Boolean,
+    onSubjectChange: (String) -> Unit,
+    onMessageChange: (String) -> Unit,
+    onSubmit: () -> Unit
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Text("Tell us what broke, what is confusing, or what you want Yugm to improve next.", color = TextMuted, fontWeight = FontWeight.Bold, lineHeight = 20.sp)
+        }
+        item { YugmTextField(value = subject, onValueChange = onSubjectChange, label = "Subject") }
+        item { YugmTextField(value = message, onValueChange = onMessageChange, label = "Write your feedback", minLines = 5) }
+        item {
+            Button(
+                onClick = onSubmit,
+                enabled = !busy && subject.trim().isNotBlank() && message.trim().isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = Pink),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth().height(48.dp)
+            ) {
+                if (busy) CircularProgressIndicator(color = TextPrimary, strokeWidth = 2.dp, modifier = Modifier.height(18.dp))
+                else Text("Send feedback", color = TextPrimary, fontWeight = FontWeight.Black)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DocumentPane(modifier: Modifier, pane: SettingsPane) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Text(paneTitle(pane), color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 24.sp)
+            Text(docs[pane].orEmpty(), color = TextMuted, fontWeight = FontWeight.Bold, lineHeight = 24.sp, modifier = Modifier.padding(top = 12.dp))
+        }
+    }
+}
+
+@Composable
+private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SectionTitle(title)
+        content()
+    }
+}
+
+@Composable
+private fun SettingsNavRow(title: String, subtitle: String, onClick: () -> Unit) {
+    Surface(
+        color = Panel,
+        border = BorderStroke(1.dp, Line),
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(Modifier.width(4.dp).height(36.dp).clip(RoundedCornerShape(8.dp)).background(PanelStrong))
+            Column(Modifier.weight(1f)) {
+                Text(title, color = TextPrimary, fontWeight = FontWeight.Black)
+                Text(subtitle, color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            Text(">", color = Gold, fontWeight = FontWeight.Black)
+        }
+    }
+}
+
+private fun defaultNotificationPreferences(): Map<String, Boolean> = mapOf(
+    "roomInvites" to true,
+    "messages" to true,
+    "gifts" to true,
+    "follows" to true,
+    "hostGoingLive" to true,
+    "wallet" to true,
+    "safety" to true,
+    "marketing" to false
+)
+
+private fun paneTitle(pane: SettingsPane): String = when (pane) {
+    SettingsPane.Home -> "Settings & Privacy"
+    SettingsPane.Blocked -> "Blocked Users"
+    SettingsPane.Notifications -> "Notifications"
+    SettingsPane.Feedback -> "Help & Feedback"
+    SettingsPane.About -> "About Yugm"
+    SettingsPane.Terms -> "Terms of Use"
+    SettingsPane.Privacy -> "Privacy Policy"
+    SettingsPane.Guidelines -> "Community Guidelines"
 }

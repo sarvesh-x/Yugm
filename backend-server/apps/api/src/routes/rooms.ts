@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { chatMessageSchema, createPollSchema, createRoomSchema, directMessageSchema, inviteSchema, reactionSchema, reportSchema, socketEvents, votePollSchema } from "@yugm/shared";
+import { chatMessageSchema, createPollSchema, createRoomSchema, directMessageSchema, inviteSchema, reactionSchema, reportBaseSchema, socketEvents, votePollSchema } from "@yugm/shared";
 import { requireAuth, requireNotMuted, type AuthRequest } from "../middleware/auth.js";
 import { chatLimiter, reportLimiter } from "../middleware/rateLimit.js";
 import { validateBody } from "../middleware/validate.js";
@@ -9,6 +9,7 @@ import { ChatMessage } from "../models/ChatMessage.js";
 import { DirectMessage } from "../models/DirectMessage.js";
 import { Follow } from "../models/Follow.js";
 import { Poll } from "../models/Poll.js";
+import { PkBattle } from "../models/PkBattle.js";
 import { Room } from "../models/Room.js";
 import { RoomActivity } from "../models/RoomActivity.js";
 import { RoomInvite } from "../models/RoomInvite.js";
@@ -18,6 +19,7 @@ import { User } from "../models/User.js";
 import { asyncHandler, sanitizeText, sendOk, HttpError, ErrorCode, isValidObjectId } from "../utils/http.js";
 import { emitRoom, emitUser } from "../services/socket.js";
 import { createNotification } from "../services/notifications.js";
+import { pkState } from "../services/pk.js";
 import { getCachedJson, invalidateCache, setCachedJson } from "../services/redis.js";
 import { grantXp } from "../services/levels.js";
 import { grantRelationshipXp } from "../services/relationships.js";
@@ -62,6 +64,25 @@ async function assertHost(req: AuthRequest, roomId: string) {
     throw new HttpError(403, "Host control required", ErrorCode.FORBIDDEN);
   }
   return room;
+}
+
+function objectIdBody(value: unknown, label: string) {
+  if (typeof value !== "string" || !isValidObjectId(value)) {
+    throw new HttpError(400, `Invalid ${label}`, ErrorCode.VALIDATION);
+  }
+  return value;
+}
+
+function assertNotHostTarget(room: any, userId: string, action: string) {
+  if (room.hostId?.toString?.() === userId) {
+    throw new HttpError(400, `Cannot ${action} the room host`, ErrorCode.VALIDATION);
+  }
+}
+
+async function requireActiveParticipant(roomId: unknown, userId: string) {
+  const participant = await RoomParticipant.findOne({ roomId, userId, leftAt: null }).lean();
+  if (!participant) throw new HttpError(403, "You are not a participant in this room", ErrorCode.FORBIDDEN);
+  return participant;
 }
 
 function roomObjectIdListIncludes(values: unknown[] | undefined, userId: string) {
@@ -192,6 +213,15 @@ roomsRouter.get("/trending", asyncHandler(async (_req, res) => {
   sendOk(res, payload);
 }));
 
+roomsRouter.get("/:roomId/pk-history", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.roomId)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
+  const battles = await PkBattle.find({
+    status: { $in: ["ENDED", "FORCE_ENDED"] },
+    $or: [{ leftRoomId: req.params.roomId }, { rightRoomId: req.params.roomId }]
+  }).sort({ createdAt: -1 }).limit(50).lean();
+  sendOk(res, { battles: await Promise.all(battles.map((battle) => pkState(battle))) });
+}));
+
 roomsRouter.get("/search", asyncHandler(async (req, res) => {
   const q = String(req.query.q || "").trim();
   if (!q || q.length < 2) throw new HttpError(400, "Query must be at least 2 characters", ErrorCode.VALIDATION);
@@ -278,7 +308,10 @@ roomsRouter.patch("/:id", requireAuth, asyncHandler(async (req: AuthRequest, res
 roomsRouter.post("/:id/request-speaker", requireAuth, requireNotMuted, asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
   const room = await getRoomOrThrow(req.params.id);
+  if (room.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
   if (!room.allowAudienceMicRequests) throw new HttpError(400, "Mic requests are closed", ErrorCode.VALIDATION);
+  const participant = await requireActiveParticipant(room._id, req.user!.id);
+  if (participant.role !== "AUDIENCE") throw new HttpError(409, "Only audience members can request the mic", ErrorCode.CONFLICT);
   const existing = await SpeakerRequest.findOne({ roomId: room._id, userId: req.user!.id, status: "PENDING" }).lean();
   if (existing) throw new HttpError(409, "Speaker request already pending", ErrorCode.CONFLICT);
   const request = await SpeakerRequest.create({ roomId: room._id, userId: req.user!.id });
@@ -289,8 +322,17 @@ roomsRouter.post("/:id/request-speaker", requireAuth, requireNotMuted, asyncHand
 
 roomsRouter.post("/:id/approve-speaker", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   const room = await assertHost(req, req.params.id);
-  const { userId } = req.body;
-  await SpeakerRequest.findOneAndUpdate({ roomId: room._id, userId, status: "PENDING" }, { status: "APPROVED" });
+  if (room.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
+  const userId = objectIdBody(req.body.userId, "user ID");
+  assertNotHostTarget(room, userId, "approve");
+  const participant = await RoomParticipant.findOne({ roomId: room._id, userId, leftAt: null }).lean();
+  if (!participant) throw new HttpError(404, "Active participant not found", ErrorCode.NOT_FOUND);
+  if (participant.role !== "AUDIENCE") throw new HttpError(409, "User is already allowed to speak", ErrorCode.CONFLICT);
+  if (!roomObjectIdListIncludes(room.speakerIds, userId) && (room.speakerIds?.length ?? 0) >= room.maxSpeakers) {
+    throw new HttpError(409, "Speaker limit reached", ErrorCode.CONFLICT);
+  }
+  const request = await SpeakerRequest.findOneAndUpdate({ roomId: room._id, userId, status: "PENDING" }, { status: "APPROVED" }, { new: true });
+  if (!request) throw new HttpError(404, "Pending speaker request not found", ErrorCode.NOT_FOUND);
   await Room.findByIdAndUpdate(room._id, { $addToSet: { speakerIds: userId } });
   await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { role: "SPEAKER" });
   emitRoom(room._id.toString(), socketEvents.roomSpeakerApprove, { userId });
@@ -299,30 +341,40 @@ roomsRouter.post("/:id/approve-speaker", requireAuth, asyncHandler(async (req: A
 
 roomsRouter.post("/:id/reject-speaker", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   const room = await assertHost(req, req.params.id);
-  await SpeakerRequest.findOneAndUpdate({ roomId: room._id, userId: req.body.userId, status: "PENDING" }, { status: "REJECTED" });
-  emitRoom(room._id.toString(), socketEvents.roomSpeakerReject, { userId: req.body.userId });
+  const userId = objectIdBody(req.body.userId, "user ID");
+  assertNotHostTarget(room, userId, "reject");
+  const request = await SpeakerRequest.findOneAndUpdate({ roomId: room._id, userId, status: "PENDING" }, { status: "REJECTED" }, { new: true });
+  if (!request) throw new HttpError(404, "Pending speaker request not found", ErrorCode.NOT_FOUND);
+  emitRoom(room._id.toString(), socketEvents.roomSpeakerReject, { userId });
   sendOk(res, { rejected: true });
 }));
 
 roomsRouter.post("/:id/mute-user", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   const room = await assertHost(req, req.params.id);
-  await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId: req.body.userId, leftAt: null }, { micEnabled: false });
-  emitRoom(room._id.toString(), socketEvents.roomUserMute, { userId: req.body.userId });
+  const userId = objectIdBody(req.body.userId, "user ID");
+  assertNotHostTarget(room, userId, "mute");
+  const participant = await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { micEnabled: false }, { new: true });
+  if (!participant) throw new HttpError(404, "Active participant not found", ErrorCode.NOT_FOUND);
+  emitRoom(room._id.toString(), socketEvents.roomUserMute, { userId });
   sendOk(res, { muted: true });
 }));
 
 roomsRouter.post("/:id/remove-user", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   const room = await assertHost(req, req.params.id);
-  const result = await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId: req.body.userId, leftAt: null }, { leftAt: new Date() });
+  const userId = objectIdBody(req.body.userId, "user ID");
+  assertNotHostTarget(room, userId, "remove");
+  const result = await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { leftAt: new Date() });
+  if (!result) throw new HttpError(404, "Active participant not found", ErrorCode.NOT_FOUND);
+  await Room.findByIdAndUpdate(room._id, { $pull: { speakerIds: userId, moderatorIds: userId } });
   if (result) {
     await decrementRoomParticipantCount(room._id);
     await invalidateCache("rooms:*");
   }
-  emitRoom(room._id.toString(), socketEvents.roomUserRemove, { userId: req.body.userId });
+  emitRoom(room._id.toString(), socketEvents.roomUserRemove, { userId });
   sendOk(res, { removed: true });
 }));
 
-roomsRouter.post("/:id/report", requireAuth, reportLimiter, validateBody(reportSchema.omit({ roomId: true }).extend({ targetUserId: reportSchema.shape.targetUserId })), asyncHandler(async (req: AuthRequest, res) => {
+roomsRouter.post("/:id/report", requireAuth, reportLimiter, validateBody(reportBaseSchema.omit({ roomId: true }).extend({ targetUserId: reportBaseSchema.shape.targetUserId })), asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
   const report = await createReportWithEvidence({ ...req.body, roomId: req.params.id }, req.user!.id);
   sendOk(res, { report }, 201);
@@ -345,6 +397,7 @@ roomsRouter.get("/:id/activity", asyncHandler(async (req, res) => {
 roomsRouter.post("/:id/reactions", requireAuth, validateBody(reactionSchema), asyncHandler(async (req: AuthRequest, res) => {
   const room = await getRoomOrThrow(req.params.id);
   if (room.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
+  await requireActiveParticipant(room._id, req.user!.id);
   const payload = { type: req.body.type, userId: req.user!.id, name: req.user!.name, at: new Date().toISOString() };
   emitRoom(req.params.id, socketEvents.roomReactionSend, payload);
   await addActivity(req.params.id, "REACTION", `${req.user!.name} reacted with ${req.body.type}`, req.user!.id, payload);
@@ -359,6 +412,7 @@ roomsRouter.get("/:id/polls", asyncHandler(async (req, res) => {
 
 roomsRouter.post("/:id/polls", requireAuth, validateBody(createPollSchema), asyncHandler(async (req: AuthRequest, res) => {
   const room = await assertHost(req, req.params.id);
+  if (room.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
   const poll = await Poll.create({
     roomId: room._id,
     createdBy: req.user!.id,
@@ -371,7 +425,9 @@ roomsRouter.post("/:id/polls", requireAuth, validateBody(createPollSchema), asyn
 }));
 
 roomsRouter.post("/:id/polls/:pollId/vote", requireAuth, validateBody(votePollSchema), asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
   if (!isValidObjectId(req.params.pollId)) throw new HttpError(400, "Invalid poll ID", ErrorCode.VALIDATION);
+  await requireActiveParticipant(req.params.id, req.user!.id);
   const poll = await Poll.findOne({ _id: req.params.pollId, roomId: req.params.id, isActive: true });
   if (!poll) throw new HttpError(404, "Poll not found", ErrorCode.NOT_FOUND);
   if (poll.voters.some((id) => id.toString() === req.user!.id)) throw new HttpError(409, "You already voted", ErrorCode.CONFLICT);
@@ -385,6 +441,9 @@ roomsRouter.post("/:id/polls/:pollId/vote", requireAuth, validateBody(votePollSc
 
 roomsRouter.post("/:id/invites", requireAuth, requireNotMuted, validateBody(inviteSchema), asyncHandler(async (req: AuthRequest, res) => {
   const room = await getRoomOrThrow(req.params.id);
+  if (room.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
+  if (req.body.userId === req.user!.id) throw new HttpError(400, "Cannot invite yourself", ErrorCode.VALIDATION);
+  await requireActiveParticipant(room._id, req.user!.id);
   await assertUsersCanInteract(req.user!.id, req.body.userId, "Cannot invite this user");
   const invite = await RoomInvite.findOneAndUpdate(
     { roomId: room._id, inviterId: req.user!.id, inviteeId: req.body.userId, status: "PENDING" },
@@ -412,6 +471,7 @@ roomsRouter.get("/:id/missions", requireAuth, asyncHandler(async (req: AuthReque
 
 roomsRouter.post("/:id/messages/direct", requireAuth, requireNotMuted, validateBody(directMessageSchema), asyncHandler(async (req: AuthRequest, res) => {
   const room = await getRoomOrThrow(req.params.id);
+  await requireActiveParticipant(room._id, req.user!.id);
   const receiverId = room.hostId.toString() === req.user!.id ? String(req.body.receiverId || "") : room.hostId.toString();
   if (!isValidObjectId(receiverId)) throw new HttpError(400, "Invalid receiver", ErrorCode.VALIDATION);
   if (receiverId === req.user!.id) throw new HttpError(400, "Cannot message yourself", ErrorCode.VALIDATION);

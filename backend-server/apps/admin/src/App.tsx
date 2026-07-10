@@ -32,6 +32,7 @@ type ViewKey =
   | "reports"
   | "queue"
   | "rooms"
+  | "pk"
   | "messages"
   | "wallet"
   | "payments"
@@ -54,6 +55,7 @@ const navItems: Array<{ key: ViewKey; label: string; icon: ReactNode; group: str
   { key: "reports", label: "Reports", icon: <AlertTriangle />, group: "Safety" },
   { key: "queue", label: "Moderation queue", icon: <Shield />, group: "Safety" },
   { key: "rooms", label: "Live rooms", icon: <Radio />, group: "Safety" },
+  { key: "pk", label: "PK battles", icon: <Sparkles />, group: "Safety" },
   { key: "messages", label: "Messages", icon: <MessageSquare />, group: "Safety" },
   { key: "wallet", label: "Wallet", icon: <Wallet />, group: "Money" },
   { key: "payments", label: "Payments", icon: <Coins />, group: "Money" },
@@ -229,6 +231,7 @@ function ViewRenderer({ view, session, setNotice, onLogout }: { view: ViewKey; s
   if (view === "reports") return <ReportsPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "queue") return <SimpleResource token={session.accessToken} title="Moderation Queue" endpoint="/moderation/queue" columns={queueColumns} />;
   if (view === "rooms") return <RoomsPage token={session.accessToken} setNotice={setNotice} />;
+  if (view === "pk") return <PkBattlesPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "messages") return <SimpleResource token={session.accessToken} title="Room Messages" endpoint="/messages" columns={messageColumns} searchPlaceholder="Search keyword" searchParam="containsKeyword" />;
   if (view === "wallet") return <WalletPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "payments") return <SimpleResource token={session.accessToken} title="Recharges" endpoint="/payments/recharges" columns={paymentColumns} />;
@@ -458,6 +461,80 @@ function RoomsPage({ token, setNotice }: { token: string; setNotice: (notice: No
               <button className="danger" onClick={endRoom}>End room</button>
               <button className="soft" onClick={() => setNotice({ tone: "info", text: "Room warning endpoint is ready from API." })}>Send warning</button>
             </div>
+          </>
+        )}
+      </Drawer>
+    </ResourceFrame>
+  );
+}
+
+function PkBattlesPage({ token, setNotice }: { token: string; setNotice: (notice: Notice) => void }) {
+  const [selected, setSelected] = useState<any>(null);
+  const [events, setEvents] = useState<any[]>([]);
+  const [reason, setReason] = useState("Moderation review");
+  const resource = useResource<any[]>("/pk/battles/live", token);
+
+  useEffect(() => {
+    if (!selected?.id) {
+      setEvents([]);
+      return;
+    }
+    adminApi<any[]>(`/pk/battles/${selected.id}/events`, { token })
+      .then(setEvents)
+      .catch(() => setEvents([]));
+  }, [selected?.id, token]);
+
+  const endBattle = async () => {
+    if (!selected) return;
+    try {
+      await adminApi(`/pk/battles/${selected.id}/end`, { token, method: "POST", body: JSON.stringify({ reason }) });
+      setNotice({ tone: "success", text: "PK battle ended" });
+      setSelected(null);
+      resource.refresh();
+    } catch (err: any) {
+      setNotice({ tone: "error", text: err.message });
+    }
+  };
+
+  const flagBattle = async () => {
+    if (!selected) return;
+    try {
+      await adminApi(`/pk/battles/${selected.id}/flag`, { token, method: "POST", body: JSON.stringify({ reason }) });
+      setNotice({ tone: "success", text: "PK battle flagged" });
+    } catch (err: any) {
+      setNotice({ tone: "error", text: err.message });
+    }
+  };
+
+  return (
+    <ResourceFrame title="PK Battles" subtitle="Monitor live PK scores, event trails, and moderation actions." loading={resource.loading} error={resource.error} onRetry={resource.refresh}>
+      <DataTable rows={resource.data || []} columns={pkColumns} onRowClick={setSelected} actions={(row) => <button className="ghost-button" onClick={() => setSelected(row)}>Inspect</button>} />
+      <Drawer open={Boolean(selected)} title={selected?.title || selected?.battleCode || "PK battle"} onClose={() => setSelected(null)}>
+        {selected && (
+          <>
+            <div className="detail-card">
+              <StatusBadge value={selected.status} />
+              <strong>{selected.left?.hostName} vs {selected.right?.hostName}</strong>
+              <p>{formatNumber(selected.left?.score)} - {formatNumber(selected.right?.score)} / {selected.remainingSeconds || 0}s left</p>
+              <p>{selected.battleType} / {selected.mode} / leader {selected.leader || "DRAW"}</p>
+            </div>
+            <label className="stacked-field">Moderation note<textarea value={reason} onChange={(event) => setReason(event.target.value)} /></label>
+            <div className="action-grid">
+              <button className="danger" onClick={endBattle}>Force end PK</button>
+              <button className="soft" onClick={flagBattle}>Flag for review</button>
+            </div>
+            <Panel title="Event trail" action={`${events.length} events`}>
+              {events.slice(0, 12).map((event) => (
+                <div className="list-row" key={event._id || event.id}>
+                  <div>
+                    <strong>{event.eventType}</strong>
+                    <span>{event.side || "BATTLE"} / +{formatNumber(event.points)} / {formatDate(event.createdAt)}</span>
+                  </div>
+                  <StatusBadge value={event.side || "PK"} />
+                </div>
+              ))}
+              {!events.length && <EmptyState text="No events recorded yet." />}
+            </Panel>
           </>
         )}
       </Drawer>
@@ -935,6 +1012,16 @@ const messageColumns: ColumnDef[] = [
   { key: "message", label: "Message" },
   { key: "roomId.title", label: "Room" },
   { key: "createdAt", label: "Sent" }
+];
+
+const pkColumns: ColumnDef[] = [
+  { key: "battleCode", label: "Code" },
+  { key: "left.hostName", label: "Left host" },
+  { key: "right.hostName", label: "Right host" },
+  { key: "score", label: "Score", render: (row) => `${formatNumber(row.left?.score)} - ${formatNumber(row.right?.score)}` },
+  { key: "remainingSeconds", label: "Time", render: (row) => `${row.remainingSeconds || 0}s` },
+  { key: "leader", label: "Leader", render: (row) => <StatusBadge value={row.leader || "DRAW"} /> },
+  { key: "status", label: "Status", render: (row) => <StatusBadge value={row.status} /> }
 ];
 
 const walletColumns: ColumnDef[] = [

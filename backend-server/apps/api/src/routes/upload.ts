@@ -42,6 +42,28 @@ const profileMediaUpload = multer({
   },
 });
 
+const trustVerificationUpload = multer({
+  storage,
+  limits: { fileSize: 30 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const purpose = String(req.body.purpose || "").toUpperCase();
+    const ext = path.extname(file.originalname).toLowerCase();
+    const faceAllowed = [".jpg", ".jpeg", ".png", ".webp", ".mp4", ".mov", ".m4v", ".webm"];
+    const voiceAllowed = [".mp3", ".m4a", ".aac", ".wav", ".webm", ".ogg"];
+    if (purpose === "VOICE") {
+      if (!voiceAllowed.includes(ext) || !file.mimetype.startsWith("audio/") && file.mimetype !== "video/webm") {
+        return cb(new Error("Only audio uploads are allowed for voice verification"));
+      }
+      return cb(null, true);
+    }
+    if (!["FACE", "LIVENESS"].includes(purpose)) return cb(new Error("Invalid trust verification upload purpose"));
+    if (!faceAllowed.includes(ext) || !file.mimetype.startsWith("image/") && !file.mimetype.startsWith("video/")) {
+      return cb(new Error("Only image/video uploads are allowed for face and liveness verification"));
+    }
+    cb(null, true);
+  },
+});
+
 function hasImageSignature(filePath: string) {
   const fd = fs.openSync(filePath, "r");
   try {
@@ -92,6 +114,41 @@ function assertSafeProfileMedia(file?: Express.Multer.File) {
   return isImage ? "IMAGE" : "VIDEO";
 }
 
+function hasAudioSignature(filePath: string) {
+  const fd = fs.openSync(filePath, "r");
+  try {
+    const buffer = Buffer.alloc(64);
+    fs.readSync(fd, buffer, 0, buffer.length, 0);
+    const hex = buffer.toString("hex");
+    const ascii = buffer.toString("ascii");
+    return (
+      ascii.startsWith("ID3") ||
+      hex.startsWith("fff") ||
+      ascii.startsWith("RIFF") && ascii.slice(8, 12) === "WAVE" ||
+      ascii.includes("ftypM4A") ||
+      ascii.includes("OggS") ||
+      ascii.includes("webm")
+    );
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function assertSafeTrustMedia(file: Express.Multer.File | undefined, purpose: string) {
+  if (!file) throw new HttpError(400, "No file uploaded", ErrorCode.VALIDATION);
+  const normalizedPurpose = purpose.toUpperCase();
+  const valid = normalizedPurpose === "VOICE"
+    ? hasAudioSignature(file.path) || hasVideoSignature(file.path)
+    : file.mimetype.startsWith("image/")
+      ? hasImageSignature(file.path)
+      : hasVideoSignature(file.path);
+  if (!valid) {
+    fs.unlink(file.path, () => {});
+    throw new HttpError(400, "Invalid verification media file", ErrorCode.VALIDATION);
+  }
+  return normalizedPurpose;
+}
+
 uploadRouter.post("/upload/avatar", requireAuth, upload.single("avatar"), asyncHandler(async (req: AuthRequest, res) => {
   assertSafeImage(req.file);
   const file = req.file!;
@@ -112,4 +169,11 @@ uploadRouter.post("/upload/profile-media", requireAuth, profileMediaUpload.singl
   const file = req.file!;
   const { url, storage } = await persistUploadedFile(file, "profile-media");
   sendOk(res, { url, type, storage });
+}));
+
+uploadRouter.post("/upload/trust-verification", requireAuth, trustVerificationUpload.single("media"), asyncHandler(async (req: AuthRequest, res) => {
+  const purpose = assertSafeTrustMedia(req.file, String(req.body.purpose || ""));
+  const file = req.file!;
+  const { url, storage } = await persistUploadedFile(file, "trust-verification");
+  sendOk(res, { url, purpose, storage });
 }));

@@ -2,8 +2,10 @@ import { ChatMessage } from "../models/ChatMessage.js";
 import { DirectMessage } from "../models/DirectMessage.js";
 import { ModerationAction } from "../models/ModerationAction.js";
 import { Report } from "../models/Report.js";
+import { Room } from "../models/Room.js";
 import { User } from "../models/User.js";
 import { createNotification } from "./notifications.js";
+import { ErrorCode, HttpError, isValidObjectId } from "../utils/http.js";
 
 type ReportPayload = {
   targetUserId?: string;
@@ -11,6 +13,27 @@ type ReportPayload = {
   reason: string;
   description?: string;
 };
+
+async function validateReportTargets(payload: ReportPayload, reporterId: string) {
+  if (payload.targetUserId) {
+    if (!isValidObjectId(payload.targetUserId)) {
+      throw new HttpError(400, "Invalid target user ID", ErrorCode.VALIDATION);
+    }
+    if (payload.targetUserId === reporterId) {
+      throw new HttpError(400, "You cannot report yourself", ErrorCode.VALIDATION);
+    }
+  }
+  if (payload.roomId && !isValidObjectId(payload.roomId)) {
+    throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
+  }
+
+  const [targetUser, room] = await Promise.all([
+    payload.targetUserId ? User.findById(payload.targetUserId).select("_id").lean() : Promise.resolve(null),
+    payload.roomId ? Room.findById(payload.roomId).select("_id").lean() : Promise.resolve(null)
+  ]);
+  if (payload.targetUserId && !targetUser) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+  if (payload.roomId && !room) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
+}
 
 async function buildEvidence(payload: ReportPayload, reporterId: string) {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -49,6 +72,7 @@ async function buildEvidence(payload: ReportPayload, reporterId: string) {
 }
 
 export async function createReportWithEvidence(payload: ReportPayload, reporterId: string) {
+  await validateReportTargets(payload, reporterId);
   const evidence = await buildEvidence(payload, reporterId);
   const riskScore = evidence.recentUniqueReporterCount * 25
     + Math.min(evidence.roomMessages.length + evidence.directMessages.length, 20);

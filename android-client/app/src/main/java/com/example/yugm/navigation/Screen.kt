@@ -23,6 +23,9 @@ sealed class Screen(val route: String) {
     object LiveHome : Screen("live_home")
     object VoiceRooms : Screen("voice_rooms")
     object VideoRooms : Screen("video_rooms")
+    object RoomLobby : Screen("room_lobby/{roomId}/{roomType}") {
+        fun createRoute(roomId: String, roomType: String = "VOICE") = "room_lobby/$roomId/$roomType"
+    }
     object VoiceRoom : Screen("voice_room/{roomId}") {
         fun createRoute(roomId: String) = "voice_room/$roomId"
     }
@@ -31,6 +34,17 @@ sealed class Screen(val route: String) {
     }
     object CreateRoom : Screen("create_room")
     object Wallet : Screen("wallet")
+    object Growth : Screen("growth")
+    object TrustVerificationIntro : Screen("trust_verification_intro")
+    object VerificationConsent : Screen("verification_consent")
+    object FaceVerification : Screen("face_verification")
+    object VoiceVerification : Screen("voice_verification")
+    object TrustVerificationStatus : Screen("trust_verification_status")
+    object CreatorPayoutKycIntro : Screen("creator_payout_kyc_intro")
+    object CreatorPayoutKycForm : Screen("creator_payout_kyc_form")
+    object CreatorPayoutKycStatus : Screen("creator_payout_kyc_status")
+    object WithdrawalEligibility : Screen("withdrawal_eligibility")
+    object Games : Screen("games")
     object GiftCatalog : Screen("gift_catalog")
     object Vip : Screen("vip")
     object Cosmetics : Screen("cosmetics")

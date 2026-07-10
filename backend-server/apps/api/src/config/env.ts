@@ -28,6 +28,7 @@ const envSchema = z.object({
   GOOGLE_PLAY_PACKAGE_NAME: z.string().optional(),
   GOOGLE_PLAY_CLIENT_EMAIL: z.string().optional(),
   GOOGLE_PLAY_PRIVATE_KEY: z.string().optional(),
+  PAYOUT_KYC_ENCRYPTION_KEY: z.string().min(24).optional(),
   STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
   S3_BUCKET: z.string().optional(),
   S3_REGION: z.string().optional(),

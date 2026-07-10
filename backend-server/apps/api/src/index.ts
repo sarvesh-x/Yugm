@@ -7,6 +7,7 @@ import { initFirebase } from "./services/firebase.js";
 import { closeJobWorkers, startJobWorkers } from "./services/jobs.js";
 import { ensureOfficialRooms } from "./services/officialRooms.js";
 import { ensureProductionIndexes } from "./services/productionIndexes.js";
+import { resumePkTimers } from "./services/pk.js";
 import { connectRedis } from "./services/redis.js";
 import { closeSocketInfrastructure, initSocket } from "./services/socket.js";
 
@@ -29,6 +30,7 @@ async function bootstrap() {
   const app = createApp();
   const server = http.createServer(app);
   await initSocket(server);
+  await resumePkTimers();
   server.listen(env.PORT, () => {
     console.log(`Yugm API listening on http://localhost:${env.PORT}`);
   });
