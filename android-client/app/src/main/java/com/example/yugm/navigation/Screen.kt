@@ -35,6 +35,7 @@ sealed class Screen(val route: String) {
     object CreateRoom : Screen("create_room")
     object Wallet : Screen("wallet")
     object Growth : Screen("growth")
+    object Games : Screen("games")
     object GiftCatalog : Screen("gift_catalog")
     object Vip : Screen("vip")
     object Cosmetics : Screen("cosmetics")

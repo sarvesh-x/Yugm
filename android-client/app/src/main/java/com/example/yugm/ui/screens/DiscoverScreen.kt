@@ -39,6 +39,7 @@ fun DiscoverScreen(
     onCreateRoom: () -> Unit,
     onNotifications: () -> Unit,
     onSearch: () -> Unit,
+    onGames: () -> Unit = {},
     viewModel: DiscoverViewModel = hiltViewModel()
 ) {
     LaunchedEffect(Unit) {
@@ -65,6 +66,9 @@ fun DiscoverScreen(
                 }
                 Button(onClick = onNotifications, colors = ButtonDefaults.buttonColors(containerColor = Gold)) {
                     Text("${viewModel.home?.unreadNotifications ?: 0}", color = Color.Black, fontWeight = FontWeight.Black)
+                }
+                Button(onClick = onGames, colors = ButtonDefaults.buttonColors(containerColor = Gold)) {
+                    Text("Games", color = Color.Black, fontWeight = FontWeight.Black)
                 }
                 Button(onClick = onCreateRoom, colors = ButtonDefaults.buttonColors(containerColor = Pink)) {
                     Text("+", color = Color.White, fontWeight = FontWeight.Black, fontSize = 20.sp)

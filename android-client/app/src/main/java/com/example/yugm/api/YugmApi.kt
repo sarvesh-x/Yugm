@@ -9,18 +9,31 @@ import com.example.yugm.BuildConfig
 import com.example.yugm.model.ChatMessage
 import com.example.yugm.model.ActiveCosmetics
 import com.example.yugm.model.CoinPack
+import com.example.yugm.model.ClanSummary
 import com.example.yugm.model.Conversation
 import com.example.yugm.model.CosmeticCatalog
 import com.example.yugm.model.DailyCheckInResult
+import com.example.yugm.model.DailyGameMission
 import com.example.yugm.model.DirectMessage
 import com.example.yugm.model.Achievement
 import com.example.yugm.model.ExperienceFeedItem
 import com.example.yugm.model.ExperienceHome
+import com.example.yugm.model.GameCatalog
+import com.example.yugm.model.GameChallenges
+import com.example.yugm.model.GameLeaderboard
+import com.example.yugm.model.GameLeaderboardEntry
+import com.example.yugm.model.GameMissions
+import com.example.yugm.model.GameReward
 import com.example.yugm.model.GiftItem
 import com.example.yugm.model.Host
 import com.example.yugm.model.LevelStatus
 import com.example.yugm.model.MediaSession
+import com.example.yugm.model.MiniGame
+import com.example.yugm.model.MiniGameBest
+import com.example.yugm.model.MiniGameChallenge
+import com.example.yugm.model.MiniGameScore
 import com.example.yugm.model.NotificationItem
+import com.example.yugm.model.NotificationPreferences
 import com.example.yugm.model.PollOption
 import com.example.yugm.model.PkBattle
 import com.example.yugm.model.PkBattleType
@@ -47,6 +60,7 @@ import com.example.yugm.model.RoomPoll
 import com.example.yugm.model.RoomType
 import com.example.yugm.model.SpeakerRequest
 import com.example.yugm.model.Session
+import com.example.yugm.model.SavedGameScoreResult
 import com.example.yugm.model.VipPlan
 import com.example.yugm.model.VipStatus
 import com.example.yugm.model.WalletOverview
@@ -664,12 +678,103 @@ object YugmApi {
         return data.getJSONArray("transactions").toWalletTransactions()
     }
 
+    suspend fun gameCatalog(token: String): GameCatalog {
+        return get("/games/catalog", token).getJSONObject("data").toGameCatalog()
+    }
+
+    suspend fun gameMissions(token: String): GameMissions {
+        return get("/games/missions", token).getJSONObject("data").toGameMissions()
+    }
+
+    suspend fun gameLeaderboard(token: String, gameId: String): GameLeaderboard {
+        val encoded = java.net.URLEncoder.encode(gameId, "UTF-8")
+        return get("/games/leaderboard?gameId=$encoded", token).getJSONObject("data").toGameLeaderboard()
+    }
+
+    suspend fun gameChallenges(token: String): GameChallenges {
+        return get("/games/challenges", token).getJSONObject("data").toGameChallenges()
+    }
+
+    suspend fun submitGameScore(
+        token: String,
+        gameId: String,
+        score: Int,
+        durationMs: Int? = null,
+        rounds: Int? = null
+    ): SavedGameScoreResult {
+        val body = JSONObject()
+            .put("gameId", gameId)
+            .put("score", score)
+        if (durationMs != null) body.put("durationMs", durationMs)
+        if (rounds != null) body.put("rounds", rounds)
+        return post("/games/scores", token, body).getJSONObject("data").toSavedGameScoreResult()
+    }
+
+    suspend fun sendGameChallenge(
+        token: String,
+        gameId: String,
+        score: Int,
+        scoreId: String,
+        targetUserId: String? = null,
+        clanId: String? = null,
+        message: String? = null
+    ): MiniGameChallenge {
+        val body = JSONObject()
+            .put("gameId", gameId)
+            .put("score", score)
+        if (scoreId.isNotBlank()) body.put("scoreId", scoreId)
+        if (!targetUserId.isNullOrBlank()) body.put("targetUserId", targetUserId)
+        if (!clanId.isNullOrBlank()) body.put("clanId", clanId)
+        if (!message.isNullOrBlank()) body.put("message", message)
+        return post("/games/challenges", token, body).getJSONObject("data").getJSONObject("challenge").toMiniGameChallenge()
+    }
+
+    suspend fun shareGameScore(token: String, scoreId: String, targetUserId: String) {
+        post("/games/scores/$scoreId/share", token, JSONObject().put("targetUserId", targetUserId))
+    }
+
+    suspend fun closeFriends(token: String): List<Host> {
+        val data = get("/users/me/close-friends", token).getJSONObject("data")
+        return data.optJSONArray("users")?.toHosts() ?: emptyList()
+    }
+
+    suspend fun myClan(token: String): ClanSummary? {
+        val data = get("/clans/me", token).getJSONObject("data")
+        return data.optJSONObject("clan")?.toClanSummary()
+    }
+
+    suspend fun notificationPreferences(token: String): NotificationPreferences {
+        val data = get("/experience/notification-preferences", token).getJSONObject("data")
+        val prefs = data.optJSONObject("preferences") ?: JSONObject()
+        return NotificationPreferences(prefs.toBooleanMap())
+    }
+
+    suspend fun updateNotificationPreferences(token: String, preferences: Map<String, Boolean>): NotificationPreferences {
+        val body = JSONObject()
+        preferences.forEach { (key, value) -> body.put(key, value) }
+        val data = put("/experience/notification-preferences", token, body).getJSONObject("data")
+        val prefs = data.optJSONObject("preferences") ?: JSONObject()
+        return NotificationPreferences(prefs.toBooleanMap())
+    }
+
+    suspend fun sendFeedback(token: String, subject: String, message: String, category: String = "OTHER") {
+        post(
+            "/users/me/feedback",
+            token,
+            JSONObject()
+                .put("category", category)
+                .put("subject", subject)
+                .put("message", message)
+        )
+    }
+
     private fun contactPayload(identifier: String): JSONObject {
         return JSONObject().put(if (identifier.contains("@")) "email" else "phone", identifier)
     }
 
     private suspend fun get(path: String, auth: String?): JSONObject = request("GET", path, auth, null)
     private suspend fun post(path: String, auth: String?, body: JSONObject): JSONObject = request("POST", path, auth, body)
+    private suspend fun put(path: String, auth: String?, body: JSONObject): JSONObject = request("PUT", path, auth, body)
     private suspend fun patch(path: String, auth: String?, body: JSONObject): JSONObject = request("PATCH", path, auth, body)
     private suspend fun delete(path: String, auth: String?): JSONObject = request("DELETE", path, auth, null)
 
@@ -686,6 +791,7 @@ object YugmApi {
                 val requestBody = body?.toString()?.toRequestBody(json)
                 when (method) {
                     "POST" -> builder.post(requestBody ?: "{}".toRequestBody(json))
+                    "PUT" -> builder.put(requestBody ?: "{}".toRequestBody(json))
                     "PATCH" -> builder.patch(requestBody ?: "{}".toRequestBody(json))
                     "DELETE" -> builder.delete()
                     else -> builder.get()
@@ -1180,6 +1286,131 @@ fun JSONArray.toWalletTransactions(): List<com.example.yugm.model.WalletTransact
             balanceAfter = item.optInt("balanceAfter", 0),
             createdAt = item.optString("createdAt", "")
         ))
+    }
+}
+
+fun JSONObject.toGameCatalog(): GameCatalog = GameCatalog(
+    games = optJSONArray("games")?.toMiniGames() ?: emptyList(),
+    recent = optJSONArray("recent")?.toMiniGameScores() ?: emptyList()
+)
+
+fun JSONObject.toMiniGame(): MiniGame = MiniGame(
+    id = optString("id", optString("_id", "")),
+    title = optString("title", "Mini Game"),
+    description = optString("description", ""),
+    durationSeconds = optInt("durationSeconds", 0),
+    scoring = optString("scoring", "Higher score wins"),
+    best = optJSONObject("best")?.toMiniGameBest()
+)
+
+fun JSONArray.toMiniGames(): List<MiniGame> = buildList {
+    for (index in 0 until length()) add(getJSONObject(index).toMiniGame())
+}
+
+fun JSONObject.toMiniGameBest(): MiniGameBest = MiniGameBest(
+    score = optInt("score", 0),
+    createdAt = optString("createdAt", "")
+)
+
+fun JSONObject.toMiniGameScore(): MiniGameScore = MiniGameScore(
+    id = optString("_id", optString("id", "")),
+    gameId = optString("gameId", ""),
+    score = optInt("score", 0),
+    durationMs = if (has("durationMs") && !isNull("durationMs")) optInt("durationMs") else null,
+    rounds = if (has("rounds") && !isNull("rounds")) optInt("rounds") else null,
+    createdAt = optString("createdAt", "")
+)
+
+fun JSONArray.toMiniGameScores(): List<MiniGameScore> = buildList {
+    for (index in 0 until length()) add(getJSONObject(index).toMiniGameScore())
+}
+
+fun JSONObject.toGameMissions(): GameMissions = GameMissions(
+    date = optString("date", ""),
+    missions = optJSONArray("missions")?.toDailyGameMissions() ?: emptyList()
+)
+
+fun JSONObject.toDailyGameMission(): DailyGameMission = DailyGameMission(
+    id = optString("id", optString("_id", "")),
+    title = optString("title", ""),
+    progress = optInt("progress", 0),
+    target = optInt("target", 0),
+    rewardXp = optInt("rewardXp", optInt("reward", 0)),
+    complete = optBoolean("complete", false)
+)
+
+fun JSONArray.toDailyGameMissions(): List<DailyGameMission> = buildList {
+    for (index in 0 until length()) add(getJSONObject(index).toDailyGameMission())
+}
+
+fun JSONObject.toGameLeaderboard(): GameLeaderboard = GameLeaderboard(
+    gameId = optString("gameId", ""),
+    leaderboard = optJSONArray("leaderboard")?.toGameLeaderboardEntries() ?: emptyList(),
+    personalBest = optJSONObject("personalBest")?.toMiniGameScore()
+)
+
+fun JSONObject.toGameLeaderboardEntry(): GameLeaderboardEntry {
+    val userObject = optJSONObject("user")
+    return GameLeaderboardEntry(
+        userId = optString("userId", userObject?.entityId() ?: ""),
+        score = optInt("score", 0),
+        createdAt = optString("createdAt", ""),
+        user = userObject?.toHost() ?: Host(id = optString("userId", ""), name = "Player", username = "yugm")
+    )
+}
+
+fun JSONArray.toGameLeaderboardEntries(): List<GameLeaderboardEntry> = buildList {
+    for (index in 0 until length()) add(getJSONObject(index).toGameLeaderboardEntry())
+}
+
+fun JSONObject.toGameChallenges(): GameChallenges = GameChallenges(
+    incoming = optJSONArray("incoming")?.toMiniGameChallenges() ?: emptyList(),
+    outgoing = optJSONArray("outgoing")?.toMiniGameChallenges() ?: emptyList(),
+    clan = optJSONArray("clan")?.toMiniGameChallenges() ?: emptyList()
+)
+
+fun JSONObject.toMiniGameChallenge(): MiniGameChallenge = MiniGameChallenge(
+    id = optString("_id", optString("id", "")),
+    gameId = optString("gameId", ""),
+    score = optInt("score", 0),
+    message = optString("message", ""),
+    expiresAt = optString("expiresAt", ""),
+    createdAt = optString("createdAt", ""),
+    challenger = optJSONObject("challenger")?.toHost() ?: optJSONObject("challengerId")?.toHost(),
+    targetUser = optJSONObject("targetUser")?.toHost() ?: optJSONObject("targetUserId")?.toHost(),
+    clan = optJSONObject("clan")?.toClanSummary() ?: optJSONObject("clanId")?.toClanSummary()
+)
+
+fun JSONArray.toMiniGameChallenges(): List<MiniGameChallenge> = buildList {
+    for (index in 0 until length()) add(getJSONObject(index).toMiniGameChallenge())
+}
+
+fun JSONObject.toClanSummary(): ClanSummary = ClanSummary(
+    id = optString("_id", optString("id", "")),
+    name = optString("name", "Family"),
+    slug = optString("slug", ""),
+    avatar = if (has("avatar") && !isNull("avatar")) optString("avatar") else null,
+    familyLabel = optString("familyLabel", ""),
+    memberCount = optInt("memberCount", 0)
+)
+
+fun JSONObject.toSavedGameScoreResult(): SavedGameScoreResult = SavedGameScoreResult(
+    score = optJSONObject("score")?.toMiniGameScore() ?: MiniGameScore(),
+    isPersonalBest = optBoolean("isPersonalBest", false),
+    personalBest = optJSONObject("personalBest")?.toMiniGameScore(),
+    reward = optJSONObject("reward")?.toGameReward() ?: GameReward()
+)
+
+fun JSONObject.toGameReward(): GameReward = GameReward(
+    xpAwarded = optInt("xpAwarded", 0),
+    levelUpReward = optInt("levelUpReward", 0)
+)
+
+fun JSONObject.toBooleanMap(): Map<String, Boolean> = buildMap {
+    val iterator = keys()
+    while (iterator.hasNext()) {
+        val key = iterator.next()
+        put(key, optBoolean(key, false))
     }
 }
 

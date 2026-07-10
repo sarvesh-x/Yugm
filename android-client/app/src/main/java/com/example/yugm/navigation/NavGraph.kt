@@ -217,6 +217,9 @@ fun NavGraph(
                 },
                 onSearch = {
                     navController.navigate(Screen.Search.route)
+                },
+                onGames = {
+                    navController.navigate(Screen.Games.route)
                 }
             )
         }
@@ -260,6 +263,15 @@ fun NavGraph(
                 onOpenRoom = { room ->
                     navController.navigate(Screen.RoomLobby.createRoute(room.id, room.type.name.uppercase()))
                 }
+            )
+        }
+
+
+        composable(Screen.Games.route) {
+            GamesScreen(
+                token = mainViewModel.authToken,
+                onBack = { navController.popBackStack() },
+                onOpenChat = { userId -> navController.navigate(Screen.Chat.createRoute(userId)) }
             )
         }
 
@@ -1131,6 +1143,9 @@ fun NavGraph(
         // Settings Screen
         composable(Screen.Settings.route) {
             SettingsScreen(
+                token = mainViewModel.authToken,
+                userName = mainViewModel.userName,
+                username = mainViewModel.username,
                 onLogout = {
                     mainViewModel.logout()
                     navController.navigate(Screen.Login.route) {
@@ -1138,7 +1153,10 @@ fun NavGraph(
                     }
                 },
                 onBack = { navController.popBackStack() },
-                onNavigateToSafety = { navController.navigate(Screen.Safety.route) }
+                onNavigateToSafety = { navController.navigate(Screen.Safety.route) },
+                onNavigateToBlocked = { navController.navigate(Screen.BlockedUsers.route) },
+                onNavigateToProfileSetup = { navController.navigate(Screen.ProfileSetup.route) },
+                onNavigateToGames = { navController.navigate(Screen.Games.route) }
             )
         }
     }
