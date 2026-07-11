@@ -2,13 +2,15 @@ import { useState, useCallback } from "react";
 import { Alert, StyleSheet, Text, View, Image, Pressable, ActivityIndicator, Modal } from "react-native";
 import * as Haptics from "expo-haptics";
 import { router, useFocusEffect } from "expo-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
-import { Heart, X, Star, Sparkles, MessageCircle, Compass, ShieldAlert } from "lucide-react-native";
+import { Heart, X, Star, Sparkles, MessageCircle, Compass, ShieldAlert, SlidersHorizontal } from "lucide-react-native";
 import { datingApi, usersApi } from "@/lib/api";
 import { Screen, Section } from "@/components/Screen";
 import { useAuthStore } from "@/store/auth";
 import { colors, gradients } from "@/theme/colors";
+import { SwipeMatchCard } from "@/components/SwipeMatchCard";
+import { MatchPreferencesSheet, type MatchPreferences } from "@/components/MatchPreferencesSheet";
 
 export default function MatchSwipe() {
   const currentUser = useAuthStore((s) => s.user);
@@ -18,12 +20,24 @@ export default function MatchSwipe() {
   const [matchModalVisible, setMatchModalVisible] = useState(false);
   const [matchedPartner, setMatchedPartner] = useState<any>(null);
   const [actionPending, setActionPending] = useState(false);
+  const [preferencesVisible, setPreferencesVisible] = useState(false);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["dating", "explore"],
     queryFn: datingApi.explore,
     staleTime: 30000,
     gcTime: 60000
+  });
+  const preferencesQuery = useQuery({ queryKey: ["dating", "preferences"], queryFn: datingApi.preferences });
+  const savePreferences = useMutation({
+    mutationFn: datingApi.updatePreferences,
+    onSuccess: async (result) => {
+      queryClient.setQueryData(["dating", "preferences"], result);
+      await queryClient.invalidateQueries({ queryKey: ["dating", "explore"] });
+      setPreferencesVisible(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (saveError: any) => Alert.alert("Couldn't save preferences", saveError?.message ?? "Please try again.")
   });
 
   useFocusEffect(
@@ -95,10 +109,11 @@ export default function MatchSwipe() {
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Vibe Discovery</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="Report this profile" style={styles.reportBtn} onPress={handleReport} disabled={!topCard || actionPending}>
-            <ShieldAlert color={topCard ? colors.danger : colors.muted} size={20} />
-          </Pressable>
+          <View><Text style={styles.headerTitle}>Your Vibe Deck</Text><Text style={styles.headerSubtitle}>{candidates.length} curated connections</Text></View>
+          <View style={styles.headerActions}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Adjust match preferences" style={styles.headerButton} onPress={() => setPreferencesVisible(true)}><SlidersHorizontal color={colors.text} size={19} /></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Report this profile" style={styles.headerButton} onPress={handleReport} disabled={!topCard || actionPending}><ShieldAlert color={topCard ? colors.danger : colors.muted} size={19} /></Pressable>
+          </View>
         </View>
 
         {isLoading ? (
@@ -128,42 +143,18 @@ export default function MatchSwipe() {
           </View>
         ) : (
           <View style={styles.cardContainer}>
-            {/* Vibe Card */}
-            <Pressable
-              style={styles.card}
-              onPress={() => router.push({ pathname: "/profile/[id]", params: { id: topCard.id } })}
-            >
-              <Image source={{ uri: topCard.avatar }} style={styles.cardImg as any} />
-              <LinearGradient
-                colors={["transparent", "rgba(5,7,19,0.95)"]}
-                style={styles.overlay}
-              >
-                <View style={styles.details}>
-                  <View style={styles.nameRow}>
-                    <Text style={styles.name}>{topCard.name}, {topCard.age}</Text>
-                    <View style={styles.vibeBadge}>
-                      <Text style={styles.vibeText}>{topCard.vibeScore}% Vibe</Text>
-                    </View>
-                  </View>
+            <View style={styles.deck}>
+              {candidates[1] && <View style={styles.nextCard}><Image source={{ uri: candidates[1].avatar }} blurRadius={8} style={styles.nextCardImage} /></View>}
+              <SwipeMatchCard
+                key={topCard.id}
+                candidate={topCard}
+                disabled={actionPending}
+                onSwipe={handleSwipe}
+                onOpen={() => router.push({ pathname: "/profile/[id]", params: { id: topCard.id } })}
+              />
+            </View>
 
-                  <Text style={styles.location}>{topCard.city}</Text>
-
-                  {topCard.vibeLine && (
-                    <Text style={styles.tagline}>“{topCard.vibeLine}”</Text>
-                  )}
-
-                  <View style={styles.interestsRow}>
-                    {topCard.interests?.slice(0, 4).map((interest: string) => (
-                      <View key={interest} style={styles.interestTag}>
-                        <Text style={styles.interestTagText}>{interest}</Text>
-                      </View>
-                    ))}
-                  </View>
-
-                  <Text style={styles.bio} numberOfLines={2}>{topCard.bio}</Text>
-                </View>
-              </LinearGradient>
-            </Pressable>
+            <Text style={styles.gestureHint}>Swipe left to pass · up for super vibe · right to connect</Text>
 
             {/* Action Row */}
             <View style={styles.actionRow}>
@@ -238,6 +229,13 @@ export default function MatchSwipe() {
             </LinearGradient>
           </View>
         </Modal>
+        <MatchPreferencesSheet
+          visible={preferencesVisible}
+          initial={preferencesQuery.data?.preferences as MatchPreferences | undefined}
+          saving={savePreferences.isPending}
+          onClose={() => setPreferencesVisible(false)}
+          onSave={(preferences) => savePreferences.mutate(preferences)}
+        />
       </View>
     </Screen>
   );
@@ -250,12 +248,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    height: 52,
+    minHeight: 68,
     borderBottomWidth: 1,
     borderBottomColor: colors.line
   },
   headerTitle: { color: colors.text, fontSize: 20, fontWeight: "900" },
-  reportBtn: { padding: 6 },
+  headerSubtitle: { color: colors.muted, fontSize: 11, fontWeight: "700", marginTop: 2 },
+  headerActions: { flexDirection: "row", gap: 8 },
+  headerButton: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line },
   loadingWrap: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   loadingText: { color: colors.muted, fontWeight: "700" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 14 },
@@ -280,7 +280,11 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { color: colors.text, fontSize: 22, fontWeight: "900" },
   emptySubtitle: { color: colors.muted, fontSize: 14, textAlign: "center", lineHeight: 20, marginBottom: 10 },
-  cardContainer: { flex: 1, paddingHorizontal: 20, marginTop: 14, justifyContent: "space-between" },
+  cardContainer: { flex: 1, paddingHorizontal: 20, marginTop: 16, justifyContent: "space-between" },
+  deck: { flex: 1, marginHorizontal: 2, marginBottom: 4 },
+  nextCard: { position: "absolute", left: 14, right: 14, top: 12, bottom: -8, borderRadius: 28, overflow: "hidden", opacity: 0.5, transform: [{ scale: 0.97 }], backgroundColor: colors.surface },
+  nextCardImage: { width: "100%", height: "100%" },
+  gestureHint: { color: colors.muted, textAlign: "center", fontSize: 11, fontWeight: "700", marginTop: 14 },
   card: { flex: 1, borderRadius: 20, overflow: "hidden", borderWidth: 1, borderColor: colors.line },
   cardImg: { width: "100%", height: "100%" },
   overlay: { position: "absolute", left: 0, right: 0, bottom: 0, top: 0, justifyContent: "flex-end" },

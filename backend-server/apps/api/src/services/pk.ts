@@ -14,7 +14,7 @@ import { RoomParticipant } from "../models/RoomParticipant.js";
 import { User } from "../models/User.js";
 import { createNotification } from "./notifications.js";
 import { emitRoom, emitUser } from "./socket.js";
-import { creditWallet, debitWallet } from "./wallet.js";
+import { debitWallet } from "./wallet.js";
 import { rankPkOpponents } from "./pkMatch.js";
 import { ErrorCode, HttpError, isValidObjectId, sanitizeText } from "../utils/http.js";
 
@@ -378,7 +378,6 @@ export async function sendPkGift(input: { userId: string; battleId: string; gift
   session.startTransaction();
   try {
     await debitWallet(input.userId, gift.coinPrice, "GIFT_SENT", { pkBattleId: battle.id, giftId: gift._id.toString(), side: input.side, idempotencyKey: input.idempotencyKey }, session);
-    await creditWallet(receiverId, gift.coinPrice, "GIFT_RECEIVED", { pkBattleId: battle.id, giftId: gift._id.toString(), side: input.side }, session);
     const [giftTransaction] = await GiftTransaction.create([{
       roomId,
       senderId: input.userId,

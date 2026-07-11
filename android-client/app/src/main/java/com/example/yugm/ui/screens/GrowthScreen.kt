@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.yugm.api.YugmApi
 import com.example.yugm.model.ExperienceHome
+import com.example.yugm.model.CreatorDashboard
 import com.example.yugm.ui.components.GlassCard
 import com.example.yugm.ui.components.LoadingState
 import com.example.yugm.ui.components.RoomCard
@@ -47,6 +48,7 @@ fun GrowthScreen(
     onOpenRoom: (com.example.yugm.model.Room) -> Unit
 ) {
     var home by remember { mutableStateOf<ExperienceHome?>(null) }
+    var creator by remember { mutableStateOf<CreatorDashboard?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -58,6 +60,8 @@ fun GrowthScreen(
                 error = null
             }
             .onFailure { error = it.message ?: "Failed to load growth" }
+        runCatching { YugmApi.creatorDashboard(token) }
+            .onSuccess { creator = it }
         isLoading = false
     }
 
@@ -81,6 +85,8 @@ fun GrowthScreen(
             error != null -> item { Text(error ?: "", color = TextMuted) }
             home != null -> {
                 val payload = home!!
+                val scheduledRooms = if (payload.userRole in setOf("HOST", "MODERATOR", "ADMIN")) creator?.scheduledRooms.orEmpty() else payload.scheduledRooms
+                val creatorSteps = creator?.nextSteps.orEmpty()
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                         StatCard("Profile", "${payload.profileCompletion.percent}%", Modifier.weight(1f))
@@ -110,21 +116,48 @@ fun GrowthScreen(
                         Text("Unread notifications: ${payload.unreadNotifications} / Scheduled rooms: ${payload.scheduledRooms.size}", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
                     }
                 }
-                item {
-                    GlassCard(Modifier.fillMaxWidth()) {
-                        Text("Creator earnings", color = Gold, fontWeight = FontWeight.Black)
-                        Text("Creator Payout Verification is required only when you withdraw real money earned from gifts.", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
-                            Button(onClick = onPayoutVerification, modifier = Modifier.weight(1f)) { Text("Payout verification") }
-                            Button(onClick = onWithdraw, modifier = Modifier.weight(1f)) { Text("Withdraw") }
+                if (payload.userRole in setOf("HOST", "MODERATOR", "ADMIN")) {
+                    creator?.let { dashboard ->
+                        item { SectionTitle("30-day creator performance") }
+                        item {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                                StatCard("Gift coins", "${dashboard.summary.giftCoins}", Modifier.weight(1f))
+                                StatCard("Rooms", "${dashboard.summary.hostedRooms}", Modifier.weight(1f))
+                                StatCard("Supporters", "${dashboard.summary.uniqueSupporters}", Modifier.weight(1f))
+                            }
+                        }
+                        item {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                                StatCard("Visits", "${dashboard.summary.participants}", Modifier.weight(1f))
+                                StatCard("Avg / room", "${dashboard.summary.averageParticipants}", Modifier.weight(1f))
+                                StatCard("Est. INR", "₹${"%.2f".format(dashboard.summary.estimatedInr)}", Modifier.weight(1f))
+                            }
+                        }
+                    }
+                    item {
+                        GlassCard(Modifier.fillMaxWidth()) {
+                            Text("Creator earnings", color = Gold, fontWeight = FontWeight.Black)
+                            Text("Creator Payout Verification is required only when you withdraw real money earned from gifts.", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
+                                Button(onClick = onPayoutVerification, modifier = Modifier.weight(1f)) { Text("Payout verification") }
+                                Button(onClick = onWithdraw, modifier = Modifier.weight(1f)) { Text("Withdraw") }
+                            }
+                        }
+                    }
+                    if (creatorSteps.isNotEmpty()) {
+                        item { SectionTitle("Creator playbook") }
+                        items(creatorSteps, key = { it }) { step ->
+                            GlassCard(Modifier.fillMaxWidth()) {
+                                Text(step, color = TextPrimary, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
                 item {
-                    SectionTitle("Scheduled rooms")
+                    SectionTitle(if (payload.userRole in setOf("HOST", "MODERATOR", "ADMIN")) "My scheduled rooms" else "Upcoming rooms")
                     Spacer(Modifier.height(8.dp))
                 }
-                if (payload.scheduledRooms.isEmpty()) {
+                if (scheduledRooms.isEmpty()) {
                     item {
                         GlassCard(Modifier.fillMaxWidth()) {
                             Text("No scheduled rooms yet.", color = TextPrimary, fontWeight = FontWeight.Black)
@@ -132,7 +165,7 @@ fun GrowthScreen(
                         }
                     }
                 } else {
-                    items(payload.scheduledRooms.take(6), key = { it.id }) { room ->
+                    items(scheduledRooms.take(6), key = { it.id }) { room ->
                         RoomCard(room = room, wide = true, onClick = { onOpenRoom(room) })
                     }
                 }

@@ -13,7 +13,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 sealed class SocketEvent {
-    data class ChatMessage(val senderName: String, val message: String) : SocketEvent()
     data class DirectMessageReceived(val message: DirectMessage) : SocketEvent()
     data class TypingUpdate(val userId: String, val typing: Boolean) : SocketEvent()
     data class UserOnline(val userId: String) : SocketEvent()
@@ -28,7 +27,7 @@ class SocketManager @Inject constructor() {
     private val _events = MutableSharedFlow<SocketEvent>(extraBufferCapacity = 20)
     val events = _events.asSharedFlow()
 
-    fun connect(token: String, roomId: String) {
+    fun connect(token: String) {
         disconnect()
         try {
             val serverUrl = BuildConfig.SOCKET_BASE_URL.trim().trimEnd('/')
@@ -53,9 +52,6 @@ class SocketManager @Inject constructor() {
             
             socket?.on(Socket.EVENT_CONNECT) {
                 Log.d("SocketManager", "Connected")
-                if (roomId.isNotBlank()) {
-                    socket?.emit("room:join", JSONObject().put("roomId", roomId))
-                }
                 _events.tryEmit(SocketEvent.Connected)
             }
             
@@ -64,21 +60,6 @@ class SocketManager @Inject constructor() {
                 _events.tryEmit(SocketEvent.Disconnected)
             }
             
-            socket?.on("room:chat:message") { args ->
-                if (args.isNotEmpty()) {
-                    try {
-                        val data = args[0] as JSONObject
-                        val msg = data.getJSONObject("message")
-                        val sender = msg.optJSONObject("senderId") ?: JSONObject()
-                        val name = sender.optString("name", "User")
-                        val text = msg.optString("message", "")
-                        _events.tryEmit(SocketEvent.ChatMessage(name, text))
-                    } catch (e: Exception) {
-                        Log.e("SocketManager", "Error parsing chat message", e)
-                    }
-                }
-            }
-
             socket?.on("direct:message:new") { args ->
                 if (args.isNotEmpty()) {
                     try {
@@ -133,13 +114,6 @@ class SocketManager @Inject constructor() {
         } catch (e: Exception) {
             Log.e("SocketManager", "Error connecting socket", e)
         }
-    }
-
-    fun sendMessage(roomId: String, message: String) {
-        socket?.emit("room:chat:send", JSONObject().apply {
-            put("roomId", roomId)
-            put("message", message)
-        })
     }
 
     fun sendTypingStatus(targetUserId: String, typing: Boolean) {

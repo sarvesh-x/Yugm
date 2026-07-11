@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -68,7 +69,7 @@ fun Avatar(
     val finalImageUrl = avatarAsset ?: imageUrl
     val frameBrush = avatarFrameBrush(cosmetics.avatarFrame)
     val waveColor = speakingWaveColor(cosmetics.speakingWave)
-    val radius = (size * 0.24f).dp
+    val radius = (size / 2f).dp
     val entryScale = remember { Animatable(if (showEntry) 0.86f else 1f) }
     val entryAlpha = remember { Animatable(if (showEntry) 0f else 1f) }
 
@@ -125,7 +126,7 @@ fun Avatar(
         Box(
             modifier = Modifier
                 .size((size + 8).dp)
-                .clip(RoundedCornerShape(radius + 5.dp))
+                .clip(CircleShape)
                 .background(frameBrush)
                 .padding(4.dp),
             contentAlignment = Alignment.Center
@@ -133,9 +134,9 @@ fun Avatar(
             Box(
                 modifier = Modifier
                     .size(size.dp)
-                    .clip(RoundedCornerShape(radius))
+                    .clip(CircleShape)
                     .background(PanelStrong)
-                    .border(1.dp, Ink.copy(alpha = 0.72f), RoundedCornerShape(radius)),
+                    .border(1.dp, Ink.copy(alpha = 0.72f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 if (!finalImageUrl.isNullOrBlank()) {

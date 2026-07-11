@@ -223,6 +223,44 @@ fun NavGraph(
                 },
                 onGames = {
                     navController.navigate(Screen.Games.route)
+                },
+                onDating = {
+                    navController.navigate(Screen.DatingDiscovery.route)
+                },
+                onChat = {
+                    navController.navigate(Screen.ChatList.route)
+                },
+                onWallet = {
+                    navController.navigate(Screen.Wallet.route)
+                },
+                onSelfProfile = {
+                    if (mainViewModel.currentUserId.isNotBlank()) {
+                        navController.navigate(Screen.ProfileDetail.createRoute(mainViewModel.currentUserId))
+                    } else {
+                        navController.navigate(Screen.ProfileSetup.route)
+                    }
+                },
+                onVoiceRooms = {
+                    navController.navigate(Screen.VoiceRooms.route)
+                }
+            )
+        }
+
+        composable(Screen.VoiceRooms.route) {
+            VoiceRoomsScreen(
+                token = mainViewModel.authToken,
+                onBack = { navController.popBackStack() },
+                onOpenRoom = { room -> navController.navigate(Screen.RoomLobby.createRoute(room.id, room.type.name.uppercase())) },
+                onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
+                onSearch = { navController.navigate(Screen.Search.route) },
+                onNotifications = { navController.navigate(Screen.Notifications.route) },
+                onDiscover = { navController.navigate(Screen.Discover.route) },
+                onDating = { navController.navigate(Screen.DatingDiscovery.route) },
+                onChat = { navController.navigate(Screen.ChatList.route) },
+                onWallet = { navController.navigate(Screen.Wallet.route) },
+                onProfile = {
+                    if (mainViewModel.currentUserId.isNotBlank()) navController.navigate(Screen.ProfileDetail.createRoute(mainViewModel.currentUserId))
+                    else navController.navigate(Screen.ProfileSetup.route)
                 }
             )
         }
@@ -416,6 +454,8 @@ fun NavGraph(
             WithdrawalEligibilityScreen(
                 balance = eligibility.balance,
                 payoutKyc = eligibility.payoutKyc,
+                requirements = eligibility.requirements,
+                coinToInrRate = eligibility.coinToInrRate,
                 onBack = { navController.popBackStack() },
                 onOpenKyc = { navController.navigate(Screen.CreatorPayoutKycIntro.route) },
                 onWithdraw = { amount ->
@@ -470,6 +510,15 @@ fun NavGraph(
                 },
                 onNavigateToProfile = { userId ->
                     navController.navigate(Screen.ProfileDetail.createRoute(userId))
+                },
+                onMatches = { navController.navigate(Screen.ChatList.route) },
+                onDiscover = { navController.navigate(Screen.Discover.route) },
+                onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
+                onLive = { navController.navigate(Screen.VoiceRooms.route) },
+                onWallet = { navController.navigate(Screen.Wallet.route) },
+                onSelfProfile = {
+                    if (mainViewModel.currentUserId.isNotBlank()) navController.navigate(Screen.ProfileDetail.createRoute(mainViewModel.currentUserId))
+                    else navController.navigate(Screen.ProfileSetup.route)
                 }
             )
         }
@@ -480,6 +529,8 @@ fun NavGraph(
             arguments = listOf(navArgument("userId") { type = NavType.StringType })
         ) { backStackEntry ->
             val userId = backStackEntry.arguments?.getString("userId") ?: ""
+            val profileScope = androidx.compose.runtime.rememberCoroutineScope()
+            val profileContext = androidx.compose.ui.platform.LocalContext.current
             ProfileDetailScreen(
                 token = mainViewModel.authToken,
                 userId = userId,
@@ -487,9 +538,21 @@ fun NavGraph(
                 onMessage = { partnerId ->
                     navController.navigate(Screen.Chat.createRoute(partnerId))
                 },
-                onInviteToRoom = {
-                    // Send room invitation
-                }
+                onInviteToRoom = { inviteeId ->
+                    profileScope.launch {
+                        val ownLiveRoom = runCatching { com.example.yugm.api.YugmApi.rooms() }.getOrDefault(emptyList())
+                            .firstOrNull { it.status.equals("LIVE", true) && it.host?.id == mainViewModel.currentUserId }
+                        if (ownLiveRoom == null) {
+                            android.widget.Toast.makeText(profileContext, "Start a room first, then invite ${userId.take(6)}", android.widget.Toast.LENGTH_SHORT).show()
+                            navController.navigate(Screen.CreateRoom.route)
+                        } else {
+                            runCatching { com.example.yugm.api.YugmApi.inviteToRoom(mainViewModel.authToken, ownLiveRoom.id, inviteeId) }
+                                .onSuccess { android.widget.Toast.makeText(profileContext, "Room invite sent", android.widget.Toast.LENGTH_SHORT).show() }
+                                .onFailure { android.widget.Toast.makeText(profileContext, it.message, android.widget.Toast.LENGTH_SHORT).show() }
+                        }
+                    }
+                },
+                onOpenRoom = { room -> navController.navigate(Screen.RoomLobby.createRoute(room.id, room.type.name.uppercase())) }
             )
         }
 
@@ -500,6 +563,14 @@ fun NavGraph(
                 currentUserId = mainViewModel.currentUserId,
                 onOpenChat = { partnerId ->
                     navController.navigate(Screen.Chat.createRoute(partnerId))
+                },
+                onDiscover = { navController.navigate(Screen.Discover.route) },
+                onDating = { navController.navigate(Screen.DatingDiscovery.route) },
+                onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
+                onWallet = { navController.navigate(Screen.Wallet.route) },
+                onProfile = {
+                    if (mainViewModel.currentUserId.isNotBlank()) navController.navigate(Screen.ProfileDetail.createRoute(mainViewModel.currentUserId))
+                    else navController.navigate(Screen.ProfileSetup.route)
                 }
             )
         }
@@ -511,29 +582,76 @@ fun NavGraph(
         ) { backStackEntry ->
             val partnerId = backStackEntry.arguments?.getString("conversationId") ?: ""
             val chatViewModel: com.example.yugm.ui.viewmodel.ChatViewModel = hiltViewModel()
+            val directGifts = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateListOf<com.example.yugm.model.GiftItem>() }
+            val chatContext = androidx.compose.ui.platform.LocalContext.current
+            val chatScope = androidx.compose.runtime.rememberCoroutineScope()
             
-            LaunchedEffect(partnerId) {
-                chatViewModel.connect(mainViewModel.authToken, partnerId)
-            }
-            
-            val messages = chatViewModel.messages.map { 
-                com.example.yugm.model.DirectMessage(
-                    message = it.text, 
-                    senderId = if (it.author == mainViewModel.userName) mainViewModel.currentUserId else partnerId
+            LaunchedEffect(partnerId, mainViewModel.authToken, mainViewModel.currentUserId) {
+                chatViewModel.connect(
+                    token = mainViewModel.authToken,
+                    userId = mainViewModel.currentUserId,
+                    partnerId = partnerId
                 )
+                runCatching { com.example.yugm.api.YugmApi.gifts(mainViewModel.authToken) }
+                    .onSuccess { directGifts.apply { clear(); addAll(it) } }
             }
 
             ChatScreen(
-                partner = null,
+                partner = chatViewModel.partner,
                 currentUserId = mainViewModel.currentUserId,
-                messages = messages,
-                relationship = null,
-                gifts = emptyList(),
+                messages = chatViewModel.messages,
+                relationship = chatViewModel.relationship,
+                gifts = directGifts,
                 balance = mainViewModel.balance,
+                loading = chatViewModel.isLoading,
                 isPartnerTyping = chatViewModel.isPartnerTyping,
+                error = chatViewModel.error,
                 onBack = { navController.popBackStack() },
-                onSend = { text -> chatViewModel.sendMessage(partnerId, text) },
-                onTyping = { typing -> chatViewModel.sendTypingStatus(typing) }
+                onRetry = chatViewModel::refresh,
+                onSend = chatViewModel::sendMessage,
+                onTyping = { typing -> chatViewModel.sendTypingStatus(typing) },
+                onGift = { gift ->
+                    chatScope.launch {
+                        runCatching { com.example.yugm.api.YugmApi.sendDirectGift(mainViewModel.authToken, gift.id, partnerId) }
+                            .onSuccess {
+                                mainViewModel.updateBalance(com.example.yugm.api.YugmApi.wallet(mainViewModel.authToken))
+                                chatViewModel.refresh()
+                            }
+                            .onFailure { android.widget.Toast.makeText(chatContext, it.message, android.widget.Toast.LENGTH_SHORT).show() }
+                    }
+                },
+                onReactMessage = { message ->
+                    chatScope.launch {
+                        runCatching { com.example.yugm.api.YugmApi.reactToDirectMessage(mainViewModel.authToken, partnerId, message.id, "heart") }
+                            .onSuccess { chatViewModel.refresh() }
+                            .onFailure { android.widget.Toast.makeText(chatContext, it.message, android.widget.Toast.LENGTH_SHORT).show() }
+                    }
+                },
+                onAudioCall = {
+                    chatScope.launch {
+                        runCatching { com.example.yugm.api.YugmApi.startPrivateCall(mainViewModel.authToken, partnerId, com.example.yugm.model.RoomType.Voice) }
+                            .onSuccess { room -> navController.navigate(Screen.VoiceRoom.createRoute(room.id)) }
+                            .onFailure { android.widget.Toast.makeText(chatContext, it.message, android.widget.Toast.LENGTH_SHORT).show() }
+                    }
+                },
+                onVideoCall = {
+                    chatScope.launch {
+                        runCatching { com.example.yugm.api.YugmApi.startPrivateCall(mainViewModel.authToken, partnerId, com.example.yugm.model.RoomType.Video) }
+                            .onSuccess { room -> navController.navigate(Screen.VideoRoom.createRoute(room.id)) }
+                            .onFailure { android.widget.Toast.makeText(chatContext, it.message, android.widget.Toast.LENGTH_SHORT).show() }
+                    }
+                },
+                onAttachmentSelected = { bytes, mimeType, fileName ->
+                    chatScope.launch {
+                        runCatching {
+                            val (url, type) = com.example.yugm.api.YugmApi.uploadMessageMedia(mainViewModel.authToken, bytes, mimeType, fileName)
+                            com.example.yugm.api.YugmApi.sendDirectMediaMessage(mainViewModel.authToken, partnerId, url, type)
+                        }.onSuccess { chatViewModel.refresh() }
+                            .onFailure { android.widget.Toast.makeText(chatContext, it.message, android.widget.Toast.LENGTH_SHORT).show() }
+                    }
+                },
+                onReport = { chatScope.launch { runCatching { com.example.yugm.api.YugmApi.reportUser(mainViewModel.authToken, "", partnerId, "Inappropriate private conversation") } } },
+                onBlock = { chatScope.launch { runCatching { com.example.yugm.api.YugmApi.blockUser(partnerId, mainViewModel.authToken) }.onSuccess { navController.popBackStack() } } }
             )
         }
 
@@ -541,6 +659,7 @@ fun NavGraph(
         composable(Screen.CreateRoom.route) {
             val scope = androidx.compose.runtime.rememberCoroutineScope()
             CreateRoomScreen(
+                token = mainViewModel.authToken,
                 host = com.example.yugm.model.Host(
                     id = mainViewModel.currentUserId,
                     name = mainViewModel.userName,
@@ -1265,9 +1384,20 @@ fun NavGraph(
 
         // Wallet
         composable(Screen.Wallet.route) {
+            val walletContext = androidx.compose.ui.platform.LocalContext.current
             WalletScreen(
-                balance = mainViewModel.balance,
-                transactions = emptyList()
+                token = mainViewModel.authToken,
+                initialBalance = mainViewModel.balance,
+                onBack = { navController.popBackStack() },
+                onOpenEarnings = { navController.navigate(Screen.Growth.route) },
+                onBalanceChanged = mainViewModel::updateBalance,
+                onRechargeOrderReady = { checkoutData ->
+                    val activity = walletContext as? android.app.Activity
+                    if (activity != null) {
+                        runCatching { com.example.yugm.payments.RazorpayCoordinator.start(activity, checkoutData) }
+                            .onFailure { android.widget.Toast.makeText(walletContext, it.message, android.widget.Toast.LENGTH_SHORT).show() }
+                    }
+                }
             )
         }
 

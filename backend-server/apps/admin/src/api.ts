@@ -59,6 +59,13 @@ export function login(email: string, password: string) {
   });
 }
 
+export function refreshAdminSession(refreshToken: string) {
+  return adminApi<{ admin: Admin; accessToken: string }>("/auth/refresh", {
+    method: "POST",
+    body: JSON.stringify({ refreshToken })
+  });
+}
+
 export const formatDate = (value?: string) => {
   if (!value) return "Never";
   const date = new Date(value);

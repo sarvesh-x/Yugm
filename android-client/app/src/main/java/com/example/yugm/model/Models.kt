@@ -241,6 +241,7 @@ data class ExperienceFeedItem(
 )
 
 data class ExperienceHome(
+    val userRole: String = "USER",
     val profileCompletion: ProfileCompletion = ProfileCompletion(),
     val level: LevelStatus = LevelStatus(),
     val achievements: List<Achievement> = emptyList(),
@@ -250,6 +251,25 @@ data class ExperienceHome(
     val followingRooms: List<Room> = emptyList(),
     val suggestedHosts: List<Host> = emptyList(),
     val unreadNotifications: Int = 0
+)
+
+data class CreatorDashboardSummary(
+    val giftCoins: Int = 0,
+    val giftCount: Int = 0,
+    val uniqueSupporters: Int = 0,
+    val hostedRooms: Int = 0,
+    val participants: Int = 0,
+    val uniqueParticipants: Int = 0,
+    val averageParticipants: Double = 0.0,
+    val estimatedInr: Double = 0.0
+)
+
+data class CreatorDashboard(
+    val windowDays: Int = 30,
+    val summary: CreatorDashboardSummary = CreatorDashboardSummary(),
+    val rooms: List<Room> = emptyList(),
+    val scheduledRooms: List<Room> = emptyList(),
+    val nextSteps: List<String> = emptyList()
 )
 
 data class ChatMessage(val author: String, val text: String)
@@ -342,7 +362,21 @@ data class DirectMessage(
     val senderId: String = "",
     val receiverId: String = "",
     val message: String = "",
-    val createdAt: String = ""
+    val createdAt: String = "",
+    val read: Boolean = false,
+    val reactionCount: Int = 0,
+    val mediaUrl: String = "",
+    val mediaType: String = ""
+)
+
+data class RazorpayCheckoutData(
+    val purchaseId: String = "",
+    val key: String = "",
+    val amount: Int = 0,
+    val currency: String = "INR",
+    val orderId: String = "",
+    val name: String = "Yugm",
+    val description: String = "Yugm coins"
 )
 
 data class Conversation(
@@ -400,12 +434,23 @@ data class CreatorPayoutKycStatus(
 data class CreatorEarningBalance(
     val earnedCoins: Int = 0,
     val lockedCoins: Int = 0,
+    val withdrawnCoins: Int = 0,
     val availableCoins: Int = 0
+)
+
+data class PayoutRequirements(
+    val creatorAccount: Boolean = false,
+    val trustVerified: Boolean = false,
+    val creatorTrustEnabled: Boolean = false,
+    val payoutKycVerified: Boolean = false,
+    val payoutEnabled: Boolean = false
 )
 
 data class WithdrawalEligibility(
     val balance: CreatorEarningBalance = CreatorEarningBalance(),
-    val payoutKyc: CreatorPayoutKycStatus = CreatorPayoutKycStatus()
+    val payoutKyc: CreatorPayoutKycStatus = CreatorPayoutKycStatus(),
+    val requirements: PayoutRequirements = PayoutRequirements(),
+    val coinToInrRate: Double = 0.01
 )
 
 data class WithdrawalRequestResult(

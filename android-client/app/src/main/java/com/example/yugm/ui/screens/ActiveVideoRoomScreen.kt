@@ -1,7 +1,17 @@
 package com.example.yugm.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -11,7 +21,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -52,6 +67,9 @@ import com.example.yugm.ui.components.RoomShell
 import com.example.yugm.ui.components.SectionTitle
 import com.example.yugm.ui.components.VideoGrid
 import com.example.yugm.ui.theme.TextMuted
+import com.example.yugm.ui.theme.Background
+import com.example.yugm.ui.theme.TextPrimary
+import livekit.org.webrtc.SurfaceViewRenderer
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -119,6 +137,13 @@ fun ActiveVideoRoomScreen(
     var pkSearch by rememberSaveable { mutableStateOf("") }
     var pkGiftSide by rememberSaveable { mutableStateOf(PkSideType.LEFT) }
     var dismissedPkResultId by rememberSaveable { mutableStateOf<String?>(null) }
+    var liveVideoFeeds by remember { mutableStateOf<List<YugmMediaRoom.VideoFeed>>(emptyList()) }
+    LaunchedEffect(room.id) {
+        while (true) {
+            liveVideoFeeds = YugmMediaRoom.videoFeeds()
+            delay(500)
+        }
+    }
     LaunchedEffect(reactionBurst) {
         if (reactionBurst.isNotBlank()) {
             delay(1200)
@@ -137,8 +162,14 @@ fun ActiveVideoRoomScreen(
         onGift = onGift,
         controls = {
             val guestId = participants.firstOrNull { it.user.id.isNotBlank() && it.user.id != room.host?.id }?.user?.id
-            ControlButton(if (mic) "Mic on" else "Mic off", active = mic) { mic = !mic }
-            ControlButton(if (camera) "Cam on" else "Cam off", active = camera) { camera = !camera }
+            ControlButton(if (mic) "Mic on" else "Mic off", active = mic) {
+                mic = !mic
+                YugmMediaRoom.setMicEnabled(mic)
+            }
+            ControlButton(if (camera) "Cam on" else "Cam off", active = camera) {
+                camera = !camera
+                YugmMediaRoom.setCameraEnabled(camera)
+            }
             ControlButton("Flip") { onToast("Camera switched") }
             if (!isHost) ControlButton("Speak") { onRequestSpeaker() }
             if (!isHost) {
@@ -151,6 +182,7 @@ fun ActiveVideoRoomScreen(
             ControlButton("Invite") {
                 showInvitePicker = true
             }
+            ControlButton("Share") { onToast("Room link copied") }
             ControlButton("DM") { onDirectMessage(if (isHost) guestId else null) }
             if (isHost) {
                 Spacer(Modifier.width(8.dp))
@@ -166,6 +198,7 @@ fun ActiveVideoRoomScreen(
             if (!isHost) room.host?.let { host ->
                 ControlButton("Report", danger = true) { onReportUser(host.id) }
             }
+            if (!isHost) ControlButton("Leave", danger = true) { onBack() }
         }
     ) {
         if (pkBattle != null && pkBattle.status == PkStatus.ACTIVE) {
@@ -215,7 +248,11 @@ fun ActiveVideoRoomScreen(
         } else if (isHost) {
             PkBattleButton { showPkSetup = true }
         }
-        VideoGrid(room = room, camera = camera)
+        if (liveVideoFeeds.isNotEmpty()) {
+            LiveVideoGrid(liveVideoFeeds)
+        } else {
+            VideoGrid(room = room, camera = camera, participants = participants.filter { it.role in listOf("HOST", "SPEAKER", "MODERATOR") })
+        }
         MissionStrip(missions)
         PollCard(poll = polls.firstOrNull(), isHost = isHost, onCreate = { showPollComposer = true }, onVote = onVotePoll)
         ActivityFeed(activity)
@@ -284,4 +321,57 @@ fun ActiveVideoRoomScreen(
             showPkSetup = true
         }
     )
+}
+
+@Composable
+private fun LiveVideoGrid(feeds: List<YugmMediaRoom.VideoFeed>) {
+    val main = feeds.first()
+    val side = feeds.drop(1).take(2)
+    val lower = feeds.drop(3).take(3)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth().height(300.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            LiveVideoTile(main, Modifier.weight(2f).fillMaxSize())
+            Column(Modifier.weight(1f).fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                side.forEach { feed -> LiveVideoTile(feed, Modifier.weight(1f).fillMaxWidth()) }
+                repeat((2 - side.size).coerceAtLeast(0)) {
+                    Box(Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Background))
+                }
+            }
+        }
+        if (lower.isNotEmpty()) {
+            Row(Modifier.fillMaxWidth().height(150.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                lower.forEach { feed -> LiveVideoTile(feed, Modifier.weight(1f).fillMaxSize()) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LiveVideoTile(feed: YugmMediaRoom.VideoFeed, modifier: Modifier = Modifier) {
+    var renderer by remember(feed.track) { mutableStateOf<SurfaceViewRenderer?>(null) }
+    DisposableEffect(feed.track) {
+        onDispose {
+            renderer?.let {
+                feed.track.removeRenderer(it)
+                it.release()
+            }
+            renderer = null
+        }
+    }
+    Box(modifier.clip(RoundedCornerShape(18.dp)).background(Background)) {
+        AndroidView(
+            factory = { context ->
+                SurfaceViewRenderer(context).also { view ->
+                    YugmMediaRoom.initializeVideoRenderer(view)
+                    view.setMirror(false)
+                    feed.track.addRenderer(view)
+                    renderer = view
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+        Box(Modifier.align(Alignment.BottomStart).padding(9.dp).clip(RoundedCornerShape(10.dp)).background(Color.Black.copy(alpha = 0.62f)).padding(horizontal = 9.dp, vertical = 5.dp)) {
+            Text(feed.label, color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
+    }
 }

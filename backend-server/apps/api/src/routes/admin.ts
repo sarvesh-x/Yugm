@@ -1,9 +1,11 @@
 import bcrypt from "bcryptjs";
+import crypto from "node:crypto";
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import { z } from "zod";
+import { creatorCoinsToInr } from "../services/withdrawal.js";
 import { adminPermissions, adminRoles, permissionsFor, type AdminRole } from "../modules/admin/permissions.js";
 import { adminOk, pageParams, paginationMeta } from "../modules/admin/http.js";
 import { requireAdminAuth, requireAnyPermission, requirePermission, requireSuperAdmin, signAdminAccessToken, signAdminRefreshToken, hashToken, adminRefreshSecret, type AdminAuthRequest } from "../middleware/adminAuth.js";
@@ -215,7 +217,11 @@ adminRouter.post("/auth/logout", requireAdminAuth, asyncHandler(async (req: Admi
 adminRouter.get("/auth/me", requireAdminAuth, (req: AdminAuthRequest, res) => adminOk(res, { admin: adminPublic(req.admin) }));
 
 adminRouter.post("/auth/invite", requireAdminAuth, requirePermission("settings.manage"), validateBody(adminUserSchema), asyncHandler(async (req: AdminAuthRequest, res) => {
+  if (req.body.role === "SUPER_ADMIN" && !req.admin!.isSuperAdmin && req.admin!.role !== "SUPER_ADMIN") {
+    throw new HttpError(403, "Only a super admin can invite another super admin", ErrorCode.FORBIDDEN);
+  }
   const passwordHash = req.body.password ? await bcrypt.hash(req.body.password, 12) : undefined;
+  const invitationToken = !passwordHash && !req.body.firebaseUid ? crypto.randomBytes(32).toString("base64url") : undefined;
   const admin = await AdminUser.create({
     email: req.body.email,
     displayName: req.body.displayName,
@@ -225,18 +231,27 @@ adminRouter.post("/auth/invite", requireAdminAuth, requirePermission("settings.m
     passwordHash,
     status: passwordHash || req.body.firebaseUid ? "ACTIVE" : "INVITED",
     isSuperAdmin: req.body.role === "SUPER_ADMIN",
-    createdBy: req.admin!.id
+    createdBy: req.admin!.id,
+    invitationTokenHash: invitationToken ? hashToken(invitationToken) : undefined,
+    invitationExpiresAt: invitationToken ? new Date(Date.now() + 72 * 60 * 60 * 1000) : undefined
   });
   await auditLog({ adminId: req.admin!.id, action: "admin.invite", entityType: "admin_user", entityId: admin.id, metadata: adminPublic(admin), req });
-  adminOk(res, { admin: adminPublic(admin) }, {}, 201);
+  adminOk(res, { admin: adminPublic(admin), invitationToken }, {}, 201);
 }));
 
-adminRouter.post("/auth/accept-invite", validateBody(z.object({ email: z.string().email(), password: z.string().min(8) })), asyncHandler(async (req, res) => {
-  const admin = await AdminUser.findOne({ email: req.body.email.toLowerCase(), status: "INVITED" });
+adminRouter.post("/auth/accept-invite", adminAuthLimiter, validateBody(z.object({ invitationToken: z.string().min(32), password: z.string().min(8) })), asyncHandler(async (req, res) => {
+  const admin = await AdminUser.findOne({
+    invitationTokenHash: hashToken(req.body.invitationToken),
+    invitationExpiresAt: { $gt: new Date() },
+    status: "INVITED"
+  }).select("+invitationTokenHash");
   if (!admin) throw new HttpError(404, "Invitation not found", ErrorCode.NOT_FOUND);
   admin.passwordHash = await bcrypt.hash(req.body.password, 12);
   admin.status = "ACTIVE";
+  admin.invitationTokenHash = undefined;
+  admin.invitationExpiresAt = undefined;
   await admin.save();
+  await auditLog({ adminId: admin.id, action: "admin.invite.accepted", entityType: "admin_user", entityId: admin.id, req });
   adminOk(res, { accepted: true });
 }));
 
@@ -420,7 +435,7 @@ adminRouter.get("/dashboard/experience", requirePermission("analytics.read"), as
     creatorEconomy: {
       giftCoins: giftSummary.coins,
       giftCount: giftSummary.count,
-      estimatedInr: Math.round((giftSummary.coins / 10) * 100) / 100,
+      estimatedInr: creatorCoinsToInr(giftSummary.coins),
       topCreators: topCreators.map((row) => ({
         ...row,
         creator: creatorMap.get(row._id?.toString?.() ?? "")

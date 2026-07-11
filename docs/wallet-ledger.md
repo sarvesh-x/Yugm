@@ -35,4 +35,4 @@ Yugm keeps normal coin wallet activity separate from creator payout eligibility.
 - Creator Payout KYC: required only for real-money withdrawal, not for dating/social verified badges.
 - Yugm Trust Verification: used for platform trust and verified badges, not payout identity compliance.
 
-The current withdrawal MVP calculates available creator earnings from received gifts minus pending, approved, and paid withdrawal locks. Future ledger work should split purchased coins, promotional coins, creator earnings, payout locks, and cash payout settlement into dedicated ledger accounts.
+The current withdrawal flow calculates available creator earnings from received gifts minus pending, approved, and paid withdrawals. Pending and approved amounts remain locked; paid amounts are tracked as withdrawn. Future ledger work should split purchased coins, promotional coins, creator earnings, payout locks, and cash payout settlement into dedicated ledger accounts.

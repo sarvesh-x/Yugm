@@ -329,7 +329,7 @@ walletRouter.post("/wallet/purchases/google-play/verify", validateBody(verifyGoo
 }));
 
 walletRouter.post("/wallet/dev-recharge", asyncHandler(async (req: AuthRequest, res) => {
-  if (!env.DEV_BYPASS_OTP && env.NODE_ENV !== "development") throw new HttpError(404, "Not found");
+  if (env.NODE_ENV !== "development") throw new HttpError(404, "Not found");
   const raw = Number(req.body.amount);
   const amount = Number.isFinite(raw) && raw > 0 ? Math.min(raw, 5000) : 500;
   await creditWallet(req.user!.id, amount, "RECHARGE", { dev: true });
@@ -361,7 +361,6 @@ walletRouter.post("/rooms/:id/send-gift", validateBody(sendGiftSchema), asyncHan
   session.startTransaction();
   try {
     await debitWallet(req.user!.id, gift.coinPrice, "GIFT_SENT", { roomId: room._id.toString(), giftId: gift._id.toString() }, session);
-    await creditWallet(req.body.receiverId, gift.coinPrice, "GIFT_RECEIVED", { roomId: room._id.toString(), giftId: gift._id.toString() }, session);
     const giftTransaction = await GiftTransaction.create([{
       roomId: room._id,
       senderId: req.user!.id,
@@ -410,7 +409,6 @@ walletRouter.post("/direct-send-gift", asyncHandler(async (req: AuthRequest, res
   session.startTransaction();
   try {
     await debitWallet(req.user!.id, gift.coinPrice, "GIFT_SENT_DM", { giftId: gift._id.toString() }, session);
-    await creditWallet(receiverId, gift.coinPrice, "GIFT_RECEIVED_DM", { giftId: gift._id.toString() }, session);
     const giftTransaction = await GiftTransaction.create([{
       senderId: req.user!.id,
       receiverId,

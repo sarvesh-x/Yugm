@@ -37,8 +37,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user });
   },
   logout: async () => {
-    await SecureStore.deleteItemAsync("yugm.token");
-    await SecureStore.deleteItemAsync("yugm.user");
     set({ token: undefined, user: undefined });
+    await Promise.allSettled([
+      SecureStore.deleteItemAsync("yugm.token"),
+      SecureStore.deleteItemAsync("yugm.user")
+    ]);
   }
 }));

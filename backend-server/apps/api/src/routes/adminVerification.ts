@@ -14,6 +14,7 @@ import { recordAuditLog } from "../services/auditLog.js";
 import { approveTrustVerification, publicTrustVerification, rejectTrustVerification, requestTrustRetry, suspendTrustVerification } from "../services/trustVerification.js";
 import { adminOk, pageParams, paginationMeta } from "../modules/admin/http.js";
 import { asyncHandler, ErrorCode, HttpError, isValidObjectId } from "../utils/http.js";
+import { assertTrustMediaFileName, loadTrustVerificationFile } from "../services/storage.js";
 
 export const adminVerificationRouter = Router();
 
@@ -37,21 +38,55 @@ function canReadSensitive(req: AdminAuthRequest) {
   return Boolean(req.admin?.isSuperAdmin || req.adminPermissions?.includes("creator_kyc.sensitive.read"));
 }
 
+function canReadTrustMedia(req: AdminAuthRequest) {
+  return Boolean(req.admin?.isSuperAdmin || req.adminPermissions?.includes("trust_verification.media.read"));
+}
+
+function adminTrustMediaUrl(value?: string | null) {
+  if (!value?.startsWith("/api/trust-verification/media/")) return value;
+  return `/api/admin/trust-verifications/media/${encodeURIComponent(value.split("/").pop() ?? "")}`;
+}
+
+adminVerificationRouter.get("/trust-verifications/media/:fileName", requireAdminAuth, requirePermission("trust_verification.media.read"), asyncHandler(async (req: AdminAuthRequest, res) => {
+  let fileName: string;
+  try {
+    fileName = assertTrustMediaFileName(req.params.fileName);
+  } catch {
+    throw new HttpError(400, "Invalid verification media reference", ErrorCode.VALIDATION);
+  }
+  const media = await loadTrustVerificationFile(fileName).catch(() => { throw new HttpError(404, "Verification media not found", ErrorCode.NOT_FOUND); });
+  await recordAuditLog({ adminId: req.admin!.id, action: "trust_verification.media.read", entityType: "trust_verification_media", entityId: fileName, targetUserId: fileName.split("_")[0], req });
+  res.setHeader("Cache-Control", "private, no-store");
+  if ("filePath" in media && media.filePath) return res.sendFile(media.filePath);
+  res.type(media.contentType ?? "application/octet-stream").send(media.body);
+}));
+
 adminVerificationRouter.get("/trust-verifications", requireAdminAuth, requirePermission("trust_verification.read"), asyncHandler(async (req, res) => {
   const { page, limit, skip } = pageParams(req.query);
   const { items, total } = await listTrustVerificationQueue(String(req.query.status || "") || undefined, skip, limit);
-  adminOk(res, { trustVerifications: items.map(publicTrustVerification) }, paginationMeta(page, limit, total));
+  adminOk(res, { trustVerifications: items.map((item: any) => ({ ...publicTrustVerification(item), user: item.userId })) }, paginationMeta(page, limit, total));
 }));
 
-adminVerificationRouter.get("/trust-verifications/:id", requireAdminAuth, requirePermission("trust_verification.read"), asyncHandler(async (req, res) => {
+adminVerificationRouter.get("/trust-verifications/:id", requireAdminAuth, requirePermission("trust_verification.read"), asyncHandler(async (req: AdminAuthRequest, res) => {
   assertObjectId(req.params.id);
   const verification = await TrustVerification.findById(req.params.id).populate("userId", "name username avatar role isVerified").lean();
   if (!verification) throw new HttpError(404, "Trust verification not found", ErrorCode.NOT_FOUND);
-  const [faceSubmissions, voiceSubmissions] = await Promise.all([
-    FaceVerificationSubmission.find({ verificationId: req.params.id }).sort({ createdAt: -1 }).limit(20).lean(),
-    VoiceVerificationSubmission.find({ verificationId: req.params.id }).sort({ createdAt: -1 }).limit(20).lean()
+  const mediaAccessGranted = canReadTrustMedia(req);
+  const [faceSubmissionCount, voiceSubmissionCount, faceSubmissions, voiceSubmissions] = await Promise.all([
+    FaceVerificationSubmission.countDocuments({ verificationId: req.params.id }),
+    VoiceVerificationSubmission.countDocuments({ verificationId: req.params.id }),
+    mediaAccessGranted ? FaceVerificationSubmission.find({ verificationId: req.params.id }).sort({ createdAt: -1 }).limit(20).lean() : Promise.resolve([]),
+    mediaAccessGranted ? VoiceVerificationSubmission.find({ verificationId: req.params.id }).sort({ createdAt: -1 }).limit(20).lean() : Promise.resolve([])
   ]);
-  adminOk(res, { trustVerification: verification, faceSubmissions, voiceSubmissions });
+  await recordAuditLog({ adminId: req.admin!.id, action: mediaAccessGranted ? "trust_verification.view_media" : "trust_verification.view", entityType: "trust_verification", entityId: verification._id.toString(), targetUserId: (verification.userId as any)?._id?.toString?.() ?? String(verification.userId), metadata: { mediaAccessGranted }, req });
+  const safeFaceSubmissions = faceSubmissions.map((submission: any) => ({
+    ...submission,
+    selfieImageUrl: adminTrustMediaUrl(submission.selfieImageUrl),
+    selfieVideoUrl: adminTrustMediaUrl(submission.selfieVideoUrl),
+    livenessVideoUrl: adminTrustMediaUrl(submission.livenessVideoUrl)
+  }));
+  const safeVoiceSubmissions = voiceSubmissions.map((submission: any) => ({ ...submission, audioUrl: adminTrustMediaUrl(submission.audioUrl) }));
+  adminOk(res, { trustVerification: verification, mediaAccessGranted, submissionCounts: { face: faceSubmissionCount, voice: voiceSubmissionCount }, faceSubmissions: safeFaceSubmissions, voiceSubmissions: safeVoiceSubmissions });
 }));
 
 adminVerificationRouter.post("/trust-verifications/:id/approve", requireAdminAuth, requirePermission("trust_verification.approve"), validateBody(noteSchema), asyncHandler(async (req: AdminAuthRequest, res) => {
@@ -86,16 +121,16 @@ adminVerificationRouter.get("/creator-kyc", requireAdminAuth, requirePermission(
   const { page, limit, skip } = pageParams(req.query);
   const { items, total } = await listCreatorKycQueue(String(req.query.status || "") || undefined, skip, limit);
   await recordAuditLog({ adminId: req.admin!.id, action: "creator_kyc.list", entityType: "creator_payout_kyc", metadata: { status: req.query.status }, req });
-  adminOk(res, { creatorKyc: items.map((item) => publicCreatorPayoutKyc(item, false)) }, paginationMeta(page, limit, total));
+  adminOk(res, { creatorKyc: items.map((item: any) => ({ ...publicCreatorPayoutKyc(item, false), user: item.userId })) }, paginationMeta(page, limit, total));
 }));
 
 adminVerificationRouter.get("/creator-kyc/:userId", requireAdminAuth, requirePermission("creator_kyc.read"), asyncHandler(async (req: AdminAuthRequest, res) => {
   assertObjectId(req.params.userId, "userId");
   const kyc = await CreatorPayoutKyc.findOne({ userId: req.params.userId }).populate("userId", "name username avatar role").lean();
   if (!kyc) throw new HttpError(404, "Creator payout KYC not found", ErrorCode.NOT_FOUND);
-  const includeSensitive = canReadSensitive(req);
-  await recordAuditLog({ adminId: req.admin!.id, action: includeSensitive ? "creator_kyc.view_sensitive" : "creator_kyc.view", entityType: "creator_payout_kyc", entityId: kyc._id.toString(), targetUserId: req.params.userId, req });
-  adminOk(res, { creatorKyc: publicCreatorPayoutKyc(kyc, includeSensitive) });
+  const sensitiveAccessGranted = canReadSensitive(req);
+  await recordAuditLog({ adminId: req.admin!.id, action: sensitiveAccessGranted ? "creator_kyc.view_masked_finance" : "creator_kyc.view_masked", entityType: "creator_payout_kyc", entityId: kyc._id.toString(), targetUserId: req.params.userId, metadata: { sensitiveFieldsMasked: true }, req });
+  adminOk(res, { creatorKyc: publicCreatorPayoutKyc(kyc, sensitiveAccessGranted) });
 }));
 
 adminVerificationRouter.post("/creator-kyc/:userId/approve", requireAdminAuth, requirePermission("creator_kyc.approve"), validateBody(noteSchema), asyncHandler(async (req: AdminAuthRequest, res) => {
@@ -136,7 +171,7 @@ adminVerificationRouter.post("/creator-kyc/:userId/enable-payout", requireAdminA
 adminVerificationRouter.get("/payout-reviews", requireAdminAuth, requirePermission("payout_review.read"), asyncHandler(async (req, res) => {
   const { page, limit, skip } = pageParams(req.query);
   const { items, total } = await listPayoutReviewQueue(String(req.query.status || "") || undefined, skip, limit);
-  adminOk(res, { payoutReviews: items.map(publicPayoutReview) }, paginationMeta(page, limit, total));
+  adminOk(res, { payoutReviews: items.map((item: any) => ({ ...publicPayoutReview(item), user: item.userId, withdrawal: item.withdrawalRequestId })) }, paginationMeta(page, limit, total));
 }));
 
 adminVerificationRouter.get("/payout-reviews/:id", requireAdminAuth, requirePermission("payout_review.read"), asyncHandler(async (req, res) => {

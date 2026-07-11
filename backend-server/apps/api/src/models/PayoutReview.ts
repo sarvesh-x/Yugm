@@ -1,6 +1,6 @@
 import mongoose, { Schema } from "mongoose";
 
-export const payoutReviewStatuses = ["PENDING", "APPROVED", "REJECTED", "NEEDS_MANUAL_REVIEW", "BLOCKED"] as const;
+export const payoutReviewStatuses = ["PENDING", "APPROVED", "REJECTED", "NEEDS_MANUAL_REVIEW", "BLOCKED", "PAID"] as const;
 
 const payoutReviewSchema = new Schema(
   {

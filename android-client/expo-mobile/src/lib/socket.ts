@@ -22,3 +22,10 @@ export function reconnectSocket() {
     socket.disconnect().connect();
   }
 }
+
+export function disconnectSocket() {
+  if (!socket) return;
+  socket.removeAllListeners();
+  socket.disconnect();
+  socket.auth = {};
+}

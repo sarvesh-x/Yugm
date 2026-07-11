@@ -12,10 +12,10 @@ import { Room } from "../models/Room.js";
 import { RoomInvite } from "../models/RoomInvite.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
 import { User } from "../models/User.js";
-import { WalletTransaction } from "../models/WalletTransaction.js";
 import { asyncHandler, sendOk } from "../utils/http.js";
 import { getLevelStatus } from "../services/levels.js";
 import { getVipStatus } from "../services/vip.js";
+import { creatorCoinsToInr } from "../services/withdrawal.js";
 
 export const experienceRouter = Router();
 experienceRouter.use(requireAuth);
@@ -201,40 +201,55 @@ experienceRouter.get("/home", asyncHandler(async (req: AuthRequest, res) => {
 experienceRouter.get("/creator-dashboard", asyncHandler(async (req: AuthRequest, res) => {
   const userId = req.user!.id;
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const [giftIncome, directGiftIncome, rooms, participants, gifts, transactions] = await Promise.all([
+  const hostedRoomIds = await Room.find({ hostId: userId, createdAt: { $gte: since } }).distinct("_id");
+  const [giftIncome, rooms, hostedRooms, participantSummary, gifts, scheduledRooms, topSupporterRows] = await Promise.all([
     GiftTransaction.aggregate([
       { $match: { receiverId: req.user!._id, createdAt: { $gte: since } } },
-      { $group: { _id: null, coins: { $sum: "$coinAmount" }, count: { $sum: 1 } } }
-    ]),
-    WalletTransaction.aggregate([
-      { $match: { userId: req.user!._id, type: "CREDIT", source: { $in: ["GIFT_RECEIVED", "GIFT_RECEIVED_DM"] }, createdAt: { $gte: since } } },
-      { $group: { _id: "$source", coins: { $sum: "$amount" }, count: { $sum: 1 } } }
+      { $group: { _id: null, coins: { $sum: "$coinAmount" }, count: { $sum: 1 }, supporters: { $addToSet: "$senderId" } } }
     ]),
     Room.find({ hostId: userId, createdAt: { $gte: since } }).sort({ createdAt: -1 }).limit(10).lean(),
-    RoomParticipant.countDocuments({ joinedAt: { $gte: since }, roomId: { $in: await Room.find({ hostId: userId, createdAt: { $gte: since } }).distinct("_id") } }),
-    GiftTransaction.find({ receiverId: userId }).populate("senderId giftId roomId").sort({ createdAt: -1 }).limit(8).lean(),
-    WalletTransaction.find({ userId, source: { $in: ["GIFT_RECEIVED", "GIFT_RECEIVED_DM", "LEVEL_REWARD"] } }).sort({ createdAt: -1 }).limit(10).lean()
+    Room.countDocuments({ hostId: userId, createdAt: { $gte: since } }),
+    RoomParticipant.aggregate([
+      { $match: { joinedAt: { $gte: since }, roomId: { $in: hostedRoomIds } } },
+      { $group: { _id: null, visits: { $sum: 1 }, people: { $addToSet: "$userId" } } }
+    ]),
+    GiftTransaction.find({ receiverId: userId, createdAt: { $gte: since } }).populate("senderId", "name username avatar").populate("giftId", "name icon coinPrice").populate("roomId", "title").sort({ createdAt: -1 }).limit(8).lean(),
+    Room.find({ hostId: userId, status: "SCHEDULED", scheduledFor: { $gte: new Date() } }).sort({ scheduledFor: 1 }).limit(8).lean(),
+    GiftTransaction.aggregate([
+      { $match: { receiverId: req.user!._id, createdAt: { $gte: since } } },
+      { $group: { _id: "$senderId", coins: { $sum: "$coinAmount" }, gifts: { $sum: 1 } } },
+      { $sort: { coins: -1 } },
+      { $limit: 5 }
+    ])
   ]);
-  const giftSummary = giftIncome[0] ?? { coins: 0, count: 0 };
-  const directSummary = directGiftIncome.reduce((acc, row) => ({ coins: acc.coins + row.coins, count: acc.count + row.count }), { coins: 0, count: 0 });
+  const giftSummary = giftIncome[0] ?? { coins: 0, count: 0, supporters: [] };
+  const participantStats = participantSummary[0] ?? { visits: 0, people: [] };
+  const supporterUsers = await User.find({ _id: { $in: topSupporterRows.map((row) => row._id) } }).select("name username avatar").lean();
+  const supporterMap = new Map(supporterUsers.map((user) => [user._id.toString(), user]));
+  const topSupporters = topSupporterRows.map((row) => ({ ...row, user: supporterMap.get(row._id.toString()) ?? null }));
+  const nextSteps = [
+    ...(scheduledRooms.length ? [] : ["Schedule one room for your strongest topic"]),
+    ...(hostedRooms ? ["Invite followers before your next live room"] : ["Host your first room this month"]),
+    ...(giftSummary.count ? ["Thank your top supporters after the room"] : ["Create a repeatable room format supporters recognize"]),
+    "Pin a poll in the first five minutes"
+  ].slice(0, 4);
   sendOk(res, {
     windowDays: 30,
     summary: {
-      giftCoins: giftSummary.coins + directSummary.coins,
-      giftCount: giftSummary.count + directSummary.count,
-      hostedRooms: rooms.length,
-      participants,
-      estimatedInr: Math.round(((giftSummary.coins + directSummary.coins) / 10) * 100) / 100
+      giftCoins: giftSummary.coins,
+      giftCount: giftSummary.count,
+      uniqueSupporters: giftSummary.supporters.length,
+      hostedRooms,
+      participants: participantStats.visits,
+      uniqueParticipants: participantStats.people.length,
+      averageParticipants: hostedRooms ? Math.round((participantStats.visits / hostedRooms) * 10) / 10 : 0,
+      estimatedInr: creatorCoinsToInr(giftSummary.coins)
     },
     rooms,
+    scheduledRooms,
     gifts,
-    transactions,
-    nextSteps: [
-      "Schedule one room for your strongest topic",
-      "Invite followers before going live",
-      "Pin a poll in the first five minutes",
-      "Thank top gifters after the room"
-    ]
+    topSupporters,
+    nextSteps
   });
 }));
 

@@ -24,13 +24,16 @@ import {
   Users,
   Wallet
 } from "lucide-react";
-import { Admin, adminApi, adminApiWithMeta, formatDate, formatNumber, login, Session } from "./api";
+import { Admin, adminApi, adminApiWithMeta, formatDate, formatNumber, login, refreshAdminSession, Session } from "./api";
 
 type ViewKey =
   | "dashboard"
   | "users"
   | "reports"
   | "queue"
+  | "trustVerifications"
+  | "creatorKyc"
+  | "payoutReviews"
   | "rooms"
   | "pk"
   | "messages"
@@ -49,15 +52,18 @@ type ViewKey =
 
 type Notice = { tone: "success" | "error" | "info"; text: string } | null;
 
-const navItems: Array<{ key: ViewKey; label: string; icon: ReactNode; group: string }> = [
+const navItems: Array<{ key: ViewKey; label: string; icon: ReactNode; group: string; requiredPermission?: string }> = [
   { key: "dashboard", label: "Dashboard", icon: <Gauge />, group: "Control" },
   { key: "users", label: "Users", icon: <Users />, group: "Control" },
   { key: "reports", label: "Reports", icon: <AlertTriangle />, group: "Safety" },
   { key: "queue", label: "Moderation queue", icon: <Shield />, group: "Safety" },
+  { key: "trustVerifications", label: "Trust verification", icon: <CheckCircle2 />, group: "Safety", requiredPermission: "trust_verification.read" },
   { key: "rooms", label: "Live rooms", icon: <Radio />, group: "Safety" },
   { key: "pk", label: "PK battles", icon: <Sparkles />, group: "Safety" },
   { key: "messages", label: "Messages", icon: <MessageSquare />, group: "Safety" },
   { key: "wallet", label: "Wallet", icon: <Wallet />, group: "Money" },
+  { key: "creatorKyc", label: "Creator payout KYC", icon: <Lock />, group: "Money", requiredPermission: "creator_kyc.read" },
+  { key: "payoutReviews", label: "Payout reviews", icon: <Coins />, group: "Money", requiredPermission: "payout_review.read" },
   { key: "payments", label: "Payments", icon: <Coins />, group: "Money" },
   { key: "gifts", label: "Gifts", icon: <Gift />, group: "Money" },
   { key: "notifications", label: "Notifications", icon: <Bell />, group: "Operations" },
@@ -73,7 +79,8 @@ const navItems: Array<{ key: ViewKey; label: string; icon: ReactNode; group: str
 
 const storedSession = () => {
   try {
-    const raw = localStorage.getItem("yugm.admin.session");
+    localStorage.removeItem("yugm.admin.session");
+    const raw = sessionStorage.getItem("yugm.admin.session");
     return raw ? (JSON.parse(raw) as Session) : null;
   } catch {
     return null;
@@ -87,9 +94,23 @@ export function App() {
 
   const saveSession = (next: Session | null) => {
     setSession(next);
-    if (next) localStorage.setItem("yugm.admin.session", JSON.stringify(next));
-    else localStorage.removeItem("yugm.admin.session");
+    if (next) sessionStorage.setItem("yugm.admin.session", JSON.stringify(next));
+    else sessionStorage.removeItem("yugm.admin.session");
   };
+
+  useEffect(() => {
+    if (!session?.refreshToken) return;
+    const refresh = async () => {
+      try {
+        const next = await refreshAdminSession(session.refreshToken!);
+        saveSession({ ...session, admin: next.admin, accessToken: next.accessToken });
+      } catch {
+        saveSession(null);
+      }
+    };
+    const timer = window.setInterval(refresh, 12 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [session?.refreshToken]);
 
   if (!session) return <LoginScreen onLogin={saveSession} />;
 
@@ -169,7 +190,8 @@ function MiniSignal({ label, value }: { label: string; value: string }) {
 }
 
 function Sidebar({ current, onNavigate, admin, onLogout }: { current: ViewKey; onNavigate: (view: ViewKey) => void; admin: Admin; onLogout: () => void }) {
-  const groups = navItems.reduce<Record<string, typeof navItems>>((acc, item) => {
+  const visibleItems = navItems.filter((item) => !item.requiredPermission || admin.isSuperAdmin || admin.permissions.includes(item.requiredPermission));
+  const groups = visibleItems.reduce<Record<string, typeof navItems>>((acc, item) => {
     acc[item.group] = [...(acc[item.group] || []), item];
     return acc;
   }, {});
@@ -230,6 +252,9 @@ function ViewRenderer({ view, session, setNotice, onLogout }: { view: ViewKey; s
   if (view === "users") return <UsersPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "reports") return <ReportsPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "queue") return <SimpleResource token={session.accessToken} title="Moderation Queue" endpoint="/moderation/queue" columns={queueColumns} />;
+  if (view === "trustVerifications") return <VerificationQueuePage kind="trust" token={session.accessToken} admin={session.admin} setNotice={setNotice} />;
+  if (view === "creatorKyc") return <VerificationQueuePage kind="creator" token={session.accessToken} admin={session.admin} setNotice={setNotice} />;
+  if (view === "payoutReviews") return <VerificationQueuePage kind="payout" token={session.accessToken} admin={session.admin} setNotice={setNotice} />;
   if (view === "rooms") return <RoomsPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "pk") return <PkBattlesPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "messages") return <SimpleResource token={session.accessToken} title="Room Messages" endpoint="/messages" columns={messageColumns} searchPlaceholder="Search keyword" searchParam="containsKeyword" />;
@@ -777,11 +802,13 @@ function AdminUsersPage({ token, setNotice }: { token: string; setNotice: (notic
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [role, setRole] = useState("MODERATOR");
+  const [invitationToken, setInvitationToken] = useState("");
   const resource = useResource<any[]>("/admin-users", token);
 
   const invite = async () => {
     try {
-      await adminApi("/auth/invite", { token, method: "POST", body: JSON.stringify({ email, displayName, role }) });
+      const result = await adminApi<any>("/auth/invite", { token, method: "POST", body: JSON.stringify({ email, displayName, role }) });
+      setInvitationToken(result.invitationToken ?? "");
       setNotice({ tone: "success", text: "Admin invited" });
       resource.refresh();
     } catch (err: any) {
@@ -798,6 +825,7 @@ function AdminUsersPage({ token, setNotice }: { token: string; setNotice: (notic
           <label>Role<select value={role} onChange={(event) => setRole(event.target.value)}><option>MODERATOR</option><option>FINANCE_MANAGER</option><option>SUPPORT_AGENT</option><option>CONTENT_REVIEWER</option><option>ANALYST</option><option>ADMIN</option></select></label>
         </div>
         <button className="primary-action compact" onClick={invite}>Invite</button>
+        {invitationToken && <div className="detail-card"><strong>One-time invitation token</strong><p>Send this through a secure channel. It expires in 72 hours and cannot be recovered later.</p><input value={invitationToken} readOnly onFocus={(event) => event.currentTarget.select()} /></div>}
       </Panel>
       <ResourceFrame title="Admin Users" loading={resource.loading} error={resource.error} onRetry={resource.refresh}>
         <DataTable rows={resource.data || []} columns={adminColumns} />
@@ -816,6 +844,156 @@ function SettingsPage({ admin, onLogout }: { admin: Admin; onLogout: () => void 
       </div>
     </Panel>
   );
+}
+
+function VerificationQueuePage({ kind, token, admin, setNotice }: { kind: "trust" | "creator" | "payout"; token: string; admin: Admin; setNotice: (notice: Notice) => void }) {
+  const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState("");
+  const [selected, setSelected] = useState<any>(null);
+  const config = kind === "trust" ? {
+    title: "Yugm Trust Verification",
+    subtitle: "Face, voice, consent, and liveness review for platform trust. This is not payout KYC.",
+    endpoint: "/trust-verifications",
+    key: "trustVerifications",
+    statuses: ["INCOMPLETE", "PENDING_REVIEW", "VERIFIED", "REJECTED", "NEEDS_RETRY", "SUSPENDED"],
+    columns: trustVerificationColumns
+  } : kind === "creator" ? {
+    title: "Creator Payout KYC",
+    subtitle: "Finance-only payout eligibility review. PAN, UPI, and bank identifiers remain masked in browser responses.",
+    endpoint: "/creator-kyc",
+    key: "creatorKyc",
+    statuses: ["NOT_SUBMITTED", "PENDING", "VERIFIED", "REJECTED", "NEEDS_RETRY", "EXPIRED", "MANUAL_REVIEW"],
+    columns: creatorKycColumns
+  } : {
+    title: "Payout Reviews",
+    subtitle: "Combined trust, KYC, wallet, reports, and fraud decision queue.",
+    endpoint: "/payout-reviews",
+    key: "payoutReviews",
+    statuses: ["PENDING", "APPROVED", "REJECTED", "NEEDS_MANUAL_REVIEW", "BLOCKED", "PAID"],
+    columns: payoutReviewColumns
+  };
+
+  const path = `${config.endpoint}${status ? `?status=${encodeURIComponent(status)}` : ""}`;
+  const resource = useResourceWithMeta<any>(path, token);
+  const rows = resource.data?.[config.key] ?? [];
+
+  const hasPermission = (...permissions: string[]) => admin.isSuperAdmin || permissions.some((permission) => admin.permissions.includes(permission));
+  const runAction = async (row: any, action: string, body: Record<string, string | undefined> = {}) => {
+    const id = kind === "creator" ? (row.user?._id || row.user?.id || row.userId) : (row.id || row._id);
+    const actionKey = `${id}:${action}`;
+    setBusy(actionKey);
+    try {
+      await adminApi(`${config.endpoint}/${id}/${action}`, { token, method: "POST", body: JSON.stringify(body) });
+      setNotice({ tone: "success", text: `${config.title}: ${action.split("-").join(" ")} complete` });
+      setSelected(null);
+      resource.refresh();
+    } catch (err: any) {
+      setNotice({ tone: "error", text: err.message || "Review action failed" });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const promptNotes = () => window.prompt("Optional internal notes", "") ?? undefined;
+  const actionsFor = (row: any) => {
+    const id = kind === "creator" ? (row.user?._id || row.user?.id || row.userId) : (row.id || row._id);
+    const actionButton = (action: string, label: string, getBody: () => Record<string, string | undefined>, className = "ghost-button") => (
+      <button className={className} disabled={Boolean(busy)} onClick={() => runAction(row, action, getBody())}>{busy === `${id}:${action}` ? "Working…" : label}</button>
+    );
+
+    if (kind === "creator") {
+      const reviewable = ["PENDING", "MANUAL_REVIEW", "NEEDS_RETRY", "REJECTED"].includes(row.kycStatus);
+      return <div className="action-row">
+        {reviewable && hasPermission("creator_kyc.approve") ? actionButton("approve", "Approve", () => ({ adminNotes: promptNotes() })) : null}
+        {reviewable && hasPermission("creator_kyc.reject") ? <button className="danger" disabled={Boolean(busy)} onClick={() => {
+          const reason = window.prompt("Rejection reason");
+          if (reason?.trim()) runAction(row, "reject", { rejectionReason: reason.trim(), adminNotes: promptNotes() });
+        }}>Reject</button> : null}
+        {reviewable && hasPermission("creator_kyc.review") ? <button className="soft" disabled={Boolean(busy)} onClick={() => runAction(row, "request-retry", { rejectionReason: window.prompt("What should the creator correct?") ?? undefined })}>Retry</button> : null}
+        {row.payoutStatus === "ENABLED" && hasPermission("creator_kyc.review") ? actionButton("freeze-payout", "Freeze", () => ({ adminNotes: promptNotes() }), "danger") : null}
+        {row.kycStatus === "VERIFIED" && row.payoutStatus !== "ENABLED" && hasPermission("creator_kyc.approve") ? actionButton("enable-payout", "Enable", () => ({ adminNotes: promptNotes() })) : null}
+      </div>;
+    }
+
+    if (kind === "payout") {
+      const pending = row.status === "PENDING" || row.status === "NEEDS_MANUAL_REVIEW";
+      return <div className="action-row">
+        {pending && hasPermission("payout_review.approve", "withdrawals.approve") ? actionButton("approve", "Approve", () => ({ adminNotes: promptNotes() })) : null}
+        {pending && hasPermission("payout_review.reject", "withdrawals.reject") ? <button className="danger" disabled={Boolean(busy)} onClick={() => {
+          const reason = window.prompt("Rejection reason");
+          if (reason?.trim()) runAction(row, "reject", { rejectionReason: reason.trim(), adminNotes: promptNotes() });
+        }}>Reject</button> : null}
+        {row.status === "PENDING" && hasPermission("payout_review.read") ? actionButton("manual-review", "Manual", () => ({ adminNotes: promptNotes() }), "soft") : null}
+        {row.status === "APPROVED" && hasPermission("payout_review.approve", "withdrawals.approve") ? <button className="ghost-button" disabled={Boolean(busy)} onClick={() => {
+          const payoutReference = window.prompt("Payout transaction reference");
+          if (payoutReference?.trim()) runAction(row, "mark-paid", { payoutReference: payoutReference.trim(), adminNotes: promptNotes() });
+        }}>Mark paid</button> : null}
+      </div>;
+    }
+
+    return null;
+  };
+
+  return (
+    <ResourceFrame title={config.title} subtitle={config.subtitle} loading={resource.loading} error={resource.error} onRetry={resource.refresh}>
+      <div className="filter-bar">
+        <Shield />
+        <select value={status} onChange={(event) => setStatus(event.target.value)}>
+          <option value="">All statuses</option>
+          {config.statuses.map((item) => <option key={item} value={item}>{item.split("_").join(" ")}</option>)}
+        </select>
+        <span>{formatNumber(resource.meta?.pagination?.total ?? rows.length)} records</span>
+      </div>
+      <DataTable rows={rows} columns={config.columns} onRowClick={kind === "creator" || kind === "payout" ? setSelected : undefined} actions={kind === "creator" || kind === "payout" ? actionsFor : undefined} />
+      <Drawer open={Boolean(selected)} title={kind === "creator" ? "Creator payout profile" : "Payout review detail"} onClose={() => setSelected(null)}>
+        {selected && kind === "creator" ? (
+          <>
+            <div className="review-hero">
+              <div className="avatar">{selected.user?.name?.[0] || selected.legalFullName?.[0] || "C"}</div>
+              <div><div className="eyebrow">Creator KYC</div><h3>{selected.user?.name || selected.legalFullName || "Creator"}</h3><p>@{selected.user?.username || "unknown"}</p></div>
+              <StatusBadge value={selected.kycStatus} />
+            </div>
+            <div className="verification-detail-grid">
+              <ReviewDetail label="Legal name" value={selected.legalFullName} />
+              <ReviewDetail label="Payout status" value={selected.payoutStatus} status />
+              <ReviewDetail label="PAN" value={selected.panLast4 ? `••••${selected.panLast4}` : null} />
+              <ReviewDetail label="UPI" value={selected.upiIdMasked} />
+              <ReviewDetail label="Bank" value={selected.bankAccountLast4 ? `••••${selected.bankAccountLast4}` : null} />
+              <ReviewDetail label="IFSC" value={selected.bankIfsc} />
+              <ReviewDetail label="Submitted" value={formatDate(selected.submittedAt)} />
+              <ReviewDetail label="Sensitive fields" value="Masked in all browser responses" />
+            </div>
+            {selected.rejectionReason && <div className="review-warning"><strong>Previous review note</strong><p>{selected.rejectionReason}</p></div>}
+            <div className="drawer-action-section"><strong>Finance actions</strong>{actionsFor(selected)}</div>
+          </>
+        ) : selected && kind === "payout" ? (
+          <>
+            <div className="review-hero">
+              <div className="avatar">{selected.user?.name?.[0] || "P"}</div>
+              <div><div className="eyebrow">Settlement review</div><h3>{selected.user?.name || selected.user?.username || "Creator"}</h3><p>{formatNumber(selected.withdrawal?.amountCoins)} coins · ₹{Number(selected.withdrawal?.amountInr || 0).toFixed(2)}</p></div>
+              <StatusBadge value={selected.status} />
+            </div>
+            <div className="verification-detail-grid">
+              <ReviewDetail label="Trust verified" value={selected.trustVerified ? "Yes" : "No"} status />
+              <ReviewDetail label="KYC verified" value={selected.kycVerified ? "Yes" : "No"} status />
+              <ReviewDetail label="Wallet safe" value={selected.walletSafe ? "Yes" : "No"} status />
+              <ReviewDetail label="Reports safe" value={selected.reportsSafe ? "Yes" : "No"} status />
+              <ReviewDetail label="Fraud safe" value={selected.fraudSafe ? "Yes" : "No"} status />
+              <ReviewDetail label="Risk score" value={String(selected.riskScore ?? 0)} />
+              <ReviewDetail label="Requested" value={formatDate(selected.createdAt)} />
+              <ReviewDetail label="Review ID" value={selected.id || selected._id} />
+            </div>
+            <div className="review-warning risk"><strong>Risk signals</strong><p>{selected.riskFlags?.length ? selected.riskFlags.join(" · ") : "No automated risk flags."}</p></div>
+            <div className="drawer-action-section"><strong>Settlement actions</strong>{actionsFor(selected)}</div>
+          </>
+        ) : null}
+      </Drawer>
+    </ResourceFrame>
+  );
+}
+
+function ReviewDetail({ label, value, status }: { label: string; value: ReactNode; status?: boolean }) {
+  return <div className="review-detail"><span>{label}</span>{status ? <StatusBadge value={String(value || "Unknown")} /> : <strong>{value || "—"}</strong>}</div>;
 }
 
 function SimpleResource({ token, title, endpoint, columns, searchPlaceholder, searchParam }: { token: string; title: string; endpoint: string; columns: ColumnDef[]; searchPlaceholder?: string; searchParam?: string }) {
@@ -1022,6 +1200,37 @@ const pkColumns: ColumnDef[] = [
   { key: "remainingSeconds", label: "Time", render: (row) => `${row.remainingSeconds || 0}s` },
   { key: "leader", label: "Leader", render: (row) => <StatusBadge value={row.leader || "DRAW"} /> },
   { key: "status", label: "Status", render: (row) => <StatusBadge value={row.status} /> }
+];
+
+const trustVerificationColumns: ColumnDef[] = [
+  { key: "user.username", label: "User" },
+  { key: "status", label: "Status", render: (row) => <StatusBadge value={row.status} /> },
+  { key: "faceStatus", label: "Face", render: (row) => <StatusBadge value={row.faceStatus} /> },
+  { key: "voiceStatus", label: "Voice", render: (row) => <StatusBadge value={row.voiceStatus} /> },
+  { key: "verificationScore", label: "Score" },
+  { key: "submittedAt", label: "Submitted" }
+];
+
+const creatorKycColumns: ColumnDef[] = [
+  { key: "user.username", label: "Creator" },
+  { key: "kycStatus", label: "KYC", render: (row) => <StatusBadge value={row.kycStatus} /> },
+  { key: "payoutStatus", label: "Payout", render: (row) => <StatusBadge value={row.payoutStatus} /> },
+  { key: "panLast4", label: "PAN", render: (row) => row.panLast4 ? `••••${row.panLast4}` : "—" },
+  { key: "upiIdMasked", label: "UPI" },
+  { key: "bankAccountLast4", label: "Bank", render: (row) => row.bankAccountLast4 ? `••••${row.bankAccountLast4}` : "—" },
+  { key: "submittedAt", label: "Submitted" }
+];
+
+const payoutReviewColumns: ColumnDef[] = [
+  { key: "user.username", label: "Creator" },
+  { key: "status", label: "Status", render: (row) => <StatusBadge value={row.status} /> },
+  { key: "withdrawal.amountCoins", label: "Coins", render: (row) => formatNumber(row.withdrawal?.amountCoins) },
+  { key: "withdrawal.amountInr", label: "INR", render: (row) => `₹${Number(row.withdrawal?.amountInr || 0).toFixed(2)}` },
+  { key: "trustVerified", label: "Trust" },
+  { key: "kycVerified", label: "KYC" },
+  { key: "fraudSafe", label: "Fraud" },
+  { key: "riskScore", label: "Risk", render: (row) => <RiskBadge value={(row.riskScore ?? 0) >= 70 ? "HIGH" : (row.riskScore ?? 0) >= 35 ? "MEDIUM" : "LOW"} /> },
+  { key: "createdAt", label: "Created" }
 ];
 
 const walletColumns: ColumnDef[] = [

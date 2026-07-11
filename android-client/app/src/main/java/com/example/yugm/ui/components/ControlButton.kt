@@ -7,6 +7,8 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,9 +53,10 @@ fun ControlButton(text: String, active: Boolean = false, danger: Boolean = false
     Surface(
         color = container,
         border = BorderStroke(1.dp, border),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(18.dp),
         modifier = Modifier
-            .height(54.dp)
+            .width(74.dp)
+            .height(68.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -64,8 +67,25 @@ fun ControlButton(text: String, active: Boolean = false, danger: Boolean = false
                 onClick = onClick
             )
     ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 14.dp)) {
-            Text(text, color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Black)
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 7.dp, vertical = 8.dp)) {
+            Text(controlGlyph(text), color = if (danger) Danger else if (active) Gold else TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Black)
+            Text(text, color = TextPrimary, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
         }
     }
+}
+
+private fun controlGlyph(text: String): String = when {
+    text.contains("mute", true) || text.contains("mic", true) || text.contains("speak", true) -> "◖"
+    text.contains("cam", true) -> "▣"
+    text.contains("flip", true) -> "↻"
+    text.contains("gift", true) -> "♢"
+    text.contains("react", true) -> "♡"
+    text.contains("invite", true) -> "+"
+    text.contains("share", true) -> "⇧"
+    text.contains("leave", true) -> "↪"
+    text == "DM" -> "●●"
+    text.contains("PK", true) -> "⚡"
+    text.contains("end", true) || text.contains("remove", true) -> "⌁"
+    text.contains("report", true) -> "⚑"
+    else -> "•"
 }

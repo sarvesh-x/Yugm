@@ -30,6 +30,7 @@ function publicUser(user: any) {
     name: user.name,
     username: user.username,
     avatar: user.avatar,
+    isVerified: Boolean(user.isVerified),
     role: user.role,
     walletBalance: user.walletBalance,
     xp: levelStatus.xp,
@@ -51,6 +52,9 @@ function publicUser(user: any) {
 const otpStore = new Map<string, { otp: string; expiresAt: number }>();
 
 authRouter.post("/request-otp", authLimiter, validateBody(requestOtpSchema), asyncHandler(async (req, res) => {
+  if (env.NODE_ENV !== "development") {
+    throw new HttpError(501, "Use Firebase phone authentication or configure a production OTP provider.", ErrorCode.VALIDATION);
+  }
   const devOtp = env.DEV_BYPASS_OTP;
   const key = req.body.email || req.body.phone;
   if (!devOtp) {
@@ -64,7 +68,7 @@ authRouter.post("/verify-otp", authLimiter, validateBody(verifyOtpSchema), async
   const key = req.body.email || req.body.phone;
   const stored = otpStore.get(key);
   const isValidOtp = stored && stored.otp === req.body.otp && stored.expiresAt > Date.now();
-  const isDevBypass = env.DEV_BYPASS_OTP && req.body.otp === env.DEV_BYPASS_OTP;
+  const isDevBypass = env.NODE_ENV === "development" && env.DEV_BYPASS_OTP && req.body.otp === env.DEV_BYPASS_OTP;
   if (!isValidOtp && !isDevBypass) {
     throw new HttpError(401, "Invalid or expired OTP", ErrorCode.UNAUTHORIZED);
   }
@@ -84,8 +88,7 @@ authRouter.post("/verify-otp", authLimiter, validateBody(verifyOtpSchema), async
             interests: ["Music", "Chill"],
             languages: ["Hindi", "English"],
             walletBalance: 250
-          },
-          $set: { isVerified: true }
+          }
         },
         { upsert: true, new: true }
       );
@@ -115,7 +118,7 @@ authRouter.post("/google", authLimiter, asyncHandler(async (req, res) => {
       interests: ["Music", "Chill"],
       languages: ["Hindi", "English"],
       walletBalance: 250,
-      isVerified: true
+      isVerified: false
     });
   }
 
@@ -139,7 +142,7 @@ authRouter.post("/phone", authLimiter, asyncHandler(async (req, res) => {
       interests: ["Music", "Chill"],
       languages: ["Hindi", "English"],
       walletBalance: 250,
-      isVerified: true
+      isVerified: false
     });
   }
 

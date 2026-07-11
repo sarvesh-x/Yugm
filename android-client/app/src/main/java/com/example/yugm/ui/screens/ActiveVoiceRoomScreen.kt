@@ -8,6 +8,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -177,6 +178,7 @@ fun ActiveVoiceRoomScreen(
             ControlButton("Invite") {
                 showInvitePicker = true
             }
+            ControlButton("Share") { onToast("Room link copied") }
             ControlButton("DM") { onDirectMessage(if (isHost) guestId else null) }
             if (isHost) {
                 Spacer(Modifier.width(8.dp))
@@ -192,6 +194,7 @@ fun ActiveVoiceRoomScreen(
             if (!isHost) room.host?.let { host ->
                 ControlButton("Report", danger = true) { onReportUser(host.id) }
             }
+            if (!isHost) ControlButton("Leave", danger = true) { onBack() }
         }
     ) {
         room.host?.let { HostCard(it) }
@@ -281,7 +284,31 @@ fun ActiveVoiceRoomScreen(
             }
         }
         SectionTitle("Audience")
-        Text("${participants.count { it.role == "AUDIENCE" }} listening / ${room.participants} live", color = TextMuted, fontSize = 12.sp)
+        val audience = participants.filter { it.role == "AUDIENCE" }
+        Text("${audience.size} listening / ${room.participants} live", color = TextMuted, fontSize = 12.sp)
+        if (audience.isNotEmpty()) {
+            androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
+                items(audience.take(12).size) { index ->
+                    val listener = audience[index].user
+                    androidx.compose.foundation.layout.Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+                        com.example.yugm.ui.components.Avatar(listener.name.take(1), 38, listener.avatar, listener.activeCosmetics)
+                        Text(listener.name.take(9), color = TextPrimary, fontSize = 9.sp, maxLines = 1)
+                    }
+                }
+            }
+        }
+        SectionTitle("Room reactions")
+        androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+            listOf("❤️", "👏", "🔥", "💯", "✨", "😂").forEach { emoji ->
+                androidx.compose.foundation.layout.Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { reactionBurst = emoji; onReact() }
+                        .padding(vertical = 8.dp),
+                    contentAlignment = androidx.compose.ui.Alignment.Center
+                ) { Text(emoji, fontSize = 25.sp) }
+            }
+        }
         MissionStrip(missions)
         PollCard(poll = polls.firstOrNull(), isHost = isHost, onCreate = { showPollComposer = true }, onVote = onVotePoll)
         ActivityFeed(activity)

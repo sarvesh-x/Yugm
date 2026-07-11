@@ -24,7 +24,8 @@ Creator Payout KYC may collect payout-specific identity and payment details:
 - Raw PAN, UPI, and bank account values are encrypted at rest.
 - Public/user responses expose only masked values such as PAN last four, UPI masked ID, and bank last four.
 - Admin access is limited to finance/admin roles.
-- Sensitive decrypted views require `creator_kyc.sensitive.read`.
+- Raw PAN, UPI, and bank account values are never returned to browser or mobile clients, including finance clients.
+- `creator_kyc.sensitive.read` permits finance staff to access the most detailed masked payout record; it does not expose decrypted identifiers.
 - Every list, view, and action on Creator Payout KYC writes an admin audit log.
 - Moderators and content reviewers must not access payout identity or payment fields.
 

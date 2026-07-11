@@ -31,7 +31,9 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
       const json = await response.json().catch(() => ({}));
       if (!response.ok || json.ok === false) {
         if (response.status === 401 && token) {
-          await useAuthStore.getState().logout().catch(() => undefined);
+          if (useAuthStore.getState().token === token) {
+            await useAuthStore.getState().logout().catch(() => undefined);
+          }
         }
         throw new ApiError(
           json.error?.message ?? (response.status === 401 ? "Your session has expired. Please sign in again." : "Request failed"),
@@ -208,10 +210,11 @@ export const experienceApi = {
   }>("/experience/home"),
   creatorDashboard: () => api<{
     windowDays: number;
-    summary: { giftCoins: number; giftCount: number; hostedRooms: number; participants: number; estimatedInr: number };
+    summary: { giftCoins: number; giftCount: number; uniqueSupporters: number; hostedRooms: number; participants: number; uniqueParticipants: number; averageParticipants: number; estimatedInr: number };
     rooms: any[];
+    scheduledRooms: any[];
     gifts: any[];
-    transactions: any[];
+    topSupporters: Array<{ _id: string; coins: number; gifts: number; user?: any }>;
     nextSteps: string[];
   }>("/experience/creator-dashboard"),
   safetyCenter: () => api<{
@@ -225,6 +228,76 @@ export const experienceApi = {
       method: "PUT",
       body: JSON.stringify(preferences)
     })
+};
+
+export type CreatorPayoutKyc = {
+  id?: string;
+  legalFullName?: string | null;
+  dateOfBirth?: string | null;
+  panLast4?: string | null;
+  panVerified: boolean;
+  upiIdMasked?: string | null;
+  bankAccountLast4?: string | null;
+  bankIfsc?: string | null;
+  bankHolderName?: string | null;
+  kycStatus: "NOT_SUBMITTED" | "PENDING" | "VERIFIED" | "REJECTED" | "NEEDS_RETRY" | "EXPIRED" | "MANUAL_REVIEW";
+  payoutStatus: "DISABLED" | "ENABLED" | "FROZEN" | "MANUAL_REVIEW";
+  rejectionReason?: string | null;
+  submittedAt?: string | null;
+  verifiedAt?: string | null;
+};
+
+export type CreatorEarningBalance = {
+  earnedCoins: number;
+  lockedCoins: number;
+  withdrawnCoins: number;
+  availableCoins: number;
+};
+
+export type CreatorWithdrawal = {
+  id: string;
+  amountCoins: number;
+  amountInr: number;
+  status: "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "PAID" | "CANCELLED" | "BLOCKED";
+  rejectionReason?: string | null;
+  payoutReference?: string | null;
+  createdAt?: string | null;
+  paidAt?: string | null;
+};
+
+export const creatorApi = {
+  payoutKyc: () => api<{ title: string; tagline: string; kyc: CreatorPayoutKyc }>("/creator/payout-kyc"),
+  submitPayoutKyc: (payload: {
+    legalFullName: string;
+    dateOfBirth?: string;
+    panNumber: string;
+    upiId?: string;
+    bankAccount?: string;
+    bankIfsc?: string;
+    bankHolderName?: string;
+    declarationsAccepted: boolean;
+  }) => api<{ kyc: CreatorPayoutKyc }>("/creator/payout-kyc/submit", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  }),
+  eligibility: () => api<{
+    balance: CreatorEarningBalance;
+    payoutKyc: CreatorPayoutKyc;
+    coinToInrRate: number;
+    requirements: {
+      creatorAccount: boolean;
+      trustVerified: boolean;
+      creatorTrustEnabled: boolean;
+      payoutKycVerified: boolean;
+      payoutEnabled: boolean;
+    };
+  }>("/creator/withdrawals/eligibility"),
+  withdrawals: () => api<{ withdrawals: CreatorWithdrawal[]; balance: CreatorEarningBalance }>("/creator/withdrawals"),
+  requestWithdrawal: (amountCoins: number) => api<{
+    message: string;
+    withdrawal: CreatorWithdrawal;
+    balance: CreatorEarningBalance;
+  }>("/creator/withdrawals", { method: "POST", body: JSON.stringify({ amountCoins }) })
 };
 
 export const gamesApi = {
@@ -292,6 +365,9 @@ export const clansApi = {
 };
 
 export const datingApi = {
+  preferences: () => api<{ preferences: { interestedIn: "Everyone" | "Women" | "Men" | "Non-binary"; lookingFor: "Friendship" | "Dating" | "Relationship" | "Networking"; datingAgeMin: number; datingAgeMax: number; verifiedOnly: boolean } }>("/dating/preferences"),
+  updatePreferences: (preferences: { interestedIn: "Everyone" | "Women" | "Men" | "Non-binary"; lookingFor: "Friendship" | "Dating" | "Relationship" | "Networking"; datingAgeMin: number; datingAgeMax: number; verifiedOnly: boolean }) =>
+    api<{ preferences: any }>("/dating/preferences", { method: "PUT", body: JSON.stringify(preferences) }),
   explore: () => api<{ candidates: any[] }>("/dating/explore"),
   like: (likedId: string, type: "LIKE" | "SUPER_LIKE" | "PASS" = "LIKE") =>
     api<{ like: any; isMatch: boolean; match: any }>("/dating/like", {

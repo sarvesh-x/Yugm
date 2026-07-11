@@ -14,6 +14,7 @@ firebaseBom = "34.6.0"
 playServicesAuth = "21.2.0"
 livekitAndroid = "2.20.3"
 coilCompose = "2.7.0"
+razorpayCheckout = "1.6.41"
 socketioClient = "2.0.1"
 credentials = "1.6.0"
 credentialsPlayServicesAuth = "1.6.0"
@@ -44,6 +45,7 @@ firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
 play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "playServicesAuth" }
 livekit-android = { group = "io.livekit", name = "livekit-android", version.ref = "livekitAndroid" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coilCompose" }
+razorpay-checkout = { group = "com.razorpay", name = "checkout", version.ref = "razorpayCheckout" }
 socketio-client = { group = "io.socket", name = "socket.io-client", version.ref = "socketioClient" }
 androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
 androidx-credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentialsPlayServicesAuth" }

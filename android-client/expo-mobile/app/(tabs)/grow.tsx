@@ -3,12 +3,13 @@ import type { ReactNode } from "react";
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { router } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, CalendarClock, CheckCircle2, ChevronRight, Coins, Flame, Radio, ShieldCheck, Sparkles, Trophy, Users } from "lucide-react-native";
+import { BadgeIndianRupee, Bell, CalendarClock, CheckCircle2, ChevronRight, Coins, Flame, Gift, Mic2, Radio, ShieldCheck, Sparkles, Trophy, Users, Video } from "lucide-react-native";
 import { GlassCard } from "@/components/GlassCard";
 import { Screen, Section } from "@/components/Screen";
 import { experienceApi } from "@/lib/api";
 import { colors, gradients } from "@/theme/colors";
 import { LinearGradient } from "expo-linear-gradient";
+import { useAuthStore } from "@/store/auth";
 
 type Achievement = {
   id: string;
@@ -46,6 +47,8 @@ const preferenceLabels: Record<string, string> = {
 
 export default function GrowScreen() {
   const queryClient = useQueryClient();
+  const role = useAuthStore((state) => state.user?.role);
+  const isCreator = role === "HOST" || role === "MODERATOR" || role === "ADMIN";
   const [savingPreference, setSavingPreference] = useState("");
 
   const home = useQuery({ queryKey: ["experience", "home"], queryFn: experienceApi.home, staleTime: 30000 });
@@ -55,13 +58,17 @@ export default function GrowScreen() {
 
   const loading = home.isLoading || creator.isLoading || safety.isLoading || preferences.isLoading;
   const refreshing = home.isFetching || creator.isFetching || safety.isFetching || preferences.isFetching;
+  const queryError = home.error || creator.error || safety.error || preferences.error;
   const profileCompletion = home.data?.profileCompletion;
   const level = home.data?.level;
   const achievements: Achievement[] = home.data?.achievements ?? [];
   const creatorSummary = creator.data?.summary;
+  const creatorRooms = creator.data?.rooms ?? [];
+  const recentGifts = creator.data?.gifts ?? [];
   const safetyChecklist: SafetyChecklistItem[] = safety.data?.checklist ?? [];
   const feed: FeedItem[] = home.data?.feed ?? [];
-  const scheduledRooms = home.data?.rooms?.scheduled ?? [];
+  const scheduledRooms = isCreator ? (creator.data?.scheduledRooms ?? []) : (home.data?.rooms?.scheduled ?? []);
+  const topSupporters = creator.data?.topSupporters ?? [];
 
   const completedAchievements = useMemo(() => achievements.filter((item: Achievement) => item.complete).length, [achievements]);
 
@@ -117,12 +124,22 @@ export default function GrowScreen() {
           </LinearGradient>
         </Section>
 
+        {queryError ? (
+          <Section>
+            <GlassCard style={styles.errorCard}>
+              <View style={styles.errorIcon}><ShieldCheck color={colors.warning} size={20} /></View>
+              <View style={styles.rowBody}><Text style={styles.rowTitle}>Some creator data could not load</Text><Text style={styles.rowMeta}>{(queryError as Error).message || "Pull to refresh or try again."}</Text></View>
+              <Pressable onPress={refresh}><Text style={styles.linkText}>Retry</Text></Pressable>
+            </GlassCard>
+          </Section>
+        ) : null}
+
         <Section>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Next Best Actions</Text>
             <Text style={styles.subtle}>{completedAchievements}/{achievements.length} done</Text>
           </View>
-          {achievements.slice(0, 5).map((item: Achievement) => (
+          {achievements.length ? achievements.slice(0, 5).map((item: Achievement) => (
             <GlassCard key={item.id} style={styles.rowCard}>
               <View style={styles.rowIcon}>
                 {item.complete ? <CheckCircle2 color={colors.success} size={22} /> : <Trophy color={colors.gold} size={22} />}
@@ -131,26 +148,106 @@ export default function GrowScreen() {
                 <Text style={styles.rowTitle}>{item.title}</Text>
                 <Text style={styles.rowMeta}>{item.description}</Text>
                 <View style={styles.progressTrack}>
-                  <View style={[styles.progressFill, { width: `${Math.min(100, (item.progress / item.target) * 100)}%` }]} />
+                  <View style={[styles.progressFill, { width: `${item.target > 0 ? Math.min(100, (item.progress / item.target) * 100) : 0}%` }]} />
                 </View>
               </View>
               <Text style={styles.reward}>{item.rewardCoins}c</Text>
             </GlassCard>
-          ))}
+          )) : <GlassCard><Text style={styles.muted}>Your next missions will appear after you start hosting and connecting.</Text></GlassCard>}
         </Section>
 
         <Section>
+          <View style={styles.sectionHeader}>
+            <View><Text style={styles.sectionTitle}>30-day performance</Text><Text style={styles.subtle}>Your latest creator signals</Text></View>
+            <View style={styles.periodPill}><Text style={styles.periodText}>Last 30 days</Text></View>
+          </View>
           <View style={styles.metricsGrid}>
             <Metric icon={<Coins color={colors.gold} size={20} />} label="Gift coins" value={creatorSummary?.giftCoins ?? 0} />
             <Metric icon={<Radio color={colors.cyan} size={20} />} label="Hosted" value={creatorSummary?.hostedRooms ?? 0} />
             <Metric icon={<Users color={colors.purple} size={20} />} label="Participants" value={creatorSummary?.participants ?? 0} />
             <Metric icon={<Flame color={colors.pink} size={20} />} label="Est. INR" value={creatorSummary?.estimatedInr ?? 0} />
+            <Metric icon={<Gift color={colors.gold} size={20} />} label="Supporters" value={creatorSummary?.uniqueSupporters ?? 0} />
+            <Metric icon={<Users color={colors.cyan} size={20} />} label="Avg / room" value={creatorSummary?.averageParticipants ?? 0} />
           </View>
         </Section>
 
+        {isCreator ? (
+          <Section>
+            <Pressable onPress={() => router.push("/creator/payouts")}>
+              <GlassCard style={styles.payoutCard}>
+                <View style={styles.payoutIcon}><BadgeIndianRupee color={colors.gold} size={24} /></View>
+                <View style={styles.rowBody}>
+                  <Text style={styles.rowTitle}>Creator earnings & payouts</Text>
+                  <Text style={styles.rowMeta}>Verify payout details, view available gift earnings, and request settlement.</Text>
+                </View>
+                <ChevronRight color={colors.muted} size={20} />
+              </GlassCard>
+            </Pressable>
+          </Section>
+        ) : null}
+
+        {topSupporters.length ? (
+          <Section>
+            <View style={styles.sectionHeader}><View><Text style={styles.sectionTitle}>Top supporters</Text><Text style={styles.subtle}>People powering your last 30 days</Text></View></View>
+            <GlassCard style={styles.supporterBoard}>
+              {topSupporters.slice(0, 5).map((supporter: any, index: number) => (
+                <View key={supporter._id ?? index} style={[styles.supporterRow, index > 0 && styles.giftBorder]}>
+                  <View style={[styles.supporterRank, index === 0 && styles.supporterRankFirst]}><Text style={[styles.supporterRankText, index === 0 && styles.supporterRankTextFirst]}>{index + 1}</Text></View>
+                  <View style={styles.rowBody}><Text style={styles.giftName}>{supporter.user?.name ?? "Supporter"}</Text><Text style={styles.rowMeta}>@{supporter.user?.username ?? "yugm"} · {supporter.gifts} gifts</Text></View>
+                  <Text style={styles.giftCoins}>{Number(supporter.coins ?? 0).toLocaleString()}c</Text>
+                </View>
+              ))}
+            </GlassCard>
+          </Section>
+        ) : null}
+
+        {(creator.data?.nextSteps ?? []).length ? (
+          <Section>
+            <Text style={styles.sectionTitle}>Creator playbook</Text>
+            <GlassCard>
+              {(creator.data?.nextSteps ?? []).map((step: string, index: number) => (
+                <View key={step} style={styles.playbookRow}>
+                  <View style={styles.stepBadge}><Text style={styles.stepBadgeText}>{index + 1}</Text></View>
+                  <Text style={styles.checkText}>{step}</Text>
+                </View>
+              ))}
+            </GlassCard>
+          </Section>
+        ) : null}
+
+        {creatorRooms.length || recentGifts.length ? (
+          <Section>
+            <View style={styles.sectionHeader}><View><Text style={styles.sectionTitle}>Recent momentum</Text><Text style={styles.subtle}>Rooms hosted and supporter activity</Text></View></View>
+            {creatorRooms.slice(0, 3).map((room: any) => (
+              <Pressable key={room._id} onPress={() => router.push({ pathname: "/room/[id]", params: { id: room._id } })}>
+                <GlassCard style={styles.momentumCard}>
+                  <View style={[styles.momentumIcon, room.type === "VIDEO" && styles.momentumVideo]}>{room.type === "VIDEO" ? <Video color={colors.pink} size={19} /> : <Mic2 color={colors.cyan} size={19} />}</View>
+                  <View style={styles.rowBody}>
+                    <Text style={styles.rowTitle} numberOfLines={1}>{room.title}</Text>
+                    <Text style={styles.rowMeta}>{room.category} · {room.participantCount ?? 0} participants</Text>
+                  </View>
+                  <View style={[styles.roomStatusPill, room.status === "LIVE" && styles.roomLivePill]}><Text style={[styles.roomStatusText, room.status === "LIVE" && styles.roomLiveText]}>{String(room.status ?? "ENDED").toLowerCase()}</Text></View>
+                </GlassCard>
+              </Pressable>
+            ))}
+            {recentGifts.length ? (
+              <GlassCard style={styles.supportCard}>
+                <View style={styles.supportHeader}><View style={styles.supportIcon}><Gift color={colors.gold} size={20} /></View><View style={styles.rowBody}><Text style={styles.rowTitle}>Recent supporter love</Text><Text style={styles.rowMeta}>{recentGifts.length} latest gift moments</Text></View></View>
+                {recentGifts.slice(0, 4).map((gift: any, index: number) => (
+                  <View key={gift._id ?? index} style={[styles.giftRow, index > 0 && styles.giftBorder]}>
+                    <Text style={styles.giftEmoji}>{gift.giftId?.icon ?? "🎁"}</Text>
+                    <View style={styles.rowBody}><Text style={styles.giftName}>{gift.senderId?.name ?? "A supporter"}</Text><Text style={styles.rowMeta}>{gift.giftId?.name ?? "Gift"} · {gift.createdAt ? new Date(gift.createdAt).toLocaleDateString() : "Recently"}</Text></View>
+                    <Text style={styles.giftCoins}>+{gift.coinAmount ?? 0}c</Text>
+                  </View>
+                ))}
+              </GlassCard>
+            ) : null}
+          </Section>
+        ) : null}
+
         <Section>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Scheduled Rooms</Text>
+            <Text style={styles.sectionTitle}>{isCreator ? "My scheduled rooms" : "Upcoming rooms"}</Text>
             <Pressable onPress={() => router.push("/room/create")}><Text style={styles.linkText}>Create</Text></Pressable>
           </View>
           {scheduledRooms.length ? scheduledRooms.slice(0, 4).map((room: any) => (
@@ -180,6 +277,7 @@ export default function GrowScreen() {
               </View>
             </GlassCard>
           ))}
+          {!feed.length ? <GlassCard><Text style={styles.muted}>Follow hosts and join rooms to build your activity feed.</Text></GlassCard> : null}
         </Section>
 
         <Section>
@@ -257,6 +355,8 @@ const styles = StyleSheet.create({
   sectionTitle: { color: colors.text, fontSize: 20, fontWeight: "900", marginBottom: 10 },
   subtle: { color: colors.muted, fontSize: 12, fontWeight: "800" },
   muted: { color: colors.muted, fontSize: 13, lineHeight: 19, fontWeight: "700" },
+  errorCard: { flexDirection: "row", alignItems: "center", gap: 11, borderColor: "rgba(253,176,34,0.28)", backgroundColor: "rgba(253,176,34,0.07)" },
+  errorIcon: { width: 38, height: 38, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(253,176,34,0.1)" },
   rowCard: { flexDirection: "row", gap: 12, alignItems: "center", marginBottom: 10 },
   rowIcon: { height: 38, width: 38, borderRadius: 8, backgroundColor: colors.panelStrong, alignItems: "center", justifyContent: "center" },
   rowBody: { flex: 1 },
@@ -269,6 +369,34 @@ const styles = StyleSheet.create({
   metric: { width: "48%", gap: 7 },
   metricValue: { color: colors.text, fontSize: 20, fontWeight: "900" },
   metricLabel: { color: colors.muted, fontSize: 12, fontWeight: "800" },
+  periodPill: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 6, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line },
+  periodText: { color: colors.muted, fontSize: 9, fontWeight: "900" },
+  payoutCard: { flexDirection: "row", alignItems: "center", gap: 12, borderColor: "rgba(246,180,75,0.35)" },
+  payoutIcon: { width: 44, height: 44, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(246,180,75,0.12)" },
+  playbookRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
+  stepBadge: { height: 24, width: 24, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: colors.panelStrong },
+  stepBadgeText: { color: colors.gold, fontSize: 11, fontWeight: "900" },
+  momentumCard: { flexDirection: "row", alignItems: "center", gap: 11, marginBottom: 9 },
+  momentumIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(39,211,255,0.1)" },
+  momentumVideo: { backgroundColor: "rgba(255,62,147,0.1)" },
+  roomStatusPill: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5, backgroundColor: colors.surface },
+  roomLivePill: { backgroundColor: "rgba(50,213,131,0.1)" },
+  roomStatusText: { color: colors.muted, fontSize: 9, fontWeight: "900", textTransform: "capitalize" },
+  roomLiveText: { color: colors.success },
+  supportCard: { marginTop: 4 },
+  supportHeader: { flexDirection: "row", alignItems: "center", gap: 10, paddingBottom: 10 },
+  supportIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(246,180,75,0.1)" },
+  giftRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10 },
+  giftBorder: { borderTopWidth: 1, borderTopColor: colors.line },
+  giftEmoji: { fontSize: 22 },
+  giftName: { color: colors.text, fontSize: 12, fontWeight: "900" },
+  giftCoins: { color: colors.gold, fontSize: 12, fontWeight: "900" },
+  supporterBoard: { paddingVertical: 4 },
+  supporterRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 11 },
+  supporterRank: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
+  supporterRankFirst: { backgroundColor: "rgba(246,180,75,0.16)" },
+  supporterRankText: { color: colors.muted, fontSize: 11, fontWeight: "900" },
+  supporterRankTextFirst: { color: colors.gold },
   linkText: { color: colors.pink, fontSize: 13, fontWeight: "900" },
   compactCard: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 10 },
   feedCard: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 10 },

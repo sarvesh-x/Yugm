@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.lifecycleScope
 import com.example.yugm.api.YugmApi
 import com.example.yugm.navigation.NavGraph
 import com.example.yugm.navigation.Screen
@@ -29,6 +30,10 @@ import com.example.yugm.ui.theme.Background
 import com.example.yugm.ui.theme.YugmTheme
 import com.example.yugm.ui.viewmodel.MainViewModel
 import com.example.yugm.util.SessionPrefs
+import com.example.yugm.data.SessionManager
+import com.example.yugm.payments.RazorpayCoordinator
+import com.razorpay.PaymentData
+import com.razorpay.PaymentResultWithDataListener
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
@@ -41,11 +46,13 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import javax.inject.Inject
 
 private const val TAG = "MainActivity"
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
+    @Inject lateinit var sessionManager: SessionManager
     private val pendingPushRoute = mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -155,6 +162,34 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         pendingPushRoute.value = routeFromPushIntent(intent)
+    }
+
+    override fun onPaymentSuccess(razorpayPaymentId: String?, paymentData: PaymentData?) {
+        val purchaseId = RazorpayCoordinator.pendingPurchaseId(this)
+        if (purchaseId.isBlank() || paymentData == null) return
+        lifecycleScope.launch {
+            runCatching {
+                YugmApi.verifyRazorpayPurchase(
+                    token = sessionManager.authToken,
+                    purchaseId = purchaseId,
+                    orderId = paymentData.orderId,
+                    paymentId = paymentData.paymentId.ifBlank { razorpayPaymentId.orEmpty() },
+                    signature = paymentData.signature
+                )
+            }.onSuccess { balance ->
+                sessionManager.balance = balance
+                RazorpayCoordinator.notifyVerified(balance)
+                RazorpayCoordinator.clearPending(this@MainActivity)
+                Toast.makeText(this@MainActivity, "Recharge successful", Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                Toast.makeText(this@MainActivity, it.message ?: "Payment verification failed", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    override fun onPaymentError(code: Int, response: String?, paymentData: PaymentData?) {
+        RazorpayCoordinator.clearPending(this)
+        Toast.makeText(this, response ?: "Payment cancelled", Toast.LENGTH_LONG).show()
     }
 
     private fun routeFromPushIntent(intent: Intent?): String? {

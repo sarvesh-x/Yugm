@@ -8,6 +8,7 @@ const withdrawalRequestSchema = new Schema(
     amountCoins: { type: Number, required: true, min: 1 },
     amountInr: { type: Number, min: 0 },
     status: { type: String, enum: withdrawalStatuses, default: "PENDING_REVIEW", index: true },
+    activeLock: { type: Boolean, default: false },
     lockedAt: Date,
     approvedAt: Date,
     rejectedAt: Date,
@@ -21,5 +22,9 @@ const withdrawalRequestSchema = new Schema(
 );
 
 withdrawalRequestSchema.index({ userId: 1, createdAt: -1 });
+withdrawalRequestSchema.index(
+  { userId: 1, activeLock: 1 },
+  { unique: true, partialFilterExpression: { activeLock: true } }
+);
 
 export const WithdrawalRequest = mongoose.model("WithdrawalRequest", withdrawalRequestSchema);

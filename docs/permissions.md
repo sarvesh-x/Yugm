@@ -33,5 +33,6 @@ Guidelines:
 - Use `wallet.adjust` only for immutable ledger changes.
 - Keep Trust Verification permissions separate from Creator Payout KYC permissions.
 - Do not grant `creator_kyc.sensitive.read` to moderators or content reviewers.
+- Even with `creator_kyc.sensitive.read`, browser responses contain masked identifiers only; raw PAN, UPI, and bank account values remain server-side.
 - Use `settings.manage` for admin user invites and app config.
 - `SUPER_ADMIN` bypasses permission checks.

@@ -10,6 +10,8 @@ export const uploadRouter = Router();
 
 const UPLOAD_DIR = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+const TRUST_UPLOAD_DIR = path.join(process.cwd(), "private-uploads", "trust-verification");
+if (!fs.existsSync(TRUST_UPLOAD_DIR)) fs.mkdirSync(TRUST_UPLOAD_DIR, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
@@ -42,8 +44,13 @@ const profileMediaUpload = multer({
   },
 });
 
+const trustStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, TRUST_UPLOAD_DIR),
+  filename: (req, file, cb) => cb(null, safeUploadName((req as AuthRequest).user!.id, file.originalname))
+});
+
 const trustVerificationUpload = multer({
-  storage,
+  storage: trustStorage,
   limits: { fileSize: 30 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const purpose = String(req.body.purpose || "").toUpperCase();

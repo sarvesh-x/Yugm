@@ -11,11 +11,14 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,6 +41,11 @@ import com.example.yugm.model.Host
 import com.example.yugm.ui.components.Avatar
 import com.example.yugm.ui.components.GlassCard
 import com.example.yugm.ui.components.LoadingState
+import com.example.yugm.ui.components.BrandHeader
+import com.example.yugm.ui.components.RoundAction
+import com.example.yugm.ui.components.SegmentedTabs
+import com.example.yugm.ui.components.YugmBottomDock
+import com.example.yugm.ui.components.YugmDockTab
 import com.example.yugm.ui.theme.*
 import com.example.yugm.ui.viewmodel.DatingViewModel
 import kotlinx.coroutines.flow.collectLatest
@@ -49,11 +57,19 @@ fun DatingDiscoveryScreen(
     token: String,
     onNavigateToChat: (String) -> Unit,
     onNavigateToProfile: (String) -> Unit,
+    onMatches: () -> Unit = {},
+    onDiscover: () -> Unit = {},
+    onCreateRoom: () -> Unit = {},
+    onLive: () -> Unit = {},
+    onWallet: () -> Unit = {},
+    onSelfProfile: () -> Unit = {},
     viewModel: DatingViewModel = hiltViewModel()
 ) {
     val coroutineScope = rememberCoroutineScope()
     var matchedCandidate by remember { mutableStateOf<Host?>(null) }
     val dragOffset = remember { Animatable(0f) }
+    var discoveryMode by rememberSaveable { mutableIntStateOf(1) }
+    var showFilters by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(token) {
         if (token.isNotBlank()) {
@@ -77,35 +93,30 @@ fun DatingDiscoveryScreen(
                 .fillMaxSize()
                 .padding(bottom = 90.dp) // Leave space for bottom bar
         ) {
-            // Header
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Match the Vibe",
-                    color = Color.White,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Black
-                )
-                Surface(
-                    color = SurfaceElevated,
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, Color(0x1AFFFFFF)),
-                    modifier = Modifier.clickable {
-                        // Open matches list or chat threads
-                    }
+            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                BrandHeader(compact = true)
+                Spacer(Modifier.weight(1f))
+                RoundAction("●●", onClick = onMatches)
+                Spacer(Modifier.width(9.dp))
+                RoundAction("☷", selected = showFilters, onClick = { showFilters = !showFilters })
+            }
+            Text("Find your vibe.", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp))
+            SegmentedTabs(
+                items = listOf("⌖" to "Nearby", "✦" to "For You", "◇" to "Verified"),
+                selectedIndex = discoveryMode,
+                onSelected = { discoveryMode = it; viewModel.loadCandidates(token) },
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+            )
+            AnimatedVisibility(showFilters) {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = "Matches",
-                        color = Gold,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                    )
+                    listOf("18–25", "Online now", "Within 25 km", "Shared interests").forEach { label ->
+                        Surface(color = SurfaceElevated, shape = RoundedCornerShape(13.dp), border = BorderStroke(1.dp, BorderColor)) {
+                            Text(label, color = TextPrimary, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp))
+                        }
+                    }
                 }
             }
 
@@ -223,6 +234,17 @@ fun DatingDiscoveryScreen(
                 )
             }
         }
+        YugmBottomDock(
+            selected = YugmDockTab.MATCH,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            onDiscover = onDiscover,
+            onMatch = {},
+            onCreate = onCreateRoom,
+            onLive = onLive,
+            onChat = onMatches,
+            onWallet = onWallet,
+            onProfile = onSelfProfile
+        )
     }
 }
 
@@ -468,6 +490,16 @@ fun DiscoveryCard(
                             .background(Brush.linearGradient(listOf(PrimaryPink, PrimaryPurple)))
                     ) {
                         Text("❤️", fontSize = 20.sp)
+                    }
+
+                    IconButton(
+                        onClick = onProfileClick,
+                        modifier = Modifier
+                            .size(54.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.12f))
+                    ) {
+                        Text("♙", fontSize = 22.sp, color = Color.White)
                     }
                 }
             }

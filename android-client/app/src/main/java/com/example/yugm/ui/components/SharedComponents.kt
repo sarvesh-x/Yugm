@@ -11,6 +11,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -133,9 +134,10 @@ fun SearchBar(onSearch: () -> Unit = {}) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 18.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(Panel)
-            .padding(horizontal = 14.dp, vertical = 14.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(Brush.horizontalGradient(listOf(SurfaceElevated, Surface)))
+            .border(1.dp, Line, RoundedCornerShape(18.dp))
+            .padding(horizontal = 16.dp, vertical = 16.dp)
             .clickable { onSearch() }
     ) {
         Text("Search rooms, hosts, tags", color = TextMuted)
@@ -165,7 +167,7 @@ fun ChipWrap(items: List<String>) {
 
 @Composable
 fun Chip(text: String) {
-    Surface(color = Panel, shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, Line)) {
+    Surface(color = SurfaceElevated, shape = RoundedCornerShape(13.dp), border = BorderStroke(1.dp, Line)) {
         Text(text, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
     }
 }
@@ -195,7 +197,7 @@ fun RoomCard(room: Room, wide: Boolean, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         colors = CardDefaults.cardColors(containerColor = Panel),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(20.dp),
         border = BorderStroke(1.dp, Line),
         modifier = Modifier
             .then(if (wide) Modifier.fillMaxWidth().height(178.dp) else Modifier.width(230.dp).height(214.dp))
@@ -340,16 +342,18 @@ fun SeatCard(name: String, cosmetics: ActiveCosmetics = ActiveCosmetics(), isSpe
 }
 
 @Composable
-fun VideoGrid(room: Room, camera: Boolean) {
+fun VideoGrid(room: Room, camera: Boolean, participants: List<com.example.yugm.model.RoomParticipant> = emptyList()) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         repeat(2) { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 repeat(2) { col ->
                     val index = row * 2 + col
+                    val participant = participants.getOrNull(index)
                     VideoTile(
-                        label = if (index == 0) (room.host?.name ?: "") else if (camera) "Speaker ${index + 1}" else "Camera off",
+                        label = participant?.user?.name ?: if (index == 0) (room.host?.name ?: "") else if (camera) "Open video" else "Camera off",
                         highlighted = index == 0,
-                        cosmetics = if (index == 0) room.host?.activeCosmetics ?: ActiveCosmetics() else ActiveCosmetics(),
+                        cosmetics = participant?.user?.activeCosmetics ?: if (index == 0) room.host?.activeCosmetics ?: ActiveCosmetics() else ActiveCosmetics(),
+                        imageUrl = participant?.user?.avatar ?: if (index == 0) room.host?.avatar else null,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -359,7 +363,7 @@ fun VideoGrid(room: Room, camera: Boolean) {
 }
 
 @Composable
-fun VideoTile(label: String, highlighted: Boolean, cosmetics: ActiveCosmetics = ActiveCosmetics(), modifier: Modifier = Modifier) {
+fun VideoTile(label: String, highlighted: Boolean, cosmetics: ActiveCosmetics = ActiveCosmetics(), imageUrl: String? = null, modifier: Modifier = Modifier) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
@@ -369,7 +373,7 @@ fun VideoTile(label: String, highlighted: Boolean, cosmetics: ActiveCosmetics = 
             .padding(10.dp)
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Avatar(initial = label.firstOrNull()?.toString() ?: "?", size = 58, cosmetics = cosmetics, isSpeaking = highlighted, showEntry = highlighted)
+            Avatar(initial = label.firstOrNull()?.toString() ?: "?", size = 76, imageUrl = imageUrl, cosmetics = cosmetics, isSpeaking = highlighted, showEntry = highlighted)
             Text(label, color = TextPrimary, fontWeight = FontWeight.Black, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 10.dp))
         }
     }
@@ -414,7 +418,11 @@ fun LiveBadge() {
         animationSpec = infiniteRepeatable(tween(620), RepeatMode.Reverse),
         label = "live-scale"
     )
-    Surface(color = Pink, shape = RoundedCornerShape(6.dp)) {
+    Surface(
+        color = Ink.copy(alpha = 0.82f),
+        shape = RoundedCornerShape(11.dp),
+        border = BorderStroke(1.dp, Danger.copy(alpha = 0.7f))
+    ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp),
@@ -430,7 +438,7 @@ fun LiveBadge() {
             ) {
                 drawCircle(Color.White.copy(alpha = alpha))
             }
-            Text("LIVE", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black)
+            Text("LIVE", color = Danger, fontSize = 11.sp, fontWeight = FontWeight.Black)
         }
     }
 }
@@ -439,9 +447,10 @@ fun LiveBadge() {
 fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(Panel)
-            .padding(14.dp),
+            .clip(RoundedCornerShape(20.dp))
+            .background(Brush.linearGradient(listOf(SurfaceElevated.copy(alpha = 0.92f), Surface.copy(alpha = 0.92f))))
+            .border(1.dp, Line, RoundedCornerShape(20.dp))
+            .padding(16.dp),
         content = content
     )
 }
@@ -452,12 +461,12 @@ fun PrimaryButton(text: String, modifier: Modifier = Modifier, onClick: () -> Un
         onClick = onClick,
         colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
         contentPadding = PaddingValues(),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(18.dp),
         modifier = modifier
             .fillMaxWidth()
             .height(56.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(Brush.linearGradient(listOf(Saffron, Pink, Purple)))
+            .clip(RoundedCornerShape(18.dp))
+            .background(Brush.horizontalGradient(listOf(Purple, Pink, Saffron)))
     ) {
         Text(text, color = Color.White, fontWeight = FontWeight.Black, fontSize = 16.sp)
     }

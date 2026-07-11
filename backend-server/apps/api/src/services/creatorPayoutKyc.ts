@@ -1,6 +1,6 @@
 import { CreatorPayoutKyc } from "../models/CreatorPayoutKyc.js";
 import { User } from "../models/User.js";
-import { decryptSensitiveField, encryptSensitiveField, last4, maskUpi } from "./cryptoFields.js";
+import { encryptSensitiveField, last4, maskUpi } from "./cryptoFields.js";
 import { ErrorCode, HttpError } from "../utils/http.js";
 
 export function isCreatorUser(user: { role?: string }) {
@@ -13,7 +13,7 @@ export async function assertCreatorAccess(user: { role?: string }) {
   }
 }
 
-export function publicCreatorPayoutKyc(kyc: any, includeSensitive = false) {
+export function publicCreatorPayoutKyc(kyc: any, sensitiveAccessGranted = false) {
   const payload: Record<string, unknown> = {
     id: kyc?._id?.toString?.() ?? kyc?.id,
     userId: kyc?.userId?.toString?.() ?? kyc?.userId,
@@ -31,15 +31,10 @@ export function publicCreatorPayoutKyc(kyc: any, includeSensitive = false) {
     verifiedAt: kyc?.verifiedAt ?? null,
     rejectedAt: kyc?.rejectedAt ?? null,
     rejectionReason: kyc?.rejectionReason ?? null,
-    adminNotes: kyc?.adminNotes ?? null
+    adminNotes: kyc?.adminNotes ?? null,
+    sensitiveAccessGranted,
+    sensitiveFieldsMasked: true
   };
-
-  if (includeSensitive) {
-    payload.panNumber = decryptSensitiveField(kyc?.panNumberEncrypted) ?? null;
-    payload.upiId = decryptSensitiveField(kyc?.upiIdEncrypted) ?? null;
-    payload.bankAccount = decryptSensitiveField(kyc?.bankAccountEncrypted) ?? null;
-  }
-
   return payload;
 }
 

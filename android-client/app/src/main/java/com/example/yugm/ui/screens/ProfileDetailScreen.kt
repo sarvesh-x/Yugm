@@ -2,11 +2,16 @@ package com.example.yugm.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,11 +20,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.yugm.R
 import com.example.yugm.api.YugmApi
 import com.example.yugm.model.Host
 import com.example.yugm.model.PkBattle
@@ -41,7 +49,8 @@ fun ProfileDetailScreen(
     userId: String,
     onBack: () -> Unit,
     onMessage: (String) -> Unit,
-    onInviteToRoom: (String) -> Unit
+    onInviteToRoom: (String) -> Unit,
+    onOpenRoom: (Room) -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
     var host by remember { mutableStateOf<Host?>(null) }
@@ -51,6 +60,7 @@ fun ProfileDetailScreen(
     var isLoading by remember { mutableStateOf(true) }
     var isFollowing by remember { mutableStateOf(false) }
     var followBusy by remember { mutableStateOf(false) }
+    var liked by remember { mutableStateOf(false) }
     var pkStats by remember { mutableStateOf(PkStats()) }
     var pkHistory by remember { mutableStateOf<List<PkBattle>>(emptyList()) }
 
@@ -91,12 +101,13 @@ fun ProfileDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Profile Detail", color = Color.White, fontWeight = FontWeight.Bold) },
+                title = { Text("Yugm", color = Color.White, fontWeight = FontWeight.Black) },
                 navigationIcon = {
                     TextButton(onClick = onBack) {
-                        Text("Back", color = Gold, fontWeight = FontWeight.Bold)
+                        Text("‹", color = Color.White, fontSize = 28.sp)
                     }
                 },
+                actions = { Text("⋮", color = Color.White, fontSize = 24.sp, modifier = Modifier.padding(horizontal = 16.dp).clickable { showReportDialog = true }) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
             )
         },
@@ -111,52 +122,27 @@ fun ProfileDetailScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .navigationBarsPadding()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            .padding(horizontal = 10.dp, vertical = 9.dp),
+                        horizontalArrangement = Arrangement.SpaceAround
                     ) {
-                        // Follow Button
-                        Button(
-                            onClick = {
-                                if (followBusy) return@Button
+                        ProfileAction(if (liked) "♥" else "♡", if (liked) "Liked" else "Like", highlight = true) {
+                            if (!liked) coroutineScope.launch {
+                                runCatching { YugmApi.datingLike(token, profile.id, "LIKE") }.onSuccess { liked = true }
+                            }
+                        }
+                        ProfileAction("●●", "Message") { onMessage(profile.id) }
+                        ProfileAction(if (isFollowing) "✓" else "+", if (isFollowing) "Following" else "Follow", highlight = true) {
+                            if (!followBusy) {
                                 followBusy = true
                                 coroutineScope.launch {
-                                    runCatching {
-                                        if (isFollowing) YugmApi.unfollowUser(token, profile.id)
-                                        else YugmApi.followUser(token, profile.id)
-                                    }.onSuccess {
-                                        isFollowing = !isFollowing
-                                    }
+                                    runCatching { if (isFollowing) YugmApi.unfollowUser(token, profile.id) else YugmApi.followUser(token, profile.id) }
+                                        .onSuccess { isFollowing = !isFollowing }
                                     followBusy = false
                                 }
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isFollowing) Color.Gray else PrimaryPink
-                            ),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(if (isFollowing) "Unfollow" else "Follow", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
                         }
-
-                        // Message Button
-                        Button(
-                            onClick = { onMessage(profile.id) },
-                            colors = ButtonDefaults.buttonColors(containerColor = SaffronGold),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Message", color = Background, fontWeight = FontWeight.Black)
-                        }
-
-                        // Invite Button
-                        Button(
-                            onClick = { onInviteToRoom(profile.id) },
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryPurple),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Invite", color = Color.White, fontWeight = FontWeight.Bold)
-                        }
+                        ProfileAction("◖", "Invite") { onInviteToRoom(profile.id) }
+                        ProfileAction("⚑", "Report") { showReportDialog = true }
                     }
                 }
             }
@@ -182,27 +168,7 @@ fun ProfileDetailScreen(
             ) {
                 // Header card
                 item {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                        Avatar(
-                            initial = profile.name.firstOrNull()?.toString() ?: "?",
-                            size = 110,
-                            imageUrl = profile.avatar,
-                            cosmetics = profile.activeCosmetics,
-                            showEntry = true
-                        )
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Text(
-                            text = "${profile.name}, ${profile.age.takeIf { it > 0 } ?: 21}",
-                            color = Color.White,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Black
-                        )
-                        Text(
-                            text = "@${profile.username} • ${profile.city}",
-                            color = TextMuted,
-                            fontSize = 14.sp
-                        )
-                    }
+                    ProfileHero(profile)
                 }
 
                 // VIP Status
@@ -364,9 +330,7 @@ fun ProfileDetailScreen(
                         GlassCard(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
-                                    // Join room logic
-                                }
+                                .clickable { onOpenRoom(room) }
                         ) {
                             Text(room.title, color = Color.White, fontWeight = FontWeight.Bold)
                             Text("${room.participants} people live • ${room.category}", color = TextMuted, fontSize = 12.sp)
@@ -478,6 +442,73 @@ fun ProfileDetailScreen(
             },
             containerColor = SurfaceElevated
         )
+    }
+}
+
+@Composable
+private fun ProfileHero(profile: Host) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(390.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(SurfaceElevated)
+            .border(1.dp, Pink.copy(alpha = 0.4f), RoundedCornerShape(24.dp))
+    ) {
+        if (!profile.avatar.isNullOrBlank()) {
+            AsyncImage(
+                model = profile.avatar,
+                contentDescription = profile.name,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            Image(
+                painter = painterResource(R.drawable.late_night_rooftop),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        }
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Transparent, Background.copy(alpha = 0.97f)))))
+        Row(Modifier.align(Alignment.TopStart).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.clip(RoundedCornerShape(10.dp)).background(Background.copy(alpha = 0.78f)).padding(horizontal = 10.dp, vertical = 6.dp)) {
+                Text(if (profile.isOnline) "●  Online" else "Recently active", color = if (profile.isOnline) Success else TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.weight(1f))
+            Box(Modifier.size(76.dp).clip(CircleShape).background(Background.copy(alpha = 0.72f)).border(2.dp, Pink, CircleShape), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("♡ ${profile.vibeScore.coerceAtLeast(80)}%", color = Pink, fontSize = 17.sp, fontWeight = FontWeight.Black)
+                    Text("Compatible", color = TextMuted, fontSize = 8.sp)
+                }
+            }
+        }
+        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("${profile.name}  ${profile.age.takeIf { it > 0 } ?: 21}", color = Color.White, fontSize = 29.sp, fontWeight = FontWeight.Black)
+                if (profile.isVip) Text("  ◆", color = PrimaryPurple, fontSize = 17.sp)
+            }
+            Text("⌖ ${profile.city.ifBlank { "India" }}", color = Color.White.copy(alpha = 0.75f), fontSize = 13.sp, modifier = Modifier.padding(top = 3.dp))
+            Text(profile.bio.ifBlank { "Dreamer. Overthinker. Night owl. Looking for good energy and real vibes ✨" }, color = Color.White.copy(alpha = 0.86f), fontSize = 12.sp, lineHeight = 17.sp, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.padding(top = 9.dp))
+            Row(Modifier.padding(top = 11.dp).horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                profile.interests.take(4).forEach { interest ->
+                    Box(Modifier.clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.12f)).border(1.dp, BorderColor, RoundedCornerShape(12.dp)).padding(horizontal = 10.dp, vertical = 7.dp)) {
+                        Text(interest, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileAction(glyph: String, label: String, highlight: Boolean = false, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(64.dp).clickable(onClick = onClick)) {
+        Box(
+            Modifier.size(46.dp).clip(CircleShape).background(if (highlight) Brush.linearGradient(listOf(Pink, PrimaryPurple)) else Brush.linearGradient(listOf(Color(0xFF2A2D42), SurfaceElevated))).border(1.dp, if (highlight) Pink.copy(alpha = 0.5f) else BorderColor, CircleShape),
+            contentAlignment = Alignment.Center
+        ) { Text(glyph, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
+        Text(label, color = TextMuted, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.padding(top = 4.dp))
     }
 }
 

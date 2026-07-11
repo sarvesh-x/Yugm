@@ -1,5 +1,6 @@
 import { Router } from "express";
 import mongoose from "mongoose";
+import { z } from "zod";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { Like } from "../models/Like.js";
 import { Match } from "../models/Match.js";
@@ -10,35 +11,37 @@ import { createNotification } from "../services/notifications.js";
 import { getVipStatus } from "../services/vip.js";
 import { ensureRelationshipForMatch, grantRelationshipXp } from "../services/relationships.js";
 import { assertUsersCanInteract } from "../services/safety.js";
+import { calculateCompatibility } from "../services/datingCompatibility.js";
+import { validateBody } from "../middleware/validate.js";
 
 export const datingRouter = Router();
 datingRouter.use(requireAuth);
 
-// Helper function to calculate compatibility score
-function calculateVibeScore(userA: any, userB: any) {
-  let score = 50; // Base score
+const preferenceSchema = z.object({
+  interestedIn: z.enum(["Everyone", "Women", "Men", "Non-binary"]),
+  lookingFor: z.enum(["Friendship", "Dating", "Relationship", "Networking"]),
+  datingAgeMin: z.number().int().min(18).max(80),
+  datingAgeMax: z.number().int().min(18).max(80),
+  verifiedOnly: z.boolean().optional()
+}).refine((value) => value.datingAgeMin <= value.datingAgeMax, { message: "Minimum age must be below maximum age", path: ["datingAgeMin"] });
 
-  // Same city
-  if (userA.city && userB.city && userA.city.toLowerCase() === userB.city.toLowerCase()) {
-    score += 15;
-  }
+datingRouter.get("/preferences", asyncHandler(async (req: AuthRequest, res) => {
+  const user = await User.findById(req.user!.id).select("interestedIn lookingFor datingAgeMin datingAgeMax datingVerifiedOnly").lean();
+  sendOk(res, { preferences: {
+    interestedIn: user?.interestedIn ?? "Everyone",
+    lookingFor: user?.lookingFor ?? "Friendship",
+    datingAgeMin: user?.datingAgeMin ?? 18,
+    datingAgeMax: user?.datingAgeMax ?? 35,
+    verifiedOnly: Boolean((user as any)?.datingVerifiedOnly)
+  } });
+}));
 
-  // Shared languages
-  if (userA.languages && userB.languages) {
-    const commonLangs = userA.languages.filter((lang: string) => userB.languages.includes(lang));
-    if (commonLangs.length > 0) {
-      score += 10;
-    }
-  }
-
-  // Shared interests
-  if (userA.interests && userB.interests) {
-    const commonInterests = userA.interests.filter((interest: string) => userB.interests.includes(interest));
-    score += Math.min(commonInterests.length * 5, 25);
-  }
-
-  return Math.min(score, 100);
-}
+datingRouter.put("/preferences", validateBody(preferenceSchema), asyncHandler(async (req: AuthRequest, res) => {
+  const update = { ...req.body, datingVerifiedOnly: req.body.verifiedOnly };
+  delete update.verifiedOnly;
+  await User.findByIdAndUpdate(req.user!.id, { $set: update });
+  sendOk(res, { preferences: req.body });
+}));
 
 // 1. GET /dating/explore - Get profiles to swipe on
 datingRouter.get("/explore", asyncHandler(async (req: AuthRequest, res) => {
@@ -59,15 +62,24 @@ datingRouter.get("/explore", asyncHandler(async (req: AuthRequest, res) => {
   const excludeIds = [currentUser.id, ...swipedIds, ...blockedIds];
   const excludeObjectIds = excludeIds.map(id => new mongoose.Types.ObjectId(id));
 
-  // Fetch candidate users
+  const genderFilter = currentUser.interestedIn && currentUser.interestedIn !== "Everyone"
+    ? { gender: currentUser.interestedIn === "Women" ? "Female" : currentUser.interestedIn === "Men" ? "Male" : "Non-binary" }
+    : {};
+  const ageFilter = currentUser.datingAgeMin || currentUser.datingAgeMax
+    ? { age: { $gte: currentUser.datingAgeMin ?? 18, $lte: currentUser.datingAgeMax ?? 80 } }
+    : {};
+
   const candidates = await User.find({
     _id: { $nin: excludeObjectIds },
-    isBlocked: { $ne: true }
+    isBlocked: { $ne: true },
+    ...genderFilter,
+    ...ageFilter,
+    ...((currentUser as any).datingVerifiedOnly ? { isVerified: true } : {})
   }).limit(40).lean();
 
   // Calculate vibe score for each candidate
   const formattedCandidates = candidates.map(candidate => {
-    const vibeScore = calculateVibeScore(currentUser, candidate);
+    const compatibility = calculateCompatibility(currentUser, candidate);
     return {
       id: candidate._id.toString(),
       _id: candidate._id.toString(),
@@ -78,13 +90,19 @@ datingRouter.get("/explore", asyncHandler(async (req: AuthRequest, res) => {
       gender: candidate.gender,
       city: candidate.city,
       bio: candidate.bio,
+      vibeLine: candidate.vibeLine,
       interests: candidate.interests,
       languages: candidate.languages,
       followersCount: candidate.followersCount,
       role: candidate.role,
       activeCosmetics: candidate.activeCosmetics,
+      isVerified: candidate.isVerified,
+      lookingFor: candidate.lookingFor,
       ...getVipStatus(candidate),
-      vibeScore
+      vibeScore: compatibility.score,
+      matchReasons: compatibility.reasons,
+      sharedInterests: compatibility.sharedInterests,
+      sharedLanguages: compatibility.sharedLanguages
     };
   });
 

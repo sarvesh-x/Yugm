@@ -7,15 +7,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.yugm.model.CreatorEarningBalance
 import com.example.yugm.model.CreatorPayoutKycStatus
+import com.example.yugm.model.PayoutRequirements
 import com.example.yugm.model.TrustVerificationStatus
 import com.example.yugm.ui.components.GlassCard
 import com.example.yugm.ui.theme.Background
 import com.example.yugm.ui.theme.Gold
 import com.example.yugm.ui.theme.TextMuted
+import com.example.yugm.ui.theme.Success
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -98,9 +101,19 @@ fun TrustVerificationStatusScreen(status: TrustVerificationStatus, onBack: () ->
 @Composable
 fun CreatorPayoutKycIntroScreen(onBack: () -> Unit, onStart: () -> Unit) {
     VerificationScaffold("Creator Payout Verification", onBack) {
-        Text("Required only when you withdraw real money earned from gifts.", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        Text("This is separate from Yugm Trust Verification and is shown only for creator payouts.", color = TextMuted)
-        Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) { Text("Continue") }
+        Text("Turn gift earnings into payouts", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Black)
+        Text("Required only when you withdraw real money earned from gifts. This never affects normal Yugm access or your public verified badge.", color = TextMuted, lineHeight = 21.sp)
+        GlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("What you'll need", color = Gold, fontWeight = FontWeight.Black, fontSize = 13.sp)
+            Spacer(Modifier.height(10.dp))
+            DetailRow("1", "Legal identity", "Full name, date of birth, and PAN")
+            DetailRow("2", "Settlement method", "UPI ID or bank account details")
+            DetailRow("3", "Finance review", "Masked details are reviewed before payouts")
+        }
+        GlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("Your sensitive identifiers are encrypted. Mobile and admin screens receive masked values only.", color = TextMuted, fontSize = 12.sp, lineHeight = 18.sp)
+        }
+        Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) { Text("Start payout verification") }
     }
 }
 
@@ -109,11 +122,21 @@ fun CreatorPayoutKycFormScreen(onBack: () -> Unit, onSubmit: (String, String, St
     var legalName by remember { mutableStateOf("") }
     var pan by remember { mutableStateOf("") }
     var upi by remember { mutableStateOf("") }
+    var declarationsAccepted by remember { mutableStateOf(false) }
+    val panValid = Regex("^[A-Z]{5}[0-9]{4}[A-Z]$").matches(pan)
+    val upiValid = Regex("^[a-zA-Z0-9._-]{2,}@[a-zA-Z]{2,}$").matches(upi)
     VerificationScaffold("Payout Details", onBack) {
-        OutlinedTextField(value = legalName, onValueChange = { legalName = it }, label = { Text("Legal full name") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(value = pan, onValueChange = { pan = it }, label = { Text("PAN") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(value = upi, onValueChange = { upi = it }, label = { Text("UPI ID") }, modifier = Modifier.fillMaxWidth())
-        Button(onClick = { onSubmit(legalName, pan, upi) }, modifier = Modifier.fillMaxWidth(), enabled = legalName.isNotBlank() && pan.isNotBlank() && upi.isNotBlank()) {
+        Text("Identity details", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
+        Text("Enter the same legal details used by your payout account.", color = TextMuted, fontSize = 13.sp)
+        OutlinedTextField(value = legalName, onValueChange = { legalName = it }, label = { Text("Legal full name") }, supportingText = { Text("Match the name printed on PAN") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(value = pan, onValueChange = { pan = it.uppercase().take(10) }, label = { Text("PAN") }, supportingText = { Text(if (pan.isNotBlank() && !panValid) "Enter a valid 10-character PAN" else "Example: ABCDE1234F") }, isError = pan.isNotBlank() && !panValid, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(value = upi, onValueChange = { upi = it.trim() }, label = { Text("UPI ID") }, supportingText = { Text(if (upi.isNotBlank() && !upiValid) "Enter a valid UPI ID" else "Example: creator@upi") }, isError = upi.isNotBlank() && !upiValid, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Switch(checked = declarationsAccepted, onCheckedChange = { declarationsAccepted = it })
+            Text("I confirm these payout details belong to me and may be reviewed for creator settlement.", color = TextMuted, modifier = Modifier.weight(1f))
+        }
+        Text("PAN and payout identifiers are encrypted. Yugm clients receive masked values only.", color = TextMuted, fontSize = 12.sp)
+        Button(onClick = { onSubmit(legalName, pan, upi) }, modifier = Modifier.fillMaxWidth(), enabled = legalName.trim().length >= 2 && panValid && upiValid && declarationsAccepted) {
             Text("Submit for finance review")
         }
     }
@@ -122,7 +145,12 @@ fun CreatorPayoutKycFormScreen(onBack: () -> Unit, onSubmit: (String, String, St
 @Composable
 fun CreatorPayoutKycStatusScreen(status: CreatorPayoutKycStatus, onBack: () -> Unit) {
     VerificationScaffold("Payout Verification", onBack) {
-        StatusRow("KYC status", status.kycStatus)
+        GlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text(if (status.kycStatus == "VERIFIED" && status.payoutStatus == "ENABLED") "Payout profile ready" else "Finance review status", color = if (status.kycStatus == "VERIFIED") Success else Gold, fontSize = 20.sp, fontWeight = FontWeight.Black)
+            Spacer(Modifier.height(6.dp))
+            Text(if (status.kycStatus == "VERIFIED") "Your masked payout profile is approved." else "Pull back into this screen later to see review updates.", color = TextMuted, fontSize = 12.sp)
+        }
+        StatusRow("Verification status", status.kycStatus)
         StatusRow("Payout status", status.payoutStatus)
         status.panLast4?.let { StatusRow("PAN", "****$it") }
         status.upiIdMasked?.let { StatusRow("UPI", it) }
@@ -132,19 +160,76 @@ fun CreatorPayoutKycStatusScreen(status: CreatorPayoutKycStatus, onBack: () -> U
 }
 
 @Composable
-fun WithdrawalEligibilityScreen(balance: CreatorEarningBalance, payoutKyc: CreatorPayoutKycStatus, onBack: () -> Unit, onWithdraw: (Int) -> Unit, onOpenKyc: () -> Unit) {
+fun WithdrawalEligibilityScreen(balance: CreatorEarningBalance, payoutKyc: CreatorPayoutKycStatus, requirements: PayoutRequirements, coinToInrRate: Double, onBack: () -> Unit, onWithdraw: (Int) -> Unit, onOpenKyc: () -> Unit) {
     var amount by remember { mutableStateOf("") }
     VerificationScaffold("Withdrawal", onBack) {
-        StatusRow("Available", "${balance.availableCoins} coins")
-        StatusRow("Locked", "${balance.lockedCoins} coins")
-        StatusRow("Payout verification", payoutKyc.kycStatus)
+        GlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("Available to withdraw", color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text("${balance.availableCoins} gift coins", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black)
+            Text("Estimated ₹${"%.2f".format(balance.availableCoins * coinToInrRate)}", color = Gold, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(14.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                BalanceMini("Lifetime", balance.earnedCoins)
+                BalanceMini("In review", balance.lockedCoins)
+                BalanceMini("Paid", balance.withdrawnCoins)
+            }
+        }
+        Text("Payout readiness", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
+        GlassCard(modifier = Modifier.fillMaxWidth()) {
+            ReadinessRow("Creator account", requirements.creatorAccount)
+            ReadinessRow("Trust Verification", requirements.trustVerified && requirements.creatorTrustEnabled)
+            ReadinessRow("Payout KYC", requirements.payoutKycVerified)
+            ReadinessRow("Finance approval", requirements.payoutEnabled)
+        }
         if (payoutKyc.kycStatus != "VERIFIED") {
             Button(onClick = onOpenKyc, modifier = Modifier.fillMaxWidth()) { Text("Complete Creator Payout Verification") }
         }
         OutlinedTextField(value = amount, onValueChange = { amount = it.filter(Char::isDigit) }, label = { Text("Coins to withdraw") }, modifier = Modifier.fillMaxWidth())
-        Button(onClick = { onWithdraw(amount.toIntOrNull() ?: 0) }, modifier = Modifier.fillMaxWidth(), enabled = (amount.toIntOrNull() ?: 0) > 0) {
+        val amountCoins = amount.toIntOrNull() ?: 0
+        if (amountCoins > 0) {
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                StatusLine("Requested", "$amountCoins coins")
+                StatusLine("Settlement rate", "₹${"%.2f".format(coinToInrRate)} / coin")
+                StatusLine("Estimated payout", "₹${"%.2f".format(amountCoins * coinToInrRate)}", highlight = true)
+            }
+        }
+        if (amountCoins > balance.availableCoins) Text("Amount exceeds your available gift earnings.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+        Button(
+            onClick = { onWithdraw(amountCoins) },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = payoutKyc.kycStatus == "VERIFIED" && payoutKyc.payoutStatus == "ENABLED" && amountCoins in 1..balance.availableCoins
+        ) {
             Text("Request withdrawal")
         }
+    }
+}
+
+@Composable
+private fun DetailRow(number: String, title: String, detail: String) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(number, color = Gold, fontWeight = FontWeight.Black)
+        Column { Text(title, color = Color.White, fontWeight = FontWeight.Bold); Text(detail, color = TextMuted, fontSize = 12.sp) }
+    }
+}
+
+@Composable
+private fun BalanceMini(label: String, value: Int) {
+    Column { Text(value.toString(), color = Color.White, fontWeight = FontWeight.Black); Text(label, color = TextMuted, fontSize = 11.sp) }
+}
+
+@Composable
+private fun ReadinessRow(label: String, complete: Boolean) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = Color.White, fontWeight = FontWeight.Bold)
+        Text(if (complete) "Done" else "Needed", color = if (complete) Success else Gold, fontWeight = FontWeight.Black, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun StatusLine(label: String, value: String, highlight: Boolean = false) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = TextMuted, fontSize = 12.sp)
+        Text(value, color = if (highlight) Gold else Color.White, fontWeight = FontWeight.Bold)
     }
 }
 

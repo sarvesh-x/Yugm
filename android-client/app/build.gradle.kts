@@ -120,6 +120,7 @@ dependencies {
     implementation(libs.googleid)
     implementation(libs.okhttp)
     implementation(libs.coil.compose)
+    implementation(libs.razorpay.checkout)
     implementation(libs.socketio.client)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)

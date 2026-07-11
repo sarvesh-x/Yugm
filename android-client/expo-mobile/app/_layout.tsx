@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
-import { Stack } from "expo-router";
+import { router, Stack, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as Notifications from "expo-notifications";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
@@ -8,7 +8,7 @@ import NetInfo from "@react-native-community/netinfo";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { notificationsApi } from "@/lib/api";
 import { openNotificationTarget } from "@/lib/notificationRouting";
-import { getSocket } from "@/lib/socket";
+import { disconnectSocket, getSocket } from "@/lib/socket";
 import { useAuthStore } from "@/store/auth";
 
 const queryClient = new QueryClient({
@@ -113,6 +113,39 @@ function NotificationBridge() {
   return null;
 }
 
+function SessionBoundary() {
+  const client = useQueryClient();
+  const segments = useSegments();
+  const hydrated = useAuthStore((state) => state.hydrated);
+  const token = useAuthStore((state) => state.token);
+  const userId = useAuthStore((state) => state.user?._id ?? state.user?.id ?? "");
+  const previousSession = useRef<string>();
+  const session = token ? `${userId}:${token}` : "anonymous";
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const previous = previousSession.current;
+    if (previous && previous !== session) {
+      client.clear();
+      disconnectSocket();
+      if (previous !== "anonymous" && session === "anonymous" && Platform.OS !== "web") {
+        Notifications.unregisterForNotificationsAsync().catch(() => undefined);
+        Notifications.setBadgeCountAsync(0).catch(() => undefined);
+      }
+    }
+    previousSession.current = session;
+  }, [client, hydrated, session]);
+
+  useEffect(() => {
+    if (!hydrated || token) return;
+    const firstSegment = String(segments[0] ?? "");
+    const isPublicRoute = !firstSegment || firstSegment === "onboarding" || firstSegment === "(auth)";
+    if (!isPublicRoute) router.replace("/onboarding");
+  }, [hydrated, segments, token]);
+
+  return null;
+}
+
 export default function RootLayout() {
   const hydrate = useAuthStore((state) => state.hydrate);
 
@@ -125,6 +158,7 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <StatusBar style="light" />
         <OfflineBanner />
+        <SessionBoundary />
         <NotificationBridge />
         <Stack screenOptions={{ headerShown: false, animation: "fade_from_bottom" }} />
       </QueryClientProvider>

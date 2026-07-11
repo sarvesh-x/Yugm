@@ -1,9 +1,9 @@
-import { useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, Image } from "react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, Image } from "react-native";
 import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { ArrowLeft, Check, Sparkles } from "lucide-react-native";
-import { authApi } from "@/lib/api";
+import { authApi, datingApi, usersApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { Screen } from "@/components/Screen";
 import { colors, gradients } from "@/theme/colors";
@@ -26,6 +26,33 @@ const PRESET_AVATARS = [
   "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d"  // Male 3
 ];
 
+type InterestedIn = "Everyone" | "Women" | "Men" | "Non-binary";
+type LookingFor = "Friendship" | "Dating" | "Relationship" | "Networking";
+
+function normalizeInterestedIn(value?: string): InterestedIn {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === "women" || normalized === "female") return "Women";
+  if (normalized === "men" || normalized === "male") return "Men";
+  if (normalized === "non-binary" || normalized === "nonbinary") return "Non-binary";
+  return "Everyone";
+}
+
+function normalizeLookingFor(value?: string): LookingFor {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === "dating" || normalized === "casual") return "Dating";
+  if (normalized === "relationship" || normalized === "serious" || normalized === "serious relationship") return "Relationship";
+  if (normalized === "networking" || normalized === "community" || normalized === "live community") return "Networking";
+  return "Friendship";
+}
+
+function normalizeGender(value?: string) {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === "male") return "Male";
+  if (normalized === "female") return "Female";
+  if (normalized === "non-binary" || normalized === "nonbinary") return "Non-binary";
+  return value ?? "";
+}
+
 export default function CreateProfile() {
   const current = useAuthStore((state) => state.user);
   const updateUser = useAuthStore((state) => state.updateUser);
@@ -33,6 +60,7 @@ export default function CreateProfile() {
   const [step, setStep] = useState(1);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [initializing, setInitializing] = useState(Boolean(current?._id ?? current?.id));
 
   // Form states
   const [name, setName] = useState(current?.name ?? "");
@@ -49,10 +77,56 @@ export default function CreateProfile() {
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>(current?.languages ?? ["Hindi", "English"]);
 
   // Dating preferences
-  const [interestedIn, setInterestedIn] = useState(current?.interestedIn ?? "EVERYONE");
-  const [lookingFor, setLookingFor] = useState(current?.lookingFor ?? "dating");
-  const [datingAgeMin, setDatingAgeMin] = useState("18");
-  const [datingAgeMax, setDatingAgeMax] = useState("35");
+  const [interestedIn, setInterestedIn] = useState<InterestedIn>(normalizeInterestedIn(current?.interestedIn));
+  const [lookingFor, setLookingFor] = useState<LookingFor>(normalizeLookingFor(current?.lookingFor));
+  const [datingAgeMin, setDatingAgeMin] = useState(String(current?.datingAgeMin ?? 18));
+  const [datingAgeMax, setDatingAgeMax] = useState(String(current?.datingAgeMax ?? 35));
+
+  useEffect(() => {
+    const userId = current?._id ?? current?.id;
+    if (!userId) {
+      setInitializing(false);
+      return;
+    }
+    const profileUserId = userId;
+    let cancelled = false;
+    async function loadCurrentProfile() {
+      setInitializing(true);
+      const [profileResult, preferencesResult] = await Promise.allSettled([
+        usersApi.get(profileUserId),
+        datingApi.preferences()
+      ]);
+      if (cancelled) return;
+      if (profileResult.status === "fulfilled") {
+        const profile = profileResult.value.user;
+        setName(profile.name ?? "");
+        setUsername(profile.username ?? "");
+        setAge(profile.age ? String(profile.age) : "");
+        setGender(normalizeGender(profile.gender));
+        setCity(profile.city ?? "");
+        setState(profile.state ?? "");
+        setBio(profile.bio ?? "");
+        setVibeLine(profile.vibeLine ?? "");
+        setAvatar(profile.avatar ?? PRESET_AVATARS[0]);
+        setSelectedInterests(profile.interests ?? []);
+        setSelectedHobbies(profile.hobbies ?? []);
+        setSelectedLanguages(profile.languages?.length ? profile.languages : ["Hindi", "English"]);
+        if (current) updateUser({ ...current, ...profile });
+      }
+      if (preferencesResult.status === "fulfilled") {
+        const preferences = preferencesResult.value.preferences;
+        setInterestedIn(normalizeInterestedIn(preferences.interestedIn));
+        setLookingFor(normalizeLookingFor(preferences.lookingFor));
+        setDatingAgeMin(String(preferences.datingAgeMin ?? 18));
+        setDatingAgeMax(String(preferences.datingAgeMax ?? 35));
+      }
+      setInitializing(false);
+    }
+    loadCurrentProfile().catch(() => {
+      if (!cancelled) setInitializing(false);
+    });
+    return () => { cancelled = true; };
+  }, [current?._id, current?.id, updateUser]);
 
   function validateStep() {
     setError("");
@@ -61,7 +135,7 @@ export default function CreateProfile() {
       if (!username.trim() || username.length < 3) return "Username must be at least 3 chars.";
       if (!/^[a-z0-9_.]+$/i.test(username)) return "Username can only have letters, numbers, dot, underscore.";
       const ageNum = Number(age);
-      if (isNaN(ageNum) || ageNum < 18 || ageNum > 90) return "You must be 18+ to enter Yugm.";
+      if (!Number.isInteger(ageNum) || ageNum < 18 || ageNum > 80) return "Age must be between 18 and 80.";
       if (!gender) return "Please select your gender.";
     }
     if (step === 2) {
@@ -75,6 +149,12 @@ export default function CreateProfile() {
     if (step === 4) {
       if (!bio.trim() || bio.length < 10) return "Bio must be at least 10 characters.";
       if (!vibeLine.trim()) return "Vibe line is required.";
+    }
+    if (step === 5) {
+      const minAge = Number(datingAgeMin);
+      const maxAge = Number(datingAgeMax);
+      if (!Number.isInteger(minAge) || !Number.isInteger(maxAge) || minAge < 18 || maxAge > 80) return "Choose an age range between 18 and 80.";
+      if (minAge > maxAge) return "Minimum age cannot be greater than maximum age.";
     }
     return "";
   }
@@ -134,6 +214,12 @@ export default function CreateProfile() {
 
   return (
     <Screen>
+      {initializing ? (
+        <View style={styles.initializing}>
+          <ActivityIndicator color={colors.pink} size="large" />
+          <Text style={styles.initializingText}>Loading your profile...</Text>
+        </View>
+      ) : (
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1 }}
@@ -200,7 +286,7 @@ export default function CreateProfile() {
 
               <Text style={styles.label}>What is your gender?</Text>
               <View style={styles.row}>
-                {["MALE", "FEMALE", "NON-BINARY"].map((g) => {
+                {["Male", "Female", "Non-binary"].map((g) => {
                   const active = gender === g;
                   return (
                     <Pressable
@@ -362,7 +448,7 @@ export default function CreateProfile() {
 
               <Text style={styles.label}>Who are you interested in?</Text>
               <View style={styles.row}>
-                {["MALE", "FEMALE", "EVERYONE"].map((opt) => {
+                {(["Women", "Men", "Non-binary", "Everyone"] as InterestedIn[]).map((opt) => {
                   const active = interestedIn === opt;
                   return (
                     <Pressable
@@ -379,11 +465,10 @@ export default function CreateProfile() {
               <Text style={styles.label}>Looking for...</Text>
               <View style={styles.chipsWrap}>
                 {[
-                  { value: "friends", label: "Friendship" },
-                  { value: "dating", label: "Dating" },
-                  { value: "serious", label: "Serious Relationship" },
-                  { value: "casual", label: "Casual Social" },
-                  { value: "community", label: "Live Community" }
+                  { value: "Friendship" as const, label: "Friendship" },
+                  { value: "Dating" as const, label: "Dating" },
+                  { value: "Relationship" as const, label: "Relationship" },
+                  { value: "Networking" as const, label: "Networking" }
                 ].map((item) => {
                   const active = lookingFor === item.value;
                   return (
@@ -441,11 +526,14 @@ export default function CreateProfile() {
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
+      )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  initializing: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
+  initializingText: { color: colors.muted, fontWeight: "700" },
   header: {
     flexDirection: "row",
     alignItems: "center",

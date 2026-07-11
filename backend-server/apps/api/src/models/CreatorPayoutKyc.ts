@@ -31,6 +31,5 @@ const creatorPayoutKycSchema = new Schema(
 );
 
 creatorPayoutKycSchema.index({ kycStatus: 1, submittedAt: -1 });
-creatorPayoutKycSchema.index({ payoutStatus: 1 });
 
 export const CreatorPayoutKyc = mongoose.model("CreatorPayoutKyc", creatorPayoutKycSchema);

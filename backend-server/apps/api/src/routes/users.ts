@@ -225,6 +225,14 @@ usersRouter.get("/messages", asyncHandler(async (req: AuthRequest, res) => {
   sendOk(res, { messages });
 }));
 
+usersRouter.post("/messages/read-all", asyncHandler(async (req: AuthRequest, res) => {
+  const result = await DirectMessage.updateMany(
+    { receiverId: req.user!.id, read: false },
+    { $set: { read: true } }
+  );
+  sendOk(res, { updated: result.modifiedCount });
+}));
+
 usersRouter.get("/messages/:userId", asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.userId)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
   const blocked = await Block.exists({
@@ -245,6 +253,10 @@ usersRouter.get("/messages/:userId", asyncHandler(async (req: AuthRequest, res) 
     .limit(100)
     .lean();
   const relationship = await findRelationship(req.user!.id, req.params.userId);
+  await DirectMessage.updateMany(
+    { senderId: req.params.userId, receiverId: req.user!.id, read: false },
+    { $set: { read: true } }
+  );
   sendOk(res, { messages: messages.reverse(), relationship });
 }));
 
@@ -262,12 +274,17 @@ usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, chatLimiter,
   if (blocked) throw new HttpError(403, "Cannot message this user", ErrorCode.FORBIDDEN);
 
   const messageText = String(req.body.message || "").trim();
-  if (!messageText) throw new HttpError(400, "Message cannot be empty", ErrorCode.VALIDATION);
+  const mediaUrl = String(req.body.mediaUrl || "").trim();
+  const mediaType = String(req.body.mediaType || "").toUpperCase();
+  if (!messageText && !mediaUrl) throw new HttpError(400, "Message cannot be empty", ErrorCode.VALIDATION);
+  if (mediaUrl && !["IMAGE", "VIDEO"].includes(mediaType)) throw new HttpError(400, "Invalid message media type", ErrorCode.VALIDATION);
 
   const created = await DirectMessage.create({
     senderId: req.user!.id,
     receiverId,
-    message: sanitizeText(messageText)
+    message: messageText ? sanitizeText(messageText) : mediaType === "VIDEO" ? "Shared a video" : "Shared a photo",
+    mediaUrl,
+    mediaType
   });
   const message = await DirectMessage.findById(created._id)
     .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")

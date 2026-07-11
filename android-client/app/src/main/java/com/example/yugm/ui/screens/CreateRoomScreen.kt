@@ -1,209 +1,303 @@
 package com.example.yugm.ui.screens
 
-import androidx.compose.foundation.BorderStroke
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.example.yugm.R
+import com.example.yugm.api.YugmApi
 import com.example.yugm.model.Host
 import com.example.yugm.model.Room
 import com.example.yugm.model.RoomType
-import com.example.yugm.ui.components.PrimaryButton
-import com.example.yugm.ui.components.ToggleRow
-import com.example.yugm.ui.components.YugmTextField
-import com.example.yugm.ui.theme.*
+import com.example.yugm.ui.components.GradientAction
+import com.example.yugm.ui.components.ReferenceChip
+import com.example.yugm.ui.components.SegmentedTabs
+import com.example.yugm.ui.components.YugmAmbientBackground
+import com.example.yugm.ui.components.YugmPageHeader
+import com.example.yugm.ui.theme.Background
+import com.example.yugm.ui.theme.BorderColor
+import com.example.yugm.ui.theme.Pink
+import com.example.yugm.ui.theme.PrimaryPurple
+import com.example.yugm.ui.theme.SurfaceElevated
+import com.example.yugm.ui.theme.TextMuted
+import com.example.yugm.ui.theme.TextPrimary
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateRoomScreen(
+    token: String,
     host: Host,
     onBack: () -> Unit,
     onCreate: (Room, Boolean, String, Boolean, String?) -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("Chill") }
-    var language by remember { mutableStateOf("English") }
-    var type by remember { mutableStateOf(RoomType.Voice) }
-    var maxSpeakers by remember { mutableStateOf(6) }
-    var tags by remember { mutableStateOf("") }
-    var coverImage by remember { mutableStateOf("") }
-    var isPublic by remember { mutableStateOf(true) }
-    var allowMicRequests by remember { mutableStateOf(true) }
-    var scheduleLater by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var title by rememberSaveable { mutableStateOf("") }
+    var description by rememberSaveable { mutableStateOf("") }
+    var category by rememberSaveable { mutableStateOf("Voice") }
+    var language by rememberSaveable { mutableStateOf("English") }
+    var type by rememberSaveable { mutableStateOf(RoomType.Voice) }
+    var maxSpeakers by rememberSaveable { mutableStateOf(8) }
+    var tags by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
+    var coverUri by remember { mutableStateOf<Uri?>(null) }
+    var isPublic by rememberSaveable { mutableStateOf(true) }
+    var allowMicRequests by rememberSaveable { mutableStateOf(true) }
+    var scheduleLater by rememberSaveable { mutableStateOf(false) }
+    var submitting by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf("") }
 
-    val categories = listOf("Chill", "Gaming", "Music", "Late Night", "Chitchat", "Dating")
-    val languages = listOf("English", "Hindi", "Punjabi", "Marathi", "Tamil")
+    val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) coverUri = uri
+    }
+    val categories = listOf("Voice" to "◖", "Music" to "♪", "Gaming" to "◆", "Chill" to "●●", "Dating" to "♡", "Learning" to "▰")
+    val languages = listOf("English", "Hindi", "Tamil", "Telugu", "Punjabi")
+    val suggestedTags = listOf("Deep Talks", "Late Night", "Good Vibes", "New People", "Music Lovers")
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Start Live Room", color = Color.White, fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text("Back", color = Gold, fontWeight = FontWeight.Bold)
+    fun submit() {
+        if (title.isBlank() || description.isBlank() || submitting) {
+            if (title.isBlank() || description.isBlank()) error = "Add a room title and topic first."
+            return
+        }
+        submitting = true
+        error = ""
+        scope.launch {
+            val uploadedCover = coverUri?.let { uri ->
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+                        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                            ?: throw IllegalStateException("Could not read selected image")
+                        require(bytes.size <= 5 * 1024 * 1024) { "Cover image must be 5 MB or smaller" }
+                        YugmApi.uploadCover(token, bytes, mime, "room-cover.${mime.substringAfter('/', "jpg")}")
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
+                }.getOrElse {
+                    error = it.message ?: "Cover upload failed"
+                    submitting = false
+                    return@launch
+                }
+            }
+            submitting = false
+            onCreate(
+                Room(
+                    title = title.trim(),
+                    description = description.trim(),
+                    type = type,
+                    category = category,
+                    language = language,
+                    maxSpeakers = maxSpeakers,
+                    tags = tags,
+                    host = host
+                ),
+                scheduleLater,
+                if (isPublic) "PUBLIC" else "PRIVATE",
+                allowMicRequests,
+                uploadedCover
             )
-        },
-        containerColor = Background
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            item {
-                Text(
-                    text = "Room details",
-                    color = Color.White,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Black
-                )
-            }
+        }
+    }
 
-            item { YugmTextField(title, { title = it }, "Room Title") }
-            item { YugmTextField(description, { description = it }, "Description (Optional)") }
-            item { YugmTextField(tags, { tags = it }, "Tags (comma separated)") }
-            item { YugmTextField(coverImage, { coverImage = it }, "Cover Image URL (Optional)") }
-            item {
-                YugmTextField(
-                    value = maxSpeakers.toString(),
-                    onValueChange = { value -> maxSpeakers = value.filter { it.isDigit() }.toIntOrNull()?.coerceIn(1, 50) ?: 1 },
-                    label = "Max Speakers",
-                    keyboardType = KeyboardType.Number
-                )
-            }
-
-            // Room Type Selector
-            item {
-                Text("Room Type", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                ) {
-                    RoomType.values().forEach { t ->
-                        val selected = type == t
-                        Surface(
-                            color = if (selected) Gold.copy(alpha = 0.2f) else SurfaceElevated,
-                            border = BorderStroke(1.dp, if (selected) Gold else Color(0x1AFFFFFF)),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { type = t }
-                        ) {
-                            Text(
-                                text = if (t == RoomType.Voice) "🎙️ Audio Room" else "🎥 Video Room",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                modifier = Modifier.padding(vertical = 12.dp),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+    YugmAmbientBackground {
+        Column(Modifier.fillMaxSize()) {
+            YugmPageHeader("Create Room", "Start a conversation that matters.", onBack = onBack)
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                item {
+                    SegmentedTabs(
+                        listOf("◖" to "Voice", "▣" to "Video"),
+                        selectedIndex = if (type == RoomType.Voice) 0 else 1,
+                        onSelected = { type = if (it == 0) RoomType.Voice else RoomType.Video }
+                    )
+                }
+                item {
+                    Row(
+                        Modifier.fillMaxWidth().height(158.dp).clip(RoundedCornerShape(22.dp)).background(SurfaceElevated).border(1.dp, BorderColor, RoundedCornerShape(22.dp)).padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.width(118.dp)) {
+                            Text("Room Cover", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 17.sp)
+                            Text("Add a cover to make your room stand out.", color = TextMuted, fontSize = 11.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 5.dp))
+                            ReferenceChip("Choose Image", glyph = "▣", onClick = { coverPicker.launch("image/*") })
+                        }
+                        Box(Modifier.weight(1f).fillMaxSize().clip(RoundedCornerShape(17.dp)).clickable { coverPicker.launch("image/*") }) {
+                            if (coverUri != null) {
+                                AsyncImage(coverUri, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                            } else {
+                                Image(painterResource(R.drawable.late_night_rooftop), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                            }
+                            Box(Modifier.align(Alignment.TopEnd).padding(8.dp).size(34.dp).clip(CircleShape).background(Background.copy(alpha = 0.8f)), contentAlignment = Alignment.Center) {
+                                Text("✎", color = Color.White, fontSize = 16.sp)
+                            }
+                        }
+                    }
+                }
+                item { RoomTextBlock("Room Title", true, title, 60, "Late Night Talks ✨") { title = it.take(60) } }
+                item { RoomTextBlock("Room Topic", true, description, 120, "Deep conversations, good vibes and new people.", singleLine = false) { description = it.take(120) } }
+                item {
+                    ChoiceBlock("Category", required = true) {
+                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            categories.forEach { (label, glyph) -> ReferenceChip(label, glyph = glyph, selected = category == label, onClick = { category = label }) }
+                        }
+                    }
+                }
+                item {
+                    ChoiceBlock("Language", required = true) {
+                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            languages.forEach { label -> ReferenceChip(label, glyph = if (label == "English") "◎" else "", selected = language == label, onClick = { language = label }) }
+                        }
+                    }
+                }
+                item {
+                    ChoiceBlock("Tags", subtitle = "Optional") {
+                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            suggestedTags.forEach { tag -> ReferenceChip(tag, glyph = if (tag in tags) "✓" else "+", selected = tag in tags, onClick = { tags = if (tag in tags) tags - tag else tags + tag }) }
+                        }
+                    }
+                }
+                item {
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(SurfaceElevated).border(1.dp, BorderColor, RoundedCornerShape(22.dp))) {
+                        SettingRow("▣", "Room Privacy", "Choose who can join your room") {
+                            ReferenceChip(if (isPublic) "Public" else "Private", glyph = if (isPublic) "◎" else "▣", selected = !isPublic, onClick = { isPublic = !isPublic })
+                        }
+                        DividerLine()
+                        SettingRow("♙", "Max Speakers", "Maximum number of speakers") {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                StepperButton("−") { maxSpeakers = (maxSpeakers - 1).coerceAtLeast(2) }
+                                Text(maxSpeakers.toString(), color = TextPrimary, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 13.dp))
+                                StepperButton("+") { maxSpeakers = (maxSpeakers + 1).coerceAtMost(20) }
+                            }
+                        }
+                        DividerLine()
+                        SettingRow("◖", "Allow Speaker Requests", "Let listeners request to speak") {
+                            Switch(
+                                checked = allowMicRequests,
+                                onCheckedChange = { allowMicRequests = it },
+                                colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Pink)
+                            )
+                        }
+                        DividerLine()
+                        SettingRow("◷", "Schedule Later", "Start this room in one hour") {
+                            Switch(
+                                checked = scheduleLater,
+                                onCheckedChange = { scheduleLater = it },
+                                colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Pink)
                             )
                         }
                     }
                 }
+                if (error.isNotBlank()) item { Text(error, color = Pink, fontSize = 12.sp) }
+                item { Spacer(Modifier.height(4.dp)) }
             }
-
-            // Category Selector
-            item {
-                Text("Category", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                Spacer(modifier = Modifier.height(8.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    categories.forEach { cat ->
-                        val selected = category == cat
-                        Surface(
-                            color = if (selected) Gold.copy(alpha = 0.2f) else SurfaceElevated,
-                            border = BorderStroke(1.dp, if (selected) Gold else Color(0x1AFFFFFF)),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.clickable { category = cat }
-                        ) {
-                            Text(
-                                text = cat,
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Language Selector
-            item {
-                Text("Primary Language", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                Spacer(modifier = Modifier.height(8.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    languages.forEach { lang ->
-                        val selected = language == lang
-                        Surface(
-                            color = if (selected) Gold.copy(alpha = 0.2f) else SurfaceElevated,
-                            border = BorderStroke(1.dp, if (selected) Gold else Color(0x1AFFFFFF)),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.clickable { language = lang }
-                        ) {
-                            Text(
-                                text = lang,
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            item { ToggleRow("Public Room", checked = isPublic, onCheckedChange = { isPublic = it }) }
-            item { ToggleRow("Audience Mic Requests", checked = allowMicRequests, onCheckedChange = { allowMicRequests = it }) }
-            item { ToggleRow("Schedule in 1 Hour", checked = scheduleLater, onCheckedChange = { scheduleLater = it }) }
-
-            item {
-                Spacer(modifier = Modifier.height(20.dp))
-                PrimaryButton(
-                    text = if (scheduleLater) "Schedule Lounge" else "Go Live Now",
-                    onClick = {
-                        if (title.isNotBlank()) {
-                            onCreate(
-                                Room(
-                                    title = title,
-                                    description = description,
-                                    type = type,
-                                    category = category,
-                                    language = language,
-                                    maxSpeakers = maxSpeakers,
-                                    tags = tags.split(",").map { it.trim() }.filter { it.isNotBlank() },
-                                    host = host
-                                ),
-                                scheduleLater,
-                                if (isPublic) "PUBLIC" else "PRIVATE",
-                                allowMicRequests,
-                                coverImage.ifBlank { null }
-                            )
-                        }
-                    }
-                )
-            }
+            GradientAction(
+                label = if (submitting) "Preparing room…" else if (scheduleLater) "Schedule Room" else "Go Live",
+                leading = if (type == RoomType.Voice) "◖" else "▣",
+                enabled = !submitting,
+                modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp),
+                onClick = ::submit
+            )
         }
     }
 }
+
+@Composable
+private fun RoomTextBlock(label: String, required: Boolean, value: String, maxLength: Int, placeholder: String, singleLine: Boolean = true, onValueChange: (String) -> Unit) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(SurfaceElevated).border(1.dp, BorderColor, RoundedCornerShape(20.dp)).padding(16.dp)) {
+        Row {
+            Text(label, color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            if (required) Text("  •", color = Pink)
+            Spacer(Modifier.weight(1f))
+            Text("${value.length}/$maxLength", color = TextMuted, fontSize = 10.sp)
+        }
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = singleLine,
+            textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold),
+            modifier = Modifier.fillMaxWidth().padding(top = 9.dp),
+            decorationBox = { inner -> if (value.isBlank()) Text(placeholder, color = TextMuted, fontSize = 14.sp) else inner() }
+        )
+    }
+}
+
+@Composable
+private fun ChoiceBlock(title: String, required: Boolean = false, subtitle: String = "", content: @Composable () -> Unit) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(SurfaceElevated).border(1.dp, BorderColor, RoundedCornerShape(20.dp)).padding(14.dp)) {
+        Row {
+            Text(title, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            if (required) Text("  •", color = Pink)
+            if (subtitle.isNotBlank()) Text("  ($subtitle)", color = TextMuted, fontSize = 12.sp)
+        }
+        Box(Modifier.padding(top = 10.dp)) { content() }
+    }
+}
+
+@Composable
+private fun SettingRow(glyph: String, title: String, subtitle: String, trailing: @Composable () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(glyph, color = TextMuted, fontSize = 21.sp, modifier = Modifier.width(38.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(subtitle, color = TextMuted, fontSize = 10.sp)
+        }
+        trailing()
+    }
+}
+
+@Composable
+private fun StepperButton(text: String, onClick: () -> Unit) {
+    Box(Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(Background.copy(alpha = 0.7f)).border(1.dp, BorderColor, RoundedCornerShape(10.dp)).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+        Text(text, color = TextPrimary, fontSize = 18.sp)
+    }
+}
+
+@Composable
+private fun DividerLine() = Box(Modifier.fillMaxWidth().height(1.dp).background(BorderColor))

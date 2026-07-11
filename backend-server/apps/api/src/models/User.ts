@@ -81,6 +81,7 @@ export interface IUser extends mongoose.Document {
   lookingFor?: string;
   datingAgeMin?: number;
   datingAgeMax?: number;
+  datingVerifiedOnly?: boolean;
 }
 
 const userSchema = new Schema<IUser>(
@@ -164,6 +165,7 @@ const userSchema = new Schema<IUser>(
     lookingFor: String,
     datingAgeMin: Number,
     datingAgeMax: Number,
+    datingVerifiedOnly: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
-import { asyncHandler, sendOk } from "../utils/http.js";
+import { asyncHandler, ErrorCode, HttpError, sendOk } from "../utils/http.js";
 import {
   acceptTrustConsent,
   getOrCreateTrustVerification,
@@ -15,9 +15,24 @@ import {
   submitVoiceVerification,
   TRUST_CONSENT_VERSION
 } from "../services/trustVerification.js";
+import { assertTrustMediaFileName, loadTrustVerificationFile } from "../services/storage.js";
 
 export const trustVerificationRouter = Router();
 trustVerificationRouter.use(requireAuth);
+
+trustVerificationRouter.get("/media/:fileName", asyncHandler(async (req: AuthRequest, res) => {
+  let fileName: string;
+  try {
+    fileName = assertTrustMediaFileName(req.params.fileName);
+  } catch {
+    throw new HttpError(400, "Invalid verification media reference", ErrorCode.VALIDATION);
+  }
+  if (!fileName.startsWith(`${req.user!.id}_`)) throw new HttpError(403, "You cannot access this verification media", ErrorCode.FORBIDDEN);
+  const media = await loadTrustVerificationFile(fileName).catch(() => { throw new HttpError(404, "Verification media not found", ErrorCode.NOT_FOUND); });
+  res.setHeader("Cache-Control", "private, no-store");
+  if ("filePath" in media && media.filePath) return res.sendFile(media.filePath);
+  res.type(media.contentType ?? "application/octet-stream").send(media.body);
+}));
 
 const consentSchema = z.object({
   consentVersion: z.string().min(3).max(80).optional()

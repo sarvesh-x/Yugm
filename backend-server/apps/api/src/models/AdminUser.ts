@@ -18,6 +18,8 @@ export interface IAdminUser extends mongoose.Document {
   lastLoginAt?: Date;
   lastLoginIp?: string;
   createdBy?: mongoose.Types.ObjectId;
+  invitationTokenHash?: string;
+  invitationExpiresAt?: Date;
 }
 
 const adminUserSchema = new Schema<IAdminUser>(
@@ -39,7 +41,9 @@ const adminUserSchema = new Schema<IAdminUser>(
     twoFactorEnabled: { type: Boolean, default: false },
     lastLoginAt: Date,
     lastLoginIp: String,
-    createdBy: { type: Schema.Types.ObjectId, ref: "AdminUser" }
+    createdBy: { type: Schema.Types.ObjectId, ref: "AdminUser" },
+    invitationTokenHash: { type: String, select: false },
+    invitationExpiresAt: Date
   },
   { timestamps: true }
 );

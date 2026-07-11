@@ -8,7 +8,35 @@ import { WithdrawalRequest } from "../models/WithdrawalRequest.js";
 import { runWithdrawalFraudChecks } from "./fraudDetection.js";
 import { ErrorCode, HttpError } from "../utils/http.js";
 
-const DEFAULT_COIN_TO_INR_RATE = 0.01;
+export const CREATOR_COIN_TO_INR_RATE = 0.01;
+export const activeWithdrawalStatuses = ["PENDING_REVIEW", "APPROVED"] as const;
+
+export function creatorCoinsToInr(amountCoins: number) {
+  return Math.round(amountCoins * CREATOR_COIN_TO_INR_RATE * 100) / 100;
+}
+
+function isDuplicateKeyError(error: unknown) {
+  return Boolean(error && typeof error === "object" && "code" in error && (error as { code?: number }).code === 11000);
+}
+
+async function rollbackWithdrawalReservation(withdrawalId: string) {
+  const deleted = await WithdrawalRequest.deleteOne({
+    _id: withdrawalId,
+    status: "PENDING_REVIEW",
+    activeLock: true
+  });
+  if (deleted.deletedCount > 0) return;
+  await WithdrawalRequest.updateOne(
+    { _id: withdrawalId, status: "PENDING_REVIEW" },
+    {
+      $set: {
+        status: "CANCELLED",
+        activeLock: false,
+        rejectionReason: "Withdrawal review creation failed"
+      }
+    }
+  );
+}
 
 export function publicWithdrawal(withdrawal: any) {
   return {
@@ -29,22 +57,30 @@ export function publicWithdrawal(withdrawal: any) {
 
 export async function creatorEarningBalance(userId: string) {
   const objectId = new mongoose.Types.ObjectId(userId);
-  const [earned, locked] = await Promise.all([
+  const [earned, withdrawals] = await Promise.all([
     GiftTransaction.aggregate([
       { $match: { receiverId: objectId } },
       { $group: { _id: null, total: { $sum: "$coinAmount" } } }
     ]),
     WithdrawalRequest.aggregate([
       { $match: { userId: objectId, status: { $in: ["PENDING_REVIEW", "APPROVED", "PAID"] } } },
-      { $group: { _id: null, total: { $sum: "$amountCoins" } } }
+      { $group: {
+        _id: null,
+        total: { $sum: "$amountCoins" },
+        locked: { $sum: { $cond: [{ $in: ["$status", ["PENDING_REVIEW", "APPROVED"]] }, "$amountCoins", 0] } },
+        withdrawn: { $sum: { $cond: [{ $eq: ["$status", "PAID"] }, "$amountCoins", 0] } }
+      } }
     ])
   ]);
   const earnedCoins = earned[0]?.total ?? 0;
-  const lockedCoins = locked[0]?.total ?? 0;
+  const deductedCoins = withdrawals[0]?.total ?? 0;
+  const lockedCoins = withdrawals[0]?.locked ?? 0;
+  const withdrawnCoins = withdrawals[0]?.withdrawn ?? 0;
   return {
     earnedCoins,
     lockedCoins,
-    availableCoins: Math.max(0, earnedCoins - lockedCoins)
+    withdrawnCoins,
+    availableCoins: Math.max(0, earnedCoins - deductedCoins)
   };
 }
 
@@ -74,33 +110,62 @@ export async function createWithdrawalRequest(userId: string, amountCoins: numbe
     throw new HttpError(403, payoutKyc.payoutStatus === "FROZEN" ? "Your wallet is temporarily restricted." : "Complete Creator Payout KYC before withdrawing.", ErrorCode.FORBIDDEN);
   }
 
+  const existingActiveWithdrawal = await WithdrawalRequest.exists({
+    userId,
+    $or: [
+      { activeLock: true },
+      { activeLock: { $exists: false }, status: { $in: activeWithdrawalStatuses } }
+    ]
+  });
+  if (existingActiveWithdrawal) {
+    throw new HttpError(409, "Complete the active withdrawal before requesting another.", ErrorCode.CONFLICT);
+  }
+
   const balance = await creatorEarningBalance(userId);
   if (amountCoins > balance.availableCoins) throw new HttpError(402, "Insufficient creator earning balance", ErrorCode.INSUFFICIENT_FUNDS);
 
   const fraud = await runWithdrawalFraudChecks(userId, amountCoins);
   const reviewStatus = fraud.fraudSafe && fraud.walletSafe && fraud.reportsSafe ? "PENDING" : "NEEDS_MANUAL_REVIEW";
-  const withdrawal = await WithdrawalRequest.create({
-    userId,
-    amountCoins,
-    amountInr: Math.round(amountCoins * DEFAULT_COIN_TO_INR_RATE * 100) / 100,
-    status: "PENDING_REVIEW",
-    lockedAt: new Date(),
-    metadata: { coinToInrRate: DEFAULT_COIN_TO_INR_RATE }
-  });
-  const review = await PayoutReview.create({
-    userId,
-    withdrawalRequestId: withdrawal.id,
-    trustVerificationId: trust._id,
-    creatorPayoutKycId: payoutKyc._id,
-    status: reviewStatus,
-    trustVerified: true,
-    kycVerified: true,
-    walletSafe: fraud.walletSafe,
-    reportsSafe: fraud.reportsSafe,
-    fraudSafe: fraud.fraudSafe,
-    riskScore: fraud.riskScore,
-    riskFlags: fraud.riskFlags
-  });
+  let withdrawal: any;
+  try {
+    withdrawal = await WithdrawalRequest.create({
+      userId,
+      amountCoins,
+      amountInr: creatorCoinsToInr(amountCoins),
+      status: "PENDING_REVIEW",
+      activeLock: true,
+      lockedAt: new Date(),
+      metadata: { coinToInrRate: CREATOR_COIN_TO_INR_RATE }
+    });
+  } catch (error) {
+    if (isDuplicateKeyError(error)) {
+      throw new HttpError(409, "Complete the active withdrawal before requesting another.", ErrorCode.CONFLICT);
+    }
+    throw error;
+  }
+
+  let review: any;
+  try {
+    review = await PayoutReview.create({
+      userId,
+      withdrawalRequestId: withdrawal.id,
+      trustVerificationId: trust._id,
+      creatorPayoutKycId: payoutKyc._id,
+      status: reviewStatus,
+      trustVerified: true,
+      kycVerified: true,
+      walletSafe: fraud.walletSafe,
+      reportsSafe: fraud.reportsSafe,
+      fraudSafe: fraud.fraudSafe,
+      riskScore: fraud.riskScore,
+      riskFlags: fraud.riskFlags
+    });
+  } catch (error) {
+    await rollbackWithdrawalReservation(withdrawal.id).catch((rollbackError) => {
+      console.error("Failed to roll back withdrawal reservation:", rollbackError);
+    });
+    throw error;
+  }
 
   return {
     withdrawal,

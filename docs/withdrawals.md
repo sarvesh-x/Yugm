@@ -21,4 +21,4 @@ Withdrawals are available only to creators/hosts with gift earnings. Normal user
 
 ## Accounting
 
-The current MVP calculates creator earnings from received gift transactions and subtracts pending, approved, and paid withdrawal requests. Future ledger work can split purchasable coins and creator cash earnings into separate balances.
+Creator earnings are calculated from received gift transactions. Pending and approved requests are reported as locked; paid requests are reported as withdrawn; all three are deducted from available earnings. The settlement rate is shared by creator dashboards, eligibility responses, and finance records so displayed estimates match the final withdrawal amount.

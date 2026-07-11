@@ -51,6 +51,7 @@ import com.example.yugm.model.PkStatus
 import com.example.yugm.model.ProfileCheck
 import com.example.yugm.model.ProfileCompletion
 import com.example.yugm.model.ProfileCosmetic
+import com.example.yugm.model.RazorpayCheckoutData
 import com.example.yugm.model.RelationshipStatus
 import com.example.yugm.model.Room
 import com.example.yugm.model.RoomActivityItem
@@ -70,15 +71,20 @@ import com.example.yugm.model.WalletProgressResult
 import com.example.yugm.model.TrustVerificationStatus
 import com.example.yugm.model.WithdrawalEligibility
 import com.example.yugm.model.WithdrawalRequestResult
+import com.example.yugm.model.PayoutRequirements
 import com.example.yugm.model.YugmUser
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 val Categories = listOf(
@@ -233,6 +239,10 @@ object YugmApi {
         return get("/experience/home", token).getJSONObject("data").toExperienceHome()
     }
 
+    suspend fun creatorDashboard(token: String): com.example.yugm.model.CreatorDashboard {
+        return get("/experience/creator-dashboard", token).getJSONObject("data").toCreatorDashboard()
+    }
+
     suspend fun joinRoom(token: String, roomId: String) {
         post("/rooms/$roomId/join", token, JSONObject())
     }
@@ -282,13 +292,42 @@ object YugmApi {
         )
     }
 
-    suspend fun createRazorpayOrder(token: String, packId: String): String {
+    suspend fun createRazorpayOrder(token: String, packId: String): RazorpayCheckoutData {
         val data = post(
             "/wallet/purchases/razorpay/order",
             token,
             JSONObject().put("packId", packId).put("provider", "RAZORPAY")
         ).getJSONObject("data")
-        return data.optJSONObject("order")?.optString("id").orEmpty()
+        val purchase = data.optJSONObject("purchase") ?: JSONObject()
+        val checkout = data.optJSONObject("checkout") ?: JSONObject()
+        return RazorpayCheckoutData(
+            purchaseId = purchase.optString("_id", purchase.optString("id")),
+            key = checkout.optString("key"),
+            amount = checkout.optInt("amount"),
+            currency = checkout.optString("currency", "INR"),
+            orderId = checkout.optString("orderId"),
+            name = checkout.optString("name", "Yugm"),
+            description = checkout.optString("description", "Yugm coins")
+        )
+    }
+
+    suspend fun verifyRazorpayPurchase(
+        token: String,
+        purchaseId: String,
+        orderId: String,
+        paymentId: String,
+        signature: String
+    ): Int {
+        val data = post(
+            "/wallet/purchases/razorpay/verify",
+            token,
+            JSONObject()
+                .put("purchaseId", purchaseId)
+                .put("razorpay_order_id", orderId)
+                .put("razorpay_payment_id", paymentId)
+                .put("razorpay_signature", signature)
+        ).getJSONObject("data")
+        return data.optInt("balance", 0)
     }
 
     suspend fun gifts(token: String): List<GiftItem> {
@@ -324,6 +363,54 @@ object YugmApi {
 
     suspend fun sendGift(token: String, roomId: String, gift: GiftItem, receiverId: String) {
         post("/rooms/$roomId/send-gift", token, JSONObject().put("giftId", gift.id).put("receiverId", receiverId))
+    }
+
+    suspend fun uploadCover(token: String, bytes: ByteArray, mimeType: String, fileName: String): String = withContext(Dispatchers.IO) {
+        if (!isOnline) throw IllegalStateException("No internet connection")
+        val base = workingBaseUrl ?: baseCandidates.firstOrNull()
+            ?: throw IllegalStateException("API_BASE_URL is not configured for this build")
+        val mediaType = mimeType.ifBlank { "image/jpeg" }.toMediaType()
+        val body = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("cover", fileName.ifBlank { "room-cover.jpg" }, bytes.toRequestBody(mediaType))
+            .build()
+        val request = Request.Builder()
+            .url("$base/upload/cover")
+            .header("Authorization", "Bearer $token")
+            .post(body)
+            .build()
+        client.newCall(request).execute().use { response ->
+            val raw = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                val message = runCatching { JSONObject(raw).optJSONObject("error")?.optString("message") }.getOrNull()
+                throw ApiHttpException(response.code, message ?: "Cover upload failed")
+            }
+            val url = JSONObject(raw).getJSONObject("data").optString("url")
+            if (url.isBlank()) throw ApiProtocolException("Cover upload returned no URL")
+            workingBaseUrl = base
+            url
+        }
+    }
+
+    suspend fun uploadMessageMedia(token: String, bytes: ByteArray, mimeType: String, fileName: String): Pair<String, String> = withContext(Dispatchers.IO) {
+        if (!isOnline) throw IllegalStateException("No internet connection")
+        val base = workingBaseUrl ?: baseCandidates.firstOrNull()
+            ?: throw IllegalStateException("API_BASE_URL is not configured for this build")
+        val body = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("media", fileName.ifBlank { "message-media.jpg" }, bytes.toRequestBody(mimeType.ifBlank { "image/jpeg" }.toMediaType()))
+            .build()
+        val request = Request.Builder().url("$base/upload/profile-media").header("Authorization", "Bearer $token").post(body).build()
+        client.newCall(request).execute().use { response ->
+            val raw = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw ApiHttpException(response.code, "Message media upload failed")
+            val data = JSONObject(raw).getJSONObject("data")
+            val url = data.optString("url")
+            val type = data.optString("type")
+            if (url.isBlank() || type.isBlank()) throw ApiProtocolException("Media upload returned invalid data")
+            workingBaseUrl = base
+            url to type
+        }
     }
 
     suspend fun trustVerificationStatus(token: String): TrustVerificationStatus {
@@ -398,7 +485,17 @@ object YugmApi {
         val data = get("/creator/withdrawals/eligibility", token).getJSONObject("data")
         return WithdrawalEligibility(
             balance = data.getJSONObject("balance").toCreatorEarningBalance(),
-            payoutKyc = data.getJSONObject("payoutKyc").toCreatorPayoutKycStatus()
+            payoutKyc = data.getJSONObject("payoutKyc").toCreatorPayoutKycStatus(),
+            requirements = data.optJSONObject("requirements")?.let {
+                PayoutRequirements(
+                    creatorAccount = it.optBoolean("creatorAccount", false),
+                    trustVerified = it.optBoolean("trustVerified", false),
+                    creatorTrustEnabled = it.optBoolean("creatorTrustEnabled", false),
+                    payoutKycVerified = it.optBoolean("payoutKycVerified", false),
+                    payoutEnabled = it.optBoolean("payoutEnabled", false)
+                )
+            } ?: PayoutRequirements(),
+            coinToInrRate = data.optDouble("coinToInrRate", 0.01)
         )
     }
 
@@ -882,10 +979,17 @@ object YugmApi {
 
     private suspend fun request(method: String, path: String, auth: String?, body: JSONObject?): JSONObject = withContext(Dispatchers.IO) {
         if (!isOnline) throw IllegalStateException("No internet connection")
-        val bases = listOfNotNull(workingBaseUrl) + baseCandidates.filter { it != workingBaseUrl }
+        val canRetry = isSafeRetryMethod(method)
+        val preferredBase = workingBaseUrl ?: baseCandidates.firstOrNull()
+        val bases = if (canRetry) {
+            listOfNotNull(workingBaseUrl) + baseCandidates.filter { it != workingBaseUrl }
+        } else {
+            listOfNotNull(preferredBase)
+        }
         if (bases.isEmpty()) throw IllegalStateException("API_BASE_URL is not configured for this build")
-        var lastError: Throwable? = null
+        var lastError: IOException? = null
         for ((attempt, base) in bases.withIndex()) {
+            currentCoroutineContext().ensureActive()
             try {
                 if (attempt > 0) kotlinx.coroutines.delay(1000L * attempt)
                 val builder = Request.Builder().url("$base$path")
@@ -900,7 +1004,7 @@ object YugmApi {
                 }
                 client.newCall(builder.build()).execute().use { response ->
                     val raw = response.body?.string()
-                    if (raw == null) throw IllegalStateException("Empty response body")
+                    if (raw.isNullOrBlank()) throw ApiProtocolException("Empty response body")
                     if (!response.isSuccessful) {
                         val errMsg = try {
                             JSONObject(raw).optJSONObject("error")?.optString("message")
@@ -908,19 +1012,80 @@ object YugmApi {
                             Log.e(TAG, "Error parsing error response", e)
                             null
                         }
-                        throw IllegalStateException(errMsg ?: "API ${response.code}")
+                        throw ApiHttpException(response.code, errMsg ?: "API ${response.code}")
+                    }
+                    val payload = try {
+                        JSONObject(raw)
+                    } catch (error: Exception) {
+                        throw ApiProtocolException("Invalid JSON response", error)
                     }
                     workingBaseUrl = base
-                    return@withContext JSONObject(raw)
+                    return@withContext payload
                 }
-            } catch (error: Throwable) {
+            } catch (error: ApiHttpException) {
+                // HTTP responses reached the intended server. Retrying them against another
+                // base can duplicate work and cannot repair validation/auth failures.
+                throw error
+            } catch (error: ApiProtocolException) {
+                // A successful-but-malformed response is a server contract failure, not a
+                // transport failover signal.
+                throw error
+            } catch (error: IOException) {
                 Log.e(TAG, "Request failed for $base$path", error)
                 lastError = error
+                if (!canRetry) throw error
             }
         }
         throw lastError ?: IllegalStateException("API unavailable")
     }
+
+    suspend fun sendDirectMediaMessage(token: String, userId: String, mediaUrl: String, mediaType: String, caption: String = ""): Conversation {
+        val data = post(
+            "/users/messages/$userId",
+            token,
+            JSONObject().put("message", caption).put("mediaUrl", mediaUrl).put("mediaType", mediaType)
+        ).getJSONObject("data")
+        val direct = data.optJSONObject("message")?.toDirectMessage()
+        return Conversation(
+            messages = if (direct != null) listOf(direct) else emptyList(),
+            relationship = data.optJSONObject("relationship")?.toRelationshipStatus()
+        )
+    }
+
+    suspend fun startPrivateCall(token: String, userId: String, type: RoomType): Room {
+        val data = post(
+            "/users/messages/$userId/call",
+            token,
+            JSONObject().put("type", if (type == RoomType.Video) "VIDEO" else "VOICE")
+        ).getJSONObject("data")
+        return data.getJSONObject("room").toRoom()
+    }
+
+    suspend fun reactToDirectMessage(token: String, userId: String, messageId: String, type: String = "heart"): DirectMessage {
+        val data = post(
+            "/users/messages/$userId/$messageId/reactions",
+            token,
+            JSONObject().put("type", type)
+        ).getJSONObject("data")
+        return data.getJSONObject("message").toDirectMessage()
+    }
+
+    suspend fun markAllMessagesRead(token: String) {
+        post("/users/messages/read-all", token, JSONObject())
+    }
 }
+
+internal fun isSafeRetryMethod(method: String): Boolean = method.equals("GET", ignoreCase = true)
+
+internal class ApiHttpException(
+    val statusCode: Int,
+    message: String
+) : IllegalStateException(message)
+
+internal class ApiProtocolException(
+    message: String,
+    cause: Throwable? = null
+) : IllegalStateException(message, cause)
 
 fun JSONArray.toRooms(): List<Room> = buildList {
     for (index in 0 until length()) {
@@ -1102,7 +1267,11 @@ fun JSONObject.toDirectMessage(): DirectMessage = DirectMessage(
     senderId = optJSONObject("senderId")?.entityId() ?: optString("senderId", ""),
     receiverId = optJSONObject("receiverId")?.entityId() ?: optString("receiverId", ""),
     message = optString("message", ""),
-    createdAt = optString("createdAt", "")
+    createdAt = optString("createdAt", ""),
+    read = optBoolean("read", false),
+    reactionCount = optJSONArray("reactions")?.length() ?: 0,
+    mediaUrl = optString("mediaUrl", ""),
+    mediaType = optString("mediaType", "")
 )
 
 fun JSONArray.toDirectMessages(): List<DirectMessage> = buildList {
@@ -1277,6 +1446,7 @@ fun JSONObject.toExperienceHome(): ExperienceHome {
     val peopleJson = optJSONObject("people") ?: JSONObject()
     val notificationsJson = optJSONObject("notifications") ?: JSONObject()
     return ExperienceHome(
+        userRole = optJSONObject("user")?.optString("role", "USER") ?: "USER",
         profileCompletion = optJSONObject("profileCompletion")?.toProfileCompletion() ?: ProfileCompletion(),
         level = optJSONObject("level")?.toLevelStatus() ?: LevelStatus(),
         achievements = optJSONArray("achievements")?.toAchievements() ?: emptyList(),
@@ -1286,6 +1456,27 @@ fun JSONObject.toExperienceHome(): ExperienceHome {
         followingRooms = roomsJson.optJSONArray("following")?.toRooms() ?: emptyList(),
         suggestedHosts = peopleJson.optJSONArray("suggestedHosts")?.toHosts() ?: emptyList(),
         unreadNotifications = notificationsJson.optInt("unreadCount", 0)
+    )
+}
+
+fun JSONObject.toCreatorDashboard(): com.example.yugm.model.CreatorDashboard {
+    val summaryJson = optJSONObject("summary") ?: JSONObject()
+    val steps = optJSONArray("nextSteps")
+    return com.example.yugm.model.CreatorDashboard(
+        windowDays = optInt("windowDays", 30),
+        summary = com.example.yugm.model.CreatorDashboardSummary(
+            giftCoins = summaryJson.optInt("giftCoins", 0),
+            giftCount = summaryJson.optInt("giftCount", 0),
+            uniqueSupporters = summaryJson.optInt("uniqueSupporters", 0),
+            hostedRooms = summaryJson.optInt("hostedRooms", 0),
+            participants = summaryJson.optInt("participants", 0),
+            uniqueParticipants = summaryJson.optInt("uniqueParticipants", 0),
+            averageParticipants = summaryJson.optDouble("averageParticipants", 0.0),
+            estimatedInr = summaryJson.optDouble("estimatedInr", 0.0)
+        ),
+        rooms = optJSONArray("rooms")?.toRooms() ?: emptyList(),
+        scheduledRooms = optJSONArray("scheduledRooms")?.toRooms() ?: emptyList(),
+        nextSteps = if (steps == null) emptyList() else List(steps.length()) { steps.optString(it) }
     )
 }
 
@@ -1417,6 +1608,7 @@ fun JSONObject.toCreatorPayoutKycStatus(): CreatorPayoutKycStatus = CreatorPayou
 fun JSONObject.toCreatorEarningBalance(): CreatorEarningBalance = CreatorEarningBalance(
     earnedCoins = optInt("earnedCoins", 0),
     lockedCoins = optInt("lockedCoins", 0),
+    withdrawnCoins = optInt("withdrawnCoins", 0),
     availableCoins = optInt("availableCoins", 0)
 )
 

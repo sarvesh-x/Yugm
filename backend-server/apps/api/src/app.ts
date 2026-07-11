@@ -66,7 +66,7 @@ function responseError(error: unknown) {
       : 500;
   return {
     status: status >= 400 && status < 600 ? status : 500,
-    message: error instanceof Error ? error.message : "Unexpected server error",
+    message: status >= 400 && status < 500 && error instanceof Error ? error.message : "Unexpected server error",
     code: status >= 400 && status < 500 ? ErrorCode.VALIDATION : ErrorCode.INTERNAL
   };
 }
@@ -82,7 +82,9 @@ export function createApp() {
     next();
   });
   // For production, CORS_ORIGIN must be an explicit URL, not "*", when credentials are enabled
-  app.use(cors({ origin: env.CORS_ORIGIN === "*" ? "*" : env.CORS_ORIGIN.split(","), credentials: true }));
+  app.use(cors(env.CORS_ORIGIN === "*"
+    ? { origin: "*", credentials: false }
+    : { origin: env.CORS_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean), credentials: true }));
   // WARNING: If adding multer file uploads, always validate file type/size and scope upload routes with auth
   app.use(express.json({ limit: "1mb" }));
   app.use((req, res, next) => {

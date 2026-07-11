@@ -552,6 +552,97 @@ tbody tr:hover {
   text-align: right;
 }
 
+.actions-cell .action-row {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.actions-cell .action-row button {
+  padding: 7px 9px;
+  font-size: 11px;
+}
+
+.review-hero {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(246, 180, 75, 0.22);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(246, 180, 75, 0.12), rgba(138, 92, 255, 0.12));
+}
+
+.review-hero h3,
+.review-hero p {
+  margin: 3px 0 0;
+}
+
+.review-hero p {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.verification-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.review-detail {
+  min-height: 74px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  overflow-wrap: anywhere;
+}
+
+.review-detail span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.review-warning {
+  margin-top: 14px;
+  padding: 13px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 91, 110, 0.28);
+  background: rgba(255, 91, 110, 0.08);
+}
+
+.review-warning.risk {
+  border-color: rgba(246, 180, 75, 0.28);
+  background: rgba(246, 180, 75, 0.07);
+}
+
+.review-warning p {
+  color: var(--muted);
+  margin: 6px 0 0;
+  line-height: 1.5;
+}
+
+.drawer-action-section {
+  margin-top: 18px;
+}
+
+.drawer-action-section > .action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.drawer-action-section button {
+  padding: 10px 12px;
+}
+
 .person-cell {
   display: flex;
   align-items: center;
