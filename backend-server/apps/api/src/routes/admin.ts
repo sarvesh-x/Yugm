@@ -42,6 +42,7 @@ import { createNotification } from "../services/notifications.js";
 import { emitRoom } from "../services/socket.js";
 import { creditWallet, debitWallet } from "../services/wallet.js";
 import { auditLog } from "../services/adminAudit.js";
+import { createRazorpayRefund, fetchRazorpayPayment, refundGooglePlayOrder, verifyGooglePlayProduct } from "../services/payments.js";
 import { endPkBattle, pkState } from "../services/pk.js";
 import { flagSafetyState, refreshUserSafetyStatus } from "../services/safetyScore.js";
 import { asyncHandler, ErrorCode, HttpError, isValidObjectId, sanitizeText } from "../utils/http.js";
@@ -51,6 +52,7 @@ export const adminRouter = Router();
 const adminAuthLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false });
 const objectIdSchema = z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid object id");
 const reasonSchema = z.object({ reason: z.string().min(3).max(500), durationHours: z.number().int().min(1).max(8760).optional() });
+const notificationTypeValues = ["FOLLOW", "GIFT", "ROOM_INVITE", "SPEAKER_APPROVED", "MESSAGE", "SYSTEM"] as const;
 const adminUserSchema = z.object({
   email: z.string().email(),
   displayName: z.string().min(2).max(120),
@@ -60,7 +62,7 @@ const adminUserSchema = z.object({
   password: z.string().min(8).optional()
 });
 
-for (const param of ["adminId", "battleId", "giftId", "messageId", "queueId", "reportId", "roomId", "ticketId", "userId"] as const) {
+for (const param of ["adminId", "battleId", "giftId", "id", "messageId", "queueId", "reportId", "roomId", "ticketId", "userId"] as const) {
   adminRouter.param(param, (_req, _res, next, value) => {
     if (!isValidObjectId(String(value))) {
       next(new HttpError(400, `Invalid ${param}`, ErrorCode.VALIDATION));
@@ -167,6 +169,157 @@ function objectIdQuery(value: unknown, label: string) {
   const id = String(value);
   if (!isValidObjectId(id)) throw new HttpError(400, `Invalid ${label}`, ErrorCode.VALIDATION);
   return id;
+}
+
+function purchaseReferenceQuery(reference: string) {
+  const clauses: Record<string, unknown>[] = [
+    { providerOrderId: reference },
+    { providerPaymentId: reference },
+    { googleOrderId: reference }
+  ];
+  if (isValidObjectId(reference)) clauses.unshift({ _id: reference });
+  return { $or: clauses };
+}
+
+async function findPurchaseByReference(reference: string) {
+  return Purchase.findOne(purchaseReferenceQuery(reference));
+}
+
+function metadataOf(document: { metadata?: unknown }) {
+  return document.metadata && typeof document.metadata === "object" ? document.metadata as Record<string, unknown> : {};
+}
+
+function notificationTypeOf(value: unknown): typeof notificationTypeValues[number] {
+  return notificationTypeValues.includes(value as typeof notificationTypeValues[number]) ? value as typeof notificationTypeValues[number] : "SYSTEM";
+}
+
+async function creditVerifiedPurchase(purchaseId: string, adminId: string, metadata: Record<string, unknown>) {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const purchase: any = await Purchase.findOne({
+      _id: purchaseId,
+      status: { $nin: ["CREDITED", "REFUND_PENDING", "REFUNDED"] }
+    }).session(session);
+    if (!purchase) {
+      await session.commitTransaction();
+      session.endSession();
+      return { purchase: await Purchase.findById(purchaseId), transaction: null };
+    }
+    purchase.status = "CREDITED";
+    purchase.creditedAt = purchase.creditedAt ?? new Date();
+    purchase.metadata = { ...metadataOf(purchase), ...metadata, adminVerifiedAt: new Date().toISOString(), adminVerifiedBy: adminId };
+    const [transaction] = await creditWallet(purchase.userId.toString(), purchase.coinAmount, `${purchase.provider}_PURCHASE`, {
+      purchaseId: purchase.id,
+      packId: purchase.packId,
+      provider: purchase.provider,
+      adminId,
+      ...metadata
+    }, session);
+    purchase.creditedTransactionId = transaction._id;
+    await purchase.save({ session });
+    await session.commitTransaction();
+    session.endSession();
+    return { purchase, transaction };
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    throw error;
+  }
+}
+
+async function reservePurchaseRefund(purchaseId: string, adminId: string, reason: string) {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const purchase: any = await Purchase.findById(purchaseId).session(session);
+    if (!purchase) throw new HttpError(404, "Purchase not found", ErrorCode.NOT_FOUND);
+    if (purchase.status === "REFUNDED") {
+      await session.commitTransaction();
+      session.endSession();
+      return { purchase, transaction: null, alreadyRefunded: true };
+    }
+    if (purchase.status === "REFUND_PENDING") {
+      throw new HttpError(409, "Refund is already pending for this purchase", ErrorCode.CONFLICT);
+    }
+    if (!["PAID", "CREDITED", "REFUND_FAILED"].includes(purchase.status)) {
+      throw new HttpError(400, "Only paid or credited purchases can be refunded", ErrorCode.VALIDATION);
+    }
+    let transaction: any = null;
+    if (purchase.status === "CREDITED") {
+      [transaction] = await debitWallet(purchase.userId.toString(), purchase.coinAmount, "PAYMENT_REFUND", {
+        purchaseId: purchase.id,
+        provider: purchase.provider,
+        adminId,
+        reason
+      }, session);
+      purchase.refundTransactionId = transaction._id;
+    }
+    purchase.status = "REFUND_PENDING";
+    purchase.metadata = {
+      ...metadataOf(purchase),
+      refundReason: reason,
+      refundRequestedAt: new Date().toISOString(),
+      refundRequestedBy: adminId
+    };
+    await purchase.save({ session });
+    await session.commitTransaction();
+    session.endSession();
+    return { purchase, transaction, alreadyRefunded: false };
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    throw error;
+  }
+}
+
+async function restoreFailedRefundReservation(purchaseId: string, adminId: string, reason: string, errorMessage: string) {
+  const purchase: any = await Purchase.findById(purchaseId);
+  if (!purchase) return null;
+  const metadata = metadataOf(purchase);
+  if (purchase.refundTransactionId && !metadata.refundRollbackTransactionId) {
+    const [rollback] = await creditWallet(purchase.userId.toString(), purchase.coinAmount, "ADMIN_ADJUSTMENT", {
+      purchaseId: purchase.id,
+      provider: purchase.provider,
+      adminId,
+      reason,
+      refundRollback: true
+    });
+    metadata.refundRollbackTransactionId = rollback._id.toString();
+  }
+  purchase.status = "REFUND_FAILED";
+  purchase.metadata = { ...metadata, refundFailedAt: new Date().toISOString(), refundFailure: errorMessage };
+  await purchase.save();
+  return purchase;
+}
+
+async function finalizePurchaseRefund(purchaseId: string, input: { status: "REFUND_PENDING" | "REFUNDED"; providerRefundId?: string; providerResponse: unknown }) {
+  const purchase: any = await Purchase.findById(purchaseId);
+  if (!purchase) throw new HttpError(404, "Purchase not found", ErrorCode.NOT_FOUND);
+  purchase.status = input.status;
+  purchase.refundProviderId = input.providerRefundId ?? purchase.refundProviderId;
+  if (input.status === "REFUNDED") purchase.refundedAt = new Date();
+  purchase.metadata = {
+    ...metadataOf(purchase),
+    refundProviderResponse: input.providerResponse,
+    refundFinalizedAt: input.status === "REFUNDED" ? new Date().toISOString() : undefined
+  };
+  await purchase.save();
+  return purchase;
+}
+
+async function notificationRecipientsForTarget(target: Record<string, unknown>) {
+  if (typeof target.userId === "string" && isValidObjectId(target.userId)) {
+    return User.find({ _id: target.userId, isBlocked: { $ne: true } }).select("_id").lean();
+  }
+  const segment = String(target.segment ?? target.type ?? "all_users");
+  const filter: Record<string, unknown> =
+    segment === "city" && typeof target.city === "string" && target.city.trim()
+      ? { city: target.city.trim() }
+      : segment === "hosts"
+        ? { role: "HOST" }
+        : {};
+  return User.find({ ...filter, isBlocked: { $ne: true } }).select("_id").limit(5000).lean();
 }
 
 adminRouter.post("/auth/login", adminAuthLimiter, validateBody(z.object({
@@ -896,24 +1049,108 @@ adminRouter.get("/payments/recharges/:orderId", requirePermission("payments.read
   adminOk(res, purchase);
 }));
 adminRouter.post("/payments/recharges/:orderId/verify", requirePermission("payments.read"), asyncHandler(async (req: AdminAuthRequest, res) => {
-  await auditLog({ adminId: req.admin!.id, action: "payment.verify_requested", entityType: "purchase", metadata: { orderId: req.params.orderId }, req });
-  adminOk(res, { queued: true });
+  const purchase: any = await findPurchaseByReference(req.params.orderId);
+  if (!purchase) throw new HttpError(404, "Purchase not found", ErrorCode.NOT_FOUND);
+  if (["REFUND_PENDING", "REFUNDED"].includes(purchase.status)) {
+    throw new HttpError(409, "Refunded purchases cannot be verified for credit", ErrorCode.CONFLICT);
+  }
+
+  let providerRecord: unknown;
+  let result = { purchase, transaction: null as unknown };
+  if (purchase.provider === "RAZORPAY") {
+    if (!purchase.providerPaymentId) {
+      throw new HttpError(409, "No Razorpay payment ID is recorded for this purchase yet", ErrorCode.CONFLICT);
+    }
+    const payment = await fetchRazorpayPayment(purchase.providerPaymentId);
+    providerRecord = payment;
+    if (payment.order_id !== purchase.providerOrderId || payment.amount !== purchase.amountInr * 100 || payment.currency !== "INR") {
+      throw new HttpError(400, "Razorpay payment details do not match purchase", ErrorCode.VALIDATION);
+    }
+    purchase.metadata = { ...metadataOf(purchase), adminPaymentVerification: payment };
+    if (payment.status !== "captured") {
+      purchase.status = payment.status === "failed" ? "FAILED" : "PAID";
+      await purchase.save();
+    } else if (purchase.status !== "CREDITED") {
+      result = await creditVerifiedPurchase(purchase.id, req.admin!.id, { paymentId: payment.id, verifiedByAdmin: true });
+    } else {
+      await purchase.save();
+    }
+  } else {
+    if (!purchase.productId || !purchase.purchaseToken) {
+      throw new HttpError(409, "Google Play product ID or purchase token is missing", ErrorCode.CONFLICT);
+    }
+    const product = await verifyGooglePlayProduct({ productId: purchase.productId, purchaseToken: purchase.purchaseToken });
+    providerRecord = product;
+    if (product.purchaseState !== 0) {
+      purchase.status = "FAILED";
+      purchase.metadata = { ...metadataOf(purchase), adminProductVerification: product };
+      await purchase.save();
+      throw new HttpError(402, "Google Play purchase is not completed", ErrorCode.VALIDATION);
+    }
+    purchase.googleOrderId = purchase.googleOrderId ?? product.orderId;
+    purchase.metadata = { ...metadataOf(purchase), adminProductVerification: product };
+    await purchase.save();
+    if (purchase.status !== "CREDITED") {
+      result = await creditVerifiedPurchase(purchase.id, req.admin!.id, { productId: purchase.productId, googleOrderId: purchase.googleOrderId, verifiedByAdmin: true });
+    }
+  }
+
+  await auditLog({ adminId: req.admin!.id, action: "payment.verified", entityType: "purchase", entityId: purchase.id, targetUserId: purchase.userId.toString(), metadata: { orderId: req.params.orderId, provider: purchase.provider, providerRecord }, req });
+  adminOk(res, { purchase: result.purchase, transaction: result.transaction, providerRecord });
 }));
 adminRouter.post("/payments/recharges/:orderId/credit", requirePermission("payments.refund"), validateBody(z.object({ reason: z.string().min(3).max(500) })), asyncHandler(async (req: AdminAuthRequest, res) => {
-  const purchase: any = await Purchase.findOne({ _id: isValidObjectId(req.params.orderId) ? req.params.orderId : undefined });
+  const purchase: any = await findPurchaseByReference(req.params.orderId);
   if (!purchase) throw new HttpError(404, "Purchase not found", ErrorCode.NOT_FOUND);
   if (purchase.status === "CREDITED") return adminOk(res, { purchase });
-  const [tx] = await creditWallet(purchase.userId.toString(), purchase.coinAmount, `${purchase.provider}_PURCHASE`, { purchaseId: purchase.id, adminId: req.admin!.id, reason: req.body.reason });
-  purchase.status = "CREDITED";
-  purchase.creditedTransactionId = tx.id;
-  purchase.creditedAt = new Date();
-  await purchase.save();
+  if (["REFUND_PENDING", "REFUNDED"].includes(purchase.status)) {
+    throw new HttpError(409, "Refunded purchases cannot be manually credited", ErrorCode.CONFLICT);
+  }
+  const result = await creditVerifiedPurchase(purchase.id, req.admin!.id, { manualCredit: true, reason: req.body.reason });
   await auditLog({ adminId: req.admin!.id, action: "payment.credited", entityType: "purchase", entityId: purchase.id, targetUserId: purchase.userId.toString(), metadata: { reason: req.body.reason }, req });
-  adminOk(res, { purchase, transaction: tx });
+  adminOk(res, { purchase: result.purchase, transaction: result.transaction });
 }));
 adminRouter.post("/payments/recharges/:orderId/refund", requirePermission("payments.refund"), validateBody(z.object({ reason: z.string().min(3).max(500) })), asyncHandler(async (req: AdminAuthRequest, res) => {
-  await auditLog({ adminId: req.admin!.id, action: "payment.refund_requested", entityType: "purchase", metadata: { orderId: req.params.orderId, reason: req.body.reason }, req });
-  adminOk(res, { refundQueued: true, note: "Provider refund integration must be completed before production refunds." });
+  const purchase: any = await findPurchaseByReference(req.params.orderId);
+  if (!purchase) throw new HttpError(404, "Purchase not found", ErrorCode.NOT_FOUND);
+  const reserved = await reservePurchaseRefund(purchase.id, req.admin!.id, req.body.reason);
+  if (reserved.alreadyRefunded) return adminOk(res, { purchase: reserved.purchase, alreadyRefunded: true });
+
+  try {
+    let providerRefund: unknown;
+    let finalStatus: "REFUND_PENDING" | "REFUNDED" = "REFUNDED";
+    let providerRefundId: string | undefined;
+    if (purchase.provider === "RAZORPAY") {
+      const paymentId = reserved.purchase.providerPaymentId;
+      if (!paymentId) throw new HttpError(409, "No Razorpay payment ID is recorded for this purchase", ErrorCode.CONFLICT);
+      const payment = await fetchRazorpayPayment(paymentId);
+      if (payment.status !== "captured") {
+        throw new HttpError(400, "Only captured Razorpay payments can be refunded", ErrorCode.VALIDATION);
+      }
+      const refund = await createRazorpayRefund({
+        paymentId,
+        amountInPaise: reserved.purchase.amountInr * 100,
+        receipt: `refund_${reserved.purchase.id}`,
+        notes: { purchaseId: reserved.purchase.id, adminId: req.admin!.id, reason: req.body.reason.slice(0, 120) }
+      });
+      providerRefund = refund;
+      providerRefundId = refund.id;
+      if (refund.status === "failed") throw new HttpError(502, "Razorpay refund failed", ErrorCode.VALIDATION);
+      finalStatus = refund.status === "processed" ? "REFUNDED" : "REFUND_PENDING";
+    } else {
+      const orderId = reserved.purchase.googleOrderId;
+      if (!orderId) throw new HttpError(409, "No Google Play order ID is recorded for this purchase", ErrorCode.CONFLICT);
+      providerRefund = await refundGooglePlayOrder({ orderId, revoke: true });
+      providerRefundId = orderId;
+    }
+    const refundedPurchase = await finalizePurchaseRefund(reserved.purchase.id, { status: finalStatus, providerRefundId, providerResponse: providerRefund });
+    await auditLog({ adminId: req.admin!.id, action: "payment.refunded", entityType: "purchase", entityId: refundedPurchase.id, targetUserId: refundedPurchase.userId.toString(), metadata: { orderId: req.params.orderId, reason: req.body.reason, providerRefund, localDebitTransactionId: reserved.transaction?._id?.toString?.() }, req });
+    adminOk(res, { purchase: refundedPurchase, providerRefund, transaction: reserved.transaction });
+  } catch (error) {
+    await restoreFailedRefundReservation(reserved.purchase.id, req.admin!.id, req.body.reason, error instanceof Error ? error.message : String(error));
+    await auditLog({ adminId: req.admin!.id, action: "payment.refund_failed", entityType: "purchase", entityId: purchase.id, targetUserId: purchase.userId.toString(), metadata: { orderId: req.params.orderId, reason: req.body.reason, error: error instanceof Error ? error.message : String(error) }, req });
+    if (error instanceof HttpError) throw error;
+    throw new HttpError(502, `Refund failed: ${error instanceof Error ? error.message : "Unknown provider error"}`, ErrorCode.VALIDATION);
+  }
 }));
 adminRouter.get("/payments/revenue-summary", requirePermission("payments.read"), asyncHandler(async (_req, res) => adminOk(res, await Purchase.aggregate([{ $match: { status: "CREDITED" } }, { $group: { _id: "$provider", gross: { $sum: "$amountInr" }, coins: { $sum: "$coinAmount" }, count: { $sum: 1 } } }]))));
 adminRouter.get("/payments/failed", requirePermission("payments.read"), asyncHandler(async (_req, res) => adminOk(res, await Purchase.find({ status: "FAILED" }).sort({ createdAt: -1 }).limit(100).lean())));
@@ -1003,10 +1240,24 @@ adminRouter.post("/notifications/send-all", requirePermission("notifications.sen
   await auditLog({ adminId: req.admin!.id, action: "notification.sent_all", entityType: "notification_campaign", metadata: { ...req.body, count: users.length }, req });
   adminOk(res, { sent: users.length });
 }));
-adminRouter.get("/notifications/campaigns", requirePermission("notifications.send"), asyncHandler(async (_req, res) => adminOk(res, await AdminAuditLog.find({ action: /^notification\.sent/ }).sort({ createdAt: -1 }).limit(100).lean())));
+adminRouter.get("/notifications/campaigns", requirePermission("notifications.send"), asyncHandler(async (_req, res) => adminOk(res, await AdminAuditLog.find({ action: /^notification\.(sent|campaign\.)/ }).sort({ createdAt: -1 }).limit(100).lean())));
 adminRouter.get("/notifications/campaigns/:id", requirePermission("notifications.send"), asyncHandler(async (req, res) => adminOk(res, await AdminAuditLog.findById(req.params.id).lean())));
 adminRouter.post("/notifications/campaigns", requirePermission("notifications.send"), validateBody(notificationBodySchema.extend({ target: z.record(z.unknown()) })), asyncHandler(async (req: AdminAuthRequest, res) => { const log = await auditLog({ adminId: req.admin!.id, action: "notification.campaign.created", entityType: "notification_campaign", metadata: req.body, req }); adminOk(res, { campaign: log }, {}, 201); }));
-adminRouter.post("/notifications/campaigns/:id/send", requirePermission("notifications.send"), asyncHandler(async (req: AdminAuthRequest, res) => { await auditLog({ adminId: req.admin!.id, action: "notification.campaign.send_requested", entityType: "notification_campaign", entityId: req.params.id, req }); adminOk(res, { queued: true }); }));
+adminRouter.post("/notifications/campaigns/:id/send", requirePermission("notifications.send"), asyncHandler(async (req: AdminAuthRequest, res) => {
+  const campaign = await AdminAuditLog.findById(req.params.id).lean();
+  if (!campaign || campaign.entityType !== "notification_campaign") throw new HttpError(404, "Campaign not found", ErrorCode.NOT_FOUND);
+  const metadata = metadataOf(campaign);
+  const title = typeof metadata.title === "string" ? metadata.title : "";
+  const body = typeof metadata.body === "string" ? metadata.body : "";
+  const type = notificationTypeOf(metadata.type);
+  const payload = metadata.payload && typeof metadata.payload === "object" ? metadata.payload as Record<string, unknown> : {};
+  const target = metadata.target && typeof metadata.target === "object" ? metadata.target as Record<string, unknown> : { segment: "all_users" };
+  if (!title || !body) throw new HttpError(400, "Campaign title and body are required", ErrorCode.VALIDATION);
+  const users = await notificationRecipientsForTarget(target);
+  await Promise.all(users.map((user: any) => createNotification(user._id.toString(), type, title, body, payload)));
+  await auditLog({ adminId: req.admin!.id, action: "notification.campaign.sent", entityType: "notification_campaign", entityId: req.params.id, metadata: { target, count: users.length }, req });
+  adminOk(res, { sent: users.length });
+}));
 
 adminRouter.get("/support/tickets", requirePermission("support.read"), asyncHandler(async (req, res) => {
   const filter: Record<string, unknown> = {};
