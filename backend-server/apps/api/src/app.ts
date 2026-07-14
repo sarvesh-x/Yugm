@@ -5,6 +5,7 @@ import express from "express";
 import helmet from "helmet";
 import mongoose from "mongoose";
 import path from "path";
+import { fileURLToPath } from "url";
 import { env } from "./config/env.js";
 import { adminRouter } from "./routes/admin.js";
 import { adminVerificationRouter } from "./routes/adminVerification.js";
@@ -107,6 +108,15 @@ export function createApp() {
   });
 
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+
+  // Serve the admin panel production build
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const adminDist = path.resolve(__dirname, "../../apps/admin/dist");
+  app.use("/admin", express.static(adminDist, { index: false }));
+  app.get("/admin/*", (_req, res) => {
+    res.sendFile(path.join(adminDist, "index.html"));
+  });
+
   app.get("/", (_req, res) => res.json({ ok: true, service: "yugm-api", health: "/health", api: "/api" }));
   const healthHandler = (_req: express.Request, res: express.Response) => {
     const mongoReady = mongoose.connection.readyState === 1;

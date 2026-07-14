@@ -1,12 +1,12 @@
 package com.example.yugm.api
 
-import android.util.Log
 import com.example.yugm.BuildConfig
 import com.example.yugm.model.PkBattle
 import com.example.yugm.model.PkInvite
 import com.example.yugm.model.PkLiveEffect
 import com.example.yugm.model.PkSideType
 import org.json.JSONObject
+import timber.log.Timber
 
 object YugmSocket {
     private const val TAG = "YugmSocket"
@@ -19,7 +19,9 @@ object YugmSocket {
         onPkState: (PkBattle) -> Unit = {},
         onPkInvite: (PkBattle, PkInvite) -> Unit = { _, _ -> },
         onPkEffect: (PkLiveEffect) -> Unit = {},
-        onPkRefresh: () -> Unit = {}
+        onPkRefresh: () -> Unit = {},
+        onPkLeadChanged: ((leader: String, leftScore: Int, rightScore: Int) -> Unit)? = null,
+        onPkRematchRequested: ((previousBattleId: String) -> Unit)? = null
     ) {
         disconnect()
         try {
@@ -51,7 +53,7 @@ object YugmSocket {
                         val text = msg.optString("message", "")
                         onMessage(name, text)
                     } catch (e: Exception) {
-                        Log.e(TAG, "Error parsing chat message", e)
+                        Timber.tag(TAG).e(e, "Error parsing chat message")
                     }
                 }
             }
@@ -68,7 +70,7 @@ object YugmSocket {
                         val invite = data.optJSONObject("invite")?.toPkInvite() ?: return@on
                         onPkInvite(battle, invite)
                     } catch (e: Exception) {
-                        Log.e(TAG, "Error parsing PK invite", e)
+                        Timber.tag(TAG).e(e, "Error parsing PK invite")
                     }
                 }
             }
@@ -83,9 +85,33 @@ object YugmSocket {
                     if (!parsePkState(args, onPkState)) onPkRefresh()
                 }
             }
+            socket?.on("pk:lead:changed") { args ->
+                if (args.isNotEmpty() && onPkLeadChanged != null) {
+                    try {
+                        val data = args[0] as JSONObject
+                        onPkLeadChanged(
+                            data.optString("leader", "DRAW"),
+                            data.optInt("leftScore", 0),
+                            data.optInt("rightScore", 0)
+                        )
+                    } catch (e: Exception) {
+                        Timber.tag(TAG).e(e, "Error parsing lead changed")
+                    }
+                }
+            }
+            socket?.on("pk:rematch:requested") { args ->
+                if (args.isNotEmpty() && onPkRematchRequested != null) {
+                    try {
+                        val data = args[0] as JSONObject
+                        onPkRematchRequested(data.optString("previousBattleId", ""))
+                    } catch (e: Exception) {
+                        Timber.tag(TAG).e(e, "Error parsing rematch requested")
+                    }
+                }
+            }
             socket?.connect()
         } catch (e: Exception) {
-            Log.e(TAG, "Error connecting socket", e)
+            Timber.tag(TAG).e(e, "Error connecting socket")
         }
     }
 
@@ -98,7 +124,7 @@ object YugmSocket {
             onPkState(battle)
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Error parsing PK state", e)
+            Timber.tag(TAG).e(e, "Error parsing PK state")
             false
         }
     }
@@ -118,7 +144,7 @@ object YugmSocket {
                 )
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Error parsing PK effect", e)
+            Timber.tag(TAG).e(e, "Error parsing PK effect")
         }
     }
 

@@ -1,7 +1,6 @@
 package com.example.yugm.media
 
 import android.content.Context
-import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.livekit.android.LiveKit
 import io.livekit.android.room.Room
@@ -12,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
+import timber.log.Timber
 
 sealed class MediaStatus {
     object Idle : MediaStatus()
@@ -38,10 +38,10 @@ class LiveKitManager @Inject constructor(
                     connect(url, token)
                 }
                 _status.value = MediaStatus.Connected
-                Log.d("LiveKitManager", "Connected to room: $url")
+                Timber.tag("LiveKitManager").d("Connected to room: $url")
             } catch (e: Exception) {
                 _status.value = MediaStatus.Error(e.message ?: "Unknown error")
-                Log.e("LiveKitManager", "Failed to connect", e)
+                Timber.tag("LiveKitManager").e(e, "Failed to connect")
             }
         }
     }

@@ -14,6 +14,8 @@ import com.example.yugm.api.YugmApi
 import com.example.yugm.model.Host
 import com.example.yugm.model.Room
 import com.example.yugm.ui.components.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.example.yugm.ui.theme.TextMuted
 import com.example.yugm.ui.theme.TextPrimary
@@ -29,27 +31,36 @@ fun SearchScreen(
     var rooms by remember { mutableStateOf<List<Room>>(emptyList()) }
     var users by remember { mutableStateOf<List<Host>>(emptyList()) }
     var error by remember { mutableStateOf<String?>(null) }
+    var searching by remember { mutableStateOf(false) }
     var busyHostId by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(query) {
+    LaunchedEffect(query, token) {
         val trimmed = query.trim()
         if (trimmed.length < 2) {
             rooms = emptyList()
             users = emptyList()
             error = null
+            searching = false
             return@LaunchedEffect
         }
-        runCatching {
+        rooms = emptyList()
+        users = emptyList()
+        error = null
+        searching = true
+        try {
+            delay(300)
             val roomResults = YugmApi.searchRooms(trimmed)
             val userResults = YugmApi.searchUsers(trimmed, token.ifBlank { null })
-            roomResults to userResults
-        }.onSuccess {
-            rooms = it.first
-            users = it.second
+            rooms = roomResults
+            users = userResults
             error = null
-        }.onFailure {
-            error = it.message ?: "Search failed"
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            error = exception.message ?: "Search failed"
+        } finally {
+            searching = false
         }
     }
     
@@ -71,6 +82,8 @@ fun SearchScreen(
         ) {
             if (query.trim().length < 2) {
                 item { Text("Type at least 2 characters to search.", color = TextMuted) }
+            } else if (searching) {
+                item { Text("Searching…", color = TextMuted) }
             } else if (error != null) {
                 item { Text(error ?: "", color = TextMuted) }
             } else {

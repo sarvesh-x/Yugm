@@ -5,8 +5,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.os.Build
-import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.example.yugm.api.YugmApi
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.CoroutineScope
@@ -20,7 +20,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
-import com.example.yugm.api.YugmApi
+import timber.log.Timber
 
 class YugmFirebaseMessagingService : FirebaseMessagingService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -53,7 +53,7 @@ class YugmFirebaseMessagingService : FirebaseMessagingService() {
                             .build()
                         httpClient.newCall(request).execute()
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to register FCM token", e)
+                        Timber.tag(TAG).e(e, "Failed to register FCM token")
                     }
                 }
             }

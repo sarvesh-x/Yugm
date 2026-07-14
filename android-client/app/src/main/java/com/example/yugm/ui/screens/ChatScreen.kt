@@ -354,7 +354,11 @@ private fun MessageBubble(message: DirectMessage, mine: Boolean, reactionCount: 
                     Text(message.message, color = Color.White, fontSize = 14.sp, lineHeight = 19.sp)
                     Row(Modifier.align(Alignment.End).padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(messageTime(message.createdAt), color = Color.White.copy(alpha = 0.56f), fontSize = 9.sp)
-                        if (mine) Text("  ✓✓", color = Color.White.copy(alpha = 0.8f), fontSize = 9.sp)
+                        if (mine) Text(
+                            if (message.read) "  ✓✓" else "  ✓",
+                            color = if (message.read) Color(0xFF80D8FF) else Color.White.copy(alpha = 0.8f),
+                            fontSize = 9.sp
+                        )
                     }
                 }
             }

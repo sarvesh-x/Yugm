@@ -18,6 +18,7 @@ import {
   getActivePk,
   pkState,
   rejectPkInvite,
+  requestPkRematch,
   sendPkGift,
   sendPkReaction
 } from "../services/pk.js";
@@ -81,8 +82,9 @@ pkRouter.post("/end", validateBody(battleActionSchema.extend({ reason: z.string(
   sendOk(res, await endPkBattle({ userId: req.user!.id, battleId: req.body.battleId, reason: req.body.reason }));
 }));
 
-pkRouter.post("/rematch", validateBody(battleActionSchema), asyncHandler(async (_req: AuthRequest, res) => {
-  sendOk(res, { requested: true });
+pkRouter.post("/rematch", validateBody(battleActionSchema), asyncHandler(async (req: AuthRequest, res) => {
+  const result = await requestPkRematch(req.user!.id, req.body.battleId);
+  sendOk(res, result, 201);
 }));
 
 pkRouter.get("/active/:roomId", asyncHandler(async (req: AuthRequest, res) => {

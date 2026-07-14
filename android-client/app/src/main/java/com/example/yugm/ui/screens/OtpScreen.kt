@@ -21,11 +21,11 @@ import com.example.yugm.ui.theme.TextMuted
 
 @Composable
 fun OtpScreen(identifier: String, devOtp: String?, onVerified: (String) -> Unit) {
-    val hint = if (devOtp != null) "Dev OTP: $devOtp" else ""
+    val otpHint = devOtp?.takeIf { it.isNotBlank() }
     var otp by rememberSaveable { mutableStateOf("") }
     AuthShell(title = "Verify OTP", subtitle = "Code sent to $identifier.") {
-        if (devOtp != null) {
-            Text(hint, color = TextMuted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp))
+        if (otpHint != null) {
+            Text("Dev OTP: $otpHint", color = TextMuted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp))
         }
         YugmTextField(value = otp, onValueChange = { otp = it }, label = "OTP", keyboardType = KeyboardType.Number)
         Spacer(Modifier.height(18.dp))

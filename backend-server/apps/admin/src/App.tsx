@@ -372,6 +372,22 @@ function UsersPage({ token, setNotice }: { token: string; setNotice: (notice: No
     }
   };
 
+  const safetyAct = async (action: "shadow-ban" | "remove-shadow-ban" | "restrict-chat" | "restrict-rooms" | "freeze-wallet" | "unfreeze-wallet") => {
+    if (!selected) return;
+    try {
+      await adminApi(`/users/${selected._id || selected.id}/${action}`, {
+        token,
+        method: "POST",
+        body: JSON.stringify({ reason })
+      });
+      setNotice({ tone: "success", text: `${action} complete` });
+      setSelected(null);
+      resource.refresh();
+    } catch (err: any) {
+      setNotice({ tone: "error", text: err.message });
+    }
+  };
+
   return (
     <ResourceFrame title="Users" subtitle="Search, inspect, and moderate user accounts." loading={resource.loading} error={resource.error} onRetry={resource.refresh}>
       <DataTable
@@ -391,6 +407,23 @@ function UsersPage({ token, setNotice }: { token: string; setNotice: (notice: No
               <button className="danger" onClick={() => act("ban")}>Ban</button>
               <button className="soft" onClick={() => act("unban")}>Unban</button>
             </div>
+            <details style={{ marginTop: "12px" }}>
+              <summary style={{ cursor: "pointer", fontSize: "13px", opacity: 0.7 }}>Safety controls</summary>
+              <div className="action-grid" style={{ marginTop: "8px" }}>
+                {selected.isShadowBanned
+                  ? <button className="soft" onClick={() => safetyAct("remove-shadow-ban")}>Remove shadow ban</button>
+                  : <button onClick={() => safetyAct("shadow-ban")}>Shadow ban</button>}
+                {selected.isChatRestricted
+                  ? <button className="soft" onClick={() => safetyAct("restrict-chat")}>Unrestrict chat</button>
+                  : <button onClick={() => safetyAct("restrict-chat")}>Restrict chat</button>}
+                {selected.isRoomRestricted
+                  ? <button className="soft" onClick={() => safetyAct("restrict-rooms")}>Unrestrict rooms</button>
+                  : <button onClick={() => safetyAct("restrict-rooms")}>Restrict rooms</button>}
+                {selected.walletFrozen
+                  ? <button className="soft" onClick={() => safetyAct("unfreeze-wallet")}>Unfreeze wallet</button>
+                  : <button className="danger" onClick={() => safetyAct("freeze-wallet")}>Freeze wallet</button>}
+              </div>
+            </details>
           </>
         )}
       </Drawer>

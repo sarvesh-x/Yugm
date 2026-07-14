@@ -6,6 +6,8 @@ import { User } from "../models/User.js";
 import { UserSafetyStatus } from "../models/UserSafetyStatus.js";
 import { WithdrawalRequest } from "../models/WithdrawalRequest.js";
 import { ErrorCode, HttpError } from "../utils/http.js";
+import { decryptSensitiveField } from "./cryptoFields.js";
+import { getPayoutProvider } from "./payouts.js";
 
 export type PayoutReviewStatus = typeof payoutReviewStatuses[number];
 
@@ -183,6 +185,31 @@ export async function markWithdrawalPaid(reviewId: string, adminId: string, payo
         throw new HttpError(409, `Withdrawal cannot be paid from ${withdrawal.status}`, ErrorCode.CONFLICT);
       }
       await assertPayoutEligibility(review, session);
+
+      const kyc = await CreatorPayoutKyc.findOne({ userId: review.userId, kycStatus: "VERIFIED", payoutStatus: "ENABLED" }).session(session).lean();
+      if (!kyc) throw new HttpError(409, "Creator payout KYC is no longer valid", ErrorCode.CONFLICT);
+
+      const amountInr = withdrawal.amountInr ?? 0;
+      let providerRef = payoutReference;
+
+      if (amountInr > 0) {
+        const provider = getPayoutProvider();
+        const upiId = decryptSensitiveField(kyc.upiIdEncrypted);
+        const bankAccountNumber = decryptSensitiveField(kyc.bankAccountEncrypted);
+        const payoutResult = await provider.transfer({
+          userId: review.userId.toString(),
+          legalFullName: kyc.legalFullName ?? "Creator",
+          upiId: upiId || undefined,
+          ...(bankAccountNumber && kyc.bankIfsc && kyc.bankHolderName
+            ? { bankAccount: { accountNumber: bankAccountNumber, ifsc: kyc.bankIfsc, holderName: kyc.bankHolderName } }
+            : {})
+        }, amountInr, notes);
+        if (!payoutResult.success) {
+          throw new HttpError(502, `Payout execution failed: ${payoutResult.errorMessage ?? "Unknown error"}`, ErrorCode.VALIDATION);
+        }
+        providerRef = payoutResult.reference;
+      }
+
       review.status = "PAID";
       review.reviewedByAdminId = adminId as any;
       review.reviewedAt = new Date();
@@ -190,7 +217,7 @@ export async function markWithdrawalPaid(reviewId: string, adminId: string, payo
       withdrawal.status = "PAID";
       withdrawal.activeLock = false;
       withdrawal.paidAt = new Date();
-      withdrawal.payoutReference = payoutReference;
+      withdrawal.payoutReference = providerRef;
       withdrawal.reviewedByAdminId = adminId as any;
       withdrawal.metadata = { ...(withdrawal.metadata ?? {}), paidNotes: notes };
       await Promise.all([review.save({ session }), withdrawal.save({ session })]);

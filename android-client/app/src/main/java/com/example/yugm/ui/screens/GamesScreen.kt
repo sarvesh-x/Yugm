@@ -54,7 +54,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.yugm.api.YugmApi
-import com.example.yugm.model.ClanSummary
+import com.example.yugm.model.Clan
 import com.example.yugm.model.DailyGameMission
 import com.example.yugm.model.GameCatalog
 import com.example.yugm.model.GameChallenges
@@ -113,7 +113,7 @@ fun GamesScreen(
     var challenges by remember { mutableStateOf(GameChallenges()) }
     var leaderboard by remember { mutableStateOf(GameLeaderboard()) }
     var closeFriends by remember { mutableStateOf<List<Host>>(emptyList()) }
-    var myClan by remember { mutableStateOf<ClanSummary?>(null) }
+    var myClan by remember { mutableStateOf<Clan?>(null) }
     var finishedScore by remember { mutableStateOf<FinishedGameScore?>(null) }
     var savedResult by remember { mutableStateOf<SavedGameScoreResult?>(null) }
     var isLoading by remember { mutableStateOf(true) }
@@ -638,7 +638,7 @@ private fun ReflexRing(modifier: Modifier, onFinish: (FinishedGameScore) -> Unit
 private fun SocialScoreActions(
     score: MiniGameScore,
     friends: List<Host>,
-    clan: ClanSummary?,
+    clan: Clan?,
     busy: Boolean,
     onChallengeUser: (String) -> Unit,
     onChallengeClan: (String) -> Unit,

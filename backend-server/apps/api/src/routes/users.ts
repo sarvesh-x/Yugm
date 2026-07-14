@@ -4,6 +4,7 @@ import { z } from "zod";
 import { profileSchema, reactionSchema, socketEvents } from "@yugm/shared";
 import { requireAuth, requireNotMuted, type AuthRequest } from "../middleware/auth.js";
 import { chatLimiter } from "../middleware/rateLimit.js";
+import { requireNotChatRestricted } from "../middleware/requireSafety.js";
 import { validateBody } from "../middleware/validate.js";
 import { Block } from "../models/Block.js";
 import { DirectMessage } from "../models/DirectMessage.js";
@@ -260,7 +261,7 @@ usersRouter.get("/messages/:userId", asyncHandler(async (req: AuthRequest, res) 
   sendOk(res, { messages: messages.reverse(), relationship });
 }));
 
-usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, chatLimiter, asyncHandler(async (req: AuthRequest, res) => {
+usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, requireNotChatRestricted, chatLimiter, asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.userId)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
   const receiverId = req.params.userId;
   if (receiverId === req.user!.id) throw new HttpError(400, "Cannot message yourself", ErrorCode.VALIDATION);

@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { z } from "zod";
 import { coinPacks, createPurchaseOrderSchema, equipProfileCosmeticSchema, profileCosmetics, purchaseProfileCosmeticSchema, purchaseVipSchema, sendGiftSchema, socketEvents, verifyGooglePlayPurchaseSchema, verifyRazorpayPurchaseSchema, vipPlans, walletSourceLabels } from "@yugm/shared";
 import { requireAuth, requireRole, type AuthRequest } from "../middleware/auth.js";
+import { requireWalletNotFrozen } from "../middleware/requireSafety.js";
 import { validateBody } from "../middleware/validate.js";
 import { Gift } from "../models/Gift.js";
 import { GiftTransaction } from "../models/GiftTransaction.js";
@@ -12,7 +13,7 @@ import { RoomActivity } from "../models/RoomActivity.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
 import { User } from "../models/User.js";
 import { WalletTransaction } from "../models/WalletTransaction.js";
-import { creditWallet, debitWallet } from "../services/wallet.js";
+import { creditWallet, debitWallet, creatorShare, platformFee } from "../services/wallet.js";
 import { emitRoom, emitUser } from "../services/socket.js";
 import { createNotification } from "../services/notifications.js";
 import { consumeGooglePlayProduct, createRazorpayOrder, fetchRazorpayPayment, verifyGooglePlayProduct, verifyRazorpaySignature } from "../services/payments.js";
@@ -144,7 +145,7 @@ walletRouter.get("/wallet/cosmetics", (req: AuthRequest, res) => {
   });
 });
 
-walletRouter.post("/wallet/cosmetics/purchase", validateBody(purchaseProfileCosmeticSchema), asyncHandler(async (req: AuthRequest, res) => {
+walletRouter.post("/wallet/cosmetics/purchase", requireWalletNotFrozen, validateBody(purchaseProfileCosmeticSchema), asyncHandler(async (req: AuthRequest, res) => {
   const cosmetic = findProfileCosmetic(req.body.cosmeticId);
   if (!cosmetic) throw new HttpError(400, "Invalid profile cosmetic", ErrorCode.VALIDATION);
   if ((req.user!.ownedCosmeticIds ?? []).includes(cosmetic.id)) {
@@ -190,7 +191,7 @@ walletRouter.get("/wallet/vip/plans", (req: AuthRequest, res) => {
   sendOk(res, { plans: vipPlans, vip: getVipStatus(req.user) });
 });
 
-walletRouter.post("/wallet/vip/activate", validateBody(purchaseVipSchema), asyncHandler(async (req: AuthRequest, res) => {
+walletRouter.post("/wallet/vip/activate", requireWalletNotFrozen, validateBody(purchaseVipSchema), asyncHandler(async (req: AuthRequest, res) => {
   const plan = findVipPlan(req.body.planId);
   if (!plan) throw new HttpError(400, "Invalid VIP plan", ErrorCode.VALIDATION);
 
@@ -225,7 +226,7 @@ walletRouter.get("/wallet/purchases", asyncHandler(async (req: AuthRequest, res)
   sendOk(res, { purchases });
 }));
 
-walletRouter.post("/wallet/purchases/razorpay/order", validateBody(createPurchaseOrderSchema), asyncHandler(async (req: AuthRequest, res) => {
+walletRouter.post("/wallet/purchases/razorpay/order", requireWalletNotFrozen, validateBody(createPurchaseOrderSchema), asyncHandler(async (req: AuthRequest, res) => {
   if (req.body.provider !== "RAZORPAY") throw new HttpError(400, "Invalid provider", ErrorCode.VALIDATION);
   const pack = findCoinPack(req.body.packId);
   const purchase = await Purchase.create({
@@ -259,7 +260,7 @@ walletRouter.post("/wallet/purchases/razorpay/order", validateBody(createPurchas
   }, 201);
 }));
 
-walletRouter.post("/wallet/purchases/razorpay/verify", validateBody(verifyRazorpayPurchaseSchema), asyncHandler(async (req: AuthRequest, res) => {
+walletRouter.post("/wallet/purchases/razorpay/verify", requireWalletNotFrozen, validateBody(verifyRazorpayPurchaseSchema), asyncHandler(async (req: AuthRequest, res) => {
   const purchase = await Purchase.findOne({ _id: req.body.purchaseId, userId: req.user!.id, provider: "RAZORPAY" });
   if (!purchase) throw new HttpError(404, "Purchase not found", ErrorCode.NOT_FOUND);
   if (purchase.status === "CREDITED") return sendOk(res, { purchase });
@@ -292,7 +293,7 @@ walletRouter.post("/wallet/purchases/razorpay/verify", validateBody(verifyRazorp
   sendOk(res, { purchase: credited, balance: user?.walletBalance ?? 0 });
 }));
 
-walletRouter.post("/wallet/purchases/google-play/verify", validateBody(verifyGooglePlayPurchaseSchema), asyncHandler(async (req: AuthRequest, res) => {
+walletRouter.post("/wallet/purchases/google-play/verify", requireWalletNotFrozen, validateBody(verifyGooglePlayPurchaseSchema), asyncHandler(async (req: AuthRequest, res) => {
   const pack = findCoinPack(req.body.packId);
   if (pack.googleProductId !== req.body.productId) throw new HttpError(400, "Product does not match coin pack", ErrorCode.VALIDATION);
   const existing = await Purchase.findOne({ provider: "GOOGLE_PLAY", purchaseToken: req.body.purchaseToken });
@@ -328,7 +329,7 @@ walletRouter.post("/wallet/purchases/google-play/verify", validateBody(verifyGoo
   sendOk(res, { purchase: credited, balance: user?.walletBalance ?? 0 });
 }));
 
-walletRouter.post("/wallet/dev-recharge", asyncHandler(async (req: AuthRequest, res) => {
+walletRouter.post("/wallet/dev-recharge", requireWalletNotFrozen, asyncHandler(async (req: AuthRequest, res) => {
   if (env.NODE_ENV !== "development") throw new HttpError(404, "Not found");
   const raw = Number(req.body.amount);
   const amount = Number.isFinite(raw) && raw > 0 ? Math.min(raw, 5000) : 500;
@@ -337,7 +338,7 @@ walletRouter.post("/wallet/dev-recharge", asyncHandler(async (req: AuthRequest, 
   sendOk(res, { balance: user?.walletBalance ?? 0 });
 }));
 
-walletRouter.post("/rooms/:id/send-gift", validateBody(sendGiftSchema), asyncHandler(async (req: AuthRequest, res) => {
+walletRouter.post("/rooms/:id/send-gift", requireWalletNotFrozen, validateBody(sendGiftSchema), asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
   if (!isValidObjectId(req.body.receiverId)) throw new HttpError(400, "Invalid receiver ID", ErrorCode.VALIDATION);
 
@@ -361,6 +362,8 @@ walletRouter.post("/rooms/:id/send-gift", validateBody(sendGiftSchema), asyncHan
   session.startTransaction();
   try {
     await debitWallet(req.user!.id, gift.coinPrice, "GIFT_SENT", { roomId: room._id.toString(), giftId: gift._id.toString() }, session);
+    const receiverCredit = creatorShare(gift.coinPrice);
+    await creditWallet(req.body.receiverId, receiverCredit, "GIFT_RECEIVED", { roomId: room._id.toString(), giftId: gift._id.toString(), senderId: req.user!.id, platformFee: platformFee(gift.coinPrice) }, session);
     const giftTransaction = await GiftTransaction.create([{
       roomId: room._id,
       senderId: req.user!.id,
@@ -392,7 +395,7 @@ walletRouter.post("/rooms/:id/send-gift", validateBody(sendGiftSchema), asyncHan
   }
 }));
 
-walletRouter.post("/direct-send-gift", asyncHandler(async (req: AuthRequest, res) => {
+walletRouter.post("/direct-send-gift", requireWalletNotFrozen, asyncHandler(async (req: AuthRequest, res) => {
   const { giftId, receiverId } = req.body;
   if (!isValidObjectId(giftId) || !isValidObjectId(receiverId)) {
     throw new HttpError(400, "Invalid IDs", ErrorCode.VALIDATION);
@@ -409,6 +412,8 @@ walletRouter.post("/direct-send-gift", asyncHandler(async (req: AuthRequest, res
   session.startTransaction();
   try {
     await debitWallet(req.user!.id, gift.coinPrice, "GIFT_SENT_DM", { giftId: gift._id.toString() }, session);
+    const receiverCredit = creatorShare(gift.coinPrice);
+    await creditWallet(receiverId, receiverCredit, "GIFT_RECEIVED", { giftId: gift._id.toString(), senderId: req.user!.id, platformFee: platformFee(gift.coinPrice) }, session);
     const giftTransaction = await GiftTransaction.create([{
       senderId: req.user!.id,
       receiverId,

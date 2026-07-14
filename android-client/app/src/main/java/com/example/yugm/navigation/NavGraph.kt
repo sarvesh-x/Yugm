@@ -15,8 +15,12 @@ import com.example.yugm.ui.viewmodel.AuthViewModel
 import com.example.yugm.ui.viewmodel.MainViewModel
 import com.example.yugm.navigation.NotificationTarget
 import com.example.yugm.navigation.notificationTarget
+import com.example.yugm.BuildConfig
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -102,8 +106,9 @@ fun NavGraph(
                         runCatching {
                             com.example.yugm.api.YugmApi.requestOtp(phoneNumber)
                         }.onSuccess { devOtp ->
+                            val safeOtp = if (BuildConfig.DEBUG) devOtp else null
                             navController.navigate(
-                                Screen.OtpVerify.createRoute(phoneNumber, devOtp ?: "123456")
+                                Screen.OtpVerify.createRoute(phoneNumber, safeOtp)
                             )
                         }.onFailure {
                             // Handled via toast
@@ -124,7 +129,11 @@ fun NavGraph(
             route = Screen.OtpVerify.route,
             arguments = listOf(
                 navArgument("username") { type = NavType.StringType },
-                navArgument("devOtp") { type = NavType.StringType }
+                navArgument("devOtp") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
             )
         ) { backStackEntry ->
             val username = backStackEntry.arguments?.getString("username") ?: ""
@@ -133,7 +142,7 @@ fun NavGraph(
             
             OtpScreen(
                 identifier = username,
-                devOtp = devOtp,
+                devOtp = if (BuildConfig.DEBUG) devOtp.takeIf { it.isNotBlank() } else null,
                 onVerified = { otp ->
                     scope.launch {
                         runCatching {
@@ -575,6 +584,25 @@ fun NavGraph(
             )
         }
 
+        // Matches Screen
+        composable(Screen.Matches.route) {
+            MatchesScreen(
+                token = mainViewModel.authToken,
+                onOpenChat = { partnerId ->
+                    navController.navigate(Screen.Chat.createRoute(partnerId))
+                },
+                onDiscover = { navController.navigate(Screen.Discover.route) },
+                onDating = { navController.navigate(Screen.DatingDiscovery.route) },
+                onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
+                onWallet = { navController.navigate(Screen.Wallet.route) },
+                onProfile = {
+                    if (mainViewModel.currentUserId.isNotBlank()) navController.navigate(Screen.ProfileDetail.createRoute(mainViewModel.currentUserId))
+                    else navController.navigate(Screen.ProfileSetup.route)
+                },
+                onBack = { navController.popBackStack() }
+            )
+        }
+
         // Private Chat Screen
         composable(
             route = Screen.Chat.route,
@@ -976,11 +1004,22 @@ fun NavGraph(
                     onEndPk = {
                         scope.launch {
                             val battleId = pkBattle?.id ?: return@launch
-                            runCatching { com.example.yugm.api.YugmApi.endPk(mainViewModel.authToken, battleId) }
-                                .onSuccess {
-                                    pkBattle = it
-                                    pkInviteId = null
-                                }
+                            val battle = pkBattle
+                            if (battle?.status == com.example.yugm.model.PkStatus.INVITED || battle?.status == com.example.yugm.model.PkStatus.WAITING) {
+                                runCatching { com.example.yugm.api.YugmApi.cancelPk(mainViewModel.authToken, battleId) }
+                                    .onSuccess {
+                                        pkBattle = null
+                                        pkInviteId = null
+                                    }
+                                    .onFailure { android.widget.Toast.makeText(context, it.message, android.widget.Toast.LENGTH_SHORT).show() }
+                            } else {
+                                runCatching { com.example.yugm.api.YugmApi.endPk(mainViewModel.authToken, battleId) }
+                                    .onSuccess {
+                                        pkBattle = it
+                                        pkInviteId = null
+                                    }
+                                    .onFailure { android.widget.Toast.makeText(context, it.message, android.widget.Toast.LENGTH_SHORT).show() }
+                            }
                         }
                     },
                     onEndRoom = {
@@ -1030,7 +1069,22 @@ fun NavGraph(
                                             if (pkLiveEffect == effect) pkLiveEffect = null
                                         }
                                     },
-                                    onPkRefresh = { refreshVoiceRoom() }
+                                    onPkRefresh = { refreshVoiceRoom() },
+                                    onPkLeadChanged = { leader, leftScore, rightScore ->
+                                        scope.launch {
+                                            pkBattle = pkBattle?.copy(
+                                                leader = com.example.yugm.model.PkSideType.valueOf(leader),
+                                                left = pkBattle?.left?.copy(score = leftScore) ?: pkBattle?.left,
+                                                right = pkBattle?.right?.copy(score = rightScore) ?: pkBattle?.right
+                                            )
+                                        }
+                                    },
+                                    onPkRematchRequested = { previousBattleId ->
+                                        scope.launch {
+                                            android.widget.Toast.makeText(context, "Opponent wants a rematch!", android.widget.Toast.LENGTH_SHORT).show()
+                                            refreshVoiceRoom()
+                                        }
+                                    }
                                 )
                                 refreshVoiceRoom()
                             }
@@ -1310,12 +1364,24 @@ fun NavGraph(
                     onEndPk = {
                         scope.launch {
                             val battleId = pkBattle?.id ?: return@launch
-                            runCatching { com.example.yugm.api.YugmApi.endPk(mainViewModel.authToken, battleId) }
-                                .onSuccess {
-                                    pkBattle = it
-                                    pkInviteId = null
-                                    pkOpponentMedia = null
-                                }
+                            val battle = pkBattle
+                            if (battle?.status == com.example.yugm.model.PkStatus.INVITED || battle?.status == com.example.yugm.model.PkStatus.WAITING) {
+                                runCatching { com.example.yugm.api.YugmApi.cancelPk(mainViewModel.authToken, battleId) }
+                                    .onSuccess {
+                                        pkBattle = null
+                                        pkInviteId = null
+                                        pkOpponentMedia = null
+                                    }
+                                    .onFailure { android.widget.Toast.makeText(context, it.message, android.widget.Toast.LENGTH_SHORT).show() }
+                            } else {
+                                runCatching { com.example.yugm.api.YugmApi.endPk(mainViewModel.authToken, battleId) }
+                                    .onSuccess {
+                                        pkBattle = it
+                                        pkInviteId = null
+                                        pkOpponentMedia = null
+                                    }
+                                    .onFailure { android.widget.Toast.makeText(context, it.message, android.widget.Toast.LENGTH_SHORT).show() }
+                            }
                         }
                     },
                     onEndRoom = {
@@ -1372,7 +1438,22 @@ fun NavGraph(
                                             if (pkLiveEffect == effect) pkLiveEffect = null
                                         }
                                     },
-                                    onPkRefresh = { refreshVideoRoom() }
+                                    onPkRefresh = { refreshVideoRoom() },
+                                    onPkLeadChanged = { leader, leftScore, rightScore ->
+                                        scope.launch {
+                                            pkBattle = pkBattle?.copy(
+                                                leader = com.example.yugm.model.PkSideType.valueOf(leader),
+                                                left = pkBattle?.left?.copy(score = leftScore) ?: pkBattle?.left,
+                                                right = pkBattle?.right?.copy(score = rightScore) ?: pkBattle?.right
+                                            )
+                                        }
+                                    },
+                                    onPkRematchRequested = { previousBattleId ->
+                                        scope.launch {
+                                            android.widget.Toast.makeText(context, "Opponent wants a rematch!", android.widget.Toast.LENGTH_SHORT).show()
+                                            refreshVideoRoom()
+                                        }
+                                    }
                                 )
                                 refreshVideoRoom()
                             }
@@ -1385,6 +1466,8 @@ fun NavGraph(
         // Wallet
         composable(Screen.Wallet.route) {
             val walletContext = androidx.compose.ui.platform.LocalContext.current
+            val scope = rememberCoroutineScope()
+
             WalletScreen(
                 token = mainViewModel.authToken,
                 initialBalance = mainViewModel.balance,
@@ -1396,6 +1479,42 @@ fun NavGraph(
                     if (activity != null) {
                         runCatching { com.example.yugm.payments.RazorpayCoordinator.start(activity, checkoutData) }
                             .onFailure { android.widget.Toast.makeText(walletContext, it.message, android.widget.Toast.LENGTH_SHORT).show() }
+                    }
+                },
+                onStartGooglePlayPurchase = { pack ->
+                    val activity = walletContext as? android.app.Activity ?: return@WalletScreen
+                    if (pack.googleProductId.isBlank()) return@WalletScreen
+                    scope.launch {
+                        val rawDetails = com.example.yugm.payments.GooglePlayBillingManager.queryRawProductDetails(listOf(pack.googleProductId))
+                        val details = rawDetails.firstOrNull()
+                        if (details != null) {
+                            com.example.yugm.payments.GooglePlayBillingManager.setPendingPurchaseHandler { productId, purchaseToken, orderId ->
+                                val balance = runCatching {
+                                    com.example.yugm.api.YugmApi.verifyGooglePlayPurchase(
+                                        token = mainViewModel.authToken,
+                                        packId = pack.id,
+                                        productId = productId,
+                                        purchaseToken = purchaseToken,
+                                        orderId = orderId
+                                    )
+                                }.onFailure { e ->
+                                    withContext(Dispatchers.Main) {
+                                        android.widget.Toast.makeText(walletContext, "Verification failed: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }.getOrNull()
+                                if (balance != null) {
+                                    withContext(Dispatchers.Main) {
+                                        mainViewModel.updateBalance(balance)
+                                        android.widget.Toast.makeText(walletContext, "Purchase successful! +${pack.coinAmount} coins", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                            com.example.yugm.payments.GooglePlayBillingManager.launchBillingFlow(activity, details)
+                        } else {
+                            withContext(Dispatchers.Main) {
+                                android.widget.Toast.makeText(walletContext, "Product not available in Google Play", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     }
                 }
             )
@@ -1447,10 +1566,74 @@ fun NavGraph(
                 },
                 onBack = { navController.popBackStack() },
                 onNavigateToSafety = { navController.navigate(Screen.Safety.route) },
-                onNavigateToBlocked = { navController.navigate(Screen.BlockedUsers.route) },
+                onNavigateToSupport = { navController.navigate(Screen.Support.route) },
                 onNavigateToProfileSetup = { navController.navigate(Screen.ProfileSetup.route) },
                 onNavigateToGames = { navController.navigate(Screen.Games.route) },
+                onNavigateToClans = { navController.navigate(Screen.ClanList.route) },
                 onNavigateToTrustVerification = { navController.navigate(Screen.TrustVerificationIntro.route) }
+            )
+        }
+
+        // Support Screen
+        composable(Screen.Support.route) {
+            SupportScreen(
+                token = mainViewModel.authToken,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        // Clan List
+        composable(Screen.ClanList.route) {
+            ClanListScreen(
+                token = mainViewModel.authToken,
+                onBack = { navController.popBackStack() },
+                onCreateClan = { navController.navigate(Screen.ClanCreate.route) },
+                onClanClick = { clanId -> navController.navigate(Screen.ClanDetail.createRoute(clanId)) },
+                onMyClanClick = { clanId -> navController.navigate(Screen.ClanDetail.createRoute(clanId)) }
+            )
+        }
+
+        // Clan Create
+        composable(Screen.ClanCreate.route) {
+            ClanCreateScreen(
+                token = mainViewModel.authToken,
+                onBack = { navController.popBackStack() },
+                onClanCreated = { clanId ->
+                    navController.navigate(Screen.ClanDetail.createRoute(clanId)) {
+                        popUpTo(Screen.ClanList.route)
+                    }
+                }
+            )
+        }
+
+        // Clan Detail
+        composable(Screen.ClanDetail.route) { backStackEntry ->
+            val clanId = backStackEntry.arguments?.getString("clanId") ?: return@composable
+            ClanDetailScreen(
+                token = mainViewModel.authToken,
+                clanId = clanId,
+                currentUserId = mainViewModel.currentUserId,
+                onBack = { navController.popBackStack() },
+                onChat = { id ->
+                    navController.navigate(Screen.ClanChat.createRoute(id))
+                },
+                onMemberClick = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) }
+            )
+        }
+
+        // Clan Chat
+        composable(Screen.ClanChat.route, arguments = listOf(
+            androidx.navigation.NavArgument("clanId") { type = NavType.StringType },
+            androidx.navigation.NavArgument("clanName") { type = NavType.StringType; defaultValue = "" }
+        )) { backStackEntry ->
+            val clanId = backStackEntry.arguments?.getString("clanId") ?: return@composable
+            val clanName = backStackEntry.arguments?.getString("clanName") ?: ""
+            ClanChatScreen(
+                token = mainViewModel.authToken,
+                clanId = clanId,
+                currentUserId = mainViewModel.currentUserId,
+                clanName = clanName,
+                onBack = { navController.popBackStack() }
             )
         }
     }

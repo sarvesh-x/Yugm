@@ -9,7 +9,6 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -46,6 +45,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 import javax.inject.Inject
 
 private const val TAG = "MainActivity"
@@ -74,6 +74,20 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                         navController.navigate(pushRoute)
                         pendingPushRoute.value = null
                     }
+                }
+
+                LaunchedEffect(Unit) {
+                    YugmApi.onUnauthorized = {
+                        mainViewModel.logout()
+                        navController.navigate(Screen.Login.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                }
+
+                // Initialize Google Play Billing
+                LaunchedEffect(Unit) {
+                    com.example.yugm.payments.GooglePlayBillingManager.init(context)
                 }
 
                 // Register network callback
@@ -138,7 +152,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                             }
                         }
                     } catch (e: Exception) {
-                        Log.e(TAG, "Google auth exception", e)
+                        Timber.tag(TAG).e(e, "Google auth exception")
                     }
                 }
 

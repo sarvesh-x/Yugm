@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import timber.log.Timber
 
 @HiltViewModel
 class DatingViewModel @Inject constructor() : ViewModel() {
@@ -28,16 +29,27 @@ class DatingViewModel @Inject constructor() : ViewModel() {
     var error by mutableStateOf<String?>(null)
         private set
 
+    var activeFilters by mutableStateOf<Set<String>>(emptySet())
+        private set
+
     // Shared flow to trigger fullscreen mutual match overlays
     private val _matchEvent = MutableSharedFlow<Host>()
     val matchEvent = _matchEvent.asSharedFlow()
+
+    fun toggleFilter(key: String) {
+        activeFilters = if (activeFilters.contains(key)) {
+            activeFilters - key
+        } else {
+            activeFilters + key
+        }
+    }
 
     fun loadCandidates(token: String) {
         viewModelScope.launch {
             isLoading = true
             error = null
             runCatching {
-                YugmApi.datingExplore(token)
+                YugmApi.datingExplore(token, activeFilters)
             }.onSuccess {
                 candidates = it
             }.onFailure {
@@ -58,7 +70,7 @@ class DatingViewModel @Inject constructor() : ViewModel() {
                     _matchEvent.emit(candidate)
                 }
             }.onFailure {
-                Log.e("DatingViewModel", "Failed to like user: ${it.message}")
+                Timber.tag("DatingViewModel").e(it, "Failed to like user")
             }
         }
     }
@@ -69,7 +81,7 @@ class DatingViewModel @Inject constructor() : ViewModel() {
             runCatching {
                 YugmApi.datingPass(token, likedId)
             }.onFailure {
-                Log.e("DatingViewModel", "Failed to pass user: ${it.message}")
+                Timber.tag("DatingViewModel").e(it, "Failed to pass user")
             }
         }
     }
@@ -87,12 +99,5 @@ class DatingViewModel @Inject constructor() : ViewModel() {
             }
             isLoading = false
         }
-    }
-}
-
-// Simple Log fallback since android.util.Log is sometimes stubbed in VM tests
-object Log {
-    fun e(tag: String, msg: String) {
-        android.util.Log.e(tag, msg)
     }
 }

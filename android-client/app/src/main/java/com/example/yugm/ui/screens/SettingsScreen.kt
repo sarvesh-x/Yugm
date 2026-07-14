@@ -86,9 +86,10 @@ fun SettingsScreen(
     onLogout: () -> Unit,
     onBack: () -> Unit,
     onNavigateToSafety: () -> Unit,
-    onNavigateToBlocked: () -> Unit,
+    onNavigateToSupport: () -> Unit = {},
     onNavigateToProfileSetup: () -> Unit,
     onNavigateToGames: () -> Unit,
+    onNavigateToClans: () -> Unit = {},
     onNavigateToTrustVerification: () -> Unit
 ) {
     val context = LocalContext.current
@@ -195,10 +196,10 @@ fun SettingsScreen(
                     error = error,
                     onProfile = onNavigateToProfileSetup,
                     onGames = onNavigateToGames,
+                    onClans = onNavigateToClans,
                     onTrustVerification = onNavigateToTrustVerification,
                     onSafety = onNavigateToSafety,
                     onBlocked = { pane = SettingsPane.Blocked },
-                    onBlockedRoute = onNavigateToBlocked,
                     onNotifications = { pane = SettingsPane.Notifications },
                     onFeedback = { pane = SettingsPane.Feedback },
                     onDoc = { pane = it },
@@ -243,10 +244,10 @@ private fun SettingsHome(
     error: String?,
     onProfile: () -> Unit,
     onGames: () -> Unit,
+    onClans: () -> Unit = {},
     onTrustVerification: () -> Unit,
     onSafety: () -> Unit,
     onBlocked: () -> Unit,
-    onBlockedRoute: () -> Unit,
     onNotifications: () -> Unit,
     onFeedback: () -> Unit,
     onDoc: (SettingsPane) -> Unit,
@@ -281,6 +282,7 @@ private fun SettingsHome(
                 SettingsNavRow("Detailed profile", "Edit your public profile and interests.", onProfile)
                 SettingsNavRow("Yugm Trust Verification", "Verify your face and voice to show people you're real.", onTrustVerification)
                 SettingsNavRow("Yugm Arcade", "Play mini games and manage challenges.", onGames)
+                SettingsNavRow("Yugm Clans", "Create or join a clan and chat with your family.", onClans)
                 SettingsNavRow("Notification settings", "Control messages, rooms, gifts, safety, and updates.", onNotifications)
             }
         }
@@ -288,7 +290,6 @@ private fun SettingsHome(
             SettingsGroup("Privacy & Safety") {
                 SettingsNavRow("Blocked list", "$blockedCount people blocked.", onBlocked)
                 SettingsNavRow("Safety center", "Reports, trust checks, and privacy actions.", onSafety)
-                SettingsNavRow("Blocked list route", "Open the dedicated block management screen.", onBlockedRoute)
                 SettingsNavRow("Community guidelines", "Read the rules for rooms, chats, and profiles.") { onDoc(SettingsPane.Guidelines) }
                 SettingsNavRow("Privacy policy", "How Yugm uses data to run and protect the service.") { onDoc(SettingsPane.Privacy) }
             }
@@ -296,6 +297,7 @@ private fun SettingsHome(
         item {
             SettingsGroup("Help & Legal") {
                 SettingsNavRow("Help and feedback", "Send a support note using the backend ticket flow.", onFeedback)
+                SettingsNavRow("Support", "Contact our support team for help.", onNavigateToSupport)
                 SettingsNavRow("About", "Yugm app summary and product scope.") { onDoc(SettingsPane.About) }
                 SettingsNavRow("Terms of use", "Respect, safety, and account rules.") { onDoc(SettingsPane.Terms) }
             }

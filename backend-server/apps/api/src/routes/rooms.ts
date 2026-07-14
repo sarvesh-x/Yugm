@@ -3,6 +3,7 @@ import { z } from "zod";
 import { chatMessageSchema, createPollSchema, createRoomSchema, directMessageSchema, inviteSchema, reactionSchema, reportBaseSchema, socketEvents, votePollSchema } from "@yugm/shared";
 import { requireAuth, requireNotMuted, type AuthRequest } from "../middleware/auth.js";
 import { chatLimiter, reportLimiter } from "../middleware/rateLimit.js";
+import { requireNotChatRestricted, requireNotRoomRestricted, requireNotShadowBanned, requireWalletNotFrozen } from "../middleware/requireSafety.js";
 import { validateBody } from "../middleware/validate.js";
 import { Block } from "../models/Block.js";
 import { ChatMessage } from "../models/ChatMessage.js";
@@ -123,7 +124,7 @@ async function decrementRoomParticipantCount(roomId: unknown) {
   );
 }
 
-roomsRouter.post("/", requireAuth, requireNotMuted, validateBody(createRoomSchema), asyncHandler(async (req: AuthRequest, res) => {
+roomsRouter.post("/", requireAuth, requireNotMuted, requireNotRoomRestricted, requireNotShadowBanned, validateBody(createRoomSchema), asyncHandler(async (req: AuthRequest, res) => {
   const scheduledFor = req.body.scheduledFor ? new Date(req.body.scheduledFor) : undefined;
   const isScheduled = scheduledFor && scheduledFor.getTime() > Date.now() + 60_000;
   const room = await Room.create({
@@ -251,7 +252,7 @@ roomsRouter.get("/:id", requireAuth, asyncHandler(async (req: AuthRequest, res) 
   sendOk(res, { room, participants, speakerRequests });
 }));
 
-roomsRouter.post("/:id/join", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
+roomsRouter.post("/:id/join", requireAuth, requireNotRoomRestricted, requireNotShadowBanned, asyncHandler(async (req: AuthRequest, res) => {
   const room = await getRoomOrThrow(req.params.id);
   assertPrivateRoomAccess(room, req.user!.id);
   if (room.status === "SCHEDULED") throw new HttpError(400, "This room is scheduled for later", ErrorCode.VALIDATION);
@@ -394,7 +395,7 @@ roomsRouter.get("/:id/activity", asyncHandler(async (req, res) => {
   sendOk(res, { activity: activity.reverse() });
 }));
 
-roomsRouter.post("/:id/reactions", requireAuth, validateBody(reactionSchema), asyncHandler(async (req: AuthRequest, res) => {
+roomsRouter.post("/:id/reactions", requireAuth, requireNotChatRestricted, validateBody(reactionSchema), asyncHandler(async (req: AuthRequest, res) => {
   const room = await getRoomOrThrow(req.params.id);
   if (room.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
   await requireActiveParticipant(room._id, req.user!.id);
@@ -469,7 +470,7 @@ roomsRouter.get("/:id/missions", requireAuth, asyncHandler(async (req: AuthReque
   sendOk(res, { missions });
 }));
 
-roomsRouter.post("/:id/messages/direct", requireAuth, requireNotMuted, validateBody(directMessageSchema), asyncHandler(async (req: AuthRequest, res) => {
+roomsRouter.post("/:id/messages/direct", requireAuth, requireNotMuted, requireNotChatRestricted, validateBody(directMessageSchema), asyncHandler(async (req: AuthRequest, res) => {
   const room = await getRoomOrThrow(req.params.id);
   await requireActiveParticipant(room._id, req.user!.id);
   const receiverId = room.hostId.toString() === req.user!.id ? String(req.body.receiverId || "") : room.hostId.toString();
@@ -499,7 +500,7 @@ roomsRouter.post("/:id/messages/direct", requireAuth, requireNotMuted, validateB
   sendOk(res, { message, relationship: relationship?.relationship }, 201);
 }));
 
-roomsRouter.post("/:id/messages", requireAuth, requireNotMuted, chatLimiter, validateBody(chatMessageSchema), asyncHandler(async (req: AuthRequest, res) => {
+roomsRouter.post("/:id/messages", requireAuth, requireNotMuted, requireNotChatRestricted, chatLimiter, validateBody(chatMessageSchema), asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
   const participant = await RoomParticipant.findOne({ roomId: req.params.id, userId: req.user!.id, leftAt: null }).lean();
   if (!participant) throw new HttpError(403, "You are not a participant in this room", ErrorCode.FORBIDDEN);

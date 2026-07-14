@@ -89,7 +89,7 @@ fun IcebreakersDialog(
                     AnimatedContent(
                         targetState = prompts[currentPromptIndex],
                         transitionSpec = {
-                            fadeIn() + slideInHorizontally() with fadeOut() + slideOutHorizontally()
+                            fadeIn() + slideInHorizontally() togetherWith fadeOut() + slideOutHorizontally()
                         }
                     ) { promptText ->
                         Text(

@@ -1,5 +1,6 @@
 [versions]
 agp = "9.2.1"
+playBilling = "6.2.1"
 coreKtx = "1.10.1"
 junit = "4.13.2"
 junitVersion = "1.1.5"
@@ -46,6 +47,7 @@ play-services-auth = { group = "com.google.android.gms", name = "play-services-a
 livekit-android = { group = "io.livekit", name = "livekit-android", version.ref = "livekitAndroid" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coilCompose" }
 razorpay-checkout = { group = "com.razorpay", name = "checkout", version.ref = "razorpayCheckout" }
+play-billing = { group = "com.android.billingclient", name = "billing", version.ref = "playBilling" }
 socketio-client = { group = "io.socket", name = "socket.io-client", version.ref = "socketioClient" }
 androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
 androidx-credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentialsPlayServicesAuth" }
@@ -54,6 +56,7 @@ hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref
 hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "hilt" }
 androidx-hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "androidxHiltNavigationCompose" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
+timber = { group = "com.jakewharton.timber", name = "timber", version = "5.0.1" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

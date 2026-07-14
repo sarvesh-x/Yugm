@@ -350,6 +350,38 @@ export async function endPkBattle(input: { userId?: string; battleId: string; fo
   return { battle: state };
 }
 
+export async function requestPkRematch(userId: string, battleId: string) {
+  objectId(battleId, "battleId");
+  const oldBattle = await PkBattle.findById(battleId).lean();
+  if (!oldBattle) throw new HttpError(404, "PK battle not found", ErrorCode.NOT_FOUND);
+  if (oldBattle.status !== "ENDED" && oldBattle.status !== "FORCE_ENDED") {
+    throw new HttpError(400, "Can only rematch ended battles", ErrorCode.VALIDATION);
+  }
+  const isLeftHost = oldBattle.leftHostId.toString() === userId;
+  const isRightHost = oldBattle.rightHostId.toString() === userId;
+  if (!isLeftHost && !isRightHost) {
+    throw new HttpError(403, "Only battle participants can request rematch", ErrorCode.FORBIDDEN);
+  }
+  const myRoomId = isLeftHost ? oldBattle.leftRoomId.toString() : oldBattle.rightRoomId.toString();
+  const opponentRoomId = isLeftHost ? oldBattle.rightRoomId.toString() : oldBattle.leftRoomId.toString();
+  const opponentHostId = isLeftHost ? oldBattle.rightHostId.toString() : oldBattle.leftHostId.toString();
+  const room = await Room.findById(myRoomId).lean();
+  if (!room || room.status !== "LIVE") throw new HttpError(400, "Your room must be live", ErrorCode.VALIDATION);
+  if (room.hostId.toString() !== userId) throw new HttpError(403, "Only room host can request rematch", ErrorCode.FORBIDDEN);
+  const result = await createPkInvite({
+    userId,
+    roomId: myRoomId,
+    opponentRoomId,
+    opponentHostId,
+    battleType: oldBattle.battleType as PkBattleType,
+    mode: oldBattle.mode as PkMode,
+    durationSeconds: oldBattle.durationSeconds,
+    title: `Rematch: ${oldBattle.title || "PK Battle"}`
+  });
+  emitUser(opponentHostId, pkSocketEvents.rematchRequested, { battleId: result.battle.id, previousBattleId: battleId, userId });
+  return result;
+}
+
 export async function getActivePk(roomId: string) {
   objectId(roomId, "roomId");
   const battle = await PkBattle.findOne({
@@ -385,8 +417,15 @@ export async function sendPkGift(input: { userId: string; battleId: string; gift
       giftId: gift._id,
       coinAmount: gift.coinPrice
     }], { session });
+    const oldLeader = leader(battle.leftScore, battle.rightScore);
     const scoreUpdate = input.side === "LEFT" ? { $inc: { leftScore: gift.coinPrice } } : { $inc: { rightScore: gift.coinPrice } };
     const updated = await PkBattle.findByIdAndUpdate(battle._id, scoreUpdate, { new: true, session });
+    const newLeader = leader(updated!.leftScore, updated!.rightScore);
+    if (newLeader !== oldLeader && newLeader !== "DRAW") {
+      addPkEvent({ battleId: battle._id, eventType: "LEAD_CHANGED", side: newLeader, metadata: { from: oldLeader } });
+      emitRoom(updated!.leftRoomId.toString(), pkSocketEvents.leadChanged, { battleId: battle.id, leader: newLeader, leftScore: updated!.leftScore, rightScore: updated!.rightScore });
+      emitRoom(updated!.rightRoomId.toString(), pkSocketEvents.leadChanged, { battleId: battle.id, leader: newLeader, leftScore: updated!.leftScore, rightScore: updated!.rightScore });
+    }
     await PkLeaderboardEntry.updateOne(
       { battleId: battle._id, userId: input.userId },
       { $setOnInsert: { battleId: battle._id, userId: input.userId, side: input.side }, $inc: { totalPoints: gift.coinPrice, totalGiftsSent: 1 } },
@@ -434,11 +473,18 @@ export async function sendPkReaction(input: { userId: string; battleId: string; 
   const used = bucket && bucket.resetAt > now ? bucket.points : 0;
   if (used + points > 10) throw new HttpError(429, "Reaction limit reached", ErrorCode.RATE_LIMITED);
   reactionBuckets.set(bucketKey, { points: used + points, resetAt });
+  const oldLeader = leader(battle.leftScore, battle.rightScore);
   const updated = await PkBattle.findByIdAndUpdate(
     battle._id,
     input.side === "LEFT" ? { $inc: { leftScore: points } } : { $inc: { rightScore: points } },
     { new: true }
   );
+  const newLeader = leader(updated!.leftScore, updated!.rightScore);
+  if (newLeader !== oldLeader && newLeader !== "DRAW") {
+    addPkEvent({ battleId: battle._id, eventType: "LEAD_CHANGED", side: newLeader, metadata: { from: oldLeader } });
+    emitRoom(updated!.leftRoomId.toString(), pkSocketEvents.leadChanged, { battleId: battle.id, leader: newLeader, leftScore: updated!.leftScore, rightScore: updated!.rightScore });
+    emitRoom(updated!.rightRoomId.toString(), pkSocketEvents.leadChanged, { battleId: battle.id, leader: newLeader, leftScore: updated!.leftScore, rightScore: updated!.rightScore });
+  }
   await addPkEvent({ battleId: battle._id, userId: input.userId, eventType: "REACTION_SENT", side: input.side, points, metadata: { type: input.type } });
   const state = await emitPkState(updated?.toObject() ?? battle.toObject(), pkSocketEvents.scoreUpdate);
   emitRoom(state.left.roomId, pkSocketEvents.reactionReceived, { battleId: battle.id, side: input.side, type: input.type, pointsAdded: points, bucketRemaining: Math.max(0, 10 - (used + points)) });

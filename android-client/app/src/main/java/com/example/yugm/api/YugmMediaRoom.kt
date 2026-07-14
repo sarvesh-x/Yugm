@@ -1,7 +1,7 @@
 package com.example.yugm.api
 
+import android.annotation.SuppressLint
 import android.content.Context
-import android.util.Log
 import io.livekit.android.LiveKit
 import io.livekit.android.room.Room
 import io.livekit.android.room.track.VideoTrack
@@ -10,7 +10,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
+@SuppressLint("StaticFieldLeak")
 object YugmMediaRoom {
     private const val TAG = "YugmMediaRoom"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -26,7 +28,7 @@ object YugmMediaRoom {
 
     fun connect(token: String, url: String) {
         val context = appContext ?: run {
-            Log.e(TAG, "Media room was not initialized")
+            Timber.tag(TAG).e("Media room was not initialized")
             return
         }
         if (token.isBlank() || url.isBlank()) return
@@ -35,10 +37,10 @@ object YugmMediaRoom {
                 room?.disconnect()
                 room = LiveKit.create(context).also { it.connect(url, token) }
                 connected = true
-                Log.d(TAG, "Connected to LiveKit media room")
+                Timber.tag(TAG).d("Connected to LiveKit media room")
             }.onFailure {
                 connected = false
-                Log.e(TAG, "LiveKit connection failed", it)
+                Timber.tag(TAG).e(it, "LiveKit connection failed")
             }
         }
     }
@@ -46,14 +48,14 @@ object YugmMediaRoom {
     fun setMicEnabled(enabled: Boolean) {
         scope.launch {
             runCatching { room?.localParticipant?.setMicrophoneEnabled(enabled) }
-                .onFailure { Log.e(TAG, "Unable to update microphone", it) }
+                .onFailure { Timber.tag(TAG).e(it, "Unable to update microphone") }
         }
     }
 
     fun setCameraEnabled(enabled: Boolean) {
         scope.launch {
             runCatching { room?.localParticipant?.setCameraEnabled(enabled) }
-                .onFailure { Log.e(TAG, "Unable to update camera", it) }
+                .onFailure { Timber.tag(TAG).e(it, "Unable to update camera") }
         }
     }
 
@@ -84,8 +86,8 @@ object YugmMediaRoom {
             runCatching {
                 opponentRoom?.disconnect()
                 opponentRoom = LiveKit.create(context).also { it.connect(url, token) }
-                Log.d(TAG, "Connected to opponent media room: $roomName")
-            }.onFailure { Log.e(TAG, "Opponent media connection failed", it) }
+                Timber.tag(TAG).d("Connected to opponent media room: $roomName")
+            }.onFailure { Timber.tag(TAG).e(it, "Opponent media connection failed") }
         }
     }
 
@@ -100,7 +102,7 @@ object YugmMediaRoom {
         room = null
         connected = false
         disconnectOpponent()
-        Log.d(TAG, "Disconnected from media room")
+        Timber.tag(TAG).d("Disconnected from media room")
     }
 
     fun isConnected(): Boolean = connected

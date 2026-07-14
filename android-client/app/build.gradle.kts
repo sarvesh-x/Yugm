@@ -46,6 +46,12 @@ if (isReleaseTaskRequested) {
     require(!yugmSocketBaseUrl.isNullOrBlank()) {
         "Set YUGM_SOCKET_BASE_URL to your deployed socket URL, for example https://your-backend.onrender.com"
     }
+    require(yugmApiBaseUrl.startsWith("https://")) {
+        "YUGM_API_BASE_URL must use HTTPS for release builds"
+    }
+    require(yugmSocketBaseUrl.startsWith("https://")) {
+        "YUGM_SOCKET_BASE_URL must use HTTPS for release builds"
+    }
 }
 
 android {
@@ -66,6 +72,19 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    lint {
+        disable += setOf(
+            "LogNotTimber",
+            "StringFormatInTimber",
+            "ThrowableNotAtBeginning",
+            "BinaryOperationInTimber",
+            "TimberArgCount",
+            "TimberArgTypes",
+            "TimberTagLength",
+            "TimberExceptionLogging"
+        )
+    }
+
     buildTypes {
         debug {
             val apiBaseUrl = yugmApiBaseUrl ?: "http://10.0.2.2:4000/api"
@@ -78,6 +97,7 @@ android {
 
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
             val apiBaseUrl = yugmApiBaseUrl.orEmpty()
             val socketBaseUrl = yugmSocketBaseUrl.orEmpty()
             buildConfigField("String", "API_BASE_URL", quoted(apiBaseUrl))
@@ -121,7 +141,9 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.coil.compose)
     implementation(libs.razorpay.checkout)
+    implementation(libs.play.billing)
     implementation(libs.socketio.client)
+    implementation(libs.timber)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
     implementation(libs.firebase.auth)

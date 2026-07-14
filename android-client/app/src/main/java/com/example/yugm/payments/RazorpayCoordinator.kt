@@ -2,6 +2,7 @@ package com.example.yugm.payments
 
 import android.app.Activity
 import android.content.Context
+import androidx.core.content.edit
 import com.example.yugm.model.RazorpayCheckoutData
 import com.razorpay.Checkout
 import org.json.JSONObject
@@ -19,10 +20,9 @@ object RazorpayCoordinator {
         require(checkoutData.purchaseId.isNotBlank() && checkoutData.orderId.isNotBlank() && checkoutData.key.isNotBlank()) {
             "Checkout configuration is incomplete"
         }
-        activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putString(PURCHASE_ID, checkoutData.purchaseId)
-            .apply()
+        activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
+            putString(PURCHASE_ID, checkoutData.purchaseId)
+        }
 
         Checkout.preload(activity.applicationContext)
         val checkout = Checkout()
@@ -42,7 +42,9 @@ object RazorpayCoordinator {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(PURCHASE_ID, "").orEmpty()
 
     fun clearPending(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(PURCHASE_ID).apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
+            remove(PURCHASE_ID)
+        }
     }
 
     fun notifyVerified(balance: Int) {

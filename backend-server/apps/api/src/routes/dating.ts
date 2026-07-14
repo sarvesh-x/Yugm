@@ -2,16 +2,19 @@ import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
+import { requireNotShadowBanned } from "../middleware/requireSafety.js";
 import { Like } from "../models/Like.js";
 import { Match } from "../models/Match.js";
 import { Block } from "../models/Block.js";
 import { User } from "../models/User.js";
+import { UserSafetyStatus } from "../models/UserSafetyStatus.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId } from "../utils/http.js";
 import { createNotification } from "../services/notifications.js";
 import { getVipStatus } from "../services/vip.js";
 import { ensureRelationshipForMatch, grantRelationshipXp } from "../services/relationships.js";
 import { assertUsersCanInteract } from "../services/safety.js";
 import { calculateCompatibility } from "../services/datingCompatibility.js";
+import { isUserOnline } from "../services/socket.js";
 import { validateBody } from "../middleware/validate.js";
 
 export const datingRouter = Router();
@@ -44,9 +47,15 @@ datingRouter.put("/preferences", validateBody(preferenceSchema), asyncHandler(as
 }));
 
 // 1. GET /dating/explore - Get profiles to swipe on
-datingRouter.get("/explore", asyncHandler(async (req: AuthRequest, res) => {
+datingRouter.get("/explore", requireNotShadowBanned, asyncHandler(async (req: AuthRequest, res) => {
   const currentUser = req.user!;
   
+  // Parse query filters
+  const queryMinAge = req.query.minAge ? Number(req.query.minAge) : undefined;
+  const queryMaxAge = req.query.maxAge ? Number(req.query.maxAge) : undefined;
+  const onlineOnly = req.query.onlineOnly === "true";
+  const sharedInterestsOnly = req.query.sharedInterests === "true";
+
   // Find users current user has swiped on
   const swiped = await Like.find({ likerId: currentUser.id }).select("likedId").lean();
   const swipedIds = swiped.map(s => s.likedId.toString());
@@ -59,15 +68,21 @@ datingRouter.get("/explore", asyncHandler(async (req: AuthRequest, res) => {
     b.blockerId.toString() === currentUser.id ? b.blockedUserId.toString() : b.blockerId.toString()
   );
 
-  const excludeIds = [currentUser.id, ...swipedIds, ...blockedIds];
+  // Find shadow banned users to exclude from explore
+  const shadowBanned = await UserSafetyStatus.find({ isShadowBanned: true }).select("userId").lean();
+  const shadowBannedIds = shadowBanned.map((s: any) => s.userId.toString());
+
+  const excludeIds = [currentUser.id, ...swipedIds, ...blockedIds, ...shadowBannedIds];
   const excludeObjectIds = excludeIds.map(id => new mongoose.Types.ObjectId(id));
 
   const genderFilter = currentUser.interestedIn && currentUser.interestedIn !== "Everyone"
     ? { gender: currentUser.interestedIn === "Women" ? "Female" : currentUser.interestedIn === "Men" ? "Male" : "Non-binary" }
     : {};
-  const ageFilter = currentUser.datingAgeMin || currentUser.datingAgeMax
-    ? { age: { $gte: currentUser.datingAgeMin ?? 18, $lte: currentUser.datingAgeMax ?? 80 } }
-    : {};
+  const ageFilter = (queryMinAge || queryMaxAge)
+    ? { age: { $gte: queryMinAge ?? 18, $lte: queryMaxAge ?? 80 } }
+    : currentUser.datingAgeMin || currentUser.datingAgeMax
+      ? { age: { $gte: currentUser.datingAgeMin ?? 18, $lte: currentUser.datingAgeMax ?? 80 } }
+      : {};
 
   const candidates = await User.find({
     _id: { $nin: excludeObjectIds },
@@ -106,14 +121,23 @@ datingRouter.get("/explore", asyncHandler(async (req: AuthRequest, res) => {
     };
   });
 
-  // Sort by vibeScore desc
-  formattedCandidates.sort((a, b) => Number(b.isVip) - Number(a.isVip) || b.vibeScore - a.vibeScore);
+  // Apply post-query filters
+  let filtered = formattedCandidates;
+  if (onlineOnly) {
+    filtered = filtered.filter((c) => isUserOnline(c.id));
+  }
+  if (sharedInterestsOnly) {
+    filtered = filtered.filter((c) => (c.sharedInterests?.length ?? 0) > 0);
+  }
 
-  sendOk(res, { candidates: formattedCandidates });
+  // Sort by vibeScore desc
+  filtered.sort((a, b) => Number(b.isVip) - Number(a.isVip) || b.vibeScore - a.vibeScore);
+
+  sendOk(res, { candidates: filtered });
 }));
 
 // 2. POST /dating/like - Swipe Like or Super Like a user
-datingRouter.post("/like", asyncHandler(async (req: AuthRequest, res) => {
+datingRouter.post("/like", requireNotShadowBanned, asyncHandler(async (req: AuthRequest, res) => {
   const { likedId, type = "LIKE" } = req.body;
   if (!likedId || !isValidObjectId(likedId)) {
     throw new HttpError(400, "Invalid likedId", ErrorCode.VALIDATION);
@@ -190,7 +214,7 @@ datingRouter.post("/like", asyncHandler(async (req: AuthRequest, res) => {
 }));
 
 // 3. POST /dating/pass - Swipe Pass a user
-datingRouter.post("/pass", asyncHandler(async (req: AuthRequest, res) => {
+datingRouter.post("/pass", requireNotShadowBanned, asyncHandler(async (req: AuthRequest, res) => {
   const { likedId } = req.body;
   if (!likedId || !isValidObjectId(likedId)) {
     throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);

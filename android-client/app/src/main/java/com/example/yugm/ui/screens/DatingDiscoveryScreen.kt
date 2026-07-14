@@ -112,9 +112,21 @@ fun DatingDiscoveryScreen(
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    listOf("18–25", "Online now", "Within 25 km", "Shared interests").forEach { label ->
-                        Surface(color = SurfaceElevated, shape = RoundedCornerShape(13.dp), border = BorderStroke(1.dp, BorderColor)) {
-                            Text(label, color = TextPrimary, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp))
+                    val filterChips = listOf(
+                        "age" to "18–25",
+                        "online" to "Online now",
+                        "distance" to "Within 25 km",
+                        "interests" to "Shared interests"
+                    )
+                    filterChips.forEach { (key, label) ->
+                        val isSelected = viewModel.activeFilters.contains(key)
+                        Surface(
+                            onClick = { viewModel.toggleFilter(key); viewModel.loadCandidates(token) },
+                            color = if (isSelected) PrimaryPink else SurfaceElevated,
+                            shape = RoundedCornerShape(13.dp),
+                            border = BorderStroke(1.dp, if (isSelected) PrimaryPink else BorderColor)
+                        ) {
+                            Text(label, color = if (isSelected) Color.White else TextPrimary, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp))
                         }
                     }
                 }
@@ -472,7 +484,13 @@ fun DiscoveryCard(
 
                     // Super Like (Star) Button
                     IconButton(
-                        onClick = onSwipeRight, // Map superlike to swipe right match for simplicity
+                        onClick = {
+                            swipedRight = true
+                            viewModel.like(token, topCandidate, "SUPER_LIKE")
+                            coroutineScope.launch {
+                                dragOffset.animateTo(width * 1.5f * density, animationSpec = tween(300))
+                            }
+                        },
                         modifier = Modifier
                             .size(62.dp)
                             .clip(CircleShape)

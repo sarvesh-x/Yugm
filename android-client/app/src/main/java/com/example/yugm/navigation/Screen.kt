@@ -1,12 +1,21 @@
 package com.example.yugm.navigation
 
+import android.net.Uri
+
 sealed class Screen(val route: String) {
     object Splash : Screen("splash")
     object Onboarding : Screen("onboarding")
     object Login : Screen("login")
     object PhoneLogin : Screen("phone_login")
-    object OtpVerify : Screen("otp_verify/{username}/{devOtp}") {
-        fun createRoute(username: String, devOtp: String) = "otp_verify/$username/$devOtp"
+    object OtpVerify : Screen("otp_verify/{username}?devOtp={devOtp}") {
+        fun createRoute(username: String, devOtp: String? = null): String {
+            val encodedUsername = Uri.encode(username)
+            return if (devOtp.isNullOrBlank()) {
+                "otp_verify/$encodedUsername"
+            } else {
+                "otp_verify/$encodedUsername?devOtp=${Uri.encode(devOtp)}"
+            }
+        }
     }
     object ProfileSetup : Screen("profile_setup")
     object Discover : Screen("discover")
@@ -53,4 +62,12 @@ sealed class Screen(val route: String) {
     object Safety : Screen("safety")
     object BlockedUsers : Screen("blocked_users")
     object Support : Screen("support")
+    object ClanList : Screen("clan_list")
+    object ClanCreate : Screen("clan_create")
+    object ClanDetail : Screen("clan_detail/{clanId}") {
+        fun createRoute(clanId: String) = "clan_detail/$clanId"
+    }
+    object ClanChat : Screen("clan_chat/{clanId}?clanName={clanName}") {
+        fun createRoute(clanId: String, clanName: String = "") = "clan_chat/$clanId?clanName=${android.net.Uri.encode(clanName)}"
+    }
 }

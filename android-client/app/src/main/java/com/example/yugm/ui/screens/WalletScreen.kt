@@ -62,6 +62,8 @@ import com.example.yugm.ui.theme.SurfaceElevated
 import com.example.yugm.ui.theme.TextMuted
 import com.example.yugm.ui.theme.TextPrimary
 import kotlinx.coroutines.launch
+import com.example.yugm.payments.GooglePlayBillingManager
+import com.example.yugm.payments.GooglePlayBillingManager.ProductInfo
 import com.example.yugm.payments.RazorpayCoordinator
 import java.util.Locale
 
@@ -72,7 +74,8 @@ fun WalletScreen(
     onBack: () -> Unit = {},
     onOpenEarnings: () -> Unit = {},
     onBalanceChanged: (Int) -> Unit = {},
-    onRechargeOrderReady: (RazorpayCheckoutData) -> Unit = {}
+    onRechargeOrderReady: (RazorpayCheckoutData) -> Unit = {},
+    onStartGooglePlayPurchase: ((pack: CoinPack) -> Unit)? = null
 ) {
     val scope = rememberCoroutineScope()
     var selectedTab by remember { mutableStateOf(0) }
@@ -151,10 +154,14 @@ fun WalletScreen(
                                 },
                                 onRecharge = {
                                     packs.getOrNull(2)?.let { pack ->
-                                        scope.launch {
-                                            runCatching { YugmApi.createRazorpayOrder(token, pack.id) }
-                                                .onSuccess { onRechargeOrderReady(it); status = "Secure checkout created" }
-                                                .onFailure { status = it.message ?: "Could not start checkout" }
+                                        if (pack.googleProductId.isNotBlank() && onStartGooglePlayPurchase != null) {
+                                            onStartGooglePlayPurchase(pack)
+                                        } else {
+                                            scope.launch {
+                                                runCatching { YugmApi.createRazorpayOrder(token, pack.id) }
+                                                    .onSuccess { onRechargeOrderReady(it); status = "Secure checkout created" }
+                                                    .onFailure { status = it.message ?: "Could not start checkout" }
+                                            }
                                         }
                                     }
                                 }
@@ -170,10 +177,14 @@ fun WalletScreen(
                                 ) {
                                     packs.forEachIndexed { index, pack ->
                                         CoinPackCard(pack, popular = index == 2) {
-                                            scope.launch {
-                                                runCatching { YugmApi.createRazorpayOrder(token, pack.id) }
-                                                    .onSuccess { onRechargeOrderReady(it); status = "Secure checkout created for ${pack.coinAmount} coins" }
-                                                    .onFailure { status = it.message ?: "Could not start checkout" }
+                                            if (pack.googleProductId.isNotBlank() && onStartGooglePlayPurchase != null) {
+                                                onStartGooglePlayPurchase(pack)
+                                            } else {
+                                                scope.launch {
+                                                    runCatching { YugmApi.createRazorpayOrder(token, pack.id) }
+                                                        .onSuccess { onRechargeOrderReady(it); status = "Secure checkout created for ${pack.coinAmount} coins" }
+                                                        .onFailure { status = it.message ?: "Could not start checkout" }
+                                                }
                                             }
                                         }
                                     }

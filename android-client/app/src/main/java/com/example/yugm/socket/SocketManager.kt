@@ -1,6 +1,5 @@
 package com.example.yugm.socket
 
-import android.util.Log
 import com.example.yugm.BuildConfig
 import com.example.yugm.api.toDirectMessage
 import com.example.yugm.model.DirectMessage
@@ -11,6 +10,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
+import timber.log.Timber
 
 sealed class SocketEvent {
     data class DirectMessageReceived(val message: DirectMessage) : SocketEvent()
@@ -51,12 +51,12 @@ class SocketManager @Inject constructor() {
             socket = IO.socket(targetUrl, options)
             
             socket?.on(Socket.EVENT_CONNECT) {
-                Log.d("SocketManager", "Connected")
+                Timber.tag("SocketManager").d("Connected")
                 _events.tryEmit(SocketEvent.Connected)
             }
             
             socket?.on(Socket.EVENT_DISCONNECT) {
-                Log.d("SocketManager", "Disconnected")
+                Timber.tag("SocketManager").d("Disconnected")
                 _events.tryEmit(SocketEvent.Disconnected)
             }
             
@@ -68,7 +68,7 @@ class SocketManager @Inject constructor() {
                         val msg = msgJson.toDirectMessage()
                         _events.tryEmit(SocketEvent.DirectMessageReceived(msg))
                     } catch (e: Exception) {
-                        Log.e("SocketManager", "Error parsing direct message", e)
+                        Timber.tag("SocketManager").e(e, "Error parsing direct message")
                     }
                 }
             }
@@ -81,7 +81,7 @@ class SocketManager @Inject constructor() {
                         val typing = data.getBoolean("typing")
                         _events.tryEmit(SocketEvent.TypingUpdate(typingUserId, typing))
                     } catch (e: Exception) {
-                        Log.e("SocketManager", "Error parsing typing update", e)
+                        Timber.tag("SocketManager").e(e, "Error parsing typing update")
                     }
                 }
             }
@@ -93,7 +93,7 @@ class SocketManager @Inject constructor() {
                         val onlineUserId = data.getString("userId")
                         _events.tryEmit(SocketEvent.UserOnline(onlineUserId))
                     } catch (e: Exception) {
-                        Log.e("SocketManager", "Error parsing user:online", e)
+                        Timber.tag("SocketManager").e(e, "Error parsing user:online")
                     }
                 }
             }
@@ -105,14 +105,14 @@ class SocketManager @Inject constructor() {
                         val offlineUserId = data.getString("userId")
                         _events.tryEmit(SocketEvent.UserOffline(offlineUserId))
                     } catch (e: Exception) {
-                        Log.e("SocketManager", "Error parsing user:offline", e)
+                        Timber.tag("SocketManager").e(e, "Error parsing user:offline")
                     }
                 }
             }
             
             socket?.connect()
         } catch (e: Exception) {
-            Log.e("SocketManager", "Error connecting socket", e)
+            Timber.tag("SocketManager").e(e, "Error connecting socket")
         }
     }
 
