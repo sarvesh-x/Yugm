@@ -26,8 +26,8 @@ sealed class Screen(val route: String) {
     }
     object Matches : Screen("matches")
     object ChatList : Screen("chat_list")
-    object Chat : Screen("chat/{conversationId}") {
-        fun createRoute(conversationId: String) = "chat/$conversationId"
+    object Chat : Screen("chat/{partnerId}") {
+        fun createRoute(partnerId: String) = "chat/$partnerId"
     }
     object LiveHome : Screen("live_home")
     object VoiceRooms : Screen("voice_rooms")
@@ -42,6 +42,9 @@ sealed class Screen(val route: String) {
         fun createRoute(roomId: String) = "video_room/$roomId"
     }
     object CreateRoom : Screen("create_room")
+    object EditRoom : Screen("edit_room/{roomId}") {
+        fun createRoute(roomId: String) = "edit_room/$roomId"
+    }
     object Wallet : Screen("wallet")
     object Growth : Screen("growth")
     object TrustVerificationIntro : Screen("trust_verification_intro")
@@ -62,6 +65,9 @@ sealed class Screen(val route: String) {
     object Safety : Screen("safety")
     object BlockedUsers : Screen("blocked_users")
     object Support : Screen("support")
+    object TicketDetail : Screen("ticket_detail/{ticketId}") {
+        fun createRoute(ticketId: String) = "ticket_detail/$ticketId"
+    }
     object ClanList : Screen("clan_list")
     object ClanCreate : Screen("clan_create")
     object ClanDetail : Screen("clan_detail/{clanId}") {

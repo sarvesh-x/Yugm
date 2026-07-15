@@ -20,7 +20,10 @@ const activeCosmeticKeys = {
   COLLECTIBLE_TITLE: "collectibleTitle",
   GIFT_SHELF: "giftShelf",
   CHAT_BUBBLE: "chatBubble",
-  SEASONAL_EVENT: "seasonalEvent"
+  SEASONAL_EVENT: "seasonalEvent",
+  CALL_SCREEN: "videoCallOverlay",
+  ROOM_BADGE: "roomBadge",
+  ROOM_AMBIENCE: "roomAmbience"
 } as const;
 
 export function findProfileCosmetic(cosmeticId: string) {

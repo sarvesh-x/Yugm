@@ -138,7 +138,8 @@ clansRouter.post("/:id/messages/:messageId/reactions", chatLimiter, validateBody
   )
     .populate("senderId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .lean();
-  const senderId = (updated?.senderId as any)?._id?.toString?.() ?? (updated?.senderId as any)?.toString?.();
+  const s = updated?.senderId as { _id?: { toString(): string }; toString?(): string } | undefined;
+  const senderId = s?._id?.toString?.() ?? s?.toString?.();
   if (senderId && senderId !== req.user!.id) {
     await createNotification(senderId, "MESSAGE", "New family reaction", `${req.user!.name} reacted to your family message`, { clanId: req.params.id, messageId: req.params.messageId });
   }
@@ -215,7 +216,7 @@ clansRouter.post("/:id/join", asyncHandler(async (req: AuthRequest, res) => {
   if (!clan) throw new HttpError(404, "Clan not found", ErrorCode.NOT_FOUND);
   if (clan.privacy === "PRIVATE") throw new HttpError(403, "This clan is invite-only", ErrorCode.FORBIDDEN);
   const members = clan.memberIds.map((memberId: any) => memberId.toString());
-  if (!members.includes(req.user!.id)) clan.memberIds = [...clan.memberIds, req.user!._id ?? req.user!.id] as any;
+  if (!members.includes(req.user!.id)) clan.memberIds = [...clan.memberIds, req.user!._id ?? req.user!.id];
   clan.memberCount = clan.memberIds.length;
   await clan.save();
   await User.findByIdAndUpdate(req.user!.id, { $set: { clanId: clan._id } });
@@ -229,7 +230,7 @@ clansRouter.post("/:id/leave", asyncHandler(async (req: AuthRequest, res) => {
   if (clan.ownerId.toString() === req.user!.id && clan.memberIds.length > 1) {
     throw new HttpError(400, "Transfer ownership before leaving this clan", ErrorCode.VALIDATION);
   }
-  clan.memberIds = clan.memberIds.filter((memberId: any) => memberId.toString() !== req.user!.id) as any;
+  clan.memberIds = clan.memberIds.filter((memberId: any) => memberId.toString() !== req.user!.id);
   clan.memberCount = clan.memberIds.length;
   await clan.save();
   await User.findByIdAndUpdate(req.user!.id, { $unset: { clanId: "" } });

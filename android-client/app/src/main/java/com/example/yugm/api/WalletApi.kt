@@ -118,6 +118,11 @@ object WalletApi {
         return data.toCosmeticCatalog()
     }
 
+    suspend fun purchaseCosmeticBundle(token: String, bundleId: String): CosmeticCatalog {
+        val data = YugmHttpClient.post("/wallet/cosmetics/bundle-purchase", token, JSONObject().put("bundleId", bundleId)).getJSONObject("data")
+        return data.toCosmeticCatalog()
+    }
+
     suspend fun equipCosmetic(token: String, cosmeticId: String, type: String): CosmeticCatalog {
         val data = YugmHttpClient.post(
             "/wallet/cosmetics/equip",
@@ -138,6 +143,15 @@ object WalletApi {
     suspend fun transactions(token: String): List<WalletTransaction> {
         val data = YugmHttpClient.get("/wallet/transactions", token).getJSONObject("data")
         return data.getJSONArray("transactions").toWalletTransactions()
+    }
+
+    suspend fun transferCosmetic(token: String, cosmeticId: String, receiverId: String) {
+        YugmHttpClient.post("/wallet/cosmetics/transfer", token, JSONObject().put("cosmeticId", cosmeticId).put("receiverId", receiverId))
+    }
+
+    suspend fun purchaseHistory(token: String): List<com.example.yugm.model.WalletTransaction> {
+        val data = YugmHttpClient.get("/wallet/purchases", token).getJSONObject("data")
+        return data.optJSONArray("purchases")?.toWalletTransactions() ?: emptyList()
     }
 
     suspend fun sendDirectGift(token: String, giftId: String, receiverId: String): Conversation {

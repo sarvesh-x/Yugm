@@ -1,7 +1,7 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
-import { coinPacks, createPurchaseOrderSchema, equipProfileCosmeticSchema, profileCosmetics, purchaseProfileCosmeticSchema, purchaseVipSchema, sendGiftSchema, socketEvents, verifyGooglePlayPurchaseSchema, verifyRazorpayPurchaseSchema, vipPlans, walletSourceLabels } from "@yugm/shared";
+import { coinPacks, cosmeticBundles, createPurchaseOrderSchema, equipProfileCosmeticSchema, profileCosmetics, purchaseCosmeticBundleSchema, purchaseProfileCosmeticSchema, purchaseVipSchema, sendGiftSchema, socketEvents, transferCosmeticSchema, verifyGooglePlayPurchaseSchema, verifyRazorpayPurchaseSchema, vipPlans, walletSourceLabels } from "@yugm/shared";
 import { requireAuth, requireRole, type AuthRequest } from "../middleware/auth.js";
 import { requireWalletNotFrozen } from "../middleware/requireSafety.js";
 import { validateBody } from "../middleware/validate.js";
@@ -185,6 +185,33 @@ walletRouter.post("/wallet/cosmetics/equip", validateBody(equipProfileCosmeticSc
     : { $unset: { [`activeCosmetics.${key}`]: "" } };
   const user = await User.findByIdAndUpdate(req.user!.id, update, { new: true }).select("ownedCosmeticIds activeCosmetics walletBalance").lean();
   sendOk(res, { ownedCosmeticIds: user?.ownedCosmeticIds ?? [], activeCosmetics: user?.activeCosmetics ?? {}, balance: user?.walletBalance ?? 0 });
+}));
+
+walletRouter.post("/wallet/cosmetics/bundle-purchase", requireWalletNotFrozen, validateBody(purchaseCosmeticBundleSchema), asyncHandler(async (req: AuthRequest, res) => {
+  const bundle = cosmeticBundles.find((b) => b.id === req.body.bundleId);
+  if (!bundle) throw new HttpError(404, "Bundle not found", ErrorCode.NOT_FOUND);
+  const alreadyOwned = bundle.cosmeticIds.filter((id) => (req.user!.ownedCosmeticIds ?? []).includes(id));
+  if (alreadyOwned.length === bundle.cosmeticIds.length) throw new HttpError(409, "You already own all cosmetics in this bundle", ErrorCode.CONFLICT);
+  if ((req.user!.walletBalance ?? 0) < bundle.coinPrice) throw new HttpError(403, "Insufficient balance", ErrorCode.INSUFFICIENT_FUNDS);
+  const newIds = bundle.cosmeticIds.filter((id) => !(req.user!.ownedCosmeticIds ?? []).includes(id));
+  await debitWallet(req.user!.id, bundle.coinPrice, "COSMETIC_BUNDLE_PURCHASE", { bundleId: bundle.id });
+  const user = await User.findByIdAndUpdate(req.user!.id, { $push: { ownedCosmeticIds: { $each: newIds } } }, { new: true }).select("ownedCosmeticIds activeCosmetics walletBalance").lean();
+  await grantXp(req.user!.id, "COSMETIC_PURCHASE", { bundleId: bundle.id });
+  sendOk(res, { ownedCosmeticIds: user?.ownedCosmeticIds ?? [], activeCosmetics: user?.activeCosmetics ?? {}, balance: user?.walletBalance ?? 0, newCosmetics: newIds });
+}));
+
+walletRouter.post("/wallet/cosmetics/transfer", requireWalletNotFrozen, validateBody(transferCosmeticSchema), asyncHandler(async (req: AuthRequest, res) => {
+  const cosmetic = findProfileCosmetic(req.body.cosmeticId);
+  if (!cosmetic) throw new HttpError(404, "Cosmetic not found", ErrorCode.NOT_FOUND);
+  if (!(req.user!.ownedCosmeticIds ?? []).includes(req.body.cosmeticId)) throw new HttpError(403, "You don't own this cosmetic", ErrorCode.FORBIDDEN);
+  const [receiver] = await Promise.all([
+    User.findById(req.body.receiverId).select("_id").lean(),
+    User.findByIdAndUpdate(req.user!.id, { $pull: { ownedCosmeticIds: req.body.cosmeticId }, $unset: { [`activeCosmetics.${activeCosmeticKey(cosmetic.type)}`]: "" } }).lean()
+  ]);
+  if (!receiver) throw new HttpError(404, "Receiver not found", ErrorCode.NOT_FOUND);
+  await User.findByIdAndUpdate(req.body.receiverId, { $push: { ownedCosmeticIds: req.body.cosmeticId } });
+  await createNotification(req.body.receiverId, "GIFT", "Cosmetic Gift", `${req.user!.name} gifted you ${cosmetic.name}!`, { cosmeticId: req.body.cosmeticId });
+  sendOk(res, { transferred: true, cosmeticId: req.body.cosmeticId });
 }));
 
 walletRouter.get("/wallet/vip/plans", (req: AuthRequest, res) => {

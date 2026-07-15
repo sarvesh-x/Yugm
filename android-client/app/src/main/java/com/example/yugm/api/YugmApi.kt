@@ -1,5 +1,6 @@
 package com.example.yugm.api
 
+import com.example.yugm.model.ClaimAchievementResult
 import com.example.yugm.model.ChatMessage
 import com.example.yugm.model.Clan
 import com.example.yugm.model.ClanMessage
@@ -39,6 +40,7 @@ import com.example.yugm.model.RoomMission
 import com.example.yugm.model.RoomPoll
 import com.example.yugm.model.RoomType
 import com.example.yugm.model.SavedGameScoreResult
+import com.example.yugm.model.SupportTicket
 import com.example.yugm.model.Session
 import com.example.yugm.model.TrustVerificationStatus
 import com.example.yugm.model.VipPlan
@@ -70,6 +72,8 @@ object YugmApi {
 
     // Rooms
     suspend fun rooms(type: RoomType? = null): List<Room> = RoomApi.rooms(type)
+    suspend fun updateRoom(token: String, roomId: String, room: Room, coverImage: String? = null): Room = RoomApi.updateRoom(token, roomId, room, coverImage)
+    suspend fun roomPkHistory(token: String, roomId: String): List<PkBattle> = RoomApi.roomPkHistory(roomId, token)
     suspend fun roomMessages(roomId: String, token: String? = null): List<ChatMessage> = RoomApi.roomMessages(roomId, token)
     suspend fun createRoom(token: String, room: Room, visibility: String = "PUBLIC", allowAudienceMicRequests: Boolean = true, scheduledFor: String? = null, coverImage: String? = null): Room = RoomApi.createRoom(token, room, visibility, allowAudienceMicRequests, scheduledFor, coverImage)
     suspend fun roomDetail(token: String, roomId: String): RoomDetail = RoomApi.roomDetail(token, roomId)
@@ -97,6 +101,7 @@ object YugmApi {
     suspend fun removeUser(roomId: String, userId: String, token: String) = RoomApi.removeUser(roomId, userId, token)
     suspend fun searchRooms(query: String): List<Room> = RoomApi.searchRooms(query)
     suspend fun uploadCover(token: String, bytes: ByteArray, mimeType: String, fileName: String): String = RoomApi.uploadCover(token, bytes, mimeType, fileName)
+    suspend fun uploadAvatar(token: String, bytes: ByteArray, mimeType: String): String = RoomApi.uploadAvatar(token, bytes, mimeType)
     suspend fun uploadMessageMedia(token: String, bytes: ByteArray, mimeType: String, fileName: String): Pair<String, String> = RoomApi.uploadMessageMedia(token, bytes, mimeType, fileName)
 
     // Wallet
@@ -111,10 +116,13 @@ object YugmApi {
     suspend fun gifts(token: String): List<GiftItem> = WalletApi.gifts(token)
     suspend fun cosmetics(token: String): CosmeticCatalog = WalletApi.cosmetics(token)
     suspend fun purchaseCosmetic(token: String, cosmeticId: String): CosmeticCatalog = WalletApi.purchaseCosmetic(token, cosmeticId)
+    suspend fun purchaseCosmeticBundle(token: String, bundleId: String): CosmeticCatalog = WalletApi.purchaseCosmeticBundle(token, bundleId)
     suspend fun equipCosmetic(token: String, cosmeticId: String, type: String): CosmeticCatalog = WalletApi.equipCosmetic(token, cosmeticId, type)
     suspend fun sendGift(token: String, roomId: String, gift: GiftItem, receiverId: String) = WalletApi.sendGift(token, roomId, gift, receiverId)
     suspend fun devRecharge(token: String, amount: Int) = WalletApi.devRecharge(token, amount)
     suspend fun walletTransactions(token: String): List<WalletTransaction> = WalletApi.transactions(token)
+    suspend fun transferCosmetic(token: String, cosmeticId: String, receiverId: String) = WalletApi.transferCosmetic(token, cosmeticId, receiverId)
+    suspend fun purchaseHistory(token: String): List<WalletTransaction> = WalletApi.purchaseHistory(token)
     suspend fun sendDirectGift(token: String, giftId: String, receiverId: String): Conversation = WalletApi.sendDirectGift(token, giftId, receiverId)
 
     // Dating
@@ -122,6 +130,8 @@ object YugmApi {
     suspend fun datingLike(token: String, likedId: String, type: String): Pair<Boolean, String?> = DatingApi.datingLike(token, likedId, type)
     suspend fun datingPass(token: String, likedId: String) = DatingApi.datingPass(token, likedId)
     suspend fun datingMatches(token: String): List<Host> = DatingApi.datingMatches(token)
+    suspend fun datingPreferences(token: String): JSONObject = DatingApi.datingPreferences(token)
+    suspend fun updateDatingPreferences(token: String, preferences: JSONObject) = DatingApi.updateDatingPreferences(token, preferences)
 
     // PK
     suspend fun activePk(token: String, roomId: String): PkBattle? = PkApi.activePk(token, roomId)
@@ -176,6 +186,12 @@ object YugmApi {
     suspend fun unblockUser(userId: String, token: String) = UserApi.unblockUser(userId, token)
     suspend fun getBlockedUsers(token: String): List<Host> = UserApi.getBlockedUsers(token)
     suspend fun closeFriends(token: String): List<Host> = UserApi.closeFriends(token)
+    suspend fun addCloseFriend(token: String, userId: String) = UserApi.addCloseFriend(token, userId)
+    suspend fun removeCloseFriend(token: String, userId: String) = UserApi.removeCloseFriend(token, userId)
+    suspend fun addProfileMedia(token: String, mediaUrl: String, mediaType: String) = UserApi.addProfileMedia(token, mediaUrl, mediaType)
+    suspend fun deleteProfileMedia(token: String, mediaId: String) = UserApi.deleteProfileMedia(token, mediaId)
+    suspend fun suggestedHosts(token: String): List<Host> = UserApi.suggestedHosts(token)
+    suspend fun levelLeaderboard(token: String): List<Host> = UserApi.levelLeaderboard(token)
     suspend fun getNotifications(token: String): Pair<List<NotificationItem>, Int> = UserApi.getNotifications(token)
     suspend fun markNotificationRead(token: String, notificationId: String) = UserApi.markNotificationRead(token, notificationId)
     suspend fun markAllNotificationsRead(token: String) = UserApi.markAllNotificationsRead(token)
@@ -184,6 +200,7 @@ object YugmApi {
     suspend fun registerFcmToken(token: String, fcmToken: String) = UserApi.registerFcmToken(token, fcmToken)
     suspend fun level(token: String): LevelStatus = UserApi.level(token)
     suspend fun checkIn(token: String): DailyCheckInResult = UserApi.checkIn(token)
+    suspend fun claimAchievement(token: String, achievementId: String): ClaimAchievementResult = CreatorApi.claimAchievement(token, achievementId)
     suspend fun notificationPreferences(token: String): NotificationPreferences = UserApi.notificationPreferences(token)
     suspend fun updateNotificationPreferences(token: String, preferences: Map<String, Boolean>): NotificationPreferences = UserApi.updateNotificationPreferences(token, preferences)
     suspend fun conversation(token: String, userId: String): Conversation = UserApi.conversation(token, userId)
@@ -208,4 +225,11 @@ object YugmApi {
     suspend fun submitCreatorPayoutKyc(token: String, legalFullName: String, panNumber: String, upiId: String? = null, bankAccount: String? = null, bankIfsc: String? = null, bankHolderName: String? = null, dateOfBirth: String? = null): CreatorPayoutKycStatus = CreatorApi.submitCreatorPayoutKyc(token, legalFullName, panNumber, upiId, bankAccount, bankIfsc, bankHolderName, dateOfBirth)
     suspend fun withdrawalEligibility(token: String): WithdrawalEligibility = CreatorApi.withdrawalEligibility(token)
     suspend fun requestWithdrawal(token: String, amountCoins: Int): WithdrawalRequestResult = CreatorApi.requestWithdrawal(token, amountCoins)
+
+    // Support Tickets
+    suspend fun createSupportTicket(token: String, subject: String, message: String, category: String = "General", priority: String = "MEDIUM"): SupportTicket = SupportApi.createTicket(token, subject, message, category, priority)
+    suspend fun listSupportTickets(token: String, status: String? = null, page: Int = 1, limit: Int = 20): Triple<List<SupportTicket>, Int, Int> = SupportApi.listTickets(token, status, page, limit)
+    suspend fun getSupportTicket(token: String, ticketId: String): SupportTicket = SupportApi.getTicket(token, ticketId)
+    suspend fun addSupportMessage(token: String, ticketId: String, message: String): SupportTicket = SupportApi.addMessage(token, ticketId, message)
+    suspend fun closeSupportTicket(token: String, ticketId: String): SupportTicket = SupportApi.closeTicket(token, ticketId)
 }

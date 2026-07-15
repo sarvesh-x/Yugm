@@ -11,7 +11,11 @@ import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.Purchase
 import com.android.billingclient.api.QueryProductDetailsParams
 import com.example.yugm.api.YugmApi
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 
@@ -91,20 +95,22 @@ object GooglePlayBillingManager {
                 }
             )
             .build()
-        val result = client.queryProductDetails(params)
-        if (result.billingResult.responseCode != BillingClient.BillingResponseCode.OK) {
-            Timber.tag(TAG).e("Query products failed: ${result.billingResult.responseCode}")
-            return@withContext emptyList()
+        return@withContext suspendCoroutine { continuation ->
+            client.queryProductDetailsAsync(params) { billingResult, productDetailsList ->
+                if (billingResult.responseCode != BillingClient.BillingResponseCode.OK) {
+                    Timber.tag(TAG).e("Query products failed: ${billingResult.responseCode}")
+                    continuation.resume(emptyList())
+                } else {
+                    continuation.resume(productDetailsList)
+                }
+            }
         }
-        result.productDetailsList.orEmpty()
     }
 
     fun launchBillingFlow(activity: Activity, productDetails: ProductDetails) {
         val client = billingClient ?: return
-        val offerToken = productDetails.oneTimePurchaseOfferDetails?.offerToken ?: return
         val productParams = BillingFlowParams.ProductDetailsParams.newBuilder()
             .setProductDetails(productDetails)
-            .setOfferToken(offerToken)
             .build()
         val billingParams = BillingFlowParams.newBuilder()
             .setProductDetailsParamsList(listOf(productParams))
@@ -115,48 +121,41 @@ object GooglePlayBillingManager {
         }
     }
 
-    private fun onPurchasesUpdated(billingResult: BillingResult, purchases: List<Purchase>?) {
-        if (billingResult.responseCode != BillingClient.BillingResponseCode.OK) {
-            Timber.tag(TAG).e("Purchase update error: ${billingResult.responseCode}")
-            return
-        }
-        if (purchases.isNullOrEmpty()) return
-        for (purchase in purchases) {
-            handlePurchase(purchase)
-        }
-    }
-
-    private fun handlePurchase(purchase: Purchase) {
-        if (purchase.purchaseState != Purchase.PurchaseState.PURCHASED) return
-        if (!purchase.isAcknowledged) {
-            acknowledgePurchase(purchase)
-        }
-        val productId = purchase.products.firstOrNull() ?: return
-        val orderId = purchase.orderId
-        val handler = pendingPurchaseHandler
-        if (handler != null) {
-            kotlinx.coroutines.MainScope().launch {
-                handler(productId, purchase.purchaseToken, orderId)
+    private fun onPurchasesUpdated(billingResult: BillingResult, purchases: MutableList<Purchase>?) {
+        if (billingResult.responseCode == BillingClient.BillingResponseCode.OK && !purchases.isNullOrEmpty()) {
+            MainScope().launch {
+                for (purchase in purchases) {
+                    handlePurchase(purchase)
+                }
             }
         }
     }
 
+    private suspend fun handlePurchase(purchase: Purchase) {
+        try {
+            if (purchase.purchaseState != Purchase.PurchaseState.PURCHASED) return
+            val productId = purchase.products.firstOrNull() ?: return
+            val purchaseToken = purchase.purchaseToken
+            val orderId = purchase.orderId
+            pendingPurchaseHandler?.invoke(productId, purchaseToken, orderId)
+            acknowledgePurchase(purchase)
+        } catch (e: Exception) {
+            Timber.tag(TAG).e("Purchase handling failed: ${e.message}")
+        }
+    }
+
     private fun acknowledgePurchase(purchase: Purchase) {
-        val acknowledgeParams = AcknowledgePurchaseParams.newBuilder()
+        val acknowledgePurchaseParams = AcknowledgePurchaseParams.newBuilder()
             .setPurchaseToken(purchase.purchaseToken)
             .build()
-        billingClient?.acknowledgePurchase(acknowledgeParams) { billingResult ->
+        billingClient?.acknowledgePurchase(acknowledgePurchaseParams) { billingResult ->
             if (billingResult.responseCode != BillingClient.BillingResponseCode.OK) {
                 Timber.tag(TAG).e("Acknowledge failed: ${billingResult.responseCode}")
             }
         }
     }
 
-    fun endConnection() {
-        billingClient?.endConnection()
-        billingClient = null
-        isReady = false
-    }
-
-    fun isBillingReady(): Boolean = isReady
+    fun getBillingClient() = billingClient
 }
+
+

@@ -497,6 +497,7 @@ fun NavGraph(
                 token = mainViewModel.authToken,
                 roomId = roomId,
                 fallbackType = fallbackType,
+                currentUserId = mainViewModel.currentUserId,
                 onBack = { navController.popBackStack() },
                 onJoin = { type ->
                     val route = if (type == com.example.yugm.model.RoomType.Video) {
@@ -506,8 +507,52 @@ fun NavGraph(
                     }
                     navController.navigate(route)
                 },
-                onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) }
+                onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) },
+                onEdit = { id -> navController.navigate(Screen.EditRoom.createRoute(id)) }
             )
+        }
+
+        // Edit Room screen
+        composable(
+            route = Screen.EditRoom.route,
+            arguments = listOf(navArgument("roomId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val roomId = backStackEntry.arguments?.getString("roomId") ?: ""
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            var roomDetail by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<com.example.yugm.model.RoomDetail?>(null) }
+
+            LaunchedEffect(roomId) {
+                runCatching { com.example.yugm.api.YugmApi.roomDetail(mainViewModel.authToken, roomId) }
+                    .onSuccess { roomDetail = it }
+            }
+
+            roomDetail?.let { detail ->
+                EditRoomScreen(
+                    token = mainViewModel.authToken,
+                    room = detail.room,
+                    host = detail.room.host ?: com.example.yugm.model.Host(),
+                    onBack = { navController.popBackStack() },
+                    onUpdate = { updatedRoom ->
+                        scope.launch {
+                            runCatching {
+                                com.example.yugm.api.RoomApi.updateRoom(
+                                    token = mainViewModel.authToken,
+                                    roomId = roomId,
+                                    room = updatedRoom
+                                )
+                            }.onSuccess {
+                                android.widget.Toast.makeText(context, "Room updated", android.widget.Toast.LENGTH_SHORT).show()
+                                navController.popBackStack()
+                            }.onFailure {
+                                android.widget.Toast.makeText(context, it.message ?: "Update failed", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                )
+            } ?: run {
+                com.example.yugm.ui.components.LoadingState("Loading room details...")
+            }
         }
 
         // Dating Discovery Swipe
@@ -606,9 +651,9 @@ fun NavGraph(
         // Private Chat Screen
         composable(
             route = Screen.Chat.route,
-            arguments = listOf(navArgument("conversationId") { type = NavType.StringType })
+            arguments = listOf(navArgument("partnerId") { type = NavType.StringType })
         ) { backStackEntry ->
-            val partnerId = backStackEntry.arguments?.getString("conversationId") ?: ""
+            val partnerId = backStackEntry.arguments?.getString("partnerId") ?: ""
             val chatViewModel: com.example.yugm.ui.viewmodel.ChatViewModel = hiltViewModel()
             val directGifts = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateListOf<com.example.yugm.model.GiftItem>() }
             val chatContext = androidx.compose.ui.platform.LocalContext.current
@@ -830,8 +875,8 @@ fun NavGraph(
                                     gift = gift,
                                     receiverId = room.host?.id ?: ""
                                 )
-                                val balanceRes = com.example.yugm.api.YugmApi.wallet(mainViewModel.authToken)
-                                mainViewModel.updateBalance(balanceRes)
+                            }.onSuccess {
+                                runCatching { mainViewModel.updateBalance(com.example.yugm.api.YugmApi.wallet(mainViewModel.authToken)) }
                                 gifts.add(gift)
                             }
                         }
@@ -1072,10 +1117,11 @@ fun NavGraph(
                                     onPkRefresh = { refreshVoiceRoom() },
                                     onPkLeadChanged = { leader, leftScore, rightScore ->
                                         scope.launch {
-                                            pkBattle = pkBattle?.copy(
+                                            val current = pkBattle ?: return@launch
+                                            pkBattle = current.copy(
                                                 leader = com.example.yugm.model.PkSideType.valueOf(leader),
-                                                left = pkBattle?.left?.copy(score = leftScore) ?: pkBattle?.left,
-                                                right = pkBattle?.right?.copy(score = rightScore) ?: pkBattle?.right
+                                                left = current.left.copy(score = leftScore),
+                                                right = current.right.copy(score = rightScore)
                                             )
                                         }
                                     },
@@ -1202,8 +1248,8 @@ fun NavGraph(
                                     gift = gift,
                                     receiverId = room.host?.id ?: ""
                                 )
-                                val balanceRes = com.example.yugm.api.YugmApi.wallet(mainViewModel.authToken)
-                                mainViewModel.updateBalance(balanceRes)
+                            }.onSuccess {
+                                runCatching { mainViewModel.updateBalance(com.example.yugm.api.YugmApi.wallet(mainViewModel.authToken)) }
                                 gifts.add(gift)
                             }
                         }
@@ -1441,10 +1487,11 @@ fun NavGraph(
                                     onPkRefresh = { refreshVideoRoom() },
                                     onPkLeadChanged = { leader, leftScore, rightScore ->
                                         scope.launch {
-                                            pkBattle = pkBattle?.copy(
+                                            val current = pkBattle ?: return@launch
+                                            pkBattle = current.copy(
                                                 leader = com.example.yugm.model.PkSideType.valueOf(leader),
-                                                left = pkBattle?.left?.copy(score = leftScore) ?: pkBattle?.left,
-                                                right = pkBattle?.right?.copy(score = rightScore) ?: pkBattle?.right
+                                                left = current.left.copy(score = leftScore),
+                                                right = current.right.copy(score = rightScore)
                                             )
                                         }
                                     },
@@ -1539,6 +1586,7 @@ fun NavGraph(
         // Safety Screen
         composable(Screen.Safety.route) {
             SafetyScreen(
+                token = mainViewModel.authToken,
                 onNavigateToBlocked = { navController.navigate(Screen.BlockedUsers.route) },
                 onBack = { navController.popBackStack() }
             )
@@ -1578,6 +1626,20 @@ fun NavGraph(
         composable(Screen.Support.route) {
             SupportScreen(
                 token = mainViewModel.authToken,
+                onBack = { navController.popBackStack() },
+                onTicketClick = { ticketId -> navController.navigate(Screen.TicketDetail.createRoute(ticketId)) }
+            )
+        }
+
+        // Ticket Detail Screen
+        composable(
+            route = Screen.TicketDetail.route,
+            arguments = listOf(navArgument("ticketId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val ticketId = backStackEntry.arguments?.getString("ticketId") ?: ""
+            TicketDetailScreen(
+                token = mainViewModel.authToken,
+                ticketId = ticketId,
                 onBack = { navController.popBackStack() }
             )
         }
@@ -1623,8 +1685,8 @@ fun NavGraph(
 
         // Clan Chat
         composable(Screen.ClanChat.route, arguments = listOf(
-            androidx.navigation.NavArgument("clanId") { type = NavType.StringType },
-            androidx.navigation.NavArgument("clanName") { type = NavType.StringType; defaultValue = "" }
+            navArgument("clanId") { type = NavType.StringType },
+            navArgument("clanName") { type = NavType.StringType; defaultValue = "" }
         )) { backStackEntry ->
             val clanId = backStackEntry.arguments?.getString("clanId") ?: return@composable
             val clanName = backStackEntry.arguments?.getString("clanName") ?: ""

@@ -8,8 +8,11 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { env } from "./config/env.js";
 import { adminRouter } from "./routes/admin.js";
+import { adminSupportRouter } from "./routes/adminSupport.js";
+import { adminCosmeticsRouter } from "./routes/adminCosmetics.js";
 import { adminVerificationRouter } from "./routes/adminVerification.js";
 import { authRouter } from "./routes/auth.js";
+import { handlePayoutWebhook } from "./services/payoutWebhook.js";
 import { clansRouter } from "./routes/clans.js";
 import { creatorRouter } from "./routes/creator.js";
 import { datingRouter } from "./routes/dating.js";
@@ -20,6 +23,7 @@ import { notificationsRouter } from "./routes/notifications.js";
 import { pkRouter } from "./routes/pk.js";
 import { reportsRouter } from "./routes/reports.js";
 import { roomsRouter } from "./routes/rooms.js";
+import { supportRouter } from "./routes/support.js";
 import { trustVerificationRouter } from "./routes/trustVerification.js";
 import { uploadRouter } from "./routes/upload.js";
 import { usersRouter } from "./routes/users.js";
@@ -86,6 +90,9 @@ export function createApp() {
   app.use(cors(env.CORS_ORIGIN === "*"
     ? { origin: "*", credentials: false }
     : { origin: env.CORS_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean), credentials: true }));
+  // Webhook route needs raw body for signature verification (before express.json)
+  app.post("/api/payments/webhook/payout", express.raw({ type: "application/json" }), handlePayoutWebhook);
+
   // WARNING: If adding multer file uploads, always validate file type/size and scope upload routes with auth
   app.use(express.json({ limit: "1mb" }));
   app.use((req, res, next) => {
@@ -140,6 +147,8 @@ export function createApp() {
   app.get("/api/health", healthHandler);
   app.use("/api/admin", adminVerificationRouter);
   app.use("/api/admin", adminRouter);
+  app.use("/api/admin", adminSupportRouter);
+  app.use("/api/admin", adminCosmeticsRouter);
   app.use("/api/auth", authRouter);
   app.use("/api/clans", clansRouter);
   app.use("/api/creator", creatorRouter);
@@ -155,6 +164,7 @@ export function createApp() {
   app.use("/api", walletRouter);
   app.use("/api", uploadRouter);
   app.use("/api", reportsRouter);
+  app.use("/api/support", supportRouter);
 
   app.use((_req, res) => res.status(404).json({ ok: false, error: { message: "Route not found" } }));
   app.use((error: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {

@@ -3,17 +3,21 @@ import { env } from "../config/env.js";
 
 function normalizeRedisUrl(rawUrl: string | undefined) {
   const value = rawUrl?.trim();
-  if (!value) return undefined;
+  if (!value) {
+    console.log("Redis disabled: REDIS_URL is empty");
+    return undefined;
+  }
 
   const matches = [...value.matchAll(/rediss?:\/\//g)];
   const start = matches.at(-1)?.index;
   const candidate = start === undefined ? value : value.slice(start).trim();
 
   try {
-    new URL(candidate);
+    const parsed = new URL(candidate);
+    console.log(`Redis URL resolved: host=${parsed.hostname} port=${parsed.port}`);
     return candidate;
   } catch {
-    console.warn("Redis disabled: REDIS_URL is not a valid URL");
+    console.warn("Redis disabled: REDIS_URL is not a valid URL:", rawUrl?.slice(0, 40));
     return undefined;
   }
 }
@@ -25,6 +29,8 @@ export function getRedisUrl() {
   return redisUrl;
 }
 
+let lastCreateRedisErrorTime = 0;
+
 export function createRedisConnection(options: RedisOptions = {}) {
   if (!redisUrl) return undefined;
   const client = new Redis(redisUrl, {
@@ -34,9 +40,10 @@ export function createRedisConnection(options: RedisOptions = {}) {
     ...options
   });
   client.on("error", (err) => {
-    if (!warnedRedisError) {
-      warnedRedisError = true;
-      console.warn("Redis connection error:", err.message);
+    const now = Date.now();
+    if (now - lastCreateRedisErrorTime > REDIS_ERROR_COOLDOWN_MS) {
+      lastCreateRedisErrorTime = now;
+      console.warn("Redis connection error (createRedisConnection):", err.message);
     }
   });
   return client;
@@ -51,23 +58,28 @@ export const redis = redisUrl
     })
   : undefined;
 
-let warnedRedisError = false;
+let lastRedisErrorTime = 0;
+const REDIS_ERROR_COOLDOWN_MS = 30_000;
 const warnedRedisCommandErrors = new Set<string>();
 
 if (redis) {
   redis.on("error", (err) => {
-    if (!warnedRedisError) {
-      warnedRedisError = true;
+    const now = Date.now();
+    if (now - lastRedisErrorTime > REDIS_ERROR_COOLDOWN_MS) {
+      lastRedisErrorTime = now;
       console.warn("Redis connection error:", err.message);
     }
   });
 }
 
+let lastRedisConnectAttempt = 0;
+
 export async function connectRedis() {
-  if (!redis) {
-    console.log("Redis disabled: REDIS_URL is empty");
-    return;
-  }
+  if (!redis) return;
+
+  const now = Date.now();
+  if (now - lastRedisConnectAttempt < 10_000) return;
+  lastRedisConnectAttempt = now;
 
   try {
     await redis.connect();

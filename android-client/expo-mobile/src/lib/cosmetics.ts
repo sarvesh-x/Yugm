@@ -1,4 +1,4 @@
-import { profileCosmetics } from "@yugm/shared";
+import { profileCosmetics, cosmeticBundles } from "@yugm/shared";
 
 export type ActiveCosmetics = {
   avatarAsset?: string;
@@ -26,6 +26,7 @@ export type ActiveCosmetics = {
 export type CosmeticItem = (typeof profileCosmetics)[number];
 
 export const cosmeticCatalog = profileCosmetics;
+export { cosmeticBundles };
 
 export function findCosmetic(id?: string) {
   return id ? cosmeticCatalog.find((item) => item.id === id) : undefined;

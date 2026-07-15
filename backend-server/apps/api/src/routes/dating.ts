@@ -35,7 +35,7 @@ datingRouter.get("/preferences", asyncHandler(async (req: AuthRequest, res) => {
     lookingFor: user?.lookingFor ?? "Friendship",
     datingAgeMin: user?.datingAgeMin ?? 18,
     datingAgeMax: user?.datingAgeMax ?? 35,
-    verifiedOnly: Boolean((user as any)?.datingVerifiedOnly)
+    verifiedOnly: Boolean(user?.datingVerifiedOnly)
   } });
 }));
 
@@ -89,7 +89,7 @@ datingRouter.get("/explore", requireNotShadowBanned, asyncHandler(async (req: Au
     isBlocked: { $ne: true },
     ...genderFilter,
     ...ageFilter,
-    ...((currentUser as any).datingVerifiedOnly ? { isVerified: true } : {})
+    ...(currentUser.datingVerifiedOnly ? { isVerified: true } : {})
   }).limit(40).lean();
 
   // Calculate vibe score for each candidate

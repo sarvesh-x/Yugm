@@ -177,7 +177,11 @@ export const walletApi = {
   sendGift: (roomId: string, giftId: string, receiverId: string) =>
     api<{ giftTransaction: any }>(`/rooms/${roomId}/send-gift`, { method: "POST", body: JSON.stringify({ giftId, receiverId }) }),
   sendGiftDirect: (giftId: string, receiverId: string) =>
-    api<{ giftTransaction: any; message: any; relationship?: any }>("/wallet/direct-send-gift", { method: "POST", body: JSON.stringify({ giftId, receiverId }) })
+    api<{ giftTransaction: any; message: any; relationship?: any }>("/wallet/direct-send-gift", { method: "POST", body: JSON.stringify({ giftId, receiverId }) }),
+  purchaseBundle: (bundleId: string) => api<{ balance: number; ownedCosmeticIds: string[]; bundle: any }>("/wallet/cosmetics/bundle-purchase", {
+    method: "POST",
+    body: JSON.stringify({ bundleId })
+  })
 };
 
 export const mediaApi = {

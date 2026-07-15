@@ -229,7 +229,7 @@ export async function createPkInvite(input: {
   await Promise.all([
     addPkEvent({ battleId: battle._id, roomId: input.roomId, userId: input.userId, eventType: "PK_CREATED" }),
     addPkEvent({ battleId: battle._id, roomId: input.opponentRoomId, userId: input.userId, eventType: "PK_INVITE_SENT" }),
-    createNotification(input.opponentHostId, "SYSTEM", "PK Battle Invite", `${(room as any).title} invited you to a PK Battle`, { battleId: battle.id, inviteId: invite.id, roomId: input.opponentRoomId, inviterRoomId: input.roomId, type: "PK_INVITE" })
+    createNotification(input.opponentHostId, "SYSTEM", "PK Battle Invite", `${room.title} invited you to a PK Battle`, { battleId: battle.id, inviteId: invite.id, roomId: input.opponentRoomId, inviterRoomId: input.roomId, type: "PK_INVITE" })
   ]);
   const state = await pkState(battle.toObject());
   emitUser(input.opponentHostId, pkSocketEvents.inviteReceived, { invite, battle: state });

@@ -222,6 +222,13 @@ fun DatingDiscoveryScreen(
                             swipedLeft = true
                             viewModel.pass(token, topCandidate.id)
                         },
+                        onSuperLike = {
+                            swipedRight = true
+                            viewModel.like(token, topCandidate, "SUPER_LIKE")
+                            coroutineScope.launch {
+                                dragOffset.animateTo(width * 1.5f * density, animationSpec = tween(300))
+                            }
+                        },
                         onProfileClick = {
                             onNavigateToProfile(topCandidate.id)
                         }
@@ -268,6 +275,7 @@ fun DiscoveryCard(
     dragOffset: Animatable<Float, *>? = null,
     onSwipeRight: () -> Unit = {},
     onSwipeLeft: () -> Unit = {},
+    onSuperLike: () -> Unit = {},
     onProfileClick: () -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -484,13 +492,7 @@ fun DiscoveryCard(
 
                     // Super Like (Star) Button
                     IconButton(
-                        onClick = {
-                            swipedRight = true
-                            viewModel.like(token, topCandidate, "SUPER_LIKE")
-                            coroutineScope.launch {
-                                dragOffset.animateTo(width * 1.5f * density, animationSpec = tween(300))
-                            }
-                        },
+                        onClick = onSuperLike,
                         modifier = Modifier
                             .size(62.dp)
                             .clip(CircleShape)

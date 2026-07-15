@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -51,7 +52,9 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.yugm.R
 import com.example.yugm.api.YugmApi
+import com.example.yugm.model.CosmeticCatalog
 import com.example.yugm.model.Host
+import com.example.yugm.model.ProfileCosmetic
 import com.example.yugm.model.Room
 import com.example.yugm.model.RoomType
 import com.example.yugm.ui.components.GradientAction
@@ -61,6 +64,7 @@ import com.example.yugm.ui.components.YugmAmbientBackground
 import com.example.yugm.ui.components.YugmPageHeader
 import com.example.yugm.ui.theme.Background
 import com.example.yugm.ui.theme.BorderColor
+import com.example.yugm.ui.theme.Gold
 import com.example.yugm.ui.theme.Pink
 import com.example.yugm.ui.theme.PrimaryPurple
 import com.example.yugm.ui.theme.SurfaceElevated
@@ -92,6 +96,26 @@ fun CreateRoomScreen(
     var scheduleLater by rememberSaveable { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
+    var cosmeticCatalog by remember { mutableStateOf<CosmeticCatalog?>(null) }
+    var selectedTheme by remember { mutableStateOf("") }
+    var selectedBadge by remember { mutableStateOf("") }
+    var selectedAmbience by remember { mutableStateOf("") }
+    var vipOnly by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(token) {
+        runCatching { YugmApi.cosmetics(token) }.onSuccess { cosmeticCatalog = it }
+    }
+
+    val catalog = cosmeticCatalog
+    val ownedThemes = catalog?.cosmetics?.filter {
+        it.type == "ROOM_THEME" && catalog.ownedCosmeticIds.contains(it.id)
+    } ?: emptyList()
+    val ownedBadges = catalog?.cosmetics?.filter {
+        it.type == "ROOM_BADGE" && catalog.ownedCosmeticIds.contains(it.id)
+    } ?: emptyList()
+    val ownedAmbiences = catalog?.cosmetics?.filter {
+        it.type == "ROOM_AMBIENCE" && catalog.ownedCosmeticIds.contains(it.id)
+    } ?: emptyList()
 
     val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) coverUri = uri
@@ -133,7 +157,11 @@ fun CreateRoomScreen(
                     language = language,
                     maxSpeakers = maxSpeakers,
                     tags = tags,
-                    host = host
+                    host = host,
+                    theme = selectedTheme,
+                    badge = selectedBadge,
+                    ambience = selectedAmbience,
+                    vipOnly = vipOnly
                 ),
                 scheduleLater,
                 if (isPublic) "PUBLIC" else "PRIVATE",
@@ -232,6 +260,47 @@ fun CreateRoomScreen(
                                 colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Pink)
                             )
                         }
+                        DividerLine()
+                        SettingRow("♛", "VIP Only Room", "Only VIP members can join") {
+                            Switch(
+                                checked = vipOnly,
+                                onCheckedChange = { vipOnly = it },
+                                colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Gold)
+                            )
+                        }
+                    }
+                }
+                if (ownedThemes.isNotEmpty()) {
+                    item {
+                        ChoiceBlock("Room Theme", subtitle = "Premium") {
+                            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                ownedThemes.forEach { cosmetic ->
+                                    ReferenceChip(cosmetic.name, glyph = if (selectedTheme == cosmetic.id) "✓" else "◖", selected = selectedTheme == cosmetic.id, onClick = { selectedTheme = if (selectedTheme == cosmetic.id) "" else cosmetic.id })
+                                }
+                            }
+                        }
+                    }
+                }
+                if (ownedBadges.isNotEmpty()) {
+                    item {
+                        ChoiceBlock("Room Badge", subtitle = "Premium") {
+                            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                ownedBadges.forEach { cosmetic ->
+                                    ReferenceChip(cosmetic.name, glyph = if (selectedBadge == cosmetic.id) "✓" else "🏷️", selected = selectedBadge == cosmetic.id, onClick = { selectedBadge = if (selectedBadge == cosmetic.id) "" else cosmetic.id })
+                                }
+                            }
+                        }
+                    }
+                }
+                if (ownedAmbiences.isNotEmpty()) {
+                    item {
+                        ChoiceBlock("Room Ambience", subtitle = "Premium") {
+                            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                ownedAmbiences.forEach { cosmetic ->
+                                    ReferenceChip(cosmetic.name, glyph = if (selectedAmbience == cosmetic.id) "✓" else "♪", selected = selectedAmbience == cosmetic.id, onClick = { selectedAmbience = if (selectedAmbience == cosmetic.id) "" else cosmetic.id })
+                                }
+                            }
+                        }
                     }
                 }
                 if (error.isNotBlank()) item { Text(error, color = Pink, fontSize = 12.sp) }
@@ -249,7 +318,7 @@ fun CreateRoomScreen(
 }
 
 @Composable
-private fun RoomTextBlock(label: String, required: Boolean, value: String, maxLength: Int, placeholder: String, singleLine: Boolean = true, onValueChange: (String) -> Unit) {
+internal fun RoomTextBlock(label: String, required: Boolean, value: String, maxLength: Int, placeholder: String, singleLine: Boolean = true, onValueChange: (String) -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(SurfaceElevated).border(1.dp, BorderColor, RoundedCornerShape(20.dp)).padding(16.dp)) {
         Row {
             Text(label, color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -269,7 +338,7 @@ private fun RoomTextBlock(label: String, required: Boolean, value: String, maxLe
 }
 
 @Composable
-private fun ChoiceBlock(title: String, required: Boolean = false, subtitle: String = "", content: @Composable () -> Unit) {
+internal fun ChoiceBlock(title: String, required: Boolean = false, subtitle: String = "", content: @Composable () -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(SurfaceElevated).border(1.dp, BorderColor, RoundedCornerShape(20.dp)).padding(14.dp)) {
         Row {
             Text(title, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
@@ -281,7 +350,7 @@ private fun ChoiceBlock(title: String, required: Boolean = false, subtitle: Stri
 }
 
 @Composable
-private fun SettingRow(glyph: String, title: String, subtitle: String, trailing: @Composable () -> Unit) {
+internal fun SettingRow(glyph: String, title: String, subtitle: String, trailing: @Composable () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(glyph, color = TextMuted, fontSize = 21.sp, modifier = Modifier.width(38.dp))
         Column(Modifier.weight(1f)) {
@@ -293,11 +362,11 @@ private fun SettingRow(glyph: String, title: String, subtitle: String, trailing:
 }
 
 @Composable
-private fun StepperButton(text: String, onClick: () -> Unit) {
+internal fun StepperButton(text: String, onClick: () -> Unit) {
     Box(Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(Background.copy(alpha = 0.7f)).border(1.dp, BorderColor, RoundedCornerShape(10.dp)).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
         Text(text, color = TextPrimary, fontSize = 18.sp)
     }
 }
 
 @Composable
-private fun DividerLine() = Box(Modifier.fillMaxWidth().height(1.dp).background(BorderColor))
+internal fun DividerLine() = Box(Modifier.fillMaxWidth().height(1.dp).background(BorderColor))

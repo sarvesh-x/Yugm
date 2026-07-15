@@ -50,7 +50,10 @@ data class ActiveCosmetics(
     val collectibleTitle: String = "",
     val giftShelf: String = "",
     val chatBubble: String = "",
-    val seasonalEvent: String = ""
+    val seasonalEvent: String = "",
+    val videoCallOverlay: String = "",
+    val roomBadge: String = "",
+    val roomAmbience: String = ""
 )
 
 data class Room(
@@ -66,7 +69,11 @@ data class Room(
     val tags: List<String> = emptyList(),
     val participants: Int = 0,
     val maxSpeakers: Int = 6,
-    val gradient: List<Color> = emptyList()
+    val gradient: List<Color> = emptyList(),
+    val theme: String = "",
+    val vipOnly: Boolean = false,
+    val badge: String = "",
+    val ambience: String = ""
 )
 
 enum class RoomType { Voice, Video }
@@ -229,8 +236,29 @@ data class Achievement(
     val description: String = "",
     val target: Int = 0,
     val rewardCoins: Int = 0,
+    val rewardCosmetic: String = "",
     val progress: Int = 0,
     val complete: Boolean = false
+)
+
+data class CosmeticBundle(
+    val id: String = "",
+    val title: String = "",
+    val description: String = "",
+    val coinPrice: Int = 0,
+    val cosmeticIds: List<String> = emptyList()
+)
+
+data class DailyCheckInResult(
+    val streak: Int = 0,
+    val claimed: Boolean = false,
+    val unlockedCosmetic: String = ""
+)
+
+data class ClaimAchievementResult(
+    val claimed: Boolean = false,
+    val rewardCoins: Int = 0,
+    val rewardCosmetic: String = ""
 )
 
 data class ExperienceFeedItem(
@@ -244,6 +272,7 @@ data class ExperienceHome(
     val userRole: String = "USER",
     val profileCompletion: ProfileCompletion = ProfileCompletion(),
     val level: LevelStatus = LevelStatus(),
+    val streakCount: Int = 0,
     val achievements: List<Achievement> = emptyList(),
     val feed: List<ExperienceFeedItem> = emptyList(),
     val liveRooms: List<Room> = emptyList(),
@@ -335,14 +364,6 @@ data class WalletProgressResult(
     val balance: Int = 0,
     val vip: VipStatus = VipStatus(),
     val level: LevelStatus = LevelStatus()
-)
-
-data class DailyCheckInResult(
-    val alreadyClaimed: Boolean = false,
-    val xpAwarded: Int = 0,
-    val levelUpReward: Int = 0,
-    val level: LevelStatus = LevelStatus(),
-    val balance: Int = 0
 )
 
 data class RelationshipStatus(
@@ -597,4 +618,26 @@ data class ClanSummary(
 
 data class NotificationPreferences(
     val values: Map<String, Boolean> = emptyMap()
+)
+
+data class TicketMessage(
+    val senderId: String = "",
+    val senderRole: String = "",
+    val message: String = "",
+    val createdAt: String = ""
+)
+
+data class SupportTicket(
+    val _id: String = "",
+    val userId: String = "",
+    val subject: String = "",
+    val message: String = "",
+    val status: String = "OPEN",
+    val priority: String = "MEDIUM",
+    val category: String = "General",
+    val messages: List<TicketMessage> = emptyList(),
+    val assignedTo: String? = null,
+    val resolvedAt: String? = null,
+    val createdAt: String = "",
+    val updatedAt: String = ""
 )

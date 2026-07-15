@@ -145,9 +145,8 @@ fun WalletScreen(
                                     scope.launch {
                                         runCatching { YugmApi.checkIn(token) }
                                             .onSuccess { result ->
-                                                balance = result.balance
-                                                onBalanceChanged(result.balance)
-                                                status = if (result.alreadyClaimed) "Today's free reward is already claimed" else "+${result.xpAwarded} XP claimed"
+                                                refresh()
+                                                status = if (!result.claimed) "Today's free reward is already claimed" else "Free reward claimed! Streak: ${result.streak}"
                                             }
                                             .onFailure { status = it.message ?: "Could not claim reward" }
                                     }

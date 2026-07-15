@@ -149,7 +149,10 @@ fun JSONObject.toActiveCosmetics(): ActiveCosmetics = ActiveCosmetics(
     collectibleTitle = optString("collectibleTitle", ""),
     giftShelf = optString("giftShelf", ""),
     chatBubble = optString("chatBubble", ""),
-    seasonalEvent = optString("seasonalEvent", "")
+    seasonalEvent = optString("seasonalEvent", ""),
+    videoCallOverlay = optString("videoCallOverlay", ""),
+    roomBadge = optString("roomBadge", ""),
+    roomAmbience = optString("roomAmbience", "")
 )
 
 fun JSONObject.toCosmeticCatalog(): CosmeticCatalog {
@@ -272,7 +275,11 @@ fun JSONObject.toRoom(): Room {
         },
         participants = optInt("participantCount", optInt("participants", 0)),
         maxSpeakers = optInt("maxSpeakers", if (type == RoomType.Video) 4 else 6),
-        gradient = roomGradient(optString("_id", optString("title")))
+        gradient = roomGradient(optString("_id", optString("title"))),
+        theme = optString("theme", ""),
+        vipOnly = optBoolean("vipOnly", false),
+        badge = optString("badge", ""),
+        ambience = optString("ambience", "")
     )
 }
 
@@ -397,6 +404,7 @@ fun JSONObject.toAchievement(): Achievement = Achievement(
     description = optString("description", ""),
     target = optInt("target", 0),
     rewardCoins = optInt("rewardCoins", 0),
+    rewardCosmetic = optString("rewardCosmetic", ""),
     progress = optInt("progress", 0),
     complete = optBoolean("complete", false)
 )
@@ -424,6 +432,7 @@ fun JSONObject.toExperienceHome(): ExperienceHome {
         userRole = optJSONObject("user")?.optString("role", "USER") ?: "USER",
         profileCompletion = optJSONObject("profileCompletion")?.toProfileCompletion() ?: ProfileCompletion(),
         level = optJSONObject("level")?.toLevelStatus() ?: LevelStatus(),
+        streakCount = optJSONObject("user")?.optInt("streakCount", 0) ?: 0,
         achievements = optJSONArray("achievements")?.toAchievements() ?: emptyList(),
         feed = optJSONArray("feed")?.toExperienceFeedItems() ?: emptyList(),
         liveRooms = roomsJson.optJSONArray("live")?.toRooms() ?: emptyList(),
@@ -528,6 +537,10 @@ fun JSONObject.toPkOpponent(): PkOpponent = PkOpponent(
 
 fun JSONArray.toPkOpponents(): List<PkOpponent> = buildList {
     for (index in 0 until length()) add(getJSONObject(index).toPkOpponent())
+}
+
+fun JSONArray.toPkBattles(): List<PkBattle> = buildList {
+    for (index in 0 until length()) add(getJSONObject(index).toPkBattle())
 }
 
 fun JSONObject.toPkLeaderboardEntry(): PkLeaderboardEntry {

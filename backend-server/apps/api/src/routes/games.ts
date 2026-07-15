@@ -118,7 +118,7 @@ gamesRouter.get("/missions", asyncHandler(async (req: AuthRequest, res) => {
 }));
 
 gamesRouter.get("/leaderboard", asyncHandler(async (req: AuthRequest, res) => {
-  const gameId = miniGameIds.includes(String(req.query.gameId) as any) ? String(req.query.gameId) : miniGameIds[0];
+  const gameId = (miniGameIds as readonly string[]).includes(String(req.query.gameId)) ? String(req.query.gameId) : miniGameIds[0];
   const limit = Math.min(Number(req.query.limit) || 20, 50);
   const leaderboard = await MiniGameScore.aggregate([
     { $match: { gameId } },
@@ -182,7 +182,7 @@ gamesRouter.get("/challenges", asyncHandler(async (req: AuthRequest, res) => {
   sendOk(res, {
     incoming: incoming.map(challengePayload),
     outgoing: outgoing.map(challengePayload),
-    clan: (clan as any[]).map(challengePayload)
+    clan: clan.map(challengePayload)
   });
 }));
 

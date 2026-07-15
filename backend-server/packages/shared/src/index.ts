@@ -94,52 +94,117 @@ export const profileCosmetics = [
   { id: "avatar_nova_static", type: "AVATAR_ASSET", name: "Nova Static Avatar", coinPrice: 299, rarity: "RARE", preview: "avatar_nova", assetKind: "STATIC", assetUrl: "https://api.dicebear.com/9.x/adventurer/png?seed=YugmNova&backgroundColor=ffd5dc" },
   { id: "avatar_pixel_gif", type: "AVATAR_ASSET", name: "Pixel Loop Avatar", coinPrice: 599, rarity: "EPIC", preview: "avatar_pixel_loop", assetKind: "ANIMATED", assetUrl: "https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif" },
   { id: "avatar_cosmic_gif", type: "AVATAR_ASSET", name: "Cosmic Pulse Avatar", coinPrice: 999, rarity: "LEGENDARY", preview: "avatar_cosmic_loop", assetKind: "ANIMATED", assetUrl: "https://media.giphy.com/media/l0HlNaQ6gWfllcjDO/giphy.gif" },
+  { id: "avatar_kitsune_gif", type: "AVATAR_ASSET", name: "Kitsune Mask Avatar", coinPrice: 699, rarity: "EPIC", preview: "avatar_kitsune", assetKind: "ANIMATED", assetUrl: "https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif" },
   { id: "frame_gold", type: "AVATAR_FRAME", name: "Golden Ring", coinPrice: 399, rarity: "RARE", preview: "gold" },
   { id: "frame_neon", type: "AVATAR_FRAME", name: "Neon Pulse", coinPrice: 699, rarity: "EPIC", preview: "neon" },
   { id: "frame_crystal", type: "AVATAR_FRAME", name: "Crystal Halo", coinPrice: 899, rarity: "EPIC", preview: "crystal" },
   { id: "frame_royal", type: "AVATAR_FRAME", name: "Royal Crown Frame", coinPrice: 1299, rarity: "LEGENDARY", preview: "royal" },
+  { id: "frame_gradient", type: "AVATAR_FRAME", name: "Gradient Shift Frame", coinPrice: 799, rarity: "EPIC", preview: "gradient" },
+  { id: "frame_floral", type: "AVATAR_FRAME", name: "Floral Vibe Frame", coinPrice: 499, rarity: "RARE", preview: "floral" },
+  { id: "frame_iridescent", type: "AVATAR_FRAME", name: "Iridescent Halo", coinPrice: 1199, rarity: "LEGENDARY", preview: "iridescent" },
+  { id: "frame_minimal", type: "AVATAR_FRAME", name: "Slim Line Frame", coinPrice: 199, rarity: "COMMON", preview: "minimal" },
   { id: "wave_soft", type: "SPEAKING_WAVE", name: "Soft Voice Wave", coinPrice: 249, rarity: "RARE", preview: "wave_soft" },
   { id: "wave_neon", type: "SPEAKING_WAVE", name: "Neon Speaker Wave", coinPrice: 699, rarity: "EPIC", preview: "wave_neon" },
   { id: "wave_royal", type: "SPEAKING_WAVE", name: "Royal Broadcast Wave", coinPrice: 999, rarity: "LEGENDARY", preview: "wave_royal" },
+  { id: "wave_pulse", type: "SPEAKING_WAVE", name: "Pulse Wave", coinPrice: 149, rarity: "COMMON", preview: "wave_pulse" },
   { id: "theme_midnight", type: "PROFILE_THEME", name: "Midnight Glow", coinPrice: 499, rarity: "RARE", preview: "midnight" },
   { id: "theme_saffron", type: "PROFILE_THEME", name: "Saffron Wave", coinPrice: 799, rarity: "EPIC", preview: "saffron" },
   { id: "theme_aurora", type: "PROFILE_THEME", name: "Aurora Glass", coinPrice: 999, rarity: "EPIC", preview: "aurora" },
+  { id: "theme_sunset", type: "PROFILE_THEME", name: "Sunset Bloom", coinPrice: 1199, rarity: "LEGENDARY", preview: "sunset" },
   { id: "entrance_spark", type: "ENTRANCE_EFFECT", name: "Spark Entrance", coinPrice: 599, rarity: "RARE", preview: "spark" },
   { id: "entrance_crown", type: "ENTRANCE_EFFECT", name: "Crown Drop", coinPrice: 999, rarity: "LEGENDARY", preview: "crown" },
   { id: "entrance_meteor", type: "ENTRANCE_EFFECT", name: "Meteor Arrival", coinPrice: 1299, rarity: "LEGENDARY", preview: "meteor" },
+  { id: "entrance_galaxy", type: "ENTRANCE_EFFECT", name: "Galaxy Portal", coinPrice: 899, rarity: "EPIC", preview: "galaxy" },
   { id: "badge_early_host", type: "PROFILE_BADGE", name: "Early Host Badge", coinPrice: 199, rarity: "COMMON", preview: "Early Host" },
   { id: "badge_voice_star", type: "PROFILE_BADGE", name: "Voice Star Badge", coinPrice: 499, rarity: "RARE", preview: "Voice Star" },
   { id: "badge_top_gifter", type: "PROFILE_BADGE", name: "Top Gifter Badge", coinPrice: 799, rarity: "EPIC", preview: "Top Gifter" },
+  { id: "badge_vip_loyal", type: "PROFILE_BADGE", name: "VIP Loyal Badge", coinPrice: 1299, rarity: "LEGENDARY", preview: "VIP Loyal" },
   { id: "name_gold_shimmer", type: "NAME_STYLE", name: "Gold Shimmer Name", coinPrice: 599, rarity: "RARE", preview: "gold" },
   { id: "name_neon_glow", type: "NAME_STYLE", name: "Neon Glow Name", coinPrice: 899, rarity: "EPIC", preview: "neon" },
   { id: "name_rainbow_pulse", type: "NAME_STYLE", name: "Rainbow Pulse Name", coinPrice: 1299, rarity: "LEGENDARY", preview: "rainbow" },
+  { id: "name_fire_gradient", type: "NAME_STYLE", name: "Fire Gradient Name", coinPrice: 999, rarity: "EPIC", preview: "fire" },
   { id: "room_entry_confetti", type: "ROOM_ENTRY", name: "Confetti Room Entry", coinPrice: 499, rarity: "RARE", preview: "confetti" },
   { id: "room_entry_spotlight", type: "ROOM_ENTRY", name: "Spotlight Room Entry", coinPrice: 899, rarity: "EPIC", preview: "spotlight" },
+  { id: "entry_rainbow", type: "ROOM_ENTRY", name: "Rainbow Slide Entry", coinPrice: 299, rarity: "COMMON", preview: "rainbow" },
+  { id: "entry_ghost", type: "ROOM_ENTRY", name: "Ghost Glide Entry", coinPrice: 699, rarity: "RARE", preview: "ghost" },
   { id: "mood_chill", type: "MOOD_STATUS", name: "Chill Mood", coinPrice: 99, rarity: "COMMON", preview: "Chill" },
   { id: "mood_open_talk", type: "MOOD_STATUS", name: "Open To Talk", coinPrice: 99, rarity: "COMMON", preview: "Open to talk" },
   { id: "mood_late_night", type: "MOOD_STATUS", name: "Late Night Vibes", coinPrice: 199, rarity: "RARE", preview: "Late night" },
+  { id: "mood_party", type: "MOOD_STATUS", name: "Party Mode", coinPrice: 299, rarity: "EPIC", preview: "Party" },
   { id: "music_lofi_intro", type: "PROFILE_MUSIC", name: "Lo-fi Profile Intro", coinPrice: 399, rarity: "RARE", preview: "lofi" },
   { id: "music_bollywood_pop", type: "PROFILE_MUSIC", name: "Bollywood Pop Intro", coinPrice: 499, rarity: "RARE", preview: "pop" },
+  { id: "music_classical", type: "PROFILE_MUSIC", name: "Classical Fusion", coinPrice: 399, rarity: "RARE", preview: "classical" },
+  { id: "music_indie", type: "PROFILE_MUSIC", name: "Indie Rock Intro", coinPrice: 699, rarity: "EPIC", preview: "indie" },
   { id: "voice_equalizer", type: "VOICE_BADGE", name: "Equalizer Voice Badge", coinPrice: 499, rarity: "RARE", preview: "equalizer" },
   { id: "voice_host_spotlight", type: "VOICE_BADGE", name: "Host Spotlight Badge", coinPrice: 999, rarity: "EPIC", preview: "spotlight" },
+  { id: "voice_master", type: "VOICE_BADGE", name: "Voice Master Badge", coinPrice: 1299, rarity: "LEGENDARY", preview: "Voice Master" },
+  { id: "voice_crowd", type: "VOICE_BADGE", name: "Crowd Favorite", coinPrice: 299, rarity: "COMMON", preview: "Crowd Favorite" },
   { id: "room_theme_neon_club", type: "ROOM_THEME", name: "Neon Club Room", coinPrice: 899, rarity: "EPIC", preview: "neon_club" },
   { id: "room_theme_festive", type: "ROOM_THEME", name: "Festive Room", coinPrice: 699, rarity: "RARE", preview: "festive" },
+  { id: "theme_cozy", type: "ROOM_THEME", name: "Cozy Cafe Room", coinPrice: 399, rarity: "COMMON", preview: "cozy" },
+  { id: "theme_beach", type: "ROOM_THEME", name: "Beach Sunset Room", coinPrice: 599, rarity: "RARE", preview: "beach" },
   { id: "decor_crown", type: "AVATAR_DECORATION", name: "Mini Crown Decoration", coinPrice: 399, rarity: "RARE", preview: "crown" },
   { id: "decor_stars", type: "AVATAR_DECORATION", name: "Star Stickers", coinPrice: 299, rarity: "COMMON", preview: "stars" },
+  { id: "decor_headphones", type: "AVATAR_DECORATION", name: "Neon Headphones", coinPrice: 599, rarity: "EPIC", preview: "headphones" },
+  { id: "decor_halo", type: "AVATAR_DECORATION", name: "Golden Halo", coinPrice: 999, rarity: "LEGENDARY", preview: "halo" },
   { id: "reaction_hearts", type: "REACTION_PACK", name: "Heartstorm Reactions", coinPrice: 299, rarity: "COMMON", preview: "hearts" },
   { id: "reaction_festival", type: "REACTION_PACK", name: "Festival Reactions", coinPrice: 599, rarity: "RARE", preview: "festival" },
+  { id: "reaction_anime", type: "REACTION_PACK", name: "Anime Blast Reactions", coinPrice: 699, rarity: "EPIC", preview: "anime" },
+  { id: "reaction_classic", type: "REACTION_PACK", name: "Classic Vibes", coinPrice: 399, rarity: "RARE", preview: "classic" },
   { id: "layout_creator", type: "PROFILE_LAYOUT", name: "Creator Profile Layout", coinPrice: 499, rarity: "RARE", preview: "creator" },
   { id: "layout_vip_luxe", type: "PROFILE_LAYOUT", name: "VIP Luxe Layout", coinPrice: 999, rarity: "EPIC", preview: "vip_luxe" },
+  { id: "layout_minimal", type: "PROFILE_LAYOUT", name: "Minimal Clean Layout", coinPrice: 299, rarity: "COMMON", preview: "minimal" },
+  { id: "layout_bold", type: "PROFILE_LAYOUT", name: "Bold Grid Layout", coinPrice: 699, rarity: "RARE", preview: "bold" },
   { id: "intro_ask_me", type: "INTRO_CARD", name: "Ask Me About Card", coinPrice: 199, rarity: "COMMON", preview: "Ask me about music, memes, and late-night rooms." },
   { id: "intro_my_vibe", type: "INTRO_CARD", name: "My Vibe Card", coinPrice: 199, rarity: "COMMON", preview: "My vibe is warm chaos and good playlists." },
+  { id: "intro_two_truths", type: "INTRO_CARD", name: "Two Truths Card", coinPrice: 299, rarity: "RARE", preview: "Two truths and a lie — ask me which is which." },
+  { id: "intro_fun_facts", type: "INTRO_CARD", name: "Fun Facts Card", coinPrice: 399, rarity: "EPIC", preview: "Fun fact: I never skip the outro." },
   { id: "title_night_owl", type: "COLLECTIBLE_TITLE", name: "Night Owl Title", coinPrice: 249, rarity: "COMMON", preview: "Night Owl" },
   { id: "title_room_royalty", type: "COLLECTIBLE_TITLE", name: "Room Royalty Title", coinPrice: 899, rarity: "EPIC", preview: "Room Royalty" },
+  { id: "title_chat_champ", type: "COLLECTIBLE_TITLE", name: "Chat Champion Title", coinPrice: 499, rarity: "RARE", preview: "Chat Champion" },
+  { id: "title_vibe_curator", type: "COLLECTIBLE_TITLE", name: "Vibe Curator Title", coinPrice: 1199, rarity: "LEGENDARY", preview: "Vibe Curator" },
   { id: "shelf_rose_wall", type: "GIFT_SHELF", name: "Rose Wall Gift Shelf", coinPrice: 499, rarity: "RARE", preview: "Rose Wall" },
   { id: "shelf_crown_case", type: "GIFT_SHELF", name: "Crown Case Gift Shelf", coinPrice: 999, rarity: "EPIC", preview: "Crown Case" },
+  { id: "shelf_diamond", type: "GIFT_SHELF", name: "Diamond Pedestal Shelf", coinPrice: 1499, rarity: "LEGENDARY", preview: "Diamond Pedestal" },
+  { id: "shelf_heart", type: "GIFT_SHELF", name: "Heart Shelf", coinPrice: 299, rarity: "COMMON", preview: "Heart Shelf" },
   { id: "bubble_gold", type: "CHAT_BUBBLE", name: "Gold Chat Bubbles", coinPrice: 299, rarity: "COMMON", preview: "gold" },
   { id: "bubble_neon", type: "CHAT_BUBBLE", name: "Neon Chat Bubbles", coinPrice: 599, rarity: "RARE", preview: "neon" },
+  { id: "bubble_gradient", type: "CHAT_BUBBLE", name: "Gradient Chat Bubbles", coinPrice: 799, rarity: "EPIC", preview: "gradient" },
+  { id: "bubble_rounded", type: "CHAT_BUBBLE", name: "Rounded Soft Bubbles", coinPrice: 199, rarity: "COMMON", preview: "rounded" },
+  { id: "bubble_festive", type: "CHAT_BUBBLE", name: "Festive Burst Bubbles", coinPrice: 499, rarity: "RARE", preview: "festive" },
+  { id: "bubble_royal", type: "CHAT_BUBBLE", name: "Royal Crown Bubbles", coinPrice: 1099, rarity: "LEGENDARY", preview: "royal" },
   { id: "season_holi", type: "SEASONAL_EVENT", name: "Holi Color Pack", coinPrice: 799, rarity: "EPIC", preview: "holi" },
-  { id: "season_diwali", type: "SEASONAL_EVENT", name: "Diwali Glow Pack", coinPrice: 799, rarity: "EPIC", preview: "diwali" }
+  { id: "season_diwali", type: "SEASONAL_EVENT", name: "Diwali Glow Pack", coinPrice: 799, rarity: "EPIC", preview: "diwali" },
+  { id: "season_monsoon", type: "SEASONAL_EVENT", name: "Monsoon Magic Pack", coinPrice: 499, rarity: "RARE", preview: "monsoon" },
+  { id: "season_republic", type: "SEASONAL_EVENT", name: "Republic Day Pack", coinPrice: 299, rarity: "COMMON", preview: "republic" },
+  { id: "call_soft_glow", type: "CALL_SCREEN", name: "Soft Glow Filter", coinPrice: 399, rarity: "RARE", preview: "soft_glow" },
+  { id: "call_neon_frame", type: "CALL_SCREEN", name: "Neon Call Frame", coinPrice: 699, rarity: "EPIC", preview: "neon_frame" },
+  { id: "call_bollywood_lights", type: "CALL_SCREEN", name: "Bollywood Lights", coinPrice: 999, rarity: "LEGENDARY", preview: "bollywood_lights" },
+  { id: "call_vintage", type: "CALL_SCREEN", name: "Vintage Film Filter", coinPrice: 199, rarity: "COMMON", preview: "vintage" },
+  { id: "badge_premium", type: "ROOM_BADGE", name: "Premium Room Badge", coinPrice: 599, rarity: "EPIC", preview: "Premium" },
+  { id: "badge_featured", type: "ROOM_BADGE", name: "Featured Room Badge", coinPrice: 999, rarity: "LEGENDARY", preview: "Featured" },
+  { id: "badge_vip_host", type: "ROOM_BADGE", name: "VIP Host Badge", coinPrice: 399, rarity: "RARE", preview: "VIP Host" },
+  { id: "badge_top_room", type: "ROOM_BADGE", name: "Top Room Badge", coinPrice: 799, rarity: "EPIC", preview: "Top Room" },
+  { id: "ambience_lofi", type: "ROOM_AMBIENCE", name: "Lo-fi Beats", coinPrice: 299, rarity: "RARE", preview: "lofi" },
+  { id: "ambience_rain", type: "ROOM_AMBIENCE", name: "Rainy Day", coinPrice: 299, rarity: "RARE", preview: "rain" },
+  { id: "ambience_cafe", type: "ROOM_AMBIENCE", name: "Cozy Cafe Ambience", coinPrice: 199, rarity: "COMMON", preview: "cafe" },
+  { id: "ambience_night", type: "ROOM_AMBIENCE", name: "Night City Waves", coinPrice: 599, rarity: "EPIC", preview: "night" },
+  { id: "ambience_forest", type: "ROOM_AMBIENCE", name: "Forest Chill", coinPrice: 499, rarity: "EPIC", preview: "forest" }
+] as const;
+
+export const streakCosmeticRewards: Record<number, string> = {
+  3: "mood_chill",
+  7: "frame_gold",
+  14: "name_neon_glow",
+  30: "avatar_cosmic_gif"
+};
+
+export const cosmeticBundles = [
+  { id: "bundle_vibe_starter", name: "Vibe Starter Pack", cosmeticIds: ["mood_chill", "frame_minimal", "bubble_rounded"], coinPrice: 399, discount: "40%" },
+  { id: "bundle_neon_nights", name: "Neon Nights Pack", cosmeticIds: ["frame_neon", "name_neon_glow", "wave_neon", "room_theme_neon_club"], coinPrice: 1999, discount: "35%" },
+  { id: "bundle_royal", name: "Royal Collection", cosmeticIds: ["frame_royal", "name_rainbow_pulse", "badge_top_gifter", "entrance_crown", "bubble_royal"], coinPrice: 3999, discount: "30%" },
+  { id: "bundle_call_pro", name: "Call Pro Pack", cosmeticIds: ["call_neon_frame", "call_bollywood_lights", "decor_headphones"], coinPrice: 1499, discount: "25%" },
+  { id: "bundle_room_host", name: "Room Host Kit", cosmeticIds: ["room_theme_festive", "badge_premium", "ambience_lofi", "room_entry_confetti"], coinPrice: 1999, discount: "30%" }
 ] as const;
 
 export const profileCosmeticIds = profileCosmetics.map((item) => item.id) as [typeof profileCosmetics[number]["id"], ...typeof profileCosmetics[number]["id"][]];
@@ -163,7 +228,10 @@ export const profileCosmeticTypes = [
   "COLLECTIBLE_TITLE",
   "GIFT_SHELF",
   "CHAT_BUBBLE",
-  "SEASONAL_EVENT"
+  "SEASONAL_EVENT",
+  "CALL_SCREEN",
+  "ROOM_BADGE",
+  "ROOM_AMBIENCE"
 ] as const;
 export const moderationActionTypes = ["WARN", "MUTE", "SUSPEND", "BAN", "UNBAN"] as const;
 
@@ -225,6 +293,9 @@ export const walletSourceLabels = {
   GIFT_RECEIVED_DM: "Direct gift received",
   VIP_PURCHASE: "VIP membership",
   PROFILE_COSMETIC_PURCHASE: "Profile cosmetic",
+  COSMETIC_BUNDLE_PURCHASE: "Cosmetic bundle",
+  COSMETIC_GIFT_SENT: "Cosmetic gift sent",
+  COSMETIC_GIFT_RECEIVED: "Cosmetic gift received",
   LEVEL_REWARD: "Level reward",
   ADMIN_ADJUSTMENT: "Admin adjustment",
   RAZORPAY_PURCHASE: "Razorpay recharge",
@@ -310,7 +381,11 @@ export const createRoomSchema = z.object({
   visibility: z.enum(roomVisibilities).default("PUBLIC"),
   coverImage: z.string().optional(),
   allowAudienceMicRequests: z.boolean().default(true),
-  scheduledFor: z.string().datetime().optional()
+  scheduledFor: z.string().datetime().optional(),
+  theme: z.string().optional(),
+  vipOnly: z.boolean().default(false),
+  badge: z.string().optional(),
+  ambience: z.string().optional()
 });
 
 export const chatMessageSchema = z.object({
@@ -342,8 +417,19 @@ export const purchaseVipSchema = z.object({
   planId: z.enum(vipPlanIds)
 });
 
+export const cosmeticBundleIds = cosmeticBundles.map((b) => b.id) as [typeof cosmeticBundles[number]["id"], ...typeof cosmeticBundles[number]["id"][]];
+
 export const purchaseProfileCosmeticSchema = z.object({
   cosmeticId: z.enum(profileCosmeticIds)
+});
+
+export const purchaseCosmeticBundleSchema = z.object({
+  bundleId: z.enum(cosmeticBundleIds)
+});
+
+export const transferCosmeticSchema = z.object({
+  cosmeticId: z.enum(profileCosmeticIds),
+  receiverId: z.string().regex(objectIdPattern, "Invalid receiverId format")
 });
 
 export const equipProfileCosmeticSchema = z.object({

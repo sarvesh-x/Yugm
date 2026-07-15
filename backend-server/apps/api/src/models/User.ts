@@ -35,8 +35,10 @@ export interface IUser extends mongoose.Document {
   level: number;
   levelTitle?: string;
   lastDailyCheckInAt?: Date;
+  streakCount: number;
   profileCompletedAt?: Date;
   ownedCosmeticIds: string[];
+  claimedAchievementIds: string[];
   activeCosmetics: {
     avatarAsset?: string;
     avatarFrame?: string;
@@ -58,6 +60,9 @@ export interface IUser extends mongoose.Document {
     giftShelf?: string;
     chatBubble?: string;
     seasonalEvent?: string;
+    videoCallOverlay?: string;
+    roomBadge?: string;
+    roomAmbience?: string;
   };
   vipTier?: string;
   vipStartedAt?: Date;
@@ -119,8 +124,10 @@ const userSchema = new Schema<IUser>(
     level: { type: Number, default: 1 },
     levelTitle: { type: String, default: "New Vibe" },
     lastDailyCheckInAt: Date,
+    streakCount: { type: Number, default: 0 },
     profileCompletedAt: Date,
     ownedCosmeticIds: [{ type: String }],
+    claimedAchievementIds: [{ type: String }],
     activeCosmetics: {
       avatarAsset: String,
       avatarFrame: String,
@@ -141,7 +148,10 @@ const userSchema = new Schema<IUser>(
       collectibleTitle: String,
       giftShelf: String,
       chatBubble: String,
-      seasonalEvent: String
+      seasonalEvent: String,
+      videoCallOverlay: String,
+      roomBadge: String,
+      roomAmbience: String
     },
     vipTier: String,
     vipStartedAt: Date,

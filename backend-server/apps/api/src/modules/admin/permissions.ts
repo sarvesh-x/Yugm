@@ -36,6 +36,8 @@ export const adminPermissions = [
   "withdrawals.approve",
   "withdrawals.reject",
   "gifts.manage",
+  "cosmetics.read",
+  "cosmetics.write",
   "notifications.send",
   "support.read",
   "support.reply",

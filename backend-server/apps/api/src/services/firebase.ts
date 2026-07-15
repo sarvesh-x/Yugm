@@ -15,15 +15,21 @@ function fb() {
 export function initFirebase() {
   const firebase = fb();
   if (firebase.apps.length) return;
-  if (!env.FCM_PROJECT_ID || !env.FCM_CLIENT_EMAIL || !env.FCM_PRIVATE_KEY) {
-    console.log("Firebase disabled: service account env vars are not configured");
+  const projectId = env.FCM_PROJECT_ID;
+  const clientEmail = env.FCM_CLIENT_EMAIL;
+  const rawKey = env.FCM_PRIVATE_KEY;
+  if (!projectId || !clientEmail || !rawKey) {
+    console.log(`Firebase disabled: missing env vars (projectId=${!!projectId} clientEmail=${!!clientEmail} privateKey=${!!rawKey})`);
     return;
   }
+  const privateKey = rawKey.includes("-----BEGIN") && rawKey.includes("\n")
+    ? rawKey
+    : rawKey.replace(/\\n/g, "\n");
   firebase.initializeApp({
     credential: firebase.credential.cert({
-      projectId: env.FCM_PROJECT_ID,
-      clientEmail: env.FCM_CLIENT_EMAIL,
-      privateKey: env.FCM_PRIVATE_KEY.replace(/\\n/g, "\n")
+      projectId,
+      clientEmail,
+      privateKey
     })
   });
   console.log("Firebase initialized (FCM + Auth)");

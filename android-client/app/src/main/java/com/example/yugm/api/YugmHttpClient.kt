@@ -34,9 +34,7 @@ object YugmHttpClient {
         if (configuredBase.isNotBlank()) add(configuredBase)
         if (BuildConfig.DEBUG) {
             add("http://10.0.2.2:4000/api")
-            add("http://10.0.3.2:4000/api")
             if (BuildConfig.LAN_API_BASE_URL.isNotBlank()) add(BuildConfig.LAN_API_BASE_URL.trim().trimEnd('/'))
-            add("http://127.0.0.1:4000/api")
         }
     }.distinct()
     var workingBaseUrl: String? = null

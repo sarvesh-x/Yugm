@@ -52,6 +52,15 @@ import com.example.yugm.ui.theme.PrimaryPurple
 import com.example.yugm.ui.theme.SurfaceElevated
 import com.example.yugm.ui.theme.TextMuted
 import com.example.yugm.ui.theme.TextPrimary
+import com.example.yugm.util.cosmeticDisplayName
+import kotlinx.coroutines.launch
+
+private val roomThemeGradients = mapOf(
+  "room_theme_neon_club" to listOf(Color(0xFF0D0221), Color(0xFF1A0533)),
+  "room_theme_festive" to listOf(Color(0xFF2D0A0A), Color(0xFF5C1A1A)),
+  "theme_cozy" to listOf(Color(0xFF1A120B), Color(0xFF3C2415)),
+  "theme_beach" to listOf(Color(0xFF0D1B2A), Color(0xFF1B3A5C))
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,9 +78,10 @@ fun RoomShell(
     roomContent: @Composable ColumnScope.() -> Unit
 ) {
     var message by rememberSaveable { mutableStateOf("") }
+    val themeGradient = roomThemeGradients[room.theme]
     GiftPanel(open = giftOpen, gifts = gifts, balance = balance, onDismiss = { onGiftOpen(false) }, onSend = onGift)
 
-    YugmAmbientBackground {
+    YugmAmbientBackground(themeOverride = themeGradient) {
         Column(Modifier.fillMaxSize()) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp),

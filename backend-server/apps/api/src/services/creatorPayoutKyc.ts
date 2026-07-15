@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { CreatorPayoutKyc } from "../models/CreatorPayoutKyc.js";
 import { User } from "../models/User.js";
 import { encryptSensitiveField, last4, maskUpi } from "./cryptoFields.js";
@@ -140,7 +141,7 @@ export async function approveCreatorPayoutKyc(userId: string, adminId: string, n
   kyc.panVerified = true;
   kyc.verifiedAt = new Date();
   kyc.rejectedAt = undefined;
-  kyc.reviewedByAdminId = adminId as any;
+  kyc.reviewedByAdminId = adminId as unknown as mongoose.Types.ObjectId;
   kyc.rejectionReason = undefined;
   kyc.adminNotes = notes;
   await kyc.save();
@@ -152,7 +153,7 @@ export async function rejectCreatorPayoutKyc(userId: string, adminId: string, re
   kyc.kycStatus = "REJECTED";
   kyc.payoutStatus = "DISABLED";
   kyc.rejectedAt = new Date();
-  kyc.reviewedByAdminId = adminId as any;
+  kyc.reviewedByAdminId = adminId as unknown as mongoose.Types.ObjectId;
   kyc.rejectionReason = reason;
   kyc.adminNotes = notes;
   await kyc.save();
@@ -163,7 +164,7 @@ export async function requestCreatorPayoutKycRetry(userId: string, adminId: stri
   const kyc = await getOrCreateCreatorPayoutKyc(userId);
   kyc.kycStatus = "NEEDS_RETRY";
   kyc.payoutStatus = "DISABLED";
-  kyc.reviewedByAdminId = adminId as any;
+  kyc.reviewedByAdminId = adminId as unknown as mongoose.Types.ObjectId;
   kyc.rejectionReason = reason;
   kyc.adminNotes = notes;
   await kyc.save();
@@ -173,7 +174,7 @@ export async function requestCreatorPayoutKycRetry(userId: string, adminId: stri
 export async function setPayoutStatus(userId: string, adminId: string, payoutStatus: "FROZEN" | "ENABLED" | "MANUAL_REVIEW" | "DISABLED", notes?: string) {
   const kyc = await getOrCreateCreatorPayoutKyc(userId);
   kyc.payoutStatus = payoutStatus;
-  kyc.reviewedByAdminId = adminId as any;
+  kyc.reviewedByAdminId = adminId as unknown as mongoose.Types.ObjectId;
   kyc.adminNotes = notes;
   await kyc.save();
   return kyc;

@@ -35,9 +35,7 @@ class SocketManager @Inject constructor() {
                 if (serverUrl.isNotBlank()) add(serverUrl)
                 if (BuildConfig.DEBUG) {
                     add("http://10.0.2.2:4000")
-                    add("http://10.0.3.2:4000")
                     if (BuildConfig.LAN_SOCKET_BASE_URL.isNotBlank()) add(BuildConfig.LAN_SOCKET_BASE_URL.trim().trimEnd('/'))
-                    add("http://127.0.0.1:4000")
                 }
             }.distinct()
             

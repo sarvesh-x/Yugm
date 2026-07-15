@@ -43,7 +43,6 @@ import com.example.yugm.ui.components.YugmPageHeader
 import com.example.yugm.ui.theme.Pink
 import com.example.yugm.ui.theme.TextMuted
 import com.example.yugm.ui.theme.TextPrimary
-import com.example.yugm.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
 
 @Composable
@@ -98,7 +97,7 @@ fun ClanDetailScreen(
                         }
                         Spacer(Modifier.height(10.dp))
                         Text(currentClan.name, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                        Text("${currentClan.familyLabel} · ${currentClan.memberCount} members", color = TextSecondary, fontSize = 13.sp)
+                        Text("${currentClan.familyLabel} · ${currentClan.memberCount} members", color = TextMuted, fontSize = 13.sp)
                         if (currentClan.description.isNotBlank()) {
                             Spacer(Modifier.height(6.dp))
                             Text(currentClan.description, color = TextMuted, fontSize = 12.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
@@ -146,7 +145,7 @@ fun ClanDetailScreen(
                     item { Text(status, color = Pink, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp)) }
                 }
                 item {
-                    Text("Members", color = TextSecondary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
+                    Text("Members", color = TextMuted, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
                 }
                 if (currentClan.members.isEmpty()) {
                     item { Text("No members yet", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp)) }
@@ -157,10 +156,9 @@ fun ClanDetailScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             com.example.yugm.ui.components.Avatar(
-                                avatarUrl = member.avatar,
-                                name = member.name,
+                                initial = member.name.firstOrNull()?.toString() ?: "?",
                                 size = 40,
-                                modifier = Modifier.size(40.dp)
+                                imageUrl = member.avatar
                             )
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {

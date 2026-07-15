@@ -4,7 +4,8 @@
   "private": true,
   "workspaces": [
     "backend-server/apps/*",
-    "backend-server/packages/*"
+    "backend-server/packages/*",
+    "android-client/expo-mobile"
   ],
   "scripts": {
     "build": "npm --workspace @yugm/api run build",

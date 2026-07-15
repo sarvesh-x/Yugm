@@ -118,7 +118,7 @@ fun MatchesScreen(
                                         .background(Brush.radialGradient(listOf(PrimaryPink, Color.Transparent)))
                                         .padding(3.dp)
                                 ) {
-                                    Avatar(url = match.avatar, name = match.name, size = 64)
+                                    Avatar(initial = match.name.firstOrNull()?.toString() ?: "?", size = 64, imageUrl = match.avatar)
                                 }
                                 Text(match.name, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(64.dp))
                             }
@@ -137,7 +137,7 @@ fun MatchesScreen(
                                 modifier = Modifier.fillMaxWidth().padding(14.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Avatar(url = match.avatar, name = match.name, size = 52)
+                                Avatar(initial = match.name.firstOrNull()?.toString() ?: "?", size = 52, imageUrl = match.avatar)
                                 Spacer(Modifier.width(14.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(match.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)

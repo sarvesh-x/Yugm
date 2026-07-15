@@ -40,6 +40,28 @@ object RoomApi {
         }
     }
 
+    suspend fun updateRoom(
+        token: String,
+        roomId: String,
+        room: Room,
+        coverImage: String? = null
+    ): Room {
+        val body = JSONObject()
+            .put("type", room.type.name.uppercase())
+            .put("title", room.title)
+            .put("description", room.description)
+            .put("tags", JSONArray(room.tags))
+            .put("language", room.language)
+            .put("category", room.category)
+            .put("maxSpeakers", room.maxSpeakers)
+            .put("vipOnly", room.vipOnly)
+        if (room.theme.isNotBlank()) body.put("theme", room.theme)
+        if (room.badge.isNotBlank()) body.put("badge", room.badge)
+        if (room.ambience.isNotBlank()) body.put("ambience", room.ambience)
+        if (!coverImage.isNullOrBlank()) body.put("coverImage", coverImage)
+        return YugmHttpClient.patch("/rooms/$roomId", token, body).getJSONObject("data").getJSONObject("room").toRoom()
+    }
+
     suspend fun createRoom(
         token: String,
         room: Room,
@@ -58,6 +80,10 @@ object RoomApi {
             .put("maxSpeakers", room.maxSpeakers)
             .put("visibility", visibility)
             .put("allowAudienceMicRequests", allowAudienceMicRequests)
+            .put("vipOnly", room.vipOnly)
+        if (room.theme.isNotBlank()) body.put("theme", room.theme)
+        if (room.badge.isNotBlank()) body.put("badge", room.badge)
+        if (room.ambience.isNotBlank()) body.put("ambience", room.ambience)
         if (!scheduledFor.isNullOrBlank()) body.put("scheduledFor", scheduledFor)
         if (!coverImage.isNullOrBlank()) body.put("coverImage", coverImage)
         return YugmHttpClient.post("/rooms", token, body).getJSONObject("data").getJSONObject("room").toRoom()
@@ -203,6 +229,31 @@ object RoomApi {
             }
             val url = JSONObject(raw).getJSONObject("data").optString("url")
             if (url.isBlank()) throw ApiProtocolException("Cover upload returned no URL")
+            YugmHttpClient.workingBaseUrl = base
+            url
+        }
+    }
+
+    suspend fun roomPkHistory(roomId: String, token: String): List<com.example.yugm.model.PkBattle> {
+        val data = YugmHttpClient.get("/rooms/$roomId/pk-history", token).getJSONObject("data")
+        return data.optJSONArray("battles")?.toPkBattles() ?: emptyList()
+    }
+
+    suspend fun uploadAvatar(token: String, bytes: ByteArray, mimeType: String): String = withContext(Dispatchers.IO) {
+        if (!YugmHttpClient.isOnline) throw IllegalStateException("No internet connection")
+        val base = YugmHttpClient.workingBaseUrl ?: YugmHttpClient.baseCandidates.firstOrNull()
+            ?: throw IllegalStateException("API_BASE_URL is not configured for this build")
+        val body = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("avatar", "avatar.${mimeType.substringAfter('/', "jpg")}", bytes.toRequestBody(mimeType.ifBlank { "image/jpeg" }.toMediaType()))
+            .build()
+        val okClient = okhttp3.OkHttpClient()
+        val request = Request.Builder().url("$base/upload/avatar").header("Authorization", "Bearer $token").post(body).build()
+        okClient.newCall(request).execute().use { response ->
+            val raw = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw ApiHttpException(response.code, "Avatar upload failed")
+            val url = JSONObject(raw).getJSONObject("data").optString("url")
+            if (url.isBlank()) throw ApiProtocolException("Avatar upload returned no URL")
             YugmHttpClient.workingBaseUrl = base
             url
         }

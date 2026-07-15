@@ -1,6 +1,9 @@
 package com.example.yugm.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -9,8 +12,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -20,23 +26,34 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.saveable.rememberSaveable
 import com.example.yugm.api.YugmApi
-import com.example.yugm.model.ExperienceHome
+import com.example.yugm.model.ClaimAchievementResult
 import com.example.yugm.model.CreatorDashboard
+import com.example.yugm.model.DailyCheckInResult
+import com.example.yugm.model.ExperienceHome
 import com.example.yugm.ui.components.GlassCard
 import com.example.yugm.ui.components.LoadingState
+import com.example.yugm.util.cosmeticDisplayName
 import com.example.yugm.ui.components.RoomCard
 import com.example.yugm.ui.components.SectionTitle
 import com.example.yugm.ui.components.StatCard
 import com.example.yugm.ui.theme.Gold
+import com.example.yugm.ui.theme.BorderColor
 import com.example.yugm.ui.theme.Pink
+import com.example.yugm.ui.theme.PrimaryPurple
+import com.example.yugm.ui.theme.SurfaceElevated
 import com.example.yugm.ui.theme.TextMuted
 import com.example.yugm.ui.theme.TextPrimary
+import kotlinx.coroutines.launch
 
 @Composable
 fun GrowthScreen(
@@ -51,12 +68,16 @@ fun GrowthScreen(
     var creator by remember { mutableStateOf<CreatorDashboard?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    var checkInResult by remember { mutableStateOf<DailyCheckInResult?>(null) }
+    var streakCount by rememberSaveable { mutableStateOf(0) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(token) {
         isLoading = true
         runCatching { YugmApi.experienceHome(token) }
             .onSuccess {
                 home = it
+                streakCount = it.streakCount
                 error = null
             }
             .onFailure { error = it.message ?: "Failed to load growth" }
@@ -87,6 +108,7 @@ fun GrowthScreen(
                 val payload = home!!
                 val scheduledRooms = if (payload.userRole in setOf("HOST", "MODERATOR", "ADMIN")) creator?.scheduledRooms.orEmpty() else payload.scheduledRooms
                 val creatorSteps = creator?.nextSteps.orEmpty()
+
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                         StatCard("Profile", "${payload.profileCompletion.percent}%", Modifier.weight(1f))
@@ -94,18 +116,93 @@ fun GrowthScreen(
                         StatCard("Unread", "${payload.unreadNotifications}", Modifier.weight(1f))
                     }
                 }
+                item {
+                    Column(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(SurfaceElevated).border(1.dp, BorderColor, RoundedCornerShape(22.dp)).padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("Daily Streak", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                        Row(
+                            Modifier.padding(top = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            (0..6).forEach { day ->
+                                val filled = day < streakCount
+                                Box(
+                                    Modifier.size(36.dp).clip(CircleShape).background(if (filled) Gold else BorderColor),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("${day + 1}", color = if (filled) TextPrimary else TextMuted, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+                            }
+                        }
+                        Text("$streakCount-day streak", color = Gold, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    runCatching { YugmApi.checkIn(token) }
+                                        .onSuccess {
+                                            checkInResult = it
+                                            streakCount = it.streak
+                                        }
+                                }
+                            },
+                            modifier = Modifier.padding(top = 10.dp),
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Gold)
+                        ) { Text("Check In", color = TextPrimary, fontWeight = FontWeight.Black) }
+                        checkInResult?.let { result ->
+                            if (result.claimed) {
+                                Text("Checked in! Streak: ${result.streak}", color = Gold, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
+                                if (result.unlockedCosmetic.isNotBlank()) {
+                                    Text("Unlocked: ${cosmeticDisplayName(result.unlockedCosmetic)}", color = Pink, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
+                                }
+                            }
+                        }
+                    }
+                }
                 item { SectionTitle("Next best actions") }
                 items(payload.achievements.take(5), key = { it.id }) { item ->
                     GlassCard(Modifier.fillMaxWidth()) {
-                        Text(item.title, color = TextPrimary, fontWeight = FontWeight.Black)
-                        Text(item.description, color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 3.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(item.title, color = TextPrimary, fontWeight = FontWeight.Black)
+                                Text(item.description, color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 3.dp))
+                            }
+                            if (item.complete) {
+                                var claiming by remember { mutableStateOf(false) }
+                                Button(
+                                    onClick = {
+                                        claiming = true
+                                        scope.launch {
+                                            runCatching<ClaimAchievementResult> { YugmApi.claimAchievement(token, item.id) }
+                                                .onSuccess {
+                                                    claiming = false
+                                                    checkInResult = DailyCheckInResult(unlockedCosmetic = it.rewardCosmetic, claimed = true)
+                                                }
+                                                .onFailure { claiming = false }
+                                        }
+                                    },
+                                    enabled = !claiming,
+                                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Gold)
+                                ) {
+                                    Text(if (claiming) "..." else "Claim", color = TextPrimary, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
                         LinearProgressIndicator(
                             progress = { if (item.target > 0) (item.progress.toFloat() / item.target).coerceIn(0f, 1f) else 0f },
                             modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
                             color = if (item.complete) Gold else Pink,
                             trackColor = TextMuted.copy(alpha = 0.24f)
                         )
-                        Text("${item.progress}/${item.target} / ${item.rewardCoins} coins", color = if (item.complete) Gold else Pink, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("${item.progress}/${item.target}", color = if (item.complete) Gold else Pink, fontWeight = FontWeight.Bold)
+                            if (item.rewardCosmetic.isNotBlank()) {
+                                Text("${cosmeticDisplayName(item.rewardCosmetic)}", color = Gold, fontWeight = FontWeight.Bold)
+                            } else {
+                                Text("${item.rewardCoins} coins", color = Gold, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
                 item {

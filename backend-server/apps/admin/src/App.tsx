@@ -14,6 +14,7 @@ import {
   Lock,
   LogOut,
   MessageSquare,
+  Palette,
   Radio,
   Search,
   Settings,
@@ -40,6 +41,7 @@ type ViewKey =
   | "wallet"
   | "payments"
   | "gifts"
+  | "cosmetics"
   | "notifications"
   | "growth"
   | "support"
@@ -66,6 +68,7 @@ const navItems: Array<{ key: ViewKey; label: string; icon: ReactNode; group: str
   { key: "payoutReviews", label: "Payout reviews", icon: <Coins />, group: "Money", requiredPermission: "payout_review.read" },
   { key: "payments", label: "Payments", icon: <Coins />, group: "Money" },
   { key: "gifts", label: "Gifts", icon: <Gift />, group: "Money" },
+  { key: "cosmetics", label: "Cosmetics", icon: <Palette />, group: "Money" },
   { key: "notifications", label: "Notifications", icon: <Bell />, group: "Operations" },
   { key: "growth", label: "Growth OS", icon: <LineChart />, group: "Operations" },
   { key: "support", label: "Support", icon: <LifeBuoy />, group: "Operations" },
@@ -261,9 +264,10 @@ function ViewRenderer({ view, session, setNotice, onLogout }: { view: ViewKey; s
   if (view === "wallet") return <WalletPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "payments") return <SimpleResource token={session.accessToken} title="Recharges" endpoint="/payments/recharges" columns={paymentColumns} />;
   if (view === "gifts") return <GiftsPage token={session.accessToken} setNotice={setNotice} />;
+  if (view === "cosmetics") return <CosmeticsPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "notifications") return <NotificationsPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "growth") return <GrowthPage token={session.accessToken} />;
-  if (view === "support") return <SimpleResource token={session.accessToken} title="Support Tickets" endpoint="/support/tickets" columns={supportColumns} />;
+  if (view === "support") return <SupportPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "analytics") return <AnalyticsPage token={session.accessToken} />;
   if (view === "fraud") return <FraudPage token={session.accessToken} />;
   if (view === "config") return <ConfigPage token={session.accessToken} setNotice={setNotice} />;
@@ -479,6 +483,139 @@ function ReportsPage({ token, setNotice }: { token: string; setNotice: (notice: 
   );
 }
 
+function SupportPage({ token, setNotice }: { token: string; setNotice: (notice: Notice) => void }) {
+  const [statusFilter, setStatusFilter] = useState("");
+  const path = statusFilter ? `/support/tickets?status=${statusFilter}` : "/support/tickets";
+  const resource = useResourceWithMeta<any[]>("/support/tickets", token);
+  const [selected, setSelected] = useState<any>(null);
+  const [reply, setReply] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const sendReply = async () => {
+    if (!selected || !reply.trim()) return;
+    setSending(true);
+    try {
+      await adminApi(`/support/tickets/${selected._id}/respond`, {
+        token, method: "POST", body: JSON.stringify({ message: reply })
+      });
+      setNotice({ tone: "success", text: "Reply sent" });
+      setReply("");
+      resource.refresh();
+      setSelected(null);
+    } catch (err: any) {
+      setNotice({ tone: "error", text: err.message });
+    }
+    setSending(false);
+  };
+
+  const updateStatus = async (ticketId: string, status: string) => {
+    try {
+      await adminApi(`/support/tickets/${ticketId}/status`, {
+        token, method: "PATCH", body: JSON.stringify({ status })
+      });
+      setNotice({ tone: "success", text: `Ticket ${status}` });
+      resource.refresh();
+      setSelected(null);
+    } catch (err: any) {
+      setNotice({ tone: "error", text: err.message });
+    }
+  };
+
+  const [ticketDetail, setTicketDetail] = useState<any>(null);
+
+  const loadTicketDetail = async (ticketId: string) => {
+    try {
+      const data = await adminApi<any>(`/support/tickets/${ticketId}`, { token });
+      setTicketDetail(data.ticket);
+    } catch (err: any) {
+      setNotice({ tone: "error", text: err.message });
+    }
+  };
+
+  useEffect(() => {
+    if (selected) {
+      loadTicketDetail(selected._id);
+    } else {
+      setTicketDetail(null);
+    }
+  }, [selected]);
+
+  return (
+    <ResourceFrame title="Support Tickets" subtitle="Respond to user support requests and manage ticket lifecycle." loading={resource.loading} error={resource.error} onRetry={resource.refresh}>
+      <div className="filter-bar">
+        <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); resource.refresh(); }}>
+          <option value="">All statuses</option>
+          <option value="OPEN">Open</option>
+          <option value="IN_PROGRESS">In Progress</option>
+          <option value="RESOLVED">Resolved</option>
+          <option value="CLOSED">Closed</option>
+        </select>
+      </div>
+      <DataTable rows={resource.data || []} columns={supportColumns} onRowClick={setSelected} />
+      <Drawer open={Boolean(selected)} title={selected?.subject || "Ticket"} onClose={() => setSelected(null)}>
+        {ticketDetail && (
+          <>
+            <div className="detail-card">
+              <div className="detail-row"><strong>Subject:</strong> <span>{ticketDetail.subject}</span></div>
+              <div className="detail-row"><strong>Category:</strong> <span>{ticketDetail.category}</span></div>
+              <div className="detail-row"><strong>Priority:</strong> <RiskBadge value={ticketDetail.priority} /></div>
+              <div className="detail-row"><strong>Status:</strong> <StatusBadge value={ticketDetail.status} /></div>
+              {ticketDetail.userId && (
+                <div className="detail-row"><strong>User:</strong> <span>{ticketDetail.userId?.username || ticketDetail.userId?.displayName || ticketDetail.userId?._id}</span></div>
+              )}
+            </div>
+
+            <div className="detail-card">
+              <strong>Conversation</strong>
+              <div className="message-thread">
+                <div className="message-bubble user">
+                  <small>You</small>
+                  <p>{ticketDetail.message}</p>
+                  <small className="time">{formatDate(ticketDetail.createdAt)}</small>
+                </div>
+                {(ticketDetail.messages || []).map((msg: any, i: number) => (
+                  <div key={i} className={`message-bubble ${msg.senderRole === "ADMIN" ? "admin" : "user"}`}>
+                    <small>{msg.senderRole === "ADMIN" ? "Support Agent" : "User"}</small>
+                    <p>{msg.message}</p>
+                    <small className="time">{formatDate(msg.createdAt)}</small>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {ticketDetail.status !== "CLOSED" && (
+              <div className="reply-section">
+                <label className="stacked-field">
+                  Reply
+                  <textarea value={reply} onChange={(e) => setReply(e.target.value)} rows={3} placeholder="Type your response..." />
+                </label>
+                <div className="action-grid">
+                  <button className="primary-action compact" disabled={sending || !reply.trim()} onClick={sendReply}>
+                    {sending ? "Sending..." : "Send Reply"}
+                  </button>
+                  {ticketDetail.status === "OPEN" && (
+                    <button className="ghost-button" onClick={() => updateStatus(ticketDetail._id, "RESOLVED")}>Resolve</button>
+                  )}
+                  {ticketDetail.status === "IN_PROGRESS" && (
+                    <button className="ghost-button" onClick={() => updateStatus(ticketDetail._id, "RESOLVED")}>Resolve</button>
+                  )}
+                  {ticketDetail.status !== "CLOSED" && (
+                    <button className="soft" onClick={() => updateStatus(ticketDetail._id, "CLOSED")}>Close</button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {ticketDetail.status === "CLOSED" && (
+              <button className="ghost-button" onClick={() => updateStatus(ticketDetail._id, "OPEN")}>Reopen</button>
+            )}
+          </>
+        )}
+      </Drawer>
+    </ResourceFrame>
+  );
+}
+
 function RoomsPage({ token, setNotice }: { token: string; setNotice: (notice: Notice) => void }) {
   const [selected, setSelected] = useState<any>(null);
   const resource = useResourceWithMeta<any[]>("/rooms/live", token);
@@ -668,6 +805,141 @@ function GiftsPage({ token, setNotice }: { token: string; setNotice: (notice: No
       <ResourceFrame title="Gift Catalog" loading={resource.loading} error={resource.error} onRetry={resource.refresh}>
         <DataTable rows={resource.data || []} columns={giftColumns} />
       </ResourceFrame>
+    </div>
+  );
+}
+
+function CosmeticsPage({ token, setNotice }: { token: string; setNotice: (notice: Notice) => void }) {
+  const [selected, setSelected] = useState<any>(null);
+  const [editMode, setEditMode] = useState(false);
+  const resource = useResource<any>("/cosmetics", token);
+  const cosmetics = resource.data?.data ?? [];
+
+  const [form, setForm] = useState({
+    id: "",
+    type: "AVATAR_FRAME",
+    name: "",
+    coinPrice: 100,
+    rarity: "COMMON",
+    preview: "",
+    isActive: true,
+    assetKind: "",
+    assetUrl: ""
+  });
+
+  const openNew = () => {
+    setForm({ id: "", type: "AVATAR_FRAME", name: "", coinPrice: 100, rarity: "COMMON", preview: "", isActive: true, assetKind: "", assetUrl: "" });
+    setEditMode(true);
+    setSelected(null);
+  };
+
+  const openEdit = (cosmetic: any) => {
+    setForm({
+      id: cosmetic._id || cosmetic.id,
+      type: cosmetic.type,
+      name: cosmetic.name,
+      coinPrice: cosmetic.coinPrice,
+      rarity: cosmetic.rarity,
+      preview: cosmetic.preview || "",
+      isActive: cosmetic.isActive !== false,
+      assetKind: cosmetic.assetKind || "",
+      assetUrl: cosmetic.assetUrl || ""
+    });
+    setEditMode(true);
+    setSelected(cosmetic);
+  };
+
+  const save = async () => {
+    try {
+      if (selected) {
+        const { id, ...body } = form;
+        await adminApi(`/cosmetics/${selected._id || selected.id}`, { token, method: "PUT", body: JSON.stringify(body) });
+        setNotice({ tone: "success", text: "Cosmetic updated" });
+      } else {
+        await adminApi("/cosmetics", { token, method: "POST", body: JSON.stringify(form) });
+        setNotice({ tone: "success", text: "Cosmetic created" });
+      }
+      setEditMode(false);
+      setSelected(null);
+      resource.refresh();
+    } catch (err: any) {
+      setNotice({ tone: "error", text: err.message });
+    }
+  };
+
+  const remove = async (cosmetic: any) => {
+    if (!window.confirm(`Delete "${cosmetic.name}"? This cannot be undone.`)) return;
+    try {
+      await adminApi(`/cosmetics/${cosmetic._id || cosmetic.id}`, { token, method: "DELETE" });
+      setNotice({ tone: "success", text: "Cosmetic deleted" });
+      resource.refresh();
+    } catch (err: any) {
+      setNotice({ tone: "error", text: err.message });
+    }
+  };
+
+  const seedFromCode = async () => {
+    if (!window.confirm("Seed all code-defined cosmetics into the database? Only works if empty.")) return;
+    try {
+      const result = await adminApi<any>("/cosmetics/seed", { token, method: "POST" });
+      setNotice({ tone: "success", text: `Seeded ${result.data?.seeded || 0} cosmetics` });
+      resource.refresh();
+    } catch (err: any) {
+      setNotice({ tone: "error", text: err.message });
+    }
+  };
+
+  const types = ["AVATAR_ASSET", "AVATAR_FRAME", "SPEAKING_WAVE", "PROFILE_THEME", "ENTRANCE_EFFECT", "PROFILE_BADGE", "NAME_STYLE", "ROOM_ENTRY", "MOOD_STATUS", "PROFILE_MUSIC", "VOICE_BADGE", "ROOM_THEME", "AVATAR_DECORATION", "REACTION_PACK", "PROFILE_LAYOUT", "INTRO_CARD", "COLLECTIBLE_TITLE", "GIFT_SHELF", "CHAT_BUBBLE", "SEASONAL_EVENT", "CALL_SCREEN", "ROOM_BADGE", "ROOM_AMBIENCE"];
+
+  return (
+    <div className="page-grid">
+      <div className="section-heading">
+        <div>
+          <h3>Cosmetics Catalog</h3>
+          <p>Create, edit, and manage profile cosmetics that users can purchase in the store.</p>
+        </div>
+        <div className="action-row">
+          <button className="ghost-button" onClick={seedFromCode}>Seed from code</button>
+          <button className="primary-action compact" onClick={openNew}>New cosmetic</button>
+        </div>
+      </div>
+      <ResourceFrame title="" loading={resource.loading} error={resource.error} onRetry={resource.refresh}>
+        <DataTable
+          rows={cosmetics}
+          columns={[
+            { key: "_id", label: "ID" },
+            { key: "name", label: "Name" },
+            { key: "type", label: "Type", render: (row) => <StatusBadge value={row.type} /> },
+            { key: "rarity", label: "Rarity", render: (row) => <RiskBadge value={row.rarity} /> },
+            { key: "coinPrice", label: "Price", render: (row) => formatNumber(row.coinPrice) },
+            { key: "isActive", label: "Active", render: (row) => <StatusBadge value={row.isActive ? "ACTIVE" : "DISABLED"} /> },
+            { key: "createdAt", label: "Created" }
+          ]}
+          actions={(row) => (
+            <div className="action-row">
+              <button className="ghost-button" onClick={() => openEdit(row)}>Edit</button>
+              <button className="soft danger" onClick={() => remove(row)}>Delete</button>
+            </div>
+          )}
+        />
+      </ResourceFrame>
+
+      <Drawer open={editMode} title={selected ? "Edit cosmetic" : "New cosmetic"} onClose={() => { setEditMode(false); setSelected(null); }}>
+        <div className="form-grid">
+          {!selected && (
+            <label>ID<input value={form.id} onChange={(e) => setForm({ ...form, id: e.target.value })} placeholder="unique_cosmetic_id" /></label>
+          )}
+          <label>Name<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+          <label>Type<select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>{types.map((t) => <option key={t} value={t}>{t}</option>)}</select></label>
+          <label>Price<input type="number" value={form.coinPrice} onChange={(e) => setForm({ ...form, coinPrice: Number(e.target.value) })} /></label>
+          <label>Rarity<select value={form.rarity} onChange={(e) => setForm({ ...form, rarity: e.target.value })}><option>COMMON</option><option>RARE</option><option>EPIC</option><option>LEGENDARY</option></select></label>
+          <label>Preview<input value={form.preview} onChange={(e) => setForm({ ...form, preview: e.target.value })} placeholder="Short preview text or image hint" /></label>
+          <label>Active<select value={String(form.isActive)} onChange={(e) => setForm({ ...form, isActive: e.target.value === "true" })}><option value="true">Yes</option><option value="false">No</option></select></label>
+          <label>Asset kind<input value={form.assetKind} onChange={(e) => setForm({ ...form, assetKind: e.target.value })} placeholder="STATIC, ANIMATED" /></label>
+          <label className="full">Asset URL<input value={form.assetUrl} onChange={(e) => setForm({ ...form, assetUrl: e.target.value })} placeholder="https://..." /></label>
+        </div>
+        <button className="primary-action compact" onClick={save} style={{ marginTop: "12px" }}>{selected ? "Update" : "Create"}</button>
+      </Drawer>
     </div>
   );
 }
@@ -1292,6 +1564,7 @@ const giftColumns: ColumnDef[] = [
 ];
 
 const supportColumns: ColumnDef[] = [
+  { key: "userId.username", label: "User" },
   { key: "subject", label: "Subject" },
   { key: "category", label: "Category" },
   { key: "priority", label: "Priority", render: (row) => <RiskBadge value={row.priority} /> },

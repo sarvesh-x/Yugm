@@ -3,6 +3,8 @@ package com.example.yugm.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -13,7 +15,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -21,13 +26,19 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.yugm.api.YugmApi
+import kotlinx.coroutines.launch
 import com.example.yugm.model.RoomActivityItem
+import com.example.yugm.util.cosmeticDisplayName
 import com.example.yugm.model.RoomDetail
 import com.example.yugm.model.RoomMission
 import com.example.yugm.model.RoomPoll
@@ -39,6 +50,7 @@ import com.example.yugm.ui.components.LiveBadge
 import com.example.yugm.ui.components.LoadingState
 import com.example.yugm.ui.components.PrimaryButton
 import com.example.yugm.ui.components.SectionTitle
+import com.example.yugm.ui.theme.DangerRed
 import com.example.yugm.ui.theme.Gold
 import com.example.yugm.ui.theme.TextMuted
 import com.example.yugm.ui.theme.TextPrimary
@@ -48,9 +60,11 @@ fun RoomLobbyScreen(
     token: String,
     roomId: String,
     fallbackType: RoomType,
+    currentUserId: String = "",
     onBack: () -> Unit,
     onJoin: (RoomType) -> Unit,
-    onOpenProfile: (String) -> Unit
+    onOpenProfile: (String) -> Unit,
+    onEdit: ((String) -> Unit)? = null
 ) {
     var detail by remember { mutableStateOf<RoomDetail?>(null) }
     var polls by remember { mutableStateOf<List<RoomPoll>>(emptyList()) }
@@ -58,6 +72,11 @@ fun RoomLobbyScreen(
     var activity by remember { mutableStateOf<List<RoomActivityItem>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    var showReportDialog by remember { mutableStateOf(false) }
+    var reportReason by remember { mutableStateOf("") }
+    var reportHostId by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     LaunchedEffect(roomId, token) {
         isLoading = true
@@ -97,12 +116,28 @@ fun RoomLobbyScreen(
                     AnimatedVisibility(visible = true, enter = fadeIn() + slideInVertically { it / 3 }) {
                         GlassCard(Modifier.fillMaxWidth()) {
                             Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                                LiveBadge()
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    LiveBadge()
+                                    if (room.vipOnly) {
+                                        Text("VIP", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 10.sp, modifier = Modifier.background(color = Gold.copy(alpha = 0.85f), shape = RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
+                                    }
+                                    if (room.badge.isNotBlank()) {
+                                        Text("🏷️ ${cosmeticDisplayName(room.badge)}", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                                    }
+                                }
                                 Text(room.type.name.uppercase(), color = Gold, fontWeight = FontWeight.Black)
                             }
                             Text(room.title, color = TextPrimary, fontSize = 26.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(top = 12.dp))
                             Text(room.description.ifBlank { "A live Yugm room." }, color = TextMuted, modifier = Modifier.padding(top = 6.dp))
-                            Text("${room.participants} live / ${room.language} / ${room.category}", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 10.dp)) {
+                                Text("${room.participants} live / ${room.language} / ${room.category}", color = TextMuted, fontSize = 12.sp)
+                                if (room.theme.isNotBlank()) {
+                                    Text("🎨 ${cosmeticDisplayName(room.theme)}", color = TextMuted, fontSize = 12.sp)
+                                }
+                                if (room.ambience.isNotBlank()) {
+                                    Text("♪ ${cosmeticDisplayName(room.ambience)}", color = TextMuted, fontSize = 12.sp)
+                                }
+                            }
                         }
                     }
                 }
@@ -156,12 +191,62 @@ fun RoomLobbyScreen(
                 }
                 room.host?.id?.takeIf { it.isNotBlank() }?.let { hostId ->
                     item {
-                        TextButton(onClick = { onOpenProfile(hostId) }) {
-                            Text("View host profile", color = Gold, fontWeight = FontWeight.Black)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            TextButton(onClick = { onOpenProfile(hostId) }) {
+                                Text("View host profile", color = Gold, fontWeight = FontWeight.Black)
+                            }
+                            if (onEdit != null && hostId == currentUserId) {
+                                TextButton(onClick = { onEdit(roomId) }) {
+                                    Text("Edit room", color = Gold, fontWeight = FontWeight.Black)
+                                }
+                            }
+                            if (hostId != currentUserId) {
+                                TextButton(onClick = { showReportDialog = true; reportHostId = hostId }) {
+                                    Text("Report", color = DangerRed, fontWeight = FontWeight.Black)
+                                }
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    if (showReportDialog) {
+        val reasons = listOf("Inappropriate content", "Harassment", "Spam", "Fake profile", "Other")
+        AlertDialog(
+            onDismissRequest = { showReportDialog = false },
+            title = { Text("Report Host", color = Color.White, fontWeight = FontWeight.Black) },
+            text = {
+                Column {
+                    Text("Select a reason for reporting:", color = TextMuted)
+                    reasons.forEach { reason ->
+                        Row(Modifier.fillMaxWidth().clickable { reportReason = reason }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = reportReason == reason, onClick = { reportReason = reason })
+                            Text(reason, color = Color.White, modifier = Modifier.padding(start = 8.dp))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            runCatching { YugmApi.reportUser(token, roomId, reportHostId, reportReason) }
+                            android.widget.Toast.makeText(context, "Report submitted", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                        showReportDialog = false
+                    },
+                    enabled = reportReason.isNotBlank()
+                ) {
+                    Text("Submit Report", color = DangerRed, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReportDialog = false }) {
+                    Text("Cancel", color = TextMuted)
+                }
+            }
+        )
     }
 }

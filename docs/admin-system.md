@@ -116,8 +116,8 @@ The prompt mentions Firebase SQL Connect/PostgreSQL, but this repository current
 
 ## TODOs Before Production
 
-- Add a full admin web panel.
-- Add provider-backed refund execution.
-- Connect approved withdrawals to the production payout rail and reconciliation process.
-- Enforce 2FA after TOTP/SMS provider setup.
-- Add privacy/legal review for private chat access workflows.
+- [x] Admin web panel — built with React (Vite), covers dashboard, users, reports, moderation, PK, rooms, gifts, cosmetics, support, analytics, fraud, config, audit, admin users, and settings.
+- [x] Provider-backed refund execution — Razorpay refund API + Google Play order refund + coin clawback with rollback on failure.
+- [x] Payout webhook reconciliation — `POST /api/payments/webhook/payout` handles `payout.processed`, `payout.reversed`, `payout.rejected`, and `payout.failed` events from Razorpay.
+- [ ] Enforce 2FA after TOTP/SMS provider setup.
+- [ ] Add privacy/legal review for private chat access workflows.

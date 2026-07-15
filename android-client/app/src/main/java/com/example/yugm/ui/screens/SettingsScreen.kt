@@ -188,7 +188,7 @@ fun SettingsScreen(
             }
         } else {
             when (pane) {
-                SettingsPane.Home -> SettingsHome(
+        SettingsPane.Home -> SettingsHome(
                     modifier = Modifier.padding(innerPadding),
                     userName = userName,
                     username = username,
@@ -203,6 +203,7 @@ fun SettingsScreen(
                     onNotifications = { pane = SettingsPane.Notifications },
                     onFeedback = { pane = SettingsPane.Feedback },
                     onDoc = { pane = it },
+                    onNavigateToSupport = onNavigateToSupport,
                     onLogout = { showLogoutConfirm = true }
                 )
                 SettingsPane.Blocked -> BlockedPane(Modifier.padding(innerPadding), blockedUsers, busy, onUnblock = { unblock(it) })
@@ -251,6 +252,7 @@ private fun SettingsHome(
     onNotifications: () -> Unit,
     onFeedback: () -> Unit,
     onDoc: (SettingsPane) -> Unit,
+    onNavigateToSupport: () -> Unit = {},
     onLogout: () -> Unit
 ) {
     LazyColumn(

@@ -127,7 +127,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                                     Tasks.await(FirebaseAuth.getInstance().signInWithCredential(credential))
                                 }
                                 val tokenResult = withContext(Dispatchers.IO) {
-                                    Tasks.await(authResult.user?.getIdToken(false) ?: throw IllegalStateException("No authenticated user"))
+                                    Tasks.await(authResult.user?.getIdToken(true) ?: throw IllegalStateException("No authenticated user"))
                                 }
                                 val fbToken = tokenResult.token ?: throw IllegalStateException("No Firebase token")
                                 YugmApi.googleAuth(fbToken)
@@ -208,10 +208,11 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
     private fun routeFromPushIntent(intent: Intent?): String? {
         val roomId = intent?.getStringExtra("roomId")
-        return if (!roomId.isNullOrBlank()) {
-            Screen.Chat.createRoute(roomId)
-        } else {
-            null
+        val chatPartnerId = intent?.getStringExtra("chatPartnerId")
+        return when {
+            !roomId.isNullOrBlank() -> Screen.RoomLobby.createRoute(roomId)
+            !chatPartnerId.isNullOrBlank() -> Screen.Chat.createRoute(chatPartnerId)
+            else -> null
         }
     }
 }

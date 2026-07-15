@@ -34,6 +34,14 @@ object DatingApi {
         YugmHttpClient.post("/dating/pass", token, JSONObject().put("likedId", likedId))
     }
 
+    suspend fun datingPreferences(token: String): JSONObject {
+        return YugmHttpClient.get("/dating/preferences", token).getJSONObject("data")
+    }
+
+    suspend fun updateDatingPreferences(token: String, preferences: JSONObject) {
+        YugmHttpClient.put("/dating/preferences", token, preferences)
+    }
+
     suspend fun datingMatches(token: String): List<Host> {
         val data = YugmHttpClient.get("/dating/matches", token).getJSONObject("data")
         val matchesArray = data.getJSONArray("matches")

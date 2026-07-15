@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { chatMessageSchema, createPollSchema, createRoomSchema, directMessageSchema, inviteSchema, reactionSchema, reportBaseSchema, socketEvents, votePollSchema } from "@yugm/shared";
+import { chatMessageSchema, createPollSchema, createRoomSchema, directMessageSchema, inviteSchema, profileCosmetics, reactionSchema, reportBaseSchema, socketEvents, votePollSchema } from "@yugm/shared";
 import { requireAuth, requireNotMuted, type AuthRequest } from "../middleware/auth.js";
 import { chatLimiter, reportLimiter } from "../middleware/rateLimit.js";
 import { requireNotChatRestricted, requireNotRoomRestricted, requireNotShadowBanned, requireWalletNotFrozen } from "../middleware/requireSafety.js";
@@ -37,6 +37,10 @@ const patchSchema = z.object({
   allowAudienceMicRequests: z.boolean().optional(),
   coverImage: z.string().optional(),
   scheduledFor: z.string().datetime().optional(),
+  theme: z.string().optional(),
+  vipOnly: z.boolean().optional(),
+  badge: z.string().optional(),
+  ambience: z.string().optional(),
 });
 
 export const roomsRouter = Router();
@@ -124,9 +128,21 @@ async function decrementRoomParticipantCount(roomId: unknown) {
   );
 }
 
+async function validateRoomCosmetics(hostId: string, fields: { theme?: string; badge?: string; ambience?: string }) {
+  const cosmeticIds = [fields.theme, fields.badge, fields.ambience].filter(Boolean) as string[];
+  if (cosmeticIds.length === 0) return;
+  const user = await User.findById(hostId).select("ownedCosmeticIds").lean();
+  if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+  const missing = cosmeticIds.filter((id) => !user.ownedCosmeticIds.includes(id));
+  if (missing.length > 0) {
+    throw new HttpError(403, `You don't own these cosmetics: ${missing.join(", ")}`, ErrorCode.FORBIDDEN);
+  }
+}
+
 roomsRouter.post("/", requireAuth, requireNotMuted, requireNotRoomRestricted, requireNotShadowBanned, validateBody(createRoomSchema), asyncHandler(async (req: AuthRequest, res) => {
   const scheduledFor = req.body.scheduledFor ? new Date(req.body.scheduledFor) : undefined;
   const isScheduled = scheduledFor && scheduledFor.getTime() > Date.now() + 60_000;
+  await validateRoomCosmetics(req.user!.id, { theme: req.body.theme, badge: req.body.badge, ambience: req.body.ambience });
   const room = await Room.create({
     ...req.body,
     scheduledFor,
@@ -256,6 +272,11 @@ roomsRouter.post("/:id/join", requireAuth, requireNotRoomRestricted, requireNotS
   const room = await getRoomOrThrow(req.params.id);
   assertPrivateRoomAccess(room, req.user!.id);
   if (room.status === "SCHEDULED") throw new HttpError(400, "This room is scheduled for later", ErrorCode.VALIDATION);
+  if (room.vipOnly) {
+    const user = await User.findById(req.user!.id).select("vipExpiresAt").lean();
+    const isVip = user?.vipExpiresAt && new Date(user.vipExpiresAt) > new Date();
+    if (!isVip) throw new HttpError(403, "This room is for VIP members only", ErrorCode.FORBIDDEN);
+  }
   const blocked = await Block.exists({ blockerId: room.hostId, blockedUserId: req.user!.id });
   if (blocked) throw new HttpError(403, "You cannot join this room", ErrorCode.FORBIDDEN);
 
@@ -301,6 +322,7 @@ roomsRouter.post("/:id/end", requireAuth, asyncHandler(async (req: AuthRequest, 
 roomsRouter.patch("/:id", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   const room = await assertHost(req, req.params.id);
   const parsed = patchSchema.parse(req.body);
+  await validateRoomCosmetics(req.user!.id, { theme: parsed.theme, badge: parsed.badge, ambience: parsed.ambience });
   await Room.findByIdAndUpdate(req.params.id, { $set: parsed }, { new: true });
   await invalidateCache("rooms:*");
   sendOk(res, { room });

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
-import { profileSchema, reactionSchema, socketEvents } from "@yugm/shared";
+import { profileSchema, reactionSchema, socketEvents, streakCosmeticRewards } from "@yugm/shared";
 import { requireAuth, requireNotMuted, type AuthRequest } from "../middleware/auth.js";
 import { chatLimiter } from "../middleware/rateLimit.js";
 import { requireNotChatRestricted } from "../middleware/requireSafety.js";
@@ -13,7 +13,7 @@ import { PkBattle } from "../models/PkBattle.js";
 import { pkState } from "../services/pk.js";
 import { Room } from "../models/Room.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
-import { SupportMessage, SupportTicket } from "../models/SupportTicket.js";
+import { SupportTicket } from "../models/SupportTicket.js";
 import { User } from "../models/User.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId, sanitizeText } from "../utils/http.js";
 import { createNotification } from "../services/notifications.js";
@@ -130,19 +130,21 @@ usersRouter.delete("/me/profile-media/:mediaId", asyncHandler(async (req: AuthRe
 }));
 
 usersRouter.post("/me/feedback", validateBody(feedbackSchema), asyncHandler(async (req: AuthRequest, res) => {
+  const messageText = sanitizeText(req.body.message);
   const ticket = await SupportTicket.create({
     userId: req.user!.id,
     category: req.body.category,
     subject: sanitizeText(req.body.subject),
-    lastMessageAt: new Date()
+    message: messageText,
+    lastMessageAt: new Date(),
+    messages: [{
+      senderId: req.user!.id,
+      senderRole: "USER",
+      message: messageText,
+      createdAt: new Date()
+    }]
   });
-  const message = await SupportMessage.create({
-    ticketId: ticket._id,
-    senderType: "USER",
-    senderUserId: req.user!.id,
-    message: sanitizeText(req.body.message)
-  });
-  sendOk(res, { ticket, message }, 201);
+  sendOk(res, { ticket }, 201);
 }));
 
 usersRouter.get("/me/level", (req: AuthRequest, res) => {
@@ -150,25 +152,36 @@ usersRouter.get("/me/level", (req: AuthRequest, res) => {
 });
 
 usersRouter.post("/me/check-in", asyncHandler(async (req: AuthRequest, res) => {
-  const checkedIn = await User.findOneAndUpdate(
-    {
-      _id: req.user!.id,
-      $or: [
-        { lastDailyCheckInAt: { $exists: false } },
-        { lastDailyCheckInAt: { $lt: dailyCheckInStart() } }
-      ]
-    },
-    { $set: { lastDailyCheckInAt: new Date() } },
-    { new: true }
-  ).select("xp level levelTitle lastDailyCheckInAt walletBalance").lean();
+  const now = new Date();
+  const user = await User.findById(req.user!.id).select("xp level levelTitle lastDailyCheckInAt walletBalance streakCount ownedCosmeticIds").lean();
+  if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
 
-  if (!checkedIn) {
-    const user = await User.findById(req.user!.id).select("xp level levelTitle lastDailyCheckInAt walletBalance").lean();
-    return sendOk(res, { alreadyClaimed: true, level: getLevelStatus(user), balance: user?.walletBalance ?? 0 });
+  const alreadyClaimed = user.lastDailyCheckInAt && user.lastDailyCheckInAt >= dailyCheckInStart();
+  if (alreadyClaimed) {
+    return sendOk(res, { alreadyClaimed: true, level: getLevelStatus(user), balance: user.walletBalance, streak: user.streakCount ?? 0 });
   }
 
-  const reward = await grantXp(req.user!.id, "DAILY_CHECKIN");
-  sendOk(res, { alreadyClaimed: false, ...(reward ?? {}) });
+  const yesterday = new Date(now.getTime() - 86400000);
+  const isConsecutive = user.lastDailyCheckInAt && user.lastDailyCheckInAt >= dailyCheckInStart(yesterday);
+  const newStreak = (isConsecutive ? (user.streakCount ?? 0) : 0) + 1;
+
+  const update: Record<string, unknown> = { lastDailyCheckInAt: now, streakCount: newStreak };
+  const rewardCosmetic = streakCosmeticRewards[newStreak];
+  let unlockedCosmetic: string | undefined;
+  if (rewardCosmetic && !user.ownedCosmeticIds.includes(rewardCosmetic)) {
+    update.$push = { ownedCosmeticIds: rewardCosmetic };
+    unlockedCosmetic = rewardCosmetic;
+  }
+
+  await User.findByIdAndUpdate(req.user!.id, update);
+
+  const xpReward = await grantXp(req.user!.id, "DAILY_CHECKIN");
+  sendOk(res, {
+    alreadyClaimed: false,
+    streak: newStreak,
+    unlockedCosmetic,
+    ...(xpReward ?? {})
+  });
 }));
 
 usersRouter.get("/search", asyncHandler(async (req: AuthRequest, res) => {
@@ -475,7 +488,7 @@ usersRouter.get("/:id", asyncHandler(async (req: AuthRequest, res) => {
   const following = req.params.id === req.user!.id
     ? false
     : Boolean(await Follow.exists({ followerId: req.user!.id, followingId: req.params.id }));
-  const closeFriendIds = ((req.user as any)?.closeFriendIds ?? []).map((friendId: any) => friendId.toString());
+  const closeFriendIds = (req.user?.closeFriendIds ?? []).map((friendId: any) => friendId.toString());
   const isCloseFriend = closeFriendIds.includes(req.params.id);
   sendOk(res, { user: publicUser({ ...user, ...getVipStatus(user), isFollowing: following, isCloseFriend, isOnline: isUserOnline(req.params.id) }) });
 }));

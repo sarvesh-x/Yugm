@@ -2,6 +2,7 @@ package com.example.yugm.api
 
 import com.example.yugm.model.CreatorEarningBalance
 import com.example.yugm.model.CreatorPayoutKycStatus
+import com.example.yugm.model.ClaimAchievementResult
 import com.example.yugm.model.ExperienceHome
 import com.example.yugm.model.PayoutRequirements
 import com.example.yugm.model.TrustVerificationStatus
@@ -12,6 +13,15 @@ import org.json.JSONObject
 object CreatorApi {
     suspend fun experienceHome(token: String): ExperienceHome {
         return YugmHttpClient.get("/experience/home", token).getJSONObject("data").toExperienceHome()
+    }
+
+    suspend fun claimAchievement(token: String, achievementId: String): ClaimAchievementResult {
+        val data = YugmHttpClient.post("/experience/achievements/claim", token, JSONObject().put("achievementId", achievementId)).getJSONObject("data")
+        return ClaimAchievementResult(
+            claimed = data.optBoolean("claimed", false),
+            rewardCoins = data.optInt("rewardCoins", 0),
+            rewardCosmetic = data.optString("rewardCosmetic", "")
+        )
     }
 
     suspend fun creatorDashboard(token: String): com.example.yugm.model.CreatorDashboard {

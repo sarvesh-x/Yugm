@@ -12,8 +12,9 @@ import { Room } from "../models/Room.js";
 import { RoomInvite } from "../models/RoomInvite.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
 import { User } from "../models/User.js";
-import { asyncHandler, sendOk } from "../utils/http.js";
+import { asyncHandler, sendOk, HttpError, ErrorCode } from "../utils/http.js";
 import { getLevelStatus } from "../services/levels.js";
+import { creditWallet } from "../services/wallet.js";
 import { getVipStatus } from "../services/vip.js";
 import { creatorCoinsToInr } from "../services/withdrawal.js";
 
@@ -43,13 +44,13 @@ const defaultNotificationPreferences = {
 };
 
 const achievements = [
-  { id: "profile_complete", title: "Profile Spark", description: "Complete your profile", target: 1, rewardCoins: 25 },
-  { id: "daily_streak_3", title: "Three Day Rhythm", description: "Check in for 3 days", target: 3, rewardCoins: 50 },
+  { id: "profile_complete", title: "Profile Spark", description: "Complete your profile", target: 1, rewardCoins: 25, rewardCosmetic: "frame_minimal" },
+  { id: "daily_streak_3", title: "Three Day Rhythm", description: "Check in for 3 days", target: 3, rewardCoins: 50, rewardCosmetic: "mood_chill" },
   { id: "follow_10", title: "Circle Builder", description: "Follow 10 creators", target: 10, rewardCoins: 75 },
-  { id: "host_3", title: "Room Starter", description: "Host 3 rooms", target: 3, rewardCoins: 100 },
+  { id: "host_3", title: "Room Starter", description: "Host 3 rooms", target: 3, rewardCoins: 100, rewardCosmetic: "badge_early_host" },
   { id: "gift_5", title: "Gift Spark", description: "Send 5 gifts", target: 5, rewardCoins: 120 },
   { id: "chat_25", title: "Conversation Flow", description: "Send 25 chat messages", target: 25, rewardCoins: 80 },
-  { id: "level_5", title: "Yugm Star", description: "Reach level 5", target: 5, rewardCoins: 150 }
+  { id: "level_5", title: "Yugm Star", description: "Reach level 5", target: 5, rewardCoins: 150, rewardCosmetic: "name_neon_glow" }
 ];
 
 function publicUser(user: any) {
@@ -175,7 +176,7 @@ experienceRouter.get("/home", asyncHandler(async (req: AuthRequest, res) => {
     level: getLevelStatus(user),
     achievements: achievementsList,
     feed: [
-      ...socialRooms.map((room) => ({ type: "FOLLOWING_LIVE", title: `${(room.hostId as any)?.name ?? "A host"} is live`, room })),
+      ...socialRooms.map((room) => ({ type: "FOLLOWING_LIVE", title: `${(room.hostId as { name?: string })?.name ?? "A host"} is live`, room })),
       ...recommendedRooms.map((room) => ({ type: "TRENDING_ROOM", title: room.title, room })),
       ...suggestedHosts.slice(0, 4).map((host) => ({ type: "SUGGESTED_HOST", title: `Meet ${host.name}`, user: publicUser(host) }))
     ].slice(0, 14),
@@ -278,12 +279,34 @@ experienceRouter.get("/safety-center", asyncHandler(async (req: AuthRequest, res
 
 experienceRouter.get("/notification-preferences", asyncHandler(async (req: AuthRequest, res) => {
   const user = await User.findById(req.user!.id).select("notificationPreferences").lean();
-  sendOk(res, { preferences: { ...defaultNotificationPreferences, ...((user as any)?.notificationPreferences ?? {}) } });
+  sendOk(res, { preferences: { ...defaultNotificationPreferences, ...(user?.notificationPreferences ?? {}) } });
 }));
 
 experienceRouter.put("/notification-preferences", validateBody(notificationPreferenceSchema.partial()), asyncHandler(async (req: AuthRequest, res) => {
-  const current = { ...defaultNotificationPreferences, ...((req.user as any)?.notificationPreferences ?? {}) };
+  const current = { ...defaultNotificationPreferences, ...(req.user?.notificationPreferences ?? {}) };
   const preferences = { ...current, ...req.body };
   await User.findByIdAndUpdate(req.user!.id, { $set: { notificationPreferences: preferences } });
   sendOk(res, { preferences });
+}));
+
+experienceRouter.post("/achievements/claim", asyncHandler(async (req: AuthRequest, res) => {
+  const { achievementId } = z.object({ achievementId: z.string().min(1) }).parse(req.body);
+  const user = await User.findById(req.user!.id).select("ownedCosmeticIds walletBalance").lean();
+  if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+  const claimed = req.user?.claimedAchievementIds ?? [];
+  if (claimed.includes(achievementId)) throw new HttpError(409, "Achievement already claimed", ErrorCode.CONFLICT);
+  const achievement = achievements.find((a) => a.id === achievementId);
+  if (!achievement) throw new HttpError(404, "Achievement not found", ErrorCode.NOT_FOUND);
+  const allAchievements = await buildAchievements(req.user!.id, req.user);
+  const entry = allAchievements.find((a) => a.id === achievementId);
+  if (!entry?.complete) throw new HttpError(400, "Achievement not yet completed", ErrorCode.VALIDATION);
+  const update: Record<string, unknown> = { $push: { claimedAchievementIds: achievementId } };
+  if (achievement.rewardCosmetic && !user.ownedCosmeticIds.includes(achievement.rewardCosmetic)) {
+    update.$push = { ownedCosmeticIds: achievement.rewardCosmetic };
+  }
+  if (achievement.rewardCoins > 0) {
+    await creditWallet(req.user!.id, achievement.rewardCoins, "LEVEL_REWARD", { achievementId });
+  }
+  await User.findByIdAndUpdate(req.user!.id, update);
+  sendOk(res, { claimed: true, rewardCoins: achievement.rewardCoins, rewardCosmetic: achievement.rewardCosmetic });
 }));

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -74,7 +75,7 @@ fun ClanCreateScreen(
                 Text(error, color = Pink, fontSize = 12.sp)
             }
             GradientAction(
-                text = if (loading) "Creating…" else "Create Clan",
+                label = if (loading) "Creating…" else "Create Clan",
                 enabled = name.isNotBlank() && !loading,
                 onClick = {
                     scope.launch {

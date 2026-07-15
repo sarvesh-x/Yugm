@@ -32,7 +32,7 @@ import { Room } from "../models/Room.js";
 import { RoomInvite } from "../models/RoomInvite.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
 import { SpeakerRequest } from "../models/SpeakerRequest.js";
-import { SupportMessage, SupportTicket } from "../models/SupportTicket.js";
+import { SupportTicket } from "../models/SupportTicket.js";
 import { User } from "../models/User.js";
 import { UserSafetyStatus } from "../models/UserSafetyStatus.js";
 import { WalletTransaction } from "../models/WalletTransaction.js";
@@ -1259,20 +1259,7 @@ adminRouter.post("/notifications/campaigns/:id/send", requirePermission("notific
   adminOk(res, { sent: users.length });
 }));
 
-adminRouter.get("/support/tickets", requirePermission("support.read"), asyncHandler(async (req, res) => {
-  const filter: Record<string, unknown> = {};
-  if (req.query.status) filter.status = req.query.status;
-  if (req.query.category) filter.category = req.query.category;
-  if (req.query.priority) filter.priority = req.query.priority;
-  const supportUserId = objectIdQuery(req.query.userId, "userId");
-  if (supportUserId) filter.userId = supportUserId;
-  adminOk(res, await SupportTicket.find(filter).populate("userId assignedTo").sort({ updatedAt: -1 }).limit(100).lean());
-}));
-adminRouter.get("/support/tickets/:ticketId", requirePermission("support.read"), asyncHandler(async (req, res) => adminOk(res, { ticket: await SupportTicket.findById(req.params.ticketId).populate("userId assignedTo").lean(), messages: await SupportMessage.find({ ticketId: req.params.ticketId }).sort({ createdAt: 1 }).lean() })));
-adminRouter.post("/support/tickets/:ticketId/assign", requirePermission("support.reply"), validateBody(z.object({ adminId: objectIdSchema.optional() })), asyncHandler(async (req: AdminAuthRequest, res) => { const ticket = await SupportTicket.findByIdAndUpdate(req.params.ticketId, { assignedTo: req.body.adminId || req.admin!.id }, { new: true }); await auditLog({ adminId: req.admin!.id, action: "support.assigned", entityType: "support_ticket", entityId: req.params.ticketId, req }); adminOk(res, { ticket }); }));
-adminRouter.post("/support/tickets/:ticketId/reply", requirePermission("support.reply"), validateBody(z.object({ message: z.string().min(1).max(2000), attachments: z.array(z.unknown()).optional() })), asyncHandler(async (req: AdminAuthRequest, res) => { const message = await SupportMessage.create({ ticketId: req.params.ticketId, senderType: "ADMIN", senderAdminId: req.admin!.id, message: sanitizeText(req.body.message), attachments: req.body.attachments ?? [] }); await SupportTicket.findByIdAndUpdate(req.params.ticketId, { lastMessageAt: new Date(), status: "PENDING" }); await auditLog({ adminId: req.admin!.id, action: "support.replied", entityType: "support_ticket", entityId: req.params.ticketId, req }); adminOk(res, { message }); }));
-adminRouter.post("/support/tickets/:ticketId/close", requirePermission("support.reply"), asyncHandler(async (req: AdminAuthRequest, res) => { const ticket = await SupportTicket.findByIdAndUpdate(req.params.ticketId, { status: "CLOSED", closedAt: new Date() }, { new: true }); await auditLog({ adminId: req.admin!.id, action: "support.closed", entityType: "support_ticket", entityId: req.params.ticketId, req }); adminOk(res, { ticket }); }));
-adminRouter.post("/support/tickets/:ticketId/reopen", requirePermission("support.reply"), asyncHandler(async (req: AdminAuthRequest, res) => { const ticket = await SupportTicket.findByIdAndUpdate(req.params.ticketId, { status: "OPEN", $unset: { closedAt: "" } }, { new: true }); await auditLog({ adminId: req.admin!.id, action: "support.reopened", entityType: "support_ticket", entityId: req.params.ticketId, req }); adminOk(res, { ticket }); }));
+// Support ticket management moved to adminSupport.ts
 
 for (const key of ["users", "rooms", "matches", "messages", "wallet", "gifts", "reports", "retention", "revenue"] as const) {
   adminRouter.get(`/analytics/${key}`, requirePermission("analytics.read"), asyncHandler(async (req, res) => {

@@ -9,6 +9,9 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -49,10 +52,14 @@ import com.example.yugm.model.RoomMission
 import com.example.yugm.model.RoomParticipant
 import com.example.yugm.model.RoomPoll
 import com.example.yugm.model.SpeakerRequest
+import com.example.yugm.util.cosmeticDisplayName
 import com.example.yugm.ui.components.ControlButton
 import com.example.yugm.ui.components.GlassCard
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import com.example.yugm.ui.components.HostCard
 import com.example.yugm.ui.components.HostRow
+import com.example.yugm.ui.components.ReferenceChip
 import com.example.yugm.ui.components.PkBattleButton
 import com.example.yugm.ui.components.PkBattleHeader
 import com.example.yugm.ui.components.PkBattleScoreBar
@@ -74,6 +81,13 @@ import com.example.yugm.ui.components.YugmTextField
 import com.example.yugm.ui.theme.TextMuted
 import com.example.yugm.ui.theme.TextPrimary
 import com.example.yugm.ui.theme.Gold
+import com.example.yugm.ui.theme.PrimaryPurple
+import com.example.yugm.ui.theme.Pink
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -142,6 +156,11 @@ fun ActiveVoiceRoomScreen(
     var pkSearch by rememberSaveable { mutableStateOf("") }
     var pkGiftSide by rememberSaveable { mutableStateOf(PkSideType.LEFT) }
     var dismissedPkResultId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showEntryOverlay by rememberSaveable { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        delay(2000)
+        showEntryOverlay = false
+    }
     LaunchedEffect(reactionBurst) {
         if (reactionBurst.isNotBlank()) {
             delay(1200)
@@ -197,6 +216,17 @@ fun ActiveVoiceRoomScreen(
             if (!isHost) ControlButton("Leave", danger = true) { onBack() }
         }
     ) {
+        if (showEntryOverlay) {
+            RoomEntryOverlay(room.host?.activeCosmetics?.roomEntry ?: "")
+        }
+        if (room.ambience.isNotBlank()) {
+            androidx.compose.foundation.layout.Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                ReferenceChip("♪ ${cosmeticDisplayName(room.ambience)}", selected = true, onClick = {})
+            }
+        }
         room.host?.let { HostCard(it) }
         if (pkBattle != null && pkBattle.status == PkStatus.ACTIVE) {
             PkBattleHeader(pkBattle, isHost = isHost, onEnd = onEndPk)
@@ -505,6 +535,31 @@ fun PollComposerSheet(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Launch poll", color = Gold, fontWeight = FontWeight.Black)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RoomEntryOverlay(entryId: String) {
+    if (entryId.isBlank()) return
+    val alpha by animateFloatAsState(targetValue = 0f, animationSpec = tween(1800), finishedListener = {})
+    Box(
+        Modifier.fillMaxSize().alpha(alpha),
+        contentAlignment = Alignment.Center
+    ) {
+        when (entryId) {
+            "room_entry_confetti" -> {
+                Text("🎉✨🎊", fontSize = 60.sp)
+            }
+            "room_entry_spotlight" -> {
+                Box(Modifier.fillMaxSize().background(Brush.radialGradient(listOf(Color.White.copy(alpha = 0.4f), Color.Transparent), radius = 200f)))
+            }
+            "entry_rainbow" -> {
+                Box(Modifier.fillMaxSize().background(Brush.sweepGradient(listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red), Offset(500f, 500f))))
+            }
+            "entry_ghost" -> {
+                Text("👻💨", fontSize = 64.sp)
             }
         }
     }

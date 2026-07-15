@@ -139,11 +139,9 @@ object UserApi {
     suspend fun checkIn(token: String): DailyCheckInResult {
         val data = YugmHttpClient.post("/users/me/check-in", token, JSONObject()).getJSONObject("data")
         return DailyCheckInResult(
-            alreadyClaimed = data.optBoolean("alreadyClaimed", false),
-            xpAwarded = data.optInt("xpAwarded", 0),
-            levelUpReward = data.optInt("levelUpReward", 0),
-            level = data.optJSONObject("level")?.toLevelStatus() ?: LevelStatus(),
-            balance = data.optInt("walletBalance", data.optInt("balance", 0))
+            streak = data.optInt("streak", 0),
+            claimed = !data.optBoolean("alreadyClaimed", true),
+            unlockedCosmetic = data.optString("unlockedCosmetic", "")
         )
     }
 
@@ -216,5 +214,31 @@ object UserApi {
     suspend fun getRecentMessages(token: String): List<DirectMessage> {
         val data = YugmHttpClient.get("/users/messages", token).getJSONObject("data")
         return data.getJSONArray("messages").toDirectMessages()
+    }
+
+    suspend fun addCloseFriend(token: String, userId: String) {
+        YugmHttpClient.post("/users/$userId/close-friend", token, JSONObject())
+    }
+
+    suspend fun removeCloseFriend(token: String, userId: String) {
+        YugmHttpClient.delete("/users/$userId/close-friend", token)
+    }
+
+    suspend fun addProfileMedia(token: String, mediaUrl: String, mediaType: String) {
+        YugmHttpClient.post("/users/me/profile-media", token, JSONObject().put("mediaUrl", mediaUrl).put("mediaType", mediaType))
+    }
+
+    suspend fun deleteProfileMedia(token: String, mediaId: String) {
+        YugmHttpClient.delete("/users/me/profile-media/$mediaId", token)
+    }
+
+    suspend fun suggestedHosts(token: String): List<Host> {
+        val data = YugmHttpClient.get("/hosts/suggested", token).getJSONObject("data")
+        return data.optJSONArray("hosts")?.toHosts() ?: emptyList()
+    }
+
+    suspend fun levelLeaderboard(token: String): List<Host> {
+        val data = YugmHttpClient.get("/leaderboard/levels", token).getJSONObject("data")
+        return data.optJSONArray("leaderboard")?.toHosts() ?: emptyList()
     }
 }

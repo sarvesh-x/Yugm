@@ -22,9 +22,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontWeight
@@ -68,6 +72,8 @@ import com.example.yugm.ui.components.SectionTitle
 import com.example.yugm.ui.components.VideoGrid
 import com.example.yugm.ui.theme.TextMuted
 import com.example.yugm.ui.theme.Background
+import com.example.yugm.ui.theme.PrimaryPurple
+import com.example.yugm.ui.theme.Pink
 import com.example.yugm.ui.theme.TextPrimary
 import livekit.org.webrtc.SurfaceViewRenderer
 import kotlinx.coroutines.delay
@@ -248,10 +254,14 @@ fun ActiveVideoRoomScreen(
         } else if (isHost) {
             PkBattleButton { showPkSetup = true }
         }
-        if (liveVideoFeeds.isNotEmpty()) {
-            LiveVideoGrid(liveVideoFeeds)
-        } else {
-            VideoGrid(room = room, camera = camera, participants = participants.filter { it.role in listOf("HOST", "SPEAKER", "MODERATOR") })
+        val overlayId = room.host?.activeCosmetics?.videoCallOverlay ?: ""
+        Box(Modifier.fillMaxWidth()) {
+            if (liveVideoFeeds.isNotEmpty()) {
+                LiveVideoGrid(liveVideoFeeds)
+            } else {
+                VideoGrid(room = room, camera = camera, participants = participants.filter { it.role in listOf("HOST", "SPEAKER", "MODERATOR") })
+            }
+            CallScreenOverlay(overlayId)
         }
         MissionStrip(missions)
         PollCard(poll = polls.firstOrNull(), isHost = isHost, onCreate = { showPollComposer = true }, onVote = onVotePoll)
@@ -372,6 +382,34 @@ private fun LiveVideoTile(feed: YugmMediaRoom.VideoFeed, modifier: Modifier = Mo
         )
         Box(Modifier.align(Alignment.BottomStart).padding(9.dp).clip(RoundedCornerShape(10.dp)).background(Color.Black.copy(alpha = 0.62f)).padding(horizontal = 9.dp, vertical = 5.dp)) {
             Text(feed.label, color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun CallScreenOverlay(overlayId: String) {
+    if (overlayId.isBlank()) return
+    Box(Modifier.fillMaxSize()) {
+        when (overlayId) {
+            "call_soft_glow" -> {
+                Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.08f)))
+            }
+            "call_neon_frame" -> {
+                Box(Modifier.fillMaxSize().border(4.dp, Brush.linearGradient(listOf(Pink, PrimaryPurple, Color.Cyan)), RoundedCornerShape(24.dp)))
+            }
+            "call_bollywood_lights" -> {
+                Canvas(Modifier.fillMaxSize()) {
+                    val w = size.width; val h = size.height
+                    for (i in 0..11) {
+                        val x = w * (i.toFloat() / 11)
+                        drawCircle(Color((i * 30 % 255) / 255f, ((i * 60 + 100) % 255) / 255f, ((i * 90 + 50) % 255) / 255f, 0.3f), radius = 18f, center = Offset(x, h * 0.08f * (if (i % 2 == 0) 1f else 3f)))
+                    }
+                }
+            }
+            "call_vintage" -> {
+                Box(Modifier.fillMaxSize().background(Color(0xFFD4A574).copy(alpha = 0.15f)))
+            }
+            else -> {}
         }
     }
 }

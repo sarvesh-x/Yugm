@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { FaceVerificationSubmission } from "../models/FaceVerificationSubmission.js";
 import { TrustVerification } from "../models/TrustVerification.js";
 import { User } from "../models/User.js";
@@ -145,7 +146,7 @@ export async function approveTrustVerification(id: string, adminId: string, note
   verification.reviewedAt = now;
   verification.verifiedAt = now;
   verification.rejectedAt = undefined;
-  verification.reviewedByAdminId = adminId as any;
+  verification.reviewedByAdminId = adminId as unknown as mongoose.Types.ObjectId;
   verification.adminNotes = notes;
   verification.rejectionReason = undefined;
   await verification.save();
@@ -162,7 +163,7 @@ export async function rejectTrustVerification(id: string, adminId: string, reaso
   verification.creatorTrustEnabled = false;
   verification.reviewedAt = now;
   verification.rejectedAt = now;
-  verification.reviewedByAdminId = adminId as any;
+  verification.reviewedByAdminId = adminId as unknown as mongoose.Types.ObjectId;
   verification.rejectionReason = reason;
   verification.adminNotes = notes;
   await verification.save();
@@ -177,7 +178,7 @@ export async function requestTrustRetry(id: string, adminId: string, reason?: st
   verification.faceStatus = "NEEDS_RETRY";
   verification.voiceStatus = "NEEDS_RETRY";
   verification.reviewedAt = new Date();
-  verification.reviewedByAdminId = adminId as any;
+  verification.reviewedByAdminId = adminId as unknown as mongoose.Types.ObjectId;
   verification.rejectionReason = reason;
   verification.adminNotes = notes;
   await verification.save();
@@ -191,7 +192,7 @@ export async function suspendTrustVerification(id: string, adminId: string, reas
   verification.verifiedBadgeEnabled = false;
   verification.creatorTrustEnabled = false;
   verification.reviewedAt = new Date();
-  verification.reviewedByAdminId = adminId as any;
+  verification.reviewedByAdminId = adminId as unknown as mongoose.Types.ObjectId;
   verification.rejectionReason = reason;
   verification.adminNotes = notes;
   await verification.save();

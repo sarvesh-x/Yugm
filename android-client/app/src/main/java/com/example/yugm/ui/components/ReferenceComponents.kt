@@ -49,27 +49,32 @@ import com.example.yugm.ui.theme.TextPrimary
 enum class YugmDockTab { DISCOVER, MATCH, LIVE, CHAT, WALLET, PROFILE }
 
 @Composable
-fun YugmAmbientBackground(content: @Composable () -> Unit) {
-    Box(Modifier.fillMaxSize().background(Background)) {
-        Canvas(Modifier.fillMaxSize()) {
-            drawCircle(
-                brush = Brush.radialGradient(
-                    listOf(PrimaryPurple.copy(alpha = 0.14f), Color.Transparent),
+fun YugmAmbientBackground(themeOverride: List<Color>? = null, content: @Composable () -> Unit) {
+    val bg = themeOverride?.getOrNull(0) ?: Background
+    val accent1 = themeOverride?.getOrNull(1)?.copy(alpha = 0.14f) ?: PrimaryPurple.copy(alpha = 0.14f)
+    val accent2 = themeOverride?.getOrNull(1)?.let { Color.Transparent } ?: Pink.copy(alpha = 0.08f)
+    Box(Modifier.fillMaxSize().background(bg)) {
+        if (themeOverride == null) {
+            Canvas(Modifier.fillMaxSize()) {
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        listOf(PrimaryPurple.copy(alpha = 0.14f), Color.Transparent),
+                        center = Offset(size.width * 0.92f, size.height * 0.18f),
+                        radius = size.width * 0.75f
+                    ),
                     center = Offset(size.width * 0.92f, size.height * 0.18f),
                     radius = size.width * 0.75f
-                ),
-                center = Offset(size.width * 0.92f, size.height * 0.18f),
-                radius = size.width * 0.75f
-            )
-            drawCircle(
-                brush = Brush.radialGradient(
-                    listOf(Pink.copy(alpha = 0.08f), Color.Transparent),
+                )
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        listOf(Pink.copy(alpha = 0.08f), Color.Transparent),
+                        center = Offset(size.width * 0.04f, size.height * 0.74f),
+                        radius = size.width * 0.58f
+                    ),
                     center = Offset(size.width * 0.04f, size.height * 0.74f),
                     radius = size.width * 0.58f
-                ),
-                center = Offset(size.width * 0.04f, size.height * 0.74f),
-                radius = size.width * 0.58f
-            )
+                )
+            }
         }
         content()
     }

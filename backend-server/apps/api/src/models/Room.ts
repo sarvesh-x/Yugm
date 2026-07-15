@@ -18,6 +18,10 @@ export interface IRoom extends mongoose.Document {
   moderatorIds: mongoose.Types.ObjectId[];
   livekitRoomName: string;
   allowAudienceMicRequests: boolean;
+  theme?: string;
+  vipOnly: boolean;
+  badge?: string;
+  ambience?: string;
   scheduledFor?: Date;
   startedAt?: Date;
   endedAt?: Date;
@@ -41,6 +45,10 @@ const roomSchema = new Schema<IRoom>(
     moderatorIds: [{ type: Schema.Types.ObjectId, ref: "User" }],
     livekitRoomName: { type: String, required: true, unique: true },
     allowAudienceMicRequests: { type: Boolean, default: true },
+    theme: String,
+    vipOnly: { type: Boolean, default: false },
+    badge: String,
+    ambience: String,
     scheduledFor: Date,
     startedAt: Date,
     endedAt: Date

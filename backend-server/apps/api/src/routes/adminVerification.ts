@@ -78,7 +78,9 @@ adminVerificationRouter.get("/trust-verifications/:id", requireAdminAuth, requir
     mediaAccessGranted ? FaceVerificationSubmission.find({ verificationId: req.params.id }).sort({ createdAt: -1 }).limit(20).lean() : Promise.resolve([]),
     mediaAccessGranted ? VoiceVerificationSubmission.find({ verificationId: req.params.id }).sort({ createdAt: -1 }).limit(20).lean() : Promise.resolve([])
   ]);
-  await recordAuditLog({ adminId: req.admin!.id, action: mediaAccessGranted ? "trust_verification.view_media" : "trust_verification.view", entityType: "trust_verification", entityId: verification._id.toString(), targetUserId: (verification.userId as any)?._id?.toString?.() ?? String(verification.userId), metadata: { mediaAccessGranted }, req });
+  const uid = verification.userId as { _id?: { toString(): string }; toString?(): string };
+  const targetUserId = uid?._id?.toString?.() ?? String(verification.userId);
+  await recordAuditLog({ adminId: req.admin!.id, action: mediaAccessGranted ? "trust_verification.view_media" : "trust_verification.view", entityType: "trust_verification", entityId: verification._id.toString(), targetUserId, metadata: { mediaAccessGranted }, req });
   const safeFaceSubmissions = faceSubmissions.map((submission: any) => ({
     ...submission,
     selfieImageUrl: adminTrustMediaUrl(submission.selfieImageUrl),

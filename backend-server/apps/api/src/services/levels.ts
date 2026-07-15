@@ -138,6 +138,6 @@ export async function grantXp(userId: string, event: XpEvent, metadata: Record<s
   };
 }
 
-export function dailyCheckInStart() {
-  return startOfUtcDay();
+export function dailyCheckInStart(date?: Date) {
+  return startOfUtcDay(date);
 }

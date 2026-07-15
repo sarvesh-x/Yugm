@@ -41,7 +41,6 @@ import com.example.yugm.ui.components.YugmPageHeader
 import com.example.yugm.ui.theme.Pink
 import com.example.yugm.ui.theme.TextMuted
 import com.example.yugm.ui.theme.TextPrimary
-import com.example.yugm.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 
@@ -145,7 +144,7 @@ private fun MyClanCard(clan: Clan, onClick: () -> Unit) {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(clan.name, color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                Text("${clan.familyLabel} · ${clan.memberCount} members", color = TextSecondary, fontSize = 12.sp)
+                Text("${clan.familyLabel} · ${clan.memberCount} members", color = TextMuted, fontSize = 12.sp)
             }
             Text("Open", color = Pink, fontSize = 12.sp, fontWeight = FontWeight.Medium)
         }
@@ -167,7 +166,7 @@ private fun ClanCard(clan: ClanSummary, onClick: () -> Unit) {
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(clan.name, color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-            Text("${clan.familyLabel} · ${clan.memberCount} members", color = TextSecondary, fontSize = 11.sp)
+            Text("${clan.familyLabel} · ${clan.memberCount} members", color = TextMuted, fontSize = 11.sp)
         }
         if (clan.slug.isNotBlank()) {
             Text(clan.slug, color = TextMuted, fontSize = 11.sp)

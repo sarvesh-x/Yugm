@@ -65,6 +65,7 @@ import com.example.yugm.ui.theme.PrimaryPurple
 import com.example.yugm.ui.theme.SurfaceElevated
 import com.example.yugm.ui.theme.TextMuted
 import com.example.yugm.ui.theme.TextPrimary
+import com.example.yugm.util.cosmeticDisplayName
 import com.example.yugm.ui.viewmodel.DiscoverViewModel
 
 @Composable
@@ -250,7 +251,12 @@ private fun VoiceRoomRow(room: Room, onClick: () -> Unit) {
             Modifier.size(110.dp).clip(RoundedCornerShape(16.dp)).background(Brush.linearGradient(room.gradient.ifEmpty { listOf(PrimaryPurple, Pink) })),
             contentAlignment = Alignment.TopStart
         ) {
-            LiveBadge()
+            Column {
+                LiveBadge()
+                if (room.vipOnly) {
+                    Text("VIP", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Black, modifier = Modifier.background(Gold.copy(alpha = 0.85f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp).padding(top = 2.dp))
+                }
+            }
         }
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
             Text(room.title, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -258,6 +264,9 @@ private fun VoiceRoomRow(room: Room, onClick: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 7.dp)) {
                 room.host?.let { Avatar(it.name.take(1), 27, it.avatar, it.activeCosmetics) }
                 Text("+${room.participants.coerceAtLeast(1)}", color = TextMuted, fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp))
+                if (room.badge.isNotBlank()) {
+                    Text("🏷️${cosmeticDisplayName(room.badge)}", color = TextMuted, fontSize = 10.sp, modifier = Modifier.padding(start = 4.dp))
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.padding(top = 6.dp)) {
                 ReferenceChip(room.category.ifBlank { "Talks" }, glyph = "◖")

@@ -98,13 +98,13 @@ export async function approvePayoutReview(id: string, adminId: string, notes?: s
       }
       await assertPayoutEligibility(review, session);
       review.status = "APPROVED";
-      review.reviewedByAdminId = adminId as any;
+      review.reviewedByAdminId = adminId as unknown as mongoose.Types.ObjectId;
       review.reviewedAt = new Date();
       review.adminNotes = notes;
       review.rejectionReason = undefined;
       withdrawal.status = "APPROVED";
       withdrawal.approvedAt = new Date();
-      withdrawal.reviewedByAdminId = adminId as any;
+      withdrawal.reviewedByAdminId = adminId as unknown as mongoose.Types.ObjectId;
       withdrawal.rejectedAt = undefined;
       withdrawal.rejectionReason = undefined;
       await Promise.all([review.save({ session }), withdrawal.save({ session })]);
@@ -134,14 +134,14 @@ export async function rejectPayoutReview(id: string, adminId: string, reason: st
         throw new HttpError(409, `Withdrawal cannot be rejected from ${withdrawal.status}`, ErrorCode.CONFLICT);
       }
       review.status = "REJECTED";
-      review.reviewedByAdminId = adminId as any;
+      review.reviewedByAdminId = adminId as unknown as mongoose.Types.ObjectId;
       review.reviewedAt = new Date();
       review.rejectionReason = reason;
       review.adminNotes = notes;
       withdrawal.status = "REJECTED";
       withdrawal.activeLock = false;
       withdrawal.rejectedAt = new Date();
-      withdrawal.reviewedByAdminId = adminId as any;
+      withdrawal.reviewedByAdminId = adminId as unknown as mongoose.Types.ObjectId;
       withdrawal.rejectionReason = reason;
       await Promise.all([review.save({ session }), withdrawal.save({ session })]);
       result = review;
@@ -160,7 +160,7 @@ export async function markPayoutReviewManual(id: string, adminId: string, notes?
   const withdrawal = await WithdrawalRequest.exists({ _id: review.withdrawalRequestId, status: "PENDING_REVIEW" });
   if (!withdrawal) throw new HttpError(409, "Withdrawal is no longer pending review", ErrorCode.CONFLICT);
   review.status = "NEEDS_MANUAL_REVIEW";
-  review.reviewedByAdminId = adminId as any;
+  review.reviewedByAdminId = adminId as unknown as mongoose.Types.ObjectId;
   review.reviewedAt = new Date();
   review.adminNotes = notes;
   await review.save();
@@ -211,14 +211,14 @@ export async function markWithdrawalPaid(reviewId: string, adminId: string, payo
       }
 
       review.status = "PAID";
-      review.reviewedByAdminId = adminId as any;
+      review.reviewedByAdminId = adminId as unknown as mongoose.Types.ObjectId;
       review.reviewedAt = new Date();
       review.adminNotes = notes ?? review.adminNotes;
       withdrawal.status = "PAID";
       withdrawal.activeLock = false;
       withdrawal.paidAt = new Date();
       withdrawal.payoutReference = providerRef;
-      withdrawal.reviewedByAdminId = adminId as any;
+      withdrawal.reviewedByAdminId = adminId as unknown as mongoose.Types.ObjectId;
       withdrawal.metadata = { ...(withdrawal.metadata ?? {}), paidNotes: notes };
       await Promise.all([review.save({ session }), withdrawal.save({ session })]);
       result = { review, withdrawal };
