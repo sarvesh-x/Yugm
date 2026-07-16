@@ -184,3 +184,10 @@ uploadRouter.post("/upload/trust-verification", requireAuth, trustVerificationUp
   const { url, storage } = await persistUploadedFile(file, "trust-verification");
   sendOk(res, { url, purpose, storage });
 }));
+
+uploadRouter.post("/upload/story", requireAuth, profileMediaUpload.single("media"), asyncHandler(async (req: AuthRequest, res) => {
+  const type = assertSafeProfileMedia(req.file);
+  const file = req.file!;
+  const { url, storage } = await persistUploadedFile(file, "stories");
+  sendOk(res, { url, type, storage });
+}));

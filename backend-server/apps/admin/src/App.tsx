@@ -43,8 +43,10 @@ type ViewKey =
   | "gifts"
   | "cosmetics"
   | "notifications"
+  | "campaigns"
   | "growth"
   | "support"
+  | "dmReviews"
   | "analytics"
   | "fraud"
   | "config"
@@ -70,8 +72,10 @@ const navItems: Array<{ key: ViewKey; label: string; icon: ReactNode; group: str
   { key: "gifts", label: "Gifts", icon: <Gift />, group: "Money" },
   { key: "cosmetics", label: "Cosmetics", icon: <Palette />, group: "Money" },
   { key: "notifications", label: "Notifications", icon: <Bell />, group: "Operations" },
+  { key: "campaigns", label: "Campaigns", icon: <Bell />, group: "Operations", requiredPermission: "notifications.send" },
   { key: "growth", label: "Growth OS", icon: <LineChart />, group: "Operations" },
   { key: "support", label: "Support", icon: <LifeBuoy />, group: "Operations" },
+  { key: "dmReviews", label: "DM Reviews", icon: <Lock />, group: "Safety", requiredPermission: "dm_reviews.review" },
   { key: "analytics", label: "Analytics", icon: <BarChart3 />, group: "Intelligence" },
   { key: "fraud", label: "Fraud radar", icon: <Activity />, group: "Intelligence" },
   { key: "config", label: "App config", icon: <SlidersHorizontal />, group: "System" },
@@ -131,6 +135,11 @@ export function App() {
 function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
   const [email, setEmail] = useState("admin@yugm.local");
   const [password, setPassword] = useState("");
+  const [twoFactorToken, setTwoFactorToken] = useState("");
+  const [twoFactorAdminId, setTwoFactorAdminId] = useState("");
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [twoFactorEmail, setTwoFactorEmail] = useState("");
+  const [twoFactorName, setTwoFactorName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -139,13 +148,70 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
     setLoading(true);
     setError("");
     try {
-      onLogin(await login(email, password));
+      const result = await login(email, password);
+      if ((result as any).twoFactorRequired) {
+        setTwoFactorToken((result as any).twoFactorToken);
+        setTwoFactorAdminId((result as any).adminId);
+        setTwoFactorEmail((result as any).email || email);
+        setTwoFactorName((result as any).displayName || "");
+        return;
+      }
+      onLogin(result as Session);
     } catch (err: any) {
       setError(err.message || "Login failed");
     } finally {
       setLoading(false);
     }
   };
+
+  const submit2FA = async () => {
+    if (!twoFactorCode.trim() || twoFactorCode.length !== 6) return;
+    setLoading(true);
+    setError("");
+    try {
+      const result = await adminApi<Session>("/auth/2fa/login", {
+        method: "POST",
+        body: JSON.stringify({ twoFactorToken, token: twoFactorCode.trim(), adminId: twoFactorAdminId })
+      });
+      onLogin(result);
+    } catch (err: any) {
+      setError(err.message || "2FA verification failed");
+      setTwoFactorCode("");
+    }
+    setLoading(false);
+  };
+
+  if (twoFactorToken) {
+    return (
+      <div className="login-page">
+        <section className="login-hero">
+          <div className="brand-lockup">
+            <div className="logo-mark">Y</div>
+            <div>
+              <h1>Yugm Admin</h1>
+              <p>Two-factor authentication required.</p>
+            </div>
+          </div>
+        </section>
+        <form className="login-card" onSubmit={(e) => { e.preventDefault(); submit2FA(); }}>
+          <div className="eyebrow">Security verification</div>
+          <h2>Enter 2FA code</h2>
+          <p>Open your authenticator app and enter the 6-digit code for {twoFactorEmail}.</p>
+          <label>
+            Authentication code
+            <input value={twoFactorCode} onChange={(e) => setTwoFactorCode(e.target.value)} placeholder="000000" maxLength={6} autoFocus />
+          </label>
+          {error && <div className="form-error">{error}</div>}
+          <button className="primary-action" disabled={loading || twoFactorCode.length !== 6}>
+            {loading ? "Verifying..." : "Verify & sign in"}
+          </button>
+          <button type="button" className="ghost-button" style={{ marginTop: "8px", width: "100%" }} onClick={() => { setTwoFactorToken(""); setTwoFactorCode(""); setError(""); }}>
+            Back to login
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="login-page">
@@ -266,14 +332,16 @@ function ViewRenderer({ view, session, setNotice, onLogout }: { view: ViewKey; s
   if (view === "gifts") return <GiftsPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "cosmetics") return <CosmeticsPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "notifications") return <NotificationsPage token={session.accessToken} setNotice={setNotice} />;
+  if (view === "campaigns") return <CampaignsPage token={session.accessToken} admin={session.admin} setNotice={setNotice} />;
   if (view === "growth") return <GrowthPage token={session.accessToken} />;
+  if (view === "dmReviews") return <DmReviewsPage token={session.accessToken} admin={session.admin} setNotice={setNotice} />;
   if (view === "support") return <SupportPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "analytics") return <AnalyticsPage token={session.accessToken} />;
   if (view === "fraud") return <FraudPage token={session.accessToken} />;
   if (view === "config") return <ConfigPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "audit") return <SimpleResource token={session.accessToken} title="Audit Logs" endpoint="/audit-logs" columns={auditColumns} searchPlaceholder="Filter action" searchParam="action" />;
   if (view === "admins") return <AdminUsersPage token={session.accessToken} setNotice={setNotice} />;
-  return <SettingsPage admin={session.admin} onLogout={onLogout} />;
+  return <SettingsPage token={session.accessToken} admin={session.admin} onLogout={onLogout} />;
 }
 
 function Dashboard({ token }: { token: string }) {
@@ -944,6 +1012,166 @@ function CosmeticsPage({ token, setNotice }: { token: string; setNotice: (notice
   );
 }
 
+function CampaignsPage({ token, admin, setNotice }: { token: string; admin: Admin; setNotice: (notice: Notice) => void }) {
+  const [selected, setSelected] = useState<any>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [busy, setBusy] = useState("");
+
+  const resource = useResourceWithMeta<any[]>("/notifications/campaigns", token);
+  const rows = resource.data ?? [];
+
+  const [form, setForm] = useState({
+    title: "",
+    body: "",
+    segment: "all",
+    segmentValue: "",
+    scheduledAt: ""
+  });
+
+  const openNew = () => {
+    setForm({ title: "", body: "", segment: "all", segmentValue: "", scheduledAt: "" });
+    setShowCreate(true);
+    setSelected(null);
+  };
+
+  const createCampaign = async () => {
+    try {
+      const body: Record<string, any> = { title: form.title, body: form.body, segment: form.segment };
+      if (form.segment === "city" && form.segmentValue.trim()) body.segmentValue = form.segmentValue.trim();
+      if (form.scheduledAt.trim()) body.scheduledAt = form.scheduledAt;
+      await adminApi("/notifications/campaigns", { token, method: "POST", body: JSON.stringify(body) });
+      setNotice({ tone: "success", text: "Campaign draft created" });
+      setShowCreate(false);
+      resource.refresh();
+    } catch (err: any) {
+      setNotice({ tone: "error", text: err.message });
+    }
+  };
+
+  const sendCampaign = async (campaign: any) => {
+    const id = campaign._id || campaign.id;
+    setBusy(`send:${id}`);
+    try {
+      await adminApi(`/notifications/campaigns/${id}/send`, { token, method: "POST" });
+      setNotice({ tone: "success", text: "Campaign sent" });
+      setSelected(null);
+      resource.refresh();
+    } catch (err: any) {
+      setNotice({ tone: "error", text: err.message });
+    }
+    setBusy("");
+  };
+
+  const cancelCampaign = async (campaign: any) => {
+    const id = campaign._id || campaign.id;
+    setBusy(`cancel:${id}`);
+    try {
+      await adminApi(`/notifications/campaigns/${id}/cancel`, { token, method: "POST" });
+      setNotice({ tone: "success", text: "Campaign cancelled" });
+      setSelected(null);
+      resource.refresh();
+    } catch (err: any) {
+      setNotice({ tone: "error", text: err.message });
+    }
+    setBusy("");
+  };
+
+  const campaignColumns: ColumnDef[] = [
+    { key: "title", label: "Title" },
+    { key: "segment", label: "Segment", render: (row) => <StatusBadge value={row.segment} /> },
+    { key: "status", label: "Status", render: (row) => <StatusBadge value={row.status} /> },
+    { key: "sentCount", label: "Sent", render: (row) => formatNumber(row.sentCount) },
+    { key: "deliveredCount", label: "Delivered", render: (row) => formatNumber(row.deliveredCount) },
+    { key: "openRate", label: "Open rate", render: (row) => row.openRate != null ? `${(row.openRate * 100).toFixed(1)}%` : "—" },
+    { key: "createdAt", label: "Created" }
+  ];
+
+  const canAct = (status: string) => status === "DRAFT" || status === "SCHEDULED";
+
+  return (
+    <div className="page-grid">
+      <ResourceFrame title="Notification Campaigns" subtitle="Create, schedule, send and track push notification campaigns." loading={resource.loading} error={resource.error} onRetry={resource.refresh}>
+        <div className="section-heading" style={{ marginBottom: 16 }}>
+          <span>{formatNumber(resource.meta?.pagination?.total ?? rows.length)} campaigns</span>
+          <button className="primary-action compact" onClick={openNew}>New Campaign</button>
+        </div>
+        <DataTable
+          rows={rows}
+          columns={campaignColumns}
+          onRowClick={setSelected}
+          actions={(row) => (
+            <div className="action-row">
+              {canAct(row.status) && (
+                <>
+                  <button className="ghost-button" disabled={busy === `send:${row._id}`} onClick={() => sendCampaign(row)}>
+                    {busy === `send:${row._id}` ? "..." : "Send"}
+                  </button>
+                  <button className="soft" disabled={busy === `cancel:${row._id}`} onClick={() => cancelCampaign(row)}>
+                    {busy === `cancel:${row._id}` ? "..." : "Cancel"}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        />
+      </ResourceFrame>
+
+      <Drawer open={showCreate} title="New Campaign" onClose={() => setShowCreate(false)}>
+        <div className="form-grid">
+          <label>Title<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Campaign title" /></label>
+          <label className="full">Body<textarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} placeholder="Push notification body text" /></label>
+          <label>Segment<select value={form.segment} onChange={(e) => setForm({ ...form, segment: e.target.value })}>
+            <option value="all">All users</option>
+            <option value="hosts">Hosts</option>
+            <option value="city">City</option>
+            <option value="vip">VIP</option>
+            <option value="custom">Custom</option>
+          </select></label>
+          {form.segment === "city" && (
+            <label>City name<input value={form.segmentValue} onChange={(e) => setForm({ ...form, segmentValue: e.target.value })} placeholder="e.g. Mumbai" /></label>
+          )}
+          <label>Scheduled date<input type="datetime-local" value={form.scheduledAt} onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })} /></label>
+        </div>
+        <button className="primary-action compact" onClick={createCampaign} style={{ marginTop: 12 }}>Create draft</button>
+      </Drawer>
+
+      <Drawer open={Boolean(selected) && !showCreate} title={selected?.title || "Campaign detail"} onClose={() => setSelected(null)}>
+        {selected && (
+          <>
+            <div className="detail-card">
+              <strong>{selected.title}</strong>
+              <p>{selected.body || "No body content."}</p>
+            </div>
+            <div className="verification-detail-grid">
+              <ReviewDetail label="Segment" value={selected.segment} status />
+              <ReviewDetail label="Status" value={selected.status} status />
+              <ReviewDetail label="Sent" value={formatNumber(selected.sentCount)} />
+              <ReviewDetail label="Delivered" value={formatNumber(selected.deliveredCount)} />
+              <ReviewDetail label="Open count" value={formatNumber(selected.openCount)} />
+              <ReviewDetail label="Click count" value={formatNumber(selected.clickCount)} />
+              <ReviewDetail label="Open rate" value={selected.openRate != null ? `${(selected.openRate * 100).toFixed(1)}%` : "—"} />
+              <ReviewDetail label="Click rate" value={selected.clickRate != null ? `${(selected.clickRate * 100).toFixed(1)}%` : "—"} />
+              <ReviewDetail label="Created" value={formatDate(selected.createdAt)} />
+              <ReviewDetail label="Sent at" value={formatDate(selected.sentAt)} />
+              <ReviewDetail label="Completed at" value={formatDate(selected.completedAt)} />
+            </div>
+            {canAct(selected.status) && (
+              <div className="action-grid" style={{ marginTop: 16 }}>
+                <button className="primary-action compact" disabled={busy === `send:${selected._id}`} onClick={() => sendCampaign(selected)}>
+                  {busy === `send:${selected._id}` ? "Sending..." : "Send now"}
+                </button>
+                <button className="soft" disabled={busy === `cancel:${selected._id}`} onClick={() => cancelCampaign(selected)}>
+                  {busy === `cancel:${selected._id}` ? "Cancelling..." : "Cancel campaign"}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </Drawer>
+    </div>
+  );
+}
+
 function NotificationsPage({ token, setNotice }: { token: string; setNotice: (notice: Notice) => void }) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -1139,15 +1367,131 @@ function AdminUsersPage({ token, setNotice }: { token: string; setNotice: (notic
   );
 }
 
-function SettingsPage({ admin, onLogout }: { admin: Admin; onLogout: () => void }) {
+function SettingsPage({ token, admin, onLogout }: { token: string; admin: Admin; onLogout: () => void }) {
+  const [qrCode, setQrCode] = useState("");
+  const [setupToken, setSetupToken] = useState("");
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [codeInput, setCodeInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [showDisable, setShowDisable] = useState(false);
+
+  useEffect(() => {
+    adminApi<{ enabled: boolean }>("/auth/2fa/status", { token }).then((data) => setTwoFactorEnabled(data.enabled)).catch(() => {});
+  }, [token]);
+
+  const startSetup = async () => {
+    setLoading(true);
+    try {
+      const data = await adminApi<{ secret: string; qrCode: string }>("/auth/2fa/setup", { token, method: "POST" });
+      setQrCode(data.qrCode);
+      setSetupToken(data.secret);
+    } catch (err: any) {
+      alert(err.message || "Failed to start 2FA setup");
+    }
+    setLoading(false);
+  };
+
+  const verifySetup = async () => {
+    if (!codeInput.trim()) return;
+    setLoading(true);
+    try {
+      const data = await adminApi<{ verified: boolean; enabled: boolean }>("/auth/2fa/verify", {
+        token, method: "POST", body: JSON.stringify({ token: codeInput.trim() })
+      });
+      if (data.enabled) {
+        setTwoFactorEnabled(true);
+        setQrCode("");
+        setSetupToken("");
+        setCodeInput("");
+      }
+    } catch (err: any) {
+      alert(err.message || "Verification failed");
+    }
+    setLoading(false);
+  };
+
+  const disable2FA = async () => {
+    setLoading(true);
+    try {
+      const body: Record<string, string> = { token: codeInput.trim() };
+      if (passwordInput.trim()) body.password = passwordInput.trim();
+      await adminApi("/auth/2fa/disable", { token, method: "POST", body: JSON.stringify(body) });
+      setTwoFactorEnabled(false);
+      setShowDisable(false);
+      setCodeInput("");
+      setPasswordInput("");
+    } catch (err: any) {
+      alert(err.message || "Failed to disable 2FA");
+    }
+    setLoading(false);
+  };
+
   return (
-    <Panel title="Session and Security" action="Admin">
-      <div className="settings-grid">
-        <div className="detail-card"><strong>{admin.displayName}</strong><p>{admin.email}</p><StatusBadge value={admin.role} /></div>
-        <div className="detail-card"><strong>Permissions</strong><p>{admin.permissions.length} permissions available.</p></div>
-        <button className="danger" onClick={onLogout}>Log out</button>
-      </div>
-    </Panel>
+    <div className="page-grid">
+      <Panel title="Session and Security" action="Admin">
+        <div className="settings-grid">
+          <div className="detail-card"><strong>{admin.displayName}</strong><p>{admin.email}</p><StatusBadge value={admin.role} /></div>
+          <div className="detail-card"><strong>Permissions</strong><p>{admin.permissions.length} permissions available.</p></div>
+          <div className="detail-card">
+            <strong>Two-Factor Authentication</strong>
+            <p>{twoFactorEnabled ? "Enabled" : "Not configured"}</p>
+            {twoFactorEnabled ? (
+              <button className="soft" onClick={() => setShowDisable(!showDisable)}>Disable 2FA</button>
+            ) : !qrCode ? (
+              <button className="primary-action compact" onClick={startSetup} disabled={loading}>{loading ? "Preparing..." : "Enable 2FA"}</button>
+            ) : null}
+          </div>
+          <button className="danger" onClick={onLogout}>Log out</button>
+        </div>
+      </Panel>
+
+      {qrCode && !twoFactorEnabled && (
+        <Panel title="Scan QR Code" action="Setup">
+          <p style={{ marginBottom: "12px", fontSize: "13px", opacity: 0.7 }}>
+            Scan this QR code with Google Authenticator, Authy, or any TOTP app. Then enter the 6-digit code below to verify.
+          </p>
+          <div style={{ textAlign: "center", marginBottom: "16px" }}>
+            <img src={qrCode} alt="TOTP QR Code" style={{ width: 180, height: 180, borderRadius: 12 }} />
+          </div>
+          <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
+            <label className="stacked-field" style={{ flex: 1 }}>
+              Verification code
+              <input value={codeInput} onChange={(e) => setCodeInput(e.target.value)} placeholder="000000" maxLength={6} />
+            </label>
+            <button className="primary-action compact" onClick={verifySetup} disabled={loading || codeInput.length !== 6}>
+              {loading ? "Verifying..." : "Verify"}
+            </button>
+          </div>
+          <details style={{ marginTop: "12px" }}>
+            <summary style={{ cursor: "pointer", fontSize: "12px", opacity: 0.6 }}>Manual setup key</summary>
+            <p style={{ fontSize: "12px", marginTop: "6px", wordBreak: "break-all" }}>{setupToken}</p>
+          </details>
+        </Panel>
+      )}
+
+      {showDisable && twoFactorEnabled && (
+        <Panel title="Disable 2FA" action="Security">
+          <p style={{ marginBottom: "12px", fontSize: "13px", opacity: 0.7 }}>
+            Enter a verification code from your authenticator app, or use your password as a fallback.
+          </p>
+          <label className="stacked-field">
+            TOTP code
+            <input value={codeInput} onChange={(e) => setCodeInput(e.target.value)} placeholder="000000" maxLength={6} />
+          </label>
+          <label className="stacked-field">
+            Password (alternative)
+            <input value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} type="password" placeholder="Admin password" />
+          </label>
+          <div className="action-row">
+            <button className="danger" onClick={disable2FA} disabled={loading || (!codeInput.trim() && !passwordInput.trim())}>
+              {loading ? "Disabling..." : "Disable 2FA"}
+            </button>
+            <button className="ghost-button" onClick={() => { setShowDisable(false); setCodeInput(""); setPasswordInput(""); }}>Cancel</button>
+          </div>
+        </Panel>
+      )}
+    </div>
   );
 }
 
@@ -1299,6 +1643,189 @@ function VerificationQueuePage({ kind, token, admin, setNotice }: { kind: "trust
 
 function ReviewDetail({ label, value, status }: { label: string; value: ReactNode; status?: boolean }) {
   return <div className="review-detail"><span>{label}</span>{status ? <StatusBadge value={String(value || "Unknown")} /> : <strong>{value || "—"}</strong>}</div>;
+}
+
+function DmReviewsPage({ token, admin, setNotice }: { token: string; admin: Admin; setNotice: (notice: Notice) => void }) {
+  const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState("");
+  const [selected, setSelected] = useState<any>(null);
+  const [detail, setDetail] = useState<any>(null);
+  const [warnReason, setWarnReason] = useState("");
+  const path = `/dm-reviews${status ? `?status=${encodeURIComponent(status)}` : ""}`;
+  const resource = useResourceWithMeta<any>(path, token);
+
+  const rows = resource.data?.dmReviews ?? [];
+
+  const hasPermission = (...perms: string[]) => admin.isSuperAdmin || perms.some((permission) => admin.permissions.includes(permission));
+
+  const openDetail = async (row: any) => {
+    setSelected(row);
+    setDetail(null);
+    setWarnReason("");
+    try {
+      const data = await adminApi<any>(`/dm-reviews/${row._id}`, { token });
+      setDetail(data);
+    } catch (err: any) {
+      setNotice({ tone: "error", text: err.message || "Failed to load detail" });
+    }
+  };
+
+  const runAction = async (action: string, body: Record<string, string | undefined> = {}) => {
+    if (!selected) return;
+    const actionKey = `${selected._id}:${action}`;
+    setBusy(actionKey);
+    try {
+      await adminApi(`/dm-reviews/${selected._id}/${action}`, { token, method: "POST", body: JSON.stringify(body) });
+      setNotice({ tone: "success", text: `DM review: ${action.split("-").join(" ")} complete` });
+      setSelected(null);
+      setDetail(null);
+      resource.refresh();
+    } catch (err: any) {
+      setNotice({ tone: "error", text: err.message || "Action failed" });
+    }
+    setBusy("");
+  };
+
+  const dmReviewColumns: ColumnDef[] = [
+    {
+      key: "targetUserId",
+      label: "User",
+      render: (row) => row.targetUserId
+        ? <div className="person-cell"><span className="avatar mini">{row.targetUserId.name?.[0] || "U"}</span><div><strong>{row.targetUserId.name || "Unknown"}</strong><span>@{row.targetUserId.username || "—"}</span></div></div>
+        : "—"
+    },
+    {
+      key: "targetType",
+      label: "Type",
+      render: (row) => <StatusBadge value={row.targetType} />
+    },
+    {
+      key: "reason",
+      label: "Reason",
+      render: (row) => row.reason || row.reportId?.reason || "—"
+    },
+    {
+      key: "status",
+      label: "Status"
+    },
+    {
+      key: "createdAt",
+      label: "Reported"
+    },
+    {
+      key: "message",
+      label: "Preview",
+      render: (row) => {
+        const msg = row.message || row.recentMessages?.[0];
+        if (!msg) return "—";
+        const text = msg.message || "";
+        return text.length > 60 ? text.slice(0, 60) + "..." : text;
+      }
+    }
+  ];
+
+  return (
+    <ResourceFrame title="Private Chat Reviews" subtitle="Reported or flagged direct messages requiring moderation review." loading={resource.loading} error={resource.error} onRetry={resource.refresh}>
+      <div className="filter-bar">
+        <Shield />
+        <select value={status} onChange={(event) => setStatus(event.target.value)}>
+          <option value="">All statuses</option>
+          <option value="PENDING">PENDING</option>
+          <option value="IN_REVIEW">IN REVIEW</option>
+          <option value="ESCALATED">ESCALATED</option>
+          <option value="ACTION_TAKEN">ACTION TAKEN</option>
+          <option value="DISMISSED">DISMISSED</option>
+          <option value="AUTO_RESOLVED">AUTO RESOLVED</option>
+        </select>
+        <span>{formatNumber(resource.meta?.pagination?.total ?? rows.length)} reviews</span>
+      </div>
+      <DataTable rows={rows} columns={dmReviewColumns} onRowClick={openDetail} actions={(row) => (
+        <div className="action-stack">
+          {row.status === "PENDING" || row.status === "IN_REVIEW" ? (
+            <button className="ghost-button compact" onClick={(e) => { e.stopPropagation(); openDetail(row); }}>Review</button>
+          ) : null}
+        </div>
+      )} />
+
+      <Drawer open={Boolean(selected)} title={`DM Review: ${selected?.targetUserId?.name || "Unknown"}`} onClose={() => { setSelected(null); setDetail(null); }}>
+        {detail ? (
+          <div className="drawer-contents">
+            <div className="review-hero">
+              <div className="profile-summary">
+                {selected?.targetUserId && (
+                  <>
+                    <div className="avatar large">{selected.targetUserId.name?.[0] || "U"}</div>
+                    <div>
+                      <strong>{selected.targetUserId.name}</strong>
+                      <span>@{selected.targetUserId.username}</span>
+                      <StatusBadge value={selected.status} />
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="verification-detail-grid">
+                <div className="detail-card"><strong>Type</strong><p>{selected?.targetType}</p></div>
+                <div className="detail-card"><strong>Reason</strong><p>{selected?.reason || selected?.reportId?.reason || "—"}</p></div>
+                <div className="detail-card"><strong>Priority</strong><p>{selected?.priority || "—"}</p></div>
+                <div className="detail-card"><strong>Reported</strong><p>{formatDate(selected?.createdAt)}</p></div>
+                {detail.partnerId && <div className="detail-card"><strong>Partner user ID</strong><p style={{ fontSize: 11, wordBreak: "break-all" }}>{detail.partnerId}</p></div>}
+                {selected?.notes && <div className="detail-card"><strong>Notes</strong><p>{selected.notes}</p></div>}
+              </div>
+            </div>
+
+            <div className="section-heading" style={{ marginTop: 20 }}><h4>Messages</h4></div>
+            <div className="message-thread">
+              {detail.messages?.length > 0 ? detail.messages.map((msg: any, idx: number) => (
+                <div key={msg._id || idx} className={`message-bubble ${msg.senderId?._id === selected?.targetUserId?._id ? "outgoing" : "incoming"}`}>
+                  <div className="message-meta">
+                    <strong>{msg.senderId?.name || msg.senderId?.username || "Unknown"}</strong>
+                    <span>{formatDate(msg.createdAt)}</span>
+                  </div>
+                  <p>{msg.message}</p>
+                  {msg.mediaUrl && <span className="media-tag">📎 Media</span>}
+                  <div className="message-actions">
+                    {hasPermission("messages.delete") && (selected?.status === "PENDING" || selected?.status === "IN_REVIEW") && (
+                      <button className="ghost-button compact danger-text" disabled={busy === `${selected._id}:delete:${msg._id}`} onClick={() => runAction(`delete-message/${msg._id}`)}>
+                        {busy === `${selected._id}:delete:${msg._id}` ? "..." : "Delete"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )) : <EmptyState text="No messages found for this review." />}
+            </div>
+
+            {selected?.status !== "DISMISSED" && selected?.status !== "ACTION_TAKEN" && (
+              <>
+                <div className="section-heading" style={{ marginTop: 20 }}><h4>Actions</h4></div>
+                <div className="action-row" style={{ flexWrap: "wrap", gap: 8 }}>
+                  {hasPermission("reports.resolve") && (
+                    <button className="ghost-button compact" disabled={busy === `${selected._id}:dismiss`} onClick={() => runAction("dismiss")}>
+                      {busy === `${selected._id}:dismiss` ? "..." : "Dismiss"}
+                    </button>
+                  )}
+                  {hasPermission("messages.delete") && (
+                    <button className="soft compact" disabled={busy === `${selected._id}:restrict`} onClick={() => runAction("restrict", { adminNotes: window.prompt("Reason for restricting this chat?", "") || undefined })}>
+                      {busy === `${selected._id}:restrict` ? "..." : "Restrict chat"}
+                    </button>
+                  )}
+                  {hasPermission("users.suspend") && (
+                    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                      <input value={warnReason} onChange={(e) => setWarnReason(e.target.value)} placeholder="Warning reason" style={{ width: 180, fontSize: 12, padding: "4px 8px" }} />
+                      <button className="danger compact" disabled={busy === `${selected._id}:warn-user` || !warnReason.trim()} onClick={() => runAction("warn-user", { reason: warnReason })}>
+                        {busy === `${selected._id}:warn-user` ? "..." : "Warn user"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <LoadingState />
+        )}
+      </Drawer>
+    </ResourceFrame>
+  );
 }
 
 function SimpleResource({ token, title, endpoint, columns, searchPlaceholder, searchParam }: { token: string; title: string; endpoint: string; columns: ColumnDef[]; searchPlaceholder?: string; searchParam?: string }) {

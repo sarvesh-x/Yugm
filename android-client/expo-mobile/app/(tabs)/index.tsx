@@ -9,7 +9,8 @@ import { BrandMark } from "@/components/BrandMark";
 import { RoomCard } from "@/components/RoomCard";
 import { ErrorState } from "@/components/ErrorState";
 import { Screen, Section } from "@/components/Screen";
-import { roomsApi, usersApi, datingApi } from "@/lib/api";
+import { roomsApi, usersApi, datingApi, storiesApi } from "@/lib/api";
+import { StoriesRing, type StoryGroup } from "@/components/StoriesRing";
 import { useAuthStore } from "@/store/auth";
 import { colors, gradients } from "@/theme/colors";
 import { LinearGradient } from "expo-linear-gradient";
@@ -27,6 +28,13 @@ export default function Discover() {
     else if (hours >= 12 && hours < 17) setGreeting("Good afternoon");
     else setGreeting("Good evening");
   }, []);
+
+  const storiesQuery = useQuery({
+    queryKey: ["stories", "feed"],
+    queryFn: storiesApi.feed,
+    staleTime: 15000,
+    gcTime: 30000
+  });
 
   const categoryFilter = selectedCategory === "Trending" ? undefined : selectedCategory;
 
@@ -119,6 +127,12 @@ export default function Discover() {
               </Pressable>
             </View>
           </View>
+
+          {/* Stories Ring */}
+          <StoriesRing
+            groups={(storiesQuery.data?.stories ?? []) as StoryGroup[]}
+            onAddPress={() => router.push("/(tabs)/create-story")}
+          />
 
           {/* Premium Search Bar */}
           <Pressable accessibilityRole="search" style={styles.searchBar} onPress={() => router.push("/(tabs)/search")}>

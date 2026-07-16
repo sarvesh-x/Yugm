@@ -10,19 +10,23 @@ import { env } from "./config/env.js";
 import { adminRouter } from "./routes/admin.js";
 import { adminSupportRouter } from "./routes/adminSupport.js";
 import { adminCosmeticsRouter } from "./routes/adminCosmetics.js";
+import { adminDmReviewsRouter } from "./routes/adminDmReviews.js";
 import { adminVerificationRouter } from "./routes/adminVerification.js";
 import { authRouter } from "./routes/auth.js";
 import { handlePayoutWebhook } from "./services/payoutWebhook.js";
 import { clansRouter } from "./routes/clans.js";
 import { creatorRouter } from "./routes/creator.js";
 import { datingRouter } from "./routes/dating.js";
+import { eventsRouter } from "./routes/events.js";
 import { experienceRouter } from "./routes/experience.js";
 import { gamesRouter } from "./routes/games.js";
 import { livekitRouter } from "./routes/livekit.js";
 import { notificationsRouter } from "./routes/notifications.js";
 import { pkRouter } from "./routes/pk.js";
+import { referralsRouter } from "./routes/referrals.js";
 import { reportsRouter } from "./routes/reports.js";
 import { roomsRouter } from "./routes/rooms.js";
+import { storiesRouter } from "./routes/stories.js";
 import { supportRouter } from "./routes/support.js";
 import { trustVerificationRouter } from "./routes/trustVerification.js";
 import { uploadRouter } from "./routes/upload.js";
@@ -146,6 +150,7 @@ export function createApp() {
   app.get("/health", healthHandler);
   app.get("/api/health", healthHandler);
   app.use("/api/admin", adminVerificationRouter);
+  app.use("/api/admin", adminDmReviewsRouter);
   app.use("/api/admin", adminRouter);
   app.use("/api/admin", adminSupportRouter);
   app.use("/api/admin", adminCosmeticsRouter);
@@ -153,6 +158,7 @@ export function createApp() {
   app.use("/api/clans", clansRouter);
   app.use("/api/creator", creatorRouter);
   app.use("/api/dating", datingRouter);
+  app.use("/api/events", eventsRouter);
   app.use("/api/experience", experienceRouter);
   app.use("/api/games", gamesRouter);
   app.use("/api/users", usersRouter);
@@ -164,6 +170,8 @@ export function createApp() {
   app.use("/api", walletRouter);
   app.use("/api", uploadRouter);
   app.use("/api", reportsRouter);
+  app.use("/api", storiesRouter);
+  app.use("/api", referralsRouter);
   app.use("/api/support", supportRouter);
 
   app.use((_req, res) => res.status(404).json({ ok: false, error: { message: "Route not found" } }));

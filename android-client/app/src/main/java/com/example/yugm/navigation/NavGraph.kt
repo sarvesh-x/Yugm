@@ -13,12 +13,12 @@ import androidx.navigation.navArgument
 import com.example.yugm.ui.screens.*
 import com.example.yugm.ui.viewmodel.AuthViewModel
 import com.example.yugm.ui.viewmodel.MainViewModel
-import com.example.yugm.navigation.NotificationTarget
-import com.example.yugm.navigation.notificationTarget
 import com.example.yugm.BuildConfig
+import kotlin.time.Duration.Companion.milliseconds
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -31,7 +31,7 @@ fun NavGraph(
     navController: NavHostController,
     mainViewModel: MainViewModel,
     onGoogleSignIn: () -> Unit,
-    onPhoneSignIn: () -> Unit
+    onPhoneSignIn: () -> Unit,
 ) {
     val authViewModel: AuthViewModel = hiltViewModel()
     val authSuccess by authViewModel.authSuccess.collectAsState(initial = null)
@@ -43,10 +43,10 @@ fun NavGraph(
                 userId = session.user.id,
                 name = session.user.name,
                 username = session.user.username,
-                balance = session.user.walletBalance
+                balance = session.user.walletBalance,
             )
             // Redirect to setup profile or Discover contextually
-            val destination = if (session.user.name == "Yugm User" || session.user.name.isBlank()) {
+            val destination = if ((session.user.name == "Yugm User") || session.user.name.isBlank()) {
                 Screen.ProfileSetup.route
             } else {
                 Screen.Discover.route
@@ -63,7 +63,7 @@ fun NavGraph(
     ) {
         // Splash Screen
         composable(Screen.Splash.route) {
-            SplashScreen(onTimeout = {
+            SplashScreen {
                 val start = if (mainViewModel.authToken.isEmpty()) {
                     Screen.Onboarding.route
                 } else {
@@ -72,7 +72,7 @@ fun NavGraph(
                 navController.navigate(start) {
                     popUpTo(Screen.Splash.route) { inclusive = true }
                 }
-            })
+            }
         }
 
         // Onboarding Screen
@@ -96,7 +96,7 @@ fun NavGraph(
         // Phone Login (Request OTP screen)
         composable(Screen.PhoneLogin.route) {
             var phoneNumber by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
-            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            val scope = rememberCoroutineScope()
             PhoneAuthScreen(
                 phoneNumber = phoneNumber,
                 onPhoneChange = { phoneNumber = it },
@@ -138,7 +138,7 @@ fun NavGraph(
         ) { backStackEntry ->
             val username = backStackEntry.arguments?.getString("username") ?: ""
             val devOtp = backStackEntry.arguments?.getString("devOtp") ?: ""
-            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            val scope = rememberCoroutineScope()
             
             OtpScreen(
                 identifier = username,
@@ -153,9 +153,9 @@ fun NavGraph(
                                 userId = session.user.id,
                                 name = session.user.name,
                                 username = session.user.username,
-                                balance = session.user.walletBalance
+                                balance = session.user.walletBalance,
                             )
-                            val dest = if (session.user.name == "Yugm User" || session.user.name.isBlank()) {
+                            val dest = if ((session.user.name == "Yugm User") || session.user.name.isBlank()) {
                                 Screen.ProfileSetup.route
                             } else {
                                 Screen.Discover.route
@@ -171,7 +171,7 @@ fun NavGraph(
 
         // Profile Setup Flow
         composable(Screen.ProfileSetup.route) {
-            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            val scope = rememberCoroutineScope()
             CreateProfileScreen(
                 initialName = mainViewModel.userName,
                 initialUsername = mainViewModel.username,
@@ -327,7 +327,7 @@ fun NavGraph(
         }
 
         composable(Screen.TrustVerificationIntro.route) {
-            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            val scope = rememberCoroutineScope()
             val context = androidx.compose.ui.platform.LocalContext.current
             TrustVerificationIntroScreen(
                 onBack = { navController.popBackStack() },
@@ -342,7 +342,7 @@ fun NavGraph(
         }
 
         composable(Screen.VerificationConsent.route) {
-            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            val scope = rememberCoroutineScope()
             val context = androidx.compose.ui.platform.LocalContext.current
             VerificationConsentScreen(
                 onBack = { navController.popBackStack() },
@@ -357,7 +357,7 @@ fun NavGraph(
         }
 
         composable(Screen.FaceVerification.route) {
-            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            val scope = rememberCoroutineScope()
             val context = androidx.compose.ui.platform.LocalContext.current
             FaceVerificationScreen(
                 onBack = { navController.popBackStack() },
@@ -372,7 +372,7 @@ fun NavGraph(
         }
 
         composable(Screen.VoiceVerification.route) {
-            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            val scope = rememberCoroutineScope()
             val context = androidx.compose.ui.platform.LocalContext.current
             var prompt by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("I am completing Yugm Trust Verification to show people I am real.") }
             LaunchedEffect(mainViewModel.authToken) {
@@ -393,7 +393,7 @@ fun NavGraph(
         }
 
         composable(Screen.TrustVerificationStatus.route) {
-            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            val scope = rememberCoroutineScope()
             val context = androidx.compose.ui.platform.LocalContext.current
             var status by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(com.example.yugm.model.TrustVerificationStatus()) }
             LaunchedEffect(mainViewModel.authToken) {
@@ -425,7 +425,7 @@ fun NavGraph(
         }
 
         composable(Screen.CreatorPayoutKycForm.route) {
-            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            val scope = rememberCoroutineScope()
             val context = androidx.compose.ui.platform.LocalContext.current
             CreatorPayoutKycFormScreen(
                 onBack = { navController.popBackStack() },
@@ -449,7 +449,7 @@ fun NavGraph(
         }
 
         composable(Screen.WithdrawalEligibility.route) {
-            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            val scope = rememberCoroutineScope()
             val context = androidx.compose.ui.platform.LocalContext.current
             var eligibility by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(com.example.yugm.model.WithdrawalEligibility()) }
             fun refreshEligibility() {
@@ -519,7 +519,7 @@ fun NavGraph(
         ) { backStackEntry ->
             val roomId = backStackEntry.arguments?.getString("roomId") ?: ""
             val context = androidx.compose.ui.platform.LocalContext.current
-            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            val scope = rememberCoroutineScope()
             var roomDetail by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<com.example.yugm.model.RoomDetail?>(null) }
 
             LaunchedEffect(roomId) {
@@ -583,7 +583,7 @@ fun NavGraph(
             arguments = listOf(navArgument("userId") { type = NavType.StringType })
         ) { backStackEntry ->
             val userId = backStackEntry.arguments?.getString("userId") ?: ""
-            val profileScope = androidx.compose.runtime.rememberCoroutineScope()
+            val profileScope = rememberCoroutineScope()
             val profileContext = androidx.compose.ui.platform.LocalContext.current
             ProfileDetailScreen(
                 token = mainViewModel.authToken,
@@ -595,7 +595,7 @@ fun NavGraph(
                 onInviteToRoom = { inviteeId ->
                     profileScope.launch {
                         val ownLiveRoom = runCatching { com.example.yugm.api.YugmApi.rooms() }.getOrDefault(emptyList())
-                            .firstOrNull { it.status.equals("LIVE", true) && it.host?.id == mainViewModel.currentUserId }
+                            .firstOrNull { it.status.equals("LIVE", ignoreCase = true) && it.host?.id == mainViewModel.currentUserId }
                         if (ownLiveRoom == null) {
                             android.widget.Toast.makeText(profileContext, "Start a room first, then invite ${userId.take(6)}", android.widget.Toast.LENGTH_SHORT).show()
                             navController.navigate(Screen.CreateRoom.route)
@@ -730,7 +730,7 @@ fun NavGraph(
 
         // Create Room screen
         composable(Screen.CreateRoom.route) {
-            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            val scope = rememberCoroutineScope()
             CreateRoomScreen(
                 token = mainViewModel.authToken,
                 host = com.example.yugm.model.Host(
@@ -792,7 +792,7 @@ fun NavGraph(
             var pkLeaderboard by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<List<com.example.yugm.model.PkLeaderboardEntry>>(emptyList()) }
             var pkLiveEffect by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<com.example.yugm.model.PkLiveEffect?>(null) }
             val context = androidx.compose.ui.platform.LocalContext.current
-            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            val scope = rememberCoroutineScope()
             val chat = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateListOf<com.example.yugm.model.ChatMessage>() }
             val gifts = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateListOf<com.example.yugm.model.GiftItem>() }
             var inviteCandidates by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<List<com.example.yugm.model.Host>>(emptyList()) }
@@ -1110,7 +1110,7 @@ fun NavGraph(
                                     onPkEffect = { effect ->
                                         scope.launch {
                                             pkLiveEffect = effect
-                                            kotlinx.coroutines.delay(1400)
+                                            delay(1400.milliseconds)
                                             if (pkLiveEffect == effect) pkLiveEffect = null
                                         }
                                     },
@@ -1125,7 +1125,7 @@ fun NavGraph(
                                             )
                                         }
                                     },
-                                    onPkRematchRequested = { previousBattleId ->
+                                    onPkRematchRequested = { _ ->
                                         scope.launch {
                                             android.widget.Toast.makeText(context, "Opponent wants a rematch!", android.widget.Toast.LENGTH_SHORT).show()
                                             refreshVoiceRoom()
@@ -1157,7 +1157,7 @@ fun NavGraph(
             var pkLiveEffect by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<com.example.yugm.model.PkLiveEffect?>(null) }
             var pkOpponentMedia by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<com.example.yugm.model.PkMediaSession?>(null) }
             val context = androidx.compose.ui.platform.LocalContext.current
-            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            val scope = rememberCoroutineScope()
             val chat = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateListOf<com.example.yugm.model.ChatMessage>() }
             val gifts = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateListOf<com.example.yugm.model.GiftItem>() }
             var inviteCandidates by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<List<com.example.yugm.model.Host>>(emptyList()) }
@@ -1198,7 +1198,7 @@ fun NavGraph(
                                     runCatching { com.example.yugm.api.YugmApi.pkMediaSession(mainViewModel.authToken, battle.id, roomId) }
                                         .onSuccess {
                                             pkOpponentMedia = it
-                                            if (it != null) com.example.yugm.api.YugmMediaRoom.connectOpponent(it.token, it.url, it.roomName)
+                                            it?.let { com.example.yugm.api.YugmMediaRoom.connectOpponent(it.token, it.url, it.roomName) }
                                         }
                                 }
                             } else {
@@ -1465,7 +1465,7 @@ fun NavGraph(
                                                 runCatching { com.example.yugm.api.YugmApi.pkMediaSession(mainViewModel.authToken, battle.id, roomId) }
                                                     .onSuccess {
                                                         pkOpponentMedia = it
-                                                        if (it != null) com.example.yugm.api.YugmMediaRoom.connectOpponent(it.token, it.url, it.roomName)
+                                                        it?.let { com.example.yugm.api.YugmMediaRoom.connectOpponent(it.token, it.url, it.roomName) }
                                                     }
                                             }
                                         }
@@ -1480,7 +1480,7 @@ fun NavGraph(
                                     onPkEffect = { effect ->
                                         scope.launch {
                                             pkLiveEffect = effect
-                                            kotlinx.coroutines.delay(1400)
+                                            delay(1400.milliseconds)
                                             if (pkLiveEffect == effect) pkLiveEffect = null
                                         }
                                     },
@@ -1495,7 +1495,7 @@ fun NavGraph(
                                             )
                                         }
                                     },
-                                    onPkRematchRequested = { previousBattleId ->
+                                    onPkRematchRequested = { _ ->
                                         scope.launch {
                                             android.widget.Toast.makeText(context, "Opponent wants a rematch!", android.widget.Toast.LENGTH_SHORT).show()
                                             refreshVideoRoom()

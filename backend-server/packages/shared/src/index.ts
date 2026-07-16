@@ -69,6 +69,7 @@ export const socketEvents = {
   clanTypingStop: "clan:typing:stop",
   clanTypingUpdate: "clan:typing:update",
   clanMessageNew: "clan:message:new",
+  clanChatCleaned: "clan:chat:cleaned",
   notificationNew: "notification:new"
 } as const;
 

@@ -56,7 +56,8 @@ export const adminPermissions = [
   "creator_kyc.sensitive.read",
   "payout_review.read",
   "payout_review.approve",
-  "payout_review.reject"
+  "payout_review.reject",
+  "dm_reviews.review"
 ] as const;
 
 export type AdminPermission = typeof adminPermissions[number];
@@ -78,6 +79,7 @@ export const rolePermissions: Record<AdminRole, AdminPermission[]> = {
     "reports.resolve",
     "messages.read",
     "messages.delete",
+    "dm_reviews.review",
     "support.read",
     "audit.read",
     "analytics.read"
@@ -103,7 +105,7 @@ export const rolePermissions: Record<AdminRole, AdminPermission[]> = {
     "analytics.read"
   ],
   SUPPORT_AGENT: ["users.read", "reports.read", "support.read", "support.reply", "notifications.send"],
-  CONTENT_REVIEWER: ["users.read", "profiles.review", "profiles.verify", "trust_verification.read", "trust_verification.review", "trust_verification.media.read", "trust_verification.approve", "trust_verification.reject", "reports.read", "reports.resolve", "messages.read", "messages.delete"],
+  CONTENT_REVIEWER: ["users.read", "profiles.review", "profiles.verify", "trust_verification.read", "trust_verification.review", "trust_verification.media.read", "trust_verification.approve", "trust_verification.reject", "reports.read", "reports.resolve", "messages.read", "messages.delete", "dm_reviews.review"],
   ROOM_MODERATOR: ["users.read", "rooms.read", "rooms.end", "rooms.moderate", "reports.read", "reports.resolve"],
   ANALYST: ["users.read", "rooms.read", "wallet.read", "payments.read", "audit.read", "analytics.read"]
 };

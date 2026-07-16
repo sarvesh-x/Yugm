@@ -25,6 +25,7 @@ fun quoted(value: String): String {
 
 fun localLanIpv4(): String? {
     return Collections.list(NetworkInterface.getNetworkInterfaces())
+        .asSequence()
         .filter { it.isUp && !it.isLoopback && !it.isVirtual }
         .flatMap { Collections.list(it.inetAddresses) }
         .filterIsInstance<Inet4Address>()
@@ -56,16 +57,12 @@ if (isReleaseTaskRequested) {
 
 android {
     namespace = "com.example.yugm"
-    compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
-    }
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.example.yugm"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
@@ -81,7 +78,7 @@ android {
             "TimberArgCount",
             "TimberArgTypes",
             "TimberTagLength",
-            "TimberExceptionLogging"
+            "TimberExceptionLogging",
         )
     }
 
@@ -106,7 +103,7 @@ android {
             buildConfigField("String", "LAN_SOCKET_BASE_URL", quoted(""))
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                "proguard-rules.pro",
             )
         }
     }

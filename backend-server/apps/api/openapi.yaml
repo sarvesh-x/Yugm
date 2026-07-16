@@ -1,0 +1,585 @@
+openapi: "3.0.3"
+info:
+  title: Yugm API
+  version: "1.0.0"
+  description: Social live-streaming platform API. All endpoints prefixed with `/api`.
+servers:
+  - url: http://localhost:4000/api
+    description: Local development
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    User:
+      type: object
+      properties:
+        _id: { type: string }
+        name: { type: string }
+        username: { type: string }
+        avatar: { type: string, nullable: true }
+        role: { type: string, enum: [USER, HOST, MODERATOR, ADMIN] }
+        isVerified: { type: boolean }
+        isBlocked: { type: boolean }
+        walletBalance: { type: number }
+        level: { type: integer }
+        xp: { type: integer }
+        referralCode: { type: string, nullable: true }
+    Story:
+      type: object
+      properties:
+        _id: { type: string }
+        userId: { $ref: "#/components/schemas/User" }
+        mediaUrl: { type: string }
+        mediaType: { type: string, enum: [IMAGE, VIDEO] }
+        caption: { type: string, nullable: true }
+        viewedBy: { type: array, items: { type: string } }
+        likeCount: { type: integer }
+        expiresAt: { type: string, format: date-time }
+        status: { type: string, enum: [ACTIVE, EXPIRED, HIDDEN] }
+    StoryFeed:
+      type: object
+      properties:
+        stories:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              user: { $ref: "#/components/schemas/User" }
+              stories: { type: array, items: { $ref: "#/components/schemas/Story" } }
+        count: { type: integer }
+    Event:
+      type: object
+      properties:
+        _id: { type: string }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        hostId: { $ref: "#/components/schemas/User" }
+        coverImage: { type: string, nullable: true }
+        category: { type: string }
+        type: { type: string, enum: [ROOM, TOURNAMENT, SPECIAL, WORKSHOP, PARTY] }
+        eventDate: { type: string, format: date-time }
+        eventEndDate: { type: string, format: date-time, nullable: true }
+        maxParticipants: { type: integer, nullable: true }
+        participantIds: { type: array, items: { type: string } }
+        status: { type: string, enum: [UPCOMING, LIVE, COMPLETED, CANCELLED] }
+    ReferralStats:
+      type: object
+      properties:
+        stats:
+          type: object
+          properties:
+            total: { type: integer }
+            completed: { type: integer }
+            rewarded: { type: integer }
+            totalCoins: { type: integer }
+        referrals:
+          type: array
+          items:
+            type: object
+            properties:
+              _id: { type: string }
+              referredUserId: { $ref: "#/components/schemas/User" }
+              status: { type: string }
+              rewardCoins: { type: integer, nullable: true }
+              createdAt: { type: string, format: date-time }
+    NotificationCampaign:
+      type: object
+      properties:
+        _id: { type: string }
+        title: { type: string }
+        body: { type: string }
+        segment: { type: string, enum: [all, hosts, city, vip, custom] }
+        status: { type: string, enum: [DRAFT, SCHEDULED, SENDING, SENT, CANCELLED] }
+        sentCount: { type: integer }
+        deliveredCount: { type: integer }
+        openCount: { type: integer }
+        clickCount: { type: integer }
+        createdBy: { $ref: "#/components/schemas/User" }
+    Error:
+      type: object
+      properties:
+        ok: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            message: { type: string }
+            code: { type: string }
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ─── AUTH ──────────────────────────────────────────────
+  /auth/request-otp:
+    post:
+      tags: [Auth]
+      summary: Request email OTP
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "200": { description: OTP sent }
+  /auth/verify-otp:
+    post:
+      tags: [Auth]
+      summary: Verify OTP and log in
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string }
+                otp: { type: string }
+      responses:
+        "200": { description: Login success, returns session }
+
+  # ─── STORIES ───────────────────────────────────────────
+  /stories:
+    post:
+      tags: [Stories]
+      summary: Create a story (24h ephemeral)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mediaUrl, mediaType]
+              properties:
+                mediaUrl: { type: string }
+                mediaType: { type: string, enum: [IMAGE, VIDEO] }
+                caption: { type: string, maxLength: 200 }
+                backgroundColor: { type: string }
+                sticker: { type: string }
+                linkUrl: { type: string }
+      responses:
+        "201": { description: Story created }
+  /stories/feed:
+    get:
+      tags: [Stories]
+      summary: Get story feed (following + own)
+      responses:
+        "200":
+          description: Grouped story feed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoryFeed"
+  /stories/user/{userId}:
+    get:
+      tags: [Stories]
+      summary: Get a user's active stories
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: User's stories }
+  /stories/{storyId}/view:
+    post:
+      tags: [Stories]
+      summary: Mark story as viewed
+      parameters:
+        - name: storyId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: View recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  viewed: { type: boolean }
+                  viewCount: { type: integer }
+  /stories/{storyId}/like:
+    post:
+      tags: [Stories]
+      summary: Like a story
+      parameters:
+        - name: storyId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Liked
+  /stories/{storyId}/hide:
+    post:
+      tags: [Stories]
+      summary: Hide own story
+      parameters:
+        - name: storyId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Hidden }
+  /stories/{storyId}:
+    delete:
+      tags: [Stories]
+      summary: Delete own story
+      parameters:
+        - name: storyId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Deleted }
+  /stories/{storyId}/views:
+    get:
+      tags: [Stories]
+      summary: Get story viewers
+      parameters:
+        - name: storyId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Viewer list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  viewers:
+                    type: array
+                    items: { $ref: "#/components/schemas/User" }
+                  count: { type: integer }
+
+  # ─── EVENTS ────────────────────────────────────────────
+  /events:
+    post:
+      tags: [Events]
+      summary: Create an event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, category, type, eventDate]
+              properties:
+                title: { type: string, minLength: 3, maxLength: 120 }
+                description: { type: string, maxLength: 2000 }
+                category: { type: string }
+                type: { type: string, enum: [ROOM, TOURNAMENT, SPECIAL, WORKSHOP, PARTY] }
+                eventDate: { type: string, format: date-time }
+                eventEndDate: { type: string, format: date-time }
+                maxParticipants: { type: integer }
+                tags: { type: array, items: { type: string } }
+      responses:
+        "201": { description: Event created }
+    get:
+      tags: [Events]
+      summary: List events
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: type
+          in: query
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: upcoming
+          in: query
+          schema: { type: boolean }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        "200":
+          description: Paginated event list
+  /events/{eventId}:
+    get:
+      tags: [Events]
+      summary: Get event detail
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Event detail }
+  /events/{eventId}/join:
+    post:
+      tags: [Events]
+      summary: Join an event
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Joined or already joined }
+  /events/{eventId}/cancel:
+    post:
+      tags: [Events]
+      summary: Cancel own event
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Cancelled }
+  /events/user/me:
+    get:
+      tags: [Events]
+      summary: Get my events (hosting + joined)
+      responses:
+        "200":
+          description: My events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hosting: { type: array, items: { $ref: "#/components/schemas/Event" } }
+                  joined: { type: array, items: { $ref: "#/components/schemas/Event" } }
+
+  # ─── REFERRALS ─────────────────────────────────────────
+  /referrals/code:
+    post:
+      tags: [Referrals]
+      summary: Generate referral code
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  referralCode: { type: string }
+    get:
+      tags: [Referrals]
+      summary: Get existing or auto-generate referral code
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  referralCode: { type: string }
+  /referrals/claim:
+    post:
+      tags: [Referrals]
+      summary: Claim a referral code (rewards both parties)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+      responses:
+        "200":
+          description: Referral claimed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reward: { type: integer }
+                  message: { type: string }
+  /referrals/stats:
+    get:
+      tags: [Referrals]
+      summary: Get referral stats and history
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReferralStats"
+
+  # ─── CLANS ─────────────────────────────────────────────
+  /clans/{clanId}/messages/clean:
+    post:
+      tags: [Clans]
+      summary: Clean all clan messages (owner only)
+      parameters:
+        - name: clanId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Messages deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deletedCount: { type: integer }
+
+  # ─── NOTIFICATIONS ─────────────────────────────────────
+  /notifications/track/{notificationId}/click:
+    post:
+      tags: [Notifications]
+      summary: Track notification click/open
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Click tracked
+
+  # ─── UPLOAD ────────────────────────────────────────────
+  /upload/story:
+    post:
+      tags: [Upload]
+      summary: Upload story media (image/video, max 25MB)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                media:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url: { type: string }
+                  type: { type: string, enum: [IMAGE, VIDEO] }
+
+  # ─── ADMIN ─────────────────────────────────────────────
+  /admin/notifications/campaigns:
+    get:
+      tags: [Admin / Campaigns]
+      summary: List notification campaigns
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Paginated campaign list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  campaigns:
+                    type: array
+                    items: { $ref: "#/components/schemas/NotificationCampaign" }
+                  pagination: { type: object }
+    post:
+      tags: [Admin / Campaigns]
+      summary: Create a campaign draft
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, body, segment]
+              properties:
+                title: { type: string, maxLength: 120 }
+                body: { type: string, maxLength: 500 }
+                segment: { type: string, enum: [all, hosts, city, vip, custom] }
+                segmentValue: { type: string }
+                scheduledFor: { type: string, format: date-time }
+      responses:
+        "201": { description: Campaign created }
+  /admin/notifications/campaigns/{id}:
+    get:
+      tags: [Admin / Campaigns]
+      summary: Get campaign detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Campaign detail }
+  /admin/notifications/campaigns/{id}/send:
+    post:
+      tags: [Admin / Campaigns]
+      summary: Send a campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Campaign sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sent: { type: integer }
+                  delivered: { type: integer }
+  /admin/notifications/campaigns/{id}/cancel:
+    post:
+      tags: [Admin / Campaigns]
+      summary: Cancel a draft/scheduled campaign
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Campaign cancelled }
+  /admin/clans/{clanId}/clean-messages:
+    post:
+      tags: [Admin / Moderation]
+      summary: Clean clan messages (admin)
+      parameters:
+        - name: clanId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Messages deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deletedCount: { type: integer }

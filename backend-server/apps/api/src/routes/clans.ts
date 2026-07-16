@@ -157,6 +157,17 @@ clansRouter.delete("/:id/messages/:messageId", asyncHandler(async (req: AuthRequ
   sendOk(res, { deleted: true });
 }));
 
+clansRouter.post("/:id/messages/clean", asyncHandler(async (req: AuthRequest, res) => {
+  const { clan, members } = await requireClanMember(req.params.id, req.user!.id);
+  const isOwner = clan.ownerId?.toString?.() === req.user!.id;
+  if (!isOwner) throw new HttpError(403, "Only the clan owner can clean the chat", ErrorCode.FORBIDDEN);
+  const result = await ClanMessage.deleteMany({ clanId: req.params.id });
+  members.forEach((memberId: string) => {
+    if (memberId !== req.user!.id) emitUser(memberId, socketEvents.clanChatCleaned, { clanId: req.params.id });
+  });
+  sendOk(res, { deletedCount: result.deletedCount });
+}));
+
 clansRouter.post("/:id/messages/:messageId/report", reportLimiter, validateBody(clanMessageReportSchema), asyncHandler(async (req: AuthRequest, res) => {
   await requireClanMember(req.params.id, req.user!.id);
   if (!isValidObjectId(req.params.messageId)) throw new HttpError(400, "Invalid message ID", ErrorCode.VALIDATION);

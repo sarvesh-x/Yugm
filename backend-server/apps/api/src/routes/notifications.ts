@@ -53,3 +53,11 @@ notificationsRouter.post("/read-all", requireAuth, asyncHandler(async (req: Auth
   await Notification.updateMany({ userId: req.user!.id, read: false }, { read: true });
   sendOk(res, { success: true });
 }));
+
+notificationsRouter.post("/track/:notificationId/click", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
+  const notification = await Notification.findOne({ _id: req.params.notificationId, userId: req.user!.id });
+  if (!notification) return sendOk(res, { tracked: false });
+  notification.read = true;
+  await notification.save();
+  sendOk(res, { tracked: true });
+}));

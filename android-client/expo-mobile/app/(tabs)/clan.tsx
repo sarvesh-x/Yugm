@@ -52,11 +52,16 @@ export default function ClanScreen() {
       if (payload?.clanId !== myClan._id || payload?.userId === currentUserId) return;
       setClanTypingUser(payload.typing ? "Someone is typing..." : "");
     };
+    const handleChatCleaned = (payload: any) => {
+      if (payload?.clanId === myClan._id) clanMessages.refetch();
+    };
     socket.on("clan:message:new", handleClanMessage);
     socket.on("clan:typing:update", handleTyping);
+    socket.on("clan:chat:cleaned", handleChatCleaned);
     return () => {
       socket.off("clan:message:new", handleClanMessage);
       socket.off("clan:typing:update", handleTyping);
+      socket.off("clan:chat:cleaned", handleChatCleaned);
       socket.emit("clan:typing:stop", { clanId: myClan._id });
     };
   }, [myClan?._id, clanMessages.refetch, currentUserId]);
@@ -124,6 +129,15 @@ export default function ClanScreen() {
     onError: (err: any) => Alert.alert("Report failed", err?.message ?? "Please try again.")
   });
 
+  const cleanClanChat = useMutation({
+    mutationFn: () => clansApi.cleanMessages(myClan._id),
+    onSuccess: (data) => {
+      clanMessages.refetch();
+      Alert.alert("Chat cleaned", `${data.deletedCount} messages removed.`);
+    },
+    onError: (err: any) => Alert.alert("Clean failed", err?.message ?? "Please try again.")
+  });
+
   const handleClanMessageChange = (text: string) => {
     setClanMessage(text);
     if (!myClan?._id) return;
@@ -174,6 +188,14 @@ export default function ClanScreen() {
                 <View style={styles.chatHeader}>
                   <MessageCircle color={colors.gold} size={18} />
                   <Text style={styles.chatTitle}>Family Chat</Text>
+                  {myClan.isOwner && (
+                    <Pressable style={styles.cleanBtn} onPress={() => Alert.alert("Clean chat?", "This removes all messages. Members will see an empty chat.", [
+                      { text: "Cancel", style: "cancel" },
+                      { text: "Clean", style: "destructive", onPress: () => cleanClanChat.mutate() }
+                    ])} disabled={cleanClanChat.isPending}>
+                      <Text style={styles.cleanBtnText}>{cleanClanChat.isPending ? "..." : "Clean"}</Text>
+                    </Pressable>
+                  )}
                 </View>
                 {clanMessages.isLoading ? (
                   <ActivityIndicator color={colors.gold} />
@@ -344,7 +366,9 @@ const styles = StyleSheet.create({
   clanCard: { marginBottom: 12, gap: 12 },
   chatPanel: { gap: 10, borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 14 },
   chatHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
-  chatTitle: { color: colors.text, fontSize: 16, fontWeight: "900" },
+  chatTitle: { color: colors.text, fontSize: 16, fontWeight: "900", flex: 1 },
+  cleanBtn: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: "rgba(255,77,77,0.12)", borderWidth: 1, borderColor: "rgba(255,77,77,0.3)" },
+  cleanBtnText: { color: colors.danger, fontSize: 11, fontWeight: "900" },
   messageList: { gap: 10 },
   messageCard: { borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, padding: 10 },
   messageAuthor: { color: colors.gold, fontSize: 12, fontWeight: "900" },

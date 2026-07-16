@@ -1,6 +1,10 @@
 import { Queue, Worker, type Job } from "bullmq";
 import { notifyUser } from "./firebase.js";
 import { getRedisUrl } from "./redis.js";
+import { ClanMessage } from "../models/ClanMessage.js";
+import { Story } from "../models/Story.js";
+import { Room } from "../models/Room.js";
+import { User } from "../models/User.js";
 
 type PushPayload = {
   userId: string;
@@ -12,9 +16,12 @@ type PushPayload = {
 const redisUrl = getRedisUrl();
 let pushQueue: Queue | undefined;
 let pushWorker: Worker | undefined;
+let cronWorker: Worker | undefined;
+let cronInterval: ReturnType<typeof setInterval> | undefined;
 const workerStartupTimeoutMs = 3000;
 let jobsMode: "redis" | "inline" = "inline";
 let lastJobError: string | undefined;
+let lastCronRun: string | undefined;
 
 function bullConnectionOptions() {
   if (!redisUrl) return undefined;
@@ -47,11 +54,72 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
   ]);
 }
 
+async function runMaintenanceTasks() {
+  const results: string[] = [];
+
+  try {
+    const expiredStories = await Story.updateMany(
+      { status: "ACTIVE", expiresAt: { $lte: new Date() } },
+      { $set: { status: "EXPIRED" } }
+    );
+    if (expiredStories.modifiedCount > 0) results.push(`Expired ${expiredStories.modifiedCount} stories`);
+  } catch (error) {
+    results.push(`Story expiry failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  try {
+    const staleRooms = await Room.updateMany(
+      { status: "LIVE", createdAt: { $lte: new Date(Date.now() - 48 * 60 * 60 * 1000) } },
+      { $set: { status: "ENDED", endedAt: new Date() } }
+    );
+    if (staleRooms.modifiedCount > 0) results.push(`Ended ${staleRooms.modifiedCount} stale rooms`);
+  } catch (error) {
+    results.push(`Room cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  try {
+    const expiredVip = await User.updateMany(
+      { vipExpiresAt: { $lte: new Date() }, vipTier: { $ne: null } },
+      { $set: { vipTier: null, vipStartedAt: null, vipExpiresAt: null } }
+    );
+    if (expiredVip.modifiedCount > 0) results.push(`Downgraded ${expiredVip.modifiedCount} expired VIP users`);
+  } catch (error) {
+    results.push(`VIP expiry failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  try {
+    const oldClanMessages = await ClanMessage.deleteMany({ createdAt: { $lte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } });
+    if (oldClanMessages.deletedCount > 0) results.push(`Pruned ${oldClanMessages.deletedCount} old clan messages`);
+  } catch (error) {
+    results.push(`Clan message prune failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  try {
+    const expiredSuspensions = await User.updateMany(
+      { suspendedUntil: { $lte: new Date(), $ne: null } },
+      { $set: { suspendedUntil: null, moderationReason: null } }
+    );
+    if (expiredSuspensions.modifiedCount > 0) results.push(`Unsuspended ${expiredSuspensions.modifiedCount} users`);
+  } catch (error) {
+    results.push(`Suspension cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  lastCronRun = `${new Date().toISOString()} — ${results.length > 0 ? results.join("; ") : "No work needed"}`;
+  if (results.length > 0) console.log(`[Cron] ${lastCronRun}`);
+}
+
+async function startCronWorker() {
+  runMaintenanceTasks();
+  cronInterval = setInterval(runMaintenanceTasks, 15 * 60 * 1000);
+  console.log("Cron maintenance worker started (15-minute interval)");
+}
+
 export async function startJobWorkers() {
   const connection = bullConnectionOptions();
   if (!connection) {
     jobsMode = "inline";
-    console.log("Background jobs disabled: REDIS_URL is empty; running jobs inline");
+    console.log("Background jobs disabled: REDIS_URL is empty; running jobs inline + cron locally");
+    await startCronWorker();
     return;
   }
   try {
@@ -90,6 +158,7 @@ export async function startJobWorkers() {
     pushWorker = undefined;
     jobsMode = "inline";
   }
+  await startCronWorker();
 }
 
 export async function enqueuePushNotification(payload: PushPayload) {
@@ -101,10 +170,13 @@ export async function enqueuePushNotification(payload: PushPayload) {
 }
 
 export async function closeJobWorkers() {
+  if (cronInterval) clearInterval(cronInterval);
   await pushWorker?.close();
   await pushQueue?.close();
+  await cronWorker?.close();
   pushWorker = undefined;
   pushQueue = undefined;
+  cronWorker = undefined;
   jobsMode = "inline";
 }
 
@@ -113,6 +185,7 @@ export function getJobHealth() {
     mode: jobsMode,
     queueReady: Boolean(pushQueue),
     workerReady: Boolean(pushWorker),
-    lastError: lastJobError
+    lastError: lastJobError,
+    lastCronRun
   };
 }

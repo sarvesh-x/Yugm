@@ -1,11 +1,12 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { router } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Ban, Bell, ChevronRight, FileText, HelpCircle, Info, Lock, LogOut, RefreshCw, Send, Shield, User, Users } from "lucide-react-native";
+import { ArrowLeft, Ban, Bell, ChevronRight, Copy, FileText, Gift, HelpCircle, Info, Lock, LogOut, RefreshCw, Send, Share2, Shield, User, Users } from "lucide-react-native";
 import { Screen, Section } from "@/components/Screen";
-import { experienceApi, usersApi } from "@/lib/api";
+import { experienceApi, referralsApi, usersApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { colors } from "@/theme/colors";
 
@@ -39,6 +40,8 @@ export default function SettingsScreen() {
   const [docKey, setDocKey] = useState<keyof typeof docs | null>(null);
   const [feedbackSubject, setFeedbackSubject] = useState("");
   const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [referralVisible, setReferralVisible] = useState(false);
+  const [claimCode, setClaimCode] = useState("");
 
   const blockedQuery = useQuery({
     queryKey: ["users", "blocked"],
@@ -78,6 +81,28 @@ export default function SettingsScreen() {
       Alert.alert("Feedback sent", "Thanks. The support team can now review it.");
     },
     onError: (err: any) => Alert.alert("Could not send feedback", err?.message ?? "Please try again.")
+  });
+
+  const referralCodeQuery = useQuery({
+    queryKey: ["referrals", "code"],
+    queryFn: referralsApi.getCode,
+    enabled: referralVisible
+  });
+
+  const referralStatsQuery = useQuery({
+    queryKey: ["referrals", "stats"],
+    queryFn: referralsApi.stats,
+    enabled: referralVisible
+  });
+
+  const claimMutation = useMutation({
+    mutationFn: () => referralsApi.claim({ code: claimCode.trim() }),
+    onSuccess: (data) => {
+      setClaimCode("");
+      Alert.alert("Code claimed!", data.reward?.message ?? "You earned a reward.");
+      referralStatsQuery.refetch();
+    },
+    onError: (err: any) => Alert.alert("Could not claim code", err?.message ?? "Please try again.")
   });
 
   const handleLogout = () => {
@@ -136,6 +161,7 @@ export default function SettingsScreen() {
           <SettingsRow icon={<User color={colors.pink} size={20} />} title="Detailed profile" onPress={() => router.push("/(auth)/create-profile")} />
           <SettingsRow icon={<Users color={colors.gold} size={20} />} title="Clan & family" onPress={() => router.push("/(tabs)/clan")} />
           <SettingsRow icon={<Bell color={colors.pink} size={20} />} title="Notification settings" onPress={() => setNotificationsVisible(true)} />
+          <SettingsRow icon={<Gift color={colors.saffron} size={20} />} title="Referral & Invite" onPress={() => setReferralVisible(true)} />
         </SettingsGroup>
 
         <SettingsGroup title="Privacy & Safety">
@@ -166,6 +192,82 @@ export default function SettingsScreen() {
 
         <Text style={styles.versionText}>Yugm v1.2.0 / Match the vibe.</Text>
       </ScrollView>
+
+      <Modal visible={referralVisible} animationType="slide" onRequestClose={() => setReferralVisible(false)}>
+        <Screen>
+          <ModalHeader title="Referral & Invite" onClose={() => setReferralVisible(false)} />
+          <ScrollView contentContainerStyle={styles.referralBody}>
+            {referralCodeQuery.isLoading ? (
+              <View style={styles.center}><ActivityIndicator color={colors.gold} size="large" /></View>
+            ) : (
+              <>
+                <View style={styles.referralCodeCard}>
+                  <Text style={styles.referralSectionLabel}>Your referral code</Text>
+                  <View style={styles.referralCodeRow}>
+                    <Text style={styles.referralCodeText}>{referralCodeQuery.data?.code ?? "------"}</Text>
+                    <Pressable
+                      style={styles.referralIconBtn}
+                      onPress={async () => {
+                        if (!referralCodeQuery.data?.code) return;
+                        await Clipboard.setStringAsync(referralCodeQuery.data.code);
+                        Alert.alert("Copied", "Referral code copied to clipboard.");
+                      }}
+                    >
+                      <Copy color={colors.gold} size={18} />
+                    </Pressable>
+                  </View>
+                </View>
+
+                <View style={styles.referralStatsRow}>
+                  <View style={styles.referralStatCard}>
+                    <Text style={styles.referralStatValue}>{referralStatsQuery.data?.totalReferred ?? 0}</Text>
+                    <Text style={styles.referralStatLabel}>Referred</Text>
+                  </View>
+                  <View style={styles.referralStatCard}>
+                    <Text style={styles.referralStatValue}>{referralStatsQuery.data?.coinsEarned ?? 0}</Text>
+                    <Text style={styles.referralStatLabel}>Coins earned</Text>
+                  </View>
+                </View>
+
+                <Pressable
+                  style={styles.referralShareBtn}
+                  onPress={async () => {
+                    const code = referralCodeQuery.data?.code;
+                    if (!code) return;
+                    try {
+                      await Share.share({ message: `Join Yugm and use my referral code ${code} to get started! 🎉` });
+                    } catch {}
+                  }}
+                >
+                  <Share2 color={colors.text} size={16} />
+                  <Text style={styles.referralShareBtnText}>Share your code</Text>
+                </Pressable>
+
+                <View style={styles.claimSection}>
+                  <Text style={styles.referralSectionLabel}>Have a code? Enter it below</Text>
+                  <View style={styles.claimRow}>
+                    <TextInput
+                      value={claimCode}
+                      onChangeText={setClaimCode}
+                      placeholder="Enter referral code"
+                      placeholderTextColor={colors.muted}
+                      style={[styles.input, styles.claimInput]}
+                      autoCapitalize="characters"
+                    />
+                    <Pressable
+                      style={[styles.claimBtn, (!claimCode.trim() || claimMutation.isPending) && styles.disabled]}
+                      onPress={() => claimMutation.mutate()}
+                      disabled={!claimCode.trim() || claimMutation.isPending}
+                    >
+                      <Text style={styles.claimBtnText}>{claimMutation.isPending ? "..." : "Claim"}</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </>
+            )}
+          </ScrollView>
+        </Screen>
+      </Modal>
 
       <Modal visible={blockedModalVisible} animationType="slide" onRequestClose={() => setBlockedModalVisible(false)}>
         <Screen>
@@ -349,5 +451,22 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.55 },
   docBody: { padding: 20 },
   docTitle: { color: colors.text, fontSize: 24, fontWeight: "900", marginBottom: 12 },
-  docText: { color: colors.muted, fontSize: 15, lineHeight: 24, fontWeight: "700" }
+  docText: { color: colors.muted, fontSize: 15, lineHeight: 24, fontWeight: "700" },
+  referralBody: { padding: 20, gap: 20 },
+  referralCodeCard: { borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, padding: 16, gap: 10 },
+  referralSectionLabel: { color: colors.muted, fontSize: 12, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.5 },
+  referralCodeRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  referralCodeText: { color: colors.text, fontSize: 28, fontWeight: "900", letterSpacing: 2, flex: 1 },
+  referralIconBtn: { width: 44, height: 44, borderRadius: 8, backgroundColor: "rgba(255,255,255,0.06)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.line },
+  referralStatsRow: { flexDirection: "row", gap: 12 },
+  referralStatCard: { flex: 1, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, padding: 16, alignItems: "center", gap: 4 },
+  referralStatValue: { color: colors.gold, fontSize: 28, fontWeight: "900" },
+  referralStatLabel: { color: colors.muted, fontSize: 12, fontWeight: "800" },
+  referralShareBtn: { height: 46, borderRadius: 8, backgroundColor: colors.gold, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
+  referralShareBtnText: { color: colors.ink, fontWeight: "900" },
+  claimSection: { gap: 10 },
+  claimRow: { flexDirection: "row", gap: 10 },
+  claimInput: { flex: 1 },
+  claimBtn: { height: 46, paddingHorizontal: 20, borderRadius: 8, backgroundColor: colors.pink, alignItems: "center", justifyContent: "center" },
+  claimBtnText: { color: colors.text, fontWeight: "900" }
 });

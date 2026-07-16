@@ -15,6 +15,8 @@ export interface IAdminUser extends mongoose.Document {
   isSuperAdmin: boolean;
   passwordHash?: string;
   twoFactorEnabled: boolean;
+  twoFactorSecret?: string;
+  twoFactorTempSecret?: string;
   lastLoginAt?: Date;
   lastLoginIp?: string;
   createdBy?: mongoose.Types.ObjectId;
@@ -39,6 +41,8 @@ const adminUserSchema = new Schema<IAdminUser>(
     isSuperAdmin: { type: Boolean, default: false },
     passwordHash: String,
     twoFactorEnabled: { type: Boolean, default: false },
+    twoFactorSecret: String,
+    twoFactorTempSecret: String,
     lastLoginAt: Date,
     lastLoginIp: String,
     createdBy: { type: Schema.Types.ObjectId, ref: "AdminUser" },

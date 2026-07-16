@@ -1,7 +1,5 @@
 package com.example.yugm
 
-import android.Manifest
-import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.Network
@@ -92,7 +90,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
                 // Register network callback
                 DisposableEffect(Unit) {
-                    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                    val cm = context.getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
                     val callback = object : ConnectivityManager.NetworkCallback() {
                         override fun onAvailable(network: Network) { YugmApi.isOnline = true }
                         override fun onLost(network: Network) { YugmApi.isOnline = false }
@@ -137,9 +135,9 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                                     userId = session.user.id,
                                     name = session.user.name,
                                     username = session.user.username,
-                                    balance = session.user.walletBalance
+                                    balance = session.user.walletBalance,
                                 )
-                                val destination = if (session.user.name == "Yugm User" || session.user.name.isBlank()) {
+                                val destination = if ((session.user.name == "Yugm User") || session.user.name.isBlank()) {
                                     Screen.ProfileSetup.route
                                 } else {
                                     Screen.Discover.route
@@ -165,7 +163,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                         },
                         onPhoneSignIn = {
                             navController.navigate(Screen.PhoneLogin.route)
-                        }
+                        },
                     )
                 }
             }
@@ -180,7 +178,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
     override fun onPaymentSuccess(razorpayPaymentId: String?, paymentData: PaymentData?) {
         val purchaseId = RazorpayCoordinator.pendingPurchaseId(this)
-        if (purchaseId.isBlank() || paymentData == null) return
+        if (purchaseId.isBlank() || (paymentData == null)) return
         lifecycleScope.launch {
             runCatching {
                 YugmApi.verifyRazorpayPurchase(

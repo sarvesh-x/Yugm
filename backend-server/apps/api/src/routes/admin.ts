@@ -4,6 +4,8 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
+import * as otplib from "otplib";
+import QRCode from "qrcode";
 import { z } from "zod";
 import { creatorCoinsToInr } from "../services/withdrawal.js";
 import { adminPermissions, adminRoles, permissionsFor, type AdminRole } from "../modules/admin/permissions.js";
@@ -16,6 +18,9 @@ import { AdminSession } from "../models/AdminSession.js";
 import { AdminUser } from "../models/AdminUser.js";
 import { AppConfig } from "../models/AppConfig.js";
 import { ChatMessage } from "../models/ChatMessage.js";
+import { Clan } from "../models/Clan.js";
+import { ClanMessage } from "../models/ClanMessage.js";
+import { NotificationCampaign } from "../models/NotificationCampaign.js";
 import { DirectMessage } from "../models/DirectMessage.js";
 import { Follow } from "../models/Follow.js";
 import { Gift } from "../models/Gift.js";
@@ -50,6 +55,7 @@ import { asyncHandler, ErrorCode, HttpError, isValidObjectId, sanitizeText } fro
 export const adminRouter = Router();
 
 const adminAuthLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false });
+const adminTwoFactorLimiter = rateLimit({ windowMs: 60_000, limit: 5, standardHeaders: true, legacyHeaders: false });
 const objectIdSchema = z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid object id");
 const reasonSchema = z.object({ reason: z.string().min(3).max(500), durationHours: z.number().int().min(1).max(8760).optional() });
 const notificationTypeValues = ["FOLLOW", "GIFT", "ROOM_INVITE", "SPEAKER_APPROVED", "MESSAGE", "SYSTEM"] as const;
@@ -343,6 +349,55 @@ adminRouter.post("/auth/login", adminAuthLimiter, validateBody(z.object({
     }
   }
   if (admin.status !== "ACTIVE") throw new HttpError(403, "Admin account is not active", ErrorCode.FORBIDDEN);
+
+  if (admin.twoFactorEnabled && admin.twoFactorSecret) {
+    const twoFactorToken = crypto.randomBytes(32).toString("base64url");
+    const twoFactorTokenHash = hashToken(twoFactorToken);
+    await AdminSession.create({
+      adminId: admin._id,
+      refreshTokenHash: twoFactorTokenHash,
+      ipAddress: ip(req),
+      userAgent: req.headers["user-agent"] || "",
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000)
+    });
+    adminOk(res, { twoFactorRequired: true, twoFactorToken, adminId: admin._id, email: admin.email, displayName: admin.displayName });
+    return;
+  }
+
+  const tokens = await createAdminSession(admin, req);
+  admin.lastLoginAt = new Date();
+  admin.lastLoginIp = ip(req);
+  await admin.save();
+  await auditLog({ adminId: admin.id, action: "admin.login", entityType: "admin_session", entityId: tokens.session.id, req });
+  adminOk(res, { admin: adminPublic(admin), accessToken: tokens.accessToken, refreshToken: tokens.refreshToken });
+}));
+
+adminRouter.post("/auth/2fa/login", adminAuthLimiter, validateBody(z.object({
+  twoFactorToken: z.string().min(20),
+  token: z.string().length(6).regex(/^\d{6}$/),
+  adminId: z.string()
+})), asyncHandler(async (req: AdminAuthRequest, res) => {
+  const admin = await AdminUser.findById(req.body.adminId);
+  if (!admin || admin.status !== "ACTIVE") throw new HttpError(401, "Admin account is not active", ErrorCode.UNAUTHORIZED);
+  if (!admin.twoFactorSecret) throw new HttpError(400, "2FA is not configured for this account", ErrorCode.VALIDATION);
+
+  const tokenHash = hashToken(req.body.twoFactorToken);
+  const session = await AdminSession.findOne({
+    adminId: admin._id,
+    refreshTokenHash: tokenHash,
+    revokedAt: { $exists: false },
+    expiresAt: { $gt: new Date() }
+  });
+  if (!session) throw new HttpError(401, "2FA session expired or invalid. Please log in again.", ErrorCode.UNAUTHORIZED);
+
+  const isValid = otplib.verify({ token: req.body.token, secret: admin.twoFactorSecret });
+  if (!isValid) {
+    await auditLog({ action: "admin.2fa.failed", entityType: "admin_user", entityId: admin._id.toString(), metadata: { email: admin.email }, req });
+    throw new HttpError(401, "Invalid 2FA code", ErrorCode.UNAUTHORIZED);
+  }
+
+  await AdminSession.findByIdAndUpdate(session._id, { revokedAt: new Date() });
+
   const tokens = await createAdminSession(admin, req);
   admin.lastLoginAt = new Date();
   admin.lastLoginIp = ip(req);
@@ -416,13 +471,51 @@ adminRouter.post("/auth/change-password", requireAdminAuth, validateBody(z.objec
   adminOk(res, { changed: true });
 }));
 
-adminRouter.post("/auth/enable-2fa", requireAdminAuth, asyncHandler(async (req: AdminAuthRequest, res) => {
-  await AdminUser.findByIdAndUpdate(req.admin!.id, { twoFactorEnabled: true });
-  await auditLog({ adminId: req.admin!.id, action: "admin.2fa.enabled", entityType: "admin_user", entityId: req.admin!.id, req });
-  adminOk(res, { enabled: true });
+adminRouter.post("/auth/2fa/setup", requireAdminAuth, adminTwoFactorLimiter, asyncHandler(async (req: AdminAuthRequest, res) => {
+  if (req.admin!.twoFactorEnabled) throw new HttpError(409, "2FA is already enabled. Disable it first to reconfigure.", ErrorCode.CONFLICT);
+  const secret = otplib.generateSecret();
+  const serviceName = "Yugm Admin";
+  const otpauth = otplib.generateURI({ issuer: serviceName, label: req.admin!.email, secret });
+  const qrCode = await QRCode.toDataURL(otpauth);
+  req.admin!.twoFactorTempSecret = secret;
+  await req.admin!.save();
+  adminOk(res, { secret, qrCode, uri: otpauth });
 }));
 
-adminRouter.post("/auth/verify-2fa", requireAdminAuth, (_req, res) => adminOk(res, { verified: true, note: "2FA provider hook is ready; configure TOTP/SMS before enforcing." }));
+adminRouter.post("/auth/2fa/verify", requireAdminAuth, adminTwoFactorLimiter, validateBody(z.object({ token: z.string().length(6).regex(/^\d{6}$/) })), asyncHandler(async (req: AdminAuthRequest, res) => {
+  const secret = req.admin!.twoFactorTempSecret || req.admin!.twoFactorSecret;
+  if (!secret) throw new HttpError(400, "No 2FA secret found. Start setup first.", ErrorCode.VALIDATION);
+  const isValid = otplib.verify({ token: req.body.token, secret });
+  if (!isValid) throw new HttpError(400, "Invalid verification code", ErrorCode.VALIDATION);
+  if (!req.admin!.twoFactorEnabled && req.admin!.twoFactorTempSecret) {
+    req.admin!.twoFactorSecret = req.admin!.twoFactorTempSecret;
+    req.admin!.twoFactorTempSecret = undefined;
+    req.admin!.twoFactorEnabled = true;
+    await req.admin!.save();
+    await auditLog({ adminId: req.admin!.id, action: "admin.2fa.enabled", entityType: "admin_user", entityId: req.admin!.id, req });
+  }
+  adminOk(res, { verified: true, enabled: req.admin!.twoFactorEnabled });
+}));
+
+adminRouter.post("/auth/2fa/disable", requireAdminAuth, adminTwoFactorLimiter, validateBody(z.object({ token: z.string().length(6).regex(/^\d{6}$/), password: z.string().optional() })), asyncHandler(async (req: AdminAuthRequest, res) => {
+  if (!req.admin!.twoFactorSecret) throw new HttpError(400, "2FA is not enabled", ErrorCode.VALIDATION);
+  if (req.body.password) {
+    if (!req.admin!.passwordHash || !(await bcrypt.compare(req.body.password, req.admin!.passwordHash))) throw new HttpError(403, "Password is incorrect", ErrorCode.FORBIDDEN);
+  } else {
+    const isValid = otplib.verify({ token: req.body.token, secret: req.admin!.twoFactorSecret });
+    if (!isValid) throw new HttpError(400, "Invalid verification code", ErrorCode.VALIDATION);
+  }
+  req.admin!.twoFactorSecret = undefined;
+  req.admin!.twoFactorTempSecret = undefined;
+  req.admin!.twoFactorEnabled = false;
+  await req.admin!.save();
+  await auditLog({ adminId: req.admin!.id, action: "admin.2fa.disabled", entityType: "admin_user", entityId: req.admin!.id, req });
+  adminOk(res, { disabled: true });
+}));
+
+adminRouter.post("/auth/2fa/status", requireAdminAuth, asyncHandler(async (req: AdminAuthRequest, res) => {
+  adminOk(res, { enabled: req.admin!.twoFactorEnabled, email: req.admin!.email });
+}));
 
 adminRouter.use(requireAdminAuth);
 
@@ -945,6 +1038,16 @@ adminRouter.post("/moderation/queue/:queueId/escalate", requirePermission("repor
   adminOk(res, { queue });
 }));
 
+adminRouter.post("/clans/:clanId/clean-messages", requireAnyPermission(["messages.delete", "reports.resolve"]), asyncHandler(async (req: AdminAuthRequest, res) => {
+  const { clanId } = req.params;
+  if (!isValidObjectId(clanId)) throw new HttpError(400, "Invalid clan ID", ErrorCode.VALIDATION);
+  const clan = await Clan.findById(clanId).select("name memberIds").lean();
+  if (!clan) throw new HttpError(404, "Clan not found", ErrorCode.NOT_FOUND);
+  const result = await ClanMessage.deleteMany({ clanId });
+  await auditLog({ adminId: req.admin!.id, action: "clan.clean_messages", entityType: "clan", entityId: clanId, metadata: { deletedCount: result.deletedCount }, req });
+  adminOk(res, { deletedCount: result.deletedCount });
+}));
+
 adminRouter.get("/messages", requirePermission("messages.read"), asyncHandler(async (req: AdminAuthRequest, res) => {
   const { page, limit, skip } = pageParams(req.query);
   const filter: Record<string, unknown> = {};
@@ -1240,23 +1343,74 @@ adminRouter.post("/notifications/send-all", requirePermission("notifications.sen
   await auditLog({ adminId: req.admin!.id, action: "notification.sent_all", entityType: "notification_campaign", metadata: { ...req.body, count: users.length }, req });
   adminOk(res, { sent: users.length });
 }));
-adminRouter.get("/notifications/campaigns", requirePermission("notifications.send"), asyncHandler(async (_req, res) => adminOk(res, await AdminAuditLog.find({ action: /^notification\.(sent|campaign\.)/ }).sort({ createdAt: -1 }).limit(100).lean())));
-adminRouter.get("/notifications/campaigns/:id", requirePermission("notifications.send"), asyncHandler(async (req, res) => adminOk(res, await AdminAuditLog.findById(req.params.id).lean())));
-adminRouter.post("/notifications/campaigns", requirePermission("notifications.send"), validateBody(notificationBodySchema.extend({ target: z.record(z.unknown()) })), asyncHandler(async (req: AdminAuthRequest, res) => { const log = await auditLog({ adminId: req.admin!.id, action: "notification.campaign.created", entityType: "notification_campaign", metadata: req.body, req }); adminOk(res, { campaign: log }, {}, 201); }));
+adminRouter.get("/notifications/campaigns", requirePermission("notifications.send"), asyncHandler(async (req, res) => {
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.min(Number(req.query.limit) || 50, 100);
+  const skip = (page - 1) * limit;
+  const [campaigns, total] = await Promise.all([
+    NotificationCampaign.find().sort({ createdAt: -1 }).skip(skip).limit(limit).populate("createdBy", "displayName").lean(),
+    NotificationCampaign.countDocuments()
+  ]);
+  adminOk(res, { campaigns }, paginationMeta(page, limit, total));
+}));
+adminRouter.get("/notifications/campaigns/:id", requirePermission("notifications.send"), asyncHandler(async (req, res) => {
+  const campaign = await NotificationCampaign.findById(req.params.id).populate("createdBy", "displayName").lean();
+  if (!campaign) throw new HttpError(404, "Campaign not found", ErrorCode.NOT_FOUND);
+  adminOk(res, { campaign });
+}));
+adminRouter.post("/notifications/campaigns", requirePermission("notifications.send"), validateBody(z.object({
+  title: z.string().min(1).max(120),
+  body: z.string().min(1).max(500),
+  segment: z.enum(["all", "hosts", "city", "vip", "custom"]),
+  segmentValue: z.string().optional(),
+  filters: z.record(z.unknown()).optional(),
+  scheduledFor: z.coerce.date().optional()
+})), asyncHandler(async (req: AdminAuthRequest, res) => {
+  const campaign = await NotificationCampaign.create({ ...req.body, createdBy: req.admin!._id });
+  await auditLog({ adminId: req.admin!.id, action: "notification.campaign.created", entityType: "notification_campaign", entityId: campaign.id, metadata: req.body, req });
+  adminOk(res, { campaign }, {}, 201);
+}));
 adminRouter.post("/notifications/campaigns/:id/send", requirePermission("notifications.send"), asyncHandler(async (req: AdminAuthRequest, res) => {
-  const campaign = await AdminAuditLog.findById(req.params.id).lean();
-  if (!campaign || campaign.entityType !== "notification_campaign") throw new HttpError(404, "Campaign not found", ErrorCode.NOT_FOUND);
-  const metadata = metadataOf(campaign);
-  const title = typeof metadata.title === "string" ? metadata.title : "";
-  const body = typeof metadata.body === "string" ? metadata.body : "";
-  const type = notificationTypeOf(metadata.type);
-  const payload = metadata.payload && typeof metadata.payload === "object" ? metadata.payload as Record<string, unknown> : {};
-  const target = metadata.target && typeof metadata.target === "object" ? metadata.target as Record<string, unknown> : { segment: "all_users" };
-  if (!title || !body) throw new HttpError(400, "Campaign title and body are required", ErrorCode.VALIDATION);
-  const users = await notificationRecipientsForTarget(target);
-  await Promise.all(users.map((user: any) => createNotification(user._id.toString(), type, title, body, payload)));
-  await auditLog({ adminId: req.admin!.id, action: "notification.campaign.sent", entityType: "notification_campaign", entityId: req.params.id, metadata: { target, count: users.length }, req });
-  adminOk(res, { sent: users.length });
+  const campaign = await NotificationCampaign.findById(req.params.id);
+  if (!campaign) throw new HttpError(404, "Campaign not found", ErrorCode.NOT_FOUND);
+  if (campaign.status !== "DRAFT" && campaign.status !== "SCHEDULED") throw new HttpError(400, "Campaign already sent", ErrorCode.VALIDATION);
+
+  const filter: Record<string, unknown> = {};
+  if (campaign.segment === "hosts") filter.role = "HOST";
+  else if (campaign.segment === "city") filter.city = campaign.segmentValue;
+  else if (campaign.segment === "vip") filter.vipTier = { $ne: null };
+  else if (campaign.segment === "custom" && campaign.filters) Object.assign(filter, campaign.filters);
+  if (campaign.segment !== "all") filter.isBlocked = { $ne: true };
+
+  const users = await User.find(filter).select("_id").limit(10000).lean();
+  campaign.status = "SENDING";
+  campaign.sentCount = users.length;
+  await campaign.save();
+
+  let delivered = 0;
+  for (const user of users) {
+    try {
+      await createNotification(user._id.toString(), "SYSTEM", campaign.title, campaign.body, { campaignId: campaign.id });
+      delivered++;
+    } catch { /* skip failed deliveries */ }
+  }
+
+  campaign.status = "SENT";
+  campaign.deliveredCount = delivered;
+  campaign.sentAt = new Date();
+  campaign.completedAt = new Date();
+  await campaign.save();
+
+  await auditLog({ adminId: req.admin!.id, action: "notification.campaign.sent", entityType: "notification_campaign", entityId: campaign.id, metadata: { segment: campaign.segment, count: users.length, delivered }, req });
+  adminOk(res, { sent: users.length, delivered });
+}));
+adminRouter.post("/notifications/campaigns/:id/cancel", requirePermission("notifications.send"), asyncHandler(async (req: AdminAuthRequest, res) => {
+  const campaign = await NotificationCampaign.findById(req.params.id);
+  if (!campaign) throw new HttpError(404, "Campaign not found", ErrorCode.NOT_FOUND);
+  if (campaign.status === "SENT") throw new HttpError(400, "Cannot cancel a sent campaign", ErrorCode.VALIDATION);
+  campaign.status = "CANCELLED";
+  await campaign.save();
+  adminOk(res, { campaign });
 }));
 
 // Support ticket management moved to adminSupport.ts

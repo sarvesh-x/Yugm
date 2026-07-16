@@ -32,3 +32,21 @@ export const reportLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false
 });
+
+export const twoFactorLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 6,
+  keyGenerator: (req) => req.ip ?? "unknown",
+  store: new ResilientRedisRateLimitStore("2fa"),
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+export const createLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  keyGenerator: userOrIpKey,
+  store: new ResilientRedisRateLimitStore("create"),
+  standardHeaders: true,
+  legacyHeaders: false
+});

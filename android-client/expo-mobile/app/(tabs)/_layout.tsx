@@ -31,6 +31,8 @@ export default function TabsLayout() {
       <Tabs.Screen name="store" options={{ href: null }} />
       <Tabs.Screen name="games" options={{ href: null }} />
       <Tabs.Screen name="grow" options={{ href: null }} />
+      <Tabs.Screen name="create-story" options={{ href: null }} />
+      <Tabs.Screen name="events" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -87,6 +87,9 @@ export interface IUser extends mongoose.Document {
   datingAgeMin?: number;
   datingAgeMax?: number;
   datingVerifiedOnly?: boolean;
+  referralCode: string;
+  referredBy?: mongoose.Types.ObjectId;
+  referralRewardsClaimed: number;
 }
 
 const userSchema = new Schema<IUser>(
@@ -176,6 +179,9 @@ const userSchema = new Schema<IUser>(
     datingAgeMin: Number,
     datingAgeMax: Number,
     datingVerifiedOnly: { type: Boolean, default: false },
+    referralCode: { type: String, unique: true, sparse: true },
+    referredBy: { type: Schema.Types.ObjectId, ref: "User" },
+    referralRewardsClaimed: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

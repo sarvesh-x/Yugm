@@ -304,6 +304,49 @@ export const creatorApi = {
   }>("/creator/withdrawals", { method: "POST", body: JSON.stringify({ amountCoins }) })
 };
 
+export async function uploadStoryMedia(file: { uri: string; name?: string; type?: string }) {
+  const token = useAuthStore.getState().token;
+  const formData = new FormData();
+  formData.append("media", {
+    uri: file.uri,
+    name: file.name ?? `story-${Date.now()}`,
+    type: file.type ?? "image/jpeg"
+  } as any);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 45_000);
+  try {
+    const response = await fetch(`${apiBaseUrl}/upload/story-media`, {
+      method: "POST",
+      signal: controller.signal,
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: formData
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok || json.ok === false) throw new ApiError(json.error?.message ?? "Upload failed", response.status);
+    const data = json.data as { url: string; type: "IMAGE" | "VIDEO" };
+    return { ...data, url: absoluteMediaUrl(data.url) };
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new ApiError("The upload took too long. Try a smaller file or a stronger connection.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export const storiesApi = {
+  create: (payload: { mediaUrl: string; mediaType: "IMAGE" | "VIDEO"; caption?: string; backgroundColor?: string }) =>
+    api<{ story: any }>("/stories", { method: "POST", body: JSON.stringify(payload) }),
+  feed: () => api<{ stories: Array<{ user: any; stories: any[] }> }>("/stories/feed"),
+  userStories: (userId: string) => api<{ stories: any[] }>(`/stories/user/${userId}`),
+  view: (id: string) => api<{ story: any }>(`/stories/${id}/view`, { method: "POST" }),
+  like: (id: string) => api<{ story: any }>(`/stories/${id}/like`, { method: "POST" }),
+  hide: (id: string) => api<{ success: boolean }>(`/stories/${id}/hide`, { method: "POST" }),
+  delete: (id: string) => api<{ success: boolean }>(`/stories/${id}`, { method: "DELETE" }),
+  viewers: (id: string) => api<{ viewers: any[] }>(`/stories/${id}/views`),
+};
+
 export const gamesApi = {
   catalog: () => api<{ games: any[]; recent: any[] }>("/games/catalog"),
   missions: () => api<{ date: string; missions: any[] }>("/games/missions"),
@@ -362,10 +405,26 @@ export const clansApi = {
   deleteMessage: (clanId: string, messageId: string) => api<{ deleted: boolean }>(`/clans/${clanId}/messages/${messageId}`, { method: "DELETE" }),
   reportMessage: (clanId: string, messageId: string, reason: string, description?: string) =>
     api<{ report: any }>(`/clans/${clanId}/messages/${messageId}/report`, { method: "POST", body: JSON.stringify({ reason, description }) }),
+  cleanMessages: (clanId: string) => api<{ deletedCount: number }>(`/clans/${clanId}/messages/clean`, { method: "POST" }),
   create: (payload: { name: string; description?: string; avatar?: string; privacy?: "PUBLIC" | "PRIVATE"; familyLabel?: string }) =>
     api<{ clan: any }>("/clans", { method: "POST", body: JSON.stringify(payload) }),
   join: (clanId: string) => api<{ clan: any }>(`/clans/${clanId}/join`, { method: "POST" }),
   leave: (clanId: string) => api<{ clan: any | null }>(`/clans/${clanId}/leave`, { method: "POST" })
+};
+
+export const eventsApi = {
+  list: () => api<{ events: any[] }>("/events"),
+  detail: (id: string) => api<{ event: any }>(`/events/${id}`),
+  create: (payload: Record<string, unknown>) => api<{ event: any }>("/events", { method: "POST", body: JSON.stringify(payload) }),
+  join: (id: string) => api<{ event: any }>(`/events/${id}/join`, { method: "POST" }),
+  myEvents: () => api<{ hosted: any[]; joined: any[] }>("/events/me"),
+  cancel: (id: string) => api<{ event: any }>(`/events/${id}/cancel`, { method: "POST" })
+};
+
+export const referralsApi = {
+  getCode: () => api<{ code: string }>("/referrals/code"),
+  claim: (payload: { code: string }) => api<{ reward: any }>("/referrals/claim", { method: "POST", body: JSON.stringify(payload) }),
+  stats: () => api<{ totalReferred: number; coinsEarned: number }>("/referrals/stats")
 };
 
 export const datingApi = {
