@@ -130,3 +130,42 @@ test("Achievement reward cosmetics map correctly", () => {
   assert.equal(achievementRewards.level_5, "name_neon_glow");
   assert.equal(Object.keys(achievementRewards).length, 4);
 });
+
+// Test achievement tier validation
+const achievementTierEnum = z.enum(["BRONZE", "SILVER", "GOLD", "PLATINUM"]);
+
+test("Achievement tier enum accepts valid tiers", () => {
+  assert.ok(achievementTierEnum.safeParse("BRONZE").success);
+  assert.ok(achievementTierEnum.safeParse("SILVER").success);
+  assert.ok(achievementTierEnum.safeParse("GOLD").success);
+  assert.ok(achievementTierEnum.safeParse("PLATINUM").success);
+});
+
+test("Achievement tier enum rejects invalid tier", () => {
+  assert.ok(!achievementTierEnum.safeParse("DIAMOND").success);
+  assert.ok(!achievementTierEnum.safeParse("bronze").success);
+});
+
+// Test badge showcase schema
+const badgeShowcaseSchema = z.object({
+  badgeIds: z.array(z.string()).max(5)
+});
+
+test("Badge showcase schema validates correct input", () => {
+  const result = badgeShowcaseSchema.safeParse({
+    badgeIds: ["profile_complete", "host_3", "level_5"]
+  });
+  assert.ok(result.success);
+});
+
+test("Badge showcase schema rejects more than 5 badges", () => {
+  const result = badgeShowcaseSchema.safeParse({
+    badgeIds: ["a", "b", "c", "d", "e", "f"]
+  });
+  assert.ok(!result.success);
+});
+
+test("Badge showcase schema allows empty array", () => {
+  const result = badgeShowcaseSchema.safeParse({ badgeIds: [] });
+  assert.ok(result.success);
+});

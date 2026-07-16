@@ -39,6 +39,8 @@ export interface IUser extends mongoose.Document {
   profileCompletedAt?: Date;
   ownedCosmeticIds: string[];
   claimedAchievementIds: string[];
+  claimedAchievementTiers: Array<{ achievementId: string; tier: string; claimedAt: Date }>;
+  showcasedBadgeIds: string[];
   activeCosmetics: {
     avatarAsset?: string;
     avatarFrame?: string;
@@ -131,6 +133,12 @@ const userSchema = new Schema<IUser>(
     profileCompletedAt: Date,
     ownedCosmeticIds: [{ type: String }],
     claimedAchievementIds: [{ type: String }],
+    claimedAchievementTiers: [{
+      achievementId: { type: String, required: true },
+      tier: { type: String, enum: ["BRONZE", "SILVER", "GOLD", "PLATINUM"], required: true },
+      claimedAt: { type: Date, default: Date.now }
+    }],
+    showcasedBadgeIds: [{ type: String }],
     activeCosmetics: {
       avatarAsset: String,
       avatarFrame: String,

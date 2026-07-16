@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Switch, Text, View } from "react-native";
 import { router } from "expo-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BadgeIndianRupee, Bell, CalendarClock, CheckCircle2, ChevronRight, Coins, Flame, Gift, Mic2, Radio, ShieldCheck, Sparkles, Trophy, Users, Video } from "lucide-react-native";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { BadgeIndianRupee, Bell, CalendarClock, CheckCircle2, ChevronRight, Coins, Flame, Gift, Medal, Mic2, Radio, ShieldCheck, Sparkles, Star, Trophy, Users, Video } from "lucide-react-native";
 import { GlassCard } from "@/components/GlassCard";
 import { Screen, Section } from "@/components/Screen";
 import { experienceApi } from "@/lib/api";
@@ -11,13 +11,39 @@ import { colors, gradients } from "@/theme/colors";
 import { LinearGradient } from "expo-linear-gradient";
 import { useAuthStore } from "@/store/auth";
 
+const TIER_COLORS: Record<string, string> = {
+  BRONZE: "#CD7F32",
+  SILVER: "#C0C0C0",
+  GOLD: "#FFD700",
+  PLATINUM: "#E5E4E2"
+};
+
+const TIER_LABELS: Record<string, string> = { BRONZE: "I", SILVER: "II", GOLD: "III", PLATINUM: "IV" };
+
+type AchievementTier = {
+  tier: string;
+  target: number;
+  rewardCoins: number;
+  rewardCosmetic?: string;
+  reached: boolean;
+  claimed: boolean;
+};
+
 type Achievement = {
   id: string;
   title: string;
   description: string;
-  target: number;
-  rewardCoins: number;
+  category: string;
+  icon: string;
+  order: number;
   progress: number;
+  total: number;
+  currentTier: string | null;
+  highestClaimedTier: string | null;
+  tiers: AchievementTier[];
+  nextTier: string | null;
+  canClaim: boolean;
+  canUpgrade: boolean;
   complete: boolean;
 };
 
@@ -70,7 +96,24 @@ export default function GrowScreen() {
   const scheduledRooms = isCreator ? (creator.data?.scheduledRooms ?? []) : (home.data?.rooms?.scheduled ?? []);
   const topSupporters = creator.data?.topSupporters ?? [];
 
-  const completedAchievements = useMemo(() => achievements.filter((item: Achievement) => item.complete).length, [achievements]);
+  const completedAchievements = useMemo(() => achievements.filter((item) => item.complete).length, [achievements]);
+
+  const claimMutation = useMutation({
+    mutationFn: (achievementId: string) => experienceApi.claimAchievement(achievementId),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["experience"] });
+      Alert.alert("Achievement claimed!", data.tier ? `${data.tier} tier unlocked` : "Reward collected");
+    },
+    onError: (err: any) => Alert.alert("Claim failed", err?.message ?? "Could not claim achievement")
+  });
+
+  const shareMutation = useMutation({
+    mutationFn: (achievementId: string) => experienceApi.shareAchievement(achievementId),
+    onSuccess: async (data) => {
+      try { await Share.share({ message: data.shareText }); } catch {}
+    },
+    onError: (err: any) => Alert.alert("Share failed", err?.message ?? "Could not share achievement")
+  });
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["experience"] });
@@ -139,21 +182,54 @@ export default function GrowScreen() {
             <Text style={styles.sectionTitle}>Next Best Actions</Text>
             <Text style={styles.subtle}>{completedAchievements}/{achievements.length} done</Text>
           </View>
-          {achievements.length ? achievements.slice(0, 5).map((item: Achievement) => (
-            <GlassCard key={item.id} style={styles.rowCard}>
-              <View style={styles.rowIcon}>
-                {item.complete ? <CheckCircle2 color={colors.success} size={22} /> : <Trophy color={colors.gold} size={22} />}
-              </View>
-              <View style={styles.rowBody}>
-                <Text style={styles.rowTitle}>{item.title}</Text>
-                <Text style={styles.rowMeta}>{item.description}</Text>
-                <View style={styles.progressTrack}>
-                  <View style={[styles.progressFill, { width: `${item.target > 0 ? Math.min(100, (item.progress / item.target) * 100) : 0}%` }]} />
-                </View>
-              </View>
-              <Text style={styles.reward}>{item.rewardCoins}c</Text>
-            </GlassCard>
-          )) : <GlassCard><Text style={styles.muted}>Your next missions will appear after you start hosting and connecting.</Text></GlassCard>}
+          {achievements.length ? achievements.slice(0, 5).map((item) => {
+            const tierColor = item.highestClaimedTier ? TIER_COLORS[item.highestClaimedTier] ?? colors.gold : colors.gold;
+            return (
+              <GlassCard key={item.id} style={styles.achieveCard}>
+                <Pressable style={styles.achieveMain} onPress={() => {
+                  if (item.canClaim) claimMutation.mutate(item.id);
+                }}>
+                  <View style={[styles.achieveIcon, { borderColor: tierColor }]}>
+                    {item.complete ? <CheckCircle2 color={tierColor} size={22} /> : <Trophy color={colors.gold} size={22} />}
+                  </View>
+                  <View style={styles.rowBody}>
+                    <View style={styles.achieveTitleRow}>
+                      <Text style={styles.rowTitle}>{item.title}</Text>
+                      {item.highestClaimedTier ? (
+                        <View style={[styles.tierBadge, { backgroundColor: `${tierColor}22`, borderColor: tierColor }]}>
+                          <Text style={[styles.tierBadgeText, { color: tierColor }]}>{TIER_LABELS[item.highestClaimedTier]}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <Text style={styles.rowMeta}>{item.description}</Text>
+                    <View style={styles.progressTrack}>
+                      <View style={[styles.progressFill, { width: `${item.total > 0 ? Math.min(100, (item.progress / item.total) * 100) : 0}%`, backgroundColor: tierColor }]} />
+                    </View>
+                    {item.canClaim ? (
+                      <Pressable style={styles.claimBtn} onPress={() => claimMutation.mutate(item.id)}>
+                        <Text style={styles.claimBtnText}>
+                          {claimMutation.isPending ? "Claiming..." : `Claim ${item.tiers.find((t) => t.tier === item.nextTier)?.rewardCoins ?? 0}c`}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                </Pressable>
+                {item.highestClaimedTier ? (
+                  <Pressable style={styles.shareIconBtn} onPress={() => shareMutation.mutate(item.id)}>
+                    <ShareIcon color={colors.muted} size={16} />
+                  </Pressable>
+                ) : null}
+                {item.tiers.length > 1 ? (
+                  <View style={styles.tierDots}>
+                    {item.tiers.map((tier) => {
+                      const dotColor = tier.claimed ? TIER_COLORS[tier.tier] ?? colors.gold : colors.line;
+                      return <View key={tier.tier} style={[styles.tierDot, { backgroundColor: dotColor, opacity: tier.claimed ? 1 : 0.4 }]} />;
+                    })}
+                  </View>
+                ) : null}
+              </GlassCard>
+            );
+          }) : <GlassCard><Text style={styles.muted}>Your next missions will appear after you start hosting and connecting.</Text></GlassCard>}
         </Section>
 
         <Section>
@@ -321,6 +397,16 @@ export default function GrowScreen() {
   );
 }
 
+function ShareIcon({ color, size }: { color: string; size: number }) {
+  return (
+    <View style={{ width: size, height: size }}>
+      <View style={{ position: "absolute", top: 0, left: 3, width: 6, height: 6, borderRadius: 3, backgroundColor: color }} />
+      <View style={{ position: "absolute", bottom: 2, right: 0, width: 6, height: 6, borderRadius: 3, backgroundColor: color }} />
+      <View style={{ position: "absolute", bottom: 2, left: 3, width: 6, height: 6, borderRadius: 3, backgroundColor: color }} />
+    </View>
+  );
+}
+
 function HeroStat({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.heroStat}>
@@ -357,6 +443,17 @@ const styles = StyleSheet.create({
   muted: { color: colors.muted, fontSize: 13, lineHeight: 19, fontWeight: "700" },
   errorCard: { flexDirection: "row", alignItems: "center", gap: 11, borderColor: "rgba(253,176,34,0.28)", backgroundColor: "rgba(253,176,34,0.07)" },
   errorIcon: { width: 38, height: 38, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(253,176,34,0.1)" },
+  achieveCard: { marginBottom: 10 },
+  achieveMain: { flexDirection: "row", gap: 12, alignItems: "center" },
+  achieveIcon: { height: 38, width: 38, borderRadius: 8, backgroundColor: colors.panelStrong, alignItems: "center", justifyContent: "center", borderWidth: 1 },
+  achieveTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  tierBadge: { borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, borderWidth: 1 },
+  tierBadgeText: { fontSize: 9, fontWeight: "900" },
+  tierDots: { flexDirection: "row", gap: 4, justifyContent: "center", paddingVertical: 6 },
+  tierDot: { width: 8, height: 8, borderRadius: 4 },
+  shareIconBtn: { position: "absolute", top: 8, right: 8, width: 28, height: 28, borderRadius: 14, backgroundColor: colors.panel, alignItems: "center", justifyContent: "center" },
+  claimBtn: { marginTop: 6, borderRadius: 6, backgroundColor: colors.pink, paddingHorizontal: 12, paddingVertical: 5, alignSelf: "flex-start" },
+  claimBtnText: { color: colors.text, fontSize: 11, fontWeight: "900" },
   rowCard: { flexDirection: "row", gap: 12, alignItems: "center", marginBottom: 10 },
   rowIcon: { height: 38, width: 38, borderRadius: 8, backgroundColor: colors.panelStrong, alignItems: "center", justifyContent: "center" },
   rowBody: { flex: 1 },
@@ -364,7 +461,7 @@ const styles = StyleSheet.create({
   rowMeta: { color: colors.muted, fontSize: 12, fontWeight: "700", marginTop: 3 },
   reward: { color: colors.gold, fontSize: 13, fontWeight: "900" },
   progressTrack: { height: 6, borderRadius: 8, backgroundColor: colors.line, overflow: "hidden", marginTop: 8 },
-  progressFill: { height: 6, borderRadius: 8, backgroundColor: colors.pink },
+  progressFill: { height: 6, borderRadius: 8 },
   metricsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   metric: { width: "48%", gap: 7 },
   metricValue: { color: colors.text, fontSize: 20, fontWeight: "900" },

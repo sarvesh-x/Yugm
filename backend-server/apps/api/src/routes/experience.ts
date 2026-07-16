@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
+import { Achievement, nextTier } from "../models/Achievement.js";
 import { Block } from "../models/Block.js";
 import { ChatMessage } from "../models/ChatMessage.js";
 import { DirectMessage } from "../models/DirectMessage.js";
@@ -43,16 +44,6 @@ const defaultNotificationPreferences = {
   marketing: false
 };
 
-const achievements = [
-  { id: "profile_complete", title: "Profile Spark", description: "Complete your profile", target: 1, rewardCoins: 25, rewardCosmetic: "frame_minimal" },
-  { id: "daily_streak_3", title: "Three Day Rhythm", description: "Check in for 3 days", target: 3, rewardCoins: 50, rewardCosmetic: "mood_chill" },
-  { id: "follow_10", title: "Circle Builder", description: "Follow 10 creators", target: 10, rewardCoins: 75 },
-  { id: "host_3", title: "Room Starter", description: "Host 3 rooms", target: 3, rewardCoins: 100, rewardCosmetic: "badge_early_host" },
-  { id: "gift_5", title: "Gift Spark", description: "Send 5 gifts", target: 5, rewardCoins: 120 },
-  { id: "chat_25", title: "Conversation Flow", description: "Send 25 chat messages", target: 25, rewardCoins: 80 },
-  { id: "level_5", title: "Yugm Star", description: "Reach level 5", target: 5, rewardCoins: 150, rewardCosmetic: "name_neon_glow" }
-];
-
 function publicUser(user: any) {
   if (!user) return null;
   const levelStatus = getLevelStatus(user);
@@ -87,11 +78,11 @@ function profileCompletion(user: any) {
   return { checks, completed, total: checks.length, percent: Math.round((completed / checks.length) * 100) };
 }
 
-function streakEstimate(user: any) {
+function streakEstimate(user: any, streakCount: number) {
   if (!user?.lastDailyCheckInAt) return 0;
   const last = new Date(user.lastDailyCheckInAt);
   const ageHours = (Date.now() - last.getTime()) / 36e5;
-  return ageHours <= 30 ? 1 : 0;
+  return ageHours <= 30 ? streakCount : 0;
 }
 
 async function blockedIdsFor(userId: string) {
@@ -101,28 +92,90 @@ async function blockedIdsFor(userId: string) {
   return rows.map((row) => row.blockerId.toString() === userId ? row.blockedUserId : row.blockerId);
 }
 
-async function buildAchievements(userId: string, user: any) {
-  const [followingCount, hostedRooms, sentGifts, chatMessages] = await Promise.all([
-    Follow.countDocuments({ followerId: userId }),
-    Room.countDocuments({ hostId: userId }),
-    GiftTransaction.countDocuments({ senderId: userId }),
-    ChatMessage.countDocuments({ senderId: userId })
-  ]);
-  const progress: Record<string, number> = {
+function computeProgress(achievement: any, user: any, followingCount: number, hostedRooms: number, sentGifts: number, chatMessages: number, streak: number) {
+  const raw: Record<string, number> = {
     profile_complete: profileCompletion(user).percent >= 100 ? 1 : 0,
-    daily_streak_3: streakEstimate(user),
+    daily_streak_3: streak,
     follow_10: followingCount,
     host_3: hostedRooms,
     gift_5: sentGifts,
     chat_25: chatMessages,
     level_5: getLevelStatus(user).level
   };
-  return achievements.map((achievement) => {
-    const value = progress[achievement.id] ?? 0;
+  return raw[achievement.id] ?? 0;
+}
+
+function buildTierInfo(achievement: any, currentProgress: number, claimedTiers: Set<string>) {
+  const activeTier = achievement.tiers.slice().reverse().find((t: any) => currentProgress >= t.target) ?? null;
+  const nextTierDef = activeTier ? nextTier(activeTier.tier) : "BRONZE";
+  const nextTierIndex = achievement.tiers.findIndex((t: any) => t.tier === nextTierDef);
+  const nextTierData = nextTierIndex >= 0 ? achievement.tiers[nextTierIndex] : null;
+
+  const tiers = achievement.tiers.map((t: any) => ({
+    tier: t.tier,
+    target: t.target,
+    rewardCoins: t.rewardCoins,
+    rewardCosmetic: t.rewardCosmetic,
+    reached: currentProgress >= t.target,
+    claimed: claimedTiers.has(`${achievement.id}:${t.tier}`)
+  }));
+
+  let highestClaimedTier: string | null = null;
+  for (const t of achievement.tiers) {
+    if (claimedTiers.has(`${achievement.id}:${t.tier}`)) {
+      highestClaimedTier = t.tier;
+    }
+  }
+
+  const allTiersClaimed = achievement.tiers.every((t: any) => claimedTiers.has(`${achievement.id}:${t.tier}`));
+  const canClaim = !allTiersClaimed && nextTierData && currentProgress >= nextTierData.target;
+  const canUpgrade = activeTier !== null && !allTiersClaimed && nextTierData && currentProgress >= nextTierData.target;
+
+  return {
+    progress: Math.min(currentProgress, nextTierData?.target ?? currentProgress),
+    total: nextTierData?.target ?? (activeTier?.target ?? 0),
+    currentTier: activeTier?.tier ?? null,
+    highestClaimedTier,
+    tiers,
+    nextTier: nextTierDef,
+    canClaim,
+    canUpgrade,
+    complete: allTiersClaimed
+  };
+}
+
+async function buildAchievements(userId: string, user: any) {
+  const [followingCount, hostedRooms, sentGifts, chatMessages, allAchievements] = await Promise.all([
+    Follow.countDocuments({ followerId: userId }),
+    Room.countDocuments({ hostId: userId }),
+    GiftTransaction.countDocuments({ senderId: userId }),
+    ChatMessage.countDocuments({ senderId: userId }),
+    Achievement.find().sort({ order: 1 }).lean()
+  ]);
+
+  const streak = streakEstimate(user, user?.streakCount ?? 0);
+  const rawTiers: Array<{ achievementId: string; tier: string }> = user?.claimedAchievementTiers ?? [];
+  const claimedTiers = new Set<string>(rawTiers.map((ct) => `${ct.achievementId}:${ct.tier}`));
+
+  return allAchievements.map((achievement) => {
+    const progress = computeProgress(achievement, user, followingCount, hostedRooms, sentGifts, chatMessages, streak);
+    const tierInfo = buildTierInfo(achievement, progress, claimedTiers);
     return {
-      ...achievement,
-      progress: Math.min(value, achievement.target),
-      complete: value >= achievement.target
+      id: achievement.id,
+      title: achievement.title,
+      description: achievement.description,
+      category: achievement.category,
+      icon: achievement.icon,
+      order: achievement.order,
+      progress: tierInfo.progress,
+      total: tierInfo.total,
+      currentTier: tierInfo.currentTier,
+      highestClaimedTier: tierInfo.highestClaimedTier,
+      tiers: tierInfo.tiers,
+      nextTier: tierInfo.nextTier,
+      canClaim: tierInfo.canClaim,
+      canUpgrade: tierInfo.canUpgrade,
+      complete: tierInfo.complete
     };
   });
 }
@@ -291,22 +344,111 @@ experienceRouter.put("/notification-preferences", validateBody(notificationPrefe
 
 experienceRouter.post("/achievements/claim", asyncHandler(async (req: AuthRequest, res) => {
   const { achievementId } = z.object({ achievementId: z.string().min(1) }).parse(req.body);
-  const user = await User.findById(req.user!.id).select("ownedCosmeticIds walletBalance").lean();
+  const user = await User.findById(req.user!.id).select("claimedAchievementIds claimedAchievementTiers ownedCosmeticIds walletBalance").lean();
   if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
-  const claimed = req.user?.claimedAchievementIds ?? [];
-  if (claimed.includes(achievementId)) throw new HttpError(409, "Achievement already claimed", ErrorCode.CONFLICT);
-  const achievement = achievements.find((a) => a.id === achievementId);
+
+  const achievement = await Achievement.findOne({ id: achievementId }).lean();
   if (!achievement) throw new HttpError(404, "Achievement not found", ErrorCode.NOT_FOUND);
+
   const allAchievements = await buildAchievements(req.user!.id, req.user);
   const entry = allAchievements.find((a) => a.id === achievementId);
-  if (!entry?.complete) throw new HttpError(400, "Achievement not yet completed", ErrorCode.VALIDATION);
-  const update: Record<string, unknown> = { $push: { claimedAchievementIds: achievementId } };
-  if (achievement.rewardCosmetic && !user.ownedCosmeticIds.includes(achievement.rewardCosmetic)) {
-    update.$push = { ownedCosmeticIds: achievement.rewardCosmetic };
+  if (!entry) throw new HttpError(404, "Achievement not found", ErrorCode.NOT_FOUND);
+
+  const nextTierToClaim = achievement.tiers.find(
+    (t) => !user.claimedAchievementTiers?.some((ct: { achievementId: string; tier: string }) => ct.achievementId === achievementId && ct.tier === t.tier)
+  );
+  if (!nextTierToClaim) throw new HttpError(409, "All tiers already claimed", ErrorCode.CONFLICT);
+  if (entry.progress < nextTierToClaim.target) throw new HttpError(400, `Reach ${nextTierToClaim.target} to unlock ${nextTierToClaim.tier}`, ErrorCode.VALIDATION);
+
+  const update: Record<string, unknown> = {
+    $push: {
+      claimedAchievementIds: achievementId,
+      claimedAchievementTiers: { achievementId, tier: nextTierToClaim.tier, claimedAt: new Date() }
+    }
+  };
+  if (nextTierToClaim.rewardCosmetic && !user.ownedCosmeticIds.includes(nextTierToClaim.rewardCosmetic)) {
+    update.$push = { ownedCosmeticIds: nextTierToClaim.rewardCosmetic, claimedAchievementIds: achievementId, claimedAchievementTiers: { achievementId, tier: nextTierToClaim.tier, claimedAt: new Date() } };
   }
-  if (achievement.rewardCoins > 0) {
-    await creditWallet(req.user!.id, achievement.rewardCoins, "LEVEL_REWARD", { achievementId });
+  if (nextTierToClaim.rewardCoins > 0) {
+    await creditWallet(req.user!.id, nextTierToClaim.rewardCoins, "LEVEL_REWARD", { achievementId, tier: nextTierToClaim.tier });
   }
   await User.findByIdAndUpdate(req.user!.id, update);
-  sendOk(res, { claimed: true, rewardCoins: achievement.rewardCoins, rewardCosmetic: achievement.rewardCosmetic });
+  sendOk(res, { claimed: true, tier: nextTierToClaim.tier, rewardCoins: nextTierToClaim.rewardCoins, rewardCosmetic: nextTierToClaim.rewardCosmetic });
+}));
+
+experienceRouter.get("/achievements", asyncHandler(async (req: AuthRequest, res) => {
+  const user = await User.findById(req.user!.id).lean();
+  const achievementsList = await buildAchievements(req.user!.id, user);
+  sendOk(res, { achievements: achievementsList });
+}));
+
+const showcasedBadgeSchema = z.object({ badgeIds: z.array(z.string()).max(5) });
+
+experienceRouter.put("/badges/showcase", validateBody(showcasedBadgeSchema), asyncHandler(async (req: AuthRequest, res) => {
+  const { badgeIds } = req.body;
+  const user = await User.findById(req.user!.id).select("claimedAchievementTiers").lean();
+  if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+  const claimedIds = new Set((user.claimedAchievementTiers ?? []).map((ct: { achievementId: string }) => ct.achievementId));
+  for (const id of badgeIds) {
+    if (!claimedIds.has(id)) throw new HttpError(400, `Achievement ${id} not yet claimed`, ErrorCode.VALIDATION);
+  }
+  await User.findByIdAndUpdate(req.user!.id, { $set: { showcasedBadgeIds: badgeIds } });
+  sendOk(res, { badgeIds });
+}));
+
+experienceRouter.get("/badges/showcase/:userId", asyncHandler(async (req: AuthRequest, res) => {
+  const user = await User.findById(req.params.userId).select("showcasedBadgeIds claimedAchievementTiers").lean();
+  if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+
+  if (!user.showcasedBadgeIds?.length) {
+    sendOk(res, { badges: [] });
+    return;
+  }
+
+  const achievements = await Achievement.find({ id: { $in: user.showcasedBadgeIds } }).lean();
+  const tierMap = new Map(
+    (user.claimedAchievementTiers ?? []).map((ct: { achievementId: string; tier: string }) => [ct.achievementId, ct.tier])
+  );
+
+  const badges = user.showcasedBadgeIds.map((id: string) => {
+    const achievement = achievements.find((a) => a.id === id);
+    if (!achievement) return null;
+    const highestTier = tierMap.get(id) ?? null;
+    const tierDef = achievement.tiers.find((t) => t.tier === highestTier);
+    return {
+      id: achievement.id,
+      title: achievement.title,
+      description: achievement.description,
+      icon: achievement.icon,
+      category: achievement.category,
+      tier: highestTier,
+      rewardCoins: tierDef?.rewardCoins ?? 0
+    };
+  }).filter(Boolean);
+
+  sendOk(res, { badges });
+}));
+
+experienceRouter.post("/achievements/:id/share", asyncHandler(async (req: AuthRequest, res) => {
+  const achievement = await Achievement.findOne({ id: req.params.id }).lean();
+  if (!achievement) throw new HttpError(404, "Achievement not found", ErrorCode.NOT_FOUND);
+
+  const user = await User.findById(req.user!.id).select("claimedAchievementTiers name username").lean();
+  const claimedTiers = user?.claimedAchievementTiers ?? [];
+  const highestTier = achievement.tiers
+    .slice()
+    .reverse()
+    .find((t) => claimedTiers.some((ct: { achievementId: string; tier: string }) => ct.achievementId === achievement.id && ct.tier === t.tier));
+
+  const shareText = `🏆 I earned "${achievement.title}" (${highestTier?.tier ?? "BRONZE"}) on Yugm!\n${achievement.description}\n\nMatch the vibe.`;
+
+  sendOk(res, {
+    shareText,
+    achievement: {
+      id: achievement.id,
+      title: achievement.title,
+      tier: highestTier?.tier ?? "BRONZE",
+      icon: achievement.icon
+    }
+  });
 }));

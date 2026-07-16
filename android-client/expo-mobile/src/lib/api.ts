@@ -231,7 +231,21 @@ export const experienceApi = {
     api<{ preferences: Record<string, boolean> }>("/experience/notification-preferences", {
       method: "PUT",
       body: JSON.stringify(preferences)
-    })
+    }),
+  claimAchievement: (achievementId: string) =>
+    api<{ claimed: boolean; tier: string; rewardCoins: number; rewardCosmetic?: string }>("/experience/achievements/claim", {
+      method: "POST",
+      body: JSON.stringify({ achievementId })
+    }),
+  listAchievements: () => api<{ achievements: any[] }>("/experience/achievements"),
+  updateBadgeShowcase: (badgeIds: string[]) =>
+    api<{ badgeIds: string[] }>("/experience/badges/showcase", {
+      method: "PUT",
+      body: JSON.stringify({ badgeIds })
+    }),
+  getUserBadges: (userId: string) => api<{ badges: any[] }>(`/experience/badges/showcase/${userId}`),
+  shareAchievement: (achievementId: string) =>
+    api<{ shareText: string; achievement: any }>(`/experience/achievements/${achievementId}/share`, { method: "POST" })
 };
 
 export type CreatorPayoutKyc = {

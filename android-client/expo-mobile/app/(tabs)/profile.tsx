@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Alert, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Crown, Image as ImageIcon, Settings, Sparkles, Star, Trash2, UserPlus, UserCheck, Wallet } from "lucide-react-native";
+import { Crown, Image as ImageIcon, Medal, Settings, Sparkles, Star, Trash2, UserPlus, UserCheck, Wallet } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import { GlassCard } from "@/components/GlassCard";
@@ -12,7 +12,7 @@ import { ErrorState } from "@/components/ErrorState";
 import { EmptyState } from "@/components/EmptyState";
 import { ProfileMedia } from "@/components/ProfileMedia";
 import { Screen, Section } from "@/components/Screen";
-import { uploadProfileMedia, usersApi } from "@/lib/api";
+import { uploadProfileMedia, usersApi, experienceApi } from "@/lib/api";
 import { cosmeticPreviewText, nameStyleColors, profileThemeColors } from "@/lib/cosmetics";
 import { useAuthStore } from "@/store/auth";
 import { colors } from "@/theme/colors";
@@ -322,6 +322,13 @@ export default function Profile() {
           )}
         </Section>
         <Section>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Badges</Text>
+            <Sparkles color={colors.gold} size={16} />
+          </View>
+          <BadgeShowcase userId={profileId} isOwn={isOwn} />
+        </Section>
+        <Section>
           <Text style={styles.sectionTitle}>Hosted rooms</Text>
           {roomsLoading ? (
             <LoadingState message="Loading rooms..." />
@@ -353,6 +360,38 @@ export default function Profile() {
         </View>
       </Modal>
     </Screen>
+  );
+}
+
+const TIER_COLORS: Record<string, string> = {
+  BRONZE: "#CD7F32", SILVER: "#C0C0C0", GOLD: "#FFD700", PLATINUM: "#E5E4E2"
+};
+
+function BadgeShowcase({ userId, isOwn }: { userId: string; isOwn: boolean }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["badges", userId],
+    queryFn: () => experienceApi.getUserBadges(userId),
+    enabled: !!userId,
+    staleTime: 60000
+  });
+
+  if (isLoading) return <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 20 }}><ActivityIndicator color={colors.gold} size="small" /></View>;
+  const badges = data?.badges ?? [];
+  if (!badges.length) return <EmptyState icon="🏅" message={isOwn ? "Claim achievements to showcase badges here" : "No badges yet"} />;
+
+  return (
+    <View style={styles.badgeRow}>
+      {badges.slice(0, 5).map((badge: any) => {
+        const tierColor = TIER_COLORS[badge.tier] ?? colors.gold;
+        return (
+          <View key={badge.id} style={[styles.badgeCard, { borderColor: tierColor }]}>
+            <Medal color={tierColor} size={22} />
+            <Text style={styles.badgeTitle} numberOfLines={1}>{badge.title}</Text>
+            <Text style={[styles.badgeTier, { color: tierColor }]}>{badge.tier}</Text>
+          </View>
+        );
+      })}
+    </View>
   );
 }
 
@@ -471,5 +510,9 @@ const styles = StyleSheet.create({
   viewerCaption: { color: colors.text, marginTop: 16, textAlign: "center", fontWeight: "800", lineHeight: 22 },
   roomCard: { marginBottom: 10 },
   hosted: { color: colors.text, fontWeight: "900", fontSize: 16 },
-  hostedMeta: { color: colors.muted, marginTop: 4 }
+  hostedMeta: { color: colors.muted, marginTop: 4 },
+  badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  badgeCard: { width: "30%", minWidth: 90, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, padding: 10, alignItems: "center", gap: 4 },
+  badgeTitle: { color: colors.text, fontSize: 11, fontWeight: "900", textAlign: "center" },
+  badgeTier: { fontSize: 9, fontWeight: "900" }
 });

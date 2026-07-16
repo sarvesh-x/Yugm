@@ -5,6 +5,7 @@ import { createApp } from "./app.js";
 import { ensureAuthIndexes } from "./services/authIndexes.js";
 import { initFirebase } from "./services/firebase.js";
 import { closeJobWorkers, startJobWorkers } from "./services/jobs.js";
+import { seedAchievements } from "./services/achievementSeeder.js";
 import { ensureOfficialRooms } from "./services/officialRooms.js";
 import { ensureProductionIndexes } from "./services/productionIndexes.js";
 import { resumePkTimers } from "./services/pk.js";
@@ -23,6 +24,7 @@ async function bootstrap() {
   await connectDatabase();
   await ensureAuthIndexes();
   await ensureProductionIndexes();
+  await seedAchievements();
   await connectRedis();
   await ensureOfficialRooms();
   initFirebase();
