@@ -1,4 +1,5 @@
 import { Router } from "express";
+import mongoose from "mongoose";
 import { z } from "zod";
 import { chatMessageSchema, createPollSchema, createRoomSchema, directMessageSchema, inviteSchema, profileCosmetics, reactionSchema, reportBaseSchema, socketEvents, votePollSchema } from "@yugm/shared";
 import { requireAuth, requireNotMuted, type AuthRequest } from "../middleware/auth.js";
@@ -9,6 +10,7 @@ import { Block } from "../models/Block.js";
 import { ChatMessage } from "../models/ChatMessage.js";
 import { DirectMessage } from "../models/DirectMessage.js";
 import { Follow } from "../models/Follow.js";
+import { Friendship } from "../models/Friendship.js";
 import { Poll } from "../models/Poll.js";
 import { PkBattle } from "../models/PkBattle.js";
 import { Room } from "../models/Room.js";
@@ -26,6 +28,8 @@ import { grantXp } from "../services/levels.js";
 import { grantRelationshipXp } from "../services/relationships.js";
 import { createReportWithEvidence } from "../services/moderation.js";
 import { assertUsersCanInteract } from "../services/safety.js";
+import { autoModerate } from "../middleware/autoModerate.js";
+import { applyAutoModeration } from "../services/autoModeration.js";
 
 const patchSchema = z.object({
   title: z.string().min(1).max(100).optional(),
@@ -188,13 +192,22 @@ roomsRouter.get("/recommended", requireAuth, asyncHandler(async (req: AuthReques
   const user = await User.findById(req.user!.id).lean();
   const followingRows = await Follow.find({ followerId: req.user!.id }).lean();
   const followingIds = followingRows.map((row) => row.followingId);
+  const friendRows = await Friendship.find({
+    $or: [{ userId: req.user!.id }, { friendId: req.user!.id }],
+    status: "ACCEPTED"
+  }).lean();
+  const friendIds = friendRows.map((r) =>
+    r.userId.toString() === req.user!.id ? r.friendId.toString() : r.userId.toString()
+  );
   const interests = user?.interests ?? [];
   const languages = user?.languages ?? [];
+
   const rooms = await Room.find({
     status: "LIVE",
     visibility: "PUBLIC",
     $or: [
       { hostId: { $in: followingIds } },
+      { hostId: { $in: friendIds } },
       { category: { $in: interests } },
       { tags: { $in: interests.map((item) => new RegExp(`^${escapeRegex(item)}$`, "i")) } },
       { language: { $in: languages } }
@@ -202,9 +215,25 @@ roomsRouter.get("/recommended", requireAuth, asyncHandler(async (req: AuthReques
   })
     .populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .sort({ participantCount: -1, createdAt: -1 })
-    .limit(20)
+    .limit(30)
     .lean();
-  sendOk(res, { rooms });
+
+  const seen = new Set<string>();
+  const deduped: Array<Record<string, unknown>> = [];
+  for (const room of rooms) {
+    const id = room._id.toString();
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const hints: string[] = [];
+    const hostIdStr = room.hostId?._id?.toString?.() ?? "";
+    if (friendIds.some((f: any) => f.toString() === hostIdStr)) hints.push("Your friend is hosting");
+    if (followingIds.some((f: any) => f.toString() === hostIdStr)) hints.push("You follow the host");
+    if (interests.some((i: string) => i.toLowerCase() === (room.category ?? "").toLowerCase())) hints.push("Matches your interests");
+    if (languages.some((l: string) => l.toLowerCase() === (room.language ?? "").toLowerCase())) hints.push("Matches your language");
+    deduped.push({ ...room, recommendationHints: hints });
+  }
+
+  sendOk(res, { rooms: deduped.slice(0, 20) });
 }));
 
 roomsRouter.get("/leaderboard", asyncHandler(async (_req, res) => {
@@ -261,7 +290,7 @@ roomsRouter.get("/:id", requireAuth, asyncHandler(async (req: AuthRequest, res) 
   const rawRoom = await Room.findById(req.params.id).lean();
   if (!rawRoom) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
   assertPrivateRoomAccess(rawRoom, req.user!.id);
-  const room = await Room.findById(req.params.id).populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle").lean();
+  const room = await Room.findById(req.params.id).populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle").populate("coHostIds", "name username avatar").lean();
   if (!room) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
   const participants = await RoomParticipant.find({ roomId: req.params.id, leftAt: null }).populate("userId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle").lean();
   const speakerRequests = await SpeakerRequest.find({ roomId: req.params.id, status: "PENDING" }).populate("userId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle").lean();
@@ -397,6 +426,50 @@ roomsRouter.post("/:id/remove-user", requireAuth, asyncHandler(async (req: AuthR
   sendOk(res, { removed: true });
 }));
 
+roomsRouter.post("/:id/co-host", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
+  const room = await Room.findById(req.params.id);
+  if (!room) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
+  if (room.hostId.toString() !== req.user!._id.toString()) throw new HttpError(403, "Only host can add co-hosts", ErrorCode.FORBIDDEN);
+
+  const { userId } = req.body;
+  if (!userId) throw new HttpError(400, "userId required", ErrorCode.VALIDATION);
+  if (room.coHostIds.some((id) => id.toString() === userId)) throw new HttpError(409, "User is already a co-host", ErrorCode.CONFLICT);
+  if (room.hostId.toString() === userId) throw new HttpError(400, "Cannot add host as co-host", ErrorCode.VALIDATION);
+
+  room.coHostIds.push(new mongoose.Types.ObjectId(userId));
+  if (!room.isDuet) room.isDuet = true;
+  await room.save();
+
+  await RoomParticipant.updateOne({ roomId: room._id, userId, leftAt: null }, { role: "MODERATOR" });
+
+  for (const pid of room.speakerIds) {
+    if (pid.toString() !== userId) emitUser(pid.toString(), socketEvents.roomParticipantUpdate, { roomId: room.id, action: "co_host_added", userId });
+  }
+
+  sendOk(res, { room });
+}));
+
+roomsRouter.post("/:id/remove-co-host", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
+  const room = await Room.findById(req.params.id);
+  if (!room) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
+  if (room.hostId.toString() !== req.user!._id.toString()) throw new HttpError(403, "Only host can remove co-hosts", ErrorCode.FORBIDDEN);
+
+  const { userId } = req.body;
+  room.coHostIds = room.coHostIds.filter((id) => id.toString() !== userId);
+  if (room.coHostIds.length === 0) room.isDuet = false;
+  await room.save();
+
+  await RoomParticipant.updateOne({ roomId: room._id, userId, leftAt: null }, { role: "SPEAKER" });
+
+  sendOk(res, { room });
+}));
+
+roomsRouter.get("/:id/co-hosts", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
+  const room = await Room.findById(req.params.id).populate("coHostIds", "name username avatar").lean();
+  if (!room) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
+  sendOk(res, { coHosts: room.coHostIds, isDuet: room.isDuet });
+}));
+
 roomsRouter.post("/:id/report", requireAuth, reportLimiter, validateBody(reportBaseSchema.omit({ roomId: true }).extend({ targetUserId: reportBaseSchema.shape.targetUserId })), asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
   const report = await createReportWithEvidence({ ...req.body, roomId: req.params.id }, req.user!.id);
@@ -492,7 +565,7 @@ roomsRouter.get("/:id/missions", requireAuth, asyncHandler(async (req: AuthReque
   sendOk(res, { missions });
 }));
 
-roomsRouter.post("/:id/messages/direct", requireAuth, requireNotMuted, requireNotChatRestricted, validateBody(directMessageSchema), asyncHandler(async (req: AuthRequest, res) => {
+roomsRouter.post("/:id/messages/direct", requireAuth, requireNotMuted, requireNotChatRestricted, validateBody(directMessageSchema), autoModerate("message"), asyncHandler(async (req: AuthRequest, res) => {
   const room = await getRoomOrThrow(req.params.id);
   await requireActiveParticipant(room._id, req.user!.id);
   const receiverId = room.hostId.toString() === req.user!.id ? String(req.body.receiverId || "") : room.hostId.toString();
@@ -522,7 +595,7 @@ roomsRouter.post("/:id/messages/direct", requireAuth, requireNotMuted, requireNo
   sendOk(res, { message, relationship: relationship?.relationship }, 201);
 }));
 
-roomsRouter.post("/:id/messages", requireAuth, requireNotMuted, requireNotChatRestricted, chatLimiter, validateBody(chatMessageSchema), asyncHandler(async (req: AuthRequest, res) => {
+roomsRouter.post("/:id/messages", requireAuth, requireNotMuted, requireNotChatRestricted, chatLimiter, validateBody(chatMessageSchema), autoModerate("message"), asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
   const participant = await RoomParticipant.findOne({ roomId: req.params.id, userId: req.user!.id, leftAt: null }).lean();
   if (!participant) throw new HttpError(403, "You are not a participant in this room", ErrorCode.FORBIDDEN);

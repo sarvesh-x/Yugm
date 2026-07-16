@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Animated, Dimensions, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import * as Haptics from "expo-haptics";
 import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Camera, CameraOff, DoorOpen, Gift, Mic, MicOff, Radio, RefreshCcw, Send, ShieldAlert, Sparkles, Smile, UserPlus, UserX, VolumeX } from "lucide-react-native";
+import { Camera, CameraOff, DoorOpen, Gift, Mic, MicOff, Monitor, MonitorPlay, Radio, RefreshCcw, Send, ShieldAlert, Sparkles, Smile, UserPlus, UserX, Users, Volume, VolumeX } from "lucide-react-native";
 import { reactionTypes, socketEvents } from "@yugm/shared";
 import { ChatComposer } from "@/components/ChatComposer";
 import { ControlButton } from "@/components/ControlButton";
 import { GiftPanel } from "@/components/GiftPanel";
+import { GiftAnimation } from "@/components/GiftAnimation";
+import { WatchPartyPlayer } from "@/components/WatchPartyPlayer";
 import { CosmeticAvatar } from "@/components/CosmeticAvatar";
 import { GlassCard } from "@/components/GlassCard";
 import { LoadingState } from "@/components/LoadingState";
@@ -15,11 +17,19 @@ import { ErrorState } from "@/components/ErrorState";
 import { Screen } from "@/components/Screen";
 import { createLiveKitSession, type MediaSession } from "@/lib/livekit";
 import { getSocket } from "@/lib/socket";
-import { roomsApi, walletApi } from "@/lib/api";
+import { roomsApi, walletApi, watchPartyApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { colors } from "@/theme/colors";
 
 const reactionLabels: Record<string, string> = { heart: "HEART", fire: "FIRE", laugh: "LAUGH", clap: "CLAP", wow: "WOW" };
+const EMOJI_MAP: Record<string, string> = {
+  heart: "❤️",
+  fire: "🔥",
+  laugh: "😂",
+  clap: "👏",
+  wow: "😮",
+};
+const SCREEN_WIDTH = Dimensions.get("window").width;
 
 export default function ActiveRoom() {
   const { id, type } = useLocalSearchParams<{ id: string; type?: "VOICE" | "VIDEO" }>();
@@ -31,7 +41,16 @@ export default function ActiveRoom() {
   const [camera, setCamera] = useState(true);
   const [showGifts, setShowGifts] = useState(false);
   const [giftBurst, setGiftBurst] = useState("");
+  const [giftAnimation, setGiftAnimation] = useState<string | null>(null);
   const [reactionBursts, setReactionBursts] = useState<{ id: string; label: string }[]>([]);
+  const [fallingEmojis, setFallingEmojis] = useState<{ id: string; emoji: string; x: number; anim: Animated.Value }[]>([]);
+  const emojiCounter = useRef(0);
+  const [watchParty, setWatchParty] = useState<any>(null);
+  const [showWatchPartyStart, setShowWatchPartyStart] = useState(false);
+  const [wpTitle, setWpTitle] = useState("");
+  const [wpMediaUrl, setWpMediaUrl] = useState("");
+  const [screenShare, setScreenShare] = useState(false);
+  const [voiceIsolation, setVoiceIsolation] = useState(false);
   const [beauty, setBeauty] = useState(false);
   const [voiceFx, setVoiceFx] = useState(false);
   const [blurBg, setBlurBg] = useState(false);
@@ -49,6 +68,8 @@ export default function ActiveRoom() {
   const room = detail.data?.room;
   const hostId = typeof room?.hostId === "object" ? (room?.hostId as any)?._id ?? (room?.hostId as any)?.id : room?.hostId;
   const isHost = hostId === currentUserId;
+  const isCoHost = room?.coHostIds?.some((id: any) => id === currentUserId) ?? false;
+  const canModerate = isHost || isCoHost;
 
   const join = useMutation({
     mutationFn: () => roomsApi.join(roomId),
@@ -110,6 +131,41 @@ export default function ActiveRoom() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["room", roomId, "polls"] }),
     onError: (err: any) => setGiftBurst(err?.message ?? "Vote failed")
   });
+  const startWatchParty = useMutation({
+    mutationFn: ({ title, mediaUrl }: { title: string; mediaUrl: string }) => watchPartyApi.start(roomId, title, mediaUrl),
+    onSuccess: (data) => {
+      setWatchParty(data.watchParty);
+      setShowWatchPartyStart(false);
+    },
+    onError: (err: any) => setGiftBurst(err?.message ?? "Failed to start watch party")
+  });
+  const fetchWatchParty = useMutation({
+    mutationFn: () => watchPartyApi.get(roomId),
+    onSuccess: (data) => setWatchParty(data.watchParty),
+    onError: () => setGiftBurst("No active watch party")
+  });
+  const syncWatchParty = useMutation({
+    mutationFn: ({ position, isPlaying }: { position: number; isPlaying: boolean }) => watchPartyApi.sync(roomId, position, isPlaying),
+  });
+  const stopWatchParty = useMutation({
+    mutationFn: () => watchPartyApi.stop(roomId),
+    onSuccess: () => { setWatchParty(null); },
+    onError: (err: any) => setGiftBurst(err?.message ?? "Failed to stop watch party")
+  });
+
+  const handleScreenShare = async () => {
+    try {
+      if (screenShare) {
+        await mediaSession.current?.room.localParticipant?.setScreenShareEnabled(false);
+      } else {
+        await mediaSession.current?.room.localParticipant?.setScreenShareEnabled(true);
+      }
+      setScreenShare(!screenShare);
+    } catch (err: any) {
+      setGiftBurst(err?.message ?? "Screen share failed");
+    }
+  };
+
   const inviteFriend = useMutation({
     mutationFn: (userId: string) => roomsApi.invite(roomId, userId),
     onSuccess: () => setGiftBurst("Invite sent"),
@@ -122,10 +178,22 @@ export default function ActiveRoom() {
   });
 
   function pushReaction(label: string) {
-    const id = `${Date.now()}-${Math.random()}`;
-    setReactionBursts((items) => [...items.slice(-5), { id, label }]);
+    const id = `${Date.now()}-${emojiCounter.current++}`;
+    const emoji = EMOJI_MAP[label.toLowerCase()] || "❤️";
+    const x = Math.random() * (SCREEN_WIDTH - 40);
+    const anim = new Animated.Value(-60);
+
+    setFallingEmojis((items) => [...items.slice(-10), { id, emoji, x, anim }]);
+
+    Animated.timing(anim, {
+      toValue: Dimensions.get("window").height,
+      duration: 2500 + Math.random() * 1500,
+      useNativeDriver: true,
+    }).start(() => {
+      setFallingEmojis((items) => items.filter((item) => item.id !== id));
+    });
+
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    setTimeout(() => setReactionBursts((items) => items.filter((item) => item.id !== id)), 1800);
   }
 
   useEffect(() => {
@@ -136,6 +204,7 @@ export default function ActiveRoom() {
     const handleChatMessage = () => queryClient.invalidateQueries({ queryKey: ["room", roomId, "messages"] });
     const handleGiftSend = (payload: any) => {
       setGiftBurst(`${payload?.gift?.name ?? "Gift"} sent`);
+      if (payload?.animation) setGiftAnimation(payload.animation);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       queryClient.invalidateQueries({ queryKey: ["room", roomId, "missions"] });
       queryClient.invalidateQueries({ queryKey: ["room", roomId, "activity"] });
@@ -146,12 +215,24 @@ export default function ActiveRoom() {
     };
     const handleActivity = () => queryClient.invalidateQueries({ queryKey: ["room", roomId, "activity"] });
     const handlePoll = () => queryClient.invalidateQueries({ queryKey: ["room", roomId, "polls"] });
+    const handleWatchPartyStarted = (payload: any) => {
+      setWatchParty(payload?.watchParty ?? null);
+    };
+    const handleWatchPartySync = (payload: any) => {
+      setWatchParty((prev: any) => prev ? { ...prev, position: payload.position, isPlaying: payload.isPlaying } : prev);
+    };
+    const handleWatchPartyStopped = () => {
+      setWatchParty(null);
+    };
     socket.on(socketEvents.roomChatMessage, handleChatMessage);
     socket.on(socketEvents.roomGiftSend, handleGiftSend);
     socket.on(socketEvents.roomReactionSend, handleReaction);
     socket.on(socketEvents.roomActivityNew, handleActivity);
     socket.on(socketEvents.roomPollNew, handlePoll);
     socket.on(socketEvents.roomPollVote, handlePoll);
+    socket.on(socketEvents.watchPartyStarted, handleWatchPartyStarted);
+    socket.on(socketEvents.watchPartySync, handleWatchPartySync);
+    socket.on(socketEvents.watchPartyStopped, handleWatchPartyStopped);
     roomsApi.join(roomId).then(
       () => {
         if (!mounted.current) return;
@@ -177,6 +258,9 @@ export default function ActiveRoom() {
       socket.off(socketEvents.roomActivityNew, handleActivity);
       socket.off(socketEvents.roomPollNew, handlePoll);
       socket.off(socketEvents.roomPollVote, handlePoll);
+      socket.off(socketEvents.watchPartyStarted, handleWatchPartyStarted);
+      socket.off(socketEvents.watchPartySync, handleWatchPartySync);
+      socket.off(socketEvents.watchPartyStopped, handleWatchPartyStopped);
     };
   }, [roomId]);
 
@@ -225,6 +309,31 @@ export default function ActiveRoom() {
               <View style={styles.main}>
                 <HostCard room={room} />
 
+                {watchParty && (
+                  <WatchPartyPlayer
+                    mediaUrl={watchParty.mediaUrl}
+                    title={watchParty.title}
+                    position={watchParty.position}
+                    isPlaying={watchParty.isPlaying}
+                    isHost={isHost}
+                    onSync={(position, isPlaying) => syncWatchParty.mutate({ position, isPlaying })}
+                    onStop={() => stopWatchParty.mutate()}
+                  />
+                )}
+
+                {room?.coHostIds?.length > 0 && (
+                  <View style={styles.coHostRow}>
+                    <Text style={styles.coHostLabel}>Co-Hosts:</Text>
+                    <View style={styles.coHostAvatars}>
+                      {room.coHostIds.map((coHost: any, i: number) => (
+                        <View key={coHost?._id ?? i} style={styles.coHostPill}>
+                          <Text style={styles.coHostName}>{coHost?.name ?? `Co-Host ${i + 1}`}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
                 {isHost && speakerRequests.length > 0 && (
                   <View style={styles.requests}>
                     <Text style={styles.sectionTitle}>Speaker requests</Text>
@@ -261,7 +370,10 @@ export default function ActiveRoom() {
                         <View style={styles.seatAvatar}><Text style={styles.seatInitial}>+</Text></View>
                       )}
                       <Text style={styles.seatName} numberOfLines={1}>{item?.userId?.name ?? "Open seat"}</Text>
-                      {isHost && item && item.userId?._id !== currentUserId && (
+                      {item && room?.coHostIds?.some((id: any) => (id === item.userId?._id || id === item.userId)) && (
+                        <Text style={styles.coHostBadge}>Co-Host</Text>
+                      )}
+                      {canModerate && item && item.userId?._id !== currentUserId && (
                         <View style={styles.seatActions}>
                           <Pressable onPress={() => muteUser.mutate(item.userId._id)}><VolumeX color={colors.danger} size={14} /></Pressable>
                           <Pressable onPress={() => Alert.alert("Remove participant", "Remove this participant from the room? They won't be able to rejoin.", [
@@ -288,6 +400,17 @@ export default function ActiveRoom() {
               </View>
             ) : (
               <View style={styles.videoMain}>
+                {watchParty && (
+                  <WatchPartyPlayer
+                    mediaUrl={watchParty.mediaUrl}
+                    title={watchParty.title}
+                    position={watchParty.position}
+                    isPlaying={watchParty.isPlaying}
+                    isHost={isHost}
+                    onSync={(position, isPlaying) => syncWatchParty.mutate({ position, isPlaying })}
+                    onStop={() => stopWatchParty.mutate()}
+                  />
+                )}
                 <View style={styles.videoGrid}>
                   {[...speakers, ...Array(4).fill(null)].slice(0, 4).map((item: any, index) => (
                     <View key={item?._id ?? index} style={[styles.videoTile, index === 0 && styles.hostTile]}>
@@ -302,7 +425,7 @@ export default function ActiveRoom() {
                         />
                       ) : <CameraOff color={colors.muted} size={28} />}
                       <Text style={styles.videoName}>{item?.userId?.name ?? "Audience mode"}</Text>
-                      {isHost && item && item.userId?._id !== currentUserId && (
+                      {canModerate && item && item.userId?._id !== currentUserId && (
                         <View style={styles.videoActions}>
                           <Pressable onPress={() => muteUser.mutate(item.userId._id)}><VolumeX color={colors.danger} size={14} /></Pressable>
                           <Pressable onPress={() => Alert.alert("Remove participant", "Remove this participant from the room? They won't be able to rejoin.", [
@@ -333,6 +456,49 @@ export default function ActiveRoom() {
           renderItem={({ item }) => <Text style={styles.chatLine}><Text style={styles.chatName}>{item.senderId?.name ?? "User"}: </Text>{item.message}</Text>}
         />
         <ChatComposer onSend={(message) => sendMessage.mutate(message)} />
+        {showWatchPartyStart && (
+          <View style={styles.wpOverlay}>
+            <Text style={styles.wpTitle}>Start Watch Party</Text>
+            <View style={styles.wpInputs}>
+              <View style={styles.wpField}>
+                <Text style={styles.wpLabel}>Title</Text>
+                <View style={{ flex: 1, backgroundColor: colors.panelStrong, borderRadius: 6, paddingHorizontal: 10, height: 36, justifyContent: "center" }}>
+                  <TextInput
+                    style={{ color: colors.text, fontWeight: "800", fontSize: 14 }}
+                    placeholder="Movie / show name"
+                    placeholderTextColor={colors.muted}
+                    value={wpTitle}
+                    onChangeText={setWpTitle}
+                  />
+                </View>
+              </View>
+              <View style={styles.wpField}>
+                <Text style={styles.wpLabel}>Media URL</Text>
+                <View style={{ flex: 1, backgroundColor: colors.panelStrong, borderRadius: 6, paddingHorizontal: 10, height: 36, justifyContent: "center" }}>
+                  <TextInput
+                    style={{ color: colors.text, fontWeight: "800", fontSize: 14 }}
+                    placeholder="https://example.com/video.mp4"
+                    placeholderTextColor={colors.muted}
+                    value={wpMediaUrl}
+                    onChangeText={setWpMediaUrl}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
+              </View>
+            </View>
+            <View style={styles.wpActions}>
+              <Pressable style={styles.wpCancelBtn} onPress={() => setShowWatchPartyStart(false)}>
+                <Text style={styles.wpBtnText}>Cancel</Text>
+              </Pressable>
+              <Pressable style={[styles.wpStartBtn, startWatchParty.isPending && styles.disabled]} onPress={() => {
+                if (wpTitle.trim() && wpMediaUrl.trim()) startWatchParty.mutate({ title: wpTitle.trim(), mediaUrl: wpMediaUrl.trim() });
+              }} disabled={startWatchParty.isPending}>
+                <Text style={[styles.wpBtnText, { color: colors.ink }]}>{startWatchParty.isPending ? "Starting..." : "Start"}</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
         {showGifts && <GiftPanel onSend={async (gift) => {
           if (hostId) {
             try {
@@ -351,20 +517,47 @@ export default function ActiveRoom() {
             setMic(next);
             mediaSession.current?.setMicrophoneEnabled(next).catch((err) => setGiftBurst(err?.message ?? "Mic update failed"));
           }} />
+          <ControlButton icon={<Volume color={colors.text} size={20} />} label="Noise" active={voiceIsolation} onPress={() => {
+            const next = !voiceIsolation;
+            setVoiceIsolation(next);
+            mediaSession.current?.setVoiceIsolationEnabled(next).catch(() => {});
+          }} />
           {roomType === "VIDEO" && <ControlButton icon={camera ? <Camera color={colors.text} size={20} /> : <CameraOff color={colors.text} size={20} />} label="Cam" active={camera} onPress={() => {
             const next = !camera;
             setCamera(next);
             mediaSession.current?.setCameraEnabled(next).catch((err) => setGiftBurst(err?.message ?? "Camera update failed"));
           }} />}
           {roomType === "VIDEO" && <ControlButton icon={<RefreshCcw color={colors.text} size={20} />} label="Flip" onPress={() => mediaSession.current?.flipCamera()} />}
+          {roomType === "VIDEO" && <ControlButton icon={<Monitor color={colors.text} size={20} />} label="Share" active={screenShare} onPress={handleScreenShare} />}
           <ControlButton icon={<UserPlus color={colors.text} size={20} />} label="Speak" onPress={() => requestSpeaker.mutate()} />
           <ControlButton icon={<Send color={colors.text} size={20} />} label="Invite" onPress={() => {
             const candidate = audience.find((item: any) => item.userId?._id && item.userId._id !== currentUserId)?.userId?._id;
             if (candidate) inviteFriend.mutate(candidate);
             else setGiftBurst("Join with friends, then invite them back in");
           }} />
+          {isHost && <ControlButton icon={<Users color={colors.text} size={20} />} label="Co-Host" onPress={() => {
+            const speaker = speakers.find((s: any) => s.userId?._id && s.userId._id !== currentUserId && !room?.coHostIds?.some((id: any) => id === s.userId._id || id._id === s.userId._id));
+            if (speaker) {
+              Alert.alert("Add Co-Host", `Make ${speaker.userId.name ?? "this speaker"} a co-host?`, [
+                { text: "Cancel", style: "cancel" },
+                { text: "Add", onPress: () => {
+                  roomsApi.addCoHost(roomId, speaker.userId._id).then(() => {
+                    queryClient.invalidateQueries({ queryKey: ["room", roomId] });
+                    setGiftBurst(`${speaker.userId.name} is now co-host`);
+                  }).catch((err: any) => setGiftBurst(err?.message ?? "Failed to add co-host"));
+                }}
+              ]);
+            } else {
+              setGiftBurst("No speaker available to promote");
+            }
+          }} />}
           <ControlButton icon={<Gift color={colors.text} size={20} />} label="Gift" onPress={() => setShowGifts((value) => !value)} />
-          <ControlButton icon={<Smile color={colors.text} size={20} />} label="React" onPress={() => react.mutate(reactionTypes[Math.floor(Math.random() * reactionTypes.length)] as any)} />
+           <ControlButton icon={<MonitorPlay color={colors.text} size={20} />} label="Watch" onPress={() => {
+             if (isHost && !watchParty) setShowWatchPartyStart(true);
+             else if (!watchParty) fetchWatchParty.mutate();
+             else setWatchParty(null);
+           }} />
+           <ControlButton icon={<Smile color={colors.text} size={20} />} label="React" onPress={() => react.mutate(reactionTypes[Math.floor(Math.random() * reactionTypes.length)] as any)} />
           {roomType === "VIDEO" && <ControlButton icon={<Sparkles color={colors.text} size={20} />} label="FX" active={beauty || voiceFx || blurBg} onPress={() => { setBeauty((v) => !v); setVoiceFx((v) => !v); setBlurBg((v) => !v); setGiftBurst("FX preference saved for this room"); }} />}
           <ControlButton icon={<Send color={colors.text} size={20} />} label="DM" onPress={() => {
             const receiverId = isHost ? audience.find((item: any) => item.userId?._id && item.userId._id !== currentUserId)?.userId?._id : undefined;
@@ -373,8 +566,16 @@ export default function ActiveRoom() {
           }} />
           <ControlButton icon={<ShieldAlert color={colors.text} size={20} />} label="Report" danger onPress={handleReport} />
         </View>
-        <View pointerEvents="none" style={styles.reactionLayer}>
-          {reactionBursts.map((item, index) => <Text key={item.id} style={[styles.reactionBurst, { bottom: 18 + index * 36, right: 16 + index * 8 }]}>{item.label}</Text>)}
+        {giftAnimation && <GiftAnimation giftName={giftAnimation} onComplete={() => setGiftAnimation(null)} />}
+        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+          {fallingEmojis.map((item) => (
+            <Animated.Text
+              key={item.id}
+              style={[styles.fallingEmoji, { left: item.x, transform: [{ translateY: item.anim }] }]}
+            >
+              {item.emoji}
+            </Animated.Text>
+          ))}
         </View>
       </KeyboardAvoidingView>
     </Screen>
@@ -508,10 +709,39 @@ const styles = StyleSheet.create({
   activityFeed: { borderRadius: 8, borderWidth: 1, borderColor: colors.line, backgroundColor: "rgba(255,255,255,0.05)", padding: 12, marginBottom: 12 },
   activityTitle: { color: colors.text, fontWeight: "900", marginBottom: 6 },
   activityLine: { color: colors.muted, paddingVertical: 2 },
-  reactionLayer: { position: "absolute", top: 0, left: 0, right: 0, bottom: 84 },
-  reactionBurst: { position: "absolute", color: colors.gold, backgroundColor: "rgba(5,7,19,0.86)", borderColor: colors.gold, borderWidth: 1, overflow: "hidden", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, fontWeight: "900" },
+  fallingEmoji: {
+    position: "absolute",
+    fontSize: 32,
+    top: 0,
+  },
+  wpOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    top: 0,
+    backgroundColor: colors.scrim,
+    zIndex: 100,
+    padding: 20,
+    justifyContent: "center",
+  },
+  wpTitle: { color: colors.text, fontSize: 20, fontWeight: "900", marginBottom: 16, textAlign: "center" },
+  wpInputs: { gap: 10, marginBottom: 16 },
+  wpField: { flexDirection: "row", alignItems: "center", gap: 8 },
+  wpLabel: { color: colors.muted, fontWeight: "800", fontSize: 13, width: 70 },
+  wpActions: { flexDirection: "row", gap: 10 },
+  wpCancelBtn: { flex: 1, height: 40, borderRadius: 6, backgroundColor: colors.panelStrong, alignItems: "center", justifyContent: "center" },
+  wpStartBtn: { flex: 1, height: 40, borderRadius: 6, backgroundColor: colors.gold, alignItems: "center", justifyContent: "center" },
+  wpBtnText: { color: colors.text, fontWeight: "900", fontSize: 14 },
+  disabled: { opacity: 0.6 },
   chat: { maxHeight: 150, borderTopWidth: 1, borderColor: colors.line, paddingHorizontal: 14 },
   chatLine: { color: colors.text, paddingVertical: 5 },
   chatName: { color: colors.gold, fontWeight: "900" },
-  controls: { flexDirection: "row", flexWrap: "wrap", gap: 8, padding: 10, borderTopWidth: 1, borderColor: colors.line }
+  controls: { flexDirection: "row", flexWrap: "wrap", gap: 8, padding: 10, borderTopWidth: 1, borderColor: colors.line },
+  coHostRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 18, padding: 10, borderRadius: 8, backgroundColor: "rgba(39,211,255,0.08)", borderWidth: 1, borderColor: colors.cyan },
+  coHostLabel: { color: colors.cyan, fontWeight: "900", fontSize: 13 },
+  coHostAvatars: { flexDirection: "row", flexWrap: "wrap", gap: 6, flex: 1 },
+  coHostPill: { borderRadius: 6, backgroundColor: "rgba(39,211,255,0.15)", borderWidth: 1, borderColor: colors.cyan, paddingHorizontal: 10, paddingVertical: 4 },
+  coHostName: { color: colors.cyan, fontWeight: "800", fontSize: 12 },
+  coHostBadge: { color: colors.cyan, fontSize: 9, fontWeight: "900", marginTop: 2, backgroundColor: "rgba(39,211,255,0.15)", borderRadius: 4, paddingHorizontal: 6, paddingVertical: 1, overflow: "hidden" }
 });

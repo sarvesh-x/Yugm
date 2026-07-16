@@ -191,3 +191,21 @@ uploadRouter.post("/upload/story", requireAuth, profileMediaUpload.single("media
   const { url, storage } = await persistUploadedFile(file, "stories");
   sendOk(res, { url, type, storage });
 }));
+
+const voiceNoteUpload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [".mp3", ".m4a", ".aac", ".wav", ".webm", ".ogg"];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!allowed.includes(ext)) return cb(new Error("Only audio files are allowed"));
+    if (!file.mimetype.startsWith("audio/") && file.mimetype !== "video/webm") return cb(new Error("Only audio uploads are allowed"));
+    cb(null, true);
+  },
+});
+
+uploadRouter.post("/upload/voice-note", requireAuth, voiceNoteUpload.single("media"), asyncHandler(async (req: AuthRequest, res) => {
+  const file = req.file!;
+  const { url, storage } = await persistUploadedFile(file, "voice-notes");
+  sendOk(res, { url, type: "AUDIO", storage });
+}));

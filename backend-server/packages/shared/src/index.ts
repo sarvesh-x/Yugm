@@ -65,12 +65,19 @@ export const socketEvents = {
   directTypingStop: "direct:typing:stop",
   directTypingUpdate: "direct:typing:update",
   directMessageNew: "direct:message:new",
+  groupMessageNew: "group:message:new",
+  groupCreated: "group:created",
+  groupParticipantAdd: "group:participant:add",
+  groupParticipantRemove: "group:participant:remove",
   clanTypingStart: "clan:typing:start",
   clanTypingStop: "clan:typing:stop",
   clanTypingUpdate: "clan:typing:update",
   clanMessageNew: "clan:message:new",
   clanChatCleaned: "clan:chat:cleaned",
-  notificationNew: "notification:new"
+  notificationNew: "notification:new",
+  watchPartyStarted: "room:watchparty:started",
+  watchPartyStopped: "room:watchparty:stopped",
+  watchPartySync: "room:watchparty:sync"
 } as const;
 
 export const giftCatalogSeed = [
@@ -298,9 +305,11 @@ export const walletSourceLabels = {
   COSMETIC_GIFT_SENT: "Cosmetic gift sent",
   COSMETIC_GIFT_RECEIVED: "Cosmetic gift received",
   LEVEL_REWARD: "Level reward",
+  STREAK_BONUS: "Streak bonus",
   ADMIN_ADJUSTMENT: "Admin adjustment",
   RAZORPAY_PURCHASE: "Razorpay recharge",
-  GOOGLE_PLAY_PURCHASE: "Google Play recharge"
+  GOOGLE_PLAY_PURCHASE: "Google Play recharge",
+  SUBSCRIPTION: "Creator subscription"
 } as const;
 
 export const vipPlans = [
@@ -475,6 +484,18 @@ export const votePollSchema = z.object({
 
 export const inviteSchema = z.object({
   userId: z.string().regex(objectIdPattern, "Invalid userId format")
+});
+
+export const createGroupChatSchema = z.object({
+  name: z.string().min(2).max(60),
+  participantIds: z.array(z.string().regex(/^[0-9a-fA-F]{24}$/)).min(2).max(32)
+});
+
+export const groupMessageSchema = z.object({
+  message: z.string().min(1).max(500),
+  mediaUrl: z.string().optional(),
+  mediaType: z.enum(["IMAGE", "VIDEO", "AUDIO"]).optional(),
+  duration: z.number().optional()
 });
 
 export const directMessageSchema = z.object({

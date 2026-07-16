@@ -252,6 +252,36 @@ gamesRouter.post("/challenges", chatLimiter, validateBody(challengeSchema), asyn
   sendOk(res, { challenge }, 201);
 }));
 
+gamesRouter.post("/challenges/:challengeId/accept", asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.challengeId)) throw new HttpError(400, "Invalid challenge ID", ErrorCode.VALIDATION);
+  const challenge = await MiniGameChallenge.findById(req.params.challengeId);
+  if (!challenge) throw new HttpError(404, "Challenge not found", ErrorCode.NOT_FOUND);
+  if (!challenge.targetUserId || challenge.targetUserId.toString() !== req.user!.id) throw new HttpError(403, "This challenge is not for you", ErrorCode.FORBIDDEN);
+
+  const text = `Challenge accepted! I beat your score of ${challenge.score} in ${gameTitle(challenge.gameId)}.`;
+  await DirectMessage.create({
+    senderId: req.user!.id,
+    receiverId: challenge.challengerId,
+    message: text
+  });
+  const gameId = challenge.gameId;
+  const score = challenge.score;
+  const challengerId = challenge.challengerId.toString();
+  await MiniGameChallenge.findByIdAndDelete(req.params.challengeId);
+
+  sendOk(res, { accepted: true, gameId, score, challengerId });
+}));
+
+gamesRouter.post("/challenges/:challengeId/decline", asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.challengeId)) throw new HttpError(400, "Invalid challenge ID", ErrorCode.VALIDATION);
+  const challenge = await MiniGameChallenge.findById(req.params.challengeId);
+  if (!challenge) throw new HttpError(404, "Challenge not found", ErrorCode.NOT_FOUND);
+  if (!challenge.targetUserId || challenge.targetUserId.toString() !== req.user!.id) throw new HttpError(403, "This challenge is not for you", ErrorCode.FORBIDDEN);
+
+  await MiniGameChallenge.findByIdAndDelete(req.params.challengeId);
+  sendOk(res, { declined: true });
+}));
+
 gamesRouter.post("/scores/:scoreId/share", chatLimiter, validateBody(shareScoreSchema), asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.scoreId)) throw new HttpError(400, "Invalid score ID", ErrorCode.VALIDATION);
   await assertCanMessage(req.user!.id, req.body.targetUserId);

@@ -11,6 +11,7 @@ export interface MediaSession {
   room: Room;
   setMicrophoneEnabled: (enabled: boolean) => Promise<void>;
   setCameraEnabled: (enabled: boolean) => Promise<void>;
+  setVoiceIsolationEnabled: (enabled: boolean) => Promise<void>;
   flipCamera: () => void;
   disconnect: () => void;
 }
@@ -20,6 +21,14 @@ export async function createLiveKitSession(roomId: string): Promise<MediaSession
   const url = session.url?.includes("localhost") ? livekitUrl : session.url;
   const room = new Room();
   await room.connect(url, session.token);
+  const setVoiceIsolationEnabled = async (enabled: boolean) => {
+    try {
+      if ((room.localParticipant as any)?.setVoiceIsolationEnabled) {
+        await (room.localParticipant as any).setVoiceIsolationEnabled(enabled);
+      }
+    } catch {}
+  };
+
   return {
     ...session,
     url,
@@ -30,6 +39,7 @@ export async function createLiveKitSession(roomId: string): Promise<MediaSession
     setCameraEnabled: async (enabled: boolean) => {
       await room.localParticipant.setCameraEnabled(enabled);
     },
+    setVoiceIsolationEnabled,
     flipCamera: () => {
       for (const publication of room.localParticipant.videoTrackPublications.values()) {
         const mediaTrack = (publication.track as any)?.mediaStreamTrack;

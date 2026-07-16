@@ -25,7 +25,7 @@ function assertS3Ready() {
   }
 }
 
-export async function persistUploadedFile(file: Express.Multer.File, folder: "avatars" | "covers" | "profile-media" | "trust-verification" | "stories") {
+export async function persistUploadedFile(file: Express.Multer.File, folder: "avatars" | "covers" | "profile-media" | "trust-verification" | "stories" | "voice-notes") {
   if (env.STORAGE_DRIVER !== "s3") {
     return {
       url: folder === "trust-verification" ? `/api/trust-verification/media/${file.filename}` : `/uploads/${file.filename}`,

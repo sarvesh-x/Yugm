@@ -142,7 +142,12 @@ export const roomsApi = {
   removeUser: (roomId: string, userId: string) => api<{ success: boolean }>(`/rooms/${roomId}/remove-user`, { method: "POST", body: JSON.stringify({ userId }) }),
   reportUser: (roomId: string, targetUserId: string, reason: string) => api<{ report: any }>(`/rooms/${roomId}/report`, { method: "POST", body: JSON.stringify({ targetUserId, reason, roomId }) }),
   searchRooms: (query: string) => api<{ rooms: any[] }>(`/rooms/search?q=${encodeURIComponent(query)}`),
-  searchUsers: (query: string) => api<{ users: any[] }>(`/users/search?q=${encodeURIComponent(query)}`)
+  searchUsers: (query: string) => api<{ users: any[] }>(`/users/search?q=${encodeURIComponent(query)}`),
+  coHosts: (roomId: string) => api<{ coHosts: any[]; isDuet: boolean }>(`/rooms/${roomId}/co-hosts`),
+  addCoHost: (roomId: string, userId: string) =>
+    api<{ room: any }>(`/rooms/${roomId}/co-host`, { method: "POST", body: JSON.stringify({ userId }) }),
+  removeCoHost: (roomId: string, userId: string) =>
+    api<{ room: any }>(`/rooms/${roomId}/remove-co-host`, { method: "POST", body: JSON.stringify({ userId }) }),
 };
 
 export const walletApi = {
@@ -184,6 +189,15 @@ export const walletApi = {
   })
 };
 
+export const wishlistApi = {
+  myItems: () => api<{ items: any[] }>("/wishlist/me"),
+  userItems: (userId: string) => api<{ items: any[] }>(`/wishlist/${userId}`),
+  add: (payload: { giftId: string; message?: string; isPublic?: boolean }) =>
+    api<{ item: any }>("/wishlist", { method: "POST", body: JSON.stringify(payload) }),
+  remove: (itemId: string) => api<{ deleted: boolean }>(`/wishlist/${itemId}`, { method: "DELETE" }),
+  sendGift: (itemId: string) => api<{ sent: boolean; giftName: string }>(`/wishlist/${itemId}/send`, { method: "POST" }),
+};
+
 export const mediaApi = {
   token: (roomId: string) => api<{ token: string; url: string; identity: string; roomName: string; role: string }>("/livekit/token", {
     method: "POST",
@@ -192,11 +206,15 @@ export const mediaApi = {
 };
 
 export const notificationsApi = {
-  list: () => api<{ notifications: any[] }>("/notifications"),
+  list: () => api<{ notifications: any[]; unreadCount: number }>("/notifications"),
   registerDeviceToken: (token: string, platform: "android" | "ios" | "web") =>
     api<{ token: any }>("/notifications/device-token", { method: "POST", body: JSON.stringify({ token, platform }) }),
   markRead: (id: string) => api<{ notification: any }>(`/notifications/${id}/read`, { method: "PATCH" }),
   markAllRead: () => api<{ success: boolean }>("/notifications/read-all", { method: "POST" })
+};
+
+export const scheduledRoomsApi = {
+  list: () => api<{ rooms: any[] }>("/rooms/scheduled"),
 };
 
 export const experienceApi = {
@@ -349,6 +367,37 @@ export async function uploadStoryMedia(file: { uri: string; name?: string; type?
   }
 }
 
+export async function uploadVoiceNote(file: { uri: string; name?: string; type?: string }) {
+  const token = useAuthStore.getState().token;
+  const formData = new FormData();
+  formData.append("media", {
+    uri: file.uri,
+    name: file.name ?? `voice-${Date.now()}.m4a`,
+    type: file.type ?? "audio/m4a"
+  } as any);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 45_000);
+  try {
+    const response = await fetch(`${apiBaseUrl}/upload/voice-note`, {
+      method: "POST",
+      signal: controller.signal,
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: formData
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok || json.ok === false) throw new ApiError(json.error?.message ?? "Upload failed", response.status);
+    const data = json.data as { url: string };
+    return { ...data, url: absoluteMediaUrl(data.url) };
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new ApiError("The upload took too long. Try a smaller file or a stronger connection.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export const storiesApi = {
   create: (payload: { mediaUrl: string; mediaType: "IMAGE" | "VIDEO"; caption?: string; backgroundColor?: string }) =>
     api<{ story: any }>("/stories", { method: "POST", body: JSON.stringify(payload) }),
@@ -359,6 +408,14 @@ export const storiesApi = {
   hide: (id: string) => api<{ success: boolean }>(`/stories/${id}/hide`, { method: "POST" }),
   delete: (id: string) => api<{ success: boolean }>(`/stories/${id}`, { method: "DELETE" }),
   viewers: (id: string) => api<{ viewers: any[] }>(`/stories/${id}/views`),
+  comments: (storyId: string, skip?: number, limit?: number) =>
+    api<{ comments: any[] }>(`/stories/${storyId}/comments?skip=${skip || 0}&limit=${limit || 20}`),
+  addComment: (storyId: string, text: string) =>
+    api<{ comment: any }>(`/stories/${storyId}/comments`, { method: "POST", body: JSON.stringify({ text }) }),
+  replyToComment: (storyId: string, commentId: string, text: string) =>
+    api<{ reply: any }>(`/stories/${storyId}/comments/${commentId}/reply`, { method: "POST", body: JSON.stringify({ text }) }),
+  deleteComment: (commentId: string) =>
+    api<{ deleted: boolean }>(`/comments/${commentId}`, { method: "DELETE" }),
 };
 
 export const gamesApi = {
@@ -371,13 +428,26 @@ export const gamesApi = {
   challenge: (payload: { gameId: string; score: number; scoreId?: string; targetUserId?: string; clanId?: string; message?: string }) =>
     api<{ challenge: any }>("/games/challenges", { method: "POST", body: JSON.stringify(payload) }),
   shareScore: (scoreId: string, targetUserId: string) =>
-    api<{ message: any }>(`/games/scores/${scoreId}/share`, { method: "POST", body: JSON.stringify({ targetUserId }) })
+    api<{ message: any }>(`/games/scores/${scoreId}/share`, { method: "POST", body: JSON.stringify({ targetUserId }) }),
+  acceptChallenge: (challengeId: string) =>
+    api<{ accepted: boolean; gameId: string; score: number; challengerId: string }>(`/games/challenges/${challengeId}/accept`, { method: "POST" }),
+  declineChallenge: (challengeId: string) =>
+    api<{ declined: boolean }>(`/games/challenges/${challengeId}/decline`, { method: "POST" }),
+};
+
+export const watchPartyApi = {
+  start: (roomId: string, title: string, mediaUrl: string) =>
+    api<{ watchParty: any }>(`/rooms/${roomId}/watch-party`, { method: "POST", body: JSON.stringify({ title, mediaUrl }) }),
+  get: (roomId: string) => api<{ watchParty: any }>(`/rooms/${roomId}/watch-party`),
+  sync: (roomId: string, position: number, isPlaying: boolean) =>
+    api<{ watchParty: any }>(`/rooms/${roomId}/watch-party/sync`, { method: "PATCH", body: JSON.stringify({ position, isPlaying }) }),
+  stop: (roomId: string) => api<{ deleted: boolean }>(`/rooms/${roomId}/watch-party`, { method: "DELETE" }),
 };
 
 export const usersApi = {
   get: (userId: string) => api<{ user: any }>(`/users/${userId}`),
   level: () => api<{ level: any }>("/users/me/level"),
-  checkIn: () => api<{ alreadyClaimed: boolean; xpAwarded?: number; levelUpReward?: number; levelsGained?: number[]; level: any; walletBalance?: number; balance?: number }>("/users/me/check-in", { method: "POST" }),
+  checkIn: () => api<{ alreadyClaimed: boolean; xpAwarded?: number; levelUpReward?: number; levelsGained?: number[]; level: any; walletBalance?: number; balance?: number; streak?: number; streakBonus?: number; nextMilestone?: number | null }>("/users/me/check-in", { method: "POST" }),
   closeFriends: () => api<{ users: any[] }>("/users/me/close-friends"),
   addProfileMedia: (payload: { url: string; type?: "IMAGE" | "VIDEO"; caption?: string }) =>
     api<{ user: any; media: any }>("/users/me/profile-media", { method: "POST", body: JSON.stringify(payload) }),
@@ -385,6 +455,7 @@ export const usersApi = {
     api<{ user: any }>(`/users/me/profile-media/${mediaId}`, { method: "DELETE" }),
   sendFeedback: (payload: { category?: string; subject: string; message: string }) =>
     api<{ ticket: any; message: any }>("/users/me/feedback", { method: "POST", body: JSON.stringify(payload) }),
+  getUserStats: (userId: string) => api<{ roomsHosted: number; roomsLive: number }>(`/users/${userId}/stats`),
   getUserRooms: (userId: string) => api<{ rooms: any[] }>(`/users/${userId}/rooms`),
   getFollowers: (userId: string) => api<{ users: any[] }>(`/users/${userId}/followers`),
   getFollowing: (userId: string) => api<{ users: any[] }>(`/users/${userId}/following`),
@@ -392,7 +463,11 @@ export const usersApi = {
   suggestedHosts: () => api<{ users: any[] }>("/users/hosts/suggested"),
   messages: () => api<{ messages: any[] }>("/users/messages"),
   conversation: (userId: string) => api<{ messages: any[]; relationship?: any }>(`/users/messages/${userId}`),
-  sendMessage: (userId: string, message: string) => api<{ message: any; relationship?: any }>(`/users/messages/${userId}`, { method: "POST", body: JSON.stringify({ message }) }),
+  sendMessage: (userId: string, message: string, options?: { mediaUrl?: string; mediaType?: string; duration?: number }) =>
+    api<{ message: any; relationship?: any }>(`/users/messages/${userId}`, {
+      method: "POST",
+      body: JSON.stringify({ message, ...options })
+    }),
   reactToMessage: (userId: string, messageId: string, type: "heart" | "fire" | "laugh" | "clap" | "wow") =>
     api<{ message: any }>(`/users/messages/${userId}/${messageId}/reactions`, { method: "POST", body: JSON.stringify({ type }) }),
   startPrivateCall: (userId: string, type: "VOICE" | "VIDEO") =>
@@ -439,6 +514,68 @@ export const referralsApi = {
   getCode: () => api<{ code: string }>("/referrals/code"),
   claim: (payload: { code: string }) => api<{ reward: any }>("/referrals/claim", { method: "POST", body: JSON.stringify(payload) }),
   stats: () => api<{ totalReferred: number; coinsEarned: number }>("/referrals/stats")
+};
+
+export const giftLeaderboardApi = {
+  get: (period?: string, skip?: number, limit?: number) =>
+    api<{ topSenders: any[]; topReceivers: any[]; period: string }>(
+      `/gift-leaderboard?period=${period || "all"}&skip=${skip || 0}&limit=${limit || 20}`
+    ),
+};
+
+export const groupsApi = {
+  list: () => api<{ groups: any[] }>("/groups"),
+  detail: (id: string) => api<{ group: any; messageCount: number }>(`/groups/${id}`),
+  create: (payload: { name: string; participantIds: string[] }) =>
+    api<{ group: any }>("/groups", { method: "POST", body: JSON.stringify(payload) }),
+  messages: (groupId: string, skip?: number, limit?: number) =>
+    api<{ messages: any[] }>(`/groups/${groupId}/messages?skip=${skip || 0}&limit=${limit || 30}`),
+  sendMessage: (groupId: string, message: string) =>
+    api<{ message: any }>(`/groups/${groupId}/message`, { method: "POST", body: JSON.stringify({ message }) }),
+  addParticipants: (groupId: string, participantIds: string[]) =>
+    api<{ group: any }>(`/groups/${groupId}/add`, { method: "POST", body: JSON.stringify({ participantIds }) }),
+  removeParticipant: (groupId: string, userId: string) =>
+    api<{ group: any }>(`/groups/${groupId}/remove`, { method: "POST", body: JSON.stringify({ userId }) }),
+  leave: (groupId: string) => api<{ left: boolean }>(`/groups/${groupId}/leave`, { method: "POST" }),
+};
+
+export const friendsApi = {
+  list: () => api<{ friends: any[] }>("/friends"),
+  requests: () => api<{ requests: any[] }>("/friends/requests"),
+  sent: () => api<{ sent: any[] }>("/friends/sent"),
+  request: (userId: string) => api<{ friendship: any }>(`/friends/request/${userId}`, { method: "POST" }),
+  accept: (userId: string) => api<{ friendship: any }>(`/friends/accept/${userId}`, { method: "POST" }),
+  decline: (userId: string) => api<{ declined: boolean }>(`/friends/decline/${userId}`, { method: "POST" }),
+  unfriend: (userId: string) => api<{ unfriended: boolean }>(`/friends/unfriend/${userId}`, { method: "POST" }),
+  status: (userId: string) => api<{ status: "NONE" | "PENDING" | "ACCEPTED" | "SENT" | "BLOCKED"; friendship?: any }>(`/friends/status/${userId}`),
+  mutual: (userId: string) => api<{ mutualCount: number; mutual: any[] }>(`/friends/mutual/${userId}`),
+  count: (userId: string) => api<{ count: number }>(`/friends/count/${userId}`),
+};
+
+export const feedApi = {
+  get: () => api<{ feed: any[] }>("/feed"),
+};
+
+export const subscriptionsApi = {
+  subscribe: (creatorId: string, plan: "MONTHLY" | "YEARLY") =>
+    api<{ subscription: any }>(`/subscriptions/${creatorId}`, { method: "POST", body: JSON.stringify({ plan }) }),
+  cancel: (creatorId: string) => api<{ cancelled: boolean }>(`/subscriptions/${creatorId}`, { method: "DELETE" }),
+  mySubscriptions: () => api<{ subscriptions: any[] }>("/subscriptions"),
+  mySubscribers: () => api<{ subscribers: any[] }>("/subscriptions/subscribers"),
+  check: (creatorId: string) => api<{ subscribed: boolean; subscription?: any }>(`/subscriptions/check/${creatorId}`),
+};
+
+export const highlightsApi = {
+  create: (payload: { title: string; storyIds: string[] }) =>
+    api<{ highlight: any }>("/highlights", { method: "POST", body: JSON.stringify(payload) }),
+  getUserHighlights: (userId: string) => api<{ highlights: any[] }>(`/highlights/${userId}`),
+  update: (id: string, payload: { title?: string; storyIds?: string[] }) =>
+    api<{ highlight: any }>(`/highlights/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  delete: (id: string) => api<{ deleted: boolean }>(`/highlights/${id}`, { method: "DELETE" }),
+  addStories: (id: string, storyIds: string[]) =>
+    api<{ highlight: any }>(`/highlights/${id}/stories`, { method: "POST", body: JSON.stringify({ storyIds }) }),
+  removeStory: (id: string, storyId: string) =>
+    api<{ highlight: any }>(`/highlights/${id}/stories/${storyId}`, { method: "DELETE" }),
 };
 
 export const datingApi = {

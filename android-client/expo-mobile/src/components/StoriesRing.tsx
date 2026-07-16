@@ -20,6 +20,7 @@ export interface Story {
   caption?: string;
   viewCount: number;
   likeCount: number;
+  replyCount: number;
   isViewed?: boolean;
   isLiked?: boolean;
 }

@@ -2,12 +2,13 @@ import { useState, useCallback } from "react";
 import { Alert, Image, Modal, StyleSheet, Text, View, Pressable, ScrollView, ActivityIndicator } from "react-native";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Crown, MessageCircle, UserPlus, UserMinus, ShieldAlert, Ban, Sparkles, MapPin, Radio, Star } from "lucide-react-native";
-import { usersApi } from "@/lib/api";
+import { ArrowLeft, Crown, MessageCircle, UserPlus, UserMinus, ShieldAlert, Ban, Sparkles, MapPin, Radio, Star, Users, Home, UserCheck, UserX, Clock } from "lucide-react-native";
+import { usersApi, friendsApi } from "@/lib/api";
 import { Screen, Section } from "@/components/Screen";
 import { ProfileMedia } from "@/components/ProfileMedia";
 import { CosmeticAvatar } from "@/components/CosmeticAvatar";
 import { useAuthStore } from "@/store/auth";
+import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { cosmeticPreviewText, nameStyleColors, profileThemeColors } from "@/lib/cosmetics";
 import { colors, gradients } from "@/theme/colors";
 import { LinearGradient } from "expo-linear-gradient";
@@ -15,7 +16,7 @@ import { LinearGradient } from "expo-linear-gradient";
 export default function UserProfileDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   if (!id) return null;
-  
+
   const queryClient = useQueryClient();
   const currentUser = useAuthStore((s) => s.user);
   const [selectedMedia, setSelectedMedia] = useState<any | null>(null);
@@ -24,6 +25,30 @@ export default function UserProfileDetail() {
     queryKey: ["users", id],
     queryFn: () => usersApi.get(id),
     enabled: !!id
+  });
+
+  const { data: statsData } = useQuery({
+    queryKey: ["users", id, "stats"],
+    queryFn: () => usersApi.getUserStats(id),
+    enabled: !!id
+  });
+
+  const { data: friendStatusData } = useQuery({
+    queryKey: ["friends", "status", id],
+    queryFn: () => friendsApi.status(id),
+    enabled: !!id && id !== currentUser?._id
+  });
+
+  const { data: friendCountData } = useQuery({
+    queryKey: ["friends", "count", id],
+    queryFn: () => friendsApi.count(id),
+    enabled: !!id
+  });
+
+  const { data: mutualData } = useQuery({
+    queryKey: ["friends", "mutual", id],
+    queryFn: () => friendsApi.mutual(id),
+    enabled: !!id && id !== currentUser?._id
   });
 
   useFocusEffect(
@@ -39,6 +64,13 @@ export default function UserProfileDetail() {
   const isFollowing = user?.isFollowing ?? false;
   const isCloseFriend = user?.isCloseFriend ?? false;
   const level = user?.levelStatus ?? { level: user?.level ?? 1, title: user?.levelTitle ?? "New Vibe", xp: user?.xp ?? 0 };
+  const friendStatus = friendStatusData?.status ?? "NONE";
+  const friendCount = friendCountData?.count ?? 0;
+  const mutualCount = mutualData?.mutualCount ?? 0;
+  const mutualFriends = mutualData?.mutual ?? [];
+  const isOwnProfile = id === currentUser?._id;
+  const roomsHosted = statsData?.roomsHosted ?? 0;
+  const roomsLive = statsData?.roomsLive ?? 0;
 
   const followMutation = useMutation({
     mutationFn: () => isFollowing ? usersApi.unfollow(id) : usersApi.follow(id),
@@ -49,10 +81,50 @@ export default function UserProfileDetail() {
     onError: (err: any) => Alert.alert("Error", err.message)
   });
 
+  const friendRequestMutation = useMutation({
+    mutationFn: () => friendsApi.request(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["friends", "status", id] });
+      Alert.alert("Friend Request Sent", `Friend request sent to ${user?.name}.`);
+    },
+    onError: (err: any) => Alert.alert("Error", err.message)
+  });
+
+  const friendAcceptMutation = useMutation({
+    mutationFn: () => friendsApi.accept(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["friends", "status", id] });
+      queryClient.invalidateQueries({ queryKey: ["friends", "count", id] });
+      queryClient.invalidateQueries({ queryKey: ["friends", "mutual", id] });
+      Alert.alert("Friend Request Accepted", `You are now friends with ${user?.name}.`);
+    },
+    onError: (err: any) => Alert.alert("Error", err.message)
+  });
+
+  const friendDeclineMutation = useMutation({
+    mutationFn: () => friendsApi.decline(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["friends", "status", id] });
+      Alert.alert("Declined", `Friend request from ${user?.name} declined.`);
+    },
+    onError: (err: any) => Alert.alert("Error", err.message)
+  });
+
+  const unfriendMutation = useMutation({
+    mutationFn: () => friendsApi.unfriend(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["friends", "status", id] });
+      queryClient.invalidateQueries({ queryKey: ["friends", "count", id] });
+      queryClient.invalidateQueries({ queryKey: ["friends", "mutual", id] });
+      Alert.alert("Unfriended", `You are no longer friends with ${user?.name}.`);
+    },
+    onError: (err: any) => Alert.alert("Error", err.message)
+  });
+
   const blockMutation = useMutation({
     mutationFn: () => usersApi.block(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["dating", "explore"] });
+      queryClient.invalidateQueries({ queryKey: ["users", id] });
       Alert.alert("Blocked", `${user?.name} has been blocked and hidden.`);
       router.replace("/(tabs)");
     },
@@ -103,18 +175,75 @@ export default function UserProfileDetail() {
     ]);
   };
 
-  // Calculate mutual interests
-  const mutualInterests = user?.interests?.filter((interest: string) => 
+  const mutualInterests = user?.interests?.filter((interest: string) =>
     currentUser?.interests?.includes(interest)
   ) ?? [];
 
   if (isLoading) return <Screen><View style={styles.center}><ActivityIndicator color={colors.pink} size="large" /></View></Screen>;
   if (error || !user) return <Screen><View style={styles.center}><Text style={styles.errorText}>User profile not found.</Text></View></Screen>;
 
+  const renderFriendButton = () => {
+    if (isOwnProfile) return null;
+    switch (friendStatus) {
+      case "ACCEPTED":
+        return (
+          <Pressable
+            onPress={() => unfriendMutation.mutate()}
+            disabled={unfriendMutation.isPending}
+            style={[styles.actionBtn, styles.friendActive]}
+          >
+            <UserCheck color={colors.text} size={18} />
+            <Text style={styles.actionBtnText}>Friends</Text>
+          </Pressable>
+        );
+      case "PENDING":
+        return (
+          <View style={styles.pendingRow}>
+            <Pressable
+              onPress={() => friendAcceptMutation.mutate()}
+              disabled={friendAcceptMutation.isPending}
+              style={[styles.actionBtn, styles.acceptBtn]}
+            >
+              <UserCheck color={colors.ink} size={18} />
+              <Text style={[styles.actionBtnText, { color: colors.ink }]}>Accept</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => friendDeclineMutation.mutate()}
+              disabled={friendDeclineMutation.isPending}
+              style={[styles.actionBtn, styles.declineBtn]}
+            >
+              <UserX color={colors.danger} size={18} />
+              <Text style={[styles.actionBtnText, { color: colors.danger }]}>Decline</Text>
+            </Pressable>
+          </View>
+        );
+      case "SENT":
+        return (
+          <Pressable
+            disabled
+            style={[styles.actionBtn, styles.pendingSentBtn]}
+          >
+            <Clock color={colors.muted} size={18} />
+            <Text style={[styles.actionBtnText, { color: colors.muted }]}>Request Sent</Text>
+          </Pressable>
+        );
+      default:
+        return (
+          <Pressable
+            onPress={() => friendRequestMutation.mutate()}
+            disabled={friendRequestMutation.isPending}
+            style={[styles.actionBtn, styles.addFriendBtn]}
+          >
+            <UserPlus color={colors.text} size={18} />
+            <Text style={styles.actionBtnText}>Add Friend</Text>
+          </Pressable>
+        );
+    }
+  };
+
   return (
     <Screen>
       <View style={styles.container}>
-        {/* Absolute Header Overlay */}
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
             <ArrowLeft color={colors.text} size={20} />
@@ -130,7 +259,6 @@ export default function UserProfileDetail() {
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollWrap} showsVerticalScrollIndicator={false}>
-          {/* Cover image / Large Avatar */}
           <View style={styles.heroSection}>
             <LinearGradient
               colors={["rgba(255,255,255,0.03)", "rgba(5,7,19,0.95)"]}
@@ -145,7 +273,6 @@ export default function UserProfileDetail() {
             />
           </View>
 
-          {/* Details Section */}
           <LinearGradient colors={themeColors} style={styles.detailsContent}>
             <View style={styles.nameRow}>
               {active?.nameStyle ? (
@@ -155,11 +282,7 @@ export default function UserProfileDetail() {
               ) : (
                 <Text style={styles.name}>{user.name}, {user.age || 22}</Text>
               )}
-              {user.isVerified && (
-                <View style={styles.verifiedBadge}>
-                  <Text style={styles.verifiedBadgeText}>✓ Verified</Text>
-                </View>
-              )}
+              {user.isVerified && <VerifiedBadge level={user.verificationLevel || "BASIC"} size={22} />}
               {user.isVip && (
                 <View style={styles.vipBadge}>
                   <Crown color={colors.ink} size={13} />
@@ -181,11 +304,72 @@ export default function UserProfileDetail() {
               {user.isOnline && <Text style={styles.onlinePill}>Online</Text>}
             </View>
 
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{user.followersCount ?? 0}</Text>
+                <Text style={styles.statLabel}>Followers</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{user.followingCount ?? 0}</Text>
+                <Text style={styles.statLabel}>Following</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{friendCount}</Text>
+                <Text style={styles.statLabel}>Friends</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <View style={styles.levelBadge}>
+                  <Sparkles color={colors.gold} size={12} />
+                  <Text style={styles.levelBadgeText}>{level.level}</Text>
+                </View>
+                <Text style={styles.statLabel}>{level.title}</Text>
+              </View>
+            </View>
+
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Home color={colors.cyan} size={16} />
+                <Text style={styles.statValue}>{roomsHosted}</Text>
+                <Text style={styles.statLabel}>Rooms Hosted</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Radio color={colors.pink} size={16} />
+                <Text style={styles.statValue}>{roomsLive}</Text>
+                <Text style={styles.statLabel}>Live Now</Text>
+              </View>
+            </View>
+
             <View style={styles.levelPill}>
               <Sparkles color={colors.gold} size={14} />
               <Text style={styles.levelPillText}>Level {level.level} / {level.title}</Text>
               <Text style={styles.levelXpText}>{level.xp} XP</Text>
             </View>
+
+            {mutualCount > 0 && !isOwnProfile && (
+              <View style={styles.mutualSection}>
+                <View style={styles.mutualRow}>
+                  <Users color={colors.cyan} size={14} />
+                  <Text style={styles.mutualText}>{mutualCount} mutual friend{mutualCount !== 1 ? "s" : ""}</Text>
+                </View>
+                {mutualFriends.length > 0 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {mutualFriends.map((mf: any) => (
+                      <Pressable
+                        key={mf._id}
+                        onPress={() => router.push({ pathname: "/profile/[id]", params: { id: mf._id } })}
+                        style={styles.mutualAvatarWrap}
+                      >
+                        <Image source={{ uri: mf.avatar }} style={styles.mutualAvatar} />
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
+            )}
 
             <View style={styles.personalGrid}>
               {active?.introCard && <PersonalCard title="Intro" value={cosmeticPreviewText(active.introCard)} />}
@@ -199,12 +383,13 @@ export default function UserProfileDetail() {
             {user.vibeLine && (
               <View style={styles.vibeBox}>
                 <Text style={styles.vibeLabel}>Vibe Line</Text>
-                <Text style={styles.vibeText}>“{user.vibeLine}”</Text>
+                <Text style={styles.vibeText}>"{user.vibeLine}"</Text>
               </View>
             )}
 
-            {/* Interaction Action Row */}
             <View style={styles.actionRow}>
+              {renderFriendButton()}
+
               <Pressable
                 onPress={() => followMutation.mutate()}
                 disabled={followMutation.isPending}
@@ -245,7 +430,6 @@ export default function UserProfileDetail() {
               </Text>
             </Pressable>
 
-            {/* Bio */}
             {user.bio && (
               <View style={styles.infoBlock}>
                 <Text style={styles.blockTitle}>About Me</Text>
@@ -256,18 +440,17 @@ export default function UserProfileDetail() {
             {user.profileMedia && user.profileMedia.length > 0 && (
               <View style={styles.infoBlock}>
                 <Text style={styles.blockTitle}>Profile Media</Text>
-                <View style={styles.mediaGrid}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mediaGalleryContent}>
                   {user.profileMedia.map((item: any) => (
-                    <Pressable key={item._id ?? item.url} style={styles.mediaTile} onPress={() => setSelectedMedia(item)}>
+                    <Pressable key={item._id ?? item.url} style={styles.mediaTileH} onPress={() => setSelectedMedia(item)}>
                       <ProfileMedia item={item} />
-                      {!!item.caption && <Text style={styles.mediaCaption}>{item.caption}</Text>}
+                      {!!item.caption && <Text style={styles.mediaCaption} numberOfLines={1}>{item.caption}</Text>}
                     </Pressable>
                   ))}
-                </View>
+                </ScrollView>
               </View>
             )}
 
-            {/* Mutual Interests */}
             {mutualInterests.length > 0 && (
               <View style={[styles.infoBlock, styles.mutualBlock]}>
                 <View style={styles.mutualTitleRow}>
@@ -286,7 +469,6 @@ export default function UserProfileDetail() {
               </View>
             )}
 
-            {/* All Interests */}
             {user.interests && user.interests.length > 0 && (
               <View style={styles.infoBlock}>
                 <Text style={styles.blockTitle}>Interests</Text>
@@ -313,7 +495,6 @@ export default function UserProfileDetail() {
               </View>
             )}
 
-            {/* Languages */}
             {user.languages && user.languages.length > 0 && (
               <View style={styles.infoBlock}>
                 <Text style={styles.blockTitle}>Preferred Languages</Text>
@@ -327,11 +508,12 @@ export default function UserProfileDetail() {
               </View>
             )}
 
-            {/* Safety Options */}
-            <Pressable style={styles.blockUserBtn} onPress={handleBlock}>
-              <Ban color={colors.danger} size={16} />
-              <Text style={styles.blockUserText}>Block {user.name}</Text>
-            </Pressable>
+            {!isOwnProfile && (
+              <Pressable style={styles.blockUserBtn} onPress={handleBlock}>
+                <Ban color={colors.danger} size={16} />
+                <Text style={styles.blockUserText}>Block {user.name}</Text>
+              </Pressable>
+            )}
           </LinearGradient>
         </ScrollView>
         <Modal visible={!!selectedMedia} transparent animationType="fade" onRequestClose={() => setSelectedMedia(null)}>
@@ -478,6 +660,53 @@ const styles = StyleSheet.create({
     fontWeight: "800"
   },
   onlinePill: { color: colors.ink, backgroundColor: colors.success, borderRadius: 8, overflow: "hidden", paddingHorizontal: 8, paddingVertical: 3, fontSize: 11, fontWeight: "900" },
+  statsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
+    marginTop: 14,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: colors.line
+  },
+  statItem: {
+    alignItems: "center",
+    gap: 2,
+    flex: 1
+  },
+  statValue: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: "900"
+  },
+  statLabel: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: "800",
+    marginTop: 2
+  },
+  statDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: colors.line
+  },
+  levelBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(246,180,75,0.15)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8
+  },
+  levelBadgeText: {
+    color: colors.gold,
+    fontSize: 14,
+    fontWeight: "900"
+  },
   levelPill: {
     alignSelf: "flex-start",
     flexDirection: "row",
@@ -500,6 +729,35 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 11,
     fontWeight: "800"
+  },
+  mutualSection: {
+    marginTop: 12,
+    backgroundColor: "rgba(39,211,255,0.06)",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "rgba(39,211,255,0.15)"
+  },
+  mutualRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 8
+  },
+  mutualText: {
+    color: colors.cyan,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  mutualAvatarWrap: {
+    marginRight: 8
+  },
+  mutualAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: colors.cyan
   },
   personalGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
   personalCard: { width: "48%", minWidth: 130, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, padding: 10 },
@@ -550,6 +808,36 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
     borderColor: colors.line
+  },
+  friendActive: {
+    backgroundColor: "rgba(50,213,131,0.12)",
+    borderWidth: 1,
+    borderColor: colors.success
+  },
+  addFriendBtn: {
+    backgroundColor: "rgba(138,92,255,0.12)",
+    borderWidth: 1,
+    borderColor: colors.purple
+  },
+  pendingSentBtn: {
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: colors.line
+  },
+  pendingRow: {
+    flexDirection: "row",
+    gap: 8,
+    flex: 1
+  },
+  acceptBtn: {
+    backgroundColor: colors.success,
+    flex: 1
+  },
+  declineBtn: {
+    backgroundColor: "rgba(255,91,110,0.1)",
+    borderWidth: 1,
+    borderColor: colors.danger,
+    flex: 1
   },
   msgBtn: {
     overflow: "hidden"
@@ -605,34 +893,16 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontWeight: "700"
   },
-  mediaGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  mediaGalleryContent: {
     gap: 10
   },
-  mediaTile: {
-    width: "48%",
-    minHeight: 150,
+  mediaTileH: {
+    width: 160,
     borderRadius: 8,
     overflow: "hidden",
     backgroundColor: colors.panel,
     borderWidth: 1,
     borderColor: colors.line
-  },
-  mediaImage: {
-    width: "100%",
-    height: 118,
-    backgroundColor: colors.panelStrong
-  },
-  videoTile: {
-    height: 118,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.panelStrong
-  },
-  videoText: {
-    color: colors.gold,
-    fontWeight: "900"
   },
   mediaCaption: {
     color: colors.text,
@@ -643,9 +913,6 @@ const styles = StyleSheet.create({
   viewerBackdrop: { flex: 1, backgroundColor: "rgba(5,7,19,0.96)", alignItems: "center", justifyContent: "center", padding: 18 },
   viewerClose: { position: "absolute", top: 48, right: 18, zIndex: 2, borderRadius: 8, backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 14, paddingVertical: 8 },
   viewerCloseText: { color: colors.text, fontWeight: "900" },
-  viewerImage: { width: "100%", height: "72%" },
-  viewerVideo: { width: "100%", height: "60%", borderRadius: 8, backgroundColor: colors.panelStrong, alignItems: "center", justifyContent: "center" },
-  viewerVideoText: { color: colors.gold, fontSize: 24, fontWeight: "900" },
   viewerCaption: { color: colors.text, marginTop: 16, textAlign: "center", fontWeight: "800", lineHeight: 22 },
   mutualBlock: {
     padding: 14,

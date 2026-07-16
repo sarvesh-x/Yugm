@@ -405,7 +405,11 @@ walletRouter.post("/rooms/:id/send-gift", requireWalletNotFrozen, validateBody(s
     await runWalletSideEffect("gift relationship XP", () => grantRelationshipXp(req.user!.id, req.body.receiverId, "GIFT_SENT", { roomId: room._id.toString(), giftId: gift._id.toString() }));
     await runWalletSideEffect("gift notification", () => createNotification(req.body.receiverId, "GIFT", "Gift Received", `${req.user!.name} sent you a ${gift.name}!`, { roomId: room._id.toString(), giftId: gift._id.toString() }));
     // NOTE: emitRoom is called after the socket room join for consistent ordering
-    emitRoom(room._id.toString(), socketEvents.roomGiftSend, { giftTransaction: giftTransaction[0], gift });
+    emitRoom(room._id.toString(), socketEvents.roomGiftSend, {
+      ...giftTransaction[0].toObject(),
+      gift: { name: gift.name, icon: gift.icon },
+      animation: gift.name.toLowerCase()
+    });
     const activity = await runWalletSideEffect("gift activity", () => RoomActivity.create({
       roomId: room._id,
       userId: req.user!.id,

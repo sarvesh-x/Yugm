@@ -16,10 +16,13 @@ import { RoomParticipant } from "../models/RoomParticipant.js";
 import { SupportTicket } from "../models/SupportTicket.js";
 import { User } from "../models/User.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId, sanitizeText } from "../utils/http.js";
+import { TrustVerification } from "../models/TrustVerification.js";
 import { createNotification } from "../services/notifications.js";
 import { emitUser, isUserOnline } from "../services/socket.js";
+import { autoModerate } from "../middleware/autoModerate.js";
 import { getVipStatus } from "../services/vip.js";
 import { dailyCheckInStart, getLevelStatus, grantXp } from "../services/levels.js";
+import { creditWallet } from "../services/wallet.js";
 import { findRelationship, grantRelationshipXp } from "../services/relationships.js";
 
 export const usersRouter = Router();
@@ -64,6 +67,7 @@ function publicUser(user: any) {
     city: user.city,
     state: user.state,
     bio: user.bio,
+    streakCount: user.streakCount ?? 0,
     vibeLine: user.vibeLine,
     gender: user.gender,
     age: user.age,
@@ -175,11 +179,23 @@ usersRouter.post("/me/check-in", asyncHandler(async (req: AuthRequest, res) => {
 
   await User.findByIdAndUpdate(req.user!.id, update);
 
+  const streakBonuses: Record<number, number> = { 3: 10, 7: 25, 14: 50, 30: 100, 60: 200, 90: 500 };
+  const milestones = Object.keys(streakBonuses).map(Number).sort((a, b) => a - b);
+  let streakBonus = 0;
+  if (streakBonuses[newStreak]) {
+    streakBonus = streakBonuses[newStreak];
+    await creditWallet(req.user!.id, streakBonus, "STREAK_BONUS", { streak: newStreak, milestone: newStreak });
+  }
+
+  const nextMilestone = milestones.find((m) => m > newStreak) ?? null;
+
   const xpReward = await grantXp(req.user!.id, "DAILY_CHECKIN");
   sendOk(res, {
     alreadyClaimed: false,
     streak: newStreak,
     unlockedCosmetic,
+    streakBonus,
+    nextMilestone,
     ...(xpReward ?? {})
   });
 }));
@@ -274,7 +290,7 @@ usersRouter.get("/messages/:userId", asyncHandler(async (req: AuthRequest, res) 
   sendOk(res, { messages: messages.reverse(), relationship });
 }));
 
-usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, requireNotChatRestricted, chatLimiter, asyncHandler(async (req: AuthRequest, res) => {
+usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, requireNotChatRestricted, chatLimiter, autoModerate("message"), asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.userId)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
   const receiverId = req.params.userId;
   if (receiverId === req.user!.id) throw new HttpError(400, "Cannot message yourself", ErrorCode.VALIDATION);
@@ -290,15 +306,17 @@ usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, requireNotCh
   const messageText = String(req.body.message || "").trim();
   const mediaUrl = String(req.body.mediaUrl || "").trim();
   const mediaType = String(req.body.mediaType || "").toUpperCase();
+  const duration = Number(req.body.duration) || 0;
   if (!messageText && !mediaUrl) throw new HttpError(400, "Message cannot be empty", ErrorCode.VALIDATION);
-  if (mediaUrl && !["IMAGE", "VIDEO"].includes(mediaType)) throw new HttpError(400, "Invalid message media type", ErrorCode.VALIDATION);
+  if (mediaUrl && !["IMAGE", "VIDEO", "AUDIO"].includes(mediaType)) throw new HttpError(400, "Invalid message media type", ErrorCode.VALIDATION);
 
   const created = await DirectMessage.create({
     senderId: req.user!.id,
     receiverId,
-    message: messageText ? sanitizeText(messageText) : mediaType === "VIDEO" ? "Shared a video" : "Shared a photo",
+    message: messageText ? sanitizeText(messageText) : mediaType === "VIDEO" ? "Shared a video" : mediaType === "AUDIO" ? "🎤 Voice note" : "Shared a photo",
     mediaUrl,
-    mediaType
+    mediaType,
+    duration: mediaType === "AUDIO" ? duration : 0
   });
   const message = await DirectMessage.findById(created._id)
     .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
@@ -490,7 +508,12 @@ usersRouter.get("/:id", asyncHandler(async (req: AuthRequest, res) => {
     : Boolean(await Follow.exists({ followerId: req.user!.id, followingId: req.params.id }));
   const closeFriendIds = (req.user?.closeFriendIds ?? []).map((friendId: any) => friendId.toString());
   const isCloseFriend = closeFriendIds.includes(req.params.id);
-  sendOk(res, { user: publicUser({ ...user, ...getVipStatus(user), isFollowing: following, isCloseFriend, isOnline: isUserOnline(req.params.id) }) });
+  let verificationLevel: string = "NONE";
+  if (user.isVerified) {
+    const trustStatus = await TrustVerification.findOne({ userId: user._id }).lean().catch(() => null);
+    verificationLevel = trustStatus?.level === "ADVANCED" ? "ADVANCED" : "BASIC";
+  }
+  sendOk(res, { user: publicUser({ ...user, ...getVipStatus(user), isFollowing: following, isCloseFriend, isOnline: isUserOnline(req.params.id), verificationLevel }) });
 }));
 
 usersRouter.post("/:id/follow", asyncHandler(async (req: AuthRequest, res) => {
@@ -617,4 +640,11 @@ usersRouter.get("/:id/following", asyncHandler(async (req: AuthRequest, res) => 
     .lean();
   const users = following.map(f => f.followingId);
   sendOk(res, { following: users, users });
+}));
+
+usersRouter.get("/:id/stats", asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
+  const roomCount = await Room.countDocuments({ hostId: req.params.id });
+  const liveCount = await Room.countDocuments({ hostId: req.params.id, status: "LIVE" });
+  sendOk(res, { roomsHosted: roomCount, roomsLive: liveCount });
 }));

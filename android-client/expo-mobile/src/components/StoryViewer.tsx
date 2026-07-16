@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View, Image, StatusBar, Dimensions } from "react-native";
 import { Video, ResizeMode } from "expo-av";
-import { X, Heart } from "lucide-react-native";
+import { X, Heart, MessageSquare } from "lucide-react-native";
+import { StoryComments } from "@/components/StoryComments";
 import { colors } from "@/theme/colors";
 import { absoluteMediaUrl, storiesApi } from "@/lib/api";
 
@@ -15,6 +16,7 @@ interface Story {
   caption?: string;
   viewCount: number;
   likeCount: number;
+  replyCount: number;
   isViewed?: boolean;
   isLiked?: boolean;
 }
@@ -29,6 +31,7 @@ export function StoryViewer({ stories, onClose, startIndex = 0 }: Props) {
   const [currentIndex, setCurrentIndex] = useState(startIndex);
   const [paused, setPaused] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [commentsVisible, setCommentsVisible] = useState(false);
   const videoRef = useRef<Video>(null);
   const progressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -176,8 +179,19 @@ export function StoryViewer({ stories, onClose, startIndex = 0 }: Props) {
             />
             <Text style={styles.countText}>{current.likeCount}</Text>
           </Pressable>
+          <Pressable onPress={() => setCommentsVisible(true)} style={styles.likeBtn}>
+            <MessageSquare color={colors.text} size={22} />
+            <Text style={styles.countText}>{current.replyCount ?? 0}</Text>
+          </Pressable>
           <Text style={styles.countText}>{current.viewCount} views</Text>
         </View>
+
+        <StoryComments
+          storyId={current._id}
+          storyUserId={current.userId._id}
+          visible={commentsVisible}
+          onClose={() => setCommentsVisible(false)}
+        />
       </View>
     </Modal>
   );

@@ -14,13 +14,15 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Send, Sparkles, AlertTriangle, ShieldOff, Gift, Info, Phone, Video } from "lucide-react-native";
+import { ArrowLeft, Send, Sparkles, AlertTriangle, ShieldOff, Gift, Info, Phone, Video, Mic, Play, Pause } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { usersApi, walletApi } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
 import { Screen } from "@/components/Screen";
 import { GiftPanel } from "@/components/GiftPanel";
+import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { useAuthStore } from "@/store/auth";
+import { Audio } from "expo-av";
 import { colors, gradients } from "@/theme/colors";
 
 const reactionTypes = ["heart", "fire", "laugh", "clap", "wow"] as const;
@@ -39,6 +41,7 @@ export default function ChatRoom() {
   const [isOnline, setIsOnline] = useState(false);
   const [reactingTo, setReactingTo] = useState<string | null>(null);
   const [partnerTyping, setPartnerTyping] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -154,6 +157,23 @@ export default function ChatRoom() {
     },
     onError: (err: any) => Alert.alert("Call failed", err.message || "Could not start private call")
   });
+
+  const sendVoiceMutation = useMutation({
+    mutationFn: ({ mediaUrl, duration }: { mediaUrl: string; duration: number }) =>
+      usersApi.sendMessage(userId, "🎤 Voice note", { mediaUrl, mediaType: "AUDIO", duration }),
+    onSuccess: () => {
+      setMessage("");
+      setVoiceMode(false);
+      queryClient.invalidateQueries({ queryKey: ["users", "messages"] });
+      queryClient.invalidateQueries({ queryKey: ["dating", "matches"] });
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    },
+    onError: (err: any) => Alert.alert("Error", err.message)
+  });
+
+  const handleVoiceComplete = (url: string, duration: number) => {
+    sendVoiceMutation.mutate({ mediaUrl: url, duration });
+  };
 
   const reactMutation = useMutation({
     mutationFn: ({ messageId, type }: { messageId: string; type: typeof reactionTypes[number] }) => usersApi.reactToMessage(userId, messageId, type),
@@ -318,31 +338,44 @@ export default function ChatRoom() {
         )}
         {/* Input Composer */}
         <View style={styles.composer}>
-          <Pressable style={styles.giftIconBtn} onPress={() => setGiftPanelOpen(true)}>
-            <Gift color={colors.gold} size={22} fill={colors.gold} />
-          </Pressable>
+          {voiceMode ? (
+            <>
+              <VoiceRecorder onComplete={handleVoiceComplete} onCancel={() => setVoiceMode(false)} />
+              {sendVoiceMutation.isPending && <ActivityIndicator color={colors.text} size="small" />}
+            </>
+          ) : (
+            <>
+              <Pressable style={styles.giftIconBtn} onPress={() => setGiftPanelOpen(true)}>
+                <Gift color={colors.gold} size={22} fill={colors.gold} />
+              </Pressable>
 
-          <TextInput
-            value={message}
-            onChangeText={handleMessageChange}
-            placeholder={`Message ${partner?.name || "partner"}...`}
-            placeholderTextColor={colors.muted}
-            style={styles.input}
-            onSubmitEditing={handleSend}
-            returnKeyType="send"
-          />
+              <TextInput
+                value={message}
+                onChangeText={handleMessageChange}
+                placeholder={`Message ${partner?.name || "partner"}...`}
+                placeholderTextColor={colors.muted}
+                style={styles.input}
+                onSubmitEditing={handleSend}
+                returnKeyType="send"
+              />
 
-          <Pressable
-            style={[styles.sendBtn, !message.trim() && styles.sendBtnDisabled]}
-            onPress={handleSend}
-            disabled={!message.trim() || sendMutation.isPending}
-          >
-            {sendMutation.isPending ? (
-              <ActivityIndicator color={colors.text} size="small" />
-            ) : (
-              <Send color={colors.text} size={18} fill={message.trim() ? colors.text : "transparent"} />
-            )}
-          </Pressable>
+              <Pressable onPress={() => setVoiceMode(true)} style={styles.voiceBtn}>
+                <Mic color={colors.text} size={20} />
+              </Pressable>
+
+              <Pressable
+                style={[styles.sendBtn, !message.trim() && styles.sendBtnDisabled]}
+                onPress={handleSend}
+                disabled={!message.trim() || sendMutation.isPending}
+              >
+                {sendMutation.isPending ? (
+                  <ActivityIndicator color={colors.text} size="small" />
+                ) : (
+                  <Send color={colors.text} size={18} fill={message.trim() ? colors.text : "transparent"} />
+                )}
+              </Pressable>
+            </>
+          )}
         </View>
 
         {/* Direct Gifting Drawer */}
@@ -353,6 +386,58 @@ export default function ChatRoom() {
         )}
       </KeyboardAvoidingView>
     </Screen>
+  );
+}
+
+function AudioBubble({ item, isMe }: { item: any; isMe: boolean }) {
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [playing, setPlaying] = useState(false);
+
+  const togglePlayback = async () => {
+    if (sound) {
+      const status = await sound.getStatusAsync();
+      if (status.isLoaded && status.isPlaying) {
+        await sound.pauseAsync();
+        setPlaying(false);
+      } else {
+        await sound.playAsync();
+        setPlaying(true);
+      }
+      return;
+    }
+    const { sound: newSound } = await Audio.Sound.createAsync(
+      { uri: item.mediaUrl },
+      { shouldPlay: true }
+    );
+    setSound(newSound);
+    setPlaying(true);
+    newSound.setOnPlaybackStatusUpdate((status) => {
+      if (status.isLoaded && !status.isPlaying && status.didJustFinish) {
+        setPlaying(false);
+      }
+    });
+  };
+
+  useEffect(() => {
+    return () => {
+      if (sound) sound.unloadAsync();
+    };
+  }, [sound]);
+
+  const formatTime = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
+  return (
+    <Pressable onPress={togglePlayback} style={[styles.audioBubble, isMe ? styles.audioBubbleMe : styles.audioBubbleThem]}>
+      {playing ? <Pause color={colors.text} size={18} /> : <Play color={colors.text} size={18} />}
+      <View style={styles.audioWave}>
+        <View style={[styles.audioProgress, { width: playing ? "60%" : "0%" }]} />
+      </View>
+      <Text style={styles.audioDuration}>{formatTime(item.duration || 0)}</Text>
+    </Pressable>
   );
 }
 
@@ -372,10 +457,13 @@ function MessageBubble({
   const messageId = item._id || item.id;
   const isMe = item.senderId?._id === currentUserId || item.senderId?.id === currentUserId || item.senderId === currentUserId;
   const isGift = typeof item.message === "string" && item.message.includes("gift");
+  const isAudio = item.mediaType === "AUDIO";
   const reactionCounts = countReactions(item.reactions ?? []);
   return (
     <View style={[styles.bubbleWrap, isMe ? styles.bubbleRight : styles.bubbleLeft]}>
-      {isMe ? (
+      {isAudio ? (
+        <AudioBubble item={item} isMe={isMe} />
+      ) : isMe ? (
         <Pressable onLongPress={() => setReactingTo(reactingTo === messageId ? null : messageId)}>
           <LinearGradient colors={isGift ? gradients.gold : gradients.fire} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.bubble}>
             <Text style={[styles.messageText, isGift && styles.giftText]}>{item.message}</Text>
@@ -525,5 +613,51 @@ const styles = StyleSheet.create({
   sendBtnDisabled: {
     opacity: 0.5,
     backgroundColor: colors.panel
+  },
+  voiceBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 6
+  },
+  audioBubble: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 16,
+    gap: 10,
+    minWidth: 160
+  },
+  audioBubbleMe: {
+    backgroundColor: colors.pink,
+  },
+  audioBubbleThem: {
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  audioWave: {
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    overflow: "hidden",
+  },
+  audioProgress: {
+    height: "100%",
+    borderRadius: 3,
+    backgroundColor: colors.text,
+  },
+  audioDuration: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: "800",
+    minWidth: 32,
   }
 });

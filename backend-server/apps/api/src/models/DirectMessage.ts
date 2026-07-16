@@ -7,7 +7,8 @@ const directMessageSchema = new Schema(
     roomId: { type: Schema.Types.ObjectId, ref: "Room" },
     message: { type: String, required: true, trim: true },
     mediaUrl: { type: String, default: "" },
-    mediaType: { type: String, enum: ["", "IMAGE", "VIDEO"], default: "" },
+    mediaType: { type: String, enum: ["", "IMAGE", "VIDEO", "AUDIO"], default: "" },
+    duration: { type: Number, default: 0 },
     reactions: [{
       userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
       type: { type: String, enum: ["heart", "fire", "laugh", "clap", "wow"], required: true },

@@ -6,6 +6,7 @@ import { Crown, Image as ImageIcon, Medal, Settings, Sparkles, Star, Trash2, Use
 import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import { GlassCard } from "@/components/GlassCard";
+import { StreakCard } from "@/components/StreakCard";
 import { CosmeticAvatar } from "@/components/CosmeticAvatar";
 import { LoadingState } from "@/components/LoadingState";
 import { ErrorState } from "@/components/ErrorState";
@@ -235,6 +236,15 @@ export default function Profile() {
               </Pressable>
             )}
           </View>
+          {isOwn && (
+            <StreakCard
+              streak={user?.streakCount ?? 0}
+              canCheckIn={level.canDailyCheckIn}
+              isPending={checkIn.isPending}
+              onCheckIn={() => checkIn.mutate()}
+              checkInLabel={level.canDailyCheckIn ? "Check in" : "Checked in"}
+            />
+          )}
           <Text style={styles.bio}>{user?.bio ?? ""}</Text>
           <View style={styles.stats}>
             <Stat label="Followers" value={user?.followersCount ?? 0} />

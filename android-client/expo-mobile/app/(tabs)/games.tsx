@@ -3,6 +3,7 @@ import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleS
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Brain, CheckCircle2, Crown, Flame, Gamepad2, MessageCircle, RotateCcw, Send, Sparkles, Swords, Timer, Trophy, Users, Zap } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { ChallengeCard } from "@/components/ChallengeCard";
 import { GlassCard } from "@/components/GlassCard";
 import { Screen, Section } from "@/components/Screen";
 import { clansApi, gamesApi, usersApi } from "@/lib/api";
@@ -65,6 +66,23 @@ export default function GamesScreen() {
     },
     onError: (err: any) => Alert.alert("Challenge failed", err?.message ?? "Could not send challenge.")
   });
+  const acceptChallenge = useMutation({
+    mutationFn: (challengeId: string) => gamesApi.acceptChallenge(challengeId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["games", "challenges"] });
+      Alert.alert("Challenge accepted", "A message has been sent to the challenger.");
+    },
+    onError: (err: any) => Alert.alert("Accept failed", err?.message ?? "Could not accept challenge.")
+  });
+  const declineChallenge = useMutation({
+    mutationFn: (challengeId: string) => gamesApi.declineChallenge(challengeId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["games", "challenges"] });
+      Alert.alert("Declined", "The challenge has been removed.");
+    },
+    onError: (err: any) => Alert.alert("Decline failed", err?.message ?? "Could not decline challenge.")
+  });
+
   const shareScore = useMutation({
     mutationFn: (targetUserId: string) => {
       if (!savedScore?._id) throw new Error("Save a score first");
@@ -194,8 +212,9 @@ export default function GamesScreen() {
             <Text style={styles.sectionTitle}>Active Challenges</Text>
             <Swords color={colors.pink} size={18} />
           </View>
-          <ChallengeList title="For you" items={challenges.data?.incoming ?? []} onPlay={(gameId) => setSelectedGame(gameId)} />
-          <ChallengeList title="Family board" items={challenges.data?.clan ?? []} onPlay={(gameId) => setSelectedGame(gameId)} />
+          <ChallengeSection title="For you" items={challenges.data?.incoming ?? []} isIncoming onAccept={(id) => acceptChallenge.mutate(id)} onDecline={(id) => declineChallenge.mutate(id)} onPlay={(gameId) => setSelectedGame(gameId)} />
+          <ChallengeSection title="Family board" items={challenges.data?.clan ?? []} onPlay={(gameId) => setSelectedGame(gameId)} />
+          <ChallengeSection title="Sent" items={challenges.data?.outgoing ?? []} onPlay={(gameId) => setSelectedGame(gameId)} />
         </Section>
 
         <Section>
@@ -301,7 +320,7 @@ function SocialScoreActions({
   );
 }
 
-function ChallengeList({ title, items, onPlay }: { title: string; items: any[]; onPlay: (gameId: GameId) => void }) {
+function ChallengeSection({ title, items, isIncoming, onAccept, onDecline, onPlay }: { title: string; items: any[]; isIncoming?: boolean; onAccept?: (id: string) => void; onDecline?: (id: string) => void; onPlay: (gameId: GameId) => void }) {
   return (
     <View style={styles.challengeBlock}>
       <Text style={styles.challengeTitle}>{title}</Text>
@@ -309,15 +328,19 @@ function ChallengeList({ title, items, onPlay }: { title: string; items: any[]; 
         <GlassCard><Text style={styles.muted}>No active challenges here yet.</Text></GlassCard>
       ) : (
         items.slice(0, 4).map((item) => (
-          <Pressable key={item._id} onPress={() => onPlay(item.gameId as GameId)}>
-          <GlassCard style={styles.challengeRow}>
-            <Swords color={colors.gold} size={18} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.rankName}>{item.challenger?.name ?? "Player"} scored {item.score}</Text>
-              <Text style={styles.rankMeta}>{String(item.gameId).replaceAll("_", " ")} / expires {new Date(item.expiresAt).toLocaleDateString()}</Text>
-            </View>
-          </GlassCard>
-          </Pressable>
+          isIncoming ? (
+            <ChallengeCard key={item._id} challenge={item} isIncoming onAccept={onAccept} onDecline={onDecline} />
+          ) : (
+            <Pressable key={item._id} onPress={() => onPlay(item.gameId as GameId)}>
+              <GlassCard style={styles.challengeRow}>
+                <Swords color={colors.gold} size={18} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rankName}>{item.challenger?.name ?? "Player"} scored {item.score}</Text>
+                  <Text style={styles.rankMeta}>{String(item.gameId).replaceAll("_", " ")} / expires {new Date(item.expiresAt).toLocaleDateString()}</Text>
+                </View>
+              </GlassCard>
+            </Pressable>
+          )
         ))
       )}
     </View>

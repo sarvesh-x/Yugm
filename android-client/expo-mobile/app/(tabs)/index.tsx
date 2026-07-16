@@ -9,7 +9,7 @@ import { BrandMark } from "@/components/BrandMark";
 import { RoomCard } from "@/components/RoomCard";
 import { ErrorState } from "@/components/ErrorState";
 import { Screen, Section } from "@/components/Screen";
-import { roomsApi, usersApi, datingApi, storiesApi } from "@/lib/api";
+import { roomsApi, usersApi, datingApi, storiesApi, feedApi } from "@/lib/api";
 import { StoriesRing, type StoryGroup } from "@/components/StoriesRing";
 import { useAuthStore } from "@/store/auth";
 import { colors, gradients } from "@/theme/colors";
@@ -58,6 +58,13 @@ export default function Discover() {
     queryFn: usersApi.suggestedHosts,
     staleTime: 30000,
     gcTime: 60000
+  });
+
+  const feedQuery = useQuery({
+    queryKey: ["feed"],
+    queryFn: feedApi.get,
+    staleTime: 15000,
+    gcTime: 30000
   });
 
   useFocusEffect(
@@ -331,7 +338,81 @@ export default function Discover() {
               </Section>
             )}
 
-            {/* 4. Trending Hosts */}
+            {/* 4. Activity Feed */}
+            {feedQuery.data?.feed && feedQuery.data.feed.length > 0 && (
+              <Section>
+                <Text style={styles.sectionTitle}>Activity Feed</Text>
+                {(() => {
+                  const friendRooms = feedQuery.data.feed.filter((item: any) => item.type === "FRIEND_LIVE").slice(0, 3);
+                  const friendStories = feedQuery.data.feed.filter((item: any) => item.type === "FRIEND_STORY").slice(0, 3);
+                  const activities = feedQuery.data.feed.filter((item: any) => item.type === "ACTIVITY").slice(0, 5);
+                  return (
+                    <>
+                      {friendRooms.length > 0 && (
+                        <View style={styles.feedSection}>
+                          <View style={styles.feedSectionHeader}>
+                            <View style={styles.feedLiveDot} />
+                            <Text style={styles.feedSectionTitle}>Friends Live Now</Text>
+                          </View>
+                          {friendRooms.map((item: any, idx: number) => (
+                            <Pressable
+                              key={`friend-room-${item.room?._id ?? idx}`}
+                              style={styles.feedItem}
+                              onPress={() => router.push({ pathname: "/room/[id]", params: { id: item.room._id, type: item.room.type } })}
+                            >
+                              <Image source={{ uri: item.room.hostId?.avatar }} style={styles.feedAvatar} />
+                              <View style={styles.feedItemContent}>
+                                <Text style={styles.feedItemTitle}>{item.room.title}</Text>
+                                <Text style={styles.feedItemMeta}>by {item.room.hostId?.name} · {item.room.participantCount} listening</Text>
+                              </View>
+                              <View style={styles.feedLiveTag}>
+                                <Text style={styles.feedLiveTagText}>LIVE</Text>
+                              </View>
+                            </Pressable>
+                          ))}
+                        </View>
+                      )}
+                      {friendStories.length > 0 && (
+                        <View style={styles.feedSection}>
+                          <Text style={styles.feedSectionTitle}>Friend Stories</Text>
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                            {friendStories.map((item: any, idx: number) => (
+                              <Pressable
+                                key={`friend-story-${item.story?._id ?? idx}`}
+                                style={styles.feedStoryCard}
+                                onPress={() => router.push({ pathname: "/profile/[id]", params: { id: item.story.userId?._id } })}
+                              >
+                                <Image source={{ uri: item.story.userId?.avatar }} style={styles.feedStoryAvatar} />
+                                <Text style={styles.feedStoryName} numberOfLines={1}>{item.story.userId?.name}</Text>
+                              </Pressable>
+                            ))}
+                          </ScrollView>
+                        </View>
+                      )}
+                      {activities.length > 0 && (
+                        <View style={styles.feedSection}>
+                          <Text style={styles.feedSectionTitle}>Recent Activity</Text>
+                          {activities.map((item: any, idx: number) => (
+                            <View key={`activity-${item.activity?._id ?? idx}`} style={styles.activityItem}>
+                              <Image source={{ uri: item.activity.userId?.avatar }} style={styles.feedAvatar} />
+                              <View style={styles.feedItemContent}>
+                                <Text style={styles.activityText}>
+                                  <Text style={styles.activityUserName}>{item.activity.userId?.name}</Text>
+                                  {" "}{item.activity.label}
+                                </Text>
+                                <Text style={styles.activityRoom}>{item.activity.roomId?.title}</Text>
+                              </View>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </>
+                  );
+                })()}
+              </Section>
+            )}
+
+            {/* 5. Trending Hosts */}
             {popularHosts.length > 0 && (
               <Section>
                 <Text style={styles.sectionTitle}>Trending Hosts</Text>
@@ -452,6 +533,24 @@ const styles = StyleSheet.create({
   bubbleImg: { width: 68, height: 68, borderRadius: 34, borderWidth: 2, borderColor: colors.pink },
   bubbleName: { color: colors.text, fontWeight: "800", fontSize: 13, marginTop: 4 },
   bubbleVibeScore: { color: colors.pink, fontSize: 11, fontWeight: "800" },
+  feedSection: { marginBottom: 20 },
+  feedSectionHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
+  feedLiveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.pink },
+  feedSectionTitle: { color: colors.text, fontSize: 16, fontWeight: "900", marginBottom: 10 },
+  feedItem: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.line },
+  feedAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.panelStrong },
+  feedItemContent: { flex: 1 },
+  feedItemTitle: { color: colors.text, fontSize: 14, fontWeight: "900" },
+  feedItemMeta: { color: colors.muted, fontSize: 12, fontWeight: "700", marginTop: 2 },
+  feedLiveTag: { backgroundColor: colors.pink, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  feedLiveTagText: { color: colors.text, fontSize: 10, fontWeight: "900" },
+  feedStoryCard: { alignItems: "center", gap: 4, marginRight: 14, width: 64 },
+  feedStoryAvatar: { width: 56, height: 56, borderRadius: 28, borderWidth: 2, borderColor: colors.pink },
+  feedStoryName: { color: colors.text, fontSize: 11, fontWeight: "800", textAlign: "center" },
+  activityItem: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.line },
+  activityText: { color: colors.text, fontSize: 13, fontWeight: "700" },
+  activityUserName: { fontWeight: "900" },
+  activityRoom: { color: colors.muted, fontSize: 11, fontWeight: "700", marginTop: 2 },
   hostRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.line },
   hostRowAvatar: { height: 50, width: 50, borderRadius: 12 },
   hostRowName: { color: colors.text, fontWeight: "900", fontSize: 15 },
