@@ -32,6 +32,7 @@ import { PkBattle } from "../models/PkBattle.js";
 import { PkEvent } from "../models/PkEvent.js";
 import { PayoutReview } from "../models/PayoutReview.js";
 import { Purchase } from "../models/Purchase.js";
+import { Referral } from "../models/Referral.js";
 import { Report } from "../models/Report.js";
 import { Room } from "../models/Room.js";
 import { RoomInvite } from "../models/RoomInvite.js";
@@ -1046,6 +1047,45 @@ adminRouter.post("/clans/:clanId/clean-messages", requireAnyPermission(["message
   const result = await ClanMessage.deleteMany({ clanId });
   await auditLog({ adminId: req.admin!.id, action: "clan.clean_messages", entityType: "clan", entityId: clanId, metadata: { deletedCount: result.deletedCount }, req });
   adminOk(res, { deletedCount: result.deletedCount });
+}));
+
+adminRouter.get("/referrals/stats", requirePermission("analytics.read"), asyncHandler(async (_req: AdminAuthRequest, res) => {
+  const [totalReferrals, rewardedReferrals, totalCoins, topReferrers] = await Promise.all([
+    Referral.countDocuments(),
+    Referral.countDocuments({ status: "REWARDED" }),
+    Referral.aggregate([
+      { $match: { status: "REWARDED" } },
+      { $group: { _id: null, totalCoins: { $sum: "$rewardCoins" } } }
+    ]),
+    Referral.aggregate([
+      { $match: { status: "REWARDED" } },
+      { $group: { _id: "$referrerId", count: { $sum: 1 }, coins: { $sum: "$rewardCoins" } } },
+      { $sort: { count: -1 } },
+      { $limit: 20 },
+      { $lookup: { from: "users", localField: "_id", foreignField: "_id", as: "user" } },
+      { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+      { $project: { _id: 1, count: 1, coins: 1, "user.name": 1, "user.username": 1, "user.avatar": 1 } }
+    ])
+  ]);
+  adminOk(res, { totalReferrals, rewardedReferrals, totalCoins: totalCoins[0]?.totalCoins ?? 0, topReferrers });
+}));
+
+adminRouter.get("/referrals", requirePermission("analytics.read"), asyncHandler(async (req: AdminAuthRequest, res) => {
+  const { page, limit, skip } = pageParams(req.query);
+  const filter: Record<string, unknown> = {};
+  if (req.query.status) filter.status = req.query.status;
+  if (req.query.referralCode) filter.referralCode = String(req.query.referralCode).toUpperCase();
+  const [rows, total] = await Promise.all([
+    Referral.find(filter)
+      .populate("referrerId", "name username avatar")
+      .populate("referredUserId", "name username avatar")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    Referral.countDocuments(filter)
+  ]);
+  adminOk(res, { referrals: rows, meta: paginationMeta(total, page, limit) });
 }));
 
 adminRouter.get("/messages", requirePermission("messages.read"), asyncHandler(async (req: AdminAuthRequest, res) => {

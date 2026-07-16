@@ -47,6 +47,7 @@ type ViewKey =
   | "growth"
   | "support"
   | "dmReviews"
+  | "referrals"
   | "analytics"
   | "fraud"
   | "config"
@@ -74,6 +75,7 @@ const navItems: Array<{ key: ViewKey; label: string; icon: ReactNode; group: str
   { key: "notifications", label: "Notifications", icon: <Bell />, group: "Operations" },
   { key: "campaigns", label: "Campaigns", icon: <Bell />, group: "Operations", requiredPermission: "notifications.send" },
   { key: "growth", label: "Growth OS", icon: <LineChart />, group: "Operations" },
+  { key: "referrals", label: "Referrals", icon: <Gift />, group: "Operations" },
   { key: "support", label: "Support", icon: <LifeBuoy />, group: "Operations" },
   { key: "dmReviews", label: "DM Reviews", icon: <Lock />, group: "Safety", requiredPermission: "dm_reviews.review" },
   { key: "analytics", label: "Analytics", icon: <BarChart3 />, group: "Intelligence" },
@@ -336,6 +338,7 @@ function ViewRenderer({ view, session, setNotice, onLogout }: { view: ViewKey; s
   if (view === "growth") return <GrowthPage token={session.accessToken} />;
   if (view === "dmReviews") return <DmReviewsPage token={session.accessToken} admin={session.admin} setNotice={setNotice} />;
   if (view === "support") return <SupportPage token={session.accessToken} setNotice={setNotice} />;
+  if (view === "referrals") return <ReferralsPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "analytics") return <AnalyticsPage token={session.accessToken} />;
   if (view === "fraud") return <FraudPage token={session.accessToken} />;
   if (view === "config") return <ConfigPage token={session.accessToken} setNotice={setNotice} />;
@@ -1267,6 +1270,72 @@ function GrowthPage({ token }: { token: string }) {
             </div>
           ))}
         </div>
+      </Panel>
+    </div>
+  );
+}
+
+function ReferralsPage({ token, setNotice }: { token: string; setNotice: (notice: Notice) => void }) {
+  const stats = useResource<any>("/referrals/stats", token);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [codeSearch, setCodeSearch] = useState("");
+  const query = `${statusFilter ? `?status=${statusFilter}` : ""}${codeSearch ? `${statusFilter ? "&" : "?"}referralCode=${codeSearch}` : ""}`;
+  const list = useResourceWithMeta<any[]>(`/referrals${query}`, token);
+
+  const filterByStatus = (status: string) => {
+    setStatusFilter(status);
+    setTimeout(() => list.refresh(), 0);
+  };
+
+  const referralColumns: Array<{ key: string; label: string; render?: (row: any) => ReactNode }> = [
+    { key: "referralCode", label: "Code", render: (row: any) => <strong>{row.referralCode}</strong> },
+    { key: "referrerId", label: "Referrer", render: (row: any) => <span>{row.referrerId?.name ?? "Deleted user"}<br /><small>@{row.referrerId?.username ?? "?"}</small></span> },
+    { key: "referredUserId", label: "Referred", render: (row: any) => row.referredUserId ? <span>{row.referredUserId.name}<br /><small>@{row.referredUserId.username}</small></span> : <em>Pending</em> },
+    { key: "status", label: "Status", render: (row: any) => <StatusBadge value={row.status} /> },
+    { key: "rewardCoins", label: "Reward", render: (row: any) => row.rewardCoins ? `${row.rewardCoins}c` : "—" },
+    { key: "createdAt", label: "Created", render: (row: any) => formatDate(row.createdAt) }
+  ];
+
+  return (
+    <div className="page-grid">
+      <Panel title="Referral overview" action="Stats">
+        {stats.loading ? <LoadingState /> : (
+          <div className="stats-grid">
+            <StatsCard label="Total referrals" value={formatNumber(stats.data?.totalReferrals ?? 0)} sub="All time" icon={<Gift />} />
+            <StatsCard label="Rewarded" value={formatNumber(stats.data?.rewardedReferrals ?? 0)} sub="Completed referrals" icon={<CheckCircle2 />} />
+            <StatsCard label="Coins distributed" value={formatNumber(stats.data?.totalCoins ?? 0)} sub="Total rewards" icon={<Coins />} />
+          </div>
+        )}
+      </Panel>
+
+      {stats.data?.topReferrers?.length ? (
+        <Panel title="Top referrers" action="Leaderboard">
+          <DataTable
+            rows={stats.data.topReferrers.slice(0, 10)}
+            columns={[
+              { key: "user", label: "User", render: (row: any) => <span>{row.user?.name ?? "Deleted"}<br /><small>@{row.user?.username ?? "?"}</small></span> },
+              { key: "count", label: "Referred" },
+              { key: "coins", label: "Coins earned", render: (row: any) => `${row.coins}c` }
+            ]}
+          />
+        </Panel>
+      ) : null}
+
+      <Panel title="All referrals">
+        <div className="filter-group" style={{ marginBottom: 12 }}>
+          {["", "PENDING", "COMPLETED", "REWARDED", "EXPIRED"].map((s) => (
+            <button key={s} className={`filter-btn${statusFilter === s ? " active" : ""}`} onClick={() => filterByStatus(s)}>
+              {s || "All"}
+            </button>
+          ))}
+        </div>
+        <ResourceFrame title="Referrals" loading={list.loading} error={list.error} onRetry={list.refresh}>
+          <div className="search-section">
+            <input value={codeSearch} onChange={(e) => setCodeSearch(e.target.value)} placeholder="Search by referral code..." className="search-input" />
+            <button className="secondary-action compact" onClick={() => list.refresh()}>Search</button>
+          </div>
+          <DataTable rows={list.data || []} columns={referralColumns} />
+        </ResourceFrame>
       </Panel>
     </div>
   );
