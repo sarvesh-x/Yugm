@@ -1,6 +1,30 @@
 package com.example.yugm.api
 
 import com.example.yugm.model.ClaimAchievementResult
+import com.example.yugm.model.GiftLeaderboardResponse
+import com.example.yugm.model.WishlistItem
+import com.example.yugm.model.ReferralStatsResponse
+import com.example.yugm.model.RoomRecording
+import com.example.yugm.model.YugmEvent
+import com.example.yugm.model.EventPagination
+import com.example.yugm.model.MyEvents
+import com.example.yugm.model.GroupChat
+import com.example.yugm.model.GroupMessage
+import com.example.yugm.model.StoryGroup
+import com.example.yugm.model.StoryItem
+import com.example.yugm.model.StoryCommentItem
+import com.example.yugm.model.StoryHighlight
+import com.example.yugm.model.StoryUser
+import com.example.yugm.model.WatchParty
+import com.example.yugm.model.FriendUser
+import com.example.yugm.model.FriendRequest
+import com.example.yugm.model.FriendStatusResponse
+import com.example.yugm.model.MutualFriendsResponse
+import com.example.yugm.model.Subscription
+import com.example.yugm.model.SubscriptionCheckResponse
+import com.example.yugm.model.SubscribersResponse
+import com.example.yugm.model.FeedResponse
+import com.example.yugm.model.Achievement
 import com.example.yugm.model.ChatMessage
 import com.example.yugm.model.Clan
 import com.example.yugm.model.ClanMessage
@@ -65,7 +89,7 @@ object YugmApi {
     fun endpoint(path: String): String = YugmHttpClient.endpoint(path)
 
     // Auth
-    suspend fun requestOtp(identifier: String): String? = AuthApi.requestOtp(identifier)
+    suspend fun requestOtp(identifier: String) = AuthApi.requestOtp(identifier)
     suspend fun verifyOtp(identifier: String, otp: String): Session = AuthApi.verifyOtp(identifier, otp)
     suspend fun googleAuth(idToken: String): Session = AuthApi.googleAuth(idToken)
     suspend fun phoneAuth(idToken: String): Session = AuthApi.phoneAuth(idToken)
@@ -103,6 +127,7 @@ object YugmApi {
     suspend fun uploadCover(token: String, bytes: ByteArray, mimeType: String, fileName: String): String = RoomApi.uploadCover(token, bytes, mimeType, fileName)
     suspend fun uploadAvatar(token: String, bytes: ByteArray, mimeType: String): String = RoomApi.uploadAvatar(token, bytes, mimeType)
     suspend fun uploadMessageMedia(token: String, bytes: ByteArray, mimeType: String, fileName: String): Pair<String, String> = RoomApi.uploadMessageMedia(token, bytes, mimeType, fileName)
+    suspend fun uploadTrustVerificationMedia(token: String, bytes: ByteArray, mimeType: String, purpose: String): String = RoomApi.uploadTrustVerificationMedia(token, bytes, mimeType, purpose)
 
     // Wallet
     suspend fun wallet(token: String): Int = WalletApi.balance(token)
@@ -232,4 +257,106 @@ object YugmApi {
     suspend fun getSupportTicket(token: String, ticketId: String): SupportTicket = SupportApi.getTicket(token, ticketId)
     suspend fun addSupportMessage(token: String, ticketId: String, message: String): SupportTicket = SupportApi.addMessage(token, ticketId, message)
     suspend fun closeSupportTicket(token: String, ticketId: String): SupportTicket = SupportApi.closeTicket(token, ticketId)
+
+    // Gift Leaderboard
+    suspend fun giftLeaderboard(token: String, period: String = "all", skip: Int = 0, limit: Int = 20): GiftLeaderboardResponse = GiftLeaderboardApi.leaderboard(token, period, skip, limit)
+
+    // Wishlist
+    suspend fun myWishlist(token: String): List<WishlistItem> = WishlistApi.myWishlist(token)
+    suspend fun userWishlist(token: String, userId: String): List<WishlistItem> = WishlistApi.userWishlist(token, userId)
+    suspend fun addWishlistItem(token: String, giftId: String, message: String? = null, isPublic: Boolean = true): WishlistItem = WishlistApi.addItem(token, giftId, message, isPublic)
+    suspend fun deleteWishlistItem(token: String, itemId: String) = WishlistApi.deleteItem(token, itemId)
+    suspend fun sendWishlistGift(token: String, itemId: String) = WishlistApi.sendGiftFromWishlist(token, itemId)
+
+    // Referral
+    suspend fun getReferralCode(token: String): String = ReferralApi.getCode(token)
+    suspend fun generateReferralCode(token: String): String = ReferralApi.generateCode(token)
+    suspend fun claimReferral(token: String, code: String): Pair<Int, String> = ReferralApi.claim(token, code)
+    suspend fun referralStats(token: String): ReferralStatsResponse = ReferralApi.stats(token)
+
+    // Recordings
+    suspend fun startRecording(token: String, roomId: String, title: String? = null): RoomRecording = RecordingsApi.start(token, roomId, title)
+    suspend fun stopRecording(token: String, recordingId: String, recordingUrl: String, duration: Int): RoomRecording = RecordingsApi.stop(token, recordingId, recordingUrl, duration)
+    suspend fun roomRecordings(token: String, roomId: String, page: Int = 1, limit: Int = 20): Pair<List<RoomRecording>, Int> = RecordingsApi.listByRoom(token, roomId, page, limit)
+    suspend fun recordingDetail(token: String, recordingId: String): RoomRecording = RecordingsApi.detail(token, recordingId)
+    suspend fun updateRecording(token: String, recordingId: String, title: String): RoomRecording = RecordingsApi.update(token, recordingId, title)
+    suspend fun deleteRecording(token: String, recordingId: String) = RecordingsApi.delete(token, recordingId)
+    suspend fun viewRecording(token: String, recordingId: String): Int = RecordingsApi.view(token, recordingId)
+
+    // Events
+    suspend fun listEvents(token: String? = null, page: Int = 1, limit: Int = 20, status: String? = null, type: String? = null, category: String? = null, upcoming: Boolean? = null): Pair<List<YugmEvent>, EventPagination> = EventsApi.list(token, page, limit, status, type, category, upcoming)
+    suspend fun eventDetail(eventId: String, token: String? = null): YugmEvent = EventsApi.detail(eventId, token)
+    suspend fun createEvent(token: String, title: String, description: String? = null, coverImage: String? = null, category: String, type: String, eventDate: String, eventEndDate: String? = null, timezone: String? = null, roomId: String? = null, maxParticipants: Int? = null, tags: List<String>? = null): YugmEvent = EventsApi.create(token, title, description, coverImage, category, type, eventDate, eventEndDate, timezone, roomId, maxParticipants, tags)
+    suspend fun joinEvent(token: String, eventId: String): YugmEvent = EventsApi.join(token, eventId)
+    suspend fun cancelEvent(token: String, eventId: String): YugmEvent = EventsApi.cancel(token, eventId)
+    suspend fun myEvents(token: String): MyEvents = EventsApi.myEvents(token)
+
+    // Group Chats
+    suspend fun listGroups(token: String): List<GroupChat> = GroupsApi.list(token)
+    suspend fun groupDetail(token: String, groupId: String): Pair<GroupChat, Int> = GroupsApi.detail(token, groupId)
+    suspend fun createGroup(token: String, name: String, participantIds: List<String>): GroupChat = GroupsApi.create(token, name, participantIds)
+    suspend fun addGroupParticipants(token: String, groupId: String, participantIds: List<String>): GroupChat = GroupsApi.addParticipants(token, groupId, participantIds)
+    suspend fun removeGroupParticipant(token: String, groupId: String, userId: String): GroupChat = GroupsApi.removeParticipant(token, groupId, userId)
+    suspend fun leaveGroup(token: String, groupId: String) = GroupsApi.leave(token, groupId)
+    suspend fun groupMessages(token: String, groupId: String, skip: Int = 0, limit: Int = 30): List<GroupMessage> = GroupsApi.messages(token, groupId, skip, limit)
+    suspend fun sendGroupMessage(token: String, groupId: String, message: String, mediaUrl: String? = null, mediaType: String? = null, duration: Int? = null): GroupMessage = GroupsApi.sendMessage(token, groupId, message, mediaUrl, mediaType, duration)
+
+    // Stories
+    suspend fun storyFeed(token: String): List<StoryGroup> = StoryApi.feed(token)
+    suspend fun userStories(token: String, userId: String): List<StoryItem> = StoryApi.userStories(token, userId)
+    suspend fun createStory(token: String, mediaUrl: String, mediaType: String, caption: String? = null, backgroundColor: String? = null, textColor: String? = null, font: String? = null, sticker: String? = null, linkUrl: String? = null): StoryItem = StoryApi.create(token, mediaUrl, mediaType, caption, backgroundColor, textColor, font, sticker, linkUrl)
+    suspend fun viewStory(token: String, storyId: String) = StoryApi.view(token, storyId)
+    suspend fun likeStory(token: String, storyId: String) = StoryApi.like(token, storyId)
+    suspend fun hideStory(token: String, storyId: String) = StoryApi.hide(token, storyId)
+    suspend fun deleteStory(token: String, storyId: String) = StoryApi.delete(token, storyId)
+    suspend fun storyViewers(token: String, storyId: String): List<StoryUser> = StoryApi.viewers(token, storyId)
+    suspend fun storyComments(token: String, storyId: String, skip: Int = 0, limit: Int = 50): List<StoryCommentItem> = StoryApi.comments(token, storyId, skip, limit)
+    suspend fun addStoryComment(token: String, storyId: String, text: String): StoryCommentItem = StoryApi.addComment(token, storyId, text)
+    suspend fun replyToStoryComment(token: String, storyId: String, commentId: String, text: String): StoryCommentItem = StoryApi.replyToComment(token, storyId, commentId, text)
+    suspend fun deleteStoryComment(token: String, commentId: String) = StoryApi.deleteComment(token, commentId)
+
+    // Highlights
+    suspend fun userHighlights(token: String, userId: String): List<StoryHighlight> = HighlightsApi.getUserHighlights(token, userId)
+    suspend fun createHighlight(token: String, title: String, storyIds: List<String>): StoryHighlight = HighlightsApi.create(token, title, storyIds)
+    suspend fun deleteHighlight(token: String, highlightId: String) = HighlightsApi.delete(token, highlightId)
+
+    // Watch Party
+    suspend fun watchPartyStart(token: String, roomId: String, title: String, mediaUrl: String): WatchParty = WatchPartyApi.start(token, roomId, title, mediaUrl)
+    suspend fun watchPartyGet(token: String, roomId: String): WatchParty = WatchPartyApi.get(token, roomId)
+    suspend fun watchPartySync(token: String, roomId: String, position: Double, isPlaying: Boolean): WatchParty = WatchPartyApi.sync(token, roomId, position, isPlaying)
+    suspend fun watchPartyStop(token: String, roomId: String) = WatchPartyApi.stop(token, roomId)
+
+    // Friends
+    suspend fun friendRequest(token: String, userId: String) = FriendsApi.request(token, userId)
+    suspend fun friendAccept(token: String, userId: String) = FriendsApi.accept(token, userId)
+    suspend fun friendDecline(token: String, userId: String) = FriendsApi.decline(token, userId)
+    suspend fun friendUnfriend(token: String, userId: String) = FriendsApi.unfriend(token, userId)
+    suspend fun friendList(token: String): List<FriendUser> = FriendsApi.list(token)
+    suspend fun friendRequests(token: String): List<FriendRequest> = FriendsApi.requests(token)
+    suspend fun friendSent(token: String): List<FriendRequest> = FriendsApi.sent(token)
+    suspend fun friendStatus(token: String, userId: String): FriendStatusResponse = FriendsApi.status(token, userId)
+    suspend fun friendMutual(token: String, userId: String): MutualFriendsResponse = FriendsApi.mutual(token, userId)
+    suspend fun friendCount(token: String, userId: String): Int = FriendsApi.count(token, userId)
+
+    // Subscriptions
+    suspend fun subscribeCreator(token: String, creatorId: String, plan: String): Subscription = SubscriptionsApi.subscribe(token, creatorId, plan)
+    suspend fun cancelSubscription(token: String, creatorId: String) = SubscriptionsApi.cancel(token, creatorId)
+    suspend fun mySubscriptions(token: String): List<Subscription> = SubscriptionsApi.list(token)
+    suspend fun mySubscribers(token: String): SubscribersResponse = SubscriptionsApi.subscribers(token)
+    suspend fun checkSubscription(token: String, creatorId: String): SubscriptionCheckResponse = SubscriptionsApi.check(token, creatorId)
+
+    // Feed
+    suspend fun feed(token: String): FeedResponse = FeedApi.get(token)
+
+    // Co-Host Management (added to RoomApi)
+    suspend fun roomCoHosts(token: String, roomId: String): List<Host> = RoomApi.coHosts(token, roomId)
+    suspend fun addCoHost(token: String, roomId: String, userId: String): Host = RoomApi.addCoHost(token, roomId, userId)
+    suspend fun removeCoHost(token: String, roomId: String, userId: String) = RoomApi.removeCoHost(token, roomId, userId)
+
+    // Badge Showcase
+    suspend fun updateBadgeShowcase(token: String, badgeIds: List<String>) = CreatorApi.updateBadgeShowcase(token, badgeIds)
+    suspend fun getUserBadges(token: String, userId: String): List<Achievement> = CreatorApi.getUserBadges(token, userId)
+
+    // Achievement Sharing
+    suspend fun shareAchievement(token: String, achievementId: String): String = CreatorApi.shareAchievement(token, achievementId)
 }

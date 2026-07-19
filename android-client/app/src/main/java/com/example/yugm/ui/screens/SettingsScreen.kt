@@ -50,12 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.yugm.api.YugmApi
 import com.example.yugm.model.Host
-import com.example.yugm.ui.components.Avatar
-import com.example.yugm.ui.components.ConfirmDialog
-import com.example.yugm.ui.components.GlassCard
-import com.example.yugm.ui.components.LoadingState
-import com.example.yugm.ui.components.SectionTitle
-import com.example.yugm.ui.components.YugmTextField
+import com.example.yugm.ui.components.*
 import com.example.yugm.ui.theme.Background
 import com.example.yugm.ui.theme.Danger
 import com.example.yugm.ui.theme.Gold
@@ -168,20 +163,22 @@ fun SettingsScreen(
         if (token.isNotBlank()) refreshSettings()
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(paneTitle(pane), color = TextPrimary, fontWeight = FontWeight.Black) },
-                navigationIcon = {
-                    TextButton(onClick = { if (pane == SettingsPane.Home) onBack() else pane = SettingsPane.Home }) {
-                        Text("Back", color = Gold, fontWeight = FontWeight.Bold)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
-            )
-        },
-        containerColor = Background
-    ) { innerPadding ->
+    Box(Modifier.fillMaxSize()) {
+        AuroraBackground(speed = 0.8f)
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(paneTitle(pane), color = TextPrimary, fontWeight = FontWeight.Black) },
+                    navigationIcon = {
+                        TextButton(onClick = { if (pane == SettingsPane.Home) onBack() else pane = SettingsPane.Home }) {
+                            Text("Back", color = Gold, fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
+                )
+            },
+            containerColor = Background
+        ) { innerPadding ->
         if (loading && pane == SettingsPane.Home) {
             Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
                 LoadingState("Loading settings...")
@@ -222,6 +219,7 @@ fun SettingsScreen(
         }
     }
 
+    }
     if (showLogoutConfirm) {
         ConfirmDialog(
             title = "Log out",
@@ -261,10 +259,9 @@ private fun SettingsHome(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Box(
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Brush.linearGradient(listOf(Purple, Pink))).padding(16.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            AnimatedEntrance(delay = 100) {
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Avatar(userName.firstOrNull()?.toString() ?: "Y", 52)
                     Column(Modifier.weight(1f)) {
                         Text(userName.ifBlank { "Yugm User" }, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp)
@@ -275,33 +272,40 @@ private fun SettingsHome(
                     }
                 }
             }
+            }
             if (!error.isNullOrBlank()) {
                 Text(error, color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
             }
         }
         item {
-            SettingsGroup("Account") {
-                SettingsNavRow("Detailed profile", "Edit your public profile and interests.", onProfile)
-                SettingsNavRow("Yugm Trust Verification", "Verify your face and voice to show people you're real.", onTrustVerification)
-                SettingsNavRow("Yugm Arcade", "Play mini games and manage challenges.", onGames)
-                SettingsNavRow("Yugm Clans", "Create or join a clan and chat with your family.", onClans)
-                SettingsNavRow("Notification settings", "Control messages, rooms, gifts, safety, and updates.", onNotifications)
+            AnimatedEntrance(delay = 200) {
+                SettingsGroup("Account") {
+                    SettingsNavRow("Detailed profile", "Edit your public profile and interests.", onProfile)
+                    SettingsNavRow("Yugm Trust Verification", "Verify your face and voice to show people you're real.", onTrustVerification)
+                    SettingsNavRow("Yugm Arcade", "Play mini games and manage challenges.", onGames)
+                    SettingsNavRow("Yugm Clans", "Create or join a clan and chat with your family.", onClans)
+                    SettingsNavRow("Notification settings", "Control messages, rooms, gifts, safety, and updates.", onNotifications)
+                }
             }
         }
         item {
-            SettingsGroup("Privacy & Safety") {
-                SettingsNavRow("Blocked list", "$blockedCount people blocked.", onBlocked)
-                SettingsNavRow("Safety center", "Reports, trust checks, and privacy actions.", onSafety)
-                SettingsNavRow("Community guidelines", "Read the rules for rooms, chats, and profiles.") { onDoc(SettingsPane.Guidelines) }
-                SettingsNavRow("Privacy policy", "How Yugm uses data to run and protect the service.") { onDoc(SettingsPane.Privacy) }
+            AnimatedEntrance(delay = 300) {
+                SettingsGroup("Privacy & Safety") {
+                    SettingsNavRow("Blocked list", "$blockedCount people blocked.", onBlocked)
+                    SettingsNavRow("Safety center", "Reports, trust checks, and privacy actions.", onSafety)
+                    SettingsNavRow("Community guidelines", "Read the rules for rooms, chats, and profiles.") { onDoc(SettingsPane.Guidelines) }
+                    SettingsNavRow("Privacy policy", "How Yugm uses data to run and protect the service.") { onDoc(SettingsPane.Privacy) }
+                }
             }
         }
         item {
-            SettingsGroup("Help & Legal") {
-                SettingsNavRow("Help and feedback", "Send a support note using the backend ticket flow.", onFeedback)
-                SettingsNavRow("Support", "Contact our support team for help.", onNavigateToSupport)
-                SettingsNavRow("About", "Yugm app summary and product scope.") { onDoc(SettingsPane.About) }
-                SettingsNavRow("Terms of use", "Respect, safety, and account rules.") { onDoc(SettingsPane.Terms) }
+            AnimatedEntrance(delay = 400) {
+                SettingsGroup("Help & Legal") {
+                    SettingsNavRow("Help and feedback", "Send a support note using the backend ticket flow.", onFeedback)
+                    SettingsNavRow("Support", "Contact our support team for help.", onNavigateToSupport)
+                    SettingsNavRow("About", "Yugm app summary and product scope.") { onDoc(SettingsPane.About) }
+                    SettingsNavRow("Terms of use", "Respect, safety, and account rules.") { onDoc(SettingsPane.Terms) }
+                }
             }
         }
         item {
@@ -449,7 +453,7 @@ private fun DocumentPane(modifier: Modifier, pane: SettingsPane) {
 
 @Composable
 private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
         SectionTitle(title)
         content()
     }

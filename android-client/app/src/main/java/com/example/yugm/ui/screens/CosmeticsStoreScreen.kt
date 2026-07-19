@@ -339,7 +339,7 @@ fun CosmeticsStoreScreen(
                 }
 
                 // Category Tabs
-                ScrollableTabRow(
+                PrimaryScrollableTabRow(
                     selectedTabIndex = tabs.indexOfFirst { it.first == activeTab },
                     containerColor = Background,
                     contentColor = Gold,

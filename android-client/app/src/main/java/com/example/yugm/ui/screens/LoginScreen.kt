@@ -1,72 +1,135 @@
 package com.example.yugm.ui.screens
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.yugm.R
+import com.example.yugm.ui.components.*
+import com.example.yugm.ui.theme.*
 
 @Composable
 fun LoginScreen(
     onGoogleSignIn: () -> Unit,
     onPhoneSignIn: () -> Unit,
-    onOtpSignIn: () -> Unit
+    onEmailLogin: (String) -> Unit,
+    loading: Boolean,
+    error: String?
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF1A1A2E))
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            text = "Yugm",
-            color = Color.White,
-            fontSize = 48.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "Connect with the world",
-            color = Color.White.copy(alpha = 0.6f),
-            fontSize = 16.sp
-        )
-        Spacer(modifier = Modifier.height(64.dp))
+    var email by rememberSaveable { mutableStateOf("") }
 
-        Button(
-            onClick = onGoogleSignIn,
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
+    Box(modifier = Modifier.fillMaxSize()) {
+        AuroraBackground()
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Text("Continue with Google", fontWeight = FontWeight.Medium)
-        }
+            AnimatedEntrance(delay = 0) {
+                Text(
+                    text = "Yugm",
+                    color = Color.White,
+                    fontSize = 52.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = (-1).sp,
+                    style = androidx.compose.ui.text.TextStyle(
+                        shadow = androidx.compose.ui.graphics.Shadow(
+                            color = PrimaryPink.copy(alpha = 0.3f),
+                            blurRadius = 20f
+                        )
+                    )
+                )
+            }
 
-        Spacer(modifier = Modifier.height(16.dp))
+            AnimatedEntrance(delay = 150, slideOffset = 10.dp) {
+                Text(
+                    text = "Connect with the world",
+                    color = TextMuted,
+                    fontSize = 15.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
 
-        Button(
-            onClick = onPhoneSignIn,
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE94560))
-        ) {
-            Text("Continue with Phone", color = Color.White, fontWeight = FontWeight.Medium)
-        }
+            Spacer(modifier = Modifier.height(40.dp))
 
-        Spacer(modifier = Modifier.height(24.dp))
+            AnimatedEntrance(delay = 300, slideOffset = 30.dp) {
+                GlassCard(
+                    cornerRadius = 24.dp,
+                    borderGradient = Brush.horizontalGradient(
+                        listOf(PrimaryPurple.copy(alpha = 0.25f), PrimaryPink.copy(alpha = 0.2f))
+                    ),
+                    contentPadding = PaddingValues(20.dp)
+                ) {
+                    Spacer(modifier = Modifier.height(8.dp))
 
-        TextButton(onClick = onOtpSignIn) {
-            Text("Use OTP Login (Dev)", color = Color.White.copy(alpha = 0.7f))
+                    GlassTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        label = "Email address",
+                        placeholder = "your@email.com",
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = KeyboardType.Email
+                        )
+                    )
+
+                    if (error != null) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            error,
+                            color = Danger,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    GlassButton(
+                        text = "Continue with Email",
+                        onClick = { onEmailLogin(email) },
+                        enabled = !loading && email.isNotBlank(),
+                        loading = loading,
+                        gradient = Brush.horizontalGradient(auroraGradientPrimary)
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        GlassOutlinedButton(
+                            text = "Google",
+                            onClick = onGoogleSignIn,
+                            modifier = Modifier.weight(1f),
+                            height = 52.dp,
+                            cornerRadius = 14.dp,
+                            enabled = !loading
+                        )
+                        GlassOutlinedButton(
+                            text = "Phone",
+                            onClick = onPhoneSignIn,
+                            modifier = Modifier.weight(1f),
+                            height = 52.dp,
+                            cornerRadius = 14.dp,
+                            enabled = !loading
+                        )
+                    }
+                }
+            }
         }
     }
 }

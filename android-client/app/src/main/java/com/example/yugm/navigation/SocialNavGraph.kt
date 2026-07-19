@@ -1,0 +1,301 @@
+package com.example.yugm.navigation
+
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.navigation.NavGraphBuilder
+import androidx.navigation.NavHostController
+import androidx.navigation.NavType
+import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
+import com.example.yugm.ui.screens.*
+import com.example.yugm.ui.viewmodel.MainViewModel
+import kotlinx.coroutines.launch
+
+fun NavGraphBuilder.socialNavGraph(
+    navController: NavHostController,
+    mainViewModel: MainViewModel,
+) {
+    composable(Screen.DatingDiscovery.route) {
+        DatingDiscoveryScreen(
+            token = mainViewModel.authToken,
+            onNavigateToChat = { partnerId ->
+                navController.navigate(Screen.Chat.createRoute(partnerId))
+            },
+            onNavigateToProfile = { userId ->
+                navController.navigate(Screen.ProfileDetail.createRoute(userId))
+            },
+            onMatches = { navController.navigate(Screen.ChatList.route) },
+            onDiscover = { navController.navigate(Screen.Discover.route) },
+            onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
+            onLive = { navController.navigate(Screen.VoiceRooms.route) },
+            onWallet = { navController.navigate(Screen.Wallet.route) },
+            onSelfProfile = {
+                if (mainViewModel.currentUserId.isNotBlank()) navController.navigate(Screen.ProfileDetail.createRoute(mainViewModel.currentUserId))
+                else navController.navigate(Screen.ProfileSetup.route)
+            }
+        )
+    }
+
+    composable(Screen.GiftLeaderboard.route) {
+        GiftLeaderboardScreen(
+            token = mainViewModel.authToken,
+            onBack = { navController.popBackStack() }
+        )
+    }
+
+    composable(Screen.Wishlist.route) {
+        WishlistScreen(
+            token = mainViewModel.authToken,
+            userId = null,
+            onBack = { navController.popBackStack() }
+        )
+    }
+
+    composable(Screen.Referral.route) {
+        ReferralScreen(
+            token = mainViewModel.authToken,
+            onBack = { navController.popBackStack() }
+        )
+    }
+
+    composable(Screen.GroupChats.route) {
+        GroupChatScreen(
+            token = mainViewModel.authToken,
+            onBack = { navController.popBackStack() },
+            onOpenGroup = { groupId ->
+                navController.navigate(Screen.GroupChatDetail.createRoute(groupId))
+            }
+        )
+    }
+
+    composable(
+        route = Screen.GroupChatDetail.route,
+        arguments = listOf(navArgument("groupId") { type = NavType.StringType })
+    ) { backStackEntry ->
+        val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
+        val scope = rememberCoroutineScope()
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val messages = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateListOf<com.example.yugm.model.GroupMessage>() }
+        var messageText by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+
+        fun loadMessages() {
+            scope.launch {
+                runCatching { com.example.yugm.api.YugmApi.groupMessages(mainViewModel.authToken, groupId) }
+                    .onSuccess {
+                        messages.clear()
+                        messages.addAll(it)
+                    }
+                    .onFailure { android.widget.Toast.makeText(context, it.message ?: "Failed to load messages", android.widget.Toast.LENGTH_SHORT).show() }
+            }
+        }
+
+        LaunchedEffect(groupId) { loadMessages() }
+
+        GroupChatDetailScreen(
+            messages = messages,
+            messageText = messageText,
+            onMessageChange = { messageText = it },
+            onBack = { navController.popBackStack() },
+            onSend = {
+                scope.launch {
+                    runCatching {
+                        com.example.yugm.api.YugmApi.sendGroupMessage(
+                            token = mainViewModel.authToken,
+                            groupId = groupId,
+                            message = messageText
+                        )
+                    }.onSuccess {
+                        messageText = ""
+                        loadMessages()
+                    }.onFailure {
+                        android.widget.Toast.makeText(context, it.message ?: "Failed", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        )
+    }
+
+    composable(
+        route = Screen.StoryViewer.route,
+        arguments = listOf(navArgument("userId") { type = NavType.StringType })
+    ) { backStackEntry ->
+        val userId = backStackEntry.arguments?.getString("userId") ?: ""
+        StoryViewerScreen(
+            token = mainViewModel.authToken,
+            userId = userId,
+            onBack = { navController.popBackStack() }
+        )
+    }
+
+    composable(
+        route = Screen.WatchPartyPlayer.route,
+        arguments = listOf(navArgument("roomId") { type = NavType.StringType })
+    ) { backStackEntry ->
+        val roomId = backStackEntry.arguments?.getString("roomId") ?: ""
+        WatchPartyPlayerScreen(
+            token = mainViewModel.authToken,
+            roomId = roomId,
+            onBack = { navController.popBackStack() },
+            onStop = { navController.popBackStack() }
+        )
+    }
+
+    composable(Screen.ScheduledCalendar.route) {
+        ScheduledCalendarScreen(
+            token = mainViewModel.authToken,
+            onBack = { navController.popBackStack() },
+            onOpenRoom = { roomId -> navController.navigate(Screen.RoomLobby.createRoute(roomId)) }
+        )
+    }
+
+    composable(Screen.LanguagePicker.route) {
+        LanguagePickerScreen(
+            currentLanguage = "en",
+            onLanguageSelected = { navController.popBackStack() },
+            onBack = { navController.popBackStack() }
+        )
+    }
+
+    composable(Screen.Events.route) {
+        EventsScreen(
+            token = mainViewModel.authToken,
+            onBack = { navController.popBackStack() },
+            onCreateEvent = { navController.navigate(Screen.EventCreate.route) },
+            onEventDetail = { eventId ->
+                navController.navigate(Screen.EventDetail.createRoute(eventId))
+            }
+        )
+    }
+
+    composable(Screen.EventCreate.route) {
+        val scope = rememberCoroutineScope()
+        val context = androidx.compose.ui.platform.LocalContext.current
+        var title by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+        var description by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+        var category by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("SOCIAL") }
+        var type by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("VOICE") }
+        var eventDate by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+        EventCreateScreen(
+            title = title,
+            onTitleChange = { title = it },
+            description = description,
+            onDescriptionChange = { description = it },
+            category = category,
+            onCategoryChange = { category = it },
+            type = type,
+            onTypeChange = { type = it },
+            eventDate = eventDate,
+            onEventDateChange = { eventDate = it },
+            onBack = { navController.popBackStack() },
+            onCreate = {
+                scope.launch {
+                    runCatching {
+                        com.example.yugm.api.YugmApi.createEvent(
+                            token = mainViewModel.authToken,
+                            title = title,
+                            description = description.ifBlank { null },
+                            category = category,
+                            type = type,
+                            eventDate = eventDate
+                        )
+                    }.onSuccess {
+                        android.widget.Toast.makeText(context, "Event created", android.widget.Toast.LENGTH_SHORT).show()
+                        navController.popBackStack()
+                    }.onFailure {
+                        android.widget.Toast.makeText(context, it.message ?: "Failed", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        )
+    }
+
+    composable(
+        route = Screen.EventDetail.route,
+        arguments = listOf(navArgument("eventId") { type = NavType.StringType })
+    ) { backStackEntry ->
+        val eventId = backStackEntry.arguments?.getString("eventId") ?: ""
+        val scope = rememberCoroutineScope()
+        val context = androidx.compose.ui.platform.LocalContext.current
+        var event by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<com.example.yugm.model.YugmEvent?>(null) }
+        var eventError by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+        LaunchedEffect(eventId) {
+            runCatching { com.example.yugm.api.YugmApi.eventDetail(eventId, mainViewModel.authToken) }
+                .onSuccess { event = it }
+                .onFailure { eventError = true; android.widget.Toast.makeText(context, it.message ?: "Failed to load event", android.widget.Toast.LENGTH_SHORT).show() }
+        }
+        if (eventError) {
+            androidx.compose.material3.Text("Failed to load event", color = com.example.yugm.ui.theme.Danger)
+        } else
+        event?.let { ev ->
+            EventDetailScreen(
+                event = ev,
+                token = mainViewModel.authToken,
+                onBack = { navController.popBackStack() },
+                onJoin = {
+                    scope.launch {
+                        runCatching { com.example.yugm.api.YugmApi.joinEvent(mainViewModel.authToken, eventId) }
+                            .onSuccess {
+                                event = it
+                                android.widget.Toast.makeText(context, "Joined event", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                            .onFailure { android.widget.Toast.makeText(context, it.message ?: "Failed", android.widget.Toast.LENGTH_SHORT).show() }
+                    }
+                },
+                onCancel = {
+                    scope.launch {
+                        runCatching { com.example.yugm.api.YugmApi.cancelEvent(mainViewModel.authToken, eventId) }
+                            .onSuccess {
+                                event = it
+                                android.widget.Toast.makeText(context, "Cancelled", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                            .onFailure { android.widget.Toast.makeText(context, it.message ?: "Failed", android.widget.Toast.LENGTH_SHORT).show() }
+                    }
+                }
+            )
+        } ?: com.example.yugm.ui.components.LoadingState("Loading event...")
+    }
+
+    composable(Screen.Recordings.route) {
+        RecordingsScreen(
+            token = mainViewModel.authToken,
+            roomId = null,
+            onBack = { navController.popBackStack() },
+            onPlayRecording = { recordingId ->
+                navController.navigate(Screen.RecordingPlayer.createRoute(recordingId))
+            }
+        )
+    }
+
+    composable(
+        route = Screen.RecordingPlayer.route,
+        arguments = listOf(navArgument("recordingId") { type = NavType.StringType })
+    ) { backStackEntry ->
+        val recordingId = backStackEntry.arguments?.getString("recordingId") ?: ""
+        val recordingContext = androidx.compose.ui.platform.LocalContext.current
+        var recording by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<com.example.yugm.model.RoomRecording?>(null) }
+        var recordingError by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+        LaunchedEffect(recordingId) {
+            runCatching { com.example.yugm.api.YugmApi.recordingDetail(mainViewModel.authToken, recordingId) }
+                .onSuccess { recording = it }
+                .onFailure { recordingError = true; android.widget.Toast.makeText(recordingContext, it.message ?: "Failed to load recording", android.widget.Toast.LENGTH_SHORT).show() }
+        }
+        when {
+            recordingError -> androidx.compose.material3.Text("Failed to load recording", color = com.example.yugm.ui.theme.Danger)
+            recording != null -> RecordingPlayerScreen(
+                recording = recording!!,
+                onBack = { navController.popBackStack() }
+            )
+            else -> com.example.yugm.ui.components.LoadingState("Loading recording...")
+        }
+    }
+
+    composable(Screen.Hosts.route) {
+        HostsScreen(
+            token = mainViewModel.authToken,
+            onBack = { navController.popBackStack() },
+            onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) }
+        )
+    }
+}

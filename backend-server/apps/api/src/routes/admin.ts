@@ -10,7 +10,7 @@ import { z } from "zod";
 import { creatorCoinsToInr } from "../services/withdrawal.js";
 import { adminPermissions, adminRoles, permissionsFor, type AdminRole } from "../modules/admin/permissions.js";
 import { adminOk, pageParams, paginationMeta } from "../modules/admin/http.js";
-import { requireAdminAuth, requireAnyPermission, requirePermission, requireSuperAdmin, signAdminAccessToken, signAdminRefreshToken, hashToken, adminRefreshSecret, type AdminAuthRequest } from "../middleware/adminAuth.js";
+import { adminJwtSecret, requireAdminAuth, requireAnyPermission, requirePermission, requireSuperAdmin, requireTwoFactor, signAdminAccessToken, signAdminRefreshToken, hashToken, adminRefreshSecret, type AdminAuthRequest } from "../middleware/adminAuth.js";
 import { validateBody } from "../middleware/validate.js";
 import { AdminAuditLog } from "../models/AdminAuditLog.js";
 import { AdminModerationAction } from "../models/AdminModerationAction.js";
@@ -254,12 +254,24 @@ async function reservePurchaseRefund(purchaseId: string, adminId: string, reason
     }
     let transaction: any = null;
     if (purchase.status === "CREDITED") {
-      [transaction] = await debitWallet(purchase.userId.toString(), purchase.coinAmount, "PAYMENT_REFUND", {
-        purchaseId: purchase.id,
-        provider: purchase.provider,
-        adminId,
-        reason
-      }, session);
+      try {
+        [transaction] = await debitWallet(purchase.userId.toString(), purchase.coinAmount, "PAYMENT_REFUND", {
+          purchaseId: purchase.id,
+          provider: purchase.provider,
+          adminId,
+          reason
+        }, session);
+      } catch (error) {
+        if (!(error instanceof HttpError) || error.status !== 402) throw error;
+        const [debtTx] = await debitWallet(purchase.userId.toString(), purchase.coinAmount, "PAYMENT_REFUND_DEBT", {
+          purchaseId: purchase.id,
+          provider: purchase.provider,
+          adminId,
+          reason,
+          debtShortfall: true
+        }, session);
+        transaction = debtTx;
+      }
       purchase.refundTransactionId = transaction._id;
     }
     purchase.status = "REFUND_PENDING";
@@ -776,7 +788,7 @@ adminRouter.post("/users/:userId/suspend", requirePermission("users.suspend"), v
   adminOk(res, { user });
 }));
 
-adminRouter.post("/users/:userId/ban", requirePermission("users.ban"), validateBody(reasonSchema), asyncHandler(async (req: AdminAuthRequest, res) => {
+adminRouter.post("/users/:userId/ban", requireTwoFactor, requirePermission("users.ban"), validateBody(reasonSchema), asyncHandler(async (req: AdminAuthRequest, res) => {
   const user = await User.findByIdAndUpdate(req.params.userId, { isBlocked: true, moderationReason: req.body.reason, $inc: { moderationStrikes: 1, tokenVersion: 1 } }, { new: true }).lean();
   if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
   await createModerationAction(req, "USER_BANNED", { targetType: "USER", targetId: req.params.userId, targetUserId: req.params.userId, reason: req.body.reason });
@@ -1134,9 +1146,30 @@ adminRouter.get("/wallet/users/:userId", requirePermission("wallet.read"), async
   adminOk(res, { user, safety, transactions });
 }));
 adminRouter.get("/wallet/users/:userId/transactions", requirePermission("wallet.read"), asyncHandler(async (req, res) => adminOk(res, await WalletTransaction.find({ userId: req.params.userId }).sort({ createdAt: -1 }).limit(200).lean())));
-adminRouter.post("/wallet/users/:userId/adjust", requirePermission("wallet.adjust"), validateBody(z.object({ type: z.enum(["CREDIT", "DEBIT"]), amount: z.number().int().min(1).max(100000), reason: z.string().min(3).max(500), metadata: z.record(z.unknown()).optional() })), asyncHandler(async (req: AdminAuthRequest, res) => {
+const LARGE_ADJUSTMENT_THRESHOLD = 10_000;
+
+async function assertSecondAdminApproval(req: AdminAuthRequest, amount: number) {
+  if (amount < LARGE_ADJUSTMENT_THRESHOLD) return;
+  const approvalHeader = req.headers["x-approval-admin-token"];
+  if (!approvalHeader || typeof approvalHeader !== "string") {
+    throw new HttpError(400, `Adjustments of ${LARGE_ADJUSTMENT_THRESHOLD}+ coins require dual approval. Provide a second admin's Bearer token via the X-Approval-Admin-Token header.`, ErrorCode.VALIDATION);
+  }
+  const token = approvalHeader.startsWith("Bearer ") ? approvalHeader.slice(7) : approvalHeader;
+  const decoded = jwt.verify(token, adminJwtSecret()) as { sub: string; type?: string };
+  if (decoded.type !== "admin") throw new HttpError(403, "Invalid approval admin token", ErrorCode.FORBIDDEN);
+  if (decoded.sub === req.admin!.id) throw new HttpError(403, "Approval must come from a different admin", ErrorCode.FORBIDDEN);
+  const approver = await AdminUser.findById(decoded.sub).lean();
+  if (!approver || approver.status !== "ACTIVE") throw new HttpError(403, "Approval admin account is not active", ErrorCode.FORBIDDEN);
+  const approverPermissions = permissionsFor(approver.role, approver.permissions ?? [], approver.isSuperAdmin);
+  if (!approver.isSuperAdmin && !approverPermissions.includes("wallet.adjust")) {
+    throw new HttpError(403, "Approval admin does not have wallet.adjust permission", ErrorCode.FORBIDDEN);
+  }
+}
+
+adminRouter.post("/wallet/users/:userId/adjust", requireTwoFactor, requirePermission("wallet.adjust"), validateBody(z.object({ type: z.enum(["CREDIT", "DEBIT"]), amount: z.number().int().min(1).max(100000), reason: z.string().min(3).max(500), metadata: z.record(z.unknown()).optional() })), asyncHandler(async (req: AdminAuthRequest, res) => {
   const frozen = await UserSafetyStatus.findOne({ userId: req.params.userId, isWalletFrozen: true }).lean();
   if (frozen) throw new HttpError(403, "Wallet is frozen", ErrorCode.FORBIDDEN);
+  await assertSecondAdminApproval(req, req.body.amount);
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
@@ -1144,7 +1177,7 @@ adminRouter.post("/wallet/users/:userId/adjust", requirePermission("wallet.adjus
       ? await creditWallet(req.params.userId, req.body.amount, "ADMIN_ADJUSTMENT", { reason: req.body.reason, adminId: req.admin!.id, ...(req.body.metadata ?? {}) }, session)
       : await debitWallet(req.params.userId, req.body.amount, "ADMIN_ADJUSTMENT", { reason: req.body.reason, adminId: req.admin!.id, ...(req.body.metadata ?? {}) }, session);
     await session.commitTransaction();
-    await auditLog({ adminId: req.admin!.id, action: "wallet.adjusted", entityType: "wallet_transaction", entityId: tx.id, targetUserId: req.params.userId, metadata: { type: req.body.type, amount: req.body.amount, reason: req.body.reason }, req });
+    await auditLog({ adminId: req.admin!.id, action: "wallet.adjusted", entityType: "wallet_transaction", entityId: tx.id, targetUserId: req.params.userId, metadata: { type: req.body.type, amount: req.body.amount, reason: req.body.reason, dualApproval: req.body.amount >= LARGE_ADJUSTMENT_THRESHOLD }, req });
     adminOk(res, { transaction: tx }, {}, 201);
   } catch (error) {
     await session.abortTransaction();
@@ -1153,7 +1186,7 @@ adminRouter.post("/wallet/users/:userId/adjust", requirePermission("wallet.adjus
     session.endSession();
   }
 }));
-adminRouter.post("/wallet/users/:userId/freeze", requirePermission("wallet.adjust"), validateBody(reasonSchema), asyncHandler(async (req: AdminAuthRequest, res) => {
+adminRouter.post("/wallet/users/:userId/freeze", requireTwoFactor, requirePermission("wallet.adjust"), validateBody(reasonSchema), asyncHandler(async (req: AdminAuthRequest, res) => {
   const safety = await flagSafetyState(req.params.userId, { isWalletFrozen: true }, req.admin!.id);
   await createModerationAction(req, "WALLET_FROZEN", { targetType: "USER", targetId: req.params.userId, targetUserId: req.params.userId, reason: req.body.reason });
   adminOk(res, { safety });

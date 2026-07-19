@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -27,7 +28,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -53,31 +56,9 @@ import com.example.yugm.model.RoomParticipant
 import com.example.yugm.model.RoomPoll
 import com.example.yugm.model.SpeakerRequest
 import com.example.yugm.util.cosmeticDisplayName
-import com.example.yugm.ui.components.ControlButton
-import com.example.yugm.ui.components.GlassCard
+import com.example.yugm.ui.components.*
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import com.example.yugm.ui.components.HostCard
-import com.example.yugm.ui.components.HostRow
-import com.example.yugm.ui.components.ReferenceChip
-import com.example.yugm.ui.components.PkBattleButton
-import com.example.yugm.ui.components.PkBattleHeader
-import com.example.yugm.ui.components.PkBattleScoreBar
-import com.example.yugm.ui.components.PkGiftPanel
-import com.example.yugm.ui.components.PkInviteCard
-import com.example.yugm.ui.components.PkLeaderboard
-import com.example.yugm.ui.components.PkLiveEffectBurst
-import com.example.yugm.ui.components.PkOpponentSearchSheet
-import com.example.yugm.ui.components.PkReactionPanel
-import com.example.yugm.ui.components.PkResultDialog
-import com.example.yugm.ui.components.PkSetupBottomSheet
-import com.example.yugm.ui.components.PkSideCard
-import com.example.yugm.ui.components.PkTeamSelector
-import com.example.yugm.ui.components.PkWaitingState
-import com.example.yugm.ui.components.RoomShell
-import com.example.yugm.ui.components.SectionTitle
-import com.example.yugm.ui.components.SeatCard
-import com.example.yugm.ui.components.YugmTextField
 import com.example.yugm.ui.theme.TextMuted
 import com.example.yugm.ui.theme.TextPrimary
 import com.example.yugm.ui.theme.Gold
@@ -121,7 +102,7 @@ fun ActiveVoiceRoomScreen(
     onVotePoll: (String, Int) -> Unit = { _, _ -> },
     onInviteFriend: (String) -> Unit = {},
     onDirectMessage: (String?) -> Unit = {},
-    onReact: () -> Unit = {},
+    onReact: (String) -> Unit = {},
     onLoadPkOpponents: (String) -> Unit = {},
     onInvitePk: (PkOpponent, PkMode, Int, String) -> Unit = { _, _, _, _ -> },
     onAutoMatchPk: (PkMode, Int, String) -> Unit = { _, _, _ -> },
@@ -146,6 +127,7 @@ fun ActiveVoiceRoomScreen(
     var muted by rememberSaveable { mutableStateOf(false) }
     var giftOpen by rememberSaveable { mutableStateOf(false) }
     var reactionBurst by rememberSaveable { mutableStateOf("") }
+    val floatingEmojis = remember { mutableStateListOf<FloatingEmoji>() }
     var showInvitePicker by rememberSaveable { mutableStateOf(false) }
     var showPollComposer by rememberSaveable { mutableStateOf(false) }
     var showPkSetup by rememberSaveable { mutableStateOf(false) }
@@ -167,17 +149,26 @@ fun ActiveVoiceRoomScreen(
             reactionBurst = ""
         }
     }
-    RoomShell(
-        room = room,
-        chat = chat,
-        onBack = onBack,
-        onSendMessage = onSendMessage,
-        giftOpen = giftOpen,
-        gifts = gifts,
-        balance = balance,
-        onGiftOpen = { giftOpen = it },
-        onGift = onGift,
-        controls = {
+    val emojiCounter = remember { mutableStateOf(0) }
+    LaunchedEffect(floatingEmojis.size) {
+        if (floatingEmojis.isNotEmpty()) {
+            delay(2200)
+            floatingEmojis.removeFirstOrNull()
+        }
+    }
+    Box(Modifier.fillMaxSize()) {
+        AuroraBackground(speed = 0.4f)
+        RoomShell(
+            room = room,
+            chat = chat,
+            onBack = onBack,
+            onSendMessage = onSendMessage,
+            giftOpen = giftOpen,
+            gifts = gifts,
+            balance = balance,
+            onGiftOpen = { giftOpen = it },
+            onGift = onGift,
+            controls = {
             val guestId = participants.firstOrNull { it.user.id.isNotBlank() && it.user.id != room.host?.id }?.user?.id
             ControlButton(if (muted) "Unmute" else "Mute", active = !muted) {
                 muted = !muted
@@ -191,8 +182,7 @@ fun ActiveVoiceRoomScreen(
                 ControlButton("Gift") { giftOpen = true }
             }
             ControlButton("React") {
-                reactionBurst = "FIRE"
-                onReact()
+                onReact("fire")
             }
             ControlButton("Invite") {
                 showInvitePicker = true
@@ -216,6 +206,7 @@ fun ActiveVoiceRoomScreen(
             if (!isHost) ControlButton("Leave", danger = true) { onBack() }
         }
     ) {
+        AnimatedEntrance(delay = 200) {
         if (showEntryOverlay) {
             RoomEntryOverlay(room.host?.activeCosmetics?.roomEntry ?: "")
         }
@@ -328,21 +319,42 @@ fun ActiveVoiceRoomScreen(
             }
         }
         SectionTitle("Room reactions")
-        androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-            listOf("❤️", "👏", "🔥", "💯", "✨", "😂").forEach { emoji ->
-                androidx.compose.foundation.layout.Box(
+        val emojiRow = listOf(
+            "❤️" to "heart", "🔥" to "fire", "😂" to "laugh",
+            "👏" to "clap", "😮" to "wow", "🎉" to "laugh"
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
+        ) {
+            emojiRow.forEach { (emoji, type) ->
+                Box(
                     modifier = Modifier
                         .weight(1f)
-                        .clickable { reactionBurst = emoji; onReact() }
-                        .padding(vertical = 8.dp),
-                    contentAlignment = androidx.compose.ui.Alignment.Center
-                ) { Text(emoji, fontSize = 25.sp) }
+                        .clickable {
+                            onReact(type)
+                            emojiCounter.value++
+                            floatingEmojis.add(
+                                FloatingEmoji(id = "${emojiCounter.value}-${type}", emoji = emoji)
+                            )
+                        }
+                        .padding(vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(emoji, fontSize = 26.sp)
+                }
             }
         }
+        Spacer(Modifier.height(4.dp))
         MissionStrip(missions)
         PollCard(poll = polls.firstOrNull(), isHost = isHost, onCreate = { showPollComposer = true }, onVote = onVotePoll)
         ActivityFeed(activity)
-        ReactionBurst(reactionBurst)
+    }
+    }
+        FloatingEmojiOverlay(
+            emojis = floatingEmojis.toList(),
+            modifier = Modifier.matchParentSize()
+        )
     }
     if (showInvitePicker) {
         FriendInviteSheet(

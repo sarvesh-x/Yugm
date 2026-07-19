@@ -21,7 +21,8 @@ object YugmSocket {
         onPkEffect: (PkLiveEffect) -> Unit = {},
         onPkRefresh: () -> Unit = {},
         onPkLeadChanged: ((leader: String, leftScore: Int, rightScore: Int) -> Unit)? = null,
-        onPkRematchRequested: ((previousBattleId: String) -> Unit)? = null
+        onPkRematchRequested: ((previousBattleId: String) -> Unit)? = null,
+        onRoomReaction: ((emoji: String, userId: String, userName: String) -> Unit)? = null
     ) {
         disconnect()
         try {
@@ -104,6 +105,20 @@ object YugmSocket {
                         onPkRematchRequested(data.optString("previousBattleId", ""))
                     } catch (e: Exception) {
                         Timber.tag(TAG).e(e, "Error parsing rematch requested")
+                    }
+                }
+            }
+            socket?.on("room:reaction:send") { args ->
+                if (args.isNotEmpty() && onRoomReaction != null) {
+                    try {
+                        val data = args[0] as JSONObject
+                        onRoomReaction(
+                            data.optString("type", ""),
+                            data.optString("userId", ""),
+                            data.optString("name", "Someone")
+                        )
+                    } catch (e: Exception) {
+                        Timber.tag(TAG).e(e, "Error parsing room reaction")
                     }
                 }
             }

@@ -7,14 +7,9 @@ sealed class Screen(val route: String) {
     object Onboarding : Screen("onboarding")
     object Login : Screen("login")
     object PhoneLogin : Screen("phone_login")
-    object OtpVerify : Screen("otp_verify/{username}?devOtp={devOtp}") {
-        fun createRoute(username: String, devOtp: String? = null): String {
-            val encodedUsername = Uri.encode(username)
-            return if (devOtp.isNullOrBlank()) {
-                "otp_verify/$encodedUsername"
-            } else {
-                "otp_verify/$encodedUsername?devOtp=${Uri.encode(devOtp)}"
-            }
+    object OtpVerify : Screen("otp_verify/{identifier}") {
+        fun createRoute(identifier: String): String {
+            return "otp_verify/${Uri.encode(identifier)}"
         }
     }
     object ProfileSetup : Screen("profile_setup")
@@ -29,9 +24,7 @@ sealed class Screen(val route: String) {
     object Chat : Screen("chat/{partnerId}") {
         fun createRoute(partnerId: String) = "chat/$partnerId"
     }
-    object LiveHome : Screen("live_home")
     object VoiceRooms : Screen("voice_rooms")
-    object VideoRooms : Screen("video_rooms")
     object RoomLobby : Screen("room_lobby/{roomId}/{roomType}") {
         fun createRoute(roomId: String, roomType: String = "VOICE") = "room_lobby/$roomId/$roomType"
     }
@@ -75,5 +68,44 @@ sealed class Screen(val route: String) {
     }
     object ClanChat : Screen("clan_chat/{clanId}?clanName={clanName}") {
         fun createRoute(clanId: String, clanName: String = "") = "clan_chat/$clanId?clanName=${android.net.Uri.encode(clanName)}"
+    }
+
+    // New parity feature routes
+    object GiftLeaderboard : Screen("gift_leaderboard")
+    object Wishlist : Screen("wishlist")
+    object Referral : Screen("referral")
+    object Recordings : Screen("recordings")
+    object RecordingPlayer : Screen("recording_player/{recordingId}") {
+        fun createRoute(recordingId: String) = "recording_player/$recordingId"
+    }
+    object LanguagePicker : Screen("language_picker")
+    object Events : Screen("events")
+    object EventCreate : Screen("event_create")
+    object EventDetail : Screen("event_detail/{eventId}") {
+        fun createRoute(eventId: String) = "event_detail/$eventId"
+    }
+    object GroupChats : Screen("group_chats")
+    object GroupChatDetail : Screen("group_chat_detail/{groupId}") {
+        fun createRoute(groupId: String) = "group_chat_detail/$groupId"
+    }
+    object StoryViewer : Screen("story_viewer/{userId}") {
+        fun createRoute(userId: String) = "story_viewer/$userId"
+    }
+
+    // Missing parity feature routes
+    object WatchPartyPlayer : Screen("watch_party_player/{roomId}") {
+        fun createRoute(roomId: String) = "watch_party_player/$roomId"
+    }
+    object Friends : Screen("friends")
+    object Subscriptions : Screen("subscriptions")
+    object Feed : Screen("feed")
+    object CreateStory : Screen("create_story")
+    object HighlightsManagement : Screen("highlights_management/{userId}") {
+        fun createRoute(userId: String) = "highlights_management/$userId"
+    }
+    object ScheduledCalendar : Screen("scheduled_calendar")
+    object Hosts : Screen("hosts")
+    object UserWishlist : Screen("user_wishlist/{userId}") {
+        fun createRoute(userId: String) = "user_wishlist/$userId"
     }
 }

@@ -6,6 +6,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -43,13 +44,7 @@ import com.example.yugm.model.RoomDetail
 import com.example.yugm.model.RoomMission
 import com.example.yugm.model.RoomPoll
 import com.example.yugm.model.RoomType
-import com.example.yugm.ui.components.Avatar
-import com.example.yugm.ui.components.GlassCard
-import com.example.yugm.ui.components.HostCard
-import com.example.yugm.ui.components.LiveBadge
-import com.example.yugm.ui.components.LoadingState
-import com.example.yugm.ui.components.PrimaryButton
-import com.example.yugm.ui.components.SectionTitle
+import com.example.yugm.ui.components.*
 import com.example.yugm.ui.theme.DangerRed
 import com.example.yugm.ui.theme.Gold
 import com.example.yugm.ui.theme.TextMuted
@@ -92,11 +87,13 @@ fun RoomLobbyScreen(
         isLoading = false
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
-        contentPadding = PaddingValues(top = 18.dp, bottom = 100.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
+    Box(Modifier.fillMaxSize()) {
+        AuroraBackground(speed = 0.8f)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
+            contentPadding = PaddingValues(top = 18.dp, bottom = 100.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 TextButton(onClick = onBack) { Text("Back", color = TextMuted) }
@@ -113,7 +110,7 @@ fun RoomLobbyScreen(
                 val payload = detail!!
                 val room = payload.room
                 item {
-                    AnimatedVisibility(visible = true, enter = fadeIn() + slideInVertically { it / 3 }) {
+                    AnimatedEntrance(delay = 100) {
                         GlassCard(Modifier.fillMaxWidth()) {
                             Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -210,6 +207,7 @@ fun RoomLobbyScreen(
                 }
             }
         }
+    }
     }
 
     if (showReportDialog) {

@@ -1,5 +1,6 @@
 package com.example.yugm.ui.screens
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -8,21 +9,21 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.yugm.ui.components.BrandHeader
-import com.example.yugm.ui.components.PrimaryButton
+import com.example.yugm.ui.components.*
 import com.example.yugm.ui.theme.*
 import kotlinx.coroutines.launch
+import kotlin.math.sin
 
 data class OnboardingSlide(
     val title: String,
@@ -64,102 +65,130 @@ fun OnboardingScreen(onStart: () -> Unit) {
 
     val pagerState = rememberPagerState(pageCount = { slides.size })
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Background)
-            .padding(24.dp),
-        verticalArrangement = Arrangement.SpaceBetween,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // Brand Header Compact
-        Box(modifier = Modifier.padding(top = 18.dp)) {
-            BrandHeader(compact = true)
-        }
+    val infiniteTransition = rememberInfiniteTransition()
+    val floatY by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 12f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2500, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        )
+    )
 
-        // Horizontal Slide Pager
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-        ) { page ->
-            val slide = slides[page]
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(vertical = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                // Feature Visual / Emoji Box
-                Box(
-                    modifier = Modifier
-                        .size(140.dp)
-                        .clip(RoundedCornerShape(36.dp))
-                        .background(Brush.linearGradient(slide.gradient)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(slide.emoji, fontSize = 58.sp)
-                }
-                Spacer(modifier = Modifier.height(40.dp))
-                Text(
-                    text = slide.title,
-                    color = Color.White,
-                    fontSize = 28.sp,
-                    lineHeight = 34.sp,
-                    fontWeight = FontWeight.Black,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 12.dp)
-                )
-                Spacer(modifier = Modifier.height(14.dp))
-                Text(
-                    text = slide.description,
-                    color = TextMuted,
-                    fontSize = 15.sp,
-                    lineHeight = 22.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 24.dp)
-                )
-            }
-        }
+    Box(modifier = Modifier.fillMaxSize()) {
+        AuroraBackground(speed = 0.7f)
 
-        // Indicators & Buttons
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Slide Indicators (Dots)
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(bottom = 32.dp)
-            ) {
-                repeat(slides.size) { index ->
-                    val active = pagerState.currentPage == index
+            AnimatedEntrance(delay = 100) {
+                Box(modifier = Modifier.padding(top = 18.dp)) {
+                    BrandHeader(compact = true)
+                }
+            }
+
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) { page ->
+                AnimatedEntrance(delay = page * 100) {
+                val slide = slides[page]
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(vertical = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
                     Box(
                         modifier = Modifier
-                            .size(if (active) 20.dp else 8.dp, 8.dp)
-                            .clip(CircleShape)
-                            .background(if (active) Gold else Color(0x33FFFFFF))
-                    )
+                            .size(150.dp)
+                            .clip(RoundedCornerShape(40.dp))
+                            .background(Brush.linearGradient(slide.gradient))
+                            .scale(1f + (sin(page * 1.5f).toFloat() * 0.02f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(slide.emoji, fontSize = 62.sp)
+                    }
+                    Spacer(modifier = Modifier.height(36.dp))
+
+                    GlassCard(
+                        cornerRadius = 24.dp,
+                        borderGradient = Brush.horizontalGradient(
+                            listOf(slide.gradient.last().copy(alpha = 0.3f), Color.Transparent)
+                        ),
+                        contentPadding = PaddingValues(20.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = slide.title,
+                            color = Color.White,
+                            fontSize = 28.sp,
+                            lineHeight = 34.sp,
+                            fontWeight = FontWeight.Black,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = slide.description,
+                            color = TextMuted,
+                            fontSize = 15.sp,
+                            lineHeight = 22.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
                 }
             }
 
-            // Get Started / Continue button
-            val isLastPage = pagerState.currentPage == slides.size - 1
-            PrimaryButton(
-                text = if (isLastPage) "Start matching the vibe" else "Next",
-                onClick = {
-                    if (isLastPage) {
-                        onStart()
-                    } else {
-                        coroutineScope.launch {
-                            pagerState.animateScrollToPage(pagerState.currentPage + 1)
-                        }
+            AnimatedEntrance(delay = 300) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(bottom = 32.dp)
+                ) {
+                    repeat(slides.size) { index ->
+                        val active = pagerState.currentPage == index
+                        Box(
+                            modifier = Modifier
+                                .size(if (active) 24.dp else 8.dp, 8.dp)
+                                .clip(CircleShape)
+                                .then(
+                                    if (active)
+                                        Modifier.background(Brush.horizontalGradient(auroraGradientPrimary))
+                                    else
+                                        Modifier.background(Color(0x33FFFFFF))
+                                )
+                        )
                     }
                 }
-            )
-            Spacer(modifier = Modifier.height(10.dp))
+
+                val isLastPage = pagerState.currentPage == slides.size - 1
+                GlassButton(
+                    text = if (isLastPage) "Start matching the vibe" else "Next",
+                    onClick = {
+                        if (isLastPage) onStart()
+                        else coroutineScope.launch {
+                            pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                        }
+                    },
+                    gradient = if (isLastPage)
+                        Brush.horizontalGradient(auroraGradientWarm)
+                    else
+                        Brush.horizontalGradient(auroraGradientPrimary),
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+            }
+            }
         }
     }
 }

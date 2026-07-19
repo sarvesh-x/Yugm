@@ -25,6 +25,7 @@ import { gamesRouter } from "./routes/games.js";
 import { groupsRouter } from "./routes/groups.js";
 import { livekitRouter } from "./routes/livekit.js";
 import { notificationsRouter } from "./routes/notifications.js";
+import { recordingsRouter } from "./routes/recordings.js";
 import { pkRouter } from "./routes/pk.js";
 import { referralsRouter } from "./routes/referrals.js";
 import { reportsRouter } from "./routes/reports.js";
@@ -35,6 +36,7 @@ import { watchPartyRouter } from "./routes/watchparty.js";
 import { subscriptionRouter } from "./routes/subscriptions.js";
 import { highlightsRouter } from "./routes/highlights.js";
 import { trustVerificationRouter } from "./routes/trustVerification.js";
+import { vibeRouter } from "./routes/vibe.js";
 import { uploadRouter } from "./routes/upload.js";
 import { usersRouter } from "./routes/users.js";
 import { walletRouter } from "./routes/wallet.js";
@@ -175,8 +177,9 @@ export function createApp() {
   app.use("/api/rooms", roomsRouter);
   app.use("/api/livekit", livekitRouter);
   app.use("/api/notifications", notificationsRouter);
-  app.use("/api/pk", pkRouter);
-  app.use("/api/trust-verification", trustVerificationRouter);
+app.use("/api/pk", pkRouter);
+app.use("/api/recordings", recordingsRouter);
+app.use("/api/trust-verification", trustVerificationRouter);
   app.use("/api", walletRouter);
   app.use("/api", giftLeaderboardRouter);
   app.use("/api", wishlistRouter);
@@ -189,6 +192,7 @@ export function createApp() {
   app.use("/api/support", supportRouter);
   app.use("/api", subscriptionRouter);
   app.use("/api", highlightsRouter);
+  app.use("/api", vibeRouter);
 
   app.use((_req, res) => res.status(404).json({ ok: false, error: { message: "Route not found" } }));
   app.use((error: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {

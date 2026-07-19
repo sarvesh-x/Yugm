@@ -52,20 +52,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.example.yugm.R
 import com.example.yugm.api.YugmApi
 import com.example.yugm.model.Host
 import com.example.yugm.model.Room
 import com.example.yugm.model.RoomType
-import com.example.yugm.ui.components.Avatar
-import com.example.yugm.ui.components.BrandHeader
-import com.example.yugm.ui.components.GlassCard
-import com.example.yugm.ui.components.LiveBadge
-import com.example.yugm.ui.components.LoadingState
-import com.example.yugm.ui.components.RoomCard
-import com.example.yugm.ui.components.YugmBottomDock
-import com.example.yugm.ui.components.YugmDockTab
+import com.example.yugm.ui.components.*
 import com.example.yugm.ui.theme.Background
 import com.example.yugm.ui.theme.BorderColor
 import com.example.yugm.ui.theme.Danger
@@ -129,12 +122,14 @@ fun DiscoverScreen(
     }
     val featuredRoom = allRooms.firstOrNull()
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Background)
-    ) {
-        AmbientBackdrop()
+    Box(Modifier.fillMaxSize()) {
+        AuroraBackground(speed = 0.8f)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Background)
+        ) {
+            AmbientBackdrop()
 
         AnimatedVisibility(
             visible = contentVisible,
@@ -146,12 +141,14 @@ fun DiscoverScreen(
                 modifier = Modifier.fillMaxSize()
             ) {
                 item {
-                    DiscoveryHeader(
-                        unreadCount = viewModel.home?.unreadNotifications ?: 0,
-                        onNotifications = onNotifications,
-                        onCreateRoom = onCreateRoom,
-                        onProfile = onSelfProfile
-                    )
+                    AnimatedEntrance(delay = 100) {
+                        DiscoveryHeader(
+                            unreadCount = viewModel.home?.unreadNotifications ?: 0,
+                            onNotifications = onNotifications,
+                            onCreateRoom = onCreateRoom,
+                            onProfile = onSelfProfile
+                        )
+                    }
                 }
 
                 item {
@@ -159,18 +156,22 @@ fun DiscoverScreen(
                         modifier = Modifier.padding(horizontal = 20.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        SearchPill(onSearch)
-                        FilterRail(
-                            selected = selectedFilter,
-                            onSelected = { filter ->
-                                selectedFilter = filter
-                                when (filter) {
-                                    "Voice" -> onVoiceRooms()
-                                    "Video" -> viewModel.refreshRooms(RoomType.Video)
-                                    "Gaming" -> onGames()
+                        AnimatedEntrance(delay = 200) {
+                            SearchPill(onSearch)
+                        }
+                        AnimatedEntrance(delay = 300) {
+                            FilterRail(
+                                selected = selectedFilter,
+                                onSelected = { filter ->
+                                    selectedFilter = filter
+                                    when (filter) {
+                                        "Voice" -> onVoiceRooms()
+                                        "Video" -> viewModel.refreshRooms(RoomType.Video)
+                                        "Gaming" -> onGames()
+                                    }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
 
@@ -314,6 +315,7 @@ fun DiscoverScreen(
             onProfile = onSelfProfile
         )
     }
+    }
 }
 
 @Composable
@@ -424,27 +426,25 @@ private fun HeaderAction(
 
 @Composable
 private fun SearchPill(onSearch: () -> Unit) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(56.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(Brush.linearGradient(listOf(SurfaceElevated, Ink2)))
-            .border(1.dp, BorderColor, RoundedCornerShape(18.dp))
-            .clickable(onClick = onSearch)
-            .padding(horizontal = 16.dp)
+    GlassCard(
+        onClick = onSearch,
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
     ) {
-        SearchGlyph()
-        Text(
-            "Search rooms, people, or topics…",
-            color = TextMuted,
-            fontSize = 14.sp,
-            modifier = Modifier.padding(start = 12.dp).weight(1f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text("⌁", color = Pink, fontSize = 22.sp)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().height(56.dp)
+        ) {
+            SearchGlyph()
+            Text(
+                "Search rooms, people, or topics…",
+                color = TextMuted,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(start = 12.dp).weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text("⌁", color = Pink, fontSize = 22.sp)
+        }
     }
 }
 

@@ -54,7 +54,7 @@ fun SupportScreen(
         containerColor = Background
     ) { innerPadding ->
         Column(Modifier.fillMaxSize().padding(innerPadding)) {
-            TabRow(
+            PrimaryTabRow(
                 selectedTabIndex = selectedTab,
                 containerColor = Background,
                 contentColor = PrimaryPink
@@ -133,7 +133,7 @@ private fun SubmitTicketTab(token: String) {
                     onValueChange = {},
                     readOnly = true,
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                    modifier = Modifier.fillMaxWidth().menuAnchor(),
+                    modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled = true),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PrimaryPink, unfocusedBorderColor = BorderColor,
                         focusedTextColor = Color.White, unfocusedTextColor = Color.White

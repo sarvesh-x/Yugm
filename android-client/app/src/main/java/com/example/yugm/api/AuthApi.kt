@@ -4,11 +4,8 @@ import com.example.yugm.model.Session
 import org.json.JSONObject
 
 object AuthApi {
-    suspend fun requestOtp(identifier: String): String? {
-        val response = YugmHttpClient.post("/auth/request-otp", auth = null, body = YugmHttpClient.contactPayload(identifier))
-        val data = response.optJSONObject("data")
-        val devOtp = data?.optString("devOtp", "")
-        return if (devOtp.isNullOrBlank()) null else devOtp
+    suspend fun requestOtp(identifier: String) {
+        YugmHttpClient.post("/auth/request-otp", auth = null, body = YugmHttpClient.contactPayload(identifier))
     }
 
     suspend fun verifyOtp(identifier: String, otp: String): Session {

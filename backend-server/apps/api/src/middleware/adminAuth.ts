@@ -85,3 +85,11 @@ export function requireSuperAdmin(req: AdminAuthRequest, _res: Response, next: N
   if (!req.admin.isSuperAdmin && req.admin.role !== "SUPER_ADMIN") return next(new HttpError(403, "Super admin access required"));
   next();
 }
+
+export function requireTwoFactor(req: AdminAuthRequest, _res: Response, next: NextFunction) {
+  if (!req.admin) return next(new HttpError(401, "Missing admin"));
+  if (!req.admin.twoFactorEnabled) {
+    return next(new HttpError(403, "Two-factor authentication must be enabled to access this endpoint"));
+  }
+  next();
+}

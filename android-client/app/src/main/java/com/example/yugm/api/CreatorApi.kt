@@ -8,7 +8,9 @@ import com.example.yugm.model.PayoutRequirements
 import com.example.yugm.model.TrustVerificationStatus
 import com.example.yugm.model.WithdrawalEligibility
 import com.example.yugm.model.WithdrawalRequestResult
+import com.example.yugm.model.Achievement
 import org.json.JSONObject
+import org.json.JSONArray
 
 object CreatorApi {
     suspend fun experienceHome(token: String): ExperienceHome {
@@ -123,5 +125,25 @@ object CreatorApi {
             amountCoins = withdrawal.optInt("amountCoins", amountCoins),
             amountInr = withdrawal.optDouble("amountInr", 0.0)
         )
+    }
+
+    suspend fun updateBadgeShowcase(token: String, badgeIds: List<String>) {
+        YugmHttpClient.put("/badges/showcase", token, JSONObject().put("badgeIds", JSONArray(badgeIds)))
+    }
+
+    suspend fun getUserBadges(token: String, userId: String): List<Achievement> {
+        val data = YugmHttpClient.get("/badges/showcase/$userId", token).getJSONObject("data")
+        val arr = data.optJSONArray("badges") ?: JSONArray()
+        val result = mutableListOf<Achievement>()
+        for (i in 0 until arr.length()) {
+            val obj = arr.optJSONObject(i) ?: continue
+            result.add(Achievement(id = obj.optString("id", ""), title = obj.optString("title", ""), description = obj.optString("description", ""), rewardCoins = obj.optInt("rewardCoins", 0)))
+        }
+        return result
+    }
+
+    suspend fun shareAchievement(token: String, achievementId: String): String {
+        val data = YugmHttpClient.post("/achievements/$achievementId/share", token, JSONObject()).getJSONObject("data")
+        return data.optString("shareUrl", "")
     }
 }

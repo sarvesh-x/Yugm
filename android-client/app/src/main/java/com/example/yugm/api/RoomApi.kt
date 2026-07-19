@@ -280,4 +280,61 @@ object RoomApi {
             url to type
         }
     }
+
+    suspend fun coHosts(token: String, roomId: String): List<Host> {
+        val data = YugmHttpClient.get("/rooms/$roomId/co-hosts", token).getJSONObject("data")
+        val arr = data.optJSONArray("coHosts") ?: JSONArray()
+        val result = mutableListOf<Host>()
+        for (i in 0 until arr.length()) {
+            val obj = arr.optJSONObject(i)
+            if (obj != null) result.add(Host(id = obj.optString("_id", ""), name = obj.optString("name", ""), username = obj.optString("username", ""), avatar = obj.optString("avatar", "").ifEmpty { null }))
+        }
+        return result
+    }
+
+    suspend fun addCoHost(token: String, roomId: String, userId: String): Host {
+        val data = YugmHttpClient.post("/rooms/$roomId/co-host", token, JSONObject().put("userId", userId)).getJSONObject("data")
+        val room = data.optJSONObject("room") ?: JSONObject()
+        val arr = room.optJSONArray("coHostIds") ?: JSONArray()
+        val added = mutableListOf<Host>()
+        for (i in 0 until arr.length()) {
+            val obj = arr.optJSONObject(i)
+            if (obj != null && obj.optString("_id", "") == userId) return Host(id = obj.optString("_id", ""), name = obj.optString("name", ""), username = obj.optString("username", ""), avatar = obj.optString("avatar", "").ifEmpty { null })
+        }
+        return Host(id = userId)
+    }
+
+    suspend fun removeCoHost(token: String, roomId: String, userId: String) {
+        YugmHttpClient.post("/rooms/$roomId/remove-co-host", token, JSONObject().put("userId", userId))
+    }
+
+    suspend fun uploadTrustVerificationMedia(token: String, bytes: ByteArray, mimeType: String, purpose: String): String = withContext(Dispatchers.IO) {
+        if (!YugmHttpClient.isOnline) throw IllegalStateException("No internet connection")
+        val base = YugmHttpClient.workingBaseUrl ?: YugmHttpClient.baseCandidates.firstOrNull()
+            ?: throw IllegalStateException("API_BASE_URL is not configured for this build")
+        val ext = when {
+            mimeType.startsWith("image/") -> "jpg"
+            mimeType.startsWith("audio/") -> "mp3"
+            mimeType.startsWith("video/") -> "mp4"
+            else -> "bin"
+        }
+        val body = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("media", "trust-$purpose.$ext", bytes.toRequestBody(mimeType.ifBlank { "image/jpeg" }.toMediaType()))
+            .build()
+        val okClient = okhttp3.OkHttpClient()
+        val request = Request.Builder()
+            .url("$base/upload/trust-verification?purpose=$purpose")
+            .header("Authorization", "Bearer $token")
+            .post(body)
+            .build()
+        okClient.newCall(request).execute().use { response ->
+            val raw = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw ApiHttpException(response.code, "Trust verification upload failed")
+            val url = JSONObject(raw).getJSONObject("data").optString("url")
+            if (url.isBlank()) throw ApiProtocolException("Trust verification upload returned no URL")
+            YugmHttpClient.workingBaseUrl = base
+            url
+        }
+    }
 }

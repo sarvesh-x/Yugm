@@ -1,0 +1,17 @@
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "backend-server/**"
+      - ".github/workflows/deploy.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Render Deploy Hook
+        run: |
+          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"

@@ -26,12 +26,10 @@ import com.example.yugm.navigation.Screen
 import com.example.yugm.ui.theme.Background
 import com.example.yugm.ui.theme.YugmTheme
 import com.example.yugm.ui.viewmodel.MainViewModel
-import com.example.yugm.util.SessionPrefs
 import com.example.yugm.data.SessionManager
 import com.example.yugm.payments.RazorpayCoordinator
 import com.razorpay.PaymentData
 import com.razorpay.PaymentResultWithDataListener
-import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.tasks.Tasks
@@ -103,6 +101,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                 }
 
                 // Google Sign In configuration
+                @Suppress("DEPRECATION")
                 val googleClientId = stringResource(R.string.google_web_client_id)
                 val gso = remember(googleClientId) {
                     GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
@@ -110,11 +109,13 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                         .requestEmail()
                         .build()
                 }
-                val googleSignInClient = remember { GoogleSignIn.getClient(context, gso) }
+                @Suppress("DEPRECATION")
+                val googleSignInClient = remember { com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso) }
 
                 val googleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
                     if (result.resultCode != RESULT_OK) return@rememberLauncherForActivityResult
-                    val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                    @Suppress("DEPRECATION")
+                    val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
                     try {
                         val account = task.getResult(ApiException::class.java)
                         val idToken = account.idToken ?: return@rememberLauncherForActivityResult
@@ -160,9 +161,6 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                         mainViewModel = mainViewModel,
                         onGoogleSignIn = {
                             googleLauncher.launch(googleSignInClient.signInIntent)
-                        },
-                        onPhoneSignIn = {
-                            navController.navigate(Screen.PhoneLogin.route)
                         },
                     )
                 }

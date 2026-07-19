@@ -15,7 +15,7 @@ class AuthRepository @Inject constructor() {
         YugmApi.phoneAuth(idToken)
     }
 
-    suspend fun requestOtp(identifier: String): Result<String?> = runCatching {
+    suspend fun requestOtp(identifier: String): Result<Unit> = runCatching {
         YugmApi.requestOtp(identifier)
     }
 

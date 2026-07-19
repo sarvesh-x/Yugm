@@ -73,8 +73,8 @@ object SupportApi {
             priority = obj.optString("priority", "MEDIUM"),
             category = obj.optString("category", "General"),
             messages = messages,
-            assignedTo = obj.optString("assignedTo", null),
-            resolvedAt = obj.optString("resolvedAt", null),
+            assignedTo = obj.optString("assignedTo", "").ifEmpty { null },
+            resolvedAt = obj.optString("resolvedAt", "").ifEmpty { null },
             createdAt = obj.optString("createdAt", ""),
             updatedAt = obj.optString("updatedAt", "")
         )

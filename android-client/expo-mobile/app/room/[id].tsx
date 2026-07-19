@@ -9,6 +9,7 @@ import { ChatComposer } from "@/components/ChatComposer";
 import { ControlButton } from "@/components/ControlButton";
 import { GiftPanel } from "@/components/GiftPanel";
 import { GiftAnimation } from "@/components/GiftAnimation";
+import { RecordingList } from "@/components/RecordingList";
 import { WatchPartyPlayer } from "@/components/WatchPartyPlayer";
 import { CosmeticAvatar } from "@/components/CosmeticAvatar";
 import { GlassCard } from "@/components/GlassCard";
@@ -395,6 +396,7 @@ export default function ActiveRoom() {
                   onVote={(pollId, optionIndex) => votePoll.mutate({ pollId, optionIndex })}
                 />
                 <ActivityFeed activity={activity.data?.activity ?? []} />
+                <RecordingList roomId={roomId} isHost={isHost} />
                 <Text style={styles.mediaState}>{mediaState}</Text>
                 {!!giftBurst && <Text style={styles.giftBurst}>{giftBurst}</Text>}
               </View>
@@ -446,6 +448,7 @@ export default function ActiveRoom() {
                   onVote={(pollId, optionIndex) => votePoll.mutate({ pollId, optionIndex })}
                 />
                 <ActivityFeed activity={activity.data?.activity ?? []} />
+                <RecordingList roomId={roomId} isHost={isHost} />
                 <Text style={styles.mediaState}>{mediaState} {beauty ? "/ beauty" : ""} {voiceFx ? "/ voice fx" : ""} {blurBg ? "/ blur" : ""}</Text>
                 {!!giftBurst && <Text style={styles.giftBurst}>{giftBurst}</Text>}
               </View>

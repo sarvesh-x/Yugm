@@ -62,11 +62,7 @@ import com.example.yugm.model.DirectMessage
 import com.example.yugm.model.GiftItem
 import com.example.yugm.model.Host
 import com.example.yugm.model.RelationshipStatus
-import com.example.yugm.ui.components.Avatar
-import com.example.yugm.ui.components.GradientAction
-import com.example.yugm.ui.components.LoadingState
-import com.example.yugm.ui.components.RoundAction
-import com.example.yugm.ui.components.YugmAmbientBackground
+import com.example.yugm.ui.components.*
 import com.example.yugm.ui.theme.Background
 import com.example.yugm.ui.theme.BorderColor
 import com.example.yugm.ui.theme.Danger
@@ -148,9 +144,16 @@ fun ChatScreen(
     }
 
     YugmAmbientBackground {
-        Column(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize()) {
+            AuroraBackground(speed = 0.8f)
+            Column(Modifier.fillMaxSize()) {
+            GlassCard(
+                modifier = Modifier.fillMaxWidth(),
+                cornerRadius = 0.dp,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+            ) {
             Row(
-                Modifier.fillMaxWidth().background(Background.copy(alpha = 0.92f)).padding(horizontal = 12.dp, vertical = 12.dp),
+                Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 RoundAction("‹", onClick = onBack)
@@ -167,6 +170,7 @@ fun ChatScreen(
                 RoundAction("▣", onClick = onVideoCall)
                 Spacer(Modifier.width(7.dp))
                 RoundAction("⋮", onClick = { showMore = true })
+            }
             }
 
             if (showMore) {
@@ -186,8 +190,8 @@ fun ChatScreen(
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
                         verticalArrangement = Arrangement.spacedBy(11.dp)
                     ) {
-                        item { MatchedBanner(partner?.name ?: "your match") }
-                        if (showSafety) item { SafetyTip(onDismiss = { showSafety = false }) }
+                        item { AnimatedEntrance(delay = 100) { MatchedBanner(partner?.name ?: "your match") } }
+                        if (showSafety) item { AnimatedEntrance(delay = 200) { SafetyTip(onDismiss = { showSafety = false }) } }
                         relationship?.let { bond -> item { BondStrip(bond) } }
                         item { ConversationDivider("Today") }
                         if (error.isNotBlank()) item {
@@ -212,9 +216,10 @@ fun ChatScreen(
                                 Column(Modifier.padding(start = 5.dp)) {
                                     TypingBubble()
                                     Text("${partner?.name ?: "Your match"} is typing…", color = TextMuted, fontSize = 9.sp)
-                                }
-                            }
-                        }
+        }
+        }
+    }
+}
                     }
                 }
             }
@@ -229,8 +234,13 @@ fun ChatScreen(
                     }
                 }
             }
+            GlassCard(
+                modifier = Modifier.fillMaxWidth().navigationBarsPadding(),
+                cornerRadius = 0.dp,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+            ) {
             Row(
-                Modifier.fillMaxWidth().background(Background.copy(alpha = 0.96f)).navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp),
+                Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(7.dp)
             ) {
@@ -257,7 +267,8 @@ fun ChatScreen(
                     contentAlignment = Alignment.Center
                 ) { Text("➤", color = Color.White, fontSize = 22.sp) }
             }
-        }
+            }
+            }
 
         if (showGiftSheet) {
             ModalBottomSheet(onDismissRequest = { showGiftSheet = false }, containerColor = SurfaceElevated) {

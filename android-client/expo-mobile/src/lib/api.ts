@@ -578,6 +578,54 @@ export const highlightsApi = {
     api<{ highlight: any }>(`/highlights/${id}/stories/${storyId}`, { method: "DELETE" }),
 };
 
+export async function uploadRecording(file: { uri: string; name?: string; type?: string }) {
+  const token = useAuthStore.getState().token;
+  const formData = new FormData();
+  formData.append("media", {
+    uri: file.uri,
+    name: file.name ?? `recording-${Date.now()}`,
+    type: file.type ?? "audio/mp4"
+  } as any);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 180_000);
+  try {
+    const response = await fetch(`${apiBaseUrl}/upload/recording`, {
+      method: "POST",
+      signal: controller.signal,
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: formData
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok || json.ok === false) throw new ApiError(json.error?.message ?? "Upload failed", response.status);
+    const data = json.data as { url: string; type: "AUDIO" | "VIDEO" };
+    return { ...data, url: absoluteMediaUrl(data.url) };
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new ApiError("Recording upload took too long. Try a smaller file or a stronger connection.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export const recordingsApi = {
+  start: (roomId: string, title?: string) =>
+    api<{ recording: any }>("/recordings", { method: "POST", body: JSON.stringify({ roomId, title }) }),
+  stop: (id: string, recordingUrl: string, duration: number) =>
+    api<{ recording: any }>(`/recordings/${id}/stop`, { method: "PATCH", body: JSON.stringify({ recordingUrl, duration }) }),
+  listByRoom: (roomId: string, page = 1, limit = 20) =>
+    api<{ recordings: any[]; total: number; page: number; totalPages: number }>(`/recordings/room/${roomId}?page=${page}&limit=${limit}`),
+  detail: (id: string) =>
+    api<{ recording: any }>(`/recordings/${id}`),
+  update: (id: string, payload: { title?: string }) =>
+    api<{ recording: any }>(`/recordings/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  delete: (id: string) =>
+    api<{ deleted: boolean }>(`/recordings/${id}`, { method: "DELETE" }),
+  view: (id: string) =>
+    api<{ viewCount: number }>(`/recordings/${id}/view`, { method: "POST" }),
+};
+
 export const datingApi = {
   preferences: () => api<{ preferences: { interestedIn: "Everyone" | "Women" | "Men" | "Non-binary"; lookingFor: "Friendship" | "Dating" | "Relationship" | "Networking"; datingAgeMin: number; datingAgeMax: number; verifiedOnly: boolean } }>("/dating/preferences"),
   updatePreferences: (preferences: { interestedIn: "Everyone" | "Women" | "Men" | "Non-binary"; lookingFor: "Friendship" | "Dating" | "Relationship" | "Networking"; datingAgeMin: number; datingAgeMax: number; verifiedOnly: boolean }) =>

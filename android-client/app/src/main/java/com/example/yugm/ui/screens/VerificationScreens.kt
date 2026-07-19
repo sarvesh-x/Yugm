@@ -1,15 +1,20 @@
 package com.example.yugm.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.yugm.api.YugmApi
 import com.example.yugm.model.CreatorEarningBalance
 import com.example.yugm.model.CreatorPayoutKycStatus
 import com.example.yugm.model.PayoutRequirements
@@ -19,6 +24,9 @@ import com.example.yugm.ui.theme.Background
 import com.example.yugm.ui.theme.Gold
 import com.example.yugm.ui.theme.TextMuted
 import com.example.yugm.ui.theme.Success
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,23 +73,139 @@ fun VerificationConsentScreen(onBack: () -> Unit, onAccept: () -> Unit) {
 }
 
 @Composable
-fun FaceVerificationScreen(onBack: () -> Unit, onSubmit: (String) -> Unit) {
-    var url by remember { mutableStateOf("") }
+fun FaceVerificationScreen(token: String, onBack: () -> Unit, onSubmit: (String) -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var selectedUri by remember { mutableStateOf<Uri?>(null) }
+    var uploading by remember { mutableStateOf(false) }
+    var uploadError by remember { mutableStateOf<String?>(null) }
+
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        selectedUri = uri
+        uploadError = null
+    }
+
     VerificationScaffold("Face Verification", onBack) {
-        Text("Add a selfie or liveness media URL.", color = TextMuted)
-        OutlinedTextField(value = url, onValueChange = { url = it }, label = { Text("Selfie/liveness URL") }, modifier = Modifier.fillMaxWidth())
-        Button(onClick = { onSubmit(url) }, modifier = Modifier.fillMaxWidth(), enabled = url.isNotBlank()) { Text("Submit face check") }
+        Text("Take or pick a selfie for liveness verification.", color = TextMuted)
+
+        selectedUri?.let {
+            Text("Selected: ${it.lastPathSegment ?: "image"}", color = Color.White)
+        }
+
+        uploadError?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+        }
+
+        Button(
+            onClick = { imagePicker.launch("image/*") },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !uploading
+        ) {
+            Text(if (selectedUri == null) "Choose selfie from gallery" else "Change photo")
+        }
+
+        Button(
+            onClick = {
+                val uri = selectedUri ?: return@Button
+                uploading = true
+                uploadError = null
+                scope.launch {
+                    runCatching {
+                        val bytes = withContext(Dispatchers.IO) {
+                            context.contentResolver.openInputStream(uri)?.readBytes()
+                                ?: throw IllegalStateException("Could not read image")
+                        }
+                        val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
+                        val url = YugmApi.uploadTrustVerificationMedia(token, bytes, mimeType, "FACE")
+                        onSubmit(url)
+                    }.onFailure {
+                        uploadError = it.message ?: "Upload failed"
+                        uploading = false
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = selectedUri != null && !uploading
+        ) {
+            if (uploading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
+                    color = Color.White
+                )
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(if (uploading) "Uploading..." else "Submit face check")
+        }
     }
 }
 
 @Composable
-fun VoiceVerificationScreen(promptText: String, onBack: () -> Unit, onSubmit: (String) -> Unit) {
-    var audioUrl by remember { mutableStateOf("") }
+fun VoiceVerificationScreen(token: String, promptText: String, onBack: () -> Unit, onSubmit: (String) -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var selectedUri by remember { mutableStateOf<Uri?>(null) }
+    var uploading by remember { mutableStateOf(false) }
+    var uploadError by remember { mutableStateOf<String?>(null) }
+
+    val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        selectedUri = uri
+        uploadError = null
+    }
+
     VerificationScaffold("Voice Verification", onBack) {
         Text("Read this prompt aloud:", color = TextMuted)
         GlassCard(modifier = Modifier.fillMaxWidth()) { Text(promptText, color = Color.White, fontWeight = FontWeight.Bold) }
-        OutlinedTextField(value = audioUrl, onValueChange = { audioUrl = it }, label = { Text("Audio URL") }, modifier = Modifier.fillMaxWidth())
-        Button(onClick = { onSubmit(audioUrl) }, modifier = Modifier.fillMaxWidth(), enabled = audioUrl.isNotBlank()) { Text("Submit voice check") }
+
+        selectedUri?.let {
+            Text("Selected: ${it.lastPathSegment ?: "audio"}", color = Color.White)
+        }
+
+        uploadError?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+        }
+
+        Button(
+            onClick = { audioPicker.launch("audio/*") },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !uploading
+        ) {
+            Text(if (selectedUri == null) "Choose audio file" else "Change audio")
+        }
+
+        Button(
+            onClick = {
+                val uri = selectedUri ?: return@Button
+                uploading = true
+                uploadError = null
+                scope.launch {
+                    runCatching {
+                        val bytes = withContext(Dispatchers.IO) {
+                            context.contentResolver.openInputStream(uri)?.readBytes()
+                                ?: throw IllegalStateException("Could not read audio")
+                        }
+                        val mimeType = context.contentResolver.getType(uri) ?: "audio/mpeg"
+                        val url = YugmApi.uploadTrustVerificationMedia(token, bytes, mimeType, "VOICE")
+                        onSubmit(url)
+                    }.onFailure {
+                        uploadError = it.message ?: "Upload failed"
+                        uploading = false
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = selectedUri != null && !uploading
+        ) {
+            if (uploading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
+                    color = Color.White
+                )
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(if (uploading) "Uploading..." else "Submit voice check")
+        }
     }
 }
 

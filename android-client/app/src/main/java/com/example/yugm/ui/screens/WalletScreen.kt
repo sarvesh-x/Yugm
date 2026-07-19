@@ -44,13 +44,7 @@ import com.example.yugm.model.CreatorDashboardSummary
 import com.example.yugm.model.GiftItem
 import com.example.yugm.model.RazorpayCheckoutData
 import com.example.yugm.model.WalletTransaction
-import com.example.yugm.ui.components.GradientAction
-import com.example.yugm.ui.components.LoadingState
-import com.example.yugm.ui.components.ReferenceSectionHeader
-import com.example.yugm.ui.components.RoundAction
-import com.example.yugm.ui.components.SegmentedTabs
-import com.example.yugm.ui.components.YugmAmbientBackground
-import com.example.yugm.ui.components.YugmPageHeader
+import com.example.yugm.ui.components.*
 import com.example.yugm.ui.theme.Background
 import com.example.yugm.ui.theme.BorderColor
 import com.example.yugm.ui.theme.Danger
@@ -115,11 +109,13 @@ fun WalletScreen(
     LaunchedEffect(token) { refresh() }
 
     YugmAmbientBackground {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 30.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
+        Box(Modifier.fillMaxSize()) {
+            AuroraBackground(speed = 0.8f)
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 30.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
             item {
                 YugmPageHeader("Yugm", "Wallet & Gifts", onBack = onBack) {
                     RoundAction("♢", onClick = {})
@@ -138,8 +134,9 @@ fun WalletScreen(
             } else {
                 when (selectedTab) {
                     0 -> {
-                        item {
-                            BalanceHero(
+                         item {
+                            AnimatedEntrance(delay = 100) {
+                                BalanceHero(
                                 balance = balance,
                                 onFreeCoins = {
                                     scope.launch {
@@ -166,11 +163,13 @@ fun WalletScreen(
                                 }
                             )
                         }
+                        }
                         if (status.isNotBlank()) item { Text(status, color = Pink, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp)) }
                         item {
-                            Column(Modifier.padding(horizontal = 20.dp)) {
-                                ReferenceSectionHeader("Recharge Packs", "View all")
-                                Row(
+                            AnimatedEntrance(delay = 200) {
+                                GlassCard(modifier = Modifier.padding(horizontal = 20.dp).fillMaxWidth()) {
+                                    ReferenceSectionHeader("Recharge Packs", "View all")
+                                    Row(
                                     Modifier.padding(top = 10.dp).horizontalScroll(rememberScrollState()),
                                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
@@ -189,10 +188,11 @@ fun WalletScreen(
                                     }
                                 }
                             }
+                            }
                         }
-                        item { EarningsStrip(earnings, onOpenEarnings) }
-                        item { GiftCatalog(gifts) }
-                        item { TransactionList(transactions) }
+                        item { AnimatedEntrance(delay = 300) { EarningsStrip(earnings, onOpenEarnings) } }
+                        item { AnimatedEntrance(delay = 400) { GiftCatalog(gifts) } }
+                        item { AnimatedEntrance(delay = 500) { TransactionList(transactions) } }
                     }
                     1 -> {
                         item { GiftCatalog(gifts, expanded = true) }
@@ -209,6 +209,7 @@ fun WalletScreen(
                 }
             }
         }
+    }
     }
 }
 

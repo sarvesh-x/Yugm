@@ -28,6 +28,58 @@ components:
         level: { type: integer }
         xp: { type: integer }
         referralCode: { type: string, nullable: true }
+    RoomRecording:
+      type: object
+      properties:
+        _id: { type: string }
+        roomId: { type: string }
+        hostId: { $ref: "#/components/schemas/User" }
+        title: { type: string }
+        recordingUrl: { type: string, nullable: true }
+        duration: { type: integer }
+        viewCount: { type: integer }
+        status: { type: string, enum: [PROCESSING, PUBLISHED, FAILED] }
+        createdAt: { type: string, format: date-time }
+    Room:
+      type: object
+      properties:
+        _id: { type: string }
+        title: { type: string }
+        type: { type: string, enum: [VOICE, VIDEO] }
+        hostId: { $ref: "#/components/schemas/User" }
+        status: { type: string, enum: [LIVE, ENDED, SCHEDULED] }
+        participantCount: { type: integer }
+        category: { type: string }
+        language: { type: string }
+    WalletTransaction:
+      type: object
+      properties:
+        _id: { type: string }
+        userId: { type: string }
+        type: { type: string }
+        amount: { type: number }
+        balanceAfter: { type: number }
+        label: { type: string }
+        referenceId: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+    Game:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        description: { type: string }
+        icon: { type: string }
+        best: { type: object, nullable: true }
+    PkBattle:
+      type: object
+      properties:
+        _id: { type: string }
+        leftRoomId: { type: string }
+        rightRoomId: { type: string }
+        status: { type: string, enum: [PENDING, ACTIVE, ENDED, FORCE_ENDED] }
+        leftScore: { type: integer }
+        rightScore: { type: integer }
+        createdAt: { type: string, format: date-time }
     Story:
       type: object
       properties:
@@ -565,6 +617,373 @@ paths:
           schema: { type: string }
       responses:
         "200": { description: Campaign cancelled }
+  # ─── RECORDINGS ───────────────────────────────────────
+  /recordings:
+    post:
+      tags: [Recordings]
+      summary: Start recording a live room (host only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roomId]
+              properties:
+                roomId: { type: string }
+                title: { type: string, maxLength: 100 }
+      responses:
+        "201":
+          description: Recording started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  recording: { $ref: "#/components/schemas/RoomRecording" }
+  /recordings/room/{roomId}:
+    get:
+      tags: [Recordings]
+      summary: List published recordings for a room
+      parameters:
+        - name: roomId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        "200":
+          description: Paginated recording list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  recordings: { type: array, items: { $ref: "#/components/schemas/RoomRecording" } }
+                  total: { type: integer }
+                  page: { type: integer }
+                  totalPages: { type: integer }
+  /recordings/{id}:
+    get:
+      tags: [Recordings]
+      summary: Get recording detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Recording detail }
+    patch:
+      tags: [Recordings]
+      summary: Update recording title (host only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string, maxLength: 100 }
+      responses:
+        "200": { description: Recording updated }
+    delete:
+      tags: [Recordings]
+      summary: Delete recording (host only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Recording deleted }
+  /recordings/{id}/stop:
+    patch:
+      tags: [Recordings]
+      summary: Stop recording and publish (host only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recordingUrl, duration]
+              properties:
+                recordingUrl: { type: string, format: uri }
+                duration: { type: integer, minimum: 1 }
+      responses:
+        "200": { description: Recording published }
+  /recordings/{id}/view:
+    post:
+      tags: [Recordings]
+      summary: Increment recording view count
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: View recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  viewCount: { type: integer }
+
+  # ─── WALLET ────────────────────────────────────────────
+  /wallet:
+    get:
+      tags: [Wallet]
+      summary: Get wallet balance and status
+      responses:
+        "200": { description: Wallet info }
+  /wallet/transactions:
+    get:
+      tags: [Wallet]
+      summary: List wallet transactions
+      responses:
+        "200":
+          description: Transaction list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transactions: { type: array, items: { $ref: "#/components/schemas/WalletTransaction" } }
+
+  # ─── ROOMS ─────────────────────────────────────────────
+  /rooms:
+    post:
+      tags: [Rooms]
+      summary: Create a room
+      responses:
+        "201": { description: Room created }
+    get:
+      tags: [Rooms]
+      summary: List live rooms
+      responses:
+        "200":
+          description: Live room list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rooms: { type: array, items: { $ref: "#/components/schemas/Room" } }
+
+  # ─── GAMES ─────────────────────────────────────────────
+  /games/catalog:
+    get:
+      tags: [Games]
+      summary: Get game catalog with personal bests
+      responses:
+        "200":
+          description: Game catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  games: { type: array, items: { $ref: "#/components/schemas/Game" } }
+  /games/scores:
+    post:
+      tags: [Games]
+      summary: Submit a game score
+      responses:
+        "201": { description: Score recorded }
+  /games/leaderboard:
+    get:
+      tags: [Games]
+      summary: Get game leaderboard
+      parameters:
+        - name: gameId
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Leaderboard }
+
+  # ─── PK BATTLES ────────────────────────────────────────
+  /pk/start:
+    post:
+      tags: [PK]
+      summary: Start a PK battle between two rooms
+      responses:
+        "201": { description: Battle started }
+
+  # ─── DATING ────────────────────────────────────────────
+  /dating/explore:
+    get:
+      tags: [Dating]
+      summary: Explore dating candidates
+      responses:
+        "200": { description: Candidate list }
+  /dating/matches:
+    get:
+      tags: [Dating]
+      summary: Get dating matches
+      responses:
+        "200": { description: Match list }
+
+  # ─── FEED ──────────────────────────────────────────────
+  /feed:
+    get:
+      tags: [Feed]
+      summary: Get social feed
+      responses:
+        "200": { description: Feed items }
+
+  # ─── FRIENDS ───────────────────────────────────────────
+  /friends:
+    get:
+      tags: [Friends]
+      summary: List friends
+      responses:
+        "200": { description: Friend list }
+
+  # ─── WATCH PARTY ───────────────────────────────────────
+  /rooms/{roomId}/watch-party:
+    post:
+      tags: [WatchParty]
+      summary: Start a watch party in a room
+      parameters:
+        - name: roomId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "201": { description: Watch party started }
+    get:
+      tags: [WatchParty]
+      summary: Get active watch party
+      parameters:
+        - name: roomId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Watch party state }
+
+  # ─── SUBSCRIPTIONS ─────────────────────────────────────
+  /subscriptions/{creatorId}:
+    post:
+      tags: [Subscriptions]
+      summary: Subscribe to a creator
+      parameters:
+        - name: creatorId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "201": { description: Subscribed }
+
+  # ─── HIGHLIGHTS ────────────────────────────────────────
+  /highlights/{userId}:
+    get:
+      tags: [Highlights]
+      summary: Get user's story highlights
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Highlight list }
+
+  # ─── GROUPS ────────────────────────────────────────────
+  /groups:
+    get:
+      tags: [Groups]
+      summary: List group DMs
+      responses:
+        "200": { description: Group list }
+    post:
+      tags: [Groups]
+      summary: Create group DM
+      responses:
+        "201": { description: Group created }
+
+  # ─── WISHLIST ──────────────────────────────────────────
+  /wishlist/me:
+    get:
+      tags: [Wishlist]
+      summary: Get my wishlist items
+      responses:
+        "200": { description: Wishlist items }
+  /wishlist/{userId}:
+    get:
+      tags: [Wishlist]
+      summary: Get a user's public wishlist
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: User's wishlist }
+
+  # ─── GIFT LEADERBOARD ──────────────────────────────────
+  /gift-leaderboard:
+    get:
+      tags: [GiftLeaderboard]
+      summary: Get top gift senders and receivers
+      responses:
+        "200": { description: Leaderboard }
+
+  # ─── CREATOR ───────────────────────────────────────────
+  /creator/payout-kyc:
+    get:
+      tags: [Creator]
+      summary: Get KYC status
+      responses:
+        "200": { description: KYC status }
+  /creator/withdrawals:
+    get:
+      tags: [Creator]
+      summary: List withdrawals
+      responses:
+        "200": { description: Withdrawal list }
+
+  # ─── SUPPORT ───────────────────────────────────────────
+  /support/tickets:
+    post:
+      tags: [Support]
+      summary: Create support ticket
+      responses:
+        "201": { description: Ticket created }
+
+  # ─── TRUST VERIFICATION ────────────────────────────────
+  /trust-verification/status:
+    get:
+      tags: [TrustVerification]
+      summary: Get trust verification status
+      responses:
+        "200": { description: Verification status }
+
+  # ─── EXPERIENCE / LEVELS ───────────────────────────────
+  /experience/home:
+    get:
+      tags: [Experience]
+      summary: Get home screen experience data
+      responses:
+        "200": { description: Home experience data }
+
   /admin/clans/{clanId}/clean-messages:
     post:
       tags: [Admin / Moderation]

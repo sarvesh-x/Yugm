@@ -28,17 +28,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.yugm.R
+import com.example.yugm.api.VibeApi
 import com.example.yugm.api.YugmApi
 import com.example.yugm.model.Host
 import com.example.yugm.model.PkBattle
 import com.example.yugm.model.PkSideType
 import com.example.yugm.model.PkStats
 import com.example.yugm.model.Room
-import com.example.yugm.ui.components.Avatar
-import com.example.yugm.ui.components.GlassCard
-import com.example.yugm.ui.components.LoadingState
-import com.example.yugm.ui.components.PkHistoryCard
-import com.example.yugm.ui.components.StatCard
+import com.example.yugm.ui.components.*
 import com.example.yugm.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -63,6 +60,7 @@ fun ProfileDetailScreen(
     var liked by remember { mutableStateOf(false) }
     var pkStats by remember { mutableStateOf(PkStats()) }
     var pkHistory by remember { mutableStateOf<List<PkBattle>>(emptyList()) }
+    var vibeMatch by remember { mutableStateOf<com.example.yugm.model.VibeMatchResponse?>(null) }
 
     var showReportDialog by remember { mutableStateOf(false) }
     var reportReason by remember { mutableStateOf("") }
@@ -94,24 +92,27 @@ fun ProfileDetailScreen(
         if (token.isNotBlank()) {
             runCatching { YugmApi.pkStats(token, userId) }.onSuccess { pkStats = it }
             runCatching { YugmApi.pkHistory(token, userId) }.onSuccess { pkHistory = it }
+            runCatching { VibeApi.match(token, userId) }.onSuccess { vibeMatch = it }
         }
         isLoading = false
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Yugm", color = Color.White, fontWeight = FontWeight.Black) },
-                navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text("‹", color = Color.White, fontSize = 28.sp)
-                    }
-                },
-                actions = { Text("⋮", color = Color.White, fontSize = 24.sp, modifier = Modifier.padding(horizontal = 16.dp).clickable { showReportDialog = true }) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
-            )
-        },
-        bottomBar = {
+    Box(Modifier.fillMaxSize()) {
+        AuroraBackground(speed = 0.8f)
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Yugm", color = Color.White, fontWeight = FontWeight.Black) },
+                    navigationIcon = {
+                        TextButton(onClick = onBack) {
+                            Text("‹", color = Color.White, fontSize = 28.sp)
+                        }
+                    },
+                    actions = { Text("⋮", color = Color.White, fontSize = 24.sp, modifier = Modifier.padding(horizontal = 16.dp).clickable { showReportDialog = true }) },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
+                )
+            },
+            bottomBar = {
             host?.let { profile ->
                 Surface(
                     color = SurfaceElevated,
@@ -168,7 +169,9 @@ fun ProfileDetailScreen(
             ) {
                 // Header card
                 item {
-                    ProfileHero(profile)
+                    AnimatedEntrance(delay = 100) {
+                        ProfileHero(profile)
+                    }
                 }
 
                 // VIP Status
@@ -189,10 +192,14 @@ fun ProfileDetailScreen(
                 }
 
                 item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                        StatCard("Followers", "${profile.followers.coerceAtLeast(followers.size)}", Modifier.weight(1f))
-                        StatCard("Following", "${profile.followingCount.coerceAtLeast(following.size)}", Modifier.weight(1f))
-                        StatCard("Level", "${profile.level}", Modifier.weight(1f))
+                    AnimatedEntrance(delay = 200) {
+                        GlassCard(modifier = Modifier.fillMaxWidth()) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                                StatCard("Followers", "${profile.followers.coerceAtLeast(followers.size)}", Modifier.weight(1f))
+                                StatCard("Following", "${profile.followingCount.coerceAtLeast(following.size)}", Modifier.weight(1f))
+                                StatCard("Level", "${profile.level}", Modifier.weight(1f))
+                            }
+                        }
                     }
                 }
 
@@ -320,6 +327,53 @@ fun ProfileDetailScreen(
                     }
                 }
 
+                vibeMatch?.let { match ->
+                    item {
+                        Column(
+                            Modifier.padding(horizontal = 20.dp).fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text("Compatibility Score", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            GlassCard(Modifier.fillMaxWidth()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            "♡ ${match.compatibility.score}%",
+                                            color = Pink,
+                                            fontSize = 28.sp,
+                                            fontWeight = FontWeight.Black
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            match.compatibility.label,
+                                            color = TextPrimary,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    if (match.compatibility.sharedInterests.isNotEmpty()) {
+                                        Text(
+                                            "Shared interests: ${match.compatibility.sharedInterests.joinToString(", ")}",
+                                            color = TextMuted,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                    if (match.compatibility.sharedLanguages.isNotEmpty()) {
+                                        Text(
+                                            "Shared languages: ${match.compatibility.sharedLanguages.joinToString(", ")}",
+                                            color = TextMuted,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                    if (match.compatibility.sameCity) {
+                                        Text("📍 Same city", color = Success, fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Hosted Rooms
                 if (rooms.isNotEmpty()) {
                     item {
@@ -365,6 +419,7 @@ fun ProfileDetailScreen(
                 }
             }
         }
+    }
     }
 
     // Report Dialog

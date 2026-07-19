@@ -209,3 +209,23 @@ uploadRouter.post("/upload/voice-note", requireAuth, voiceNoteUpload.single("med
   const { url, storage } = await persistUploadedFile(file, "voice-notes");
   sendOk(res, { url, type: "AUDIO", storage });
 }));
+
+const recordingUpload = multer({
+  storage,
+  limits: { fileSize: 200 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [".mp3", ".m4a", ".aac", ".wav", ".webm", ".ogg", ".mp4", ".mov", ".m4v"];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!allowed.includes(ext)) return cb(new Error("Only audio/video recording files are allowed"));
+    if (!file.mimetype.startsWith("audio/") && !file.mimetype.startsWith("video/")) {
+      return cb(new Error("Only audio/video uploads are allowed"));
+    }
+    cb(null, true);
+  },
+});
+
+uploadRouter.post("/upload/recording", requireAuth, recordingUpload.single("media"), asyncHandler(async (req: AuthRequest, res) => {
+  const file = req.file!;
+  const { url, storage } = await persistUploadedFile(file, "recordings");
+  sendOk(res, { url, type: file.mimetype.startsWith("audio/") ? "AUDIO" : "VIDEO", storage });
+}));
