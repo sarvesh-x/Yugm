@@ -1,5 +1,5 @@
 import mongoose, { Schema } from "mongoose";
-import type { RoomStatus, RoomType, RoomVisibility } from "@yugm/shared";
+import { roomModes, type RoomMode, type RoomStatus, type RoomType, type RoomVisibility } from "@yugm/shared";
 
 export interface IRoom extends mongoose.Document {
   title: string;
@@ -27,6 +27,7 @@ export interface IRoom extends mongoose.Document {
   scheduledFor?: Date;
   startedAt?: Date;
   endedAt?: Date;
+  mode?: RoomMode;
 }
 
 const roomSchema = new Schema<IRoom>(
@@ -55,7 +56,8 @@ const roomSchema = new Schema<IRoom>(
     ambience: String,
     scheduledFor: Date,
     startedAt: Date,
-    endedAt: Date
+    endedAt: Date,
+    mode: { type: String, enum: roomModes }
   },
   { timestamps: true }
 );

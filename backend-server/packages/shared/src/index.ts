@@ -287,6 +287,17 @@ export const xpEvents = {
 
 export type XpEvent = keyof typeof xpEvents;
 
+export const roomModes = ["coffee_date", "blind_date", "truth_or_dare", "never_have_i_ever", "would_you_rather"] as const;
+export type RoomMode = (typeof roomModes)[number];
+
+export const roomModesInfo = [
+  { key: "coffee_date" as const, name: "Coffee Date", description: "Get to know each other with fun questions", minParticipants: 2 },
+  { key: "blind_date" as const, name: "Blind Date", description: "Anonymously match and reveal after multiple rounds", minParticipants: 2 },
+  { key: "truth_or_dare" as const, name: "Truth or Dare", description: "Classic party game", minParticipants: 2 },
+  { key: "never_have_i_ever" as const, name: "Never Have I Ever", description: "Confess what you've never done", minParticipants: 2 },
+  { key: "would_you_rather" as const, name: "Would You Rather", description: "Tough choices and fun debates", minParticipants: 2 },
+];
+
 export const relationshipLevelMilestones = [
   { level: 1, requiredXp: 0, title: "First Spark", perk: "Bond badge" },
   { level: 2, requiredXp: 50, title: "Good Vibes", perk: "Chat bond meter" },
