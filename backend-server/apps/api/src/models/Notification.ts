@@ -2,7 +2,7 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 
 export interface INotification extends Document {
   userId: mongoose.Types.ObjectId;
-  type: "FOLLOW" | "GIFT" | "ROOM_INVITE" | "SPEAKER_APPROVED" | "MESSAGE" | "MOMENT" | "COMMENT" | "SYSTEM" | "FRIEND_REQUEST" | "FRIEND_ACCEPT" | "SUBSCRIPTION";
+  type: "FOLLOW" | "GIFT" | "ROOM_INVITE" | "SPEAKER_APPROVED" | "MESSAGE" | "MOMENT" | "COMMENT" | "SYSTEM" | "FRIEND_REQUEST" | "FRIEND_ACCEPT" | "SUBSCRIPTION" | "WAVE";
   title: string;
   body: string;
   data?: Record<string, unknown>;
@@ -13,7 +13,7 @@ export interface INotification extends Document {
 const notificationSchema = new Schema<INotification>(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    type: { type: String, enum: ["FOLLOW", "GIFT", "ROOM_INVITE", "SPEAKER_APPROVED", "MESSAGE", "MOMENT", "COMMENT", "SYSTEM", "FRIEND_REQUEST", "FRIEND_ACCEPT", "SUBSCRIPTION"], required: true },
+    type: { type: String, enum: ["FOLLOW", "GIFT", "ROOM_INVITE", "SPEAKER_APPROVED", "MESSAGE", "MOMENT", "COMMENT", "SYSTEM", "FRIEND_REQUEST", "FRIEND_ACCEPT", "SUBSCRIPTION", "WAVE"], required: true },
     title: { type: String, required: true },
     body: { type: String, required: true },
     data: { type: Schema.Types.Mixed },

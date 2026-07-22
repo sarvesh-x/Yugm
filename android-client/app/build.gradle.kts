@@ -157,6 +157,7 @@ dependencies {
     implementation(project(":core:util"))
     implementation(project(":core:navigation"))
     implementation(project(":feature:missions"))
+    implementation(project(":feature:gift"))
 
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))

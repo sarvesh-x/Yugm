@@ -116,4 +116,17 @@ sealed class Screen(val route: String) {
     }
     object Missions : Screen("missions")
     object BattlePass : Screen("battle_pass")
+
+    // Gift v2
+    object Inventory : Screen("inventory")
+
+    // Social features (Week 9)
+    object MoodActivity : Screen("mood_activity")
+    object WaveInbox : Screen("wave_inbox")
+    object DailyQuestion : Screen("daily_question")
+    object VoicePolls : Screen("voice_polls")
+    object VoicePollDetail : Screen("voice_poll_detail/{pollId}") {
+        fun createRoute(pollId: String) = "voice_poll_detail/$pollId"
+    }
+    object Countdowns : Screen("countdowns")
 }

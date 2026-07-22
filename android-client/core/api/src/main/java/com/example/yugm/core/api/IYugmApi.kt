@@ -24,8 +24,23 @@ import com.example.yugm.core.model.GameChallenges
 import com.example.yugm.core.model.GameLeaderboard
 import com.example.yugm.core.model.GameMissions
 import com.example.yugm.core.model.EquippedThemes
+import com.example.yugm.core.model.GiftCollection
 import com.example.yugm.core.model.GiftItem
 import com.example.yugm.core.model.GiftLeaderboardResponse
+import com.example.yugm.core.model.GiftV2
+import com.example.yugm.core.model.ComboResult
+import com.example.yugm.core.model.RoomWideGiftResult
+import com.example.yugm.core.model.SurpriseBoxResult
+import com.example.yugm.core.model.UpgradeResult
+import com.example.yugm.core.model.InventoryResponse
+import com.example.yugm.core.model.TradeResult
+import com.example.yugm.core.model.UserMood
+import com.example.yugm.core.model.WaveNudge
+import com.example.yugm.core.model.DailyQuestion
+import com.example.yugm.core.model.DailyQuestionAnswer
+import com.example.yugm.core.model.VoicePoll
+import com.example.yugm.core.model.VoicePollListResponse
+import com.example.yugm.core.model.CountdownEvent
 import com.example.yugm.core.model.GroupChat
 import com.example.yugm.core.model.GroupMessage
 import com.example.yugm.core.model.Host
@@ -377,4 +392,33 @@ interface IYugmApi {
     suspend fun battlePass(token: String): BattlePassResponse
     suspend fun purchaseBattlePass(token: String): BattlePassPurchaseResult
     suspend fun battlePassLevelUp(token: String, xp: Int = 100): BattlePassLevelUpResult
+
+    // Social features (Week 9)
+    suspend fun getMood(token: String): UserMood
+    suspend fun setMood(token: String, mood: String, emoji: String? = null): UserMood
+    suspend fun setActivity(token: String, activity: String, roomId: String? = null): UserMood
+    suspend fun clearMood(token: String)
+    suspend fun sendWave(token: String, receiverId: String, type: String, roomId: String? = null): WaveNudge
+    suspend fun getWaves(token: String, unreadOnly: Boolean = false): List<WaveNudge>
+    suspend fun getUnreadWaveCount(token: String): Int
+    suspend fun markWaveRead(token: String, waveId: String)
+    suspend fun getDailyQuestion(token: String): DailyQuestion
+    suspend fun answerDailyQuestion(token: String, questionId: String, answer: String, isPublic: Boolean = true): DailyQuestionAnswer
+    suspend fun getQuestionAnswers(token: String, questionId: String): List<DailyQuestionAnswer>
+    suspend fun getMyAnswer(token: String, questionId: String): DailyQuestionAnswer?
+    suspend fun createVoicePoll(token: String, question: String, options: List<Pair<String, String?>>, audioUrl: String? = null, duration: Int? = null, expiresInHours: Int? = 24): VoicePoll
+    suspend fun getActiveVoicePolls(token: String, page: Int = 1, limit: Int = 20): VoicePollListResponse
+    suspend fun voteVoicePoll(token: String, pollId: String, optionIndex: Int): VoicePoll
+    suspend fun getMyVoicePolls(token: String): List<VoicePoll>
+    suspend fun getCountdowns(token: String): List<CountdownEvent>
+
+    // Gifts v2
+    suspend fun giftsV2(token: String, category: String? = null, rarity: String? = null, page: Int = 1, limit: Int = 20): Pair<List<GiftV2>, Int>
+    suspend fun giftCollections(token: String): List<GiftCollection>
+    suspend fun comboGift(token: String, roomId: String, giftId: String, participants: List<String>): ComboResult
+    suspend fun roomWideGift(token: String, roomId: String, giftId: String, receiverIds: List<String>): RoomWideGiftResult
+    suspend fun surpriseBox(token: String, tier: String): SurpriseBoxResult
+    suspend fun upgradeGift(token: String, inventoryId: String): UpgradeResult
+    suspend fun inventory(token: String): InventoryResponse
+    suspend fun tradeGift(token: String, targetUserId: String, offerItems: List<String>, requestItems: List<String>): TradeResult
 }

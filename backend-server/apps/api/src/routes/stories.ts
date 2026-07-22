@@ -13,13 +13,15 @@ export const storiesRouter = Router();
 
 const createSchema = z.object({
   mediaUrl: z.string().min(1),
-  mediaType: z.enum(["IMAGE", "VIDEO"]),
+  mediaType: z.enum(["IMAGE", "VIDEO", "AUDIO"]),
   caption: z.string().max(200).optional(),
   backgroundColor: z.string().optional(),
   textColor: z.string().optional(),
   font: z.string().optional(),
   sticker: z.string().optional(),
-  linkUrl: z.string().url().optional().or(z.literal(""))
+  linkUrl: z.string().url().optional().or(z.literal("")),
+  duration: z.number().int().min(1).max(300).optional(),
+  transcript: z.string().max(1000).optional()
 });
 
 storiesRouter.post("/stories", requireAuth, createLimiter, validateBody(createSchema), asyncHandler(async (req: AuthRequest, res) => {

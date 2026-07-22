@@ -81,11 +81,26 @@ export const socketEvents = {
 } as const;
 
 export const giftCatalogSeed = [
-  { name: "Rose", icon: "rose", coinPrice: 10 },
-  { name: "Diya", icon: "diya", coinPrice: 50 },
-  { name: "Lotus", icon: "lotus", coinPrice: 100 },
-  { name: "Crown", icon: "crown", coinPrice: 500 },
-  { name: "Astra", icon: "astra", coinPrice: 1000 }
+  { name: "Rose", icon: "rose", coinPrice: 10, diamondPrice: 0, rarity: "common", category: "normal" },
+  { name: "Diya", icon: "diya", coinPrice: 50, diamondPrice: 0, rarity: "common", category: "normal" },
+  { name: "Lotus", icon: "lotus", coinPrice: 100, diamondPrice: 0, rarity: "rare", category: "normal" },
+  { name: "Crown", icon: "crown", coinPrice: 500, diamondPrice: 0, rarity: "epic", category: "premium" },
+  { name: "Astra", icon: "astra", coinPrice: 1000, diamondPrice: 0, rarity: "legendary", category: "premium" }
+] as const;
+
+export const giftV2CatalogSeed = [
+  { name: "Rose", icon: "rose", coinPrice: 10, diamondPrice: 0, rarity: "common", category: "normal", effect3d: "rose_spin", interactive: false, comboMultiplier: 1, tradable: true, upgradeable: true, upgradePath: [] },
+  { name: "Diya", icon: "diya", coinPrice: 50, diamondPrice: 0, rarity: "common", category: "normal", effect3d: "diya_glow", interactive: true, comboMultiplier: 1, tradable: true, upgradeable: true, upgradePath: [] },
+  { name: "Lotus", icon: "lotus", coinPrice: 100, diamondPrice: 0, rarity: "rare", category: "normal", effect3d: "lotus_bloom", interactive: true, comboMultiplier: 2, tradable: true, upgradeable: true, upgradePath: [] },
+  { name: "Crown", icon: "crown", coinPrice: 500, diamondPrice: 0, rarity: "epic", category: "premium", effect3d: "crown_sparkle", interactive: true, comboMultiplier: 3, tradable: false, upgradeable: true, upgradePath: [] },
+  { name: "Astra", icon: "astra", coinPrice: 1000, diamondPrice: 0, rarity: "legendary", category: "premium", effect3d: "astra_galaxy", interactive: true, comboMultiplier: 5, tradable: false, upgradeable: false, upgradePath: [] },
+  { name: "Galaxy Burst", icon: "galaxy", coinPrice: 5000, diamondPrice: 50, rarity: "legendary", category: "space", effect3d: "galaxy_explosion", interactive: true, comboMultiplier: 5, tradable: false, upgradeable: false, upgradePath: [] },
+  { name: "Meteor Shower", icon: "meteor", coinPrice: 2000, diamondPrice: 20, rarity: "epic", category: "space", effect3d: "meteor_rain", interactive: true, comboMultiplier: 3, tradable: true, upgradeable: true, upgradePath: [] },
+  { name: "Dragon Fire", icon: "dragon", coinPrice: 10000, diamondPrice: 100, rarity: "mythic", category: "dragon", effect3d: "dragon_inferno", interactive: true, comboMultiplier: 10, tradable: false, upgradeable: false, upgradePath: [] },
+  { name: "Love Letter", icon: "letter", coinPrice: 25, diamondPrice: 0, rarity: "common", category: "normal", effect3d: "letter_unfold", interactive: true, comboMultiplier: 1, tradable: true, upgradeable: true, upgradePath: [] },
+  { name: "Crystal Heart", icon: "crystal_heart", coinPrice: 300, diamondPrice: 3, rarity: "rare", category: "normal", effect3d: "heart_pulse", interactive: true, comboMultiplier: 2, tradable: true, upgradeable: true, upgradePath: [] },
+  { name: "Moon Lamp", icon: "moon", coinPrice: 750, diamondPrice: 7, rarity: "epic", category: "space", effect3d: "moon_glow", interactive: true, comboMultiplier: 3, tradable: true, upgradeable: false, upgradePath: [] },
+  { name: "Diamond Ring", icon: "ring", coinPrice: 25000, diamondPrice: 250, rarity: "mythic", category: "luxury", effect3d: "ring_shine", interactive: true, comboMultiplier: 15, tradable: false, upgradeable: false, upgradePath: [] }
 ] as const;
 
 export const coinPacks = [

@@ -53,7 +53,22 @@ import com.example.yugm.core.model.GameCatalog
 import com.example.yugm.core.model.GameChallenges
 import com.example.yugm.core.model.GameLeaderboard
 import com.example.yugm.core.model.GameMissions
+import com.example.yugm.core.model.GiftCollection
 import com.example.yugm.core.model.GiftItem
+import com.example.yugm.core.model.GiftV2
+import com.example.yugm.core.model.ComboResult
+import com.example.yugm.core.model.RoomWideGiftResult
+import com.example.yugm.core.model.SurpriseBoxResult
+import com.example.yugm.core.model.UpgradeResult
+import com.example.yugm.core.model.InventoryResponse
+import com.example.yugm.core.model.TradeResult
+import com.example.yugm.core.model.UserMood
+import com.example.yugm.core.model.WaveNudge
+import com.example.yugm.core.model.DailyQuestion
+import com.example.yugm.core.model.DailyQuestionAnswer
+import com.example.yugm.core.model.VoicePoll
+import com.example.yugm.core.model.VoicePollListResponse
+import com.example.yugm.core.model.CountdownEvent
 import com.example.yugm.core.model.Host
 import com.example.yugm.core.model.ImmersiveTheme
 import com.example.yugm.core.model.LevelStatus
@@ -411,4 +426,33 @@ object YugmApi : IYugmApi {
     override suspend fun battlePass(token: String): BattlePassResponse = BattlePassApi.get(token)
     override suspend fun purchaseBattlePass(token: String): BattlePassPurchaseResult = BattlePassApi.purchase(token)
     override suspend fun battlePassLevelUp(token: String, xp: Int): BattlePassLevelUpResult = BattlePassApi.levelUp(token, xp)
+
+    // Social features (Week 9)
+    override suspend fun getMood(token: String): UserMood = SocialApi.getMood(token)
+    override suspend fun setMood(token: String, mood: String, emoji: String?): UserMood = SocialApi.setMood(token, mood, emoji)
+    override suspend fun setActivity(token: String, activity: String, roomId: String?): UserMood = SocialApi.setActivity(token, activity, roomId)
+    override suspend fun clearMood(token: String) = SocialApi.clearMood(token)
+    override suspend fun sendWave(token: String, receiverId: String, type: String, roomId: String?): WaveNudge = SocialApi.sendWave(token, receiverId, type, roomId)
+    override suspend fun getWaves(token: String, unreadOnly: Boolean): List<WaveNudge> = SocialApi.getWaves(token, unreadOnly)
+    override suspend fun getUnreadWaveCount(token: String): Int = SocialApi.getUnreadWaveCount(token)
+    override suspend fun markWaveRead(token: String, waveId: String) = SocialApi.markWaveRead(token, waveId)
+    override suspend fun getDailyQuestion(token: String): DailyQuestion = SocialApi.getDailyQuestion(token)
+    override suspend fun answerDailyQuestion(token: String, questionId: String, answer: String, isPublic: Boolean): DailyQuestionAnswer = SocialApi.answerDailyQuestion(token, questionId, answer, isPublic)
+    override suspend fun getQuestionAnswers(token: String, questionId: String): List<DailyQuestionAnswer> = SocialApi.getQuestionAnswers(token, questionId)
+    override suspend fun getMyAnswer(token: String, questionId: String): DailyQuestionAnswer? = SocialApi.getMyAnswer(token, questionId)
+    override suspend fun createVoicePoll(token: String, question: String, options: List<Pair<String, String?>>, audioUrl: String?, duration: Int?, expiresInHours: Int?): VoicePoll = SocialApi.createVoicePoll(token, question, options, audioUrl, duration, expiresInHours)
+    override suspend fun getActiveVoicePolls(token: String, page: Int, limit: Int): VoicePollListResponse = SocialApi.getActiveVoicePolls(token, page, limit)
+    override suspend fun voteVoicePoll(token: String, pollId: String, optionIndex: Int): VoicePoll = SocialApi.voteVoicePoll(token, pollId, optionIndex)
+    override suspend fun getMyVoicePolls(token: String): List<VoicePoll> = SocialApi.getMyVoicePolls(token)
+    override suspend fun getCountdowns(token: String): List<CountdownEvent> = SocialApi.getCountdowns(token)
+
+    // Gifts v2
+    override suspend fun giftsV2(token: String, category: String?, rarity: String?, page: Int, limit: Int): Pair<List<GiftV2>, Int> = GiftsApi.giftsV2(token, category, rarity, page, limit)
+    override suspend fun giftCollections(token: String): List<GiftCollection> = GiftsApi.collections(token)
+    override suspend fun comboGift(token: String, roomId: String, giftId: String, participants: List<String>): ComboResult = GiftsApi.comboGift(token, roomId, giftId, participants)
+    override suspend fun roomWideGift(token: String, roomId: String, giftId: String, receiverIds: List<String>): RoomWideGiftResult = GiftsApi.roomWideGift(token, roomId, giftId, receiverIds)
+    override suspend fun surpriseBox(token: String, tier: String): SurpriseBoxResult = GiftsApi.surpriseBox(token, tier)
+    override suspend fun upgradeGift(token: String, inventoryId: String): UpgradeResult = GiftsApi.upgradeGift(token, inventoryId)
+    override suspend fun inventory(token: String): InventoryResponse = GiftsApi.inventory(token)
+    override suspend fun tradeGift(token: String, targetUserId: String, offerItems: List<String>, requestItems: List<String>): TradeResult = GiftsApi.tradeGift(token, targetUserId, offerItems, requestItems)
 }

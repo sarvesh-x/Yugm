@@ -41,6 +41,8 @@ import { uploadRouter } from "./routes/upload.js";
 import { usersRouter } from "./routes/users.js";
 import { walletRouter } from "./routes/wallet.js";
 import { giftLeaderboardRouter } from "./routes/giftLeaderboard.js";
+import { giftsRouter } from "./routes/gifts.js";
+import { socialRouter } from "./routes/social.js";
 import { wishlistRouter } from "./routes/wishlist.js";
 import { getJobHealth } from "./services/jobs.js";
 import { getMetricsSnapshot, recordHttpRequest } from "./services/metrics.js";
@@ -183,6 +185,7 @@ app.use("/api/trust-verification", trustVerificationRouter);
   app.use("/api", walletRouter);
   app.use("/api", giftLeaderboardRouter);
   app.use("/api", wishlistRouter);
+  app.use("/api", giftsRouter);
   app.use("/api", uploadRouter);
   app.use("/api", reportsRouter);
   app.use("/api", storiesRouter);
@@ -193,6 +196,7 @@ app.use("/api/trust-verification", trustVerificationRouter);
   app.use("/api", subscriptionRouter);
   app.use("/api", highlightsRouter);
   app.use("/api", vibeRouter);
+  app.use("/api", socialRouter);
 
   app.use((_req, res) => res.status(404).json({ ok: false, error: { message: "Route not found" } }));
   app.use((error: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {

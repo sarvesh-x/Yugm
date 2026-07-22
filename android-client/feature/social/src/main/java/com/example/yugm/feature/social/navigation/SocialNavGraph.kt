@@ -299,4 +299,53 @@ fun NavGraphBuilder.socialNavGraph(
             onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) }
         )
     }
+
+    composable(Screen.MoodActivity.route) {
+        MoodActivityScreen(
+            token = authToken,
+            onBack = { navController.popBackStack() }
+        )
+    }
+
+    composable(Screen.WaveInbox.route) {
+        WaveInboxScreen(
+            token = authToken,
+            onBack = { navController.popBackStack() },
+            onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) }
+        )
+    }
+
+    composable(Screen.DailyQuestion.route) {
+        DailyQuestionScreen(
+            token = authToken,
+            onBack = { navController.popBackStack() }
+        )
+    }
+
+    composable(Screen.VoicePolls.route) {
+        VoicePollScreen(
+            token = authToken,
+            onBack = { navController.popBackStack() },
+            onPollDetail = { pollId -> navController.navigate(Screen.VoicePollDetail.createRoute(pollId)) }
+        )
+    }
+
+    composable(
+        route = Screen.VoicePollDetail.route,
+        arguments = listOf(navArgument("pollId") { type = NavType.StringType })
+    ) { backStackEntry ->
+        val pollId = backStackEntry.arguments?.getString("pollId") ?: ""
+        VoicePollDetailScreen(
+            token = authToken,
+            pollId = pollId,
+            onBack = { navController.popBackStack() }
+        )
+    }
+
+    composable(Screen.Countdowns.route) {
+        CountdownScreen(
+            token = authToken,
+            onBack = { navController.popBackStack() }
+        )
+    }
 }

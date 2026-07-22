@@ -9,6 +9,8 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.example.yugm.api.VibeApi
+import com.example.yugm.feature.gift.screens.GiftCatalogScreen
+import com.example.yugm.feature.gift.screens.InventoryScreen
 import com.example.yugm.feature.missions.screens.BattlePassScreen
 import com.example.yugm.feature.missions.screens.MissionsScreen
 import com.example.yugm.ui.viewmodel.AuthViewModel
@@ -91,6 +93,20 @@ fun NavGraph(
 
         composable(Screen.BattlePass.route) {
             BattlePassScreen(
+                token = mainViewModel.authToken,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.GiftCatalog.route) {
+            GiftCatalogScreen(
+                token = mainViewModel.authToken,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.Inventory.route) {
+            InventoryScreen(
                 token = mainViewModel.authToken,
                 onBack = { navController.popBackStack() }
             )
