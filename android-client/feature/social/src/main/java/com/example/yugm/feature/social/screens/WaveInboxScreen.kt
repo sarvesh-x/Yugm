@@ -1,7 +1,9 @@
 package com.example.yugm.feature.social.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,7 +21,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,7 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.yugm.core.api.YugmApi
+import com.example.yugm.core.api.SocialApi
 import com.example.yugm.core.model.WaveNudge
 import com.example.yugm.core.ui.components.Avatar
 import com.example.yugm.core.ui.components.GlassButton
@@ -48,16 +52,15 @@ fun WaveInboxScreen(
     var waves by remember { mutableStateOf<List<WaveNudge>>(emptyList()) }
     var unreadCount by remember { mutableStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
 
-    fun load() {
+    LaunchedEffect(token) {
         runCatching {
-            waves = YugmApi.SocialApi.getWaves(token)
-            unreadCount = YugmApi.SocialApi.getUnreadWaveCount(token)
+            waves = SocialApi.getWaves(token)
+            unreadCount = SocialApi.getUnreadWaveCount(token)
         }
         isLoading = false
     }
-
-    LaunchedEffect(token) { load() }
 
     YugmAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -127,7 +130,7 @@ fun WaveInboxScreen(
 
                         if (!wave.read) {
                             LaunchedEffect(wave.id) {
-                                runCatching { YugmApi.SocialApi.markWaveRead(token, wave.id) }
+                                runCatching { SocialApi.markWaveRead(token, wave.id) }
                             }
                         }
                     }

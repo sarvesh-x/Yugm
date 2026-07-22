@@ -9,6 +9,12 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.example.yugm.feature.social.screens.CountdownScreen
+import com.example.yugm.feature.social.screens.DailyQuestionScreen
+import com.example.yugm.feature.social.screens.MoodActivityScreen
+import com.example.yugm.feature.social.screens.VoicePollDetailScreen
+import com.example.yugm.feature.social.screens.VoicePollScreen
+import com.example.yugm.feature.social.screens.WaveInboxScreen
 import com.example.yugm.ui.screens.*
 import com.example.yugm.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
@@ -296,6 +302,55 @@ fun NavGraphBuilder.socialNavGraph(
             token = mainViewModel.authToken,
             onBack = { navController.popBackStack() },
             onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) }
+        )
+    }
+
+    composable(Screen.MoodActivity.route) {
+        MoodActivityScreen(
+            token = mainViewModel.authToken,
+            onBack = { navController.popBackStack() }
+        )
+    }
+
+    composable(Screen.WaveInbox.route) {
+        WaveInboxScreen(
+            token = mainViewModel.authToken,
+            onBack = { navController.popBackStack() },
+            onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) }
+        )
+    }
+
+    composable(Screen.DailyQuestion.route) {
+        DailyQuestionScreen(
+            token = mainViewModel.authToken,
+            onBack = { navController.popBackStack() }
+        )
+    }
+
+    composable(Screen.VoicePolls.route) {
+        VoicePollScreen(
+            token = mainViewModel.authToken,
+            onBack = { navController.popBackStack() },
+            onPollDetail = { pollId -> navController.navigate(Screen.VoicePollDetail.createRoute(pollId)) }
+        )
+    }
+
+    composable(
+        route = Screen.VoicePollDetail.route,
+        arguments = listOf(navArgument("pollId") { type = NavType.StringType })
+    ) { backStackEntry ->
+        val pollId = backStackEntry.arguments?.getString("pollId") ?: ""
+        VoicePollDetailScreen(
+            token = mainViewModel.authToken,
+            pollId = pollId,
+            onBack = { navController.popBackStack() }
+        )
+    }
+
+    composable(Screen.Countdowns.route) {
+        CountdownScreen(
+            token = mainViewModel.authToken,
+            onBack = { navController.popBackStack() }
         )
     }
 }

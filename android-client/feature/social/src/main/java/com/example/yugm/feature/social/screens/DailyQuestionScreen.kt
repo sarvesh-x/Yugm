@@ -19,13 +19,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.yugm.core.api.YugmApi
+import com.example.yugm.core.api.SocialApi
 import com.example.yugm.core.model.DailyQuestion
 import com.example.yugm.core.model.DailyQuestionAnswer
 import com.example.yugm.core.ui.components.Avatar
@@ -52,16 +54,17 @@ fun DailyQuestionScreen(
     var isPublic by remember { mutableStateOf(true) }
     var isLoading by remember { mutableStateOf(true) }
     var hasAnswered by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
-    fun load() {
-        runCatching {
-            question = YugmApi.SocialApi.getDailyQuestion(token)
+    suspend fun load() {
+        try {
+            question = SocialApi.getDailyQuestion(token)
             question?.let { q ->
-                myAnswer = YugmApi.SocialApi.getMyAnswer(token, q.id)
+                myAnswer = SocialApi.getMyAnswer(token, q.id)
                 if (myAnswer != null) hasAnswered = true
-                allAnswers = YugmApi.SocialApi.getQuestionAnswers(token, q.id)
+                allAnswers = SocialApi.getQuestionAnswers(token, q.id)
             }
-        }
+        } catch (_: Exception) { }
         isLoading = false
     }
 
@@ -108,12 +111,14 @@ fun DailyQuestionScreen(
                                 text = "Submit Answer",
                                 enabled = answerText.isNotBlank(),
                                 onClick = {
-                                    runCatching {
-                                        YugmApi.SocialApi.answerDailyQuestion(token, q.id, answerText, isPublic)
-                                        hasAnswered = true
-                                        myAnswer = YugmApi.SocialApi.getMyAnswer(token, q.id)
-                                        allAnswers = YugmApi.SocialApi.getQuestionAnswers(token, q.id)
-                                        Toast.makeText(context, "Answer submitted!", Toast.LENGTH_SHORT).show()
+                                    scope.launch {
+                                        try {
+                                            SocialApi.answerDailyQuestion(token, q.id, answerText, isPublic)
+                                            hasAnswered = true
+                                            myAnswer = SocialApi.getMyAnswer(token, q.id)
+                                            allAnswers = SocialApi.getQuestionAnswers(token, q.id)
+                                            Toast.makeText(context, "Answer submitted!", Toast.LENGTH_SHORT).show()
+                                        } catch (_: Exception) { }
                                     }
                                 }
                             )

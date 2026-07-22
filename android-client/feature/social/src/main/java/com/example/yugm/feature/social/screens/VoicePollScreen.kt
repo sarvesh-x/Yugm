@@ -21,7 +21,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,7 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.yugm.core.api.YugmApi
+import com.example.yugm.core.api.SocialApi
 import com.example.yugm.core.model.VoicePoll
 import com.example.yugm.core.model.VoicePollListResponse
 import com.example.yugm.core.ui.components.Avatar
@@ -51,10 +53,13 @@ fun VoicePollScreen(
     var polls by remember { mutableStateOf<VoicePollListResponse?>(null) }
     var showCreate by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
 
     fun load() {
-        runCatching { polls = YugmApi.SocialApi.getActiveVoicePolls(token) }
-        isLoading = false
+        scope.launch {
+            try { polls = SocialApi.getActiveVoicePolls(token) } catch (_: Exception) { }
+            isLoading = false
+        }
     }
 
     LaunchedEffect(token) { load() }
@@ -130,6 +135,7 @@ private fun CreatePollSection(
     var question by remember { mutableStateOf("") }
     var options by remember { mutableStateOf(listOf("", "")) }
     var expiresInHours by remember { mutableStateOf("24") }
+    val scope = rememberCoroutineScope()
 
     GlassCard {
         Text("New Poll", color = Gold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -161,11 +167,13 @@ private fun CreatePollSection(
             text = "Create Poll",
             enabled = question.isNotBlank() && options.count { it.isNotBlank() } >= 2,
             onClick = {
-                val validOptions = options.filter { it.isNotBlank() }.map { it to null as String? }
-                runCatching {
-                    YugmApi.SocialApi.createVoicePoll(token, question, validOptions, expiresInHours = expiresInHours.toIntOrNull() ?: 24)
-                    Toast.makeText(context, "Poll created!", Toast.LENGTH_SHORT).show()
-                    onCreated()
+                scope.launch {
+                    val validOptions = options.filter { it.isNotBlank() }.map { it to null as String? }
+                    try {
+                        SocialApi.createVoicePoll(token, question, validOptions, expiresInHours = expiresInHours.toIntOrNull() ?: 24)
+                        Toast.makeText(context, "Poll created!", Toast.LENGTH_SHORT).show()
+                        onCreated()
+                    } catch (_: Exception) { }
                 }
             }
         )

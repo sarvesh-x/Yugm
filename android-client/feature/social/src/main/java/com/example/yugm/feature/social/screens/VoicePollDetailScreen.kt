@@ -19,14 +19,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.yugm.core.api.YugmApi
+import com.example.yugm.core.api.SocialApi
 import com.example.yugm.core.model.VoicePoll
 import com.example.yugm.core.ui.components.GlassButton
 import com.example.yugm.core.ui.components.GlassCard
@@ -45,12 +47,13 @@ fun VoicePollDetailScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     var poll by remember { mutableStateOf<VoicePoll?>(null) }
     var votedIndex by remember { mutableStateOf(-1) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(pollId) {
-        runCatching {
-            val resp = YugmApi.SocialApi.getActiveVoicePolls(token, 1, 100)
+        try {
+            val resp = SocialApi.getActiveVoicePolls(token, 1, 100)
             poll = resp.polls.find { it.id == pollId }
-        }
+        } catch (_: Exception) { }
     }
 
     YugmAmbientBackground {
@@ -76,10 +79,12 @@ fun VoicePollDetailScreen(
                                 .background(if (isSelected) Purple.copy(alpha = 0.2f) else Panel)
                                 .then(
                                     if (!isVoter) Modifier.clickable {
-                                        runCatching {
-                                            poll = YugmApi.SocialApi.voteVoicePoll(token, p.id, idx)
-                                            votedIndex = idx
-                                            Toast.makeText(context, "Vote recorded", android.widget.Toast.LENGTH_SHORT).show()
+                                        scope.launch {
+                                            try {
+                                                poll = SocialApi.voteVoicePoll(token, p.id, idx)
+                                                votedIndex = idx
+                                                Toast.makeText(context, "Vote recorded", android.widget.Toast.LENGTH_SHORT).show()
+                                            } catch (_: Exception) { }
                                         }
                                     } else Modifier
                                 )

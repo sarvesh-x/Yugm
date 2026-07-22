@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,7 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.yugm.core.api.YugmApi
+import com.example.yugm.core.api.SocialApi
 import com.example.yugm.core.model.CountdownEvent
 import com.example.yugm.core.ui.components.GlassButton
 import com.example.yugm.core.ui.components.GlassCard
@@ -48,7 +49,7 @@ fun CountdownScreen(
     var isLoading by remember { mutableStateOf(true) }
 
     LaunchedEffect(token) {
-        runCatching { events = YugmApi.SocialApi.getCountdowns(token) }
+        try { events = SocialApi.getCountdowns(token) } catch (_: Exception) { }
         isLoading = false
     }
 

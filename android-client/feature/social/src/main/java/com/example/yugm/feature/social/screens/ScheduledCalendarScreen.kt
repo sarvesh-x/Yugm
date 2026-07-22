@@ -43,6 +43,7 @@ import com.example.yugm.core.ui.theme.SurfaceElevated
 import com.example.yugm.core.ui.theme.TextMuted
 import com.example.yugm.core.ui.theme.TextPrimary
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
@@ -53,16 +54,13 @@ fun ScheduledCalendarScreen(
 ) {
     var loading by remember { mutableStateOf(true) }
     var rooms by remember { mutableStateOf<List<Room>>(emptyList()) }
-    val scope = rememberCoroutineScope()
 
     LaunchedEffect(token) {
         loading = true
-        scope.launch {
-            runCatching {
-                rooms = withContext(Dispatchers.IO) { YugmApi.scheduledRooms() }
-            }
-            loading = false
+        runCatching {
+            rooms = withContext(Dispatchers.IO) { YugmApi.scheduledRooms() }
         }
+        loading = false
     }
 
     YugmAmbientBackground {

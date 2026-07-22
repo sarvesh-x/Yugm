@@ -22,7 +22,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,7 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.yugm.core.api.YugmApi
+import com.example.yugm.core.api.SocialApi
 import com.example.yugm.core.ui.components.GlassButton
 import com.example.yugm.core.ui.components.GlassCard
 import com.example.yugm.core.ui.components.YugmAmbientBackground
@@ -70,10 +72,11 @@ fun MoodActivityScreen(
     var selectedMood by remember { mutableStateOf<Pair<String, String>?>(null) }
     var selectedActivity by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(token) {
         runCatching {
-            val mood = YugmApi.SocialApi.getMood(token)
+            val mood = SocialApi.getMood(token)
             if (mood.mood.isNotBlank()) currentMood = mood.mood to mood.emoji
             if (mood.activity.isNotBlank()) currentActivity = mood.activity
         }
@@ -151,21 +154,23 @@ fun MoodActivityScreen(
                 text = "Set Status",
                 enabled = selectedMood != null || selectedActivity != null,
                 onClick = {
-                    val mood = selectedMood
-                    val activity = selectedActivity
-                    if (mood != null) {
-                        runCatching {
-                            YugmApi.SocialApi.setMood(token, mood.first, mood.second)
-                            currentMood = mood
+                    scope.launch {
+                        val mood = selectedMood
+                        val activity = selectedActivity
+                        if (mood != null) {
+                            runCatching {
+                                SocialApi.setMood(token, mood.first, mood.second)
+                                currentMood = mood
+                            }
                         }
-                    }
-                    if (activity != null) {
-                        runCatching {
-                            YugmApi.SocialApi.setActivity(token, activity)
-                            currentActivity = activity
+                        if (activity != null) {
+                            runCatching {
+                                SocialApi.setActivity(token, activity)
+                                currentActivity = activity
+                            }
                         }
+                        android.widget.Toast.makeText(context, "Status updated", android.widget.Toast.LENGTH_SHORT).show()
                     }
-                    android.widget.Toast.makeText(context, "Status updated", android.widget.Toast.LENGTH_SHORT).show()
                 }
             )
 
@@ -173,12 +178,14 @@ fun MoodActivityScreen(
                 text = "Clear Status",
                 gradient = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(com.example.yugm.core.ui.theme.Danger, PrimaryPink)),
                 onClick = {
-                    runCatching { YugmApi.SocialApi.clearMood(token) }
-                    currentMood = null
-                    currentActivity = null
-                    selectedMood = null
-                    selectedActivity = null
-                    android.widget.Toast.makeText(context, "Status cleared", android.widget.Toast.LENGTH_SHORT).show()
+                    scope.launch {
+                        runCatching { SocialApi.clearMood(token) }
+                        currentMood = null
+                        currentActivity = null
+                        selectedMood = null
+                        selectedActivity = null
+                        android.widget.Toast.makeText(context, "Status cleared", android.widget.Toast.LENGTH_SHORT).show()
+                    }
                 }
             )
 

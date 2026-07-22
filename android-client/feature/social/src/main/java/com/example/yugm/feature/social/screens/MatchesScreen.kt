@@ -28,6 +28,7 @@ import com.example.yugm.core.ui.components.YugmBottomDock
 import com.example.yugm.core.ui.components.YugmDockTab
 import com.example.yugm.core.ui.theme.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,17 +45,13 @@ fun MatchesScreen(
 ) {
     var matches by remember { mutableStateOf<List<Host>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
-    val scope = rememberCoroutineScope()
-
     LaunchedEffect(token) {
         if (token.isNotBlank()) {
             isLoading = true
-            scope.launch {
-                runCatching {
-                    matches = withContext(Dispatchers.IO) { YugmApi.datingMatches(token) }
-                }
-                isLoading = false
+            runCatching {
+                matches = withContext(Dispatchers.IO) { YugmApi.datingMatches(token) }
             }
+            isLoading = false
         }
     }
 

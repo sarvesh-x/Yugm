@@ -71,7 +71,7 @@ fun WatchPartyPlayerScreen(
         scope.launch {
             isLoading = true
             runCatching {
-                val wp = withContext(Dispatchers.IO) { YugmApi.watchParty(token, roomId) }
+                val wp = withContext(Dispatchers.IO) { YugmApi.watchPartyGet(token, roomId) }
                 watchParty = wp
                 isPlaying = wp.isPlaying
                 position = wp.position
@@ -133,7 +133,7 @@ fun WatchPartyPlayerScreen(
                                 isPlaying = newPlaying
                                 scope.launch {
                                     runCatching {
-                                        withContext(Dispatchers.IO) { YugmApi.syncWatchParty(token, roomId, position, newPlaying) }
+                                        withContext(Dispatchers.IO) { YugmApi.watchPartySync(token, roomId, position, newPlaying) }
                                     }
                                 }
                             }
@@ -145,7 +145,7 @@ fun WatchPartyPlayerScreen(
                                 busy = true
                                 scope.launch {
                                     runCatching {
-                                        withContext(Dispatchers.IO) { YugmApi.stopWatchParty(token, roomId) }
+                                        withContext(Dispatchers.IO) { YugmApi.watchPartyStop(token, roomId) }
                                     }
                                 }
                                 onStop()
