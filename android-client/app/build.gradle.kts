@@ -150,6 +150,14 @@ dependencies {
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
+
+    implementation(project(":core:model"))
+    implementation(project(":core:api"))
+    implementation(project(":core:ui"))
+    implementation(project(":core:util"))
+    implementation(project(":core:navigation"))
+    implementation(project(":feature:missions"))
+
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

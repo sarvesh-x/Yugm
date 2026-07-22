@@ -100,6 +100,7 @@ fun DiscoverScreen(
     onWallet: () -> Unit = {},
     onSelfProfile: () -> Unit = {},
     onVoiceRooms: () -> Unit = {},
+    onMissions: () -> Unit = {},
     viewModel: DiscoverViewModel = hiltViewModel()
 ) {
     LaunchedEffect(Unit) { viewModel.refreshHome(token) }
@@ -146,7 +147,8 @@ fun DiscoverScreen(
                             unreadCount = viewModel.home?.unreadNotifications ?: 0,
                             onNotifications = onNotifications,
                             onCreateRoom = onCreateRoom,
-                            onProfile = onSelfProfile
+                            onProfile = onSelfProfile,
+                            onMissions = onMissions
                         )
                     }
                 }
@@ -347,7 +349,8 @@ private fun DiscoveryHeader(
     unreadCount: Int,
     onNotifications: () -> Unit,
     onCreateRoom: () -> Unit,
-    onProfile: () -> Unit
+    onProfile: () -> Unit,
+    onMissions: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier.padding(horizontal = 20.dp),
@@ -356,6 +359,8 @@ private fun DiscoveryHeader(
         Row(verticalAlignment = Alignment.CenterVertically) {
             BrandHeader(compact = true)
             Spacer(Modifier.weight(1f))
+            HeaderAction(glyph = "★", onClick = onMissions)
+            Spacer(Modifier.width(10.dp))
             HeaderAction(glyph = "♢", badge = unreadCount, onClick = onNotifications)
             Spacer(Modifier.width(10.dp))
             HeaderAction(glyph = "+", onClick = onCreateRoom, gradient = true)

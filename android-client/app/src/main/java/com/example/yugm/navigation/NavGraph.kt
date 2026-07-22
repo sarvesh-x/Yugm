@@ -7,7 +7,10 @@ import androidx.compose.runtime.getValue
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
 import com.example.yugm.api.VibeApi
+import com.example.yugm.feature.missions.screens.BattlePassScreen
+import com.example.yugm.feature.missions.screens.MissionsScreen
 import com.example.yugm.ui.viewmodel.AuthViewModel
 import com.example.yugm.ui.viewmodel.MainViewModel
 
@@ -77,5 +80,20 @@ fun NavGraph(
         socialNavGraph(navController, mainViewModel)
         walletNavGraph(navController, mainViewModel)
         settingsNavGraph(navController, mainViewModel)
+
+        composable(Screen.Missions.route) {
+            MissionsScreen(
+                token = mainViewModel.authToken,
+                onBack = { navController.popBackStack() },
+                onBattlePass = { navController.navigate(Screen.BattlePass.route) }
+            )
+        }
+
+        composable(Screen.BattlePass.route) {
+            BattlePassScreen(
+                token = mainViewModel.authToken,
+                onBack = { navController.popBackStack() }
+            )
+        }
     }
 }

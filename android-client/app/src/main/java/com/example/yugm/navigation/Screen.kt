@@ -108,4 +108,6 @@ sealed class Screen(val route: String) {
     object UserWishlist : Screen("user_wishlist/{userId}") {
         fun createRoute(userId: String) = "user_wishlist/$userId"
     }
+    object Missions : Screen("missions")
+    object BattlePass : Screen("battle_pass")
 }

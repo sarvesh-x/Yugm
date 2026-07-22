@@ -1,0 +1,13 @@
+
+# Build
+build/
+
+# IDE.gradle/.idea/
+local.properties
+
+# KSP/KAPT generated
+build/tmp/kapt3/
+build/generated/
+
+# Transforms
+**/build/.transforms/

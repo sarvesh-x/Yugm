@@ -1,0 +1,7 @@
+uploads/
+private-uploads/
+apps/api/dist/
+apps/admin/dist/
+node_modules/
+*.log
+.env

@@ -56,6 +56,9 @@ fun NavGraphBuilder.discoverNavGraph(
             },
             onVoiceRooms = {
                 navController.navigate(Screen.VoiceRooms.route)
+            },
+            onMissions = {
+                navController.navigate(Screen.Missions.route)
             }
         )
     }
