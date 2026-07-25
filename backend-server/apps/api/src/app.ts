@@ -39,6 +39,7 @@ import { subscriptionRouter } from "./routes/subscriptions.js";
 import { highlightsRouter } from "./routes/highlights.js";
 import { trustVerificationRouter } from "./routes/trustVerification.js";
 import { aiWingmanRouter } from "./routes/aiWingman.js";
+import moderationRouter from "./routes/moderation.js";
 import { vibeRouter } from "./routes/vibe.js";
 import { uploadRouter } from "./routes/upload.js";
 import { usersRouter } from "./routes/users.js";
@@ -203,6 +204,7 @@ app.use("/api/trust-verification", trustVerificationRouter);
   app.use("/api/ai", aiWingmanRouter);
   app.use("/api", vibeRouter);
   app.use("/api", socialRouter);
+  app.use("/api", moderationRouter);
 
   app.use((_req, res) => res.status(404).json({ ok: false, error: { message: "Route not found" } }));
   app.use((error: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {

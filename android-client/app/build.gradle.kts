@@ -160,6 +160,7 @@ dependencies {
     implementation(project(":feature:gift"))
     implementation(project(":feature:social"))
     implementation(project(":feature:room-modes"))
+    implementation(project(":feature:moderation"))
 
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))

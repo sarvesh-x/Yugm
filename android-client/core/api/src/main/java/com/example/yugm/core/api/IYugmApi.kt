@@ -73,6 +73,13 @@ import com.example.yugm.core.model.BattlePassLevelUpResult
 import com.example.yugm.core.model.BattlePassPurchaseResult
 import com.example.yugm.core.model.BattlePassResponse
 import com.example.yugm.core.model.MissionClaimResult
+import com.example.yugm.core.model.ModerationCheckTextRequest
+import com.example.yugm.core.model.ModerationCheckTextResponse
+import com.example.yugm.core.model.ModerationReportRequest
+import com.example.yugm.core.model.ModerationReportResponse
+import com.example.yugm.core.model.ModerationAppealRequest
+import com.example.yugm.core.model.ModerationAppealResponse
+import com.example.yugm.core.model.ModerationStatusResponse
 import com.example.yugm.core.model.MissionProgressResult
 import com.example.yugm.core.model.RoomMission
 import com.example.yugm.core.model.RoomPoll
@@ -448,4 +455,10 @@ interface IYugmApi {
     suspend fun upgradeGift(token: String, inventoryId: String): UpgradeResult
     suspend fun inventory(token: String): InventoryResponse
     suspend fun tradeGift(token: String, targetUserId: String, offerItems: List<String>, requestItems: List<String>): TradeResult
+
+    // Moderation
+    suspend fun moderationCheckText(token: String, request: ModerationCheckTextRequest): ModerationCheckTextResponse
+    suspend fun moderationReport(token: String, request: ModerationReportRequest): ModerationReportResponse
+    suspend fun moderationAppeal(token: String, request: ModerationAppealRequest): ModerationAppealResponse
+    suspend fun moderationStatus(token: String): ModerationStatusResponse
 }

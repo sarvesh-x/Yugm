@@ -71,6 +71,13 @@ import com.example.yugm.core.model.VoicePollListResponse
 import com.example.yugm.core.model.CountdownEvent
 import com.example.yugm.core.model.Host
 import com.example.yugm.core.model.ImmersiveTheme
+import com.example.yugm.core.model.ModerationCheckTextRequest
+import com.example.yugm.core.model.ModerationCheckTextResponse
+import com.example.yugm.core.model.ModerationReportRequest
+import com.example.yugm.core.model.ModerationReportResponse
+import com.example.yugm.core.model.ModerationAppealRequest
+import com.example.yugm.core.model.ModerationAppealResponse
+import com.example.yugm.core.model.ModerationStatusResponse
 import com.example.yugm.core.model.LevelStatus
 import com.example.yugm.core.model.MediaSession
 import com.example.yugm.core.model.MiniGameChallenge
@@ -483,4 +490,10 @@ object YugmApi : IYugmApi {
     override suspend fun upgradeGift(token: String, inventoryId: String): UpgradeResult = GiftsApi.upgradeGift(token, inventoryId)
     override suspend fun inventory(token: String): InventoryResponse = GiftsApi.inventory(token)
     override suspend fun tradeGift(token: String, targetUserId: String, offerItems: List<String>, requestItems: List<String>): TradeResult = GiftsApi.tradeGift(token, targetUserId, offerItems, requestItems)
+
+    // Moderation
+    override suspend fun moderationCheckText(token: String, request: ModerationCheckTextRequest): ModerationCheckTextResponse = ModerationApi.checkText(token, request)
+    override suspend fun moderationReport(token: String, request: ModerationReportRequest): ModerationReportResponse = ModerationApi.report(token, request)
+    override suspend fun moderationAppeal(token: String, request: ModerationAppealRequest): ModerationAppealResponse = ModerationApi.appeal(token, request)
+    override suspend fun moderationStatus(token: String): ModerationStatusResponse = ModerationApi.getStatus(token)
 }

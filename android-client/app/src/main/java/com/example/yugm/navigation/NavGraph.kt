@@ -16,6 +16,7 @@ import com.example.yugm.feature.missions.screens.MissionsScreen
 import com.example.yugm.ui.screens.WingmanScreen
 import com.example.yugm.ui.viewmodel.AuthViewModel
 import com.example.yugm.feature.roommodes.navigation.roomModesNavGraph
+import com.example.yugm.feature.moderation.navigation.moderationNavGraph
 import com.example.yugm.ui.viewmodel.MainViewModel
 import com.example.yugm.ui.viewmodel.WingmanViewModel
 
@@ -86,6 +87,7 @@ fun NavGraph(
         walletNavGraph(navController, mainViewModel)
         settingsNavGraph(navController, mainViewModel)
         roomModesNavGraph(navController, mainViewModel.authToken, mainViewModel.currentUserId)
+        moderationNavGraph(navController, mainViewModel.authToken)
 
         composable(Screen.Missions.route) {
             MissionsScreen(
