@@ -18,7 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.example.yugm.core.model.*
 import com.example.yugm.core.ui.components.GlassCard
 import com.example.yugm.core.ui.theme.*
@@ -82,7 +82,7 @@ fun WingmanScreen(
 @Composable
 private fun WingmanTabBar(activeTab: WingmanTab, onTabSelected: (WingmanTab) -> Unit) {
     val tabs = WingmanTab.entries
-    ScrollableTabRow(
+    PrimaryScrollableTabRow(
         selectedTabIndex = tabs.indexOf(activeTab),
         containerColor = Background,
         contentColor = PrimaryPink,
