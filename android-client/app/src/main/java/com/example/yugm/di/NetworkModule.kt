@@ -1,6 +1,7 @@
 package com.example.yugm.di
 
-import com.example.yugm.api.YugmApi
+import com.example.yugm.core.api.IYugmApi
+import com.example.yugm.core.api.YugmApi
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -13,5 +14,5 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideYugmApi(): YugmApi = YugmApi
+    fun provideYugmApi(): IYugmApi = YugmApi
 }

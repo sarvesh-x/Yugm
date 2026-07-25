@@ -13,8 +13,11 @@ import com.example.yugm.feature.gift.screens.GiftCatalogScreen
 import com.example.yugm.feature.gift.screens.InventoryScreen
 import com.example.yugm.feature.missions.screens.BattlePassScreen
 import com.example.yugm.feature.missions.screens.MissionsScreen
+import com.example.yugm.ui.screens.WingmanScreen
 import com.example.yugm.ui.viewmodel.AuthViewModel
+import com.example.yugm.feature.roommodes.navigation.roomModesNavGraph
 import com.example.yugm.ui.viewmodel.MainViewModel
+import com.example.yugm.ui.viewmodel.WingmanViewModel
 
 @Composable
 fun NavGraph(
@@ -82,6 +85,7 @@ fun NavGraph(
         socialNavGraph(navController, mainViewModel)
         walletNavGraph(navController, mainViewModel)
         settingsNavGraph(navController, mainViewModel)
+        roomModesNavGraph(navController, mainViewModel.authToken, mainViewModel.currentUserId)
 
         composable(Screen.Missions.route) {
             MissionsScreen(
@@ -109,6 +113,13 @@ fun NavGraph(
             InventoryScreen(
                 token = mainViewModel.authToken,
                 onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.Wingman.route) {
+            WingmanScreen(
+                token = mainViewModel.authToken,
+                onBack = { navController.popBackStack() },
             )
         }
     }

@@ -159,6 +159,7 @@ dependencies {
     implementation(project(":feature:missions"))
     implementation(project(":feature:gift"))
     implementation(project(":feature:social"))
+    implementation(project(":feature:room-modes"))
 
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))

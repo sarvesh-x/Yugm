@@ -110,6 +110,22 @@ import com.example.yugm.core.model.Subscription
 import com.example.yugm.core.model.SubscriptionCheckResponse
 import com.example.yugm.core.model.WatchParty
 import com.example.yugm.core.model.WishlistItem
+import com.example.yugm.core.model.WingmanBioGenerateRequest
+import com.example.yugm.core.model.WingmanBioGenerateResponse
+import com.example.yugm.core.model.WingmanBioRateResponse
+import com.example.yugm.core.model.WingmanOpenerRequest
+import com.example.yugm.core.model.WingmanOpenerResponse
+import com.example.yugm.core.model.WingmanReplyRequest
+import com.example.yugm.core.model.WingmanReplyResponse
+import com.example.yugm.core.model.WingmanCoachRequest
+import com.example.yugm.core.model.WingmanCoachResponse
+import com.example.yugm.core.model.WingmanGhostDetectRequest
+import com.example.yugm.core.model.WingmanGhostDetectResponse
+import com.example.yugm.core.model.WingmanDatePlanRequest
+import com.example.yugm.core.model.WingmanDatePlanResponse
+import com.example.yugm.core.model.WingmanGiftRecommendRequest
+import com.example.yugm.core.model.WingmanGiftRecommendResponse
+import com.example.yugm.core.model.WingmanAnalyticsResponse
 import org.json.JSONObject
 
 interface IYugmApi {
@@ -361,6 +377,17 @@ interface IYugmApi {
     suspend fun checkSubscription(token: String, creatorId: String): SubscriptionCheckResponse
 
     suspend fun feed(token: String): FeedResponse
+
+    // AI Wingman
+    suspend fun wingmanBioGenerate(token: String, request: com.example.yugm.core.model.WingmanBioGenerateRequest): com.example.yugm.core.model.WingmanBioGenerateResponse
+    suspend fun wingmanBioRate(token: String, bio: String): com.example.yugm.core.model.WingmanBioRateResponse
+    suspend fun wingmanOpeners(token: String, request: com.example.yugm.core.model.WingmanOpenerRequest): com.example.yugm.core.model.WingmanOpenerResponse
+    suspend fun wingmanReplies(token: String, request: com.example.yugm.core.model.WingmanReplyRequest): com.example.yugm.core.model.WingmanReplyResponse
+    suspend fun wingmanCoach(token: String, request: com.example.yugm.core.model.WingmanCoachRequest): com.example.yugm.core.model.WingmanCoachResponse
+    suspend fun wingmanGhostDetect(token: String, request: com.example.yugm.core.model.WingmanGhostDetectRequest): com.example.yugm.core.model.WingmanGhostDetectResponse
+    suspend fun wingmanDatePlan(token: String, request: com.example.yugm.core.model.WingmanDatePlanRequest): com.example.yugm.core.model.WingmanDatePlanResponse
+    suspend fun wingmanGiftRecommend(token: String, request: com.example.yugm.core.model.WingmanGiftRecommendRequest): com.example.yugm.core.model.WingmanGiftRecommendResponse
+    suspend fun wingmanAnalytics(token: String): com.example.yugm.core.model.WingmanAnalyticsResponse
 
     // Vibe Graph
     suspend fun vibeInit(token: String): VibeInitResponse

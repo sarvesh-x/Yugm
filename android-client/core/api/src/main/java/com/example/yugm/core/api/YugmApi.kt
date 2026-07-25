@@ -108,6 +108,23 @@ import com.example.yugm.core.model.WalletTransaction
 import com.example.yugm.core.model.WithdrawalEligibility
 import com.example.yugm.core.model.WithdrawalRequestResult
 import com.example.yugm.core.model.YugmUser
+import com.example.yugm.core.model.WingmanBioGenerateRequest
+import com.example.yugm.core.model.WingmanBioRateRequest
+import com.example.yugm.core.model.WingmanOpenerRequest
+import com.example.yugm.core.model.WingmanReplyRequest
+import com.example.yugm.core.model.WingmanCoachRequest
+import com.example.yugm.core.model.WingmanGhostDetectRequest
+import com.example.yugm.core.model.WingmanDatePlanRequest
+import com.example.yugm.core.model.WingmanGiftRecommendRequest
+import com.example.yugm.core.model.WingmanBioGenerateResponse
+import com.example.yugm.core.model.WingmanBioRateResponse
+import com.example.yugm.core.model.WingmanOpenerResponse
+import com.example.yugm.core.model.WingmanReplyResponse
+import com.example.yugm.core.model.WingmanCoachResponse
+import com.example.yugm.core.model.WingmanGhostDetectResponse
+import com.example.yugm.core.model.WingmanDatePlanResponse
+import com.example.yugm.core.model.WingmanGiftRecommendResponse
+import com.example.yugm.core.model.WingmanAnalyticsResponse
 import org.json.JSONObject
 
 object YugmApi : IYugmApi {
@@ -380,6 +397,17 @@ object YugmApi : IYugmApi {
 
     // Feed
     override suspend fun feed(token: String): FeedResponse = FeedApi.get(token)
+
+    // AI Wingman
+    override suspend fun wingmanBioGenerate(token: String, request: WingmanBioGenerateRequest) = WingmanApi.bioGenerate(token, request)
+    override suspend fun wingmanBioRate(token: String, bio: String) = WingmanApi.bioRate(token, bio)
+    override suspend fun wingmanOpeners(token: String, request: WingmanOpenerRequest) = WingmanApi.openers(token, request)
+    override suspend fun wingmanReplies(token: String, request: WingmanReplyRequest) = WingmanApi.replies(token, request)
+    override suspend fun wingmanCoach(token: String, request: WingmanCoachRequest) = WingmanApi.coach(token, request)
+    override suspend fun wingmanGhostDetect(token: String, request: WingmanGhostDetectRequest) = WingmanApi.ghostDetect(token, request)
+    override suspend fun wingmanDatePlan(token: String, request: WingmanDatePlanRequest) = WingmanApi.datePlan(token, request)
+    override suspend fun wingmanGiftRecommend(token: String, request: WingmanGiftRecommendRequest) = WingmanApi.giftRecommend(token, request)
+    override suspend fun wingmanAnalytics(token: String) = WingmanApi.analytics(token)
 
     // Vibe Graph
     override suspend fun vibeInit(token: String): VibeInitResponse = VibeApi.init(token)

@@ -23,6 +23,20 @@ val TextPrimaryColor = Color(0xFFFFFFFF)
 val TextSecondaryColor = Color(0xFF9EA3B9)
 val BorderColor = Color(0x24FFFFFF)
 
+// Aurora Gradients - each is a list of colors for gradient transitions
+object Aurora {
+    val Sunrise = listOf(Color(0xFFFF6B35), Color(0xFFF7C59F), Color(0xFFEFEFBB))
+    val Sunset = listOf(Color(0xFFFF512F), Color(0xFFDD2475), Color(0xFFE94057))
+    val Northern = listOf(Color(0xFF00F2FE), Color(0xFF4FACFE), Color(0xFFA18CD1))
+    val Ocean = listOf(Color(0xFF0BDEFF), Color(0xFF2AF598), Color(0xFF00F260))
+    val Cosmos = listOf(Color(0xFF1A2980), Color(0xFF26D0CE), Color(0xFF00E1FD))
+    val Fire = listOf(Color(0xFFF12711), Color(0xFFF5AF19), Color(0xFFFFE000))
+    val Royal = listOf(Color(0xFF141E30), Color(0xFFE100FF), Color(0xFF4A00E0))
+    val Neon = listOf(Color(0xFF00F2FE), Color(0xFFF20000), Color(0xFFFEAC5E))
+
+    val all = listOf(Sunrise, Sunset, Northern, Ocean, Cosmos, Fire, Royal, Neon)
+}
+
 // Legacy mappings for backwards compatibility
 val Ink = Background
 val Ink2 = Surface
