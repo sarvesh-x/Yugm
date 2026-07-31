@@ -20,13 +20,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.lifecycleScope
-import com.example.yugm.api.YugmApi
+import com.example.yugm.core.api.YugmApi
+import com.example.yugm.core.api.YugmHttpClient
 import com.example.yugm.navigation.NavGraph
 import com.example.yugm.core.navigation.Screen
 import com.example.yugm.ui.theme.Background
 import com.example.yugm.ui.theme.YugmTheme
 import com.example.yugm.ui.viewmodel.MainViewModel
-import com.example.yugm.data.SessionManager
+import com.example.yugm.core.data.SessionManager
 import com.example.yugm.payments.RazorpayCoordinator
 import com.razorpay.PaymentData
 import com.razorpay.PaymentResultWithDataListener
@@ -73,7 +74,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                 }
 
                 LaunchedEffect(Unit) {
-                    YugmApi.onUnauthorized = {
+                    YugmHttpClient.onUnauthorized = {
                         mainViewModel.logout()
                         navController.navigate(Screen.Login.route) {
                             popUpTo(0) { inclusive = true }
@@ -90,8 +91,8 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                 DisposableEffect(Unit) {
                     val cm = context.getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
                     val callback = object : ConnectivityManager.NetworkCallback() {
-                        override fun onAvailable(network: Network) { YugmApi.isOnline = true }
-                        override fun onLost(network: Network) { YugmApi.isOnline = false }
+                        override fun onAvailable(network: Network) { YugmHttpClient.isOnline = true }
+                        override fun onLost(network: Network) { YugmHttpClient.isOnline = false }
                     }
                     val request = NetworkRequest.Builder()
                         .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)

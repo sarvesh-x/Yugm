@@ -6,9 +6,11 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import com.example.yugm.api.YugmApi
+import com.example.yugm.core.api.YugmApi
+import com.example.yugm.core.data.SessionManager
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -21,8 +23,11 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import timber.log.Timber
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class YugmFirebaseMessagingService : FirebaseMessagingService() {
+    @Inject lateinit var sessionManager: SessionManager
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -37,8 +42,7 @@ class YugmFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        val prefs = getSharedPreferences("yugm_session", MODE_PRIVATE)
-        val authToken = prefs.getString("authToken", "") ?: ""
+        val authToken = sessionManager.authToken
         if (authToken.isNotBlank()) {
             scope.launch {
                 withContext(Dispatchers.IO) {

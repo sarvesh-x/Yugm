@@ -10,7 +10,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import com.example.yugm.api.VibeApi
+import com.example.yugm.core.api.VibeApi
 import com.example.yugm.core.navigation.Screen
 import com.example.yugm.feature.auth.navigation.authNavGraph
 import com.example.yugm.feature.discover.navigation.discoverNavGraph

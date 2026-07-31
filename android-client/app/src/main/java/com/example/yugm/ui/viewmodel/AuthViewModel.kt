@@ -5,9 +5,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.yugm.data.SessionManager
-import com.example.yugm.data.repository.AuthRepository
-import com.example.yugm.model.Session
+import com.example.yugm.core.api.YugmApi
+import com.example.yugm.core.data.SessionManager
+import com.example.yugm.core.model.Session
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -16,7 +16,6 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
-    private val authRepository: AuthRepository,
     private val sessionManager: SessionManager
 ) : ViewModel() {
 
@@ -33,7 +32,7 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             isLoading = true
             error = null
-            authRepository.googleAuth(idToken)
+            runCatching { YugmApi.googleAuth(idToken) }
                 .onSuccess { session ->
                     saveSession(session)
                     _authSuccess.emit(session)
@@ -49,7 +48,7 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             isLoading = true
             error = null
-            authRepository.phoneAuth(idToken)
+            runCatching { YugmApi.phoneAuth(idToken) }
                 .onSuccess { session ->
                     saveSession(session)
                     _authSuccess.emit(session)

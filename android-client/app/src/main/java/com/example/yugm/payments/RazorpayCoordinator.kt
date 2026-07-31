@@ -3,7 +3,7 @@ package com.example.yugm.payments
 import android.app.Activity
 import android.content.Context
 import androidx.core.content.edit
-import com.example.yugm.model.RazorpayCheckoutData
+import com.example.yugm.core.model.RazorpayCheckoutData
 import com.razorpay.Checkout
 import org.json.JSONObject
 import androidx.compose.runtime.getValue
