@@ -50,9 +50,9 @@ adminCosmeticsRouter.get("/cosmetics", requirePermission("cosmetics.read"),
     if (type && typeof type === "string") filter.type = type;
     if (rarity && typeof rarity === "string") filter.rarity = rarity;
     if (q && typeof q === "string") {
+      const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       filter.$or = [
-        { name: { $regex: q, $options: "i" } },
-        { _id: { $regex: q, $options: "i" } }
+        { name: { $regex: escaped, $options: "i" } }
       ];
     }
 

@@ -4,21 +4,28 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.example.yugm.api.VibeApi
-import com.example.yugm.feature.gift.screens.GiftCatalogScreen
-import com.example.yugm.feature.gift.screens.InventoryScreen
-import com.example.yugm.feature.missions.screens.BattlePassScreen
-import com.example.yugm.feature.missions.screens.MissionsScreen
+import com.example.yugm.core.navigation.Screen
+import com.example.yugm.feature.auth.navigation.authNavGraph
+import com.example.yugm.feature.discover.navigation.discoverNavGraph
+import com.example.yugm.feature.gift.navigation.giftNavGraph
+import com.example.yugm.feature.missions.navigation.missionsNavGraph
+import com.example.yugm.feature.moderation.navigation.moderationNavGraph
+import com.example.yugm.feature.profile.navigation.profileNavGraph
+import com.example.yugm.feature.room.navigation.roomNavGraph
+import com.example.yugm.feature.roommodes.navigation.roomModesNavGraph
+import com.example.yugm.feature.settings.navigation.settingsNavGraph
+import com.example.yugm.feature.social.navigation.socialNavGraph
+import com.example.yugm.feature.wallet.navigation.walletNavGraph
 import com.example.yugm.ui.screens.WingmanScreen
 import com.example.yugm.ui.viewmodel.AuthViewModel
-import com.example.yugm.feature.roommodes.navigation.roomModesNavGraph
-import com.example.yugm.feature.moderation.navigation.moderationNavGraph
 import com.example.yugm.ui.viewmodel.MainViewModel
-import com.example.yugm.ui.viewmodel.WingmanViewModel
 
 @Composable
 fun NavGraph(
@@ -49,7 +56,7 @@ fun NavGraph(
         }
     }
 
-    val vibeInitDone = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val vibeInitDone = remember { mutableStateOf(false) }
     LaunchedEffect(mainViewModel.authToken) {
         if (mainViewModel.authToken.isNotBlank() && !vibeInitDone.value) {
             runCatching { VibeApi.init(mainViewModel.authToken) }
@@ -57,7 +64,7 @@ fun NavGraph(
         }
     }
 
-    fun navigateAfterLogin(session: com.example.yugm.model.Session) {
+    fun navigateAfterLogin(session: com.example.yugm.core.model.Session) {
         mainViewModel.updateSession(
             token = session.token,
             userId = session.user.id,
@@ -79,44 +86,54 @@ fun NavGraph(
         navController = navController,
         startDestination = Screen.Splash.route
     ) {
-        authNavGraph(navController, mainViewModel, onGoogleSignIn, ::navigateAfterLogin)
-        discoverNavGraph(navController, mainViewModel)
-        roomNavGraph(navController, mainViewModel)
-        profileNavGraph(navController, mainViewModel)
-        socialNavGraph(navController, mainViewModel)
-        walletNavGraph(navController, mainViewModel)
-        settingsNavGraph(navController, mainViewModel)
+        authNavGraph(
+            navController = navController,
+            isLoggedIn = mainViewModel.authToken.isNotBlank(),
+            authToken = mainViewModel.authToken,
+            onGoogleSignIn = onGoogleSignIn,
+            navigateAfterLogin = ::navigateAfterLogin
+        )
+        discoverNavGraph(
+            navController = navController,
+            authToken = mainViewModel.authToken,
+            currentUserId = mainViewModel.currentUserId
+        )
+        roomNavGraph(
+            navController = navController,
+            authToken = mainViewModel.authToken,
+            currentUserId = mainViewModel.currentUserId,
+            userName = mainViewModel.userName,
+            username = mainViewModel.username,
+            balance = mainViewModel.balance
+        )
+        profileNavGraph(
+            navController = navController,
+            authToken = mainViewModel.authToken,
+            currentUserId = mainViewModel.currentUserId
+        )
+        socialNavGraph(
+            navController = navController,
+            authToken = mainViewModel.authToken,
+            currentUserId = mainViewModel.currentUserId
+        )
+        walletNavGraph(
+            navController = navController,
+            authToken = mainViewModel.authToken,
+            balance = mainViewModel.balance,
+            currentUserId = mainViewModel.currentUserId
+        )
+        settingsNavGraph(
+            navController = navController,
+            authToken = mainViewModel.authToken,
+            currentUserId = mainViewModel.currentUserId,
+            userName = mainViewModel.userName,
+            username = mainViewModel.username,
+            onLogout = { mainViewModel.logout() }
+        )
         roomModesNavGraph(navController, mainViewModel.authToken, mainViewModel.currentUserId)
         moderationNavGraph(navController, mainViewModel.authToken)
-
-        composable(Screen.Missions.route) {
-            MissionsScreen(
-                token = mainViewModel.authToken,
-                onBack = { navController.popBackStack() },
-                onBattlePass = { navController.navigate(Screen.BattlePass.route) }
-            )
-        }
-
-        composable(Screen.BattlePass.route) {
-            BattlePassScreen(
-                token = mainViewModel.authToken,
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        composable(Screen.GiftCatalog.route) {
-            GiftCatalogScreen(
-                token = mainViewModel.authToken,
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        composable(Screen.Inventory.route) {
-            InventoryScreen(
-                token = mainViewModel.authToken,
-                onBack = { navController.popBackStack() }
-            )
-        }
+        missionsNavGraph(navController, mainViewModel.authToken)
+        giftNavGraph(navController, mainViewModel.authToken)
 
         composable(Screen.Wingman.route) {
             WingmanScreen(

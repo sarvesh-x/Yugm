@@ -22,7 +22,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.lifecycleScope
 import com.example.yugm.api.YugmApi
 import com.example.yugm.navigation.NavGraph
-import com.example.yugm.navigation.Screen
+import com.example.yugm.core.navigation.Screen
 import com.example.yugm.ui.theme.Background
 import com.example.yugm.ui.theme.YugmTheme
 import com.example.yugm.ui.viewmodel.MainViewModel

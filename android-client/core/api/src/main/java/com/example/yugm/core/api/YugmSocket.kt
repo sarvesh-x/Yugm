@@ -11,6 +11,7 @@ import timber.log.Timber
 object YugmSocket {
     private const val TAG = "YugmSocket"
     private var socket: io.socket.client.Socket? = null
+    private val lock = Any()
 
     fun connect(
         token: String,
@@ -24,6 +25,7 @@ object YugmSocket {
         onPkRematchRequested: ((previousBattleId: String) -> Unit)? = null,
         onRoomReaction: ((emoji: String, userId: String, userName: String) -> Unit)? = null
     ) {
+        synchronized(lock) {
         disconnect()
         try {
             val serverUrl = ApiConfig.socketBaseUrl.trim().trimEnd('/')
@@ -125,6 +127,7 @@ object YugmSocket {
             socket?.connect()
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Error connecting socket")
+        }
         }
     }
 

@@ -147,8 +147,9 @@ roomsRouter.post("/", requireAuth, requireNotMuted, requireNotRoomRestricted, re
   const scheduledFor = req.body.scheduledFor ? new Date(req.body.scheduledFor) : undefined;
   const isScheduled = scheduledFor && scheduledFor.getTime() > Date.now() + 60_000;
   await validateRoomCosmetics(req.user!.id, { theme: req.body.theme, badge: req.body.badge, ambience: req.body.ambience });
+  const { title, description, type, category, language, tags, maxSpeakers, visibility, coverImage, allowAudienceMicRequests, theme, vipOnly, badge, ambience } = req.body;
   const room = await Room.create({
-    ...req.body,
+    title, description, type, category, language, tags, maxSpeakers, visibility, coverImage, allowAudienceMicRequests, theme, vipOnly, badge, ambience,
     scheduledFor,
     status: isScheduled ? "SCHEDULED" : "LIVE",
     hostId: req.user!.id,

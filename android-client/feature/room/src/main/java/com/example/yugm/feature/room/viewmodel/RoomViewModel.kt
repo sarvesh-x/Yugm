@@ -138,53 +138,53 @@ class RoomViewModel @Inject constructor(
     fun refresh() {
         viewModelScope.launch {
             roomState = UiState.Loading
-            withContext(Dispatchers.IO) {
-                runCatching { yugmApi.roomDetail(authToken, roomId) }
-                    .onSuccess { roomDetail = it; roomState = UiState.Success(it) }
-                runCatching { yugmApi.roomPolls(roomId) }
-                    .onSuccess { polls = it }
-                runCatching { yugmApi.roomMissions(authToken, roomId) }
-                    .onSuccess { missions = it }
-                runCatching { yugmApi.roomActivity(roomId) }
-                    .onSuccess { activity = it }
-                runCatching { yugmApi.roomMessages(roomId, authToken) }
-                    .onSuccess {
-                        chat.clear(); chat.addAll(it)
-                    }
-                runCatching { yugmApi.gifts(authToken) }
-                    .onSuccess {
-                        gifts.clear(); gifts.addAll(it)
-                    }
-                if (currentUserId.isNotBlank()) {
-                    runCatching { yugmApi.getFollowing(currentUserId, authToken) }
-                        .onSuccess { inviteCandidates = it }
-                }
-                runCatching { yugmApi.activePkWithInvite(authToken, roomId) }
-                    .onSuccess { (battle, invite) ->
-                        pkBattle = battle
-                        pkInviteId = invite?.id
-                        if (battle != null) {
-                            runCatching { yugmApi.pkLeaderboard(authToken, battle.id) }
-                                .onSuccess { pkLeaderboard = it }
-                            if (isVideo && battle.status == PkStatus.ACTIVE && battle.battleType == PkBattleType.VIDEO) {
-                                runCatching { yugmApi.pkMediaSession(authToken, battle.id, roomId) }
-                                    .onSuccess {
-                                        pkOpponentMedia = it
-                                        it?.let { YugmMediaRoom.connectOpponent(it.token, it.url, it.roomName) }
-                                    }
+            val detailResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomDetail(authToken, roomId) } }
+            detailResult.onSuccess { roomDetail = it; roomState = UiState.Success(it) }
+            val pollsResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomPolls(roomId) } }
+            pollsResult.onSuccess { polls = it }
+            val missionsResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomMissions(authToken, roomId) } }
+            missionsResult.onSuccess { missions = it }
+            val activityResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomActivity(roomId) } }
+            activityResult.onSuccess { activity = it }
+            val messagesResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomMessages(roomId, authToken) } }
+            messagesResult.onSuccess {
+                chat.clear(); chat.addAll(it)
+            }
+            val giftsResult = withContext(Dispatchers.IO) { runCatching { yugmApi.gifts(authToken) } }
+            giftsResult.onSuccess {
+                gifts.clear(); gifts.addAll(it)
+            }
+            if (currentUserId.isNotBlank()) {
+                val followingResult = withContext(Dispatchers.IO) { runCatching { yugmApi.getFollowing(currentUserId, authToken) } }
+                followingResult.onSuccess { inviteCandidates = it }
+            }
+            val pkResult = withContext(Dispatchers.IO) { runCatching { yugmApi.activePkWithInvite(authToken, roomId) } }
+            pkResult.onSuccess { (battle, invite) ->
+                pkBattle = battle
+                pkInviteId = invite?.id
+                if (battle != null) {
+                    viewModelScope.launch {
+                        val leaderboardResult = withContext(Dispatchers.IO) { runCatching { yugmApi.pkLeaderboard(authToken, battle.id) } }
+                        leaderboardResult.onSuccess { pkLeaderboard = it }
+                        if (isVideo && battle.status == PkStatus.ACTIVE && battle.battleType == PkBattleType.VIDEO) {
+                            val mediaResult = withContext(Dispatchers.IO) { runCatching { yugmApi.pkMediaSession(authToken, battle.id, roomId) } }
+                            mediaResult.onSuccess {
+                                pkOpponentMedia = it
+                                it?.let { YugmMediaRoom.connectOpponent(it.token, it.url, it.roomName) }
                             }
-                        } else {
-                            pkLeaderboard = emptyList()
-                            pkOpponentMedia = null
                         }
                     }
+                } else {
+                    pkLeaderboard = emptyList()
+                    pkOpponentMedia = null
+                }
             }
         }
     }
 
     fun join() {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
+            val result = withContext(Dispatchers.IO) {
                 runCatching {
                     yugmApi.joinRoom(authToken, roomId)
                     val mediaSession = yugmApi.liveKitToken(authToken, roomId)
@@ -192,30 +192,32 @@ class RoomViewModel @Inject constructor(
                     YugmSocket.connect(
                         token = authToken,
                         roomId = roomId,
-                        onMessage = { author, text -> chat.add(ChatMessage(author, text)) },
+                        onMessage = { author, text ->
+                            viewModelScope.launch { chat.add(ChatMessage(author, text)) }
+                        },
                         onPkState = { battle ->
-                            launch {
+                            viewModelScope.launch {
                                 pkBattle = battle
                                 if (battle.status == PkStatus.ACTIVE) pkInviteId = null
-                                runCatching { yugmApi.pkLeaderboard(authToken, battle.id) }
-                                    .onSuccess { pkLeaderboard = it }
+                                val leaderboardResult = withContext(Dispatchers.IO) { runCatching { yugmApi.pkLeaderboard(authToken, battle.id) } }
+                                leaderboardResult.onSuccess { pkLeaderboard = it }
                                 if (isVideo && battle.status == PkStatus.ACTIVE && battle.battleType == PkBattleType.VIDEO) {
-                                    runCatching { yugmApi.pkMediaSession(authToken, battle.id, roomId) }
-                                        .onSuccess {
-                                            pkOpponentMedia = it
-                                            it?.let { YugmMediaRoom.connectOpponent(it.token, it.url, it.roomName) }
-                                        }
+                                    val mediaResult = withContext(Dispatchers.IO) { runCatching { yugmApi.pkMediaSession(authToken, battle.id, roomId) } }
+                                    mediaResult.onSuccess {
+                                        pkOpponentMedia = it
+                                        it?.let { YugmMediaRoom.connectOpponent(it.token, it.url, it.roomName) }
+                                    }
                                 }
                             }
                         },
                         onPkInvite = { battle, invite ->
-                            launch {
+                            viewModelScope.launch {
                                 pkBattle = battle
                                 pkInviteId = invite.id
                             }
                         },
                         onPkEffect = { effect ->
-                            launch {
+                            viewModelScope.launch {
                                 pkLiveEffect = effect
                                 delay(1400.milliseconds)
                                 if (pkLiveEffect == effect) pkLiveEffect = null
@@ -223,7 +225,7 @@ class RoomViewModel @Inject constructor(
                         },
                         onPkRefresh = { refresh() },
                         onPkLeadChanged = { leader, leftScore, rightScore ->
-                            launch {
+                            viewModelScope.launch {
                                 val current = pkBattle ?: return@launch
                                 pkBattle = current.copy(
                                     leader = PkSideType.valueOf(leader),
@@ -234,8 +236,10 @@ class RoomViewModel @Inject constructor(
                         },
                         onPkRematchRequested = { refresh() }
                     )
-                    isConnected = true
                 }
+            }
+            if (result.isSuccess) {
+                isConnected = true
             }
             refresh()
         }
@@ -245,13 +249,15 @@ class RoomViewModel @Inject constructor(
         viewModelScope.launch {
             actionLoading = true
             actionError = null
-            withContext(Dispatchers.IO) {
+            val result = withContext(Dispatchers.IO) {
                 runCatching {
                     yugmApi.sendMessage(authToken, roomId, text)
-                    chat.add(ChatMessage(sessionManager.userName, text))
-                }.onFailure {
-                    actionError = it.message ?: "Failed to send message"
                 }
+            }
+            result.onSuccess {
+                chat.add(ChatMessage(sessionManager.userName, text))
+            }.onFailure {
+                actionError = it.message ?: "Failed to send message"
             }
             actionLoading = false
         }
@@ -261,15 +267,18 @@ class RoomViewModel @Inject constructor(
         viewModelScope.launch {
             actionLoading = true
             actionError = null
-            withContext(Dispatchers.IO) {
+            val result = withContext(Dispatchers.IO) {
                 runCatching {
                     yugmApi.sendGift(token = authToken, roomId = roomId, gift = gift, receiverId = receiverId)
-                }.onSuccess {
-                    runCatching { sessionManager.balance = yugmApi.wallet(authToken) }
-                    gifts.add(gift)
-                }.onFailure {
-                    actionError = it.message ?: "Failed to send gift"
                 }
+            }
+            result.onSuccess {
+                viewModelScope.launch {
+                    runCatching { sessionManager.balance = withContext(Dispatchers.IO) { yugmApi.wallet(authToken) } }
+                }
+                gifts.add(gift)
+            }.onFailure {
+                actionError = it.message ?: "Failed to send gift"
             }
             actionLoading = false
         }

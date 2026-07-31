@@ -37,4 +37,5 @@ dependencies {
     implementation(libs.paging.runtime)
     implementation(libs.paging.compose)
     implementation("javax.inject:javax.inject:1")
+    implementation(libs.androidx.security.crypto)
 }

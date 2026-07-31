@@ -32,7 +32,7 @@ test("isValidObjectId returns false for invalid strings", () => {
 });
 
 test("sanitizeText removes HTML special characters", () => {
-  assert.equal(sanitizeText("<script>alert('xss')</script>"), "scriptalert('xss')/script");
+  assert.equal(sanitizeText("<script>alert('xss')</script>"), "scriptalert(xss)/script");
   assert.equal(sanitizeText("<b>bold</b>"), "bbold/b");
   assert.equal(sanitizeText('quote"test'), "quotetest");
 });

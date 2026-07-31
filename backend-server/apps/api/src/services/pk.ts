@@ -417,14 +417,17 @@ export async function sendPkGift(input: { userId: string; battleId: string; gift
       giftId: gift._id,
       coinAmount: gift.coinPrice
     }], { session });
+    const comboMultiplier = Math.min(combo, 5);
+    const effectivePoints = gift.coinPrice * comboMultiplier;
     const oldLeader = leader(battle.leftScore, battle.rightScore);
-    const scoreUpdate = input.side === "LEFT" ? { $inc: { leftScore: gift.coinPrice } } : { $inc: { rightScore: gift.coinPrice } };
+    const scoreUpdate = input.side === "LEFT" ? { $inc: { leftScore: effectivePoints } } : { $inc: { rightScore: effectivePoints } };
     const updated = await PkBattle.findByIdAndUpdate(battle._id, scoreUpdate, { new: true, session });
-    const newLeader = leader(updated!.leftScore, updated!.rightScore);
+    if (!updated) throw new HttpError(500, "Failed to update PK battle", ErrorCode.INTERNAL);
+    const newLeader = leader(updated.leftScore, updated.rightScore);
     if (newLeader !== oldLeader && newLeader !== "DRAW") {
-      addPkEvent({ battleId: battle._id, eventType: "LEAD_CHANGED", side: newLeader, metadata: { from: oldLeader } });
-      emitRoom(updated!.leftRoomId.toString(), pkSocketEvents.leadChanged, { battleId: battle.id, leader: newLeader, leftScore: updated!.leftScore, rightScore: updated!.rightScore });
-      emitRoom(updated!.rightRoomId.toString(), pkSocketEvents.leadChanged, { battleId: battle.id, leader: newLeader, leftScore: updated!.leftScore, rightScore: updated!.rightScore });
+      await addPkEvent({ battleId: battle._id, eventType: "LEAD_CHANGED", side: newLeader, metadata: { from: oldLeader } });
+      emitRoom(updated.leftRoomId.toString(), pkSocketEvents.leadChanged, { battleId: battle.id, leader: newLeader, leftScore: updated.leftScore, rightScore: updated.rightScore });
+      emitRoom(updated.rightRoomId.toString(), pkSocketEvents.leadChanged, { battleId: battle.id, leader: newLeader, leftScore: updated.leftScore, rightScore: updated.rightScore });
     }
     await PkLeaderboardEntry.updateOne(
       { battleId: battle._id, userId: input.userId },
@@ -479,11 +482,12 @@ export async function sendPkReaction(input: { userId: string; battleId: string; 
     input.side === "LEFT" ? { $inc: { leftScore: points } } : { $inc: { rightScore: points } },
     { new: true }
   );
-  const newLeader = leader(updated!.leftScore, updated!.rightScore);
+  if (!updated) throw new HttpError(500, "Failed to update PK battle", ErrorCode.INTERNAL);
+  const newLeader = leader(updated.leftScore, updated.rightScore);
   if (newLeader !== oldLeader && newLeader !== "DRAW") {
-    addPkEvent({ battleId: battle._id, eventType: "LEAD_CHANGED", side: newLeader, metadata: { from: oldLeader } });
-    emitRoom(updated!.leftRoomId.toString(), pkSocketEvents.leadChanged, { battleId: battle.id, leader: newLeader, leftScore: updated!.leftScore, rightScore: updated!.rightScore });
-    emitRoom(updated!.rightRoomId.toString(), pkSocketEvents.leadChanged, { battleId: battle.id, leader: newLeader, leftScore: updated!.leftScore, rightScore: updated!.rightScore });
+    await addPkEvent({ battleId: battle._id, eventType: "LEAD_CHANGED", side: newLeader, metadata: { from: oldLeader } });
+    emitRoom(updated.leftRoomId.toString(), pkSocketEvents.leadChanged, { battleId: battle.id, leader: newLeader, leftScore: updated.leftScore, rightScore: updated.rightScore });
+    emitRoom(updated.rightRoomId.toString(), pkSocketEvents.leadChanged, { battleId: battle.id, leader: newLeader, leftScore: updated.leftScore, rightScore: updated.rightScore });
   }
   await addPkEvent({ battleId: battle._id, userId: input.userId, eventType: "REACTION_SENT", side: input.side, points, metadata: { type: input.type } });
   const state = await emitPkState(updated?.toObject() ?? battle.toObject(), pkSocketEvents.scoreUpdate);
@@ -559,7 +563,11 @@ export function startBattleTimer(battleId: string) {
     const state = await pkState(battle);
     emitRoom(state.left.roomId, pkSocketEvents.timerTick, state);
     emitRoom(state.right.roomId, pkSocketEvents.timerTick, state);
-    if (state.remainingSeconds <= 0) await endPkBattle({ battleId });
+    if (state.remainingSeconds <= 0) {
+      stopBattleTimer(battleId);
+      await endPkBattle({ battleId });
+      return;
+    }
   }, 5000);
   timer.unref?.();
   timers.set(battleId, timer);

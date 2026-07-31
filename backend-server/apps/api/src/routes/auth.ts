@@ -154,6 +154,11 @@ authRouter.post("/logout", requireAuth, (_req, res) => sendOk(res, { loggedOut: 
 authRouter.get("/me", requireAuth, (req: AuthRequest, res) => sendOk(res, { user: publicUser(req.user) }));
 
 authRouter.patch("/profile", requireAuth, validateBody(profileSchema.partial()), asyncHandler(async (req: AuthRequest, res) => {
-  const user = await User.findByIdAndUpdate(req.user!.id, req.body, { new: true }).select("-__v");
+  const allowedFields = ["name", "username", "gender", "age", "city", "state", "bio", "vibeLine", "interests", "hobbies", "languages", "avatar", "interestedIn", "lookingFor", "datingAgeMin", "datingAgeMax"];
+  const update: Record<string, unknown> = {};
+  for (const key of allowedFields) {
+    if (key in req.body) update[key] = req.body[key];
+  }
+  const user = await User.findByIdAndUpdate(req.user!.id, { $set: update }, { new: true }).select("-__v");
   sendOk(res, { user: publicUser(user) });
 }));

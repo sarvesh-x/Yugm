@@ -132,11 +132,16 @@ fun ActiveVideoRoomScreen(
     var pkGiftSide by rememberSaveable { mutableStateOf(PkSideType.LEFT) }
     var dismissedPkResultId by rememberSaveable { mutableStateOf<String?>(null) }
     var liveVideoFeeds by remember { mutableStateOf<List<YugmMediaRoom.VideoFeed>>(emptyList()) }
+    var isPollingActive by rememberSaveable { mutableStateOf(true) }
     LaunchedEffect(room.id) {
-        while (true) {
+        isPollingActive = true
+        while (isPollingActive) {
             liveVideoFeeds = YugmMediaRoom.videoFeeds()
             delay(500)
         }
+    }
+    DisposableEffect(room.id) {
+        onDispose { isPollingActive = false }
     }
     LaunchedEffect(reactionBurst) {
         if (reactionBurst.isNotBlank()) {

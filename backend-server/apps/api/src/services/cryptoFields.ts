@@ -3,8 +3,11 @@ import { env } from "../config/env.js";
 
 const algorithm = "aes-256-gcm";
 
-function key() {
-  return crypto.createHash("sha256").update(env.PAYOUT_KYC_ENCRYPTION_KEY || env.JWT_SECRET).digest();
+function key(): Buffer {
+  if (!env.PAYOUT_KYC_ENCRYPTION_KEY) {
+    throw new Error("PAYOUT_KYC_ENCRYPTION_KEY is required to encrypt sensitive KYC fields");
+  }
+  return crypto.createHash("sha256").update(env.PAYOUT_KYC_ENCRYPTION_KEY).digest();
 }
 
 export function encryptSensitiveField(value?: string | null) {

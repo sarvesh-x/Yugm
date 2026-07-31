@@ -420,7 +420,7 @@ adminRouter.post("/auth/2fa/login", adminAuthLimiter, validateBody(z.object({
 }));
 
 adminRouter.post("/auth/refresh", adminAuthLimiter, validateBody(z.object({ refreshToken: z.string().min(20) })), asyncHandler(async (req: AdminAuthRequest, res) => {
-  const decoded = jwt.verify(req.body.refreshToken, adminRefreshSecret()) as { sub: string; sessionId: string; type?: string };
+  const decoded = jwt.verify(req.body.refreshToken, adminRefreshSecret(), { algorithms: ["HS256"] }) as { sub: string; sessionId: string; type?: string };
   if (decoded.type !== "admin_refresh") throw new HttpError(401, "Invalid refresh token", ErrorCode.UNAUTHORIZED);
   const session = await AdminSession.findOne({ _id: decoded.sessionId, adminId: decoded.sub, refreshTokenHash: hashToken(req.body.refreshToken), revokedAt: { $exists: false }, expiresAt: { $gt: new Date() } });
   if (!session) throw new HttpError(401, "Refresh token expired", ErrorCode.UNAUTHORIZED);
@@ -1155,7 +1155,7 @@ async function assertSecondAdminApproval(req: AdminAuthRequest, amount: number) 
     throw new HttpError(400, `Adjustments of ${LARGE_ADJUSTMENT_THRESHOLD}+ coins require dual approval. Provide a second admin's Bearer token via the X-Approval-Admin-Token header.`, ErrorCode.VALIDATION);
   }
   const token = approvalHeader.startsWith("Bearer ") ? approvalHeader.slice(7) : approvalHeader;
-  const decoded = jwt.verify(token, adminJwtSecret()) as { sub: string; type?: string };
+  const decoded = jwt.verify(token, adminJwtSecret(), { algorithms: ["HS256"] }) as { sub: string; type?: string };
   if (decoded.type !== "admin") throw new HttpError(403, "Invalid approval admin token", ErrorCode.FORBIDDEN);
   if (decoded.sub === req.admin!.id) throw new HttpError(403, "Approval must come from a different admin", ErrorCode.FORBIDDEN);
   const approver = await AdminUser.findById(decoded.sub).lean();

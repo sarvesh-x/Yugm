@@ -337,6 +337,7 @@ fun NavGraphBuilder.socialNavGraph(
         val pollId = backStackEntry.arguments?.getString("pollId") ?: ""
         VoicePollDetailScreen(
             token = authToken,
+            userId = currentUserId,
             pollId = pollId,
             onBack = { navController.popBackStack() }
         )

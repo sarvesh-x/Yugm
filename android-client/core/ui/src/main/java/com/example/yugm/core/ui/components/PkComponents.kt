@@ -1,5 +1,6 @@
 package com.example.yugm.core.ui.components
 
+import java.util.Locale
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -413,7 +414,7 @@ private fun VsBadge() {
 
 fun formatPkTime(seconds: Int): String {
     val safe = seconds.coerceAtLeast(0)
-    return "%02d:%02d".format(safe / 60, safe % 60)
+    return "%02d:%02d".format(Locale.US, safe / 60, safe % 60)
 }
 
-private fun Int.toLocaleScore(): String = "%,d".format(this)
+private fun Int.toLocaleScore(): String = "%,d".format(Locale.US, this)

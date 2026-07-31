@@ -89,7 +89,12 @@ function hasCompletedProfile(user: any) {
 usersRouter.get("/me", (req: AuthRequest, res) => sendOk(res, { user: publicUser(req.user) }));
 
 usersRouter.patch("/me", validateBody(profileSchema.partial()), asyncHandler(async (req: AuthRequest, res) => {
-  let user: any = await User.findByIdAndUpdate(req.user!.id, req.body, { new: true }).select("-__v");
+  const allowedFields = ["name", "username", "gender", "age", "city", "state", "bio", "vibeLine", "interests", "hobbies", "languages", "avatar", "interestedIn", "lookingFor", "datingAgeMin", "datingAgeMax"];
+  const update: Record<string, unknown> = {};
+  for (const key of allowedFields) {
+    if (key in req.body) update[key] = req.body[key];
+  }
+  let user: any = await User.findByIdAndUpdate(req.user!.id, { $set: update }, { new: true }).select("-__v");
   if (user && !user.profileCompletedAt && hasCompletedProfile(user)) {
     user.profileCompletedAt = new Date();
     await user.save();

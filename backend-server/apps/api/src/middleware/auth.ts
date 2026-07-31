@@ -19,7 +19,7 @@ export async function requireAuth(req: AuthRequest, _res: Response, next: NextFu
     const token = header?.startsWith("Bearer ") ? header.slice(7) : undefined;
     if (!token) throw new HttpError(401, "Missing auth token");
 
-    const decoded = jwt.verify(token, env.JWT_SECRET) as { sub: string; tokenVersion?: number };
+    const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] }) as { sub: string; tokenVersion?: number };
     const user = await User.findById(decoded.sub).select("-__v");
     if (!user || user.isBlocked) throw new HttpError(401, user?.moderationReason || "Invalid user");
     if (user.suspendedUntil && user.suspendedUntil.getTime() > Date.now()) {

@@ -26,7 +26,7 @@ function cleanupStaleConnections() {
     }
   }
 }
-setInterval(cleanupStaleConnections, 60_000);
+setInterval(cleanupStaleConnections, 60_000).unref();
 
 async function refreshRedisPresenceSnapshot() {
   const ids = await getOnlinePresenceIds();
@@ -68,7 +68,7 @@ export async function initSocket(server: HttpServer) {
     const token = socket.handshake.auth?.token as string | undefined;
     if (!token) return next(new Error("Authentication required"));
     try {
-      const decoded = jwt.verify(token, env.JWT_SECRET) as { sub: string };
+      const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] }) as { sub: string };
       socket.data.userId = decoded.sub;
       next();
     } catch {

@@ -65,8 +65,8 @@ referralsRouter.post("/referrals/claim", requireAuth, createLimiter, validateBod
   await req.user!.updateOne({ referredBy: referrer._id });
 
   await Promise.all([
-    creditWallet(req.user!._id.toString(), REFERRAL_REWARD_COINS, "referral_bonus", `Welcome bonus for using referral code`),
-    creditWallet(referrer._id.toString(), REFERRAL_REWARD_COINS, "referral_bonus", `Referral reward for ${req.user!.name}`)
+    creditWallet(req.user!._id.toString(), REFERRAL_REWARD_COINS, "referral_bonus", { message: "Welcome bonus for using referral code", type: "referral" }),
+    creditWallet(referrer._id.toString(), REFERRAL_REWARD_COINS, "referral_bonus", { message: `Referral reward for ${req.user!.name}`, type: "referral" })
   ]);
 
   referral.status = "REWARDED";

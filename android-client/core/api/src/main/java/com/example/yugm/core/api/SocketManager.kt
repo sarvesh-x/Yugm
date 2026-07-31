@@ -90,6 +90,8 @@ class SocketManager @Inject constructor() {
             socket?.off()
             socket?.disconnect()
             socket = null
-        } catch (_: Exception) { }
+        } catch (_: Exception) {
+            Timber.tag("SocketManager").d("Error during disconnect (ignored)")
+        }
     }
 }

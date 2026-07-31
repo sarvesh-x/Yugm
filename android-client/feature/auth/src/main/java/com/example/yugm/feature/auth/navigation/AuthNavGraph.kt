@@ -31,7 +31,7 @@ fun NavGraphBuilder.authNavGraph(
                 Screen.Discover.route
             }
             navController.navigate(start) {
-                popUpTo(Screen.Splash.route, inclusive = true)
+                popUpTo(Screen.Splash.route) { inclusive = true }
             }
         }
     }
@@ -123,7 +123,7 @@ fun NavGraphBuilder.authNavGraph(
                     }.onSuccess { user ->
                         navigateAfterLogin(Session(token = authToken, user = user))
                         navController.navigate(Screen.Discover.route) {
-                            popUpTo(Screen.ProfileSetup.route, inclusive = true)
+                            popUpTo(Screen.ProfileSetup.route) { inclusive = true }
                         }
                     }.onFailure {
                         android.widget.Toast.makeText(context, it.message ?: "Profile creation failed", android.widget.Toast.LENGTH_SHORT).show()

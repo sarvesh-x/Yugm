@@ -7,7 +7,7 @@ const envSchema = z.object({
   MONGODB_URI: z.string().min(1, "MONGODB_URI is required"),
   MONGODB_DB_NAME: z.string().min(1).default("Yugm"),
   REDIS_URL: z.string().optional(),
-  JWT_SECRET: z.string().min(8).default("replace-me"),
+  JWT_SECRET: z.string().min(16, "JWT_SECRET must be at least 16 characters"),
   ADMIN_JWT_SECRET: z.string().min(8).optional(),
   ADMIN_REFRESH_SECRET: z.string().min(8).optional(),
   ADMIN_PANEL_ORIGIN: z.string().optional(),
@@ -40,10 +40,6 @@ const envSchema = z.object({
 });
 
 export const env = envSchema.parse(process.env);
-
-if (env.JWT_SECRET === "replace-me" && env.NODE_ENV === "production") {
-  console.warn("WARNING: JWT_SECRET is still the default value. Set a strong secret in production.");
-}
 
 if (!env.ADMIN_JWT_SECRET && env.NODE_ENV === "production") {
   console.warn("WARNING: ADMIN_JWT_SECRET is not set. Admin auth will fall back to JWT_SECRET.");

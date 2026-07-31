@@ -41,6 +41,7 @@ import java.util.TimeZone
 @Composable
 fun VoicePollDetailScreen(
     token: String,
+    userId: String,
     pollId: String,
     onBack: () -> Unit
 ) {
@@ -70,7 +71,7 @@ fun VoicePollDetailScreen(
                     p.options.forEachIndexed { idx, opt ->
                         val pct = if (totalVotes > 0) opt.votes * 100f / totalVotes else 0f
                         val isSelected = votedIndex == idx
-                        val isVoter = p.voters.any { it == token }
+                        val isVoter = p.voters.any { it == userId }
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()

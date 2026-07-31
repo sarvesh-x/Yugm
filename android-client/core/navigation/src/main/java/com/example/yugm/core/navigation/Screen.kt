@@ -132,4 +132,7 @@ sealed class Screen(val route: String) {
         fun createRoute(pollId: String) = "voice_poll_detail/$pollId"
     }
     object Countdowns : Screen("countdowns")
+
+    // AI Wingman
+    object Wingman : Screen("wingman")
 }

@@ -1,5 +1,6 @@
 package com.example.yugm.feature.wallet.screens
 
+import java.util.Locale
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -112,7 +113,7 @@ fun FaceVerificationScreen(token: String, onBack: () -> Unit, onSubmit: (String)
                 scope.launch {
                     runCatching {
                         val bytes = withContext(Dispatchers.IO) {
-                            context.contentResolver.openInputStream(uri)?.readBytes()
+                            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                                 ?: throw IllegalStateException("Could not read image")
                         }
                         val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
@@ -181,7 +182,7 @@ fun VoiceVerificationScreen(token: String, promptText: String, onBack: () -> Uni
                 scope.launch {
                     runCatching {
                         val bytes = withContext(Dispatchers.IO) {
-                            context.contentResolver.openInputStream(uri)?.readBytes()
+                            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                                 ?: throw IllegalStateException("Could not read audio")
                         }
                         val mimeType = context.contentResolver.getType(uri) ?: "audio/mpeg"
@@ -292,7 +293,7 @@ fun WithdrawalEligibilityScreen(balance: CreatorEarningBalance, payoutKyc: Creat
         GlassCard(modifier = Modifier.fillMaxWidth()) {
             Text("Available to withdraw", color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             Text("${balance.availableCoins} gift coins", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black)
-            Text("Estimated ₹${"%.2f".format(balance.availableCoins * coinToInrRate)}", color = Gold, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text("Estimated ₹${"%.2f".format(Locale.US, balance.availableCoins * coinToInrRate)}", color = Gold, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(14.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 BalanceMini("Lifetime", balance.earnedCoins)
@@ -315,8 +316,8 @@ fun WithdrawalEligibilityScreen(balance: CreatorEarningBalance, payoutKyc: Creat
         if (amountCoins > 0) {
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 StatusLine("Requested", "$amountCoins coins")
-                StatusLine("Settlement rate", "₹${"%.2f".format(coinToInrRate)} / coin")
-                StatusLine("Estimated payout", "₹${"%.2f".format(amountCoins * coinToInrRate)}", highlight = true)
+                StatusLine("Settlement rate", "₹${"%.2f".format(Locale.US, coinToInrRate)} / coin")
+                StatusLine("Estimated payout", "₹${"%.2f".format(Locale.US, amountCoins * coinToInrRate)}", highlight = true)
             }
         }
         if (amountCoins > balance.availableCoins) Text("Amount exceeds your available gift earnings.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)

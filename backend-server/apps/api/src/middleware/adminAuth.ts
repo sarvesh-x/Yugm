@@ -47,7 +47,7 @@ export async function requireAdminAuth(req: AdminAuthRequest, _res: Response, ne
     const token = header?.startsWith("Bearer ") ? header.slice(7) : undefined;
     if (!token) throw new HttpError(401, "Missing admin auth token");
 
-    const decoded = jwt.verify(token, adminJwtSecret()) as { sub: string; sessionId?: string; type?: string };
+    const decoded = jwt.verify(token, adminJwtSecret(), { algorithms: ["HS256"] }) as { sub: string; sessionId?: string; type?: string };
     if (decoded.type !== "admin") throw new HttpError(401, "Invalid admin token");
     const admin = await AdminUser.findById(decoded.sub);
     if (!admin || admin.status !== "ACTIVE") throw new HttpError(401, "Admin account is not active");

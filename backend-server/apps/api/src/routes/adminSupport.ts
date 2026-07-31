@@ -3,7 +3,7 @@ import { z } from "zod";
 import { adminOk, pageParams, paginationMeta } from "../modules/admin/http.js";
 import { requirePermission, type AdminAuthRequest } from "../middleware/adminAuth.js";
 import { validateBody } from "../middleware/validate.js";
-import { asyncHandler, HttpError } from "../utils/http.js";
+import { asyncHandler, HttpError, isValidObjectId, ErrorCode } from "../utils/http.js";
 import { SupportTicket } from "../models/SupportTicket.js";
 import { AdminAuditLog } from "../models/AdminAuditLog.js";
 
@@ -24,10 +24,11 @@ adminSupportRouter.get("/support/tickets", requirePermission("support.read"),
     if (category) {
       filter.category = category;
     }
-    if (q) {
+    if (q && typeof q === "string") {
+      const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       filter.$or = [
-        { subject: { $regex: q, $options: "i" } },
-        { message: { $regex: q, $options: "i" } }
+        { subject: { $regex: escaped, $options: "i" } },
+        { message: { $regex: escaped, $options: "i" } }
       ];
     }
 
@@ -132,9 +133,17 @@ adminSupportRouter.patch("/support/tickets/:ticketId/assign", requirePermission(
   asyncHandler(async (req: AdminAuthRequest, res) => {
     const { adminUserId } = req.body || {};
 
+    let assignToId = req.admin!._id;
+    if (adminUserId) {
+      if (!isValidObjectId(adminUserId)) {
+        throw new HttpError(400, "Invalid admin user ID", ErrorCode.VALIDATION);
+      }
+      assignToId = adminUserId;
+    }
+
     const ticket = await SupportTicket.findByIdAndUpdate(
       req.params.ticketId,
-      { assignedTo: adminUserId || req.admin!._id },
+      { assignedTo: assignToId },
       { new: true }
     );
 

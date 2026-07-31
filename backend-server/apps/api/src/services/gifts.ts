@@ -78,34 +78,50 @@ export async function comboGift(roomId: string, giftId: string, participants: st
 }
 
 export async function roomWideGift(roomId: string, giftId: string, senderId: string, receiverIds: string[]) {
+  const MAX_RECEIVERS = 100;
+  if (receiverIds.length > MAX_RECEIVERS) {
+    throw new HttpError(400, `Cannot send room-wide gift to more than ${MAX_RECEIVERS} recipients`, ErrorCode.VALIDATION);
+  }
+
   const gift = await Gift.findById(giftId).lean();
   if (!gift) throw new HttpError(404, "Gift not found", ErrorCode.NOT_FOUND);
 
   const totalCost = gift.coinPrice * receiverIds.length;
-  await debitWallet(senderId, totalCost, "GIFT_SENT", { giftId, roomId, type: "room_wide" });
 
-  const txns = [];
-  for (const rid of receiverIds) {
-    const share = Math.floor(creatorShare(gift.coinPrice));
-    await creditWallet(rid, share, "GIFT_RECEIVED", { giftId, roomId, type: "room_wide" });
-    await grantXp(rid, "GIFT_RECEIVED", { giftId, roomId });
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    await debitWallet(senderId, totalCost, "GIFT_SENT", { giftId, roomId, type: "room_wide" }, session);
 
-    const txn = await GiftTransaction.create([{
-      roomId,
-      senderId,
-      receiverId: rid,
-      giftId,
-      coinAmount: gift.coinPrice,
-      type: "room_wide",
-      totalValue: gift.coinPrice,
-      effect: "room_wide"
-    }]);
-    txns.push(txn[0]);
+    const txns = [];
+    for (const rid of receiverIds) {
+      const share = Math.floor(creatorShare(gift.coinPrice));
+      await creditWallet(rid, share, "GIFT_RECEIVED", { giftId, roomId, type: "room_wide" }, session);
+      await grantXp(rid, "GIFT_RECEIVED", { giftId, roomId });
+
+      const txn = await GiftTransaction.create([{
+        roomId,
+        senderId,
+        receiverId: rid,
+        giftId,
+        coinAmount: gift.coinPrice,
+        type: "room_wide",
+        totalValue: gift.coinPrice,
+        effect: "room_wide"
+      }], { session });
+      txns.push(txn[0]);
+    }
+
+    await grantXp(senderId, "GIFT_SENT", { giftId, roomId, type: "room_wide", count: receiverIds.length });
+
+    await session.commitTransaction();
+    return { totalCost, receiverCount: receiverIds.length, transactions: txns };
+  } catch (err) {
+    await session.abortTransaction();
+    throw err;
+  } finally {
+    session.endSession();
   }
-
-  await grantXp(senderId, "GIFT_SENT", { giftId, roomId, type: "room_wide", count: receiverIds.length });
-
-  return { totalCost, receiverCount: receiverIds.length, transactions: txns };
 }
 
 export async function surpriseBox(userId: string, tier: "basic" | "premium" | "luxury") {
@@ -121,21 +137,31 @@ export async function surpriseBox(userId: string, tier: "basic" | "premium" | "l
 
   const allowedRarities = rarities[tier];
 
-  await debitWallet(userId, price, "SURPRISE_BOX", { tier });
-
   const pool = await Gift.find({ rarity: { $in: allowedRarities }, isActive: true }).lean();
   if (pool.length === 0) throw new HttpError(500, "No gifts available in this tier");
 
   const randomGift = pool[Math.floor(Math.random() * pool.length)];
 
-  const source = "mystery";
-  await GiftInventory.findOneAndUpdate(
-    { userId, giftId: randomGift._id },
-    { $inc: { quantity: 1 }, $setOnInsert: { userId, giftId: randomGift._id, source, tradable: true } },
-    { upsert: true }
-  );
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    await debitWallet(userId, price, "SURPRISE_BOX", { tier }, session);
 
-  return { tier, price, revealedGift: randomGift, source };
+    const source = "mystery";
+    await GiftInventory.findOneAndUpdate(
+      { userId, giftId: randomGift._id },
+      { $inc: { quantity: 1 }, $setOnInsert: { userId, giftId: randomGift._id, source, tradable: true } },
+      { upsert: true, session }
+    );
+
+    await session.commitTransaction();
+    return { tier, price, revealedGift: randomGift, source };
+  } catch (err) {
+    await session.abortTransaction();
+    throw err;
+  } finally {
+    session.endSession();
+  }
 }
 
 export async function upgradeGift(userId: string, inventoryId: string) {
