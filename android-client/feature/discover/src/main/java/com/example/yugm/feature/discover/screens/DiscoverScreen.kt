@@ -81,6 +81,7 @@ private val discoveryFilters = listOf(
     DiscoveryFilter("Video", "▣"),
     DiscoveryFilter("Music", "♪"),
     DiscoveryFilter("Gaming", "◆"),
+    DiscoveryFilter("Events", "\uD83C\uDF89"),
     DiscoveryFilter("Chill", "☕")
 )
 
@@ -94,6 +95,7 @@ fun DiscoverScreen(
     onGrowth: () -> Unit,
     onSearch: () -> Unit,
     onGames: () -> Unit = {},
+    onEvents: () -> Unit = {},
     onDating: () -> Unit = {},
     onChat: () -> Unit = {},
     onWallet: () -> Unit = {},
@@ -167,6 +169,7 @@ fun DiscoverScreen(
                                         "Voice" -> onVoiceRooms()
                                         "Video" -> viewModel.refreshRooms(RoomType.Video)
                                         "Gaming" -> onGames()
+                                        "Events" -> onEvents()
                                     }
                                 }
                             )

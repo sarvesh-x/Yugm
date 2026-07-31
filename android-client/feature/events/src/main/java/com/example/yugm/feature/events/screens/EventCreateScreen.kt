@@ -1,4 +1,4 @@
-package com.example.yugm.feature.social.screens
+package com.example.yugm.feature.events.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
@@ -21,6 +21,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -50,18 +51,21 @@ fun EventCreateScreen(
     onTypeChange: (String) -> Unit,
     eventDate: String,
     onEventDateChange: (String) -> Unit,
+    festival: String,
+    onFestivalChange: (String) -> Unit,
     onBack: () -> Unit,
     onCreate: () -> Unit
 ) {
-    val categories = listOf("SOCIAL", "MUSIC", "GAMING", "EDUCATION", "ART", "SPORTS", "OTHER")
-    val types = listOf("VOICE", "VIDEO", "HYBRID")
+    val categories = listOf("SOCIAL", "MUSIC", "GAMING", "EDUCATION", "ART", "SPORTS", "PARTY", "OTHER")
+    val types = listOf("ROOM", "TOURNAMENT", "SPECIAL", "WORKSHOP", "PARTY")
+    val festivals = ALL_FESTIVALS.filter { it.key.isNotBlank() }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Create Event", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
-                    androidx.compose.material3.TextButton(onClick = onBack) {
+                    TextButton(onClick = onBack) {
                         Text("Back", color = TextPrimary)
                     }
                 },
@@ -199,10 +203,59 @@ fun EventCreateScreen(
 
             Spacer(Modifier.height(12.dp))
 
+            var festivalExpanded by remember { mutableStateOf(false) }
+            ExposedDropdownMenuBox(
+                expanded = festivalExpanded,
+                onExpandedChange = { festivalExpanded = it }
+            ) {
+                OutlinedTextField(
+                    value = festival.ifBlank { "none" },
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Festival") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = festivalExpanded) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled = true),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PrimaryPurple,
+                        unfocusedBorderColor = TextMuted,
+                        focusedLabelColor = PrimaryPurple,
+                        unfocusedLabelColor = TextMuted,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                ExposedDropdownMenu(
+                    expanded = festivalExpanded,
+                    onDismissRequest = { festivalExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("none") },
+                        onClick = {
+                            onFestivalChange("none")
+                            festivalExpanded = false
+                        }
+                    )
+                    festivals.forEach { f ->
+                        DropdownMenuItem(
+                            text = { Text("${f.emoji} ${f.label}") },
+                            onClick = {
+                                onFestivalChange(f.key)
+                                festivalExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
             OutlinedTextField(
                 value = eventDate,
                 onValueChange = onEventDateChange,
-                label = { Text("Event Date (ISO format, e.g. 2025-12-25T18:00:00Z)") },
+                label = { Text("Event Date (ISO format, e.g. 2026-12-25T18:00:00Z)") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(

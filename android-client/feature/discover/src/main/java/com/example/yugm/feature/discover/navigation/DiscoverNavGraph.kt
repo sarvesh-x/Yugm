@@ -36,6 +36,9 @@ fun NavGraphBuilder.discoverNavGraph(
             onGames = {
                 navController.navigate(Screen.Games.route)
             },
+            onEvents = {
+                navController.navigate(Screen.Events.route)
+            },
             onDating = {
                 navController.navigate(Screen.DatingDiscovery.route)
             },

@@ -20,7 +20,9 @@ const createSchema = z.object({
   timezone: z.string().optional(),
   roomId: z.string().optional(),
   maxParticipants: z.number().int().positive().optional(),
-  tags: z.array(z.string()).optional()
+  tags: z.array(z.string()).optional(),
+  festival: z.enum(["none", "diwali", "holi", "new_year", "valentines", "independence_day"]).default("none").optional(),
+  featured: z.boolean().default(false).optional()
 });
 
 eventsRouter.post("/events", requireAuth, createLimiter, validateBody(createSchema), asyncHandler(async (req: AuthRequest, res) => {
@@ -35,12 +37,16 @@ eventsRouter.get("/events", asyncHandler(async (req, res) => {
   const status = String(req.query.status || "") || undefined;
   const type = String(req.query.type || "") || undefined;
   const category = String(req.query.category || "") || undefined;
+  const festival = String(req.query.festival || "") || undefined;
+  const featured = req.query.featured === "true";
   const upcoming = req.query.upcoming === "true";
 
   const filter: Record<string, unknown> = {};
   if (status) filter.status = status;
   if (type) filter.type = type;
   if (category) filter.category = category;
+  if (festival) filter.festival = festival;
+  if (featured) filter.featured = true;
   if (upcoming) {
     filter.eventDate = { $gte: new Date() };
     filter.status = { $in: ["UPCOMING", "LIVE"] };
@@ -48,7 +54,7 @@ eventsRouter.get("/events", asyncHandler(async (req, res) => {
 
   const [events, total] = await Promise.all([
     Event.find(filter)
-      .sort({ eventDate: 1 })
+      .sort({ featured: -1, eventDate: 1 })
       .skip(skip).limit(limit)
       .populate("hostId", "name username avatar")
       .lean(),
@@ -92,6 +98,15 @@ eventsRouter.post("/events/:eventId/cancel", requireAuth, asyncHandler(async (re
   const event = await Event.findOne({ _id: req.params.eventId, hostId: req.user!._id });
   if (!event) throw new HttpError(404, "Event not found or not your event", ErrorCode.NOT_FOUND);
   event.status = "CANCELLED";
+  await event.save();
+  sendOk(res, { event });
+}));
+
+eventsRouter.post("/events/:eventId/leave", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
+  const event = await Event.findById(req.params.eventId);
+  if (!event) throw new HttpError(404, "Event not found", ErrorCode.NOT_FOUND);
+  const uid = req.user!._id;
+  event.participantIds = event.participantIds.filter((p) => p.toString() !== uid.toString());
   await event.save();
   sendOk(res, { event });
 }));

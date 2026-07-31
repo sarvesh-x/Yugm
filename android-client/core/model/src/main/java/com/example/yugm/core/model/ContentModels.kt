@@ -32,6 +32,8 @@ data class YugmEvent(
     val participantIds: List<String> = emptyList(),
     val tags: List<String> = emptyList(),
     val status: String = "UPCOMING",
+    val festival: String = "none",
+    val featured: Boolean = false,
     val createdAt: String = ""
 )
 

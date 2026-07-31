@@ -6,12 +6,14 @@ import com.example.yugm.core.model.MyEvents
 import org.json.JSONObject
 
 object EventsApi {
-    suspend fun list(token: String? = null, page: Int = 1, limit: Int = 20, status: String? = null, type: String? = null, category: String? = null, upcoming: Boolean? = null): Pair<List<YugmEvent>, EventPagination> {
+    suspend fun list(token: String? = null, page: Int = 1, limit: Int = 20, status: String? = null, type: String? = null, category: String? = null, upcoming: Boolean? = null, festival: String? = null, featured: Boolean? = null): Pair<List<YugmEvent>, EventPagination> {
         val params = mutableListOf("page=$page", "limit=$limit")
         if (status != null) params.add("status=$status")
         if (type != null) params.add("type=$type")
         if (category != null) params.add("category=$category")
         if (upcoming != null) params.add("upcoming=$upcoming")
+        if (festival != null) params.add("festival=$festival")
+        if (featured != null) params.add("featured=$featured")
         val json = YugmHttpClient.get("/events?${params.joinToString("&")}", token)
         val data = json.getJSONObject("data")
         val paginationObj = data.optJSONObject("pagination") ?: JSONObject()
@@ -29,7 +31,7 @@ object EventsApi {
         return parseEvent(json.getJSONObject("data").getJSONObject("event"))
     }
 
-    suspend fun create(token: String, title: String, description: String? = null, coverImage: String? = null, category: String, type: String, eventDate: String, eventEndDate: String? = null, timezone: String? = null, roomId: String? = null, maxParticipants: Int? = null, tags: List<String>? = null): YugmEvent {
+    suspend fun create(token: String, title: String, description: String? = null, coverImage: String? = null, category: String, type: String, eventDate: String, eventEndDate: String? = null, timezone: String? = null, roomId: String? = null, maxParticipants: Int? = null, tags: List<String>? = null, festival: String? = null): YugmEvent {
         val body = JSONObject().apply {
             put("title", title)
             put("category", category)
@@ -42,6 +44,7 @@ object EventsApi {
             if (!roomId.isNullOrBlank()) put("roomId", roomId)
             if (maxParticipants != null) put("maxParticipants", maxParticipants)
             if (!tags.isNullOrEmpty()) put("tags", org.json.JSONArray(tags))
+            if (!festival.isNullOrBlank()) put("festival", festival)
         }
         val json = YugmHttpClient.post("/events", token, body)
         return parseEvent(json.getJSONObject("data").getJSONObject("event"))
@@ -49,6 +52,11 @@ object EventsApi {
 
     suspend fun join(token: String, eventId: String): YugmEvent {
         val json = YugmHttpClient.post("/events/$eventId/join", token, JSONObject())
+        return parseEvent(json.getJSONObject("data").getJSONObject("event"))
+    }
+
+    suspend fun leave(token: String, eventId: String): YugmEvent {
+        val json = YugmHttpClient.post("/events/$eventId/leave", token, JSONObject())
         return parseEvent(json.getJSONObject("data").getJSONObject("event"))
     }
 
@@ -106,6 +114,8 @@ object EventsApi {
                 (0 until arr.length()).map { arr.optString(it, "") }
             } ?: emptyList(),
             status = obj.optString("status", "UPCOMING"),
+            festival = obj.optString("festival", "none"),
+            featured = obj.optBoolean("featured", false),
             createdAt = obj.optString("createdAt", "")
         )
     }

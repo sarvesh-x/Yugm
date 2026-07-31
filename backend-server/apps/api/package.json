@@ -9,6 +9,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "seed": "tsx src/scripts/seed.ts",
+    "seed:festivals": "tsx src/scripts/seed-festivals.ts",
     "seed:admin": "tsx src/scripts/seed-admin.ts",
     "env:check": "tsx src/scripts/check-env.ts",
     "test": "tsx --test \"src/**/*.test.ts\"",

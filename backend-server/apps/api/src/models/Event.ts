@@ -15,6 +15,8 @@ export interface IEvent extends mongoose.Document {
   participantIds: mongoose.Types.ObjectId[];
   tags: string[];
   status: "UPCOMING" | "LIVE" | "COMPLETED" | "CANCELLED";
+  festival: "none" | "diwali" | "holi" | "new_year" | "valentines" | "independence_day";
+  featured: boolean;
   createdAt: Date;
 }
 
@@ -30,15 +32,18 @@ const eventSchema = new Schema<IEvent>(
     eventEndDate: Date,
     timezone: String,
     roomId: { type: Schema.Types.ObjectId, ref: "Room" },
-    maxParticipants: Number,
+    maxParticipants: { type: Number, min: 1 },
     participantIds: [{ type: Schema.Types.ObjectId, ref: "User" }],
     tags: [{ type: String }],
-    status: { type: String, enum: ["UPCOMING", "LIVE", "COMPLETED", "CANCELLED"], default: "UPCOMING", index: true }
+    status: { type: String, enum: ["UPCOMING", "LIVE", "COMPLETED", "CANCELLED"], default: "UPCOMING", index: true },
+    festival: { type: String, enum: ["none", "diwali", "holi", "new_year", "valentines", "independence_day"], default: "none", index: true },
+    featured: { type: Boolean, default: false, index: true }
   },
   { timestamps: true }
 );
 
 eventSchema.index({ eventDate: 1, status: 1 });
 eventSchema.index({ status: 1, eventDate: -1 });
+eventSchema.index({ festival: 1, status: 1, eventDate: 1 });
 
 export const Event = mongoose.model<IEvent>("Event", eventSchema);

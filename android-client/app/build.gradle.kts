@@ -164,6 +164,7 @@ dependencies {
     implementation(project(":feature:wallet"))
     implementation(project(":feature:settings"))
     implementation(project(":feature:missions"))
+    implementation(project(":feature:events"))
     implementation(project(":feature:gift"))
     implementation(project(":feature:social"))
     implementation(project(":feature:room-modes"))

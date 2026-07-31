@@ -328,10 +328,11 @@ interface IYugmApi {
     suspend fun deleteRecording(token: String, recordingId: String)
     suspend fun viewRecording(token: String, recordingId: String): Int
 
-    suspend fun listEvents(token: String? = null, page: Int = 1, limit: Int = 20, status: String? = null, type: String? = null, category: String? = null, upcoming: Boolean? = null): Pair<List<YugmEvent>, EventPagination>
+    suspend fun listEvents(token: String? = null, page: Int = 1, limit: Int = 20, status: String? = null, type: String? = null, category: String? = null, upcoming: Boolean? = null, festival: String? = null, featured: Boolean? = null): Pair<List<YugmEvent>, EventPagination>
     suspend fun eventDetail(eventId: String, token: String? = null): YugmEvent
-    suspend fun createEvent(token: String, title: String, description: String? = null, coverImage: String? = null, category: String, type: String, eventDate: String, eventEndDate: String? = null, timezone: String? = null, roomId: String? = null, maxParticipants: Int? = null, tags: List<String>? = null): YugmEvent
+    suspend fun createEvent(token: String, title: String, description: String? = null, coverImage: String? = null, category: String, type: String, eventDate: String, eventEndDate: String? = null, timezone: String? = null, roomId: String? = null, maxParticipants: Int? = null, tags: List<String>? = null, festival: String? = null): YugmEvent
     suspend fun joinEvent(token: String, eventId: String): YugmEvent
+    suspend fun leaveEvent(token: String, eventId: String): YugmEvent
     suspend fun cancelEvent(token: String, eventId: String): YugmEvent
     suspend fun myEvents(token: String): MyEvents
 

@@ -341,10 +341,11 @@ object YugmApi : IYugmApi {
     override suspend fun viewRecording(token: String, recordingId: String): Int = RecordingsApi.view(token, recordingId)
 
     // Events
-    override suspend fun listEvents(token: String?, page: Int, limit: Int, status: String?, type: String?, category: String?, upcoming: Boolean?): Pair<List<YugmEvent>, EventPagination> = EventsApi.list(token, page, limit, status, type, category, upcoming)
+    override suspend fun listEvents(token: String?, page: Int, limit: Int, status: String?, type: String?, category: String?, upcoming: Boolean?, festival: String?, featured: Boolean?): Pair<List<YugmEvent>, EventPagination> = EventsApi.list(token, page, limit, status, type, category, upcoming, festival, featured)
     override suspend fun eventDetail(eventId: String, token: String?): YugmEvent = EventsApi.detail(eventId, token)
-    override suspend fun createEvent(token: String, title: String, description: String?, coverImage: String?, category: String, type: String, eventDate: String, eventEndDate: String?, timezone: String?, roomId: String?, maxParticipants: Int?, tags: List<String>?): YugmEvent = EventsApi.create(token, title, description, coverImage, category, type, eventDate, eventEndDate, timezone, roomId, maxParticipants, tags)
+    override suspend fun createEvent(token: String, title: String, description: String?, coverImage: String?, category: String, type: String, eventDate: String, eventEndDate: String?, timezone: String?, roomId: String?, maxParticipants: Int?, tags: List<String>?, festival: String?): YugmEvent = EventsApi.create(token, title, description, coverImage, category, type, eventDate, eventEndDate, timezone, roomId, maxParticipants, tags, festival)
     override suspend fun joinEvent(token: String, eventId: String): YugmEvent = EventsApi.join(token, eventId)
+    override suspend fun leaveEvent(token: String, eventId: String): YugmEvent = EventsApi.leave(token, eventId)
     override suspend fun cancelEvent(token: String, eventId: String): YugmEvent = EventsApi.cancel(token, eventId)
     override suspend fun myEvents(token: String): MyEvents = EventsApi.myEvents(token)
 

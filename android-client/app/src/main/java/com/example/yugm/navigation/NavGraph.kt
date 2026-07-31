@@ -14,6 +14,7 @@ import com.example.yugm.core.api.VibeApi
 import com.example.yugm.core.navigation.Screen
 import com.example.yugm.feature.auth.navigation.authNavGraph
 import com.example.yugm.feature.discover.navigation.discoverNavGraph
+import com.example.yugm.feature.events.navigation.eventsNavGraph
 import com.example.yugm.feature.gift.navigation.giftNavGraph
 import com.example.yugm.feature.missions.navigation.missionsNavGraph
 import com.example.yugm.feature.moderation.navigation.moderationNavGraph
@@ -133,6 +134,7 @@ fun NavGraph(
         roomModesNavGraph(navController, mainViewModel.authToken, mainViewModel.currentUserId)
         moderationNavGraph(navController, mainViewModel.authToken)
         missionsNavGraph(navController, mainViewModel.authToken)
+        eventsNavGraph(navController, mainViewModel.authToken, mainViewModel.currentUserId)
         giftNavGraph(navController, mainViewModel.authToken)
 
         composable(Screen.Wingman.route) {

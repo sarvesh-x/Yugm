@@ -1,4 +1,4 @@
-package com.example.yugm.feature.social.viewmodel
+package com.example.yugm.feature.events.viewmodel
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,6 +28,9 @@ class EventViewModel @Inject constructor(
     var eventDetail by mutableStateOf<YugmEvent?>(null)
         private set
 
+    var selectedFestival by mutableStateOf<String?>(null)
+        private set
+
     var isLoading by mutableStateOf(false)
         private set
     var error by mutableStateOf<String?>(null)
@@ -37,12 +40,22 @@ class EventViewModel @Inject constructor(
         error = null
     }
 
+    fun selectFestival(festival: String?) {
+        if (selectedFestival != festival) {
+            selectedFestival = festival
+            events = emptyList()
+        }
+    }
+
     fun loadEvents(token: String) {
         viewModelScope.launch {
             isLoading = true
             error = null
             runCatching {
-                events = withContext(Dispatchers.IO) { yugmApi.listEvents(token).first }
+                val (list, _) = withContext(Dispatchers.IO) {
+                    yugmApi.listEvents(token, page = 1, limit = 50, upcoming = true, festival = selectedFestival, featured = null)
+                }
+                events = list
             }.onFailure {
                 error = it.message ?: "Failed to load events"
             }
@@ -76,13 +89,13 @@ class EventViewModel @Inject constructor(
         }
     }
 
-    fun create(token: String, title: String, description: String?, coverImage: String?, category: String, type: String, eventDate: String, eventEndDate: String?, timezone: String?, roomId: String?, maxParticipants: Int?, tags: List<String>?) {
+    fun create(token: String, title: String, description: String?, coverImage: String?, category: String, type: String, eventDate: String, eventEndDate: String?, timezone: String?, roomId: String?, maxParticipants: Int?, tags: List<String>?, festival: String?) {
         viewModelScope.launch {
             isLoading = true
             error = null
             runCatching {
                 eventDetail = withContext(Dispatchers.IO) {
-                    yugmApi.createEvent(token, title, description, coverImage, category, type, eventDate, eventEndDate, timezone, roomId, maxParticipants, tags)
+                    yugmApi.createEvent(token, title, description, coverImage, category, type, eventDate, eventEndDate, timezone, roomId, maxParticipants, tags, festival)
                 }
             }.onFailure {
                 error = it.message ?: "Failed to create event"
@@ -99,6 +112,19 @@ class EventViewModel @Inject constructor(
                 eventDetail = withContext(Dispatchers.IO) { yugmApi.joinEvent(token, eventId) }
             }.onFailure {
                 error = it.message ?: "Failed to join event"
+            }
+            isLoading = false
+        }
+    }
+
+    fun leave(token: String, eventId: String) {
+        viewModelScope.launch {
+            isLoading = true
+            error = null
+            runCatching {
+                eventDetail = withContext(Dispatchers.IO) { yugmApi.leaveEvent(token, eventId) }
+            }.onFailure {
+                error = it.message ?: "Failed to leave event"
             }
             isLoading = false
         }
