@@ -52,23 +52,21 @@ function publicUser(user: any) {
 const otpStore = new Map<string, { otp: string; expiresAt: number }>();
 
 authRouter.post("/request-otp", authLimiter, validateBody(requestOtpSchema), asyncHandler(async (req, res) => {
-  if (env.NODE_ENV !== "development") {
-    throw new HttpError(501, "Use Firebase phone authentication or configure a production OTP provider.", ErrorCode.VALIDATION);
-  }
   const devOtp = env.DEV_BYPASS_OTP;
-  const key = req.body.email || req.body.phone;
-  if (!devOtp) {
-    throw new HttpError(501, "OTP provider is not configured. Use Firebase phone auth or configure an OTP provider.", ErrorCode.VALIDATION);
+  if (!devOtp && env.NODE_ENV !== "development") {
+    throw new HttpError(501, "Use Firebase phone/Google authentication or configure DEV_BYPASS_OTP for staging.", ErrorCode.VALIDATION);
   }
-  otpStore.set(key, { otp: devOtp, expiresAt: Date.now() + 300_000 });
-  sendOk(res, { channel: req.body.email ? "email" : "phone", expiresInSeconds: 300, devOtp });
+  const key = req.body.email || req.body.phone;
+  const activeOtp = devOtp || "123456";
+  otpStore.set(key, { otp: activeOtp, expiresAt: Date.now() + 300_000 });
+  sendOk(res, { channel: req.body.email ? "email" : "phone", expiresInSeconds: 300, devOtp: devOtp || undefined });
 }));
 
 authRouter.post("/verify-otp", authLimiter, validateBody(verifyOtpSchema), asyncHandler(async (req, res) => {
   const key = req.body.email || req.body.phone;
   const stored = otpStore.get(key);
   const isValidOtp = stored && stored.otp === req.body.otp && stored.expiresAt > Date.now();
-  const isDevBypass = env.NODE_ENV === "development" && env.DEV_BYPASS_OTP && req.body.otp === env.DEV_BYPASS_OTP;
+  const isDevBypass = Boolean(env.DEV_BYPASS_OTP && req.body.otp === env.DEV_BYPASS_OTP);
   if (!isValidOtp && !isDevBypass) {
     throw new HttpError(401, "Invalid or expired OTP", ErrorCode.UNAUTHORIZED);
   }

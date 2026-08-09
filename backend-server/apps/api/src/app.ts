@@ -48,6 +48,8 @@ import { walletRouter } from "./routes/wallet.js";
 import { giftLeaderboardRouter } from "./routes/giftLeaderboard.js";
 import { giftsRouter } from "./routes/gifts.js";
 import { socialRouter } from "./routes/social.js";
+import { missionsRouter } from "./routes/missions.js";
+import { battlePassRouter } from "./routes/battlePass.js";
 import { wishlistRouter } from "./routes/wishlist.js";
 import { getJobHealth } from "./services/jobs.js";
 import { getMetricsSnapshot, recordHttpRequest } from "./services/metrics.js";
@@ -226,6 +228,8 @@ export function createApp() {
   app.use("/api", discoverRouter);
   app.use("/api", socialRouter);
   app.use("/api", moderationRouter);
+  app.use("/api", missionsRouter);
+  app.use("/api", battlePassRouter);
 
   app.use((_req, res) => res.status(404).json({ ok: false, error: { message: "Route not found" } }));
   app.use((error: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {

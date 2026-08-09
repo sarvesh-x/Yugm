@@ -8,6 +8,7 @@ import { closeJobWorkers, startJobWorkers } from "./services/jobs.js";
 import { seedAchievements } from "./services/achievementSeeder.js";
 import { ensureOfficialRooms } from "./services/officialRooms.js";
 import { ensureProductionIndexes } from "./services/productionIndexes.js";
+import { runMigrations } from "./config/migration.js";
 import { resumePkTimers } from "./services/pk.js";
 import { connectRedis } from "./services/redis.js";
 import { closeSocketInfrastructure, initSocket } from "./services/socket.js";
@@ -24,6 +25,7 @@ async function bootstrap() {
   await connectDatabase();
   await ensureAuthIndexes();
   await ensureProductionIndexes();
+  await runMigrations();
   await seedAchievements();
   await connectRedis();
   await ensureOfficialRooms();

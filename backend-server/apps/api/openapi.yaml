@@ -1002,3 +1002,70 @@ paths:
                 type: object
                 properties:
                   deletedCount: { type: integer }
+
+  # ─── MISSIONS & BATTLE PASS ────────────────────────────
+  /missions:
+    get:
+      tags: [Missions]
+      summary: Get active missions and daily progress
+      responses:
+        "200": { description: Active missions list }
+  /missions/claim:
+    post:
+      tags: [Missions]
+      summary: Claim mission reward
+      responses:
+        "200": { description: Reward claimed }
+
+  /battle-pass:
+    get:
+      tags: [Battle Pass]
+      summary: Get battle pass status and tiers
+      responses:
+        "200": { description: Battle pass details }
+  /battle-pass/claim:
+    post:
+      tags: [Battle Pass]
+      summary: Claim battle pass tier reward
+      responses:
+        "200": { description: Tier reward claimed }
+
+  # ─── VIBE GRAPH & DISCOVER ──────────────────────────────
+  /vibe/dimensions:
+    get:
+      tags: [Vibe]
+      summary: Get 8-dimensional vibe graph
+      responses:
+        "200": { description: Vibe dimensions }
+  /vibe/trend:
+    get:
+      tags: [Vibe]
+      summary: Get 7-day vibe trend history
+      responses:
+        "200": { description: Vibe trend points }
+  /vibe/matches:
+    get:
+      tags: [Vibe]
+      summary: Get top vibe matches
+      responses:
+        "200": { description: Top matches list }
+
+  /discover/trending:
+    get:
+      tags: [Discover]
+      summary: Get trending live rooms
+      responses:
+        "200": { description: Trending room list }
+  /discover/recommended:
+    get:
+      tags: [Discover]
+      summary: Get AI-recommended rooms and users
+      responses:
+        "200": { description: Recommended content }
+  /discover/hubs:
+    get:
+      tags: [Discover]
+      summary: Get interest and language hub room counts
+      responses:
+        "200": { description: Hub summary counts }
+

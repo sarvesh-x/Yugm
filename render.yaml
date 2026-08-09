@@ -72,3 +72,15 @@ services:
         sync: false
       - key: GOOGLE_PLAY_PRIVATE_KEY
         sync: false
+      # OTP Staging Bypass & Super Admin Seeding
+      - key: DEV_BYPASS_OTP
+        sync: false
+      - key: SEED_SUPER_ADMIN_EMAIL
+        sync: false
+      - key: SEED_SUPER_ADMIN_NAME
+        sync: false
+      - key: SEED_SUPER_ADMIN_FIREBASE_UID
+        sync: false
+      - key: SEED_SUPER_ADMIN_PASSWORD
+        sync: false
+

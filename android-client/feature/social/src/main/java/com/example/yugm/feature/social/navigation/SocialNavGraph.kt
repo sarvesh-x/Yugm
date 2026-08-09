@@ -250,4 +250,61 @@ fun NavGraphBuilder.socialNavGraph(
             onBack = { navController.popBackStack() }
         )
     }
+
+    composable(Screen.Games.route) {
+        GamesScreen(
+            token = authToken,
+            onBack = { navController.popBackStack() }
+        )
+    }
+
+    composable(Screen.Friends.route) {
+        FriendsScreen(
+            token = authToken,
+            onBack = { navController.popBackStack() },
+            onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) }
+        )
+    }
+
+    composable(Screen.Notifications.route) {
+        NotificationsScreen(
+            token = authToken,
+            onBack = { navController.popBackStack() },
+            onNotificationClick = { _, _ -> }
+        )
+    }
+
+    composable(Screen.Growth.route) {
+        GrowthScreen(
+            token = authToken,
+            onBack = { navController.popBackStack() }
+        )
+    }
+
+    composable(Screen.Matches.route) {
+        MatchesScreen(
+            token = authToken,
+            onBack = { navController.popBackStack() },
+            onOpenChat = { partnerId -> navController.navigate(Screen.Chat.createRoute(partnerId)) }
+        )
+    }
+
+    composable(Screen.VoiceRooms.route) {
+        navController.navigate(Screen.Discover.route)
+    }
+
+    composable(Screen.Feed.route) {
+        FeedScreen(
+            token = authToken,
+            onBack = { navController.popBackStack() }
+        )
+    }
+
+    composable(Screen.Subscriptions.route) {
+        SubscriptionsScreen(
+            token = authToken,
+            onBack = { navController.popBackStack() }
+        )
+    }
 }
+

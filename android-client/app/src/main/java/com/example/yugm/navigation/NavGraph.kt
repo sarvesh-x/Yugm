@@ -13,6 +13,7 @@ import androidx.navigation.compose.composable
 import com.example.yugm.core.api.VibeApi
 import com.example.yugm.core.navigation.Screen
 import com.example.yugm.feature.auth.navigation.authNavGraph
+import com.example.yugm.feature.chat.navigation.chatNavGraph
 import com.example.yugm.feature.creator.navigation.creatorNavGraph
 import com.example.yugm.feature.discover.navigation.discoverNavGraph
 import com.example.yugm.feature.events.navigation.eventsNavGraph
@@ -138,6 +139,11 @@ fun NavGraph(
         missionsNavGraph(navController, mainViewModel.authToken)
         eventsNavGraph(navController, mainViewModel.authToken, mainViewModel.currentUserId)
         giftNavGraph(navController, mainViewModel.authToken)
+        chatNavGraph(
+            navController = navController,
+            authToken = mainViewModel.authToken,
+            currentUserId = mainViewModel.currentUserId
+        )
         creatorNavGraph(
             navController = navController,
             authToken = mainViewModel.authToken,
