@@ -6,13 +6,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.example.yugm.core.api.VibeApi
 import com.example.yugm.core.navigation.Screen
 import com.example.yugm.feature.auth.navigation.authNavGraph
+import com.example.yugm.feature.creator.navigation.creatorNavGraph
 import com.example.yugm.feature.discover.navigation.discoverNavGraph
 import com.example.yugm.feature.events.navigation.eventsNavGraph
 import com.example.yugm.feature.gift.navigation.giftNavGraph
@@ -61,6 +62,7 @@ fun NavGraph(
     LaunchedEffect(mainViewModel.authToken) {
         if (mainViewModel.authToken.isNotBlank() && !vibeInitDone.value) {
             runCatching { VibeApi.init(mainViewModel.authToken) }
+                .onFailure { e -> android.util.Log.w("NavGraph", "Vibe init failed (non-fatal): ${e.message}") }
             vibeInitDone.value = true
         }
     }
@@ -136,11 +138,23 @@ fun NavGraph(
         missionsNavGraph(navController, mainViewModel.authToken)
         eventsNavGraph(navController, mainViewModel.authToken, mainViewModel.currentUserId)
         giftNavGraph(navController, mainViewModel.authToken)
+        creatorNavGraph(
+            navController = navController,
+            authToken = mainViewModel.authToken,
+            currentUserId = mainViewModel.currentUserId
+        )
 
         composable(Screen.Wingman.route) {
             WingmanScreen(
                 token = mainViewModel.authToken,
                 onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Screen.VibeGraph.route) {
+            com.example.yugm.feature.discover.screens.VibeGraphScreen(
+                token = mainViewModel.authToken,
+                onBack = { navController.popBackStack() },
+                onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) }
             )
         }
     }

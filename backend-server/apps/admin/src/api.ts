@@ -1,4 +1,4 @@
-const API_BASE = (import.meta.env.VITE_ADMIN_API_URL || "http://127.0.0.1:4000/api/admin").replace(/\/$/, "");
+const API_BASE = (import.meta.env.VITE_ADMIN_API_URL || "/api/admin").replace(/\/$/, "");
 
 export type Admin = {
   id: string;

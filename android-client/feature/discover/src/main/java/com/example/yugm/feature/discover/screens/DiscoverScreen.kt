@@ -101,6 +101,8 @@ fun DiscoverScreen(
     onWallet: () -> Unit = {},
     onSelfProfile: () -> Unit = {},
     onVoiceRooms: () -> Unit = {},
+    onVibeGraph: () -> Unit = {},
+    onCreatorDashboard: () -> Unit = {},
     viewModel: DiscoverViewModel = hiltViewModel(),
 ) {
     LaunchedEffect(Unit) { viewModel.refreshHome(token) }
@@ -173,6 +175,33 @@ fun DiscoverScreen(
                                     }
                                 }
                             )
+                        }
+                    }
+                }
+
+                // AI Vibe Graph Quick Card
+                item {
+                    GlassCard(
+                        Modifier
+                            .padding(horizontal = 20.dp)
+                            .fillMaxWidth()
+                            .clickable(onClick = onVibeGraph)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(Brush.linearGradient(listOf(Gold, Pink))),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("🕸️", fontSize = 22.sp)
+                            }
+                            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                                Text("AI Vibe Graph", color = TextPrimary, fontWeight = FontWeight.Bold)
+                                Text("Explore your 8D vibe radar & top matches", color = TextMuted, fontSize = 12.sp)
+                            }
+                            Text("View  ›", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -277,7 +306,7 @@ fun DiscoverScreen(
                             Modifier
                                 .padding(horizontal = 20.dp)
                                 .fillMaxWidth()
-                                .clickable(onClick = onGrowth)
+                                .clickable(onClick = onCreatorDashboard)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
@@ -290,7 +319,7 @@ fun DiscoverScreen(
                                     Text("↗", color = Color.White, fontWeight = FontWeight.Black, fontSize = 22.sp)
                                 }
                                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                                    Text("Your creator journey", color = TextPrimary, fontWeight = FontWeight.Bold)
+                                    Text("Creator Hub & Earnings", color = TextPrimary, fontWeight = FontWeight.Bold)
                                     Text(
                                         "${home.profileCompletion.percent}% profile · Level ${home.level.level}",
                                         color = TextMuted,

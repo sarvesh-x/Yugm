@@ -1,5 +1,21 @@
 import "dotenv/config";
+import crypto from "node:crypto";
 import { z } from "zod";
+
+const PLACEHOLDER_SECRETS = new Set(["replace-me", "replace-me-admin-access", "replace-me-admin-refresh"]);
+
+function resolveJwtSecret(value: string | undefined, nodeEnv: string): string {
+  if (value && value.length >= 16 && !PLACEHOLDER_SECRETS.has(value)) return value;
+  if (nodeEnv === "production") {
+    const generated = crypto.randomBytes(32).toString("hex");
+    console.warn(
+      "WARNING: JWT_SECRET is not set. Generated an ephemeral secret; auth tokens will be invalidated on the next restart. " +
+        "Set JWT_SECRET as a persistent environment variable (e.g. Render: Environment > Env Vars, or generateValue in render.yaml)."
+    );
+    return generated;
+  }
+  return "dev-only-jwt-secret-do-not-use-in-production";
+}
 
 const envSchema = z.object({
   NODE_ENV: z.string().default("development"),
@@ -7,7 +23,10 @@ const envSchema = z.object({
   MONGODB_URI: z.string().min(1, "MONGODB_URI is required"),
   MONGODB_DB_NAME: z.string().min(1).default("Yugm"),
   REDIS_URL: z.string().optional(),
-  JWT_SECRET: z.string().min(16, "JWT_SECRET must be at least 16 characters"),
+  JWT_SECRET: z.preprocess(
+    (v) => (typeof v === "string" && (v.length < 16 || PLACEHOLDER_SECRETS.has(v)) ? undefined : v),
+    z.string().min(16, "JWT_SECRET must be at least 16 characters").optional()
+  ),
   ADMIN_JWT_SECRET: z.string().min(8).optional(),
   ADMIN_REFRESH_SECRET: z.string().min(8).optional(),
   ADMIN_PANEL_ORIGIN: z.string().optional(),
@@ -39,7 +58,9 @@ const envSchema = z.object({
   S3_PUBLIC_BASE_URL: z.string().optional()
 });
 
-export const env = envSchema.parse(process.env);
+const parsed = envSchema.parse(process.env);
+
+export const env = { ...parsed, JWT_SECRET: resolveJwtSecret(parsed.JWT_SECRET, parsed.NODE_ENV) };
 
 if (!env.ADMIN_JWT_SECRET && env.NODE_ENV === "production") {
   console.warn("WARNING: ADMIN_JWT_SECRET is not set. Admin auth will fall back to JWT_SECRET.");

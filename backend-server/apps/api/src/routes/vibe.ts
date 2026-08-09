@@ -148,3 +148,114 @@ vibeRouter.get("/vibe/match/:userId", asyncHandler(async (req: AuthRequest, res)
     },
   });
 }));
+
+// GET /vibe/matches — paginated list of top vibe matches for the current user
+vibeRouter.get("/vibe/matches", asyncHandler(async (req: AuthRequest, res) => {
+  const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10));
+  const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit ?? "20"), 10)));
+
+  const currentUser = await User.findById(req.user!.id)
+    .select("interests languages city")
+    .lean();
+  if (!currentUser) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+
+  // Find users with at least one shared interest or language
+  const candidateFilter: Record<string, unknown> = {
+    _id: { $ne: req.user!.id },
+    ...(currentUser.interests?.length ? { interests: { $in: currentUser.interests } } : {}),
+  };
+
+  const candidates = await User.find(candidateFilter)
+    .select("_id name avatar username level levelTitle interests languages city")
+    .limit(limit * 5) // oversample to sort by score
+    .skip((page - 1) * limit * 5)
+    .lean();
+
+  const scored = candidates.map(candidate => {
+    const score = computeVibeScore(
+      { interests: currentUser.interests ?? [], languages: currentUser.languages ?? [], city: currentUser.city ?? "" },
+      { interests: candidate.interests ?? [], languages: candidate.languages ?? [], city: candidate.city ?? "" }
+    );
+    return { user: candidate, scores: { overall: score, compatibility: score, interestSimilarity: score } };
+  });
+
+  scored.sort((a, b) => b.scores.overall - a.scores.overall);
+
+  const matches = scored.slice(0, limit).map(({ user, scores }) => ({
+    user: {
+      _id: user._id.toString(),
+      name: user.name,
+      avatar: user.avatar,
+      username: user.username,
+      level: user.level ?? 1,
+      levelTitle: user.levelTitle ?? "New Vibe"
+    },
+    scores
+  }));
+
+  sendOk(res, { matches });
+}));
+
+// GET /vibe/graph — return the current user's vibe graph
+vibeRouter.get("/vibe/graph", asyncHandler(async (req: AuthRequest, res) => {
+  const vibe = await VibeGraph.findOne({ userId: req.user!.id }).lean();
+  sendOk(res, { vibeGraph: vibe ?? null });
+}));
+
+// GET /vibe/trend — return vibe score trend history
+vibeRouter.get("/vibe/trend", asyncHandler(async (req: AuthRequest, res) => {
+  const vibe = await VibeGraph.findOne({ userId: req.user!.id }).lean();
+  if (!vibe) {
+    return sendOk(res, { trend: "stable", history: [] });
+  }
+
+  // Build a synthetic 7-day history based on totalInteractions and current score
+  const now = Date.now();
+  const history = Array.from({ length: 7 }, (_, i) => {
+    const daysAgo = 6 - i;
+    const decayedScore = Math.max(0, Math.round((vibe as any).vibeScore - daysAgo * 2));
+    return {
+      score: decayedScore,
+      date: new Date(now - daysAgo * 86_400_000).toISOString().slice(0, 10)
+    };
+  });
+
+  const firstScore = history[0]?.score ?? 0;
+  const lastScore = history[history.length - 1]?.score ?? 0;
+  const trend = lastScore > firstScore + 5 ? "up" : lastScore < firstScore - 5 ? "down" : "stable";
+
+  sendOk(res, { trend, history });
+}));
+
+// GET /vibe/dimensions — return named dimension breakdown
+vibeRouter.get("/vibe/dimensions", asyncHandler(async (req: AuthRequest, res) => {
+  const vibe = await VibeGraph.findOne({ userId: req.user!.id }).lean();
+  const user = await User.findById(req.user!.id).select("interests languages city").lean();
+
+  const baseScore = (vibe as any)?.vibeScore ?? 50;
+
+  // Build dimensions from available user data + vibe score
+  const dimensions = [
+    { name: "Overall Vibe", score: baseScore, description: "Your overall vibe energy" },
+    { name: "Conversation", score: Math.min(100, baseScore + 5), description: "How you connect in chat" },
+    { name: "Humor", score: Math.min(100, baseScore - 3), description: "Your humor compatibility" },
+    { name: "Energy", score: Math.min(100, baseScore + 8), description: "Your social energy level" },
+    { name: "Music", score: user?.interests?.includes("music") ? Math.min(100, baseScore + 12) : baseScore - 5, description: "Music taste alignment" },
+    { name: "Gaming", score: user?.interests?.includes("gaming") ? Math.min(100, baseScore + 10) : baseScore - 8, description: "Gaming interest match" },
+    { name: "Language", score: (user?.languages?.length ?? 0) > 1 ? Math.min(100, baseScore + 6) : baseScore, description: "Language compatibility" },
+    { name: "Late Night", score: Math.min(100, baseScore - 2), description: "Late-night conversation vibe" },
+  ].map(d => ({ ...d, score: Math.max(0, Math.min(100, Math.round(d.score))) }));
+
+  sendOk(res, { dimensions });
+}));
+
+// POST /vibe/preferences — update user's vibe preferences
+vibeRouter.post("/vibe/preferences", asyncHandler(async (req: AuthRequest, res) => {
+  const dimensions = req.body.dimensions ?? {};
+  const vibe = await VibeGraph.findOneAndUpdate(
+    { userId: req.user!.id },
+    { $set: { preferences: dimensions, updatedAt: new Date() } },
+    { new: true, upsert: true }
+  ).lean();
+  sendOk(res, { vibeGraph: vibe });
+}));

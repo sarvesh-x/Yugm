@@ -135,4 +135,8 @@ sealed class Screen(val route: String) {
 
     // AI Wingman
     object Wingman : Screen("wingman")
+
+    // Creator & AI Vibe Graph
+    object CreatorDashboard : Screen("creator_dashboard")
+    object VibeGraph : Screen("vibe_graph")
 }

@@ -203,6 +203,10 @@ private fun avatarFrameBrush(id: String): Brush = when (id) {
     "frame_crystal" -> Brush.linearGradient(listOf(Color(0xFFB9F2FF), Color.White, Purple))
     "frame_royal" -> Brush.linearGradient(listOf(Gold, Pink, Purple))
     "frame_gold" -> Brush.linearGradient(listOf(Gold, Color(0xFFFFE8A3), Color(0xFFFF8A22)))
+    "frame_dragon_fire" -> Brush.linearGradient(listOf(Color(0xFFFF3D00), Color(0xFFFF9100), Color(0xFFFFEA00)))
+    "frame_sakura_blossom" -> Brush.linearGradient(listOf(Color(0xFFFF80AB), Color(0xFFFF4081), Color(0xFFF8BBD0)))
+    "frame_cyber_punk" -> Brush.linearGradient(listOf(Color(0xFF00E5FF), Color(0xFFFF007F), Color(0xFF76FF03)))
+    "frame_phoenix_wings" -> Brush.linearGradient(listOf(Color(0xFFD50000), Color(0xFFFF6D00), Color(0xFFFFD600)))
     else -> Brush.linearGradient(listOf(PanelStrong, Gold, PanelStrong))
 }
 
@@ -210,21 +214,35 @@ private fun speakingWaveColor(id: String): Color = when (id) {
     "wave_neon" -> Pink
     "wave_royal" -> Gold
     "wave_soft" -> Color(0xFF27D3FF)
+    "wave_fire" -> Color(0xFFFF3D00)
+    "wave_rainbow" -> Color(0xFFE040FB)
+    "wave_cyber" -> Color(0xFF76FF03)
     else -> Gold
 }
 
 private fun entryLabel(id: String): String = when (id) {
-    "entrance_crown" -> "ROYAL"
-    "entrance_meteor" -> "METEOR"
-    else -> "SPARK"
+    "entrance_crown" -> "👑 ROYAL"
+    "entrance_meteor" -> "☄️ METEOR"
+    "entrance_galaxy" -> "🌌 GALAXY"
+    else -> "✨ SPARK"
 }
 
 private fun decorationLabel(id: String): String = when (id) {
-    "decor_crown" -> "CROWN"
-    else -> "STARS"
+    "decor_crown" -> "👑 CROWN"
+    "decor_halo" -> "😇 HALO"
+    "decor_headphones" -> "🎧 DJ"
+    "decor_dragon_horns" -> "🐉 DRAGON"
+    "decor_cat_ears" -> "🐱 NEKO"
+    "decor_cyber_visor" -> "🕶️ CYBER"
+    "decor_sakura_petals" -> "🌸 SAKURA"
+    "decor_fire_aura" -> "🔥 AURA"
+    else -> "⭐ STARS"
 }
 
 private fun voiceBadgeLabel(id: String): String = when (id) {
-    "voice_host_spotlight" -> "HOST"
-    else -> "EQ"
+    "voice_host_spotlight" -> "🎙️ HOST"
+    "voice_rockstar" -> "🎸 ROCK"
+    "voice_legend" -> "👑 LEGEND"
+    "voice_superstar" -> "⭐ STAR"
+    else -> "📊 EQ"
 }

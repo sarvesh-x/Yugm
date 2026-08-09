@@ -24,6 +24,8 @@ function normalizeRedisUrl(rawUrl: string | undefined) {
 
 const redisUrl = normalizeRedisUrl(env.REDIS_URL);
 const presenceScanMatch = "presence:user:*";
+const REDIS_ERROR_COOLDOWN_MS = 30_000;
+const warnedRedisCommandErrors = new Set<string>();
 
 export function getRedisUrl() {
   return redisUrl;
@@ -59,8 +61,6 @@ export const redis = redisUrl
   : undefined;
 
 let lastRedisErrorTime = 0;
-const REDIS_ERROR_COOLDOWN_MS = 30_000;
-const warnedRedisCommandErrors = new Set<string>();
 
 if (redis) {
   redis.on("error", (err) => {
@@ -70,21 +70,30 @@ if (redis) {
       console.warn("Redis connection error:", err.message);
     }
   });
+  redis.on("connect", () => {
+    warnedRedisCommandErrors.clear();
+  });
 }
 
 let lastRedisConnectAttempt = 0;
+let connectAttempts = 0;
 
 export async function connectRedis() {
   if (!redis) return;
 
   const now = Date.now();
-  if (now - lastRedisConnectAttempt < 10_000) return;
+  const backoff = Math.min(1000 * Math.pow(2, connectAttempts), 60000);
+  const jitter = Math.random() * 1000;
+  
+  if (now - lastRedisConnectAttempt < backoff + jitter) return;
   lastRedisConnectAttempt = now;
 
   try {
     await redis.connect();
     console.log("Redis connected");
+    connectAttempts = 0;
   } catch (err: any) {
+    connectAttempts++;
     console.warn("Redis connection failed (non-fatal):", err.message);
   }
 }

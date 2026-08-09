@@ -41,6 +41,7 @@ import { trustVerificationRouter } from "./routes/trustVerification.js";
 import { aiWingmanRouter } from "./routes/aiWingman.js";
 import moderationRouter from "./routes/moderation.js";
 import { vibeRouter } from "./routes/vibe.js";
+import { discoverRouter } from "./routes/discover.js";
 import { uploadRouter } from "./routes/upload.js";
 import { usersRouter } from "./routes/users.js";
 import { walletRouter } from "./routes/wallet.js";
@@ -144,7 +145,26 @@ export function createApp() {
     res.sendFile(path.join(adminDist, "index.html"));
   });
 
-  app.get("/", (_req, res) => res.json({ ok: true, service: "yugm-api", health: "/health", api: "/api" }));
+  app.get("/", (_req, res) => res.json({ ok: true, service: "yugm-api", version: "0.1.0", health: "/health", api: "/api" }));
+  // API root — declared before routers so unauthenticated discovery requests don't 401
+  app.get("/api", (_req, res) => res.json({
+    ok: true,
+    service: "yugm-api",
+    version: "0.1.0",
+    environment: env.NODE_ENV,
+    uptimeSeconds: Math.round(process.uptime()),
+    health: "/api/health",
+    authentication: "Bearer <token> header required on protected routes",
+    endpointGroups: [
+      "POST /api/auth/* (register, login, otp, refresh, logout, me)",
+      "/api/users/*", "/api/rooms/*", "/api/feed", "/api/friends", "/api/clans", "/api/groups",
+      "/api/pk/*", "/api/games/*", "/api/livekit/*", "/api/wallet", "/api/gifts", "/api/events",
+      "/api/social/*", "/api/dating/*", "/api/creator/*", "/api/recordings", "/api/notifications/*",
+      "/api/reports", "/api/support/*", "/api/upload/*", "/api/missions", "/api/battle-pass",
+      "/api/vibe/*", "/api/ai/*", "/api/trust-verification/*", "/api/moderation/*", "/api/discover/*",
+      "/api/admin/* (admin panel)", "/api/payments/webhook/payout (webhook)"
+    ]
+  }));
   const healthHandler = (_req: express.Request, res: express.Response) => {
     const mongoReady = mongoose.connection.readyState === 1;
     const redis = getRedisHealth();
@@ -185,9 +205,9 @@ export function createApp() {
   app.use("/api/rooms", roomsRouter);
   app.use("/api/livekit", livekitRouter);
   app.use("/api/notifications", notificationsRouter);
-app.use("/api/pk", pkRouter);
-app.use("/api/recordings", recordingsRouter);
-app.use("/api/trust-verification", trustVerificationRouter);
+  app.use("/api/pk", pkRouter);
+  app.use("/api/recordings", recordingsRouter);
+  app.use("/api/trust-verification", trustVerificationRouter);
   app.use("/api", walletRouter);
   app.use("/api", giftLeaderboardRouter);
   app.use("/api", wishlistRouter);
@@ -203,6 +223,7 @@ app.use("/api/trust-verification", trustVerificationRouter);
   app.use("/api", highlightsRouter);
   app.use("/api/ai", aiWingmanRouter);
   app.use("/api", vibeRouter);
+  app.use("/api", discoverRouter);
   app.use("/api", socialRouter);
   app.use("/api", moderationRouter);
 
