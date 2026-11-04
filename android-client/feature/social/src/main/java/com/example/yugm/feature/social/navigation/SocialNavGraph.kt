@@ -254,7 +254,8 @@ fun NavGraphBuilder.socialNavGraph(
     composable(Screen.Games.route) {
         GamesScreen(
             token = authToken,
-            onBack = { navController.popBackStack() }
+            onBack = { navController.popBackStack() },
+            onOpenChat = { partnerId -> navController.navigate(Screen.Chat.createRoute(partnerId)) }
         )
     }
 
@@ -270,14 +271,24 @@ fun NavGraphBuilder.socialNavGraph(
         NotificationsScreen(
             token = authToken,
             onBack = { navController.popBackStack() },
-            onNotificationClick = { _, _ -> }
+            onOpenTarget = { notification ->
+                when {
+                    notification.roomId.isNotBlank() -> navController.navigate(Screen.RoomLobby.createRoute(notification.roomId))
+                    notification.partnerId.isNotBlank() -> navController.navigate(Screen.Chat.createRoute(notification.partnerId))
+                    notification.actorId.isNotBlank() -> navController.navigate(Screen.ProfileDetail.createRoute(notification.actorId))
+                }
+            }
         )
     }
 
     composable(Screen.Growth.route) {
         GrowthScreen(
             token = authToken,
-            onBack = { navController.popBackStack() }
+            onBack = { navController.popBackStack() },
+            onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
+            onPayoutVerification = { navController.navigate(Screen.CreatorPayoutKycIntro.route) },
+            onWithdraw = { navController.navigate(Screen.WithdrawalEligibility.route) },
+            onOpenRoom = { room -> navController.navigate(Screen.RoomLobby.createRoute(room.id, room.type.name.uppercase())) }
         )
     }
 
@@ -285,7 +296,15 @@ fun NavGraphBuilder.socialNavGraph(
         MatchesScreen(
             token = authToken,
             onBack = { navController.popBackStack() },
-            onOpenChat = { partnerId -> navController.navigate(Screen.Chat.createRoute(partnerId)) }
+            onOpenChat = { partnerId -> navController.navigate(Screen.Chat.createRoute(partnerId)) },
+            onDiscover = { navController.navigate(Screen.Discover.route) },
+            onDating = { navController.navigate(Screen.DatingDiscovery.route) },
+            onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
+            onWallet = { navController.navigate(Screen.Wallet.route) },
+            onProfile = {
+                if (currentUserId.isNotBlank()) navController.navigate(Screen.ProfileDetail.createRoute(currentUserId))
+                else navController.navigate(Screen.ProfileSetup.route)
+            }
         )
     }
 
@@ -296,15 +315,18 @@ fun NavGraphBuilder.socialNavGraph(
     composable(Screen.Feed.route) {
         FeedScreen(
             token = authToken,
-            onBack = { navController.popBackStack() }
+            onBack = { navController.popBackStack() },
+            onOpenRoom = { roomId -> navController.navigate(Screen.RoomLobby.createRoute(roomId)) },
+            onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) },
+            onOpenStory = { userId -> navController.navigate(Screen.StoryViewer.createRoute(userId)) }
         )
     }
 
     composable(Screen.Subscriptions.route) {
         SubscriptionsScreen(
             token = authToken,
-            onBack = { navController.popBackStack() }
+            onBack = { navController.popBackStack() },
+            onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) }
         )
     }
 }
-

@@ -126,7 +126,7 @@ function pickRandom<T>(arr: T[]): T {
 
 // GET /v1/rooms/modes
 roomModesRouter.get(
-  "/",
+  "/modes",
   asyncHandler(async (_req, res) => {
     sendOk(res, { modes: roomModesInfo });
   })

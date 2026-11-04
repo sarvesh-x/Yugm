@@ -57,7 +57,7 @@ if (isReleaseTaskRequested) {
 
 android {
     namespace = "com.example.yugm"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.example.yugm"
@@ -163,6 +163,7 @@ dependencies {
     implementation(project(":feature:profile"))
     implementation(project(":feature:wallet"))
     implementation(project(":feature:settings"))
+    implementation(project(":feature:chat"))
     implementation(project(":feature:missions"))
     implementation(project(":feature:events"))
     implementation(project(":feature:gift"))

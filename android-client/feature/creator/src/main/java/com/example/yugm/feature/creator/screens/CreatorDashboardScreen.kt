@@ -140,18 +140,18 @@ fun CreatorDashboardScreen(
                             item {
                                 GlassCard(Modifier.fillMaxWidth()) {
                                     Column(Modifier.padding(4.dp)) {
-                                        Text("TOTAL CREATOR EARNINGS", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        Text("CREATOR EARNINGS · LAST ${db?.windowDays ?: 30} DAYS", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                         Spacer(Modifier.height(4.dp))
                                         Row(verticalAlignment = Alignment.Bottom) {
                                             Text(
-                                                "🪙 ${db?.analytics?.totalGiftsValue ?: wd?.balance?.availableCoins ?: 0}",
+                                                "🪙 ${db?.summary?.giftCoins ?: wd?.balance?.availableCoins ?: 0}",
                                                 color = SaffronGold,
                                                 fontSize = 32.sp,
                                                 fontWeight = FontWeight.Black
                                             )
                                             Spacer(Modifier.width(8.dp))
                                             Text(
-                                                "≈ ₹${(wd?.balance?.availableCoins ?: 0) * (wd?.coinToInrRate ?: 0.01)}",
+                                                "≈ ₹${db?.summary?.estimatedInr ?: (wd?.balance?.availableCoins ?: 0) * (wd?.coinToInrRate ?: 0.01)}",
                                                 color = SuccessGreen,
                                                 fontSize = 16.sp,
                                                 fontWeight = FontWeight.Bold,
@@ -192,19 +192,19 @@ fun CreatorDashboardScreen(
                                 ) {
                                     StatBox(
                                         title = "Rooms Hosted",
-                                        value = "${db?.analytics?.totalRoomsHosted ?: 0}",
+                                        value = "${db?.summary?.hostedRooms ?: 0}",
                                         glyph = "🎙️",
                                         modifier = Modifier.weight(1f)
                                     )
                                     StatBox(
-                                        title = "Live Hours",
-                                        value = "${db?.analytics?.totalLiveMinutes?.let { it / 60 } ?: 0}h",
-                                        glyph = "⏱️",
+                                        title = "Gifts Received",
+                                        value = "${db?.summary?.giftCount ?: 0}",
+                                        glyph = "🎁",
                                         modifier = Modifier.weight(1f)
                                     )
                                     StatBox(
                                         title = "Supporters",
-                                        value = "${db?.analytics?.uniqueSupporters ?: 0}",
+                                        value = "${db?.summary?.uniqueSupporters ?: 0}",
                                         glyph = "👑",
                                         modifier = Modifier.weight(1f)
                                     )
@@ -223,9 +223,7 @@ fun CreatorDashboardScreen(
                                             Text("Level ${exp.level.level}", color = SaffronGold, fontWeight = FontWeight.Black, fontSize = 14.sp)
                                         }
                                         Spacer(Modifier.height(8.dp))
-                                        val progress = if (exp.level.nextLevelXp > 0) {
-                                            exp.level.currentXp.toFloat() / exp.level.nextLevelXp.toFloat()
-                                        } else 1f
+                                        val progress = exp.level.progress
                                         LinearProgressIndicator(
                                             progress = { progress.coerceIn(0f, 1f) },
                                             modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
@@ -233,43 +231,21 @@ fun CreatorDashboardScreen(
                                             trackColor = SurfaceElevated
                                         )
                                         Spacer(Modifier.height(4.dp))
-                                        Text("${exp.level.currentXp} / ${exp.level.nextLevelXp} XP to Level ${exp.level.level + 1}", color = TextMuted, fontSize = 11.sp)
+                                        Text("${exp.level.progressXp} / ${exp.level.requiredXp} XP to Level ${exp.level.nextLevel ?: exp.level.level}", color = TextMuted, fontSize = 11.sp)
                                     }
                                 }
                             }
 
                             // Top Supporters Section
                             item {
-                                Text("Top Supporters", color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Black)
+                                Text("Creator Growth", color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Black)
                                 Spacer(Modifier.height(8.dp))
-                                val supporters = db?.topSupporters ?: emptyList()
-                                if (supporters.isEmpty()) {
-                                    GlassCard(Modifier.fillMaxWidth()) {
-                                        Text("Host your first room to receive gifts from fans!", color = TextMuted, fontSize = 13.sp)
-                                    }
-                                } else {
-                                    supporters.forEachIndexed { index, supporter ->
-                                        GlassCard(
-                                            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
-                                        ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Text(
-                                                    when (index) {
-                                                        0 -> "🥇"
-                                                        1 -> "🥈"
-                                                        2 -> "🥉"
-                                                        else -> "#${index + 1}"
-                                                    },
-                                                    fontSize = 18.sp,
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                                Spacer(Modifier.width(12.dp))
-                                                Column(Modifier.weight(1f)) {
-                                                    Text(supporter.user?.name ?: "Anonymous", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                                    Text("${supporter.giftCount} gifts sent", color = TextMuted, fontSize = 11.sp)
-                                                }
-                                                Text("🪙 ${supporter.totalCoins}", color = Gold, fontWeight = FontWeight.Black, fontSize = 14.sp)
-                                            }
+                                GlassCard(Modifier.fillMaxWidth()) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text("${db?.summary?.uniqueParticipants ?: 0} unique participants", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        Text("${db?.summary?.participants ?: 0} room visits · ${db?.summary?.averageParticipants ?: 0.0} average attendance", color = TextMuted, fontSize = 12.sp)
+                                        db?.nextSteps.orEmpty().forEach { step ->
+                                            Text("• $step", color = TextMuted, fontSize = 12.sp)
                                         }
                                     }
                                 }
