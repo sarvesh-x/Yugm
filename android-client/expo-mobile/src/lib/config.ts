@@ -15,12 +15,11 @@ function resolveLocalUrl(rawUrl: string, port: string, protocol: "http" | "ws") 
   return `${protocol}://${host}:${port}`;
 }
 
-// NOTE: For production builds, replace "http" with "https" and "ws" with "wss" below.
-const rawApi = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
+const rawApi = process.env.EXPO_PUBLIC_API_URL ?? "https://yugm.onrender.com/api";
 function addApi(url: string) {
   return url.endsWith("/api") ? url : `${url}/api`;
 }
 export const apiBaseUrl = addApi(resolveLocalUrl(rawApi, "4000", "http"));
 
-export const socketUrl = resolveLocalUrl(process.env.EXPO_PUBLIC_SOCKET_URL ?? "http://localhost:4000", "4000", "http");
+export const socketUrl = resolveLocalUrl(process.env.EXPO_PUBLIC_SOCKET_URL ?? "https://yugm.onrender.com", "4000", "http");
 export const livekitUrl = resolveLocalUrl(process.env.EXPO_PUBLIC_LIVEKIT_URL ?? "ws://localhost:7880", "7880", "ws");

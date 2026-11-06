@@ -35,8 +35,8 @@ fun localLanIpv4(): String? {
         }
 }
 
-val yugmApiBaseUrl = configValue("YUGM_API_BASE_URL")
-val yugmSocketBaseUrl = configValue("YUGM_SOCKET_BASE_URL")
+val yugmApiBaseUrl = configValue("YUGM_API_BASE_URL") ?: "https://yugm.onrender.com/api"
+val yugmSocketBaseUrl = configValue("YUGM_SOCKET_BASE_URL") ?: "https://yugm.onrender.com"
 val localLanHost = localLanIpv4()
 val isReleaseTaskRequested = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
 
@@ -84,8 +84,8 @@ android {
 
     buildTypes {
         debug {
-            val apiBaseUrl = yugmApiBaseUrl ?: "http://10.0.2.2:4000/api"
-            val socketBaseUrl = yugmSocketBaseUrl ?: "http://10.0.2.2:4000"
+            val apiBaseUrl = yugmApiBaseUrl
+            val socketBaseUrl = yugmSocketBaseUrl
             buildConfigField("String", "API_BASE_URL", quoted(apiBaseUrl))
             buildConfigField("String", "SOCKET_BASE_URL", quoted(socketBaseUrl))
             buildConfigField("String", "LAN_API_BASE_URL", quoted(localLanHost?.let { "http://$it:4000/api" }.orEmpty()))

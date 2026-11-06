@@ -107,17 +107,19 @@ For Firebase Auth and FCM, download `google-services.json` from Firebase Console
 android-client/app/google-services.json
 ```
 
-Debug builds use the Android emulator backend by default:
-
-```text
-http://10.0.2.2:4000/api
-```
-
-For production/release builds, provide the deployed backend URLs:
+Android builds connect to the deployed Render backend by default. To use a local API during development, override the URLs when building:
 
 ```bash
-YUGM_API_BASE_URL=https://your-backend.onrender.com/api \
-YUGM_SOCKET_BASE_URL=https://your-backend.onrender.com \
+./gradlew assembleDebug \
+  -PYUGM_API_BASE_URL=http://10.0.2.2:4000/api \
+  -PYUGM_SOCKET_BASE_URL=http://10.0.2.2:4000
+```
+
+For release builds, the deployed backend URLs are the defaults; you can override them with environment variables:
+
+```bash
+YUGM_API_BASE_URL=https://yugm.onrender.com/api \
+YUGM_SOCKET_BASE_URL=https://yugm.onrender.com \
 ./gradlew :app:assembleRelease
 ```
 
@@ -135,8 +137,8 @@ npm run android
 ### Expo Environment
 
 ```env
-EXPO_PUBLIC_API_URL=http://localhost:4000/api
-EXPO_PUBLIC_SOCKET_URL=http://localhost:4000
+EXPO_PUBLIC_API_URL=https://yugm.onrender.com/api
+EXPO_PUBLIC_SOCKET_URL=https://yugm.onrender.com
 EXPO_PUBLIC_LIVEKIT_URL=ws://localhost:7880
 
 EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=
@@ -144,7 +146,7 @@ EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=
 EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=
 ```
 
-For Android emulator, replace localhost values with `10.0.2.2`.
+For a local Android emulator backend, set the API URL to `http://10.0.2.2:4000/api` and the socket URL to `http://10.0.2.2:4000`.
 
 ## Firebase Auth Setup
 
