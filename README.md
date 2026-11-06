@@ -107,23 +107,20 @@ For Firebase Auth and FCM, download `google-services.json` from Firebase Console
 android-client/app/google-services.json
 ```
 
-Android builds connect to the deployed Render backend by default. To use a local API during development, override the URLs when building:
+Android debug builds use the local development server by default. Choose the server mode when building:
 
 ```bash
-./gradlew assembleDebug \
-  -PYUGM_API_BASE_URL=http://10.0.2.2:4000/api \
-  -PYUGM_SOCKET_BASE_URL=http://10.0.2.2:4000
+./gradlew :app:assembleDebug -PYUGM_SERVER_MODE=development
+./gradlew :app:assembleDebug -PYUGM_SERVER_MODE=deploy
 ```
 
-For release builds, the deployed backend URLs are the defaults; you can override them with environment variables:
+`development` targets the host machine through the Android emulator bridge at `10.0.2.2:4000`. `deploy` targets `https://yugm.onrender.com`. Release builds default to `deploy` and reject development mode.
+
+For a physical Android device, override the API and socket URLs with your computer's LAN IP:
 
 ```bash
-YUGM_API_BASE_URL=https://yugm.onrender.com/api \
-YUGM_SOCKET_BASE_URL=https://yugm.onrender.com \
-./gradlew :app:assembleRelease
+./gradlew :app:assembleDebug -PYUGM_SERVER_MODE=development -PYUGM_API_BASE_URL=http://192.168.1.20:4000/api -PYUGM_SOCKET_BASE_URL=http://192.168.1.20:4000
 ```
-
-Use `https://.../api` for `YUGM_API_BASE_URL` and the same host without `/api` for `YUGM_SOCKET_BASE_URL`.
 
 ## Expo Client Setup
 
@@ -137,8 +134,7 @@ npm run android
 ### Expo Environment
 
 ```env
-EXPO_PUBLIC_API_URL=https://yugm.onrender.com/api
-EXPO_PUBLIC_SOCKET_URL=https://yugm.onrender.com
+EXPO_PUBLIC_SERVER_MODE=development
 EXPO_PUBLIC_LIVEKIT_URL=ws://localhost:7880
 
 EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=
@@ -146,7 +142,7 @@ EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=
 EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=
 ```
 
-For a local Android emulator backend, set the API URL to `http://10.0.2.2:4000/api` and the socket URL to `http://10.0.2.2:4000`.
+For a local Android emulator backend, development mode resolves to `http://10.0.2.2:4000/api` and `http://10.0.2.2:4000`. Set `EXPO_PUBLIC_SERVER_MODE=deploy` in `.env` and restart Expo with `npx expo start --clear` to use Render. For a physical device, use your computer's LAN IP with the optional `EXPO_PUBLIC_API_URL` and `EXPO_PUBLIC_SOCKET_URL` overrides.
 
 ## Firebase Auth Setup
 

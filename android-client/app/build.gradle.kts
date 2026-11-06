@@ -35,10 +35,32 @@ fun localLanIpv4(): String? {
         }
 }
 
-val yugmApiBaseUrl = configValue("YUGM_API_BASE_URL") ?: "https://yugm.onrender.com/api"
-val yugmSocketBaseUrl = configValue("YUGM_SOCKET_BASE_URL") ?: "https://yugm.onrender.com"
-val localLanHost = localLanIpv4()
 val isReleaseTaskRequested = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
+val yugmServerMode = configValue("YUGM_SERVER_MODE")?.trim()?.lowercase()
+    ?: if (isReleaseTaskRequested) "deploy" else "development"
+
+require(yugmServerMode == "development" || yugmServerMode == "deploy") {
+    "YUGM_SERVER_MODE must be either 'development' or 'deploy'"
+}
+if (isReleaseTaskRequested) {
+    require(yugmServerMode == "deploy") {
+        "Release builds must use YUGM_SERVER_MODE=deploy"
+    }
+}
+
+val defaultApiBaseUrl = if (yugmServerMode == "deploy") {
+    "https://yugm.onrender.com/api"
+} else {
+    "http://10.0.2.2:4000/api"
+}
+val defaultSocketBaseUrl = if (yugmServerMode == "deploy") {
+    "https://yugm.onrender.com"
+} else {
+    "http://10.0.2.2:4000"
+}
+val yugmApiBaseUrl = configValue("YUGM_API_BASE_URL") ?: defaultApiBaseUrl
+val yugmSocketBaseUrl = configValue("YUGM_SOCKET_BASE_URL") ?: defaultSocketBaseUrl
+val localLanHost = localLanIpv4()
 
 if (isReleaseTaskRequested) {
     require(!yugmApiBaseUrl.isNullOrBlank()) {
@@ -84,10 +106,8 @@ android {
 
     buildTypes {
         debug {
-            val apiBaseUrl = yugmApiBaseUrl
-            val socketBaseUrl = yugmSocketBaseUrl
-            buildConfigField("String", "API_BASE_URL", quoted(apiBaseUrl))
-            buildConfigField("String", "SOCKET_BASE_URL", quoted(socketBaseUrl))
+            buildConfigField("String", "API_BASE_URL", quoted(yugmApiBaseUrl))
+            buildConfigField("String", "SOCKET_BASE_URL", quoted(yugmSocketBaseUrl))
             buildConfigField("String", "LAN_API_BASE_URL", quoted(localLanHost?.let { "http://$it:4000/api" }.orEmpty()))
             buildConfigField("String", "LAN_SOCKET_BASE_URL", quoted(localLanHost?.let { "http://$it:4000" }.orEmpty()))
         }
@@ -95,10 +115,8 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            val apiBaseUrl = yugmApiBaseUrl.orEmpty()
-            val socketBaseUrl = yugmSocketBaseUrl.orEmpty()
-            buildConfigField("String", "API_BASE_URL", quoted(apiBaseUrl))
-            buildConfigField("String", "SOCKET_BASE_URL", quoted(socketBaseUrl))
+            buildConfigField("String", "API_BASE_URL", quoted(yugmApiBaseUrl))
+            buildConfigField("String", "SOCKET_BASE_URL", quoted(yugmSocketBaseUrl))
             buildConfigField("String", "LAN_API_BASE_URL", quoted(""))
             buildConfigField("String", "LAN_SOCKET_BASE_URL", quoted(""))
             proguardFiles(
