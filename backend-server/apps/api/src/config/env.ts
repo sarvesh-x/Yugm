@@ -59,9 +59,15 @@ const envSchema = z.object({
 });
 
 const parsed = envSchema.parse(process.env);
+const jwtSecret = resolveJwtSecret(parsed.JWT_SECRET, parsed.NODE_ENV);
+const deriveSecret = (purpose: string) =>
+  crypto.createHmac("sha256", jwtSecret).update(`yugm:${purpose}:v1`).digest("hex");
 
-export const env = { ...parsed, JWT_SECRET: resolveJwtSecret(parsed.JWT_SECRET, parsed.NODE_ENV) };
-
-if (!env.ADMIN_JWT_SECRET && env.NODE_ENV === "production") {
-  console.warn("WARNING: ADMIN_JWT_SECRET is not set. Admin auth will fall back to JWT_SECRET.");
-}
+// Keep admin signing keys separate from user tokens even when optional admin
+// secrets are not configured in the hosting environment.
+export const env = {
+  ...parsed,
+  JWT_SECRET: jwtSecret,
+  ADMIN_JWT_SECRET: parsed.ADMIN_JWT_SECRET || deriveSecret("admin-access-token"),
+  ADMIN_REFRESH_SECRET: parsed.ADMIN_REFRESH_SECRET || deriveSecret("admin-refresh-token")
+};

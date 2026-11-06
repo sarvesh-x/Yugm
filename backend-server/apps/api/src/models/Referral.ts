@@ -16,7 +16,7 @@ const referralSchema = new Schema<IReferral>(
   {
     referrerId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     referredUserId: { type: Schema.Types.ObjectId, ref: "User" },
-    referralCode: { type: String, required: true, index: true },
+    referralCode: { type: String, required: true },
     status: { type: String, enum: ["PENDING", "COMPLETED", "REWARDED", "EXPIRED"], default: "PENDING" },
     rewardCoins: Number,
     rewardCosmeticId: String,

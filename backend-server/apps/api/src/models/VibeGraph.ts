@@ -23,6 +23,4 @@ const vibeGraphSchema = new Schema<IVibeGraph>(
   { timestamps: true }
 );
 
-vibeGraphSchema.index({ userId: 1 }, { unique: true });
-
 export const VibeGraph = mongoose.model<IVibeGraph>("VibeGraph", vibeGraphSchema);

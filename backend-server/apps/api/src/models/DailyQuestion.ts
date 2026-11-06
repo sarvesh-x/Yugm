@@ -17,7 +17,6 @@ const dailyQuestionSchema = new Schema<IDailyQuestion>(
   { timestamps: true }
 );
 
-dailyQuestionSchema.index({ date: 1 }, { unique: true });
 dailyQuestionSchema.index({ isActive: 1, date: -1 });
 
 export interface IUserDailyAnswer extends mongoose.Document {
