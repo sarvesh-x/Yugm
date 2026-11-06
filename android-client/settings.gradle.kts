@@ -23,7 +23,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Yugm"
+rootProject.name = "Yugm-Android-Client"
 include(":app")
 include(":core:model")
 include(":core:api")

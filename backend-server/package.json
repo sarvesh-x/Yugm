@@ -2,6 +2,9 @@
   "name": "yugm-backend-server",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22.18.0 <25"
+  },
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -15,6 +18,8 @@
     "env:check": "npm --workspace apps/api run env:check",
     "seed": "npm --workspace apps/api run seed",
     "seed:admin": "npm --workspace apps/api run seed:admin",
+    "build": "npm run build:admin && npm run build:api",
+    "build:api": "npm --workspace apps/api run build",
     "test": "npm --workspaces --if-present run test",
     "typecheck": "npm --workspaces --if-present run typecheck",
     "load:test": "node scripts/load-test-api.mjs",

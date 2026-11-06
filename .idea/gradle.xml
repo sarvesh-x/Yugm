@@ -5,11 +5,33 @@
     <option name="linkedExternalProjectsSettings">
       <GradleProjectSettings>
         <option name="testRunner" value="CHOOSE_PER_TEST" />
-        <option name="externalProjectPath" value="$PROJECT_DIR$" />
+        <option name="externalProjectPath" value="$PROJECT_DIR$/android-client" />
         <option name="modules">
           <set>
-            <option value="$PROJECT_DIR$" />
+            <option value="$PROJECT_DIR$/android-client" />
             <option value="$PROJECT_DIR$/android-client/app" />
+            <option value="$PROJECT_DIR$/android-client/core" />
+            <option value="$PROJECT_DIR$/android-client/core/api" />
+            <option value="$PROJECT_DIR$/android-client/core/data" />
+            <option value="$PROJECT_DIR$/android-client/core/model" />
+            <option value="$PROJECT_DIR$/android-client/core/navigation" />
+            <option value="$PROJECT_DIR$/android-client/core/ui" />
+            <option value="$PROJECT_DIR$/android-client/core/util" />
+            <option value="$PROJECT_DIR$/android-client/feature" />
+            <option value="$PROJECT_DIR$/android-client/feature/auth" />
+            <option value="$PROJECT_DIR$/android-client/feature/chat" />
+            <option value="$PROJECT_DIR$/android-client/feature/creator" />
+            <option value="$PROJECT_DIR$/android-client/feature/discover" />
+            <option value="$PROJECT_DIR$/android-client/feature/events" />
+            <option value="$PROJECT_DIR$/android-client/feature/gift" />
+            <option value="$PROJECT_DIR$/android-client/feature/missions" />
+            <option value="$PROJECT_DIR$/android-client/feature/moderation" />
+            <option value="$PROJECT_DIR$/android-client/feature/profile" />
+            <option value="$PROJECT_DIR$/android-client/feature/room" />
+            <option value="$PROJECT_DIR$/android-client/feature/room-modes" />
+            <option value="$PROJECT_DIR$/android-client/feature/settings" />
+            <option value="$PROJECT_DIR$/android-client/feature/social" />
+            <option value="$PROJECT_DIR$/android-client/feature/wallet" />
           </set>
         </option>
       </GradleProjectSettings>

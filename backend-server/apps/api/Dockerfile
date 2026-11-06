@@ -1,4 +1,4 @@
-FROM node:20-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/tsconfig.json ./apps/api/
@@ -8,7 +8,7 @@ COPY apps/api/src/ ./apps/api/src/
 RUN npm run build --workspace apps/api
 RUN npm ci --omit=dev --workspace apps/api
 
-FROM node:20-alpine
+FROM node:24-alpine
 WORKDIR /app
 RUN apk add --no-cache tini
 ENTRYPOINT ["/sbin/tini", "--"]

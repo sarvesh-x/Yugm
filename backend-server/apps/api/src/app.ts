@@ -141,7 +141,7 @@ export function createApp() {
 
   // Serve the admin panel production build
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  const adminDist = path.resolve(__dirname, "../../apps/admin/dist");
+  const adminDist = path.resolve(__dirname, "../../admin/dist");
   app.use("/admin", express.static(adminDist, { index: false }));
   app.get("/admin/*", (_req, res) => {
     res.sendFile(path.join(adminDist, "index.html"));

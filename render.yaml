@@ -3,11 +3,11 @@ services:
     name: yugm-api
     runtime: node
     rootDir: backend-server
-    buildCommand: npm install --include=dev && npm run build:admin && npm --workspace @yugm/api run build
-    startCommand: npm --workspace @yugm/api run start
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
     autoDeploy: true
     envVars:
-      # Node version is set in Render Dashboard > Service > Settings (native runtime ignores NODE_VERSION env var)
       - key: NODE_ENV
         value: production
       - key: JWT_SECRET
@@ -16,71 +16,8 @@ services:
         generateValue: true
       - key: ADMIN_REFRESH_SECRET
         generateValue: true
-      - key: ADMIN_PANEL_ORIGIN
-        sync: false
-      # Secrets below use sync: false — Render never creates or overwrites them;
-      # set each value in Dashboard > Service > Environment after the first deploy.
-      # REQUIRED: without MONGODB_URI the API refuses to start.
+      - key: PAYOUT_KYC_ENCRYPTION_KEY
+        generateValue: true
+      # Required: provide a MongoDB Atlas URI (or another reachable MongoDB URI).
       - key: MONGODB_URI
         sync: false
-      # Redis: optional (graceful fallback), needed for queues, rate limits, socket fan-out, cache
-      - key: REDIS_URL
-        sync: false
-      # S3 media storage: required for persistent uploads (local driver is wiped on every deploy)
-      - key: STORAGE_DRIVER
-        sync: false
-      - key: S3_BUCKET
-        sync: false
-      - key: S3_REGION
-        sync: false
-      - key: S3_ENDPOINT
-        sync: false
-      - key: S3_ACCESS_KEY_ID
-        sync: false
-      - key: S3_SECRET_ACCESS_KEY
-        sync: false
-      - key: S3_PUBLIC_BASE_URL
-        sync: false
-      # Firebase (Google/phone auth + push notifications)
-      - key: FCM_PROJECT_ID
-        sync: false
-      - key: FCM_CLIENT_EMAIL
-        sync: false
-      - key: FCM_PRIVATE_KEY
-        sync: false
-      # LiveKit voice/video rooms
-      - key: LIVEKIT_API_KEY
-        sync: false
-      - key: LIVEKIT_API_SECRET
-        sync: false
-      - key: LIVEKIT_URL
-        sync: false
-      # Payout KYC field encryption
-      - key: PAYOUT_KYC_ENCRYPTION_KEY
-        sync: false
-      # Razorpay payments
-      - key: RAZORPAY_KEY_ID
-        sync: false
-      - key: RAZORPAY_KEY_SECRET
-        sync: false
-      - key: RAZORPAY_WEBHOOK_SECRET
-        sync: false
-      # Google Play billing
-      - key: GOOGLE_PLAY_PACKAGE_NAME
-        sync: false
-      - key: GOOGLE_PLAY_CLIENT_EMAIL
-        sync: false
-      - key: GOOGLE_PLAY_PRIVATE_KEY
-        sync: false
-      # OTP Staging Bypass & Super Admin Seeding
-      - key: DEV_BYPASS_OTP
-        sync: false
-      - key: SEED_SUPER_ADMIN_EMAIL
-        sync: false
-      - key: SEED_SUPER_ADMIN_NAME
-        sync: false
-      - key: SEED_SUPER_ADMIN_FIREBASE_UID
-        sync: false
-      - key: SEED_SUPER_ADMIN_PASSWORD
-        sync: false
-

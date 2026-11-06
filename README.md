@@ -8,9 +8,10 @@ Yugm uses **Yugm Trust Verification** for user safety, fake-profile prevention, 
 
 ## Project Layout
 
-- `backend-server/`: Node.js API server, shared TypeScript schemas/constants, npm workspace, and Docker Compose services.
-- `android-client/app/`: Native Android client built with Kotlin, Jetpack Compose, Firebase, Socket.IO, and LiveKit.
-- `android-client/expo-mobile/`: Expo React Native client prototype.
+- `backend-server/`: Standalone Node.js server project with the API, admin app, shared TypeScript schemas/constants, npm workspace, and Docker Compose services.
+- `android-client/`: Standalone Android client project, including the native app and Expo React Native client.
+
+Each project has its own build configuration and dependency manifests. Open `android-client/` in Android Studio, or run npm commands from `backend-server/` or `android-client/expo-mobile/` as appropriate.
 
 ## Backend Setup
 
