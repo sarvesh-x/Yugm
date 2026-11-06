@@ -55,9 +55,16 @@ export async function runMigrations() {
 }
 
 defineMigration(1, "create_users_indexes", async (db) => {
-  await db.collection("users").createIndex({ firebaseUid: 1 }, { unique: true, sparse: true });
-  await db.collection("users").createIndex({ email: 1 }, { sparse: true });
-  await db.collection("users").createIndex({ username: 1 }, { unique: true, sparse: true });
+  const users = db.collection("users");
+  await users.createIndex(
+    { firebaseUid: 1 },
+    { unique: true, partialFilterExpression: { firebaseUid: { $type: "string" } } }
+  );
+  await users.createIndex(
+    { email: 1 },
+    { unique: true, partialFilterExpression: { email: { $type: "string" } } }
+  );
+  await users.createIndex({ username: 1 }, { unique: true });
 });
 
 defineMigration(2, "create_rooms_indexes", async (db) => {
