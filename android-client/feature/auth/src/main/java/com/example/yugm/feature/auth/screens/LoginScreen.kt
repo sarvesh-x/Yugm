@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -21,11 +22,12 @@ import com.example.yugm.core.ui.theme.*
 fun LoginScreen(
     onGoogleSignIn: () -> Unit,
     onPhoneSignIn: () -> Unit,
-    onEmailLogin: (String) -> Unit,
+    onEmailAuth: (String, String, Boolean) -> Unit,
     loading: Boolean,
     error: String?
 ) {
     var email by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AuroraBackground()
@@ -84,6 +86,17 @@ fun LoginScreen(
                         )
                     )
 
+                    GlassTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = "Password",
+                        placeholder = "At least 6 characters",
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = KeyboardType.Password
+                        ),
+                        visualTransformation = PasswordVisualTransformation()
+                    )
+
                     if (error != null) {
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
@@ -97,11 +110,22 @@ fun LoginScreen(
                     Spacer(modifier = Modifier.height(20.dp))
 
                     GlassButton(
-                        text = "Continue with Email",
-                        onClick = { onEmailLogin(email) },
-                        enabled = !loading && email.isNotBlank(),
+                        text = "Sign in with Email",
+                        onClick = { onEmailAuth(email.trim(), password, false) },
+                        enabled = !loading && email.isNotBlank() && password.length >= 6,
                         loading = loading,
                         gradient = Brush.horizontalGradient(auroraGradientPrimary)
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    GlassOutlinedButton(
+                        text = "Create account",
+                        onClick = { onEmailAuth(email.trim(), password, true) },
+                        modifier = Modifier.fillMaxWidth(),
+                        height = 52.dp,
+                        cornerRadius = 14.dp,
+                        enabled = !loading && email.isNotBlank() && password.length >= 6
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))

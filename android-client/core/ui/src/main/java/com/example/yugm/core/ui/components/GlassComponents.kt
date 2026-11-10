@@ -354,6 +354,7 @@ fun GlassTextField(
     placeholder: String = "",
     singleLine: Boolean = true,
     keyboardOptions: androidx.compose.foundation.text.KeyboardOptions = androidx.compose.foundation.text.KeyboardOptions.Default,
+    visualTransformation: androidx.compose.ui.text.input.VisualTransformation = androidx.compose.ui.text.input.VisualTransformation.None,
 ) {
     val shape = RoundedCornerShape(16.dp)
     androidx.compose.material3.OutlinedTextField(
@@ -363,6 +364,7 @@ fun GlassTextField(
         placeholder = if (placeholder.isNotEmpty()) {{ Text(placeholder) }} else null,
         singleLine = singleLine,
         keyboardOptions = keyboardOptions,
+        visualTransformation = visualTransformation,
         modifier = modifier
             .fillMaxWidth()
             .clip(shape),

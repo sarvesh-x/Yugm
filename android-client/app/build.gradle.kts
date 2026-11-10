@@ -37,7 +37,7 @@ fun localLanIpv4(): String? {
 
 val isReleaseTaskRequested = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
 val yugmServerMode = configValue("YUGM_SERVER_MODE")?.trim()?.lowercase()
-    ?: if (isReleaseTaskRequested) "deploy" else "development"
+    ?: "deploy"
 
 require(yugmServerMode == "development" || yugmServerMode == "deploy") {
     "YUGM_SERVER_MODE must be either 'development' or 'deploy'"

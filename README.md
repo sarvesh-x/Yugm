@@ -107,14 +107,16 @@ For Firebase Auth and FCM, download `google-services.json` from Firebase Console
 android-client/app/google-services.json
 ```
 
-Android debug builds use the local development server by default. Choose the server mode when building:
+Android builds use the live Render server by default. Choose the server mode when building:
 
 ```bash
 ./gradlew :app:assembleDebug -PYUGM_SERVER_MODE=development
 ./gradlew :app:assembleDebug -PYUGM_SERVER_MODE=deploy
 ```
 
-`development` targets the host machine through the Android emulator bridge at `10.0.2.2:4000`. `deploy` targets `https://yugm.onrender.com`. Release builds default to `deploy` and reject development mode.
+`development` targets the host machine through the Android emulator bridge at `10.0.2.2:4000`. `deploy` targets `https://yugm.onrender.com`. To use the local server for a debug build, pass `-PYUGM_SERVER_MODE=development`; release builds require `deploy`.
+
+Email sign-in and account creation use Firebase Authentication's Email/Password provider; phone sign-in uses Firebase Phone Auth. Enable both providers in the Yugm Firebase project and configure phone verification for the app. The app exchanges the resulting Firebase ID token with the API, which creates a Yugm profile on first sign-in. Google sign-in also creates a profile automatically. Email OTP is reserved for development because the production API does not send email codes.
 
 For a physical Android device, override the API and socket URLs with your computer's LAN IP:
 

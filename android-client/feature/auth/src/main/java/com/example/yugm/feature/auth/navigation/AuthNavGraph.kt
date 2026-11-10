@@ -50,14 +50,15 @@ fun NavGraphBuilder.authNavGraph(
             onPhoneSignIn = {
                 navController.navigate(Screen.PhoneLogin.route)
             },
-            onEmailLogin = { email ->
-                authViewModel.requestOtp(email) {
-                    navController.navigate(Screen.OtpVerify.createRoute(email))
-                }
+            onEmailAuth = { email, password, createAccount ->
+                authViewModel.emailAuth(email, password, createAccount)
             },
             loading = authViewModel.isLoading,
             error = authViewModel.error
         )
+        LaunchedEffect(authViewModel.session) {
+            authViewModel.session?.let(navigateAfterLogin)
+        }
     }
 
     composable(Screen.PhoneLogin.route) {

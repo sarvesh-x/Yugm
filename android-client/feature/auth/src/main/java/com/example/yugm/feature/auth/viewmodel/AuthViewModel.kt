@@ -12,6 +12,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+import com.google.firebase.auth.FirebaseAuth
+import com.google.android.gms.tasks.Tasks
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
@@ -29,6 +31,39 @@ class AuthViewModel @Inject constructor(
 
     fun clearError() {
         error = null
+    }
+
+    fun emailAuth(email: String, password: String, createAccount: Boolean) {
+        viewModelScope.launch {
+            isLoading = true
+            error = null
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val auth = FirebaseAuth.getInstance()
+                    val result = if (createAccount) {
+                        Tasks.await(auth.createUserWithEmailAndPassword(email, password))
+                    } else {
+                        Tasks.await(auth.signInWithEmailAndPassword(email, password))
+                    }
+                    val idToken = Tasks.await(
+                        result.user?.getIdToken(true)
+                            ?: throw IllegalStateException("Firebase did not return a user")
+                    ).token ?: throw IllegalStateException("Firebase did not return an ID token")
+                    yugmApi.googleAuth(idToken)
+                }
+            }.onSuccess {
+                session = it
+                isLoading = false
+            }.onFailure {
+                isLoading = false
+                error = when (it) {
+                    is com.google.firebase.auth.FirebaseAuthInvalidCredentialsException -> "Check your email and password, then try again."
+                    is com.google.firebase.auth.FirebaseAuthUserCollisionException -> "An account already uses this email. Sign in instead."
+                    is com.google.firebase.auth.FirebaseAuthInvalidUserException -> "No account found for this email. Create an account first."
+                    else -> it.message ?: "Email sign-in failed"
+                }
+            }
+        }
     }
 
     fun requestOtp(identifier: String, onSuccess: () -> Unit) {
