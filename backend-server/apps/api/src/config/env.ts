@@ -67,10 +67,8 @@ const envSchema = z.object({
 });
 
 const parsed = envSchema.parse(process.env);
-if (parsed.NODE_ENV === "production") {
-  if (!parsed.LIVEKIT_URL.startsWith("wss://")) {
-    throw new Error("LIVEKIT_URL must be the production wss:// endpoint in production.");
-  }
+if (parsed.NODE_ENV === "production" && (!parsed.LIVEKIT_URL.startsWith("wss://") || !parsed.LIVEKIT_API_KEY || !parsed.LIVEKIT_API_SECRET)) {
+  console.warn("LiveKit is not fully configured; the API will start, but voice/video room tokens will be unavailable.");
 }
 const jwtSecret = resolveJwtSecret(parsed.JWT_SECRET, parsed.NODE_ENV);
 const deriveSecret = (purpose: string) =>

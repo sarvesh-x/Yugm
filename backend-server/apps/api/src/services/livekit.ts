@@ -18,6 +18,9 @@ export class LiveKitMediaProvider implements MediaProvider {
     if (!env.LIVEKIT_API_KEY || !env.LIVEKIT_API_SECRET) {
       throw new HttpError(503, "LiveKit credentials are not configured");
     }
+    if (!env.LIVEKIT_URL.trim() || (env.NODE_ENV === "production" && !env.LIVEKIT_URL.startsWith("wss://"))) {
+      throw new HttpError(503, "LiveKit URL is not configured for production");
+    }
 
     const token = new AccessToken(env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET, {
       identity: input.identity,
