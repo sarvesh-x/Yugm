@@ -118,7 +118,7 @@ For the Android emulator, the default `development` mode reaches your computer's
 
 Release builds require the Play upload keystore outside source control. Supply `YUGM_UPLOAD_KEYSTORE_FILE`, `YUGM_UPLOAD_KEYSTORE_PASSWORD`, `YUGM_UPLOAD_KEY_ALIAS`, and `YUGM_UPLOAD_KEY_PASSWORD` as Gradle properties or environment variables. The Android release target is API 36. Before uploading, confirm the permanent package ID and register the Play app-signing and upload certificate fingerprints in Firebase.
 
-The Render blueprint marks Firebase Admin credentials, LiveKit production URL/credentials, and Google Play purchase-verification credentials as required manual environment values. Production startup rejects missing Firebase/Play credentials or a non-`wss://` LiveKit URL. Add those values in Render before deploying the production service.
+Firebase ID tokens are verified against Google's public Firebase signing certificates using the project ID in `google-services.json`; the Firebase Admin service-account key is optional and only enables push notifications. Google Play service-account credentials are optional at startup and are required only to verify purchases. The Render service still requires its database, persistent JWT secrets, and production LiveKit configuration (`wss://` URL and API credentials) for those features.
 
 See [the Play Store release checklist](docs/play-store-release-checklist.md) for the remaining Play Console and account setup steps.
 
@@ -160,7 +160,7 @@ Google Sign-In and Phone Auth require a Firebase project:
 
 1. Go to [Firebase Console](https://console.firebase.google.com) and create or select your project
 2. Enable Google and Phone in Authentication > Sign-in method
-3. Service account for backend: Project Settings > Service Accounts > Generate new private key, then copy `FCM_PROJECT_ID`, `FCM_CLIENT_EMAIL`, `FCM_PRIVATE_KEY` into `backend-server/apps/api/.env`
+3. Optional push notification setup: Project Settings > Service Accounts > Generate new private key, then set `FCM_CLIENT_EMAIL` and `FCM_PRIVATE_KEY` in the backend environment. Firebase ID-token verification works without this key; `FCM_PROJECT_ID` defaults to `yugm-e985e` and can be overridden if the Firebase project changes.
 4. Android app for native Android:
    - Package name: `com.example.yugm`
    - Place `google-services.json` in `android-client/app/`

@@ -23,9 +23,9 @@ const keys: EnvKey[] = [
   { key: "LIVEKIT_API_KEY", group: "livekit", required: false, note: "required for media tokens" },
   { key: "LIVEKIT_API_SECRET", group: "livekit", required: false, note: "required for media tokens" },
   { key: "LIVEKIT_URL", group: "livekit", required: false, note: "defaults to ws://localhost:7880" },
-  { key: "FCM_PROJECT_ID", group: "firebase", required: false, note: "required for Google/Phone auth and push" },
-  { key: "FCM_CLIENT_EMAIL", group: "firebase", required: false, note: "required for Google/Phone auth and push" },
-  { key: "FCM_PRIVATE_KEY", group: "firebase", required: false, note: "required for Google/Phone auth and push" },
+  { key: "FCM_PROJECT_ID", group: "firebase", required: false, note: "defaults to the Yugm Firebase project ID; used to verify auth tokens" },
+  { key: "FCM_CLIENT_EMAIL", group: "firebase", required: false, note: "optional service account for push notifications" },
+  { key: "FCM_PRIVATE_KEY", group: "firebase", required: false, note: "optional service account for push notifications" },
   { key: "RAZORPAY_KEY_ID", group: "payments", required: false, note: "required for Razorpay orders" },
   { key: "RAZORPAY_KEY_SECRET", group: "payments", required: false, note: "required for Razorpay verification" },
   { key: "GOOGLE_PLAY_PACKAGE_NAME", group: "payments", required: false, note: "required for Google Play purchases" },
@@ -94,11 +94,6 @@ if (isProduction) {
   if (process.env.STORAGE_DRIVER === "s3") {
     for (const key of ["S3_BUCKET", "S3_REGION"]) {
       if (!process.env[key]) productionErrors.push(`${key} must be set when STORAGE_DRIVER=s3`);
-    }
-  }
-  for (const key of ["FCM_PROJECT_ID", "FCM_CLIENT_EMAIL", "FCM_PRIVATE_KEY"]) {
-    if (!process.env[key]) {
-      productionErrors.push(`${key} must be set for Firebase auth and push in production`);
     }
   }
   for (const key of ["LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "LIVEKIT_URL"]) {

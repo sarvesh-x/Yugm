@@ -39,13 +39,21 @@ const envSchema = z.object({
   LIVEKIT_API_SECRET: z.string().optional(),
   LIVEKIT_URL: z.string().default("ws://localhost:7880"),
   CORS_ORIGIN: z.string().default("*"),
-  FCM_PROJECT_ID: z.string().optional(),
+  // Public Firebase project identifier, also present in the Android client's
+  // google-services.json. Service-account credentials are optional at startup.
+  FCM_PROJECT_ID: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() ? v.trim() : undefined),
+    z.string().default("yugm-e985e")
+  ),
   FCM_CLIENT_EMAIL: z.string().optional(),
   FCM_PRIVATE_KEY: z.string().optional(),
   RAZORPAY_KEY_ID: z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
-  GOOGLE_PLAY_PACKAGE_NAME: z.string().optional(),
+  GOOGLE_PLAY_PACKAGE_NAME: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() ? v.trim() : undefined),
+    z.string().default("com.example.yugm")
+  ),
   GOOGLE_PLAY_CLIENT_EMAIL: z.string().optional(),
   GOOGLE_PLAY_PRIVATE_KEY: z.string().optional(),
   PAYOUT_KYC_ENCRYPTION_KEY: z.string().min(24).optional(),
@@ -60,14 +68,6 @@ const envSchema = z.object({
 
 const parsed = envSchema.parse(process.env);
 if (parsed.NODE_ENV === "production") {
-  const requiredProductionValues = [
-    "FCM_PROJECT_ID", "FCM_CLIENT_EMAIL", "FCM_PRIVATE_KEY",
-    "GOOGLE_PLAY_PACKAGE_NAME", "GOOGLE_PLAY_CLIENT_EMAIL", "GOOGLE_PLAY_PRIVATE_KEY"
-  ] as const;
-  const missingProductionValues = requiredProductionValues.filter((key) => !parsed[key]);
-  if (missingProductionValues.length) {
-    throw new Error(`Missing production environment values: ${missingProductionValues.join(", ")}`);
-  }
   if (!parsed.LIVEKIT_URL.startsWith("wss://")) {
     throw new Error("LIVEKIT_URL must be the production wss:// endpoint in production.");
   }

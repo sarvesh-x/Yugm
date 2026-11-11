@@ -6,7 +6,7 @@ services:
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /health
-    autoDeploy: true
+    autoDeployTrigger: commit
     envVars:
       - key: NODE_ENV
         value: production
@@ -19,7 +19,7 @@ services:
       - key: PAYOUT_KYC_ENCRYPTION_KEY
         generateValue: true
       - key: FCM_PROJECT_ID
-        sync: false
+        value: yugm-e985e
       - key: FCM_CLIENT_EMAIL
         sync: false
       - key: FCM_PRIVATE_KEY
