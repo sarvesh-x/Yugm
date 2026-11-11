@@ -40,14 +40,20 @@ class AuthViewModel @Inject constructor(
             runCatching {
                 withContext(Dispatchers.IO) {
                     val auth = FirebaseAuth.getInstance()
-                    val result = if (createAccount) {
-                        Tasks.await(auth.createUserWithEmailAndPassword(email, password))
-                    } else {
-                        Tasks.await(auth.signInWithEmailAndPassword(email, password))
+                    // If Firebase account creation succeeded but the Yugm API
+                    // timed out, Firebase keeps the new user signed in. Reuse
+                    // that user on a signup retry instead of attempting to
+                    // create the same Firebase account again.
+                    val existingSignupUser = auth.currentUser?.takeIf {
+                        createAccount && it.email.equals(email, ignoreCase = true)
                     }
+                    val firebaseUser = existingSignupUser ?: if (createAccount) {
+                        Tasks.await(auth.createUserWithEmailAndPassword(email, password)).user
+                    } else {
+                        Tasks.await(auth.signInWithEmailAndPassword(email, password)).user
+                    } ?: throw IllegalStateException("Firebase did not return a user")
                     val idToken = Tasks.await(
-                        result.user?.getIdToken(true)
-                            ?: throw IllegalStateException("Firebase did not return a user")
+                        firebaseUser.getIdToken(true)
                     ).token ?: throw IllegalStateException("Firebase did not return an ID token")
                     yugmApi.googleAuth(idToken)
                 }
@@ -60,6 +66,7 @@ class AuthViewModel @Inject constructor(
                     is com.google.firebase.auth.FirebaseAuthInvalidCredentialsException -> "Check your email and password, then try again."
                     is com.google.firebase.auth.FirebaseAuthUserCollisionException -> "An account already uses this email. Sign in instead."
                     is com.google.firebase.auth.FirebaseAuthInvalidUserException -> "No account found for this email. Create an account first."
+                    is java.net.SocketTimeoutException -> "The server took too long to respond. Try again; your Firebase signup is saved."
                     else -> it.message ?: "Email sign-in failed"
                 }
             }
@@ -109,7 +116,11 @@ class AuthViewModel @Inject constructor(
                 isLoading = false
             }.onFailure {
                 isLoading = false
-                error = it.message ?: "Google sign-in failed"
+                error = if (it is java.net.SocketTimeoutException) {
+                    "The server took too long to respond. Try Google sign-in again."
+                } else {
+                    it.message ?: "Google sign-in failed"
+                }
             }
         }
     }

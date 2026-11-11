@@ -59,6 +59,19 @@ const envSchema = z.object({
 });
 
 const parsed = envSchema.parse(process.env);
+if (parsed.NODE_ENV === "production") {
+  const requiredProductionValues = [
+    "FCM_PROJECT_ID", "FCM_CLIENT_EMAIL", "FCM_PRIVATE_KEY",
+    "GOOGLE_PLAY_PACKAGE_NAME", "GOOGLE_PLAY_CLIENT_EMAIL", "GOOGLE_PLAY_PRIVATE_KEY"
+  ] as const;
+  const missingProductionValues = requiredProductionValues.filter((key) => !parsed[key]);
+  if (missingProductionValues.length) {
+    throw new Error(`Missing production environment values: ${missingProductionValues.join(", ")}`);
+  }
+  if (!parsed.LIVEKIT_URL.startsWith("wss://")) {
+    throw new Error("LIVEKIT_URL must be the production wss:// endpoint in production.");
+  }
+}
 const jwtSecret = resolveJwtSecret(parsed.JWT_SECRET, parsed.NODE_ENV);
 const deriveSecret = (purpose: string) =>
   crypto.createHmac("sha256", jwtSecret).update(`yugm:${purpose}:v1`).digest("hex");

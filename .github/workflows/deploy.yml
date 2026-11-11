@@ -6,12 +6,27 @@ on:
     paths:
       - "backend-server/**"
       - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: render-deploy-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
       - name: Render Deploy Hook
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        shell: bash
         run: |
-          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+          if [[ -z "$RENDER_DEPLOY_HOOK_URL" ]]; then
+            echo "::error title=Missing Render deploy hook::Add the repository Actions secret RENDER_DEPLOY_HOOK_URL using the Deploy Hook URL from the Render service settings."
+            exit 1
+          fi
+
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            "$RENDER_DEPLOY_HOOK_URL"

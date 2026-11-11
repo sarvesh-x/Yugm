@@ -36,8 +36,9 @@ fun localLanIpv4(): String? {
 }
 
 val isReleaseTaskRequested = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
+val defaultServerMode = if (isReleaseTaskRequested) "deploy" else "development"
 val yugmServerMode = configValue("YUGM_SERVER_MODE")?.trim()?.lowercase()
-    ?: "deploy"
+    ?: defaultServerMode
 
 require(yugmServerMode == "development" || yugmServerMode == "deploy") {
     "YUGM_SERVER_MODE must be either 'development' or 'deploy'"
@@ -61,6 +62,12 @@ val defaultSocketBaseUrl = if (yugmServerMode == "deploy") {
 val yugmApiBaseUrl = configValue("YUGM_API_BASE_URL") ?: defaultApiBaseUrl
 val yugmSocketBaseUrl = configValue("YUGM_SOCKET_BASE_URL") ?: defaultSocketBaseUrl
 val localLanHost = localLanIpv4()
+val uploadKeystoreFile = configValue("YUGM_UPLOAD_KEYSTORE_FILE")
+val uploadKeystorePassword = configValue("YUGM_UPLOAD_KEYSTORE_PASSWORD")
+val uploadKeyAlias = configValue("YUGM_UPLOAD_KEY_ALIAS")
+val uploadKeyPassword = configValue("YUGM_UPLOAD_KEY_PASSWORD")
+val hasUploadSigning = listOf(uploadKeystoreFile, uploadKeystorePassword, uploadKeyAlias, uploadKeyPassword)
+    .all { !it.isNullOrBlank() }
 
 if (isReleaseTaskRequested) {
     require(!yugmApiBaseUrl.isNullOrBlank()) {
@@ -75,6 +82,9 @@ if (isReleaseTaskRequested) {
     require(yugmSocketBaseUrl.startsWith("https://")) {
         "YUGM_SOCKET_BASE_URL must use HTTPS for release builds"
     }
+    require(hasUploadSigning) {
+        "Release builds require YUGM_UPLOAD_KEYSTORE_FILE, YUGM_UPLOAD_KEYSTORE_PASSWORD, YUGM_UPLOAD_KEY_ALIAS, and YUGM_UPLOAD_KEY_PASSWORD. Keep the upload keystore and passwords outside source control."
+    }
 }
 
 android {
@@ -84,7 +94,7 @@ android {
     defaultConfig {
         applicationId = "com.example.yugm"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
@@ -104,6 +114,21 @@ android {
         )
     }
 
+    signingConfigs {
+        if (hasUploadSigning) {
+            create("playUpload") {
+                storeFile = file(uploadKeystoreFile!!)
+                storePassword = uploadKeystorePassword
+                keyAlias = uploadKeyAlias
+                keyPassword = uploadKeyPassword
+            }
+        } else {
+            // Debug builds do not need release signing. Release task validation above
+            // stops unsigned artifacts from being mistaken for Play-ready bundles.
+            create("playUpload")
+        }
+    }
+
     buildTypes {
         debug {
             buildConfigField("String", "API_BASE_URL", quoted(yugmApiBaseUrl))
@@ -113,6 +138,7 @@ android {
         }
 
         release {
+            signingConfig = signingConfigs.getByName("playUpload")
             isMinifyEnabled = true
             isShrinkResources = true
             buildConfigField("String", "API_BASE_URL", quoted(yugmApiBaseUrl))

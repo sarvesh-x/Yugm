@@ -29,6 +29,7 @@ import com.example.yugm.ui.theme.YugmTheme
 import com.example.yugm.ui.viewmodel.MainViewModel
 import com.example.yugm.core.data.SessionManager
 import com.example.yugm.payments.RazorpayCoordinator
+import com.example.yugm.payments.GooglePlayBillingManager
 import com.razorpay.PaymentData
 import com.razorpay.PaymentResultWithDataListener
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -84,7 +85,21 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
                 // Initialize Google Play Billing
                 LaunchedEffect(Unit) {
-                    com.example.yugm.payments.GooglePlayBillingManager.init(context)
+                    GooglePlayBillingManager.init(context)
+                    GooglePlayBillingManager.setPendingPurchaseHandler { productId, purchaseToken, orderId ->
+                        val token = mainViewModel.authToken
+                        check(token.isNotBlank()) { "Sign in again to finish your purchase." }
+                        val pack = YugmApi.coinPacks(token).firstOrNull { it.googleProductId == productId }
+                            ?: error("This Play Store product is not configured for Yugm.")
+                        val balance = YugmApi.verifyGooglePlayPurchase(
+                            token = token,
+                            packId = pack.id,
+                            productId = productId,
+                            purchaseToken = purchaseToken,
+                            orderId = orderId,
+                        )
+                        mainViewModel.updateBalance(balance)
+                    }
                 }
 
                 // Register network callback
@@ -139,7 +154,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                                     username = session.user.username,
                                     balance = session.user.walletBalance,
                                 )
-                                val destination = if ((session.user.name == "Yugm User") || session.user.name.isBlank()) {
+                                val destination = if (!session.user.profileCompleted) {
                                     Screen.ProfileSetup.route
                                 } else {
                                     Screen.Discover.route
@@ -162,6 +177,22 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                         mainViewModel = mainViewModel,
                         onGoogleSignIn = {
                             googleLauncher.launch(googleSignInClient.signInIntent)
+                        },
+                        onRechargeOrderReady = { checkout ->
+                            runCatching { RazorpayCoordinator.start(this@MainActivity, checkout) }
+                                .onFailure { Toast.makeText(context, it.message ?: "Checkout could not start", Toast.LENGTH_LONG).show() }
+                        },
+                        onStartGooglePlayPurchase = { pack ->
+                            scope.launch {
+                                runCatching {
+                                    GooglePlayBillingManager.queryRawProductDetails(listOf(pack.googleProductId))
+                                        .firstOrNull() ?: error("This coin pack is not available in Google Play yet.")
+                                }.onSuccess { details ->
+                                    GooglePlayBillingManager.launchBillingFlow(this@MainActivity, details)
+                                }.onFailure {
+                                    Toast.makeText(context, it.message ?: "Purchase could not start", Toast.LENGTH_LONG).show()
+                                }
+                            }
                         },
                     )
                 }

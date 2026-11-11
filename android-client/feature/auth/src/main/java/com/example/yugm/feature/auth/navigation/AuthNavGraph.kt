@@ -119,7 +119,8 @@ fun NavGraphBuilder.authNavGraph(
                             gender = gender,
                             age = age,
                             lookingFor = lookingFor,
-                            avatar = avatar.ifBlank { null }
+                            avatar = avatar.ifBlank { null },
+                            acceptTerms = true
                         )
                     }.onSuccess { user ->
                         navigateAfterLogin(Session(token = authToken, user = user))

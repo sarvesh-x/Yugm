@@ -73,6 +73,9 @@ fun WalletScreen(
     val viewModel: WalletViewModel = hiltViewModel()
 
     LaunchedEffect(token) { viewModel.loadWallet(token) }
+    LaunchedEffect(viewModel.razorpayCheckoutData) {
+        viewModel.razorpayCheckoutData?.let(onRechargeOrderReady)
+    }
 
     YugmAmbientBackground {
         Box(Modifier.fillMaxSize()) {

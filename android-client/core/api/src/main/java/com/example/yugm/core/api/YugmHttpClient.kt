@@ -26,7 +26,9 @@ object YugmHttpClient {
     private val json = "application/json; charset=utf-8".toMediaType()
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        // The production API may need time to wake its hosting instance before
+        // completing Firebase token verification and the first database query.
+        .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .apply {
             if (ApiConfig.isDebug) {
@@ -69,18 +71,28 @@ object YugmHttpClient {
     private suspend fun request(method: String, path: String, auth: String?, body: JSONObject?): JSONObject = withContext(Dispatchers.IO) {
         if (!isOnline) throw IllegalStateException("No internet connection")
         val canRetry = isSafeRetryMethod(method)
+        // Firebase auth has already created/authenticated the Firebase user by
+        // the time these API calls run. The API exchange is idempotent by UID,
+        // so retrying a transient network timeout won't create another account.
+        val canRetryAuth = method.equals("POST", ignoreCase = true) &&
+            (path == "/auth/google" || path == "/auth/phone")
         val preferredBase = workingBaseUrl ?: baseCandidates.firstOrNull()
-        val bases = if (canRetry) {
+        val bases = if (canRetry || canRetryAuth) {
             listOfNotNull(workingBaseUrl) + baseCandidates.filter { it != workingBaseUrl }
         } else {
             listOfNotNull(preferredBase)
         }
         if (bases.isEmpty()) throw IllegalStateException("API_BASE_URL is not configured for this build")
         var lastError: IOException? = null
-        for ((attempt, base) in bases.withIndex()) {
+        val attempts = when {
+            canRetryAuth -> listOf(bases.first(), bases.first())
+            canRetry -> bases
+            else -> bases.take(1)
+        }
+        for ((attempt, base) in attempts.withIndex()) {
             currentCoroutineContext().ensureActive()
             try {
-                if (attempt > 0) kotlinx.coroutines.delay(1000L * attempt)
+                if (attempt > 0) kotlinx.coroutines.delay(if (canRetryAuth) 1500L else 1000L * attempt)
                 val builder = Request.Builder().url("$base$path")
                 if (auth != null) builder.header("Authorization", "Bearer $auth")
                 val requestBody = body?.toString()?.toRequestBody(json)
@@ -95,13 +107,21 @@ object YugmHttpClient {
                     val raw = response.body?.string()
                     if (raw.isNullOrBlank()) throw ApiProtocolException("Empty response body")
                     if (!response.isSuccessful) {
-                        val errMsg = try {
-                            JSONObject(raw).optJSONObject("error")?.optString("message")
+                        val apiError = try {
+                            JSONObject(raw).optJSONObject("error")
                         } catch (e: Exception) {
                             Timber.tag(TAG).e(e, "Error parsing error response")
                             null
                         }
-                        throw ApiHttpException(response.code, errMsg ?: "API ${response.code}")
+                        val errMsg = apiError?.optString("message")?.takeIf { it.isNotBlank() }
+                            ?: "API ${response.code}"
+                        val requestId = apiError?.optString("requestId")?.takeIf { it.isNotBlank() && it != "null" }
+                        val displayMessage = if (response.code >= 500 && requestId != null) {
+                            "$errMsg (reference: $requestId)"
+                        } else {
+                            errMsg
+                        }
+                        throw ApiHttpException(response.code, displayMessage)
                     }
                     val payload = try {
                         JSONObject(raw)
@@ -123,7 +143,7 @@ object YugmHttpClient {
             } catch (error: IOException) {
                 Timber.tag(TAG).e(error, "Request failed for $base$path")
                 lastError = error
-                if (!canRetry) throw error
+                if (attempt == attempts.lastIndex || (!canRetry && !canRetryAuth)) throw error
             }
         }
         throw lastError ?: IllegalStateException("API unavailable")

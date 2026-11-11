@@ -107,22 +107,30 @@ For Firebase Auth and FCM, download `google-services.json` from Firebase Console
 android-client/app/google-services.json
 ```
 
-Android builds use the live Render server by default. Choose the server mode when building:
+Debug Android builds use the local backend by default; release builds use the live Render server. Override the mode when you need to test a different environment:
 
 ```bash
 ./gradlew :app:assembleDebug -PYUGM_SERVER_MODE=development
 ./gradlew :app:assembleDebug -PYUGM_SERVER_MODE=deploy
 ```
 
-`development` targets the host machine through the Android emulator bridge at `10.0.2.2:4000`. `deploy` targets `https://yugm.onrender.com`. To use the local server for a debug build, pass `-PYUGM_SERVER_MODE=development`; release builds require `deploy`.
+For the Android emulator, the default `development` mode reaches your computer's local API at `http://10.0.2.2:4000/api`. Use `-PYUGM_SERVER_MODE=deploy` to test the live API. Release builds default to `deploy` and reject development mode. Debug builds allow HTTP only in the debug variant so local development works; release builds continue to require HTTPS.
+
+Release builds require the Play upload keystore outside source control. Supply `YUGM_UPLOAD_KEYSTORE_FILE`, `YUGM_UPLOAD_KEYSTORE_PASSWORD`, `YUGM_UPLOAD_KEY_ALIAS`, and `YUGM_UPLOAD_KEY_PASSWORD` as Gradle properties or environment variables. The Android release target is API 36. Before uploading, confirm the permanent package ID and register the Play app-signing and upload certificate fingerprints in Firebase.
+
+The Render blueprint marks Firebase Admin credentials, LiveKit production URL/credentials, and Google Play purchase-verification credentials as required manual environment values. Production startup rejects missing Firebase/Play credentials or a non-`wss://` LiveKit URL. Add those values in Render before deploying the production service.
+
+See [the Play Store release checklist](docs/play-store-release-checklist.md) for the remaining Play Console and account setup steps.
 
 Email sign-in and account creation use Firebase Authentication's Email/Password provider; phone sign-in uses Firebase Phone Auth. Enable both providers in the Yugm Firebase project and configure phone verification for the app. The app exchanges the resulting Firebase ID token with the API, which creates a Yugm profile on first sign-in. Google sign-in also creates a profile automatically. Email OTP is reserved for development because the production API does not send email codes.
 
-For a physical Android device, override the API and socket URLs with your computer's LAN IP:
+For a physical Android device on the same Wi-Fi, point the debug build at your computer's LAN IP:
 
 ```bash
 ./gradlew :app:assembleDebug -PYUGM_SERVER_MODE=development -PYUGM_API_BASE_URL=http://192.168.1.20:4000/api -PYUGM_SOCKET_BASE_URL=http://192.168.1.20:4000
 ```
+
+Replace `192.168.1.20` with your computer's current LAN IP. Keep the backend listening on port `4000` and allow that port through the computer's firewall.
 
 ## Expo Client Setup
 

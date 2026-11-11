@@ -4,6 +4,7 @@ import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode } from "../utils/http.js";
 import { SupportTicket } from "../models/SupportTicket.js";
+import { createLimiter } from "../middleware/rateLimit.js";
 
 export const supportRouter = Router();
 
@@ -21,6 +22,31 @@ const createTicketSchema = z.object({
 const addMessageSchema = z.object({
   message: z.string().min(1).max(2000)
 });
+
+const publicRequestSchema = z.object({
+  email: z.string().trim().email().max(254),
+  username: z.string().trim().min(2).max(32).optional().default(""),
+  subject: z.string().trim().min(3).max(120),
+  message: z.string().trim().min(10).max(2000),
+  requestType: z.enum(["ACCOUNT_DELETION", "PRIVACY", "SUPPORT"])
+});
+
+supportRouter.post("/public-requests", createLimiter, validateBody(publicRequestSchema),
+  asyncHandler(async (req, res) => {
+    const { email, username, subject, message, requestType } = req.body;
+    const category = requestType === "SUPPORT" ? "General" : "Account";
+    const ticket = await SupportTicket.create({
+      requesterEmail: email,
+      subject: requestType === "ACCOUNT_DELETION" ? `Account deletion request: ${subject}` : subject,
+      message: [username ? `Username: ${username}` : "", `Request type: ${requestType}`, message].filter(Boolean).join("\n\n"),
+      category,
+      priority: requestType === "ACCOUNT_DELETION" ? "HIGH" : "MEDIUM",
+      status: "OPEN",
+      messages: []
+    });
+    sendOk(res, { requestId: ticket.id, received: true }, 201);
+  })
+);
 
 supportRouter.post("/tickets", requireAuth, validateBody(createTicketSchema),
   asyncHandler(async (req: AuthRequest, res) => {

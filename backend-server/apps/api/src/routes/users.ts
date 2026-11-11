@@ -67,6 +67,7 @@ function publicUser(user: any) {
     city: user.city,
     state: user.state,
     bio: user.bio,
+    profileCompleted: Boolean(user.profileCompletedAt || (user.bio && user.city && user.interests?.length)),
     streakCount: user.streakCount ?? 0,
     vibeLine: user.vibeLine,
     gender: user.gender,
@@ -94,6 +95,7 @@ usersRouter.patch("/me", validateBody(profileSchema.partial()), asyncHandler(asy
   for (const key of allowedFields) {
     if (key in req.body) update[key] = req.body[key];
   }
+  if (req.body.acceptTerms === true && !req.user!.termsAcceptedAt) update.termsAcceptedAt = new Date();
   let user: any = await User.findByIdAndUpdate(req.user!.id, { $set: update }, { new: true }).select("-__v");
   if (user && !user.profileCompletedAt && hasCompletedProfile(user)) {
     user.profileCompletedAt = new Date();

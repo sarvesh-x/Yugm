@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -20,6 +21,8 @@ import com.example.yugm.core.ui.components.BrandHeader
 import com.example.yugm.core.ui.components.PrimaryButton
 import com.example.yugm.core.ui.components.YugmTextField
 import com.example.yugm.core.ui.theme.*
+import android.content.Intent
+import android.net.Uri
 
 @Composable
 fun CreateProfileScreen(
@@ -38,8 +41,10 @@ fun CreateProfileScreen(
         avatar: String
     ) -> Unit
 ) {
+    val context = LocalContext.current
     var step by remember { mutableStateOf(1) }
     var errorMessage by remember { mutableStateOf("") }
+    var termsAccepted by remember { mutableStateOf(false) }
 
     var name by remember { mutableStateOf(initialName) }
     var handle by remember { mutableStateOf(initialUsername) }
@@ -100,6 +105,12 @@ fun CreateProfileScreen(
             4 -> {
                 if (bio.isBlank()) {
                     errorMessage = "Write a short bio to match the vibe!"
+                    return false
+                }
+            }
+            5 -> {
+                if (!termsAccepted) {
+                    errorMessage = "Please accept the Terms of Use before continuing."
                     return false
                 }
             }
@@ -286,6 +297,17 @@ fun CreateProfileScreen(
                                 )
                             }
                         }
+                    }
+                }
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = termsAccepted, onCheckedChange = { termsAccepted = it })
+                        Text("I agree to the Yugm Terms of Use and Community Guidelines.", color = TextMuted, fontSize = 13.sp)
+                    }
+                    TextButton(onClick = {
+                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://yugm.onrender.com/legal/terms"))) }
+                    }) {
+                        Text("Read Terms of Use", color = Gold, fontWeight = FontWeight.Bold)
                     }
                 }
             }

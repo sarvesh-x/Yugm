@@ -19,6 +19,9 @@ export function initFirebase() {
   const clientEmail = env.FCM_CLIENT_EMAIL;
   const rawKey = env.FCM_PRIVATE_KEY;
   if (!projectId || !clientEmail || !rawKey) {
+    if (env.NODE_ENV === "production") {
+      throw new Error("FCM_PROJECT_ID, FCM_CLIENT_EMAIL, and FCM_PRIVATE_KEY are required in production for Firebase authentication.");
+    }
     console.log(`Firebase disabled: missing env vars (projectId=${!!projectId} clientEmail=${!!clientEmail} privateKey=${!!rawKey})`);
     return;
   }

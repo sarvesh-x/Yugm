@@ -256,7 +256,7 @@ object YugmApi : IYugmApi {
     override suspend fun shareGameScore(token: String, scoreId: String, targetUserId: String) = GameApi.shareGameScore(token, scoreId, targetUserId)
 
     // User profile, search, follow, block, notifications, messaging
-    override suspend fun updateProfile(token: String, name: String, username: String, bio: String?, city: String?, interests: List<String>?, languages: List<String>?, gender: String?, age: Int?, lookingFor: String?, avatar: String?): YugmUser = UserApi.updateProfile(token, name, username, bio, city, interests, languages, gender, age, lookingFor, avatar)
+    override suspend fun updateProfile(token: String, name: String, username: String, bio: String?, city: String?, interests: List<String>?, languages: List<String>?, gender: String?, age: Int?, lookingFor: String?, avatar: String?, acceptTerms: Boolean): YugmUser = UserApi.updateProfile(token, name, username, bio, city, interests, languages, gender, age, lookingFor, avatar, acceptTerms)
     override suspend fun searchUsers(query: String, token: String?): List<Host> = UserApi.searchUsers(query, token)
     override suspend fun getUser(userId: String, token: String?): Host = UserApi.getUser(userId, token)
     override suspend fun getUserRooms(userId: String, token: String?): List<Room> = UserApi.getUserRooms(userId, token)

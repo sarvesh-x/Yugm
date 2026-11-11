@@ -38,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -46,6 +47,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import android.content.Intent
+import android.net.Uri
 import com.example.yugm.core.model.Host
 import com.example.yugm.core.ui.components.*
 import com.example.yugm.core.ui.theme.Background
@@ -92,6 +95,12 @@ fun SettingsScreen(
     var showLogoutConfirm by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val viewModel: SettingsViewModel = hiltViewModel()
+    val context = LocalContext.current
+    fun openLegalPage(path: String) {
+        runCatching {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://yugm.onrender.com/legal/$path")))
+        }.onFailure { error = "Could not open the Yugm legal page." }
+    }
 
     fun unblock(userId: String) {
         busy = true
@@ -140,6 +149,10 @@ fun SettingsScreen(
                     onNotifications = { pane = SettingsPane.Notifications },
                     onFeedback = { pane = SettingsPane.Feedback },
                     onDoc = { pane = it },
+                    onOpenPrivacy = { openLegalPage("privacy") },
+                    onOpenChildSafety = { openLegalPage("child-safety") },
+                    onOpenTerms = { openLegalPage("terms") },
+                    onDeleteAccount = { openLegalPage("account-deletion") },
                     onNavigateToSupport = onNavigateToSupport,
                     onLogout = { showLogoutConfirm = true }
                 )
@@ -194,6 +207,10 @@ private fun SettingsHome(
     onNotifications: () -> Unit,
     onFeedback: () -> Unit,
     onDoc: (SettingsPane) -> Unit,
+    onOpenPrivacy: () -> Unit,
+    onOpenChildSafety: () -> Unit,
+    onOpenTerms: () -> Unit,
+    onDeleteAccount: () -> Unit,
     onNavigateToSupport: () -> Unit = {},
     onLogout: () -> Unit
 ) {
@@ -229,6 +246,7 @@ private fun SettingsHome(
                     SettingsNavRow("Yugm Arcade", "Play mini games and manage challenges.", onGames)
                     SettingsNavRow("Yugm Clans", "Create or join a clan and chat with your family.", onClans)
                     SettingsNavRow("Notification settings", "Control messages, rooms, gifts, safety, and updates.", onNotifications)
+                    SettingsNavRow("Delete account", "Request deletion of your account and associated data.", onDeleteAccount)
                 }
             }
         }
@@ -237,8 +255,9 @@ private fun SettingsHome(
                 SettingsGroup("Privacy & Safety") {
                     SettingsNavRow("Blocked list", "$blockedCount people blocked.", onBlocked)
                     SettingsNavRow("Safety center", "Reports, trust checks, and privacy actions.", onSafety)
+                    SettingsNavRow("Child safety standards", "Yugm’s adult-only policy and child-safety reporting.", onOpenChildSafety)
                     SettingsNavRow("Community guidelines", "Read the rules for rooms, chats, and profiles.") { onDoc(SettingsPane.Guidelines) }
-                    SettingsNavRow("Privacy policy", "How Yugm uses data to run and protect the service.") { onDoc(SettingsPane.Privacy) }
+                    SettingsNavRow("Privacy policy", "How Yugm uses data to run and protect the service.", onOpenPrivacy)
                 }
             }
         }
@@ -248,7 +267,7 @@ private fun SettingsHome(
                     SettingsNavRow("Help and feedback", "Send a support note using the backend ticket flow.", onFeedback)
                     SettingsNavRow("Support", "Contact our support team for help.", onNavigateToSupport)
                     SettingsNavRow("About", "Yugm app summary and product scope.") { onDoc(SettingsPane.About) }
-                    SettingsNavRow("Terms of use", "Respect, safety, and account rules.") { onDoc(SettingsPane.Terms) }
+                    SettingsNavRow("Terms of use", "Respect, safety, and account rules.", onOpenTerms)
                 }
             }
         }

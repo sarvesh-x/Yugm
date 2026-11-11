@@ -634,6 +634,9 @@ function SupportPage({ token, setNotice }: { token: string; setNotice: (notice: 
               {ticketDetail.userId && (
                 <div className="detail-row"><strong>User:</strong> <span>{ticketDetail.userId?.username || ticketDetail.userId?.displayName || ticketDetail.userId?._id}</span></div>
               )}
+              {ticketDetail.requesterEmail && (
+                <div className="detail-row"><strong>Requester email:</strong> <span>{ticketDetail.requesterEmail}</span></div>
+              )}
             </div>
 
             <div className="detail-card">

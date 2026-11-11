@@ -11,6 +11,8 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.example.yugm.core.api.VibeApi
+import com.example.yugm.core.model.CoinPack
+import com.example.yugm.core.model.RazorpayCheckoutData
 import com.example.yugm.core.navigation.Screen
 import com.example.yugm.feature.auth.navigation.authNavGraph
 import com.example.yugm.feature.chat.navigation.chatNavGraph
@@ -35,6 +37,8 @@ fun NavGraph(
     navController: NavHostController,
     mainViewModel: MainViewModel,
     onGoogleSignIn: () -> Unit,
+    onRechargeOrderReady: (RazorpayCheckoutData) -> Unit,
+    onStartGooglePlayPurchase: (CoinPack) -> Unit,
 ) {
     val authViewModel: AuthViewModel = hiltViewModel()
     val authSuccess by authViewModel.authSuccess.collectAsState(initial = null)
@@ -48,7 +52,7 @@ fun NavGraph(
                 username = session.user.username,
                 balance = session.user.walletBalance,
             )
-            val destination = if ((session.user.name == "Yugm User") || session.user.name.isBlank()) {
+            val destination = if (!session.user.profileCompleted) {
                 Screen.ProfileSetup.route
             } else {
                 Screen.Discover.route
@@ -76,7 +80,7 @@ fun NavGraph(
             username = session.user.username,
             balance = session.user.walletBalance,
         )
-        val dest = if ((session.user.name == "Yugm User") || session.user.name.isBlank()) {
+        val dest = if (!session.user.profileCompleted) {
             Screen.ProfileSetup.route
         } else {
             Screen.Discover.route
@@ -124,7 +128,9 @@ fun NavGraph(
             navController = navController,
             authToken = mainViewModel.authToken,
             balance = mainViewModel.balance,
-            currentUserId = mainViewModel.currentUserId
+            currentUserId = mainViewModel.currentUserId,
+            onRechargeOrderReady = onRechargeOrderReady,
+            onStartGooglePlayPurchase = onStartGooglePlayPurchase
         )
         settingsNavGraph(
             navController = navController,

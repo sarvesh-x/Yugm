@@ -250,7 +250,7 @@ interface IYugmApi {
     suspend fun sendGameChallenge(token: String, gameId: String, score: Int, scoreId: String, targetUserId: String? = null, clanId: String? = null, message: String? = null): MiniGameChallenge
     suspend fun shareGameScore(token: String, scoreId: String, targetUserId: String)
 
-    suspend fun updateProfile(token: String, name: String, username: String, bio: String? = null, city: String? = null, interests: List<String>? = null, languages: List<String>? = null, gender: String? = null, age: Int? = null, lookingFor: String? = null, avatar: String? = null): YugmUser
+    suspend fun updateProfile(token: String, name: String, username: String, bio: String? = null, city: String? = null, interests: List<String>? = null, languages: List<String>? = null, gender: String? = null, age: Int? = null, lookingFor: String? = null, avatar: String? = null, acceptTerms: Boolean = false): YugmUser
     suspend fun searchUsers(query: String, token: String? = null): List<Host>
     suspend fun getUser(userId: String, token: String? = null): Host
     suspend fun getUserRooms(userId: String, token: String? = null): List<Room>

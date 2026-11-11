@@ -407,6 +407,7 @@ export const profileSchema = z.object({
   username: z.string().min(3).max(24).regex(/^[a-z0-9_.]+$/i),
   gender: z.string().max(32).optional(),
   age: z.number().int().min(18).max(80).optional(),
+  acceptTerms: z.literal(true).optional(),
   city: z.string().max(60).optional(),
   state: z.string().max(60).optional(),
   bio: z.string().max(180).optional(),

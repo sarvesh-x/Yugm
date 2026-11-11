@@ -44,6 +44,7 @@ import { vibeRouter } from "./routes/vibe.js";
 import { discoverRouter } from "./routes/discover.js";
 import { uploadRouter } from "./routes/upload.js";
 import { usersRouter } from "./routes/users.js";
+import { legalRouter } from "./routes/legal.js";
 import { walletRouter } from "./routes/wallet.js";
 import { giftLeaderboardRouter } from "./routes/giftLeaderboard.js";
 import { giftsRouter } from "./routes/gifts.js";
@@ -148,6 +149,7 @@ export function createApp() {
   });
 
   app.get("/", (_req, res) => res.json({ ok: true, service: "yugm-api", version: "0.1.0", health: "/health", api: "/api" }));
+  app.use("/legal", legalRouter);
   // API root — declared before routers so unauthenticated discovery requests don't 401
   app.get("/api", (_req, res) => res.json({
     ok: true,

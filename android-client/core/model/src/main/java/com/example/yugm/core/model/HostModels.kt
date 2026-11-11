@@ -58,6 +58,7 @@ data class YugmUser(
     val id: String = "",
     val name: String = "",
     val username: String = "",
+    val profileCompleted: Boolean = false,
     val walletBalance: Int = 0,
     val isVip: Boolean = false,
     val vipTier: String = "",

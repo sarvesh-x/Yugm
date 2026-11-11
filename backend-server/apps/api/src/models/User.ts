@@ -92,6 +92,7 @@ export interface IUser extends mongoose.Document {
   referralCode: string;
   referredBy?: mongoose.Types.ObjectId;
   referralRewardsClaimed: number;
+  termsAcceptedAt?: Date;
 }
 
 const userSchema = new Schema<IUser>(
@@ -131,6 +132,7 @@ const userSchema = new Schema<IUser>(
     lastDailyCheckInAt: Date,
     streakCount: { type: Number, default: 0 },
     profileCompletedAt: Date,
+    termsAcceptedAt: Date,
     ownedCosmeticIds: [{ type: String }],
     claimedAchievementIds: [{ type: String }],
     claimedAchievementTiers: [{

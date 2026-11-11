@@ -8,6 +8,8 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import com.example.yugm.core.navigation.Screen
+import com.example.yugm.core.model.CoinPack
+import com.example.yugm.core.model.RazorpayCheckoutData
 import com.example.yugm.feature.wallet.screens.*
 import kotlinx.coroutines.launch
 
@@ -16,6 +18,8 @@ fun NavGraphBuilder.walletNavGraph(
     authToken: String,
     balance: Int,
     currentUserId: String,
+    onRechargeOrderReady: (RazorpayCheckoutData) -> Unit,
+    onStartGooglePlayPurchase: (CoinPack) -> Unit,
 ) {
     composable(Screen.Wallet.route) {
         WalletScreen(
@@ -24,8 +28,8 @@ fun NavGraphBuilder.walletNavGraph(
             onBack = { navController.popBackStack() },
             onOpenEarnings = { navController.navigate(Screen.Growth.route) },
             onBalanceChanged = { },
-            onRechargeOrderReady = { },
-            onStartGooglePlayPurchase = { },
+            onRechargeOrderReady = onRechargeOrderReady,
+            onStartGooglePlayPurchase = onStartGooglePlayPurchase,
         )
     }
 

@@ -26,7 +26,8 @@ object UserApi {
         gender: String? = null,
         age: Int? = null,
         lookingFor: String? = null,
-        avatar: String? = null
+        avatar: String? = null,
+        acceptTerms: Boolean = false
     ): YugmUser {
         val body = JSONObject()
             .put("name", name)
@@ -39,6 +40,7 @@ object UserApi {
         if (age != null) body.put("age", age)
         if (lookingFor != null) body.put("lookingFor", lookingFor)
         if (avatar != null) body.put("avatar", avatar)
+        if (acceptTerms) body.put("acceptTerms", true)
         return YugmHttpClient.patch("/users/me", token, body).getJSONObject("data").getJSONObject("user").toUser()
     }
 

@@ -9,7 +9,8 @@ export interface ISupportMessage {
 
 const supportTicketSchema = new Schema(
   {
-    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    userId: { type: Schema.Types.ObjectId, ref: "User", index: true },
+    requesterEmail: { type: String, trim: true, lowercase: true, maxlength: 254 },
     assignedTo: { type: Schema.Types.ObjectId, ref: "AdminUser" },
     category: { type: String, enum: ["General", "Account", "Payment", "Technical", "Report", "Content", "Other"], default: "General" },
     subject: { type: String, required: true, maxlength: 200 },

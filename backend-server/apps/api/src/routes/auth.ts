@@ -22,6 +22,68 @@ async function generateUniqueUsername(): Promise<string> {
   return `vibe_${Date.now()}`;
 }
 
+async function findOrCreateFirebaseUser(input: {
+  firebaseUid: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  avatar?: string;
+}) {
+  const normalizedEmail = input.email?.trim().toLowerCase();
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const byUid = await User.findOne({ firebaseUid: input.firebaseUid }).select("-__v");
+    if (byUid) return byUid;
+
+    // Older accounts may have been created through the OTP flow before Firebase
+    // became the identity provider. Attach the authenticated Firebase identity to
+    // that existing record instead of violating the unique email index.
+    const byEmail = normalizedEmail
+      ? await User.findOne({ email: normalizedEmail }).select("-__v")
+      : null;
+    if (byEmail) {
+      if (byEmail.firebaseUid && byEmail.firebaseUid !== input.firebaseUid) {
+        throw new HttpError(409, "This email is already linked to another sign-in. Contact support to recover the account.", ErrorCode.CONFLICT);
+      }
+      byEmail.firebaseUid = input.firebaseUid;
+      if (!byEmail.email && normalizedEmail) byEmail.email = normalizedEmail;
+      if (!byEmail.name && input.name) byEmail.name = input.name;
+      if (!byEmail.avatar && input.avatar) byEmail.avatar = input.avatar;
+      try {
+        return await byEmail.save();
+      } catch (error: any) {
+        // Concurrent sign-in may have linked the same Firebase user already.
+        if (error?.code === 11000) continue;
+        throw error;
+      }
+    }
+
+    try {
+      return await User.create({
+        name: input.name || "Yugm User",
+        username: await generateUniqueUsername(),
+        email: normalizedEmail || undefined,
+        phone: input.phone || undefined,
+        firebaseUid: input.firebaseUid,
+        avatar: input.avatar || undefined,
+        interests: ["Music", "Chill"],
+        languages: ["Hindi", "English"],
+        walletBalance: 250,
+        isVerified: false
+      });
+    } catch (error: any) {
+      // The client retries auth after transient timeouts. If the original
+      // request completed concurrently, return its user instead of a 500.
+      if (error?.code === 11000) continue;
+      throw error;
+    }
+  }
+
+  const existing = await User.findOne({ firebaseUid: input.firebaseUid }).select("-__v");
+  if (existing) return existing;
+  throw new HttpError(409, "Could not finish creating your account. Please retry.", ErrorCode.CONFLICT);
+}
+
 function publicUser(user: any) {
   const levelStatus = getLevelStatus(user);
   return {
@@ -44,6 +106,7 @@ function publicUser(user: any) {
     languages: user.languages,
     city: user.city,
     bio: user.bio,
+    profileCompleted: Boolean(user.profileCompletedAt || (user.bio && user.city && user.interests?.length)),
     followersCount: user.followersCount,
     followingCount: user.followingCount
   };
@@ -104,21 +167,8 @@ authRouter.post("/google", authLimiter, asyncHandler(async (req, res) => {
 
   const payload = await verifyIdToken(idToken);
   const { sub: firebaseUid, name, email, picture } = payload;
-
-  let user = await User.findOne({ firebaseUid }).select("-__v");
-  if (!user) {
-    user = await User.create({
-      name: name ?? "Yugm User",
-      username: await generateUniqueUsername(),
-      email: email || undefined,
-      firebaseUid,
-      avatar: picture || undefined,
-      interests: ["Music", "Chill"],
-      languages: ["Hindi", "English"],
-      walletBalance: 250,
-      isVerified: false
-    });
-  }
+  if (!firebaseUid) throw new HttpError(401, "Invalid Firebase identity token", ErrorCode.UNAUTHORIZED);
+  const user = await findOrCreateFirebaseUser({ firebaseUid, name, email, avatar: picture });
 
   sendOk(res, { token: signToken(user), user: publicUser(user) });
 }));
@@ -129,20 +179,8 @@ authRouter.post("/phone", authLimiter, asyncHandler(async (req, res) => {
 
   const payload = await verifyIdToken(idToken);
   const { sub: firebaseUid, phone_number } = payload;
-
-  let user = await User.findOne({ firebaseUid }).select("-__v");
-  if (!user) {
-    user = await User.create({
-      name: "Yugm User",
-      username: await generateUniqueUsername(),
-      phone: phone_number || undefined,
-      firebaseUid,
-      interests: ["Music", "Chill"],
-      languages: ["Hindi", "English"],
-      walletBalance: 250,
-      isVerified: false
-    });
-  }
+  if (!firebaseUid) throw new HttpError(401, "Invalid Firebase identity token", ErrorCode.UNAUTHORIZED);
+  const user = await findOrCreateFirebaseUser({ firebaseUid, phone: phone_number });
 
   sendOk(res, { token: signToken(user), user: publicUser(user) });
 }));
