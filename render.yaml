@@ -3,7 +3,7 @@ services:
     name: yugm-api
     runtime: node
     rootDir: backend-server
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: npm ci --include=dev && npm --workspace apps/api run build
     startCommand: npm start
     healthCheckPath: /health
     autoDeployTrigger: commit
