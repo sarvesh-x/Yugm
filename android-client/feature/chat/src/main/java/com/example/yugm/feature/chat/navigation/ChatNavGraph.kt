@@ -6,6 +6,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.example.yugm.core.navigation.Screen
+import com.example.yugm.core.navigation.navigateTopLevel
 import com.example.yugm.feature.chat.screens.ChatListScreen
 import com.example.yugm.feature.chat.screens.ChatScreen
 
@@ -21,10 +22,11 @@ fun NavGraphBuilder.chatNavGraph(
             onOpenChat = { partnerId ->
                 navController.navigate(Screen.Chat.createRoute(partnerId))
             },
-            onDiscover = { navController.navigate(Screen.Discover.route) },
-            onDating = { navController.navigate(Screen.DatingDiscovery.route) },
+            onDiscover = { navController.navigateTopLevel(Screen.Discover.route) },
+            onDating = { navController.navigateTopLevel(Screen.DatingDiscovery.route) },
             onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
-            onWallet = { navController.navigate(Screen.Wallet.route) },
+            onLive = { navController.navigateTopLevel(Screen.Discover.route) },
+            onWallet = { navController.navigateTopLevel(Screen.Wallet.route) },
             onProfile = {
                 if (currentUserId.isNotBlank()) {
                     navController.navigate(Screen.ProfileDetail.createRoute(currentUserId))

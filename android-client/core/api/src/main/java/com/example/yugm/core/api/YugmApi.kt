@@ -139,7 +139,7 @@ object YugmApi : IYugmApi {
         get() = YugmHttpClient.isOnline
         set(value) { YugmHttpClient.isOnline = value }
 
-    var onUnauthorized: (() -> Unit)?
+    var onUnauthorized: ((rejectedToken: String) -> Unit)?
         get() = YugmHttpClient.onUnauthorized
         set(value) { YugmHttpClient.onUnauthorized = value }
 

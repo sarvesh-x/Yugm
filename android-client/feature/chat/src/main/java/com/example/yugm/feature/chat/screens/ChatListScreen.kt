@@ -66,6 +66,7 @@ fun ChatListScreen(
     onDiscover: () -> Unit = {},
     onDating: () -> Unit = {},
     onCreateRoom: () -> Unit = {},
+    onLive: () -> Unit = {},
     onWallet: () -> Unit = {},
     onProfile: () -> Unit = {}
 ) {
@@ -99,7 +100,7 @@ fun ChatListScreen(
 
     YugmAmbientBackground {
         Box(Modifier.fillMaxSize()) {
-            if (viewModel.isLoading) {
+            if (viewModel.isLoading && viewModel.recentMessages.isEmpty() && viewModel.matches.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingState("Retrieving conversations…") }
             } else {
                 LazyColumn(
@@ -111,15 +112,29 @@ fun ChatListScreen(
                         Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                             BrandHeader(compact = true)
                             Spacer(Modifier.weight(1f))
-                            RoundAction("♢", onClick = {})
-                            Spacer(Modifier.width(10.dp))
                             RoundAction("♙", onClick = onProfile)
                         }
                     }
                     item {
                         Column(Modifier.padding(horizontal = 20.dp)) {
-                            Text("Matches & Messages ✨", color = TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.Black)
-                            Text("Where connections turn into conversations", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 3.dp))
+                            Text("YOUR CONNECTIONS", color = Pink, fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 1.4.sp)
+                            Text("Messages", color = TextPrimary, fontSize = 30.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(top = 3.dp))
+                            Text("Pick up where your conversations left off.", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 3.dp))
+                        }
+                    }
+                    if (viewModel.error != null) {
+                        item {
+                            Row(
+                                Modifier.padding(horizontal = 20.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                                    .background(SurfaceElevated).border(1.dp, BorderColor, RoundedCornerShape(16.dp)).padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text("Couldn't refresh messages", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text(viewModel.error.orEmpty(), color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 3.dp))
+                                }
+                                Text("Retry", color = Pink, fontWeight = FontWeight.Black, modifier = Modifier.clickable { viewModel.load(token) }.padding(8.dp))
+                            }
                         }
                     }
                     item {
@@ -141,7 +156,7 @@ fun ChatListScreen(
                     }
                     item {
                         SegmentedTabs(
-                            items = listOf("" to "All", "" to "Matches", "" to "Unread"),
+                            items = listOf("✦" to "All", "♡" to "Matches", "●" to "Unread"),
                             selectedIndex = selectedTab,
                             onSelected = { selectedTab = it },
                             modifier = Modifier.padding(horizontal = 20.dp)
@@ -160,14 +175,22 @@ fun ChatListScreen(
                     if (selectedTab != 1) {
                         item {
                             Box(Modifier.padding(horizontal = 20.dp)) {
-                                ReferenceSectionHeader("Messages", if (unreadCount > 0) "Mark all as read" else "") {
-                                    viewModel.markAllRead(token)
+                                ReferenceSectionHeader("Recent chats", if (unreadCount > 0) "Mark all read" else "") {
+                                    if (unreadCount > 0) viewModel.markAllRead(token)
                                 }
                             }
                         }
                         if (visibleConversations.isEmpty()) {
                             item {
-                                Text("No conversations yet. Match with someone and say hello.", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 30.dp))
+                                Column(
+                                    Modifier.padding(horizontal = 20.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp))
+                                        .background(SurfaceElevated).border(1.dp, BorderColor, RoundedCornerShape(22.dp))
+                                        .padding(horizontal = 20.dp, vertical = 26.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(if (selectedTab == 2) "All caught up ✨" else "Your inbox is quiet", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Black)
+                                    Text(if (selectedTab == 2) "New unread messages will show up here." else "Match with someone and start a conversation.", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
+                                }
                             }
                         } else {
                             item {
@@ -187,7 +210,7 @@ fun ChatListScreen(
                 onDiscover = onDiscover,
                 onMatch = onDating,
                 onCreate = onCreateRoom,
-                onLive = {},
+                onLive = onLive,
                 onChat = {},
                 onWallet = onWallet,
                 onProfile = onProfile,
@@ -222,12 +245,19 @@ fun ChatThreadRow(item: ConversationItem, unread: Boolean = false, onClick: () -
         }
         Column(Modifier.weight(1f).padding(start = 10.dp)) {
             Text(item.partner.name, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Black)
-            Text(item.lastMessage.message, color = TextMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp))
+            Text(
+                item.lastMessage.message,
+                color = if (unread) TextPrimary else TextMuted,
+                fontSize = 12.sp,
+                fontWeight = if (unread) FontWeight.Bold else FontWeight.Normal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 3.dp)
+            )
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(formatMessageTime(item.lastMessage.createdAt), color = TextMuted, fontSize = 10.sp)
-            if (unread) Box(Modifier.padding(top = 6.dp).size(22.dp).clip(CircleShape).background(Pink), contentAlignment = Alignment.Center) {
-                Text("1", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Black)
+            if (unread) Box(Modifier.padding(top = 6.dp).size(9.dp).clip(CircleShape).background(Pink)) {
             }
         }
     }

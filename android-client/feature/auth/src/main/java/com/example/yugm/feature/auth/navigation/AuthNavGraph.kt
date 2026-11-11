@@ -19,9 +19,10 @@ import kotlinx.coroutines.launch
 fun NavGraphBuilder.authNavGraph(
     navController: NavHostController,
     isLoggedIn: Boolean,
-    authToken: String,
+    authTokenProvider: () -> String,
     onGoogleSignIn: () -> Unit,
     navigateAfterLogin: (Session) -> Unit,
+    onProfileComplete: (Session) -> Unit,
 ) {
     composable(Screen.Splash.route) {
         SplashScreen {
@@ -107,9 +108,14 @@ fun NavGraphBuilder.authNavGraph(
             initialUsername = "",
             onDone = { name, handle, bio, city, interests, languages, gender, age, lookingFor, avatar ->
                 scope.launch {
+                    var sessionToken = ""
                     runCatching {
+                        // Read the token when the user submits the form. The navigation graph
+                        // can outlive the login composition that originally registered it.
+                        sessionToken = authTokenProvider().takeIf(String::isNotBlank)
+                            ?: throw IllegalStateException("Your sign-in session expired. Please sign in again.")
                         com.example.yugm.core.api.YugmApi.updateProfile(
-                            token = authToken,
+                            token = sessionToken,
                             name = name,
                             username = handle,
                             bio = bio,
@@ -123,10 +129,7 @@ fun NavGraphBuilder.authNavGraph(
                             acceptTerms = true
                         )
                     }.onSuccess { user ->
-                        navigateAfterLogin(Session(token = authToken, user = user))
-                        navController.navigate(Screen.Discover.route) {
-                            popUpTo(Screen.ProfileSetup.route) { inclusive = true }
-                        }
+                        onProfileComplete(Session(token = sessionToken, user = user))
                     }.onFailure {
                         android.widget.Toast.makeText(context, it.message ?: "Profile creation failed", android.widget.Toast.LENGTH_SHORT).show()
                     }

@@ -21,7 +21,9 @@ internal fun isSafeRetryMethod(method: String): Boolean = method.equals("GET", i
 
 object YugmHttpClient {
     var isOnline = true
-    var onUnauthorized: (() -> Unit)? = null
+    var onUnauthorized: ((rejectedToken: String) -> Unit)? = null
+    /** Supplies the persisted session token when a navigation callback captured an empty token. */
+    var authTokenProvider: (() -> String)? = null
     private const val TAG = "YugmHttp"
     private val json = "application/json; charset=utf-8".toMediaType()
     private val client = OkHttpClient.Builder()
@@ -91,10 +93,21 @@ object YugmHttpClient {
         }
         for ((attempt, base) in attempts.withIndex()) {
             currentCoroutineContext().ensureActive()
+            var requestAuth: String? = null
             try {
                 if (attempt > 0) kotlinx.coroutines.delay(if (canRetryAuth) 1500L else 1000L * attempt)
                 val builder = Request.Builder().url("$base$path")
-                if (auth != null) builder.header("Authorization", "Bearer $auth")
+                // The session manager is the source of truth. Navigation destinations
+                // can retain an older token snapshot, and a few public API wrappers pass
+                // null even when the server endpoint requires an authenticated user.
+                // Attach the current session to every non-auth API call when available.
+                requestAuth = if (path.startsWith("/auth/")) {
+                    auth?.takeIf(String::isNotBlank)
+                } else {
+                    authTokenProvider?.invoke()?.takeIf(String::isNotBlank)
+                        ?: auth?.takeIf(String::isNotBlank)
+                }
+                if (requestAuth != null) builder.header("Authorization", "Bearer $requestAuth")
                 val requestBody = body?.toString()?.toRequestBody(json)
                 when (method) {
                     "POST" -> builder.post(requestBody ?: "{}".toRequestBody(json))
@@ -132,9 +145,9 @@ object YugmHttpClient {
                     return@withContext payload
                 }
             } catch (error: ApiHttpException) {
-                if (error.statusCode == 401) {
+                if (error.statusCode == 401 && requestAuth != null) {
                     onUnauthorized?.let { callback ->
-                        withContext(Dispatchers.Main) { callback() }
+                        withContext(Dispatchers.Main) { callback(requestAuth) }
                     }
                 }
                 throw error

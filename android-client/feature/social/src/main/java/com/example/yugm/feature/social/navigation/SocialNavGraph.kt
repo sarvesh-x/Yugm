@@ -10,6 +10,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.example.yugm.core.navigation.Screen
+import com.example.yugm.core.navigation.navigateTopLevel
 import com.example.yugm.feature.social.screens.*
 import kotlinx.coroutines.launch
 
@@ -27,10 +28,10 @@ fun NavGraphBuilder.socialNavGraph(
             onNavigateToProfile = { userId ->
                 navController.navigate(Screen.ProfileDetail.createRoute(userId))
             },
-            onMatches = { navController.navigate(Screen.ChatList.route) },
-            onDiscover = { navController.navigate(Screen.Discover.route) },
+            onMatches = { navController.navigateTopLevel(Screen.ChatList.route) },
+            onDiscover = { navController.navigateTopLevel(Screen.Discover.route) },
             onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
-            onLive = { navController.navigate(Screen.VoiceRooms.route) },
+            onLive = { navController.navigateTopLevel(Screen.Discover.route) },
             onWallet = { navController.navigate(Screen.Wallet.route) },
             onSelfProfile = {
                 if (currentUserId.isNotBlank()) navController.navigate(Screen.ProfileDetail.createRoute(currentUserId))
@@ -297,10 +298,11 @@ fun NavGraphBuilder.socialNavGraph(
             token = authToken,
             onBack = { navController.popBackStack() },
             onOpenChat = { partnerId -> navController.navigate(Screen.Chat.createRoute(partnerId)) },
-            onDiscover = { navController.navigate(Screen.Discover.route) },
-            onDating = { navController.navigate(Screen.DatingDiscovery.route) },
+            onDiscover = { navController.navigateTopLevel(Screen.Discover.route) },
+            onDating = { navController.navigateTopLevel(Screen.DatingDiscovery.route) },
             onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
-            onWallet = { navController.navigate(Screen.Wallet.route) },
+            onWallet = { navController.navigateTopLevel(Screen.Wallet.route) },
+            onLive = { navController.navigateTopLevel(Screen.Discover.route) },
             onProfile = {
                 if (currentUserId.isNotBlank()) navController.navigate(Screen.ProfileDetail.createRoute(currentUserId))
                 else navController.navigate(Screen.ProfileSetup.route)
@@ -309,7 +311,14 @@ fun NavGraphBuilder.socialNavGraph(
     }
 
     composable(Screen.VoiceRooms.route) {
-        navController.navigate(Screen.Discover.route)
+        LaunchedEffect(Unit) {
+            val returnedToDiscover = navController.popBackStack(Screen.Discover.route, inclusive = false)
+            if (!returnedToDiscover) {
+                navController.navigate(Screen.Discover.route) {
+                    launchSingleTop = true
+                }
+            }
+        }
     }
 
     composable(Screen.Feed.route) {

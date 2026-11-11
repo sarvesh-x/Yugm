@@ -57,6 +57,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
         super.onCreate(savedInstanceState)
         pendingPushRoute.value = routeFromPushIntent(intent)
         FirebaseApp.initializeApp(this)
+        YugmHttpClient.authTokenProvider = { sessionManager.authToken }
         enableEdgeToEdge()
 
         setContent {
@@ -75,10 +76,19 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                 }
 
                 LaunchedEffect(Unit) {
-                    YugmHttpClient.onUnauthorized = {
-                        mainViewModel.logout()
-                        navController.navigate(Screen.Login.route) {
-                            popUpTo(0) { inclusive = true }
+                    YugmHttpClient.onUnauthorized = { rejectedToken ->
+                        // Several requests may fail together. Only clear the session if
+                        // the rejected token is still the current one, and navigate once.
+                        if (rejectedToken == sessionManager.authToken &&
+                            rejectedToken == mainViewModel.authToken
+                        ) {
+                            mainViewModel.logout()
+                            if (navController.currentDestination?.route != Screen.Login.route) {
+                                navController.navigate(Screen.Login.route) {
+                                    popUpTo(0) { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            }
                         }
                     }
                 }

@@ -123,7 +123,20 @@ fun DiscoverScreen(
     val allRooms = remember(viewModel.recommendedRooms, viewModel.rooms) {
         (viewModel.recommendedRooms + viewModel.rooms).distinctBy { it.id }
     }
-    val featuredRoom = allRooms.firstOrNull()
+    val filteredRooms = remember(allRooms, selectedFilter) {
+        when (selectedFilter) {
+            "Voice" -> allRooms.filter { it.type == RoomType.Voice }
+            "Video" -> allRooms.filter { it.type == RoomType.Video }
+            "Trending" -> allRooms
+            else -> allRooms.filter { room ->
+                sequenceOf(room.category, room.title, room.description, room.theme, room.mode)
+                    .filterNotNull()
+                    .plus(room.tags.asSequence())
+                    .any { value -> value.contains(selectedFilter, ignoreCase = true) }
+            }
+        }
+    }
+    val featuredRoom = filteredRooms.firstOrNull()
 
     Box(Modifier.fillMaxSize()) {
         AuroraBackground(speed = 0.8f)
@@ -167,12 +180,6 @@ fun DiscoverScreen(
                                 selected = selectedFilter,
                                 onSelected = { filter ->
                                     selectedFilter = filter
-                                    when (filter) {
-                                        "Voice" -> onVoiceRooms()
-                                        "Video" -> viewModel.refreshRooms(RoomType.Video)
-                                        "Gaming" -> onGames()
-                                        "Events" -> onEvents()
-                                    }
                                 }
                             )
                         }
@@ -212,23 +219,25 @@ fun DiscoverScreen(
                             LoadingState("Finding tonight's best rooms…")
                         }
                     }
-                } else if (allRooms.isEmpty()) {
+                } else if (filteredRooms.isEmpty()) {
                     item {
                         GlassCard(Modifier.padding(horizontal = 20.dp).fillMaxWidth()) {
-                            Text("The rooms are quiet for a moment.", color = TextPrimary, fontWeight = FontWeight.Bold)
+                            Text(if (allRooms.isEmpty()) "The rooms are quiet for a moment." else "No ${selectedFilter.lowercase()} rooms right now.", color = TextPrimary, fontWeight = FontWeight.Bold)
                             Text(
-                                viewModel.error ?: "Start a room and set tonight's vibe.",
+                                viewModel.error ?: if (allRooms.isEmpty()) "Start a room and set tonight's vibe." else "Try another filter or check back soon.",
                                 color = TextMuted,
                                 fontSize = 12.sp,
                                 modifier = Modifier.padding(top = 4.dp)
                             )
-                            Text(
-                                "Create a room  ›",
-                                color = Pink,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Black,
-                                modifier = Modifier.padding(top = 12.dp).clickable(onClick = onCreateRoom)
-                            )
+                            if (allRooms.isEmpty()) {
+                                Text(
+                                    "Create a room  ›",
+                                    color = Pink,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Black,
+                                    modifier = Modifier.padding(top = 12.dp).clickable(onClick = onCreateRoom)
+                                )
+                            }
                         }
                     }
                 } else if (featuredRoom != null) {
@@ -272,14 +281,14 @@ fun DiscoverScreen(
                     }
                 }
 
-                if (allRooms.isNotEmpty()) {
+                if (filteredRooms.isNotEmpty()) {
                     item {
-                        DiscoverySectionHeader("Live now", "Real rooms, right now", onSearch)
+                        DiscoverySectionHeader(if (selectedFilter == "Trending") "Live now" else "$selectedFilter rooms", "Real rooms, right now", onSearch)
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 20.dp),
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            items(allRooms.drop(1).ifEmpty { allRooms }.take(8), key = { "live-${it.id}" }) { room ->
+                            items(filteredRooms.drop(1).ifEmpty { filteredRooms }.take(8), key = { "live-${it.id}" }) { room ->
                                 RoomCard(room = room, wide = false, onClick = { onOpenRoom(room) })
                             }
                         }

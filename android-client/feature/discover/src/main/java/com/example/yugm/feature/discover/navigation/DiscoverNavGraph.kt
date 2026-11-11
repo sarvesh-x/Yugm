@@ -4,6 +4,7 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import com.example.yugm.core.navigation.Screen
+import com.example.yugm.core.navigation.navigateTopLevel
 import com.example.yugm.feature.discover.screens.DiscoverScreen
 import com.example.yugm.feature.discover.screens.SearchScreen
 
@@ -40,13 +41,13 @@ fun NavGraphBuilder.discoverNavGraph(
                 navController.navigate(Screen.Events.route)
             },
             onDating = {
-                navController.navigate(Screen.DatingDiscovery.route)
+                navController.navigateTopLevel(Screen.DatingDiscovery.route)
             },
             onChat = {
-                navController.navigate(Screen.ChatList.route)
+                navController.navigateTopLevel(Screen.ChatList.route)
             },
             onWallet = {
-                navController.navigate(Screen.Wallet.route)
+                navController.navigateTopLevel(Screen.Wallet.route)
             },
             onSelfProfile = {
                 if (currentUserId.isNotBlank()) {
@@ -56,7 +57,7 @@ fun NavGraphBuilder.discoverNavGraph(
                 }
             },
             onVoiceRooms = {
-                navController.navigate(Screen.VoiceRooms.route)
+                navController.navigateTopLevel(Screen.Discover.route)
             },
             onVibeGraph = {
                 navController.navigate(Screen.VibeGraph.route)

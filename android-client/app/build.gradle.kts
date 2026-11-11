@@ -4,7 +4,14 @@ import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.util.Collections
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
+val localProperties = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }
+        ?.inputStream()?.use { load(it) }
+}
+val fpnvTestToken = System.getenv("FPNV_TEST_TOKEN")?.takeIf { it.isNotEmpty() }
+    ?: localProperties.getProperty("fpnv.testToken", "")
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -134,12 +141,14 @@ android {
             buildConfigField("String", "API_BASE_URL", quoted(yugmApiBaseUrl))
             buildConfigField("String", "SOCKET_BASE_URL", quoted(yugmSocketBaseUrl))
             buildConfigField("String", "LAN_API_BASE_URL", quoted(localLanHost?.let { "http://$it:4000/api" }.orEmpty()))
+            buildConfigField("String", "FPNV_TEST_TOKEN", "\"$fpnvTestToken\"")
             buildConfigField("String", "LAN_SOCKET_BASE_URL", quoted(localLanHost?.let { "http://$it:4000" }.orEmpty()))
         }
 
         release {
             signingConfig = signingConfigs.getByName("playUpload")
             isMinifyEnabled = true
+            buildConfigField("String", "FPNV_TEST_TOKEN", "\"\"")
             isShrinkResources = true
             buildConfigField("String", "API_BASE_URL", quoted(yugmApiBaseUrl))
             buildConfigField("String", "SOCKET_BASE_URL", quoted(yugmSocketBaseUrl))
@@ -192,6 +201,7 @@ dependencies {
     implementation(libs.livekit.android)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.hilt.android)
+
     kapt(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
 

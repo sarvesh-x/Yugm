@@ -97,9 +97,22 @@ fun NavGraph(
         authNavGraph(
             navController = navController,
             isLoggedIn = mainViewModel.authToken.isNotBlank(),
-            authToken = mainViewModel.authToken,
+            authTokenProvider = { mainViewModel.authToken },
             onGoogleSignIn = onGoogleSignIn,
-            navigateAfterLogin = ::navigateAfterLogin
+            navigateAfterLogin = ::navigateAfterLogin,
+            onProfileComplete = { session ->
+                mainViewModel.updateSession(
+                    token = session.token,
+                    userId = session.user.id,
+                    name = session.user.name,
+                    username = session.user.username,
+                    balance = session.user.walletBalance,
+                )
+                navController.navigate(Screen.Discover.route) {
+                    popUpTo(Screen.ProfileSetup.route) { inclusive = true }
+                    launchSingleTop = true
+                }
+            }
         )
         discoverNavGraph(
             navController = navController,
