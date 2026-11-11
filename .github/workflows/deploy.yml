@@ -23,8 +23,8 @@ jobs:
         shell: bash
         run: |
           if [[ -z "$RENDER_DEPLOY_HOOK_URL" ]]; then
-            echo "::error title=Missing Render deploy hook::Add the repository Actions secret RENDER_DEPLOY_HOOK_URL using the Deploy Hook URL from the Render service settings."
-            exit 1
+            echo "::notice title=Using Render auto-deploy::RENDER_DEPLOY_HOOK_URL is not configured; Render's Git integration will deploy this master push."
+            exit 0
           fi
 
           curl --fail-with-body --silent --show-error \
