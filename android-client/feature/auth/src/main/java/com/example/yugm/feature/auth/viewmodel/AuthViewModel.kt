@@ -1,5 +1,6 @@
 package com.example.yugm.feature.auth.viewmodel
 
+import android.util.Patterns
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -14,6 +15,7 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import com.google.firebase.auth.FirebaseAuth
 import com.google.android.gms.tasks.Tasks
+import java.util.Locale
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
@@ -34,6 +36,11 @@ class AuthViewModel @Inject constructor(
     }
 
     fun emailAuth(email: String, password: String, createAccount: Boolean) {
+        val normalizedEmail = email.trim().lowercase(Locale.ROOT)
+        if (!Patterns.EMAIL_ADDRESS.matcher(normalizedEmail).matches()) {
+            error = "Enter a valid email address, for example name@example.com."
+            return
+        }
         viewModelScope.launch {
             isLoading = true
             error = null
@@ -45,12 +52,12 @@ class AuthViewModel @Inject constructor(
                     // that user on a signup retry instead of attempting to
                     // create the same Firebase account again.
                     val existingSignupUser = auth.currentUser?.takeIf {
-                        createAccount && it.email.equals(email, ignoreCase = true)
+                        createAccount && it.email.equals(normalizedEmail, ignoreCase = true)
                     }
                     val firebaseUser = existingSignupUser ?: if (createAccount) {
-                        Tasks.await(auth.createUserWithEmailAndPassword(email, password)).user
+                        Tasks.await(auth.createUserWithEmailAndPassword(normalizedEmail, password)).user
                     } else {
-                        Tasks.await(auth.signInWithEmailAndPassword(email, password)).user
+                        Tasks.await(auth.signInWithEmailAndPassword(normalizedEmail, password)).user
                     } ?: throw IllegalStateException("Firebase did not return a user")
                     val idToken = Tasks.await(
                         firebaseUser.getIdToken(true)

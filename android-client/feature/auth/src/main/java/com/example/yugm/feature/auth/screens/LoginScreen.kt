@@ -1,5 +1,6 @@
 package com.example.yugm.feature.auth.screens
 
+import android.util.Patterns
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
@@ -28,6 +29,7 @@ fun LoginScreen(
 ) {
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
+    val emailIsValid = Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()
 
     Box(modifier = Modifier.fillMaxSize()) {
         AuroraBackground()
@@ -85,6 +87,14 @@ fun LoginScreen(
                             keyboardType = KeyboardType.Email
                         )
                     )
+                    if (email.isNotBlank() && !emailIsValid) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            "Enter a valid email address, for example name@example.com.",
+                            color = Danger,
+                            fontSize = 12.sp
+                        )
+                    }
 
                     GlassTextField(
                         value = password,
@@ -112,7 +122,7 @@ fun LoginScreen(
                     GlassButton(
                         text = "Sign in with Email",
                         onClick = { onEmailAuth(email.trim(), password, false) },
-                        enabled = !loading && email.isNotBlank() && password.length >= 6,
+                        enabled = !loading && emailIsValid && password.length >= 6,
                         loading = loading,
                         gradient = Brush.horizontalGradient(auroraGradientPrimary)
                     )
@@ -125,7 +135,7 @@ fun LoginScreen(
                         modifier = Modifier.fillMaxWidth(),
                         height = 52.dp,
                         cornerRadius = 14.dp,
-                        enabled = !loading && email.isNotBlank() && password.length >= 6
+                        enabled = !loading && emailIsValid && password.length >= 6
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
