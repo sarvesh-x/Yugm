@@ -19,7 +19,6 @@ const keys: EnvKey[] = [
   { key: "SEED_SUPER_ADMIN_NAME", group: "admin", required: false, note: "used by npm run seed:admin" },
   { key: "SEED_SUPER_ADMIN_FIREBASE_UID", group: "admin", required: false, note: "Firebase admin login binding" },
   { key: "SEED_SUPER_ADMIN_PASSWORD", group: "admin", required: false, note: "local/backend admin password seed" },
-  { key: "DEV_BYPASS_OTP", group: "auth", required: false, note: "dev-only OTP bypass" },
   { key: "LIVEKIT_API_KEY", group: "livekit", required: false, note: "required for media tokens" },
   { key: "LIVEKIT_API_SECRET", group: "livekit", required: false, note: "required for media tokens" },
   { key: "LIVEKIT_URL", group: "livekit", required: false, note: "defaults to ws://localhost:7880" },
@@ -75,9 +74,6 @@ if (isProduction) {
   }
   if (!process.env.ADMIN_REFRESH_SECRET || process.env.ADMIN_REFRESH_SECRET.length < 24) {
     productionErrors.push("ADMIN_REFRESH_SECRET must be set to a strong value in production");
-  }
-  if (process.env.DEV_BYPASS_OTP) {
-    productionErrors.push("DEV_BYPASS_OTP must not be set in production");
   }
   if (!process.env.PAYOUT_KYC_ENCRYPTION_KEY || process.env.PAYOUT_KYC_ENCRYPTION_KEY.length < 24) {
     productionErrors.push("PAYOUT_KYC_ENCRYPTION_KEY must be set to a strong value in production");
