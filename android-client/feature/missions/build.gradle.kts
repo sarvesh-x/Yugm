@@ -7,8 +7,8 @@ plugins {
 }
 
 android {
-    namespace = "com.example.yugm.feature.missions"
-    compileSdk = 35
+    namespace = "com.yugm.app.feature.missions"
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 24

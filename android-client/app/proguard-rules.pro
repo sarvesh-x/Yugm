@@ -1,5 +1,5 @@
 # Keep data classes for JSON parsing
--keep class com.example.yugm.model.** { *; }
+-keep class com.yugm.app.core.model.** { *; }
 
 # Keep Kotlin coroutines
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}

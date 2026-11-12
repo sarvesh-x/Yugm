@@ -7,8 +7,8 @@ plugins {
 }
 
 android {
-    namespace = "com.example.yugm.feature.room"
-    compileSdk = 35
+    namespace = "com.yugm.app.feature.room"
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 24

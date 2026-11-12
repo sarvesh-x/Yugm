@@ -4,8 +4,8 @@ plugins {
 }
 
 android {
-    namespace = "com.example.yugm.core.api"
-    compileSdk = 35
+    namespace = "com.yugm.app.core.api"
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 24
@@ -36,4 +36,5 @@ dependencies {
     compileOnly(libs.hilt.android)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
     implementation(libs.livekit.android)
+    testImplementation(libs.junit)
 }

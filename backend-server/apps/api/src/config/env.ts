@@ -55,7 +55,7 @@ const envSchema = z.object({
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
   GOOGLE_PLAY_PACKAGE_NAME: z.preprocess(
     (v) => (typeof v === "string" && v.trim() ? v.trim() : undefined),
-    z.string().default("com.example.yugm")
+    z.string().default("com.yugm.app")
   ),
   GOOGLE_PLAY_CLIENT_EMAIL: z.string().optional(),
   GOOGLE_PLAY_PRIVATE_KEY: z.string().optional(),

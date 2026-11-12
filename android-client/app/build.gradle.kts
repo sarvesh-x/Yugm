@@ -108,11 +108,11 @@ if (isReleaseTaskRequested) {
 }
 
 android {
-    namespace = "com.example.yugm"
+    namespace = "com.yugm.app"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.example.yugm"
+        applicationId = "com.yugm.app"
         minSdk = 24
         targetSdk = 36
         versionCode = 1

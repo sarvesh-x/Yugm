@@ -16,6 +16,18 @@ const payoutReviewSchema = new Schema(
     fraudSafe: { type: Boolean, default: false },
     riskScore: Number,
     riskFlags: { type: Schema.Types.Mixed, default: [] },
+    payout: {
+      type: new Schema(
+        {
+          providerPayoutId: { type: String },
+          providerStatus: String,
+          processedAt: Date,
+          failureReason: String
+        },
+        { _id: false }
+      ),
+      default: undefined
+    },
     reviewedByAdminId: { type: Schema.Types.ObjectId, ref: "AdminUser" },
     adminNotes: String,
     rejectionReason: String,
@@ -25,5 +37,6 @@ const payoutReviewSchema = new Schema(
 );
 
 payoutReviewSchema.index({ status: 1, createdAt: -1 });
+payoutReviewSchema.index({ "payout.providerPayoutId": 1 });
 
 export const PayoutReview = mongoose.model("PayoutReview", payoutReviewSchema);

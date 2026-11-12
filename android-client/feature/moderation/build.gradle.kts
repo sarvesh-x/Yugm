@@ -7,8 +7,8 @@ plugins {
 }
 
 android {
-    namespace = "com.example.yugm.feature.moderation"
-    compileSdk = 35
+    namespace = "com.yugm.app.feature.moderation"
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 24

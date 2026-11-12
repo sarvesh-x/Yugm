@@ -7,8 +7,8 @@ plugins {
 }
 
 android {
-    namespace = "com.example.yugm.feature.discover"
-    compileSdk = 35
+    namespace = "com.yugm.app.feature.discover"
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 24

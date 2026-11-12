@@ -7,8 +7,8 @@ plugins {
 }
 
 android {
-    namespace = "com.example.yugm.feature.events"
-    compileSdk = 35
+    namespace = "com.yugm.app.feature.events"
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 24

@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { env } from "../config/env.js";
 import { HttpError, ErrorCode } from "../utils/http.js";
+import { verifyRazorpayPaymentSignature } from "./paymentSignatures.js";
 
 function requireRazorpay() {
   if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
@@ -37,12 +38,7 @@ export async function createRazorpayOrder(input: { amountInPaise: number; receip
 
 export function verifyRazorpaySignature(input: { orderId: string; paymentId: string; signature: string }) {
   const { keySecret } = requireRazorpay();
-  const expected = crypto
-    .createHmac("sha256", keySecret)
-    .update(`${input.orderId}|${input.paymentId}`)
-    .digest("hex");
-  if (expected.length !== input.signature.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(input.signature));
+  return verifyRazorpayPaymentSignature({ ...input, keySecret });
 }
 
 export async function fetchRazorpayPayment(paymentId: string) {

@@ -9,9 +9,9 @@ Yugm uses **Yugm Trust Verification** for user safety, fake-profile prevention, 
 ## Project Layout
 
 - `backend-server/`: Standalone Node.js server project with the API, admin app, shared TypeScript schemas/constants, npm workspace, and Docker Compose services.
-- `android-client/`: Standalone Android client project, including the native app and Expo React Native client.
+- `android-client/`: Standalone Android client project. The **native Kotlin/Compose app** is the canonical, shipping client (`com.yugm.app`). The `expo-mobile/` React Native client is **frozen/deprecated** and is not part of the Play Store release path.
 
-Each project has its own build configuration and dependency manifests. Open `android-client/` in Android Studio, or run npm commands from `backend-server/` or `android-client/expo-mobile/` as appropriate.
+Each project has its own build configuration and dependency manifests. Open `android-client/` in Android Studio, and run npm commands from `backend-server/`.
 
 ## Backend Setup
 
@@ -136,6 +136,8 @@ Replace `192.168.1.20` with your computer's current LAN IP. Keep the backend lis
 
 ## Expo Client Setup
 
+> **Deprecated:** the Expo React Native client is frozen and is not part of the Play Store release path. These instructions are kept only for reference.
+
 ```bash
 cd android-client/expo-mobile
 npm install
@@ -164,7 +166,7 @@ Google Sign-In and Phone Auth require a Firebase project:
 2. Enable Google and Phone in Authentication > Sign-in method
 3. Optional push notification setup: Project Settings > Service Accounts > Generate new private key, then set `FCM_CLIENT_EMAIL` and `FCM_PRIVATE_KEY` in the backend environment. Firebase ID-token verification works without this key; `FCM_PROJECT_ID` defaults to `yugm-e985e` and can be overridden if the Firebase project changes.
 4. Android app for native Android:
-   - Package name: `com.example.yugm`
+   - Package name: `com.yugm.app`
    - Place `google-services.json` in `android-client/app/`
 5. Web client ID for Expo Google Sign-In:
    - Put the web client ID in `android-client/expo-mobile/.env` as `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`
@@ -190,6 +192,7 @@ npm run dev:api
 npm run env:check
 npm run seed
 npm run typecheck
+npm run test
 ```
 
 Expo client:
@@ -204,8 +207,10 @@ Native Android:
 
 ```bash
 cd android-client
-./gradlew test
-./gradlew assembleDebug
+./gradlew :app:assembleDebug
+./gradlew testDebugUnitTest
+./gradlew :app:lintDebug
+./gradlew :app:bundleRelease
 ```
 
 ## MVP Notes

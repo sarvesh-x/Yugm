@@ -4,8 +4,8 @@ plugins {
 }
 
 android {
-    namespace = "com.example.yugm.core.navigation"
-    compileSdk = 35
+    namespace = "com.yugm.app.core.navigation"
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 24

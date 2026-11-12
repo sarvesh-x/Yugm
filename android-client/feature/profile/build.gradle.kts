@@ -7,8 +7,8 @@ plugins {
 }
 
 android {
-    namespace = "com.example.yugm.feature.profile"
-    compileSdk = 35
+    namespace = "com.yugm.app.feature.profile"
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 24

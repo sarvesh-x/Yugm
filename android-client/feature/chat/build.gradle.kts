@@ -7,8 +7,8 @@ plugins {
 }
 
 android {
-    namespace = "com.example.yugm.feature.chat"
-    compileSdk = 35
+    namespace = "com.yugm.app.feature.chat"
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 24

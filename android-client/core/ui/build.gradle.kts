@@ -5,8 +5,8 @@ plugins {
 }
 
 android {
-    namespace = "com.example.yugm.core.ui"
-    compileSdk = 35
+    namespace = "com.yugm.app.core.ui"
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 24

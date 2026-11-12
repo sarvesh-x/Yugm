@@ -7,8 +7,8 @@ plugins {
 }
 
 android {
-    namespace = "com.example.yugm.feature.social"
-    compileSdk = 35
+    namespace = "com.yugm.app.feature.social"
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 24

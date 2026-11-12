@@ -7,8 +7,8 @@ plugins {
 }
 
 android {
-    namespace = "com.example.yugm.feature.auth"
-    compileSdk = 35
+    namespace = "com.yugm.app.feature.auth"
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 24
@@ -55,4 +55,5 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
+    implementation("com.google.firebase:firebase-appcheck")
 }

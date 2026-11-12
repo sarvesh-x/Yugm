@@ -59,6 +59,7 @@ const adminAuthLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standa
 const adminTwoFactorLimiter = rateLimit({ windowMs: 60_000, limit: 5, standardHeaders: true, legacyHeaders: false });
 const objectIdSchema = z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid object id");
 const reasonSchema = z.object({ reason: z.string().min(3).max(500), durationHours: z.number().int().min(1).max(8760).optional() });
+const markWithdrawalPaidSchema = z.object({ payoutReference: z.string().min(3).max(120).optional() });
 const notificationTypeValues = ["FOLLOW", "GIFT", "ROOM_INVITE", "SPEAKER_APPROVED", "MESSAGE", "SYSTEM"] as const;
 const adminUserSchema = z.object({
   email: z.string().email(),
@@ -1366,11 +1367,33 @@ adminRouter.post("/withdrawals/:withdrawalId/reject", requirePermission("withdra
   await auditLog({ adminId: req.admin!.id, action: "withdrawal.rejected", entityType: "withdrawal", entityId: withdrawal.id, targetUserId: withdrawal.userId.toString(), metadata: { reason: req.body.reason }, req });
   adminOk(res, { withdrawal });
 }));
-adminRouter.post("/withdrawals/:withdrawalId/mark-paid", requirePermission("withdrawals.approve"), asyncHandler(async (req: AdminAuthRequest, res) => {
+adminRouter.post("/withdrawals/:withdrawalId/mark-paid", requirePermission("withdrawals.approve"), validateBody(markWithdrawalPaidSchema), asyncHandler(async (req: AdminAuthRequest, res) => {
   if (!isValidObjectId(req.params.withdrawalId)) throw new HttpError(400, "Invalid withdrawal ID", ErrorCode.VALIDATION);
-  const withdrawal = await WithdrawalRequest.findOneAndUpdate({ _id: req.params.withdrawalId, status: "APPROVED" }, { status: "PAID", paidAt: new Date(), reviewedByAdminId: req.admin!.id }, { new: true });
+  const payoutReference = req.body.payoutReference as string | undefined;
+  const withdrawal = await WithdrawalRequest.findOneAndUpdate(
+    { _id: req.params.withdrawalId, status: "APPROVED" },
+    {
+      status: "PAID",
+      paidAt: new Date(),
+      reviewedByAdminId: req.admin!.id,
+      ...(payoutReference ? { payoutReference } : {})
+    },
+    { new: true }
+  );
   if (!withdrawal) throw new HttpError(404, "Approved withdrawal not found", ErrorCode.NOT_FOUND);
-  await auditLog({ adminId: req.admin!.id, action: "withdrawal.marked_paid", entityType: "withdrawal", entityId: withdrawal.id, targetUserId: withdrawal.userId.toString(), req });
+  if (payoutReference) {
+    await PayoutReview.findOneAndUpdate(
+      { withdrawalRequestId: withdrawal.id },
+      {
+        $set: {
+          "payout.providerPayoutId": payoutReference,
+          "payout.providerStatus": "PROCESSED",
+          "payout.processedAt": new Date()
+        }
+      }
+    );
+  }
+  await auditLog({ adminId: req.admin!.id, action: "withdrawal.marked_paid", entityType: "withdrawal", entityId: withdrawal.id, targetUserId: withdrawal.userId.toString(), metadata: payoutReference ? { payoutReference } : undefined, req });
   adminOk(res, { withdrawal });
 }));
 adminRouter.post("/withdrawals/:withdrawalId/request-info", requirePermission("withdrawals.read"), validateBody(reasonSchema), asyncHandler(async (req: AdminAuthRequest, res) => { await auditLog({ adminId: req.admin!.id, action: "withdrawal.info_requested", entityType: "withdrawal", metadata: { withdrawalId: req.params.withdrawalId, reason: req.body.reason }, req }); adminOk(res, { requested: true }); }));

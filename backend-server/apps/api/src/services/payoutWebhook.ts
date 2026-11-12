@@ -1,9 +1,9 @@
-import crypto from "node:crypto";
 import type { Request, Response } from "express";
 import { env } from "../config/env.js";
 import { PayoutReview } from "../models/PayoutReview.js";
 import { WithdrawalRequest } from "../models/WithdrawalRequest.js";
 import { AdminAuditLog } from "../models/AdminAuditLog.js";
+import { isValidRazorpayWebhook } from "./paymentSignatures.js";
 
 type PayoutWebhookEvent = {
   event: "payout.created" | "payout.processing" | "payout.processed" | "payout.reversed" | "payout.rejected" | "payout.failed";
@@ -20,15 +20,6 @@ type PayoutWebhookEvent = {
     };
   };
 };
-
-function isValidRazorpayWebhook(body: string, signature: string, secret: string): boolean {
-  const expected = crypto.createHmac("sha256", secret).update(body).digest("hex");
-  try {
-    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
-  } catch {
-    return false;
-  }
-}
 
 export async function handlePayoutWebhook(req: Request, res: Response) {
   const secret = env.RAZORPAY_WEBHOOK_SECRET;
@@ -50,30 +41,45 @@ export async function handlePayoutWebhook(req: Request, res: Response) {
     return res.status(400).json({ ok: false, error: "Invalid JSON body" });
   }
 
-  const payoutId = event.payload.payout.id;
+  const payoutId = event.payload?.payout?.id;
+  if (!payoutId) {
+    return res.status(400).json({ ok: false, error: "Missing payout id" });
+  }
 
   if (event.event === "payout.processed") {
-    const update: Record<string, unknown> = {
+    const update = {
       "payout.providerStatus": "PROCESSED",
       "payout.processedAt": event.payload.payout.processed_at ? new Date(event.payload.payout.processed_at * 1000) : new Date(),
+      "payout.failureReason": undefined,
       status: "PAID"
     };
 
+    // Atomic idempotency: only transition rows that are not already processed.
     const review = await PayoutReview.findOneAndUpdate(
-      { "payout.providerPayoutId": payoutId },
+      { "payout.providerPayoutId": payoutId, "payout.providerStatus": { $ne: "PROCESSED" } },
       { $set: update },
       { new: true }
     ).lean();
 
-    if (review?.withdrawalRequestId) {
-      await WithdrawalRequest.findByIdAndUpdate(review.withdrawalRequestId, { status: "PAID" });
+    if (!review) {
+      const exists = await PayoutReview.exists({ "payout.providerPayoutId": payoutId });
+      if (exists) return res.json({ ok: true, received: event.event, duplicate: true });
+      console.warn(`[payoutWebhook] No PayoutReview matched provider payout ${payoutId}`);
+      return res.json({ ok: true, received: event.event, matched: false });
+    }
+
+    if (review.withdrawalRequestId) {
+      await WithdrawalRequest.findByIdAndUpdate(review.withdrawalRequestId, {
+        status: "PAID",
+        paidAt: review.payout?.processedAt ?? new Date()
+      });
     }
 
     await AdminAuditLog.create({
       adminId: undefined,
       action: "PAYOUT_WEBHOOK_PROCESSED",
       entityType: "PayoutReview",
-      entityId: review?._id,
+      entityId: review._id,
       metadata: { payoutId, providerStatus: "PROCESSED" }
     });
   }
@@ -82,7 +88,7 @@ export async function handlePayoutWebhook(req: Request, res: Response) {
     const reason = event.event === "payout.reversed" ? "REVERSED" : event.event === "payout.rejected" ? "REJECTED" : "FAILED";
 
     const review = await PayoutReview.findOneAndUpdate(
-      { "payout.providerPayoutId": payoutId },
+      { "payout.providerPayoutId": payoutId, "payout.providerStatus": { $ne: reason } },
       {
         $set: {
           "payout.providerStatus": reason,
@@ -92,7 +98,14 @@ export async function handlePayoutWebhook(req: Request, res: Response) {
       { new: true }
     ).lean();
 
-    if (review?.withdrawalRequestId) {
+    if (!review) {
+      const exists = await PayoutReview.exists({ "payout.providerPayoutId": payoutId });
+      if (exists) return res.json({ ok: true, received: event.event, duplicate: true });
+      console.warn(`[payoutWebhook] No PayoutReview matched provider payout ${payoutId}`);
+      return res.json({ ok: true, received: event.event, matched: false });
+    }
+
+    if (review.withdrawalRequestId) {
       await WithdrawalRequest.findByIdAndUpdate(review.withdrawalRequestId, { status: "FAILED" });
     }
 
@@ -100,7 +113,7 @@ export async function handlePayoutWebhook(req: Request, res: Response) {
       adminId: undefined,
       action: `PAYOUT_WEBHOOK_${reason}`,
       entityType: "PayoutReview",
-      entityId: review?._id,
+      entityId: review._id,
       metadata: { payoutId, reason: event.payload.payout.failure_reason }
     });
   }

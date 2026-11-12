@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
 
 jobs:
   backend:
@@ -17,31 +17,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: backend-server/package-lock.json
       - run: npm ci
       - run: npm run typecheck
       - run: npm run test
 
-  expo:
-    name: Expo client (typecheck)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: android-client/expo-mobile
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: android-client/expo-mobile/package-lock.json
-      - run: npm ci
-      - run: npm run typecheck
-
-  android-lint:
-    name: Android (lint)
+  android:
+    name: Android (lint + unit tests + debug build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -55,5 +39,7 @@ jobs:
           distribution: temurin
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
-      - name: Run lint
-        run: ./gradlew :app:lintDebug
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+      - name: Lint, unit tests and debug build
+        run: ./gradlew :app:lintDebug testDebugUnitTest :app:assembleDebug
