@@ -57,7 +57,7 @@ fun NavGraphBuilder.discoverNavGraph(
                 }
             },
             onVoiceRooms = {
-                navController.navigateTopLevel(Screen.Discover.route)
+                navController.navigateTopLevel(Screen.VoiceRooms.route)
             },
             onVibeGraph = {
                 navController.navigate(Screen.VibeGraph.route)

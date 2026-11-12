@@ -5,10 +5,15 @@ import android.content.Context
 import io.livekit.android.LiveKit
 import io.livekit.android.room.Room
 import io.livekit.android.room.track.VideoTrack
+import io.livekit.android.util.flow
 import livekit.org.webrtc.SurfaceViewRenderer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import timber.log.Timber
 
@@ -19,8 +24,11 @@ object YugmMediaRoom {
     private var appContext: Context? = null
     private var room: Room? = null
     private var opponentRoom: Room? = null
+    private var speakingObserver: Job? = null
     private var connected = false
     private var opponentRoomName: String? = null
+    private val mutableSpeakingIdentities = MutableStateFlow<Set<String>>(emptySet())
+    val speakingIdentities = mutableSpeakingIdentities.asStateFlow()
 
     fun initialize(context: Context) {
         appContext = context.applicationContext
@@ -34,8 +42,17 @@ object YugmMediaRoom {
         if (token.isBlank() || url.isBlank()) return
         scope.launch {
             runCatching {
+                speakingObserver?.cancel()
+                mutableSpeakingIdentities.value = emptySet()
                 room?.disconnect()
-                room = LiveKit.create(context).also { it.connect(url, token) }
+                val nextRoom = LiveKit.create(context)
+                nextRoom.connect(url, token)
+                room = nextRoom
+                speakingObserver = scope.launch {
+                    nextRoom::activeSpeakers.flow.collect { speakers ->
+                        mutableSpeakingIdentities.value = speakers.mapNotNull { it.identity?.value }.toSet()
+                    }
+                }
                 connected = true
                 Timber.tag(TAG).d("Connected to LiveKit media room")
             }.onFailure {
@@ -98,6 +115,9 @@ object YugmMediaRoom {
     }
 
     fun disconnect() {
+        speakingObserver?.cancel()
+        speakingObserver = null
+        mutableSpeakingIdentities.value = emptySet()
         room?.disconnect()
         room = null
         connected = false

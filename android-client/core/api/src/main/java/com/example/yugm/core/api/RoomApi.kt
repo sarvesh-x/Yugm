@@ -199,6 +199,10 @@ object RoomApi {
         YugmHttpClient.post("/rooms/$roomId/remove-user", token, JSONObject().put("userId", userId))
     }
 
+    suspend fun setRoomAdmin(roomId: String, userId: String, isAdmin: Boolean, token: String) {
+        YugmHttpClient.post("/rooms/$roomId/admin", token, JSONObject().put("userId", userId).put("isAdmin", isAdmin))
+    }
+
     suspend fun searchRooms(query: String): List<Room> {
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
         val data = YugmHttpClient.get("/rooms/search?q=$encoded", auth = null).getJSONObject("data")

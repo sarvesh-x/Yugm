@@ -75,6 +75,17 @@ async function assertHost(req: AuthRequest, roomId: string) {
   return room;
 }
 
+async function assertHostOrRoomAdmin(req: AuthRequest, roomId: string) {
+  const room = await getRoomOrThrow(roomId);
+  const isHost = room.hostId.toString() === req.user!.id;
+  const isPlatformAdmin = req.user!.role === "ADMIN";
+  const isRoomAdmin = roomObjectIdListIncludes(room.roomAdminIds, req.user!.id);
+  if (!isHost && !isPlatformAdmin && !isRoomAdmin) {
+    throw new HttpError(403, "Room host or room admin control required", ErrorCode.FORBIDDEN);
+  }
+  return { room, isHost: isHost || isPlatformAdmin };
+}
+
 function objectIdBody(value: unknown, label: string) {
   if (typeof value !== "string" || !isValidObjectId(value)) {
     throw new HttpError(400, `Invalid ${label}`, ErrorCode.VALIDATION);
@@ -295,7 +306,11 @@ roomsRouter.get("/:id", requireAuth, asyncHandler(async (req: AuthRequest, res) 
   if (!room) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
   const participants = await RoomParticipant.find({ roomId: req.params.id, leftAt: null }).populate("userId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle").lean();
   const speakerRequests = await SpeakerRequest.find({ roomId: req.params.id, status: "PENDING" }).populate("userId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle").lean();
-  sendOk(res, { room, participants, speakerRequests });
+  const participantPayload = participants.map((participant: any) => ({
+    ...participant,
+    isRoomAdmin: roomObjectIdListIncludes(rawRoom.roomAdminIds, participant.userId?._id?.toString?.() ?? participant.userId?.toString?.() ?? "")
+  }));
+  sendOk(res, { room, participants: participantPayload, speakerRequests });
 }));
 
 roomsRouter.post("/:id/join", requireAuth, requireNotRoomRestricted, requireNotShadowBanned, asyncHandler(async (req: AuthRequest, res) => {
@@ -403,9 +418,10 @@ roomsRouter.post("/:id/reject-speaker", requireAuth, asyncHandler(async (req: Au
 }));
 
 roomsRouter.post("/:id/mute-user", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
-  const room = await assertHost(req, req.params.id);
+  const { room, isHost } = await assertHostOrRoomAdmin(req, req.params.id);
   const userId = objectIdBody(req.body.userId, "user ID");
   assertNotHostTarget(room, userId, "mute");
+  if (!isHost && roomObjectIdListIncludes(room.roomAdminIds, userId)) throw new HttpError(403, "Room admins cannot mute each other", ErrorCode.FORBIDDEN);
   const participant = await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { micEnabled: false }, { new: true });
   if (!participant) throw new HttpError(404, "Active participant not found", ErrorCode.NOT_FOUND);
   emitRoom(room._id.toString(), socketEvents.roomUserMute, { userId });
@@ -413,18 +429,33 @@ roomsRouter.post("/:id/mute-user", requireAuth, asyncHandler(async (req: AuthReq
 }));
 
 roomsRouter.post("/:id/remove-user", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
-  const room = await assertHost(req, req.params.id);
+  const { room, isHost } = await assertHostOrRoomAdmin(req, req.params.id);
   const userId = objectIdBody(req.body.userId, "user ID");
   assertNotHostTarget(room, userId, "remove");
+  if (!isHost && roomObjectIdListIncludes(room.roomAdminIds, userId)) throw new HttpError(403, "Room admins cannot remove each other", ErrorCode.FORBIDDEN);
   const result = await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { leftAt: new Date() });
   if (!result) throw new HttpError(404, "Active participant not found", ErrorCode.NOT_FOUND);
-  await Room.findByIdAndUpdate(room._id, { $pull: { speakerIds: userId, moderatorIds: userId } });
+  await Room.findByIdAndUpdate(room._id, { $pull: { speakerIds: userId, moderatorIds: userId, roomAdminIds: userId } });
   if (result) {
     await decrementRoomParticipantCount(room._id);
     await invalidateCache("rooms:*");
   }
   emitRoom(room._id.toString(), socketEvents.roomUserRemove, { userId });
   sendOk(res, { removed: true });
+}));
+
+roomsRouter.post("/:id/admin", requireAuth, validateBody(z.object({ userId: z.string(), isAdmin: z.boolean().optional() })), asyncHandler(async (req: AuthRequest, res) => {
+  const room = await assertHost(req, req.params.id);
+  const userId = objectIdBody(req.body.userId, "user ID");
+  assertNotHostTarget(room, userId, "promote");
+  const participant = await RoomParticipant.findOne({ roomId: room._id, userId, leftAt: null }).lean();
+  if (!participant) throw new HttpError(404, "Active participant not found", ErrorCode.NOT_FOUND);
+  const isAdmin = req.body.isAdmin !== false;
+  await Room.findByIdAndUpdate(room._id, isAdmin
+    ? { $addToSet: { roomAdminIds: userId } }
+    : { $pull: { roomAdminIds: userId } });
+  emitRoom(room._id.toString(), socketEvents.roomParticipantUpdate, { roomId: room.id, action: isAdmin ? "admin_promoted" : "admin_removed", userId });
+  sendOk(res, { isRoomAdmin: isAdmin });
 }));
 
 roomsRouter.post("/:id/co-host", requireAuth, asyncHandler(async (req: AuthRequest, res) => {

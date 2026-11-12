@@ -21,6 +21,7 @@ fun NavGraphBuilder.authNavGraph(
     isLoggedIn: Boolean,
     authTokenProvider: () -> String,
     onGoogleSignIn: () -> Unit,
+    isGoogleSignInLoading: Boolean = false,
     navigateAfterLogin: (Session) -> Unit,
     onProfileComplete: (Session) -> Unit,
 ) {
@@ -55,7 +56,8 @@ fun NavGraphBuilder.authNavGraph(
                 authViewModel.emailAuth(email, password, createAccount)
             },
             loading = authViewModel.isLoading,
-            error = authViewModel.error
+            error = authViewModel.error,
+            googleLoading = isGoogleSignInLoading
         )
         LaunchedEffect(authViewModel.session) {
             authViewModel.session?.let(navigateAfterLogin)

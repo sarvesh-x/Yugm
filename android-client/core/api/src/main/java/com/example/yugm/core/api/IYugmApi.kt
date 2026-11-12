@@ -169,6 +169,7 @@ interface IYugmApi {
     suspend fun endRoom(roomId: String, token: String)
     suspend fun muteUser(roomId: String, userId: String, token: String)
     suspend fun removeUser(roomId: String, userId: String, token: String)
+    suspend fun setRoomAdmin(roomId: String, userId: String, isAdmin: Boolean, token: String)
     suspend fun searchRooms(query: String): List<Room>
     suspend fun uploadCover(token: String, bytes: ByteArray, mimeType: String, fileName: String): String
     suspend fun uploadAvatar(token: String, bytes: ByteArray, mimeType: String): String

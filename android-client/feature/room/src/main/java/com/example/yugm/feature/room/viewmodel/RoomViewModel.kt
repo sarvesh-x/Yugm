@@ -87,6 +87,12 @@ class RoomViewModel @Inject constructor(
 
     var isConnected by mutableStateOf(false)
         private set
+    var forcedMuteVersion by mutableStateOf(0)
+        private set
+    var forcedRemoveVersion by mutableStateOf(0)
+        private set
+    var roomReactionEvent by mutableStateOf(0 to "")
+        private set
 
     var roomState by mutableStateOf<UiState<RoomDetail>>(UiState.Idle)
         private set
@@ -102,6 +108,8 @@ class RoomViewModel @Inject constructor(
     var cosmeticError by mutableStateOf<String?>(null)
         private set
     var roomError by mutableStateOf<String?>(null)
+        private set
+    var roomListError by mutableStateOf<String?>(null)
         private set
     var actionLoading by mutableStateOf(false)
         private set
@@ -234,7 +242,37 @@ class RoomViewModel @Inject constructor(
                                 )
                             }
                         },
-                        onPkRematchRequested = { refresh() }
+                        onPkRematchRequested = { refresh() },
+                        onRoomReaction = { type, _, _ ->
+                            viewModelScope.launch { roomReactionEvent = (roomReactionEvent.first + 1) to type }
+                        },
+                        onSpeakerApproved = { approvedUserId ->
+                            if (approvedUserId == currentUserId) {
+                                refresh()
+                                refreshMediaSession()
+                            }
+                        },
+                        onUserMuted = { targetId ->
+                            if (targetId == currentUserId) {
+                                viewModelScope.launch {
+                                    YugmMediaRoom.setMicEnabled(false)
+                                    forcedMuteVersion++
+                                }
+                            }
+                        },
+                        onUserRemoved = { targetId ->
+                            if (targetId == currentUserId) {
+                                viewModelScope.launch { forcedRemoveVersion++ }
+                            }
+                        },
+                        onRoomParticipantChanged = { action, targetId ->
+                            if (action in listOf("admin_promoted", "admin_removed") && targetId == currentUserId) {
+                                viewModelScope.launch {
+                                    withContext(Dispatchers.IO) { runCatching { yugmApi.roomDetail(authToken, roomId) } }
+                                        .onSuccess { roomDetail = it; roomState = UiState.Success(it) }
+                                }
+                            }
+                        }
                     )
                 }
             }
@@ -289,6 +327,15 @@ class RoomViewModel @Inject constructor(
             withContext(Dispatchers.IO) {
                 runCatching { yugmApi.requestSpeaker(authToken, roomId) }.onSuccess { refresh() }
             }
+        }
+    }
+
+    private fun refreshMediaSession() {
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { yugmApi.liveKitToken(authToken, roomId) }
+            }.onSuccess { YugmMediaRoom.connect(it.token, it.url) }
+                .onFailure { actionError = it.message ?: "Could not enable room audio" }
         }
     }
 
@@ -479,6 +526,19 @@ class RoomViewModel @Inject constructor(
         }
     }
 
+    fun setRoomAdmin(userId: String, isAdmin: Boolean) {
+        viewModelScope.launch {
+            actionLoading = true
+            actionError = null
+            withContext(Dispatchers.IO) {
+                runCatching { yugmApi.setRoomAdmin(roomId, userId, isAdmin, authToken) }
+                    .onFailure { actionError = it.message ?: "Couldn't update room admin" }
+            }
+            actionLoading = false
+            if (actionError == null) refresh()
+        }
+    }
+
     fun reportUser(userId: String, reason: String = "Inappropriate behavior") {
         viewModelScope.launch {
             actionLoading = true
@@ -491,10 +551,13 @@ class RoomViewModel @Inject constructor(
         }
     }
 
-    fun loadRooms(token: String, type: RoomType? = null) {
+    fun loadRooms(type: RoomType? = null) {
         viewModelScope.launch {
             isLoading = true
-            rooms = withContext(Dispatchers.IO) { yugmApi.rooms(type) }
+            roomListError = null
+            runCatching { withContext(Dispatchers.IO) { yugmApi.rooms(type) } }
+                .onSuccess { rooms = it }
+                .onFailure { roomListError = it.message ?: "Couldn't load live rooms" }
             isLoading = false
         }
     }

@@ -28,12 +28,12 @@ async function findOrCreateFirebaseUser(input: {
   email?: string;
   phone?: string;
   avatar?: string;
-}) {
+}): Promise<{ user: any; isNewUser: boolean }> {
   const normalizedEmail = input.email?.trim().toLowerCase();
 
   for (let attempt = 0; attempt < 5; attempt++) {
     const byUid = await User.findOne({ firebaseUid: input.firebaseUid }).select("-__v");
-    if (byUid) return byUid;
+    if (byUid) return { user: byUid, isNewUser: false };
 
     // Older accounts may have been created through the OTP flow before Firebase
     // became the identity provider. Attach the authenticated Firebase identity to
@@ -50,7 +50,7 @@ async function findOrCreateFirebaseUser(input: {
       if (!byEmail.name && input.name) byEmail.name = input.name;
       if (!byEmail.avatar && input.avatar) byEmail.avatar = input.avatar;
       try {
-        return await byEmail.save();
+        return { user: await byEmail.save(), isNewUser: false };
       } catch (error: any) {
         // Concurrent sign-in may have linked the same Firebase user already.
         if (error?.code === 11000) continue;
@@ -59,7 +59,7 @@ async function findOrCreateFirebaseUser(input: {
     }
 
     try {
-      return await User.create({
+      const user = await User.create({
         name: input.name || "Yugm User",
         username: await generateUniqueUsername(),
         email: normalizedEmail || undefined,
@@ -71,6 +71,7 @@ async function findOrCreateFirebaseUser(input: {
         walletBalance: 250,
         isVerified: false
       });
+      return { user, isNewUser: true };
     } catch (error: any) {
       // The client retries auth after transient timeouts. If the original
       // request completed concurrently, return its user instead of a 500.
@@ -80,7 +81,7 @@ async function findOrCreateFirebaseUser(input: {
   }
 
   const existing = await User.findOne({ firebaseUid: input.firebaseUid }).select("-__v");
-  if (existing) return existing;
+  if (existing) return { user: existing, isNewUser: false };
   throw new HttpError(409, "Could not finish creating your account. Please retry.", ErrorCode.CONFLICT);
 }
 
@@ -136,6 +137,7 @@ authRouter.post("/verify-otp", authLimiter, validateBody(verifyOtpSchema), async
   if (stored) otpStore.delete(key);
 
   const lookup = req.body.email ? { email: req.body.email } : { phone: req.body.phone };
+  const isNewUser = !(await User.exists(lookup));
   const maxRetries = 10;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const username = await generateUniqueUsername();
@@ -153,7 +155,7 @@ authRouter.post("/verify-otp", authLimiter, validateBody(verifyOtpSchema), async
         },
         { upsert: true, new: true }
       );
-      return sendOk(res, { token: signToken(user), user: publicUser(user) });
+      return sendOk(res, { token: signToken(user), user: publicUser(user), isNewUser });
     } catch (err: any) {
       if (err?.code === 11000 && attempt < maxRetries - 1) continue;
       throw err;
@@ -168,9 +170,9 @@ authRouter.post("/google", authLimiter, asyncHandler(async (req, res) => {
   const payload = await verifyIdToken(idToken);
   const { sub: firebaseUid, name, email, picture } = payload;
   if (!firebaseUid) throw new HttpError(401, "Invalid Firebase identity token", ErrorCode.UNAUTHORIZED);
-  const user = await findOrCreateFirebaseUser({ firebaseUid, name, email, avatar: picture });
+  const { user, isNewUser } = await findOrCreateFirebaseUser({ firebaseUid, name, email, avatar: picture });
 
-  sendOk(res, { token: signToken(user), user: publicUser(user) });
+  sendOk(res, { token: signToken(user), user: publicUser(user), isNewUser });
 }));
 
 authRouter.post("/phone", authLimiter, asyncHandler(async (req, res) => {
@@ -180,9 +182,9 @@ authRouter.post("/phone", authLimiter, asyncHandler(async (req, res) => {
   const payload = await verifyIdToken(idToken);
   const { sub: firebaseUid, phone_number } = payload;
   if (!firebaseUid) throw new HttpError(401, "Invalid Firebase identity token", ErrorCode.UNAUTHORIZED);
-  const user = await findOrCreateFirebaseUser({ firebaseUid, phone: phone_number });
+  const { user, isNewUser } = await findOrCreateFirebaseUser({ firebaseUid, phone: phone_number });
 
-  sendOk(res, { token: signToken(user), user: publicUser(user) });
+  sendOk(res, { token: signToken(user), user: publicUser(user), isNewUser });
 }));
 
 authRouter.post("/logout", requireAuth, (_req, res) => sendOk(res, { loggedOut: true }));

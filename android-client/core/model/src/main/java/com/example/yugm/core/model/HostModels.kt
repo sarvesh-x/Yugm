@@ -69,6 +69,6 @@ data class YugmUser(
     val activeCosmetics: ActiveCosmetics = ActiveCosmetics()
 )
 
-data class Session(val token: String, val user: YugmUser)
+data class Session(val token: String, val user: YugmUser, val isNewUser: Boolean = false)
 
 data class MediaSession(val token: String, val url: String, val roomName: String, val role: String)

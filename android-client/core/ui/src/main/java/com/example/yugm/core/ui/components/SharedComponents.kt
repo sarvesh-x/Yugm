@@ -62,6 +62,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
@@ -219,7 +221,7 @@ fun RoomCard(room: Room, wide: Boolean, onClick: () -> Unit) {
             Column(modifier = Modifier.align(Alignment.BottomStart)) {
                 Text(room.title, color = TextPrimary, fontSize = 20.sp, lineHeight = 23.sp, fontWeight = FontWeight.Black, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                    room.host?.let { Avatar(initial = it.name.firstOrNull()?.toString() ?: "?", size = 34, imageUrl = it.avatar, cosmetics = it.activeCosmetics, isSpeaking = room.type == RoomType.Voice) }
+                    room.host?.let { Avatar(initial = it.name.firstOrNull()?.toString() ?: "?", size = 34, imageUrl = it.avatar, cosmetics = it.activeCosmetics) }
                     Text(room.host?.name ?: "", color = TextPrimary, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Text("${room.participants} live / ${room.language}", color = TextMuted, fontSize = 12.sp)
@@ -285,7 +287,7 @@ fun HostRow(host: Host, onFollow: ((String) -> Unit)? = null, onClick: ((Host) -
 fun HostCard(host: Host) {
     GlassCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Avatar(host.name.firstOrNull()?.toString() ?: "?", 58, imageUrl = host.avatar, cosmetics = host.activeCosmetics, isSpeaking = true, showEntry = true)
+            Avatar(host.name.firstOrNull()?.toString() ?: "?", 58, imageUrl = host.avatar, cosmetics = host.activeCosmetics, showEntry = true)
             Column(Modifier.weight(1f)) {
                 Text(host.name, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp)
                 Text("${host.username} / ${host.city}", color = TextMuted, fontSize = 12.sp)
@@ -311,7 +313,7 @@ fun SpeakerGrid(room: Room) {
                                 else -> "Open seat"
                             },
                             cosmetics = if (index == 0) room.host?.activeCosmetics ?: ActiveCosmetics() else ActiveCosmetics(),
-                            isSpeaking = index == 0,
+                            isSpeaking = false,
                             showEntry = index == 0,
                             modifier = Modifier.weight(1f)
                         )
@@ -330,12 +332,12 @@ fun SeatCard(name: String, cosmetics: ActiveCosmetics = ActiveCosmetics(), isSpe
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
         modifier = modifier
-            .height(104.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .height(112.dp)
+            .clip(RoundedCornerShape(16.dp))
             .background(Panel)
-            .padding(8.dp)
+            .padding(10.dp)
     ) {
-        Avatar(initial = name.firstOrNull()?.toString() ?: "?", size = 42, cosmetics = cosmetics, isSpeaking = isSpeaking, showEntry = showEntry)
+        Avatar(initial = name.firstOrNull()?.toString() ?: "?", size = 46, cosmetics = cosmetics, isSpeaking = isSpeaking, showEntry = showEntry)
         Text(name, color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 7.dp))
     }
 }
@@ -399,7 +401,7 @@ fun RoomTopBar(room: Room, onBack: () -> Unit) {
 
 @Composable
 fun SectionTitle(text: String) {
-    Text(text, color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Black)
+    Text(text, color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Black, modifier = Modifier.semantics { heading() })
 }
 
 @Composable

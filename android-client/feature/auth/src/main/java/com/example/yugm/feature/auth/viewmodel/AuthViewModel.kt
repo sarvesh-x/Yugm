@@ -60,7 +60,7 @@ class AuthViewModel @Inject constructor(
                         Tasks.await(auth.signInWithEmailAndPassword(normalizedEmail, password)).user
                     } ?: throw IllegalStateException("Firebase did not return a user")
                     val idToken = Tasks.await(
-                        firebaseUser.getIdToken(true)
+                        firebaseUser.getIdToken(false)
                     ).token ?: throw IllegalStateException("Firebase did not return an ID token")
                     yugmApi.googleAuth(idToken)
                 }

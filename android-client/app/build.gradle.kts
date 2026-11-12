@@ -24,6 +24,7 @@ plugins {
 fun configValue(name: String): String? {
     return providers.gradleProperty(name).orNull
         ?: providers.environmentVariable(name).orNull
+        ?: localProperties.getProperty(name)
 }
 
 fun quoted(value: String): String {
@@ -33,13 +34,25 @@ fun quoted(value: String): String {
 fun localLanIpv4(): String? {
     return Collections.list(NetworkInterface.getNetworkInterfaces())
         .asSequence()
-        .filter { it.isUp && !it.isLoopback && !it.isVirtual }
-        .flatMap { Collections.list(it.inetAddresses) }
-        .filterIsInstance<Inet4Address>()
-        .map { it.hostAddress }
-        .firstOrNull { address: String ->
-            address.startsWith("192.168.") || address.startsWith("10.") || address.startsWith("172.")
+        .filter { it.isUp && !it.isLoopback }
+        .flatMap { network ->
+            val interfaceName = network.displayName.lowercase()
+            val preference = when {
+                network.isVirtual || listOf("virtual", "vmware", "virtualbox", "hyper-v", "docker", "wsl").any(interfaceName::contains) -> 0
+                listOf("wi-fi", "wifi", "wireless", "wlan").any(interfaceName::contains) -> 3
+                else -> 1
+            }
+            Collections.list(network.inetAddresses)
+                .filterIsInstance<Inet4Address>()
+                .mapNotNull { address ->
+                    val value = address.hostAddress
+                    val isPrivate = value.startsWith("192.168.") || value.startsWith("10.") || value.startsWith("172.")
+                    if (isPrivate && preference > 0) preference to value else null
+                }
         }
+        .sortedByDescending { it.first }
+        .map { it.second }
+        .firstOrNull()
 }
 
 val isReleaseTaskRequested = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
@@ -56,19 +69,19 @@ if (isReleaseTaskRequested) {
     }
 }
 
+val localLanHost = configValue("YUGM_LAN_HOST")?.trim()?.takeIf(String::isNotBlank) ?: localLanIpv4()
 val defaultApiBaseUrl = if (yugmServerMode == "deploy") {
     "https://yugm.onrender.com/api"
 } else {
-    "http://10.0.2.2:4000/api"
+    localLanHost?.let { "http://$it:4000/api" } ?: "http://10.0.2.2:4000/api"
 }
 val defaultSocketBaseUrl = if (yugmServerMode == "deploy") {
     "https://yugm.onrender.com"
 } else {
-    "http://10.0.2.2:4000"
+    localLanHost?.let { "http://$it:4000" } ?: "http://10.0.2.2:4000"
 }
 val yugmApiBaseUrl = configValue("YUGM_API_BASE_URL") ?: defaultApiBaseUrl
 val yugmSocketBaseUrl = configValue("YUGM_SOCKET_BASE_URL") ?: defaultSocketBaseUrl
-val localLanHost = localLanIpv4()
 val uploadKeystoreFile = configValue("YUGM_UPLOAD_KEYSTORE_FILE")
 val uploadKeystorePassword = configValue("YUGM_UPLOAD_KEYSTORE_PASSWORD")
 val uploadKeyAlias = configValue("YUGM_UPLOAD_KEY_ALIAS")

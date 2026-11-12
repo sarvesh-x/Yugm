@@ -319,7 +319,7 @@ fun PkOpponentSearchSheet(
                 items(opponents, key = { it.roomId }) { opponent ->
                     GlassCard(Modifier.fillMaxWidth().clickable { onInvite(opponent) }) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Avatar(opponent.hostName.firstOrNull()?.toString() ?: "?", 44, imageUrl = opponent.hostAvatar, cosmetics = opponent.activeCosmetics, isSpeaking = true)
+                            Avatar(opponent.hostName.firstOrNull()?.toString() ?: "?", 44, imageUrl = opponent.hostAvatar, cosmetics = opponent.activeCosmetics)
                             Column(Modifier.weight(1f)) {
                                 Text(opponent.hostName, color = TextPrimary, fontWeight = FontWeight.Black)
                                 Text("${opponent.roomTitle} / ${opponent.participantCount} live", color = TextMuted, fontSize = 12.sp)

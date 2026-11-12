@@ -56,7 +56,7 @@ fun PhoneAuthScreen(
                 withContext(Dispatchers.IO) {
                     val result = Tasks.await(FirebaseAuth.getInstance().signInWithCredential(credential))
                     val token = Tasks.await(
-                        result.user?.getIdToken(true)
+                            result.user?.getIdToken(false)
                             ?: throw IllegalStateException("Firebase did not return a user")
                     ).token ?: throw IllegalStateException("Firebase did not return an ID token")
                     YugmApi.phoneAuth(token)
@@ -71,6 +71,11 @@ fun PhoneAuthScreen(
     fun sendCode() {
         if (activity == null) {
             error = "Phone sign-in is unavailable in this screen."
+            return
+        }
+        val normalizedPhone = phone.trim().replace(" ", "").replace("-", "")
+        if (!normalizedPhone.matches(Regex("^\\+[1-9]\\d{7,14}$"))) {
+            error = "Enter the full phone number with country code, for example +919876543210."
             return
         }
         loading = true
@@ -92,7 +97,7 @@ fun PhoneAuthScreen(
             }
         }
         val options = PhoneAuthOptions.newBuilder(FirebaseAuth.getInstance())
-            .setPhoneNumber(phone.trim())
+            .setPhoneNumber(normalizedPhone)
             .setTimeout(60L, TimeUnit.SECONDS)
             .setActivity(activity)
             .setCallbacks(callbacks)

@@ -608,7 +608,7 @@ private fun FeaturedRoomCard(room: Room, onOpen: () -> Unit) {
                             size = 34,
                             imageUrl = host.avatar,
                             cosmetics = host.activeCosmetics,
-                            isSpeaking = room.type == RoomType.Voice
+                            isSpeaking = false
                         )
                     }
                     Column(Modifier.padding(start = 4.dp).weight(1f)) {
@@ -684,7 +684,7 @@ private fun TrendingHost(host: Host, onOpen: () -> Unit) {
             size = 68,
             imageUrl = host.avatar,
             cosmetics = host.activeCosmetics,
-            isSpeaking = host.isOnline
+            isSpeaking = false
         )
         Text(host.name, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text("${formatAudience(host.followers)} followers", color = TextMuted, fontSize = 9.sp, maxLines = 1)

@@ -96,6 +96,7 @@ fun JSONObject.toRoomParticipant(): RoomParticipant {
         id = optString("_id", optString("id", "")),
         user = userJson.toHost(),
         role = optString("role", "AUDIENCE"),
+        isRoomAdmin = optBoolean("isRoomAdmin", optString("role") == "MODERATOR"),
         micEnabled = optBoolean("micEnabled", true),
         cameraEnabled = optBoolean("cameraEnabled", false)
     )

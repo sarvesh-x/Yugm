@@ -32,6 +32,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -112,12 +115,13 @@ fun RoundAction(
     danger: Boolean = false,
     selected: Boolean = false,
     badge: String? = null,
+    accessibilityLabel: String? = null,
     onClick: () -> Unit
 ) {
     Box(modifier) {
         Box(
             modifier = Modifier
-                .size(44.dp)
+                .size(48.dp)
                 .clip(CircleShape)
                 .background(
                     when {
@@ -127,7 +131,10 @@ fun RoundAction(
                     }
                 )
                 .border(1.dp, if (danger) Danger else BorderColor, CircleShape)
-                .clickable(onClick = onClick),
+                .semantics {
+                    if (accessibilityLabel != null) contentDescription = accessibilityLabel
+                }
+                .clickable(role = Role.Button, onClickLabel = accessibilityLabel, onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
             Text(glyph, color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)

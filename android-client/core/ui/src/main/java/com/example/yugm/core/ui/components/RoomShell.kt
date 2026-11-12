@@ -11,16 +11,15 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,6 +36,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -87,17 +89,15 @@ fun RoomShell(
                 Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                RoundAction("⌄", onClick = onBack)
+                RoundAction("⌄", accessibilityLabel = "Leave room", onClick = onBack)
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                     Text(room.title, color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("● LIVE", color = Danger, fontSize = 10.sp, fontWeight = FontWeight.Black)
-                        Text("  ·  ${room.participants} people", color = TextMuted, fontSize = 10.sp)
+                        Text("  ·  ${room.participants} listening", color = TextMuted, fontSize = 12.sp)
                     }
                 }
                 ReferenceChip(if (room.type.name.equals("Voice", true)) "Voice" else "Video", glyph = if (room.type.name.equals("Voice", true)) "◖" else "▣")
-                Spacer(Modifier.width(8.dp))
-                RoundAction("⋯", onClick = {})
             }
 
             LazyColumn(
@@ -108,7 +108,7 @@ fun RoomShell(
                 item { Column(verticalArrangement = Arrangement.spacedBy(14.dp)) { roomContent() } }
                 if (chat.isNotEmpty()) {
                     item { ReferenceSectionHeader("Live chat") }
-                    items(chat.takeLast(8), key = { it.author + it.text }) { item ->
+                    itemsIndexed(chat.takeLast(8), key = { index, item -> "$index-${item.author}-${item.text.hashCode()}" }) { _, item ->
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SurfaceElevated.copy(alpha = 0.8f)).border(1.dp, BorderColor, RoundedCornerShape(16.dp)).padding(11.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -144,11 +144,13 @@ fun RoomShell(
                         value = message,
                         onValueChange = { message = it.take(500) },
                         textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 13.sp),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Write a room message" },
                         decorationBox = { inner -> if (message.isBlank()) Text("Say something…", color = TextMuted, fontSize = 12.sp) else inner() }
                     )
                 }
-                Box(Modifier.size(48.dp).clip(CircleShape).background(Brush.linearGradient(listOf(PrimaryPurple, Pink))).clickable {
+                Box(Modifier.size(48.dp).clip(CircleShape).background(Brush.linearGradient(listOf(PrimaryPurple, Pink))).semantics {
+                    contentDescription = "Send message"
+                }.clickable(role = Role.Button, onClickLabel = "Send message") {
                     val value = message.trim(); if (value.isNotBlank()) { onSendMessage(value); message = "" }
                 }, contentAlignment = Alignment.Center) { Text("➤", color = Color.White, fontSize = 20.sp) }
             }

@@ -156,7 +156,7 @@ fun RoomLobbyScreen(
                                         size = 46,
                                         imageUrl = participant.user.avatar,
                                         cosmetics = participant.user.activeCosmetics,
-                                        isSpeaking = participant.micEnabled,
+                                        isSpeaking = false,
                                         showEntry = true
                                     )
                                     Text(participant.user.name.take(10), color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)

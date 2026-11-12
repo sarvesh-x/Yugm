@@ -23,7 +23,11 @@ object YugmSocket {
         onPkRefresh: () -> Unit = {},
         onPkLeadChanged: ((leader: String, leftScore: Int, rightScore: Int) -> Unit)? = null,
         onPkRematchRequested: ((previousBattleId: String) -> Unit)? = null,
-        onRoomReaction: ((emoji: String, userId: String, userName: String) -> Unit)? = null
+        onRoomReaction: ((emoji: String, userId: String, userName: String) -> Unit)? = null,
+        onSpeakerApproved: ((userId: String) -> Unit)? = null,
+        onUserMuted: ((userId: String) -> Unit)? = null,
+        onUserRemoved: ((userId: String) -> Unit)? = null,
+        onRoomParticipantChanged: ((action: String, userId: String) -> Unit)? = null
     ) {
         synchronized(lock) {
         disconnect()
@@ -121,6 +125,34 @@ object YugmSocket {
                         )
                     } catch (e: Exception) {
                         Timber.tag(TAG).e(e, "Error parsing room reaction")
+                    }
+                }
+            }
+            socket?.on("room:speaker:approve") { args ->
+                if (args.isNotEmpty() && onSpeakerApproved != null) {
+                    val userId = runCatching {
+                        (args[0] as JSONObject).optString("userId")
+                    }.getOrDefault("")
+                    if (userId.isNotBlank()) onSpeakerApproved(userId)
+                }
+            }
+            socket?.on("room:user:mute") { args ->
+                if (args.isNotEmpty() && onUserMuted != null) {
+                    val userId = runCatching { (args[0] as JSONObject).optString("userId") }.getOrDefault("")
+                    if (userId.isNotBlank()) onUserMuted(userId)
+                }
+            }
+            socket?.on("room:user:remove") { args ->
+                if (args.isNotEmpty() && onUserRemoved != null) {
+                    val userId = runCatching { (args[0] as JSONObject).optString("userId") }.getOrDefault("")
+                    if (userId.isNotBlank()) onUserRemoved(userId)
+                }
+            }
+            socket?.on("room:participant:update") { args ->
+                if (args.isNotEmpty() && onRoomParticipantChanged != null) {
+                    runCatching {
+                        val data = args[0] as JSONObject
+                        onRoomParticipantChanged(data.optString("action"), data.optString("userId"))
                     }
                 }
             }

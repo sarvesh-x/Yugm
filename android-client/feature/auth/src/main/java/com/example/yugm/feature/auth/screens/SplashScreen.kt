@@ -19,7 +19,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.yugm.core.ui.theme.*
-import kotlinx.coroutines.delay
 
 @Composable
 fun SplashScreen(onTimeout: () -> Unit) {
@@ -29,10 +28,9 @@ fun SplashScreen(onTimeout: () -> Unit) {
         scale.animateTo(
             targetValue = 1.0f,
             animationSpec = tween(
-                durationMillis = 800
+                durationMillis = 500
             )
         )
-        delay(1200)
         onTimeout()
     }
 

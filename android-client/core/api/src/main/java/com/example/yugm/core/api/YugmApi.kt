@@ -180,6 +180,7 @@ object YugmApi : IYugmApi {
     override suspend fun endRoom(roomId: String, token: String) = RoomApi.endRoom(roomId, token)
     override suspend fun muteUser(roomId: String, userId: String, token: String) = RoomApi.muteUser(roomId, userId, token)
     override suspend fun removeUser(roomId: String, userId: String, token: String) = RoomApi.removeUser(roomId, userId, token)
+    override suspend fun setRoomAdmin(roomId: String, userId: String, isAdmin: Boolean, token: String) = RoomApi.setRoomAdmin(roomId, userId, isAdmin, token)
     override suspend fun searchRooms(query: String): List<Room> = RoomApi.searchRooms(query)
     override suspend fun uploadCover(token: String, bytes: ByteArray, mimeType: String, fileName: String): String = RoomApi.uploadCover(token, bytes, mimeType, fileName)
     override suspend fun uploadAvatar(token: String, bytes: ByteArray, mimeType: String): String = RoomApi.uploadAvatar(token, bytes, mimeType)

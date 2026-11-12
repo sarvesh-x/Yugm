@@ -16,6 +16,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -51,7 +53,7 @@ fun ProfileDetailScreen(
 ) {
     val coroutineScope = rememberCoroutineScope()
     val viewModel: ProfileViewModel = hiltViewModel()
-    var followBusy by remember { mutableStateOf(false) }
+    var socialList by remember { mutableStateOf<String?>(null) }
     var liked by remember { mutableStateOf(false) }
     var vibeMatch by remember { mutableStateOf<com.example.yugm.core.model.VibeMatchResponse?>(null) }
 
@@ -99,11 +101,9 @@ fun ProfileDetailScreen(
                             if (!liked) viewModel.like(token, profile.id) { liked = it }
                         }
                         ProfileAction("●●", "Message") { onMessage(profile.id) }
-                        ProfileAction(if (viewModel.isFollowing) "✓" else "+", if (viewModel.isFollowing) "Following" else "Follow", highlight = true) {
-                            if (!followBusy) {
-                                followBusy = true
+                        ProfileAction(if (viewModel.followBusy) "…" else if (viewModel.isFollowing) "✓" else "+", if (viewModel.followBusy) "Updating" else if (viewModel.isFollowing) "Unfollow" else "Follow", highlight = true, enabled = !viewModel.followBusy) {
+                            if (!viewModel.followBusy) {
                                 if (viewModel.isFollowing) viewModel.unfollow(token, profile.id) else viewModel.follow(token, profile.id)
-                                followBusy = false
                             }
                         }
                         ProfileAction("◖", "Invite") { onInviteToRoom(profile.id) }
@@ -160,8 +160,8 @@ fun ProfileDetailScreen(
                     AnimatedEntrance(delay = 200) {
                         GlassCard(modifier = Modifier.fillMaxWidth()) {
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                                StatCard("Followers", "${profile.followers.coerceAtLeast(viewModel.followers.size)}", Modifier.weight(1f))
-                                StatCard("Following", "${profile.followingCount.coerceAtLeast(viewModel.following.size)}", Modifier.weight(1f))
+                                StatCard("Followers", "${profile.followers.coerceAtLeast(viewModel.followers.size)}", Modifier.weight(1f).semantics { contentDescription = "View ${profile.followers} followers" }.clickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = "View followers") { socialList = "Followers" })
+                                StatCard("Following", "${profile.followingCount.coerceAtLeast(viewModel.following.size)}", Modifier.weight(1f).semantics { contentDescription = "View ${profile.followingCount} following" }.clickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = "View following") { socialList = "Following" })
                                 StatCard("Level", "${profile.level}", Modifier.weight(1f))
                             }
                         }
@@ -203,7 +203,7 @@ fun ProfileDetailScreen(
                     item {
                         Text("Social Proof", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                         Spacer(modifier = Modifier.height(6.dp))
-                        GlassCard(modifier = Modifier.fillMaxWidth()) {
+                        GlassCard(modifier = Modifier.fillMaxWidth().clickable { socialList = "Followers" }) {
                             Text(
                                 text = "Followed by ${viewModel.followers.take(3).joinToString { it.name.ifBlank { it.username } }.ifBlank { "new people" }}",
                                 color = TextPrimary,
@@ -387,6 +387,41 @@ fun ProfileDetailScreen(
     }
     }
 
+    socialList?.let { selectedList ->
+        val users = if (selectedList == "Followers") viewModel.followers else viewModel.following
+        ModalBottomSheet(onDismissRequest = { socialList = null }, containerColor = SurfaceElevated) {
+            Column(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 560.dp).padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("$selectedList · ${users.size}", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    TextButton(onClick = { socialList = "Followers" }) { Text("Followers", color = if (selectedList == "Followers") Gold else TextMuted) }
+                    TextButton(onClick = { socialList = "Following" }) { Text("Following", color = if (selectedList == "Following") Gold else TextMuted) }
+                }
+                if (users.isEmpty()) {
+                    Text("No ${selectedList.lowercase()} to show yet.", color = TextMuted, modifier = Modifier.padding(bottom = 28.dp))
+                } else {
+                    LazyColumn(contentPadding = PaddingValues(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(users, key = { it.id }) { person ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Background.copy(alpha = 0.7f)).padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Avatar(person.name.take(1), 44, person.avatar, person.activeCosmetics)
+                                Column(Modifier.weight(1f)) {
+                                    Text(person.name.ifBlank { person.username }, color = TextPrimary, fontWeight = FontWeight.Bold)
+                                    if (person.username.isNotBlank()) Text("@${person.username}", color = TextMuted, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Report Dialog
     if (showReportDialog) {
         AlertDialog(
@@ -518,8 +553,8 @@ private fun ProfileHero(profile: Host) {
 }
 
 @Composable
-private fun ProfileAction(glyph: String, label: String, highlight: Boolean = false, onClick: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(64.dp).clickable(onClick = onClick)) {
+private fun ProfileAction(glyph: String, label: String, highlight: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(68.dp).heightIn(min = 56.dp).semantics { contentDescription = label }.clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClickLabel = label, onClick = onClick)) {
         Box(
             Modifier.size(46.dp).clip(CircleShape).background(if (highlight) Brush.linearGradient(listOf(Pink, PrimaryPurple)) else Brush.linearGradient(listOf(Color(0xFF2A2D42), SurfaceElevated))).border(1.dp, if (highlight) Pink.copy(alpha = 0.5f) else BorderColor, CircleShape),
             contentAlignment = Alignment.Center

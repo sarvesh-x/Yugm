@@ -16,6 +16,7 @@ export interface IRoom extends mongoose.Document {
   participantCount: number;
   speakerIds: mongoose.Types.ObjectId[];
   moderatorIds: mongoose.Types.ObjectId[];
+  roomAdminIds?: mongoose.Types.ObjectId[];
   coHostIds: mongoose.Types.ObjectId[];
   isDuet: boolean;
   livekitRoomName: string;
@@ -46,6 +47,7 @@ const roomSchema = new Schema<IRoom>(
     participantCount: { type: Number, default: 0 },
     speakerIds: [{ type: Schema.Types.ObjectId, ref: "User" }],
     moderatorIds: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    roomAdminIds: [{ type: Schema.Types.ObjectId, ref: "User" }],
     coHostIds: [{ type: Schema.Types.ObjectId, ref: "User" }],
     isDuet: { type: Boolean, default: false },
     livekitRoomName: { type: String, required: true, unique: true },

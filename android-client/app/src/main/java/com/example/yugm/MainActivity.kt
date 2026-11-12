@@ -66,6 +66,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                 val mainViewModel: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
                 val scope = rememberCoroutineScope()
                 val context = this@MainActivity
+                var googleSignInLoading by remember { mutableStateOf(false) }
 
                 val pushRoute = pendingPushRoute.value
                 LaunchedEffect(pushRoute, mainViewModel.authToken) {
@@ -128,7 +129,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
                 // Google Sign In configuration
                 @Suppress("DEPRECATION")
-                val googleClientId = stringResource(R.string.google_web_client_id)
+                val googleClientId = stringResource(R.string.default_web_client_id)
                 val gso = remember(googleClientId) {
                     GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                         .requestIdToken(googleClientId)
@@ -136,15 +137,30 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                         .build()
                 }
                 @Suppress("DEPRECATION")
-                val googleSignInClient = remember { com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso) }
+                val googleSignInClient = remember(googleClientId, context) { com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso) }
 
                 val googleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-                    if (result.resultCode != RESULT_OK) return@rememberLauncherForActivityResult
+                    if (result.resultCode != RESULT_OK) {
+                        googleSignInLoading = false
+                        if (result.resultCode != RESULT_CANCELED) {
+                            Toast.makeText(this@MainActivity, "Google sign-in did not complete (result ${result.resultCode}).", Toast.LENGTH_LONG).show()
+                        }
+                        return@rememberLauncherForActivityResult
+                    }
                     @Suppress("DEPRECATION")
                     val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
                     try {
                         val account = task.getResult(ApiException::class.java)
-                        val idToken = account.idToken ?: return@rememberLauncherForActivityResult
+                        val idToken = account.idToken
+                        if (idToken.isNullOrBlank()) {
+                            googleSignInLoading = false
+                            Toast.makeText(
+                                this@MainActivity,
+                                "Google returned no ID token. Check this app's SHA-1 in Firebase, then replace google-services.json.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                            return@rememberLauncherForActivityResult
+                        }
                         scope.launch {
                             runCatching {
                                 val credential = GoogleAuthProvider.getCredential(idToken, null)
@@ -152,7 +168,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                                     Tasks.await(FirebaseAuth.getInstance().signInWithCredential(credential))
                                 }
                                 val tokenResult = withContext(Dispatchers.IO) {
-                                    Tasks.await(authResult.user?.getIdToken(true) ?: throw IllegalStateException("No authenticated user"))
+                                    Tasks.await(authResult.user?.getIdToken(false) ?: throw IllegalStateException("No authenticated user"))
                                 }
                                 val fbToken = tokenResult.token ?: throw IllegalStateException("No Firebase token")
                                 YugmApi.googleAuth(fbToken)
@@ -164,7 +180,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                                     username = session.user.username,
                                     balance = session.user.walletBalance,
                                 )
-                                val destination = if (!session.user.profileCompleted) {
+                                val destination = if (session.isNewUser) {
                                     Screen.ProfileSetup.route
                                 } else {
                                     Screen.Discover.route
@@ -175,9 +191,12 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                             }.onFailure {
                                 Toast.makeText(context, "Google Sign-In failed: ${it.message}", Toast.LENGTH_LONG).show()
                             }
+                            googleSignInLoading = false
                         }
                     } catch (e: Exception) {
+                        googleSignInLoading = false
                         Timber.tag(TAG).e(e, "Google auth exception")
+                        Toast.makeText(this@MainActivity, "Google sign-in failed: ${e.message ?: "code ${ (e as? ApiException)?.statusCode ?: "unknown" }"}", Toast.LENGTH_LONG).show()
                     }
                 }
 
@@ -185,7 +204,9 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                     NavGraph(
                         navController = navController,
                         mainViewModel = mainViewModel,
+                        isGoogleSignInLoading = googleSignInLoading,
                         onGoogleSignIn = {
+                            googleSignInLoading = true
                             googleLauncher.launch(googleSignInClient.signInIntent)
                         },
                         onRechargeOrderReady = { checkout ->

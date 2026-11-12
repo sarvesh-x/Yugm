@@ -25,7 +25,8 @@ fun LoginScreen(
     onPhoneSignIn: () -> Unit,
     onEmailAuth: (String, String, Boolean) -> Unit,
     loading: Boolean,
-    error: String?
+    error: String?,
+    googleLoading: Boolean = false
 ) {
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
@@ -145,12 +146,12 @@ fun LoginScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         GlassOutlinedButton(
-                            text = "Google",
+                            text = if (googleLoading) "Connecting…" else "Google",
                             onClick = onGoogleSignIn,
                             modifier = Modifier.weight(1f),
                             height = 52.dp,
                             cornerRadius = 14.dp,
-                            enabled = !loading
+                            enabled = !loading && !googleLoading
                         )
                         GlassOutlinedButton(
                             text = "Phone",
@@ -158,7 +159,7 @@ fun LoginScreen(
                             modifier = Modifier.weight(1f),
                             height = 52.dp,
                             cornerRadius = 14.dp,
-                            enabled = !loading
+                            enabled = !loading && !googleLoading
                         )
                     }
                 }

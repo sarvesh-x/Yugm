@@ -11,6 +11,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.example.yugm.core.navigation.Screen
+import com.example.yugm.core.navigation.navigateTopLevel
 import com.example.yugm.feature.room.screens.*
 import com.example.yugm.feature.room.viewmodel.RoomViewModel
 import kotlinx.coroutines.launch
@@ -27,6 +28,21 @@ fun NavGraphBuilder.roomNavGraph(
     username: String,
     balance: Int,
 ) {
+    composable(Screen.VoiceRooms.route) {
+        VoiceRoomsScreen(
+            onOpenRoom = { room -> navController.navigate(Screen.RoomLobby.createRoute(room.id, room.type.name.uppercase())) },
+            onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
+            onDiscover = { navController.navigateTopLevel(Screen.Discover.route) },
+            onMatch = { navController.navigateTopLevel(Screen.Matches.route) },
+            onChat = { navController.navigateTopLevel(Screen.ChatList.route) },
+            onWallet = { navController.navigateTopLevel(Screen.Wallet.route) },
+            onProfile = {
+                if (currentUserId.isNotBlank()) navController.navigate(Screen.ProfileDetail.createRoute(currentUserId))
+                else navController.navigate(Screen.ProfileSetup.route)
+            }
+        )
+    }
+
     composable(
         route = Screen.RoomLobby.route,
         arguments = listOf(
@@ -166,6 +182,13 @@ fun NavGraphBuilder.roomNavGraph(
                 gifts = roomViewModel.gifts,
                 balance = balance,
                 isHost = room.host?.id == currentUserId,
+                isRoomAdmin = detail.participants.any { it.user.id == currentUserId && it.isRoomAdmin },
+                forcedMuteVersion = roomViewModel.forcedMuteVersion,
+                forcedRemoveVersion = roomViewModel.forcedRemoveVersion,
+                roomReactionEvent = roomViewModel.roomReactionEvent,
+                canSpeak = room.host?.id == currentUserId || detail.participants.any {
+                    it.user.id == currentUserId && it.role in listOf("SPEAKER", "MODERATOR")
+                },
                 participants = detail.participants,
                 inviteCandidates = roomViewModel.inviteCandidates,
                 pkBattle = roomViewModel.pkBattle,
@@ -223,6 +246,7 @@ fun NavGraphBuilder.roomNavGraph(
                 },
                 onMuteUser = roomViewModel::muteUser,
                 onRemoveUser = roomViewModel::removeUser,
+                onSetRoomAdmin = roomViewModel::setRoomAdmin,
                 onReportUser = { userId -> roomViewModel.reportUser(userId) },
                 onJoin = roomViewModel::join,
                 onOpenModes = {

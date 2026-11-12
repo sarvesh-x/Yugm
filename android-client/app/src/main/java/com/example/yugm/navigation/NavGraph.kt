@@ -36,6 +36,7 @@ import com.example.yugm.ui.viewmodel.MainViewModel
 fun NavGraph(
     navController: NavHostController,
     mainViewModel: MainViewModel,
+    isGoogleSignInLoading: Boolean = false,
     onGoogleSignIn: () -> Unit,
     onRechargeOrderReady: (RazorpayCheckoutData) -> Unit,
     onStartGooglePlayPurchase: (CoinPack) -> Unit,
@@ -52,7 +53,7 @@ fun NavGraph(
                 username = session.user.username,
                 balance = session.user.walletBalance,
             )
-            val destination = if (!session.user.profileCompleted) {
+            val destination = if (session.isNewUser) {
                 Screen.ProfileSetup.route
             } else {
                 Screen.Discover.route
@@ -80,7 +81,7 @@ fun NavGraph(
             username = session.user.username,
             balance = session.user.walletBalance,
         )
-        val dest = if (!session.user.profileCompleted) {
+        val dest = if (session.isNewUser) {
             Screen.ProfileSetup.route
         } else {
             Screen.Discover.route
@@ -99,6 +100,7 @@ fun NavGraph(
             isLoggedIn = mainViewModel.authToken.isNotBlank(),
             authTokenProvider = { mainViewModel.authToken },
             onGoogleSignIn = onGoogleSignIn,
+            isGoogleSignInLoading = isGoogleSignInLoading,
             navigateAfterLogin = ::navigateAfterLogin,
             onProfileComplete = { session ->
                 mainViewModel.updateSession(

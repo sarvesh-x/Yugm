@@ -25,7 +25,7 @@ fun NavGraphBuilder.chatNavGraph(
             onDiscover = { navController.navigateTopLevel(Screen.Discover.route) },
             onDating = { navController.navigateTopLevel(Screen.DatingDiscovery.route) },
             onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
-            onLive = { navController.navigateTopLevel(Screen.Discover.route) },
+            onLive = { navController.navigateTopLevel(Screen.VoiceRooms.route) },
             onWallet = { navController.navigateTopLevel(Screen.Wallet.route) },
             onProfile = {
                 if (currentUserId.isNotBlank()) {

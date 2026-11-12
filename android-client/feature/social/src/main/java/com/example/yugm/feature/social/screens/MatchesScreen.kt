@@ -39,6 +39,7 @@ fun MatchesScreen(
     onDiscover: () -> Unit,
     onDating: () -> Unit,
     onCreateRoom: () -> Unit,
+    onLive: () -> Unit = onDiscover,
     onWallet: () -> Unit,
     onProfile: () -> Unit,
     onBack: () -> Unit,
@@ -74,7 +75,7 @@ fun MatchesScreen(
                 onDiscover = onDiscover,
                 onMatch = onDating,
                 onCreate = onCreateRoom,
-                onLive = onDating,
+                onLive = onLive,
                 onChat = {},
                 onWallet = onWallet,
                 onProfile = onProfile

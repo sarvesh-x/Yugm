@@ -31,7 +31,7 @@ fun NavGraphBuilder.socialNavGraph(
             onMatches = { navController.navigateTopLevel(Screen.ChatList.route) },
             onDiscover = { navController.navigateTopLevel(Screen.Discover.route) },
             onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
-            onLive = { navController.navigateTopLevel(Screen.Discover.route) },
+            onLive = { navController.navigateTopLevel(Screen.VoiceRooms.route) },
             onWallet = { navController.navigate(Screen.Wallet.route) },
             onSelfProfile = {
                 if (currentUserId.isNotBlank()) navController.navigate(Screen.ProfileDetail.createRoute(currentUserId))
@@ -302,23 +302,12 @@ fun NavGraphBuilder.socialNavGraph(
             onDating = { navController.navigateTopLevel(Screen.DatingDiscovery.route) },
             onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
             onWallet = { navController.navigateTopLevel(Screen.Wallet.route) },
-            onLive = { navController.navigateTopLevel(Screen.Discover.route) },
+            onLive = { navController.navigateTopLevel(Screen.VoiceRooms.route) },
             onProfile = {
                 if (currentUserId.isNotBlank()) navController.navigate(Screen.ProfileDetail.createRoute(currentUserId))
                 else navController.navigate(Screen.ProfileSetup.route)
             }
         )
-    }
-
-    composable(Screen.VoiceRooms.route) {
-        LaunchedEffect(Unit) {
-            val returnedToDiscover = navController.popBackStack(Screen.Discover.route, inclusive = false)
-            if (!returnedToDiscover) {
-                navController.navigate(Screen.Discover.route) {
-                    launchSingleTop = true
-                }
-            }
-        }
     }
 
     composable(Screen.Feed.route) {

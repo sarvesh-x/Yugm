@@ -29,6 +29,7 @@ data class RoomParticipant(
     val id: String = "",
     val user: Host = Host(),
     val role: String = "AUDIENCE",
+    val isRoomAdmin: Boolean = false,
     val micEnabled: Boolean = true,
     val cameraEnabled: Boolean = false
 )
