@@ -15,8 +15,10 @@ import com.example.yugm.core.api.SocketManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
@@ -91,28 +93,35 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             isLoading = true
             error = ""
-
             var loadError: Throwable? = null
             try {
-                val conversation = withContext(Dispatchers.IO) { yugmApi.conversation(authToken, partnerUserId) }
-                mergeMessages(conversation.messages)
-                relationship = conversation.relationship
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: Throwable) {
-                loadError = failure
+                supervisorScope {
+                    val historyRequest = async(Dispatchers.IO) {
+                        runCatching { yugmApi.conversation(authToken, partnerUserId) }
+                    }
+                    val partnerRequest = async(Dispatchers.IO) {
+                        runCatching { yugmApi.getUser(partnerUserId, authToken) }
+                    }
+                    historyRequest.await()
+                        .onSuccess { conversation ->
+                            mergeMessages(conversation.messages)
+                            relationship = conversation.relationship
+                        }
+                        .onFailure { failure ->
+                            if (failure is CancellationException) throw failure
+                            loadError = failure
+                        }
+                    partnerRequest.await()
+                        .onSuccess { partner = it }
+                        .onFailure { failure ->
+                            if (failure is CancellationException) throw failure
+                            if (loadError == null) loadError = failure
+                        }
+                }
+            } finally {
+                isLoading = false
             }
-
-            try {
-                partner = withContext(Dispatchers.IO) { yugmApi.getUser(partnerUserId, authToken) }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: Throwable) {
-                if (loadError == null) loadError = failure
-            }
-
             error = loadError?.message.orEmpty()
-            isLoading = false
         }
     }
 

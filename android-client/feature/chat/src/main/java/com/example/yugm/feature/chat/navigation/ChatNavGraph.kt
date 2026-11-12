@@ -1,5 +1,7 @@
 package com.example.yugm.feature.chat.navigation
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -9,6 +11,7 @@ import com.example.yugm.core.navigation.Screen
 import com.example.yugm.core.navigation.navigateTopLevel
 import com.example.yugm.feature.chat.screens.ChatListScreen
 import com.example.yugm.feature.chat.screens.ChatScreen
+import com.example.yugm.feature.chat.viewmodel.ChatViewModel
 
 fun NavGraphBuilder.chatNavGraph(
     navController: NavHostController,
@@ -42,12 +45,22 @@ fun NavGraphBuilder.chatNavGraph(
         arguments = listOf(navArgument("partnerId") { type = NavType.StringType })
     ) { backStackEntry ->
         val partnerId = backStackEntry.arguments?.getString("partnerId") ?: ""
+        val chatViewModel: ChatViewModel = hiltViewModel(backStackEntry)
+        LaunchedEffect(authToken, currentUserId, partnerId) {
+            chatViewModel.connect(authToken, currentUserId, partnerId)
+        }
         ChatScreen(
-            partner = com.example.yugm.core.model.Host(id = partnerId, name = "Match Partner"),
+            partner = chatViewModel.partner,
             currentUserId = currentUserId,
-            messages = emptyList(),
-            relationship = null,
-            onBack = { navController.popBackStack() }
+            messages = chatViewModel.messages,
+            relationship = chatViewModel.relationship,
+            loading = chatViewModel.isLoading,
+            isPartnerTyping = chatViewModel.isPartnerTyping,
+            error = chatViewModel.error,
+            onBack = { navController.popBackStack() },
+            onRetry = chatViewModel::refresh,
+            onSend = chatViewModel::sendMessage,
+            onTyping = chatViewModel::sendTypingStatus,
         )
     }
 }

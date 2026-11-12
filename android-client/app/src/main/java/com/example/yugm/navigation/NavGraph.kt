@@ -84,15 +84,6 @@ fun NavGraph(
             isLoggedIn = mainViewModel.authToken.isNotBlank(),
             authTokenProvider = { mainViewModel.authToken },
             googleWebClientId = context.getString(com.example.yugm.R.string.default_web_client_id),
-            onValidateSession = {
-                runCatching {
-                    val user = com.example.yugm.core.api.YugmApi.authMe(mainViewModel.authToken)
-                    mainViewModel.validateAndUpdate(user)
-                    true
-                }.getOrElse { error ->
-                    if (error is com.example.yugm.core.api.ApiHttpException && error.statusCode == 401) false else true
-                }
-            },
             navigateAfterLogin = ::navigateAfterLogin,
             onProfileComplete = { session ->
                 mainViewModel.updateSession(

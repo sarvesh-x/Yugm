@@ -48,8 +48,16 @@ class AuthViewModel @Inject constructor(private val yugmApi: IYugmApi) : ViewMod
             } else {
                 Tasks.await(auth.signInWithEmailAndPassword(normalizedEmail, password)).user
             } ?: error("Firebase did not return a user")
-            if (createAccount && !user.isEmailVerified) runCatching { Tasks.await(user.sendEmailVerification()) }
-            val firebaseToken = Tasks.await(user.getIdToken(true)).token ?: error("Firebase did not return an ID token")
+            // Sending the verification email is best-effort and should not hold up
+            // the session exchange or navigation into the app.
+            if (createAccount && !user.isEmailVerified) {
+                viewModelScope.launch(Dispatchers.IO) {
+                    runCatching { Tasks.await(user.sendEmailVerification()) }
+                }
+            }
+            // Sign-in has just produced a current Firebase user/token. Avoid forcing
+            // another Firebase network round trip before exchanging it with Yugm.
+            val firebaseToken = Tasks.await(user.getIdToken(false)).token ?: error("Firebase did not return an ID token")
             yugmApi.googleAuth(firebaseToken, acceptTerms, provider = "email")
         }
     }
@@ -59,7 +67,7 @@ class AuthViewModel @Inject constructor(private val yugmApi: IYugmApi) : ViewMod
         launchAuth {
             val credential = GoogleAuthProvider.getCredential(googleIdToken, null)
             val user = Tasks.await(FirebaseAuth.getInstance().signInWithCredential(credential)).user ?: error("Google sign-in returned no user")
-            val firebaseToken = Tasks.await(user.getIdToken(true)).token ?: error("Firebase did not return an ID token")
+            val firebaseToken = Tasks.await(user.getIdToken(false)).token ?: error("Firebase did not return an ID token")
             yugmApi.googleAuth(firebaseToken, acceptTerms, provider = "google")
         }
     }

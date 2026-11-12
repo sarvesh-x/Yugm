@@ -22,10 +22,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -146,129 +148,131 @@ fun ChatScreen(
     YugmAmbientBackground {
         Box(Modifier.fillMaxSize()) {
             AuroraBackground(speed = 0.8f)
-            Column(Modifier.fillMaxSize()) {
-            GlassCard(
-                modifier = Modifier.fillMaxWidth(),
-                cornerRadius = 0.dp,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
-            ) {
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                RoundAction("‹", onClick = onBack)
-                Avatar(partner?.name?.take(1) ?: "?", 45, partner?.avatar, partner?.activeCosmetics ?: com.example.yugm.core.model.ActiveCosmetics())
-                Column(Modifier.weight(1f).padding(start = 6.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(partner?.name ?: "Yugm User", color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Black)
-                        if (partner?.isVip == true) Text("  ✦", color = Pink, fontSize = 15.sp)
-                    }
-                    Text(if (partner?.isOnline == true) "Online" else "@${partner?.username ?: "chat"}", color = if (partner?.isOnline == true) Success else TextMuted, fontSize = 11.sp)
-                }
-                RoundAction("☎", onClick = onAudioCall)
-                Spacer(Modifier.width(7.dp))
-                RoundAction("▣", onClick = onVideoCall)
-                Spacer(Modifier.width(7.dp))
-                RoundAction("⋮", onClick = { showMore = true })
-            }
-            }
-
-            if (showMore) {
-                Row(Modifier.fillMaxWidth().background(SurfaceElevated).padding(10.dp), horizontalArrangement = Arrangement.End) {
-                    Text("Report", color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showMore = false; onReport() }.padding(8.dp))
-                    Text("Block", color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showMore = false; onBlock() }.padding(8.dp))
-                }
-            }
-
-            Box(Modifier.weight(1f)) {
-                if (loading && messages.isEmpty()) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingState("Retrieving conversation history…") }
-                } else {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(11.dp)
-                    ) {
-                        item { AnimatedEntrance(delay = 100) { MatchedBanner(partner?.name ?: "your match") } }
-                        if (showSafety) item { AnimatedEntrance(delay = 200) { SafetyTip(onDismiss = { showSafety = false }) } }
-                        relationship?.let { bond -> item { BondStrip(bond) } }
-                        item { ConversationDivider("Today") }
-                        if (error.isNotBlank()) item {
-                            Text("$error · Retry", color = Pink, fontSize = 12.sp, modifier = Modifier.clickable(onClick = onRetry))
-                        }
-                        itemsIndexed(messages, key = { index, message -> message.id.ifBlank { "$index-${message.createdAt}-${message.message}" } }) { index, message ->
-                            if (messages.size > 2 && index == messages.size - 2) ConversationDivider("New Messages", highlight = true)
-                            MessageBubble(
-                                message = message,
-                                mine = message.senderId == currentUserId,
-                                reactionCount = message.reactionCount + (reactions[message.id.ifBlank { index.toString() }] ?: 0),
-                                onReact = {
-                                    val key = message.id.ifBlank { index.toString() }
-                                    reactions[key] = (reactions[key] ?: 0) + 1
-                                    if (message.id.isNotBlank()) onReactMessage(message)
-                                }
+            Column(Modifier.fillMaxSize().statusBarsPadding()) {
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    cornerRadius = 0.dp,
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                ) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        RoundAction("‹", onClick = onBack)
+                        Spacer(Modifier.width(10.dp))
+                        Avatar(partner?.name?.take(1) ?: "?", 44, partner?.avatar, partner?.activeCosmetics ?: com.example.yugm.core.model.ActiveCosmetics())
+                        Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(partner?.name ?: "Loading match…", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                if (partner?.isVip == true) Text("  ✦", color = Pink, fontSize = 15.sp)
+                            }
+                            Text(
+                                if (partner?.isOnline == true) "Online" else partner?.username?.let { "@$it" } ?: "Your conversation",
+                                color = if (partner?.isOnline == true) Success else TextMuted,
+                                fontSize = 12.sp
                             )
                         }
-                        if (isPartnerTyping) item {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Avatar(partner?.name?.take(1) ?: "?", 30, partner?.avatar, partner?.activeCosmetics ?: com.example.yugm.core.model.ActiveCosmetics())
-                                Column(Modifier.padding(start = 5.dp)) {
-                                    TypingBubble()
-                                    Text("${partner?.name ?: "Your match"} is typing…", color = TextMuted, fontSize = 9.sp)
-        }
-        }
-    }
-}
+                        RoundAction("⋮", onClick = { showMore = !showMore })
                     }
                 }
-            }
 
-            AnimatedVisibility(showEmojiBar) {
-                Row(
-                    Modifier.fillMaxWidth().background(SurfaceElevated).horizontalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 9.dp),
-                    horizontalArrangement = Arrangement.spacedBy(17.dp)
+                if (showMore) {
+                    Row(Modifier.fillMaxWidth().background(SurfaceElevated).padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) {
+                        Text("Report", color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showMore = false; onReport() }.padding(10.dp))
+                        Text("Block", color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showMore = false; onBlock() }.padding(10.dp))
+                    }
+                }
+
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    if (loading && messages.isEmpty()) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingState("Loading conversation…") }
+                    } else {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            item { MatchedBanner(partner?.name ?: "your match") }
+                            if (showSafety) item { SafetyTip(onDismiss = { showSafety = false }) }
+                            relationship?.let { bond -> item { BondStrip(bond) } }
+                            item { ConversationDivider("Today") }
+                            if (error.isNotBlank()) item {
+                                Text("$error · Retry", color = Pink, fontSize = 12.sp, modifier = Modifier.clickable(onClick = onRetry).padding(vertical = 6.dp))
+                            }
+                            if (messages.isEmpty() && !loading && error.isBlank()) {
+                                item {
+                                    Box(Modifier.fillParentMaxHeight(0.62f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                        EmptyConversationState(partner?.name ?: "your match")
+                                    }
+                                }
+                            }
+                            itemsIndexed(messages, key = { index, message -> message.id.ifBlank { "$index-${message.createdAt}-${message.message}" } }) { index, message ->
+                                if (messages.size > 2 && index == messages.size - 2) ConversationDivider("New Messages", highlight = true)
+                                MessageBubble(
+                                    message = message,
+                                    mine = message.senderId == currentUserId,
+                                    reactionCount = message.reactionCount + (reactions[message.id.ifBlank { index.toString() }] ?: 0),
+                                    onReact = {
+                                        val key = message.id.ifBlank { index.toString() }
+                                        reactions[key] = (reactions[key] ?: 0) + 1
+                                        if (message.id.isNotBlank()) onReactMessage(message)
+                                    }
+                                )
+                            }
+                            if (isPartnerTyping) item {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Avatar(partner?.name?.take(1) ?: "?", 30, partner?.avatar, partner?.activeCosmetics ?: com.example.yugm.core.model.ActiveCosmetics())
+                                    Column(Modifier.padding(start = 8.dp)) {
+                                        TypingBubble()
+                                        Text("${partner?.name ?: "Your match"} is typing…", color = TextMuted, fontSize = 10.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                AnimatedVisibility(showEmojiBar) {
+                    Row(
+                        Modifier.fillMaxWidth().background(SurfaceElevated).horizontalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(18.dp)
+                    ) {
+                        listOf("😊", "😂", "❤️", "✨", "🔥", "👋", "🎧", "🌙").forEach { emoji ->
+                            Text(emoji, fontSize = 24.sp, modifier = Modifier.clickable { draft += emoji })
+                        }
+                    }
+                }
+
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding(),
+                    cornerRadius = 0.dp,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
                 ) {
-                    listOf("😊", "😂", "❤️", "✨", "🔥", "👋", "🎧", "🌙").forEach { emoji ->
-                        Text(emoji, fontSize = 23.sp, modifier = Modifier.clickable { draft += emoji })
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        RoundAction("☺", modifier = Modifier.size(42.dp), onClick = { showEmojiBar = !showEmojiBar })
+                        Row(
+                            Modifier.weight(1f).height(50.dp).clip(RoundedCornerShape(18.dp)).background(SurfaceElevated).border(1.dp, BorderColor, RoundedCornerShape(18.dp)).padding(horizontal = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            BasicTextField(
+                                value = draft,
+                                onValueChange = { draft = it.take(1000) },
+                                textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 14.sp),
+                                modifier = Modifier.weight(1f),
+                                decorationBox = { inner -> if (draft.isBlank()) Text("Message…", color = TextMuted, fontSize = 14.sp) else inner() }
+                            )
+                            Text("⌕", color = TextMuted, fontSize = 20.sp, modifier = Modifier.clickable { attachmentPicker.launch("image/*") }.padding(start = 8.dp))
+                            Text("♢", color = TextMuted, fontSize = 20.sp, modifier = Modifier.clickable { showGiftSheet = true }.padding(start = 8.dp))
+                        }
+                        Box(
+                            Modifier.size(48.dp).clip(CircleShape).background(Brush.linearGradient(listOf(PrimaryPurple, Pink))).clickable {
+                                val text = draft.trim()
+                                if (text.isNotBlank()) { draft = ""; onSend(text) }
+                            },
+                            contentAlignment = Alignment.Center
+                        ) { Text("➤", color = Color.White, fontSize = 21.sp) }
                     }
                 }
             }
-            GlassCard(
-                modifier = Modifier.fillMaxWidth().navigationBarsPadding(),
-                cornerRadius = 0.dp,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
-            ) {
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(7.dp)
-            ) {
-                RoundAction("☺", modifier = Modifier.size(40.dp), onClick = { showEmojiBar = !showEmojiBar })
-                Row(
-                    Modifier.weight(1f).height(50.dp).clip(RoundedCornerShape(17.dp)).background(SurfaceElevated).border(1.dp, BorderColor, RoundedCornerShape(17.dp)).padding(horizontal = 13.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    BasicTextField(
-                        draft,
-                        { draft = it.take(1000) },
-                        textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 14.sp),
-                        modifier = Modifier.weight(1f),
-                        decorationBox = { inner -> if (draft.isBlank()) Text("Type a message…", color = TextMuted, fontSize = 13.sp) else inner() }
-                    )
-                    Text("⌕", color = TextMuted, fontSize = 18.sp, modifier = Modifier.clickable { attachmentPicker.launch("image/*") })
-                    Text("  ♢", color = TextMuted, fontSize = 18.sp, modifier = Modifier.clickable { showGiftSheet = true })
-                }
-                Box(
-                    Modifier.size(50.dp).clip(CircleShape).background(Brush.linearGradient(listOf(PrimaryPurple, Pink, Color(0xFFFF5E64)))).clickable {
-                        val text = draft.trim()
-                        if (text.isNotBlank()) { draft = ""; onSend(text) }
-                    },
-                    contentAlignment = Alignment.Center
-                ) { Text("➤", color = Color.White, fontSize = 22.sp) }
-            }
-            }
-            }
+        }
 
         if (showGiftSheet) {
             ModalBottomSheet(onDismissRequest = { showGiftSheet = false }, containerColor = SurfaceElevated) {
@@ -308,6 +312,22 @@ private fun MatchedBanner(name: String) {
             Text("You're Matched!", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Black)
             Text("Say hello to $name and start your story ✨", color = TextMuted, fontSize = 11.sp)
         }
+    }
+}
+
+@Composable
+private fun EmptyConversationState(name: String) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            Modifier.size(56.dp).clip(CircleShape).background(Brush.linearGradient(listOf(PrimaryPurple.copy(alpha = 0.75f), Pink.copy(alpha = 0.75f)))),
+            contentAlignment = Alignment.Center
+        ) { Text("♡", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold) }
+        Text("Start the conversation", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text("Send ${name.substringBefore(' ')} a message and see where the conversation goes.", color = TextMuted, fontSize = 13.sp, lineHeight = 18.sp)
     }
 }
 

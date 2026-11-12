@@ -28,17 +28,15 @@ fun NavGraphBuilder.authNavGraph(
     isLoggedIn: Boolean,
     authTokenProvider: () -> String,
     googleWebClientId: String,
-    onValidateSession: suspend () -> Boolean,
     navigateAfterLogin: (Session) -> Unit,
     onProfileComplete: (Session) -> Unit,
 ) {
     composable(Screen.Splash.route) {
         SplashScreen {
-            val start = when {
-                !isLoggedIn -> Screen.Onboarding.route
-                onValidateSession() -> Screen.Discover.route
-                else -> Screen.Login.route
-            }
+            // Use the persisted session to render the app immediately. API requests
+            // refresh an expired access token in the background; making /auth/me a
+            // prerequisite here added a network round trip to every cold launch.
+            val start = if (isLoggedIn) Screen.Discover.route else Screen.Onboarding.route
             navController.navigate(start) {
                 popUpTo(Screen.Splash.route) { inclusive = true }
             }
