@@ -152,7 +152,13 @@ object YugmHttpClient {
             } catch (error: ApiHttpException) {
                 val mayRefresh = !path.startsWith("/auth/") || path == "/auth/me"
                 if (error.statusCode == 401 && requestAuth != null && allowRefresh && mayRefresh) {
-                    val renewed = runCatching { refreshAccessToken?.invoke(requestAuth) }.getOrNull()
+                    // A network failure during refresh is not evidence that the session
+                    // is invalid. Let the request fail offline while retaining cached auth.
+                    val renewed = try {
+                        refreshAccessToken?.invoke(requestAuth)
+                    } catch (refreshError: IOException) {
+                        throw refreshError
+                    }
                     if (!renewed.isNullOrBlank() && renewed != requestAuth) {
                         return@withContext request(method, path, renewed, body, allowRefresh = false)
                     }

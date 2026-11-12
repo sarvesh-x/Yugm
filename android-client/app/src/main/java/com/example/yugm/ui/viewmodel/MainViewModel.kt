@@ -87,10 +87,10 @@ class MainViewModel @Inject constructor(
         )
     }
 
-    suspend fun logout() {
+    suspend fun logout(revokeServerSession: Boolean = true) {
         val token = sessionManager.authToken
         val refresh = sessionManager.refreshToken
-        if (token.isNotBlank()) {
+        if (revokeServerSession && token.isNotBlank()) {
             runCatching {
                 val deviceToken = withContext(Dispatchers.IO) { Tasks.await(FirebaseMessaging.getInstance().token) }
                 if (deviceToken.isNotBlank()) withContext(Dispatchers.IO) { yugmApi.removeFcmToken(token, deviceToken) }

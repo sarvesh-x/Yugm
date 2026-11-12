@@ -23,6 +23,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import com.example.yugm.core.api.YugmApi
+import com.example.yugm.core.api.ApiHttpException
 import com.example.yugm.core.api.YugmHttpClient
 import com.example.yugm.navigation.NavGraph
 import com.example.yugm.core.navigation.Screen
@@ -93,27 +94,36 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                             val current = sessionManager.authToken
                             if (current != rejectedToken) return@withLock current
                             val refreshToken = sessionManager.refreshToken
-                            if (refreshToken.isBlank()) return@withLock null
-                            runCatching {
+                            if (refreshToken.isBlank()) {
+                                mainViewModel.logout(revokeServerSession = false)
+                                return@withLock null
+                            }
+                            try {
                                 val pair = withContext(Dispatchers.IO) { YugmApi.refreshAuth(refreshToken) }
                                 mainViewModel.updateTokens(pair)
                                 pair.accessToken
-                            }.getOrNull()
+                            } catch (error: ApiHttpException) {
+                                if (error.statusCode == 401 && sessionManager.authToken == rejectedToken) {
+                                    mainViewModel.logout(revokeServerSession = false)
+                                    null
+                                } else throw error
+                            }
                         }
                     }
                     YugmHttpClient.onUnauthorized = { rejectedToken ->
                         // Several requests may fail together. Only clear the session if
                         // the rejected token is still the current one, and navigate once.
-                        if (rejectedToken == sessionManager.authToken &&
-                            rejectedToken == mainViewModel.authToken
-                        ) {
-                            scope.launch { mainViewModel.logout() }
-                            if (navController.currentDestination?.route != Screen.Login.route) {
+                        val rejectedCurrentSession = rejectedToken == sessionManager.authToken && rejectedToken == mainViewModel.authToken
+                        if (rejectedCurrentSession) {
+                            scope.launch { mainViewModel.logout(revokeServerSession = false) }
+                        }
+                        val sessionAlreadyCleared = sessionManager.authToken.isBlank() && mainViewModel.authToken.isBlank()
+                        val route = navController.currentDestination?.route
+                        if ((rejectedCurrentSession || sessionAlreadyCleared) && route != Screen.Login.route && route != Screen.Splash.route) {
                                 navController.navigate(Screen.Login.route) {
                                     popUpTo(0) { inclusive = true }
                                     launchSingleTop = true
                                 }
-                            }
                         }
                     }
                 }
