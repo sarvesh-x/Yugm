@@ -113,6 +113,12 @@ export async function verifyIdToken(idToken: string): Promise<VerifiedFirebaseId
   }
 }
 
+export async function verifyAppCheckToken(token: string) {
+  const firebase = fb();
+  if (!firebase.apps.length) throw new Error("Firebase Admin service account is required for App Check verification");
+  return firebase.appCheck().verifyToken(token, { consume: true });
+}
+
 export async function notifyUser(userId: string, title: string, body: string, data: Record<string, string> = {}) {
   const firebase = fb();
   if (!firebase.apps.length) return;

@@ -23,6 +23,7 @@ fun JSONObject.toUser(): YugmUser = YugmUser(
     name = optString("name", ""),
     username = optString("username", ""),
     profileCompleted = optBoolean("profileCompleted", false),
+    emailVerified = optBoolean("emailVerified", false),
     walletBalance = optInt("walletBalance", 0),
     isVip = optBoolean("isVip", false),
     vipTier = optString("vipTier", ""),

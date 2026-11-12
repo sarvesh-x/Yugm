@@ -10,6 +10,14 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: TRUST_PROXY
+        value: "1"
+      - key: ACCESS_TOKEN_TTL
+        value: 45m
+      - key: REFRESH_TOKEN_TTL_DAYS
+        value: "60"
+      - key: APP_CHECK_ENFORCE
+        value: "true"
       - key: JWT_SECRET
         generateValue: true
       - key: ADMIN_JWT_SECRET

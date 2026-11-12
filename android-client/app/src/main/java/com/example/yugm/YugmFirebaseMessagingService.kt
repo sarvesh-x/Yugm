@@ -6,8 +6,8 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import com.example.yugm.core.api.YugmApi
 import com.example.yugm.core.data.SessionManager
+import com.example.yugm.core.api.YugmApi
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import dagger.hilt.android.AndroidEntryPoint
@@ -16,24 +16,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
-import java.util.concurrent.TimeUnit
-import timber.log.Timber
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class YugmFirebaseMessagingService : FirebaseMessagingService() {
     @Inject lateinit var sessionManager: SessionManager
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .build()
 
     override fun onCreate() {
         super.onCreate()
@@ -42,25 +30,11 @@ class YugmFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        val authToken = sessionManager.authToken
-        if (authToken.isNotBlank()) {
-            scope.launch {
-                withContext(Dispatchers.IO) {
-                    try {
-                        val json = "application/json; charset=utf-8".toMediaType()
-                        val body = JSONObject().put("token", token).put("platform", "android").toString()
-                            .toRequestBody(json)
-                        val request = Request.Builder()
-                            .url(YugmApi.endpoint("/notifications/device-token"))
-                            .header("Authorization", "Bearer $authToken")
-                            .post(body)
-                            .build()
-                        httpClient.newCall(request).execute()
-                    } catch (e: Exception) {
-                        Timber.tag(TAG).e(e, "Failed to register FCM token")
-                    }
-                }
-            }
+        sessionManager.pendingFcmToken = token
+        if (sessionManager.authToken.isNotBlank()) scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { YugmApi.registerFcmToken(sessionManager.authToken, token) }
+            }.onSuccess { sessionManager.pendingFcmToken = "" }
         }
     }
 
@@ -107,8 +81,8 @@ class YugmFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     companion object {
-        private const val TAG = "YugmFCM"
         private const val CHANNEL_ID = "yugm_default"
         private var notifId = 0
     }
 }
+

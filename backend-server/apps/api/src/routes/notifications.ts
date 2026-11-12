@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
+import { requireAppCheck } from "../middleware/appCheck.js";
 import { validateBody } from "../middleware/validate.js";
 import { Notification } from "../models/Notification.js";
 import { DeviceToken } from "../models/DeviceToken.js";
@@ -13,7 +14,7 @@ const deviceTokenSchema = z.object({
   platform: z.enum(["android", "ios", "web"])
 });
 
-notificationsRouter.post("/device-token", requireAuth, validateBody(deviceTokenSchema), asyncHandler(async (req: AuthRequest, res) => {
+notificationsRouter.post("/device-token", requireAppCheck, requireAuth, validateBody(deviceTokenSchema), asyncHandler(async (req: AuthRequest, res) => {
   const existing = await DeviceToken.findOne({ token: req.body.token }).lean();
   if (existing && existing.userId.toString() !== req.user!.id) {
     throw new HttpError(403, "Token belongs to another user", ErrorCode.FORBIDDEN);
@@ -33,6 +34,11 @@ notificationsRouter.post("/device-token", requireAuth, validateBody(deviceTokenS
   );
 
   sendOk(res, { token });
+}));
+
+notificationsRouter.post("/device-token/remove", requireAppCheck, requireAuth, validateBody(z.object({ token: z.string().min(20) })), asyncHandler(async (req: AuthRequest, res) => {
+  await DeviceToken.deleteOne({ userId: req.user!._id, token: req.body.token });
+  sendOk(res, { removed: true });
 }));
 
 notificationsRouter.get("/", requireAuth, asyncHandler(async (req: AuthRequest, res) => {

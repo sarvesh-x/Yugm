@@ -28,11 +28,11 @@ class AuthViewModel @Inject constructor(
     private val _authSuccess = MutableSharedFlow<Session>()
     val authSuccess = _authSuccess.asSharedFlow()
 
-    fun googleAuth(idToken: String) {
+    fun googleAuth(idToken: String, acceptTerms: Boolean) {
         viewModelScope.launch {
             isLoading = true
             error = null
-            runCatching { YugmApi.googleAuth(idToken) }
+            runCatching { YugmApi.googleAuth(idToken, acceptTerms) }
                 .onSuccess { session ->
                     saveSession(session)
                     _authSuccess.emit(session)
@@ -44,11 +44,11 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    fun phoneAuth(idToken: String) {
+    fun phoneAuth(idToken: String, acceptTerms: Boolean) {
         viewModelScope.launch {
             isLoading = true
             error = null
-            runCatching { YugmApi.phoneAuth(idToken) }
+            runCatching { YugmApi.phoneAuth(idToken, acceptTerms) }
                 .onSuccess { session ->
                     saveSession(session)
                     _authSuccess.emit(session)

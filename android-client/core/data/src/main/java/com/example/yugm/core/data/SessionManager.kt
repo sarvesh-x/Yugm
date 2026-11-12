@@ -27,6 +27,26 @@ class SessionManager @Inject constructor(
         get() = prefs.getString("authToken", "") ?: ""
         set(value) = prefs.edit().putString("authToken", value).apply()
 
+    var refreshToken: String
+        get() = prefs.getString("refreshToken", "") ?: ""
+        set(value) = prefs.edit().putString("refreshToken", value).apply()
+
+    var sessionId: String
+        get() = prefs.getString("sessionId", "") ?: ""
+        set(value) = prefs.edit().putString("sessionId", value).apply()
+
+    var accessTokenExpiresAt: Long
+        get() = prefs.getLong("accessTokenExpiresAt", 0L)
+        set(value) = prefs.edit().putLong("accessTokenExpiresAt", value).apply()
+
+    var emailVerified: Boolean
+        get() = prefs.getBoolean("emailVerified", false)
+        set(value) = prefs.edit().putBoolean("emailVerified", value).apply()
+
+    var pendingFcmToken: String
+        get() = prefs.getString("pendingFcmToken", "") ?: ""
+        set(value) = prefs.edit().putString("pendingFcmToken", value).apply()
+
     var userId: String
         get() = prefs.getString("userId", "") ?: ""
         set(value) = prefs.edit().putString("userId", value).apply()
@@ -42,6 +62,20 @@ class SessionManager @Inject constructor(
     var balance: Int
         get() = prefs.getInt("balance", 0)
         set(value) = prefs.edit().putInt("balance", value).apply()
+
+    fun saveSession(token: String, refresh: String, session: String, expiresInSeconds: Long, id: String, name: String, handle: String, walletBalance: Int, emailVerified: Boolean) {
+        prefs.edit()
+            .putString("authToken", token)
+            .putString("refreshToken", refresh)
+            .putString("sessionId", session)
+            .putLong("accessTokenExpiresAt", System.currentTimeMillis() + expiresInSeconds * 1000L)
+            .putString("userId", id)
+            .putString("userName", name)
+            .putString("username", handle)
+            .putInt("balance", walletBalance)
+            .putBoolean("emailVerified", emailVerified)
+            .apply()
+    }
 
     fun logout() {
         prefs.edit().clear().apply()

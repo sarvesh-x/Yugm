@@ -87,6 +87,7 @@ import com.example.yugm.core.model.RoomType
 import com.example.yugm.core.model.SavedGameScoreResult
 import com.example.yugm.core.model.SupportTicket
 import com.example.yugm.core.model.Session
+import com.example.yugm.core.model.RefreshedSession
 import com.example.yugm.core.model.TrustVerificationStatus
 import com.example.yugm.core.model.UserThemesResponse
 import com.example.yugm.core.model.VibeDimensionListResponse
@@ -136,10 +137,11 @@ import com.example.yugm.core.model.WingmanAnalyticsResponse
 import org.json.JSONObject
 
 interface IYugmApi {
-    suspend fun requestOtp(identifier: String)
-    suspend fun verifyOtp(identifier: String, otp: String): Session
-    suspend fun googleAuth(idToken: String): Session
-    suspend fun phoneAuth(idToken: String): Session
+    suspend fun googleAuth(idToken: String, acceptTerms: Boolean, provider: String = "google"): Session
+    suspend fun phoneAuth(idToken: String, acceptTerms: Boolean): Session
+    suspend fun refreshAuth(refreshToken: String): RefreshedSession
+    suspend fun logoutAuth(token: String, refreshToken: String)
+    suspend fun authMe(token: String): YugmUser
 
     suspend fun rooms(type: RoomType? = null): List<Room>
     suspend fun updateRoom(token: String, roomId: String, room: Room, coverImage: String? = null): Room
@@ -275,6 +277,8 @@ interface IYugmApi {
     suspend fun reportUser(token: String, roomId: String, targetUserId: String, reason: String)
     suspend fun sendFeedback(token: String, subject: String, message: String, category: String = "OTHER")
     suspend fun registerFcmToken(token: String, fcmToken: String)
+    suspend fun removeFcmToken(token: String, fcmToken: String)
+    suspend fun deleteOwnAccount(token: String)
     suspend fun level(token: String): LevelStatus
     suspend fun checkIn(token: String): DailyCheckInResult
     suspend fun claimAchievement(token: String, achievementId: String): ClaimAchievementResult

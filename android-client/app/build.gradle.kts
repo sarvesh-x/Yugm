@@ -210,6 +210,7 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
     implementation(libs.firebase.auth)
+    implementation("com.google.firebase:firebase-appcheck-playintegrity")
     implementation(libs.play.services.auth)
     implementation(libs.livekit.android)
     implementation(libs.androidx.navigation.compose)
@@ -246,4 +247,5 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation("com.google.firebase:firebase-appcheck-debug")
 }

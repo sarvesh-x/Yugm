@@ -7,19 +7,11 @@ import javax.inject.Singleton
 
 @Singleton
 class AuthRepository @Inject constructor() {
-    suspend fun googleAuth(idToken: String): Result<Session> = runCatching {
-        YugmApi.googleAuth(idToken)
+    suspend fun googleAuth(idToken: String, acceptTerms: Boolean, provider: String = "google"): Result<Session> = runCatching {
+        YugmApi.googleAuth(idToken, acceptTerms, provider)
     }
 
-    suspend fun phoneAuth(idToken: String): Result<Session> = runCatching {
-        YugmApi.phoneAuth(idToken)
-    }
-
-    suspend fun requestOtp(identifier: String): Result<Unit> = runCatching {
-        YugmApi.requestOtp(identifier)
-    }
-
-    suspend fun verifyOtp(identifier: String, otp: String): Result<Session> = runCatching {
-        YugmApi.verifyOtp(identifier, otp)
+    suspend fun phoneAuth(idToken: String, acceptTerms: Boolean): Result<Session> = runCatching {
+        YugmApi.phoneAuth(idToken, acceptTerms)
     }
 }

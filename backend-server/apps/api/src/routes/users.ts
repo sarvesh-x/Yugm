@@ -24,6 +24,8 @@ import { getVipStatus } from "../services/vip.js";
 import { dailyCheckInStart, getLevelStatus, grantXp } from "../services/levels.js";
 import { creditWallet } from "../services/wallet.js";
 import { findRelationship, grantRelationshipXp } from "../services/relationships.js";
+import { DeviceToken } from "../models/DeviceToken.js";
+import { revokeAllForUser } from "../services/tokens.js";
 
 export const usersRouter = Router();
 usersRouter.use(requireAuth);
@@ -89,7 +91,17 @@ function hasCompletedProfile(user: any) {
 
 usersRouter.get("/me", (req: AuthRequest, res) => sendOk(res, { user: publicUser(req.user) }));
 
-usersRouter.patch("/me", validateBody(profileSchema.partial()), asyncHandler(async (req: AuthRequest, res) => {
+usersRouter.delete("/me", asyncHandler(async (req: AuthRequest, res) => {
+  const requestedAt = new Date();
+  await User.updateOne({ _id: req.user!._id }, { $set: { deletionRequestedAt: requestedAt }, $inc: { tokenVersion: 1 } });
+  await Promise.all([
+    revokeAllForUser(req.user!.id),
+    DeviceToken.deleteMany({ userId: req.user!._id })
+  ]);
+  sendOk(res, { deletionScheduledAt: new Date(requestedAt.getTime() + 30 * 24 * 60 * 60 * 1000) });
+}));
+
+usersRouter.patch("/me", validateBody(profileSchema.partial().refine((data) => data.age === undefined || (data.age >= 18 && data.age <= 100), { message: "You must be between 18 and 100 years old", path: ["age"] })), asyncHandler(async (req: AuthRequest, res) => {
   const allowedFields = ["name", "username", "gender", "age", "city", "state", "bio", "vibeLine", "interests", "hobbies", "languages", "avatar", "interestedIn", "lookingFor", "datingAgeMin", "datingAgeMax"];
   const update: Record<string, unknown> = {};
   for (const key of allowedFields) {

@@ -4,9 +4,12 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Checkbox
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +50,7 @@ fun PhoneAuthScreen(
     var step by remember { mutableStateOf("phone") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var acceptTerms by remember { mutableStateOf(false) }
 
     fun verifyCredential(credential: com.google.firebase.auth.PhoneAuthCredential) {
         loading = true
@@ -59,7 +63,8 @@ fun PhoneAuthScreen(
                             result.user?.getIdToken(false)
                             ?: throw IllegalStateException("Firebase did not return a user")
                     ).token ?: throw IllegalStateException("Firebase did not return an ID token")
-                    YugmApi.phoneAuth(token)
+                    if (!acceptTerms) throw IllegalStateException("Confirm that you are 18+ and accept the Terms and Privacy Policy.")
+                    YugmApi.phoneAuth(token, acceptTerms)
                 }
             }.onSuccess(onAuthSuccess).onFailure {
                 error = it.message ?: "Phone verification failed"
@@ -118,6 +123,10 @@ fun PhoneAuthScreen(
         title = if (step == "phone") "Enter phone number" else "Verify phone number",
         subtitle = if (step == "phone") "Firebase will send a one-time code via SMS." else "Code sent to $phone"
     ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = acceptTerms, onCheckedChange = { acceptTerms = it })
+            Text("I am 18+ and accept the Terms and Privacy Policy", color = TextMuted)
+        }
         if (step == "phone") {
             YugmTextField(value = phone, onValueChange = { phone = it }, label = "+911234567890", keyboardType = KeyboardType.Phone)
             if (error != null) {
@@ -125,7 +134,7 @@ fun PhoneAuthScreen(
                 Text(error!!, color = TextMuted)
             }
             Spacer(Modifier.height(12.dp))
-            PrimaryButton(text = if (loading) "Sending code..." else "Send code", onClick = { sendCode() }, enabled = !loading && phone.length >= 8)
+            PrimaryButton(text = if (loading) "Sending code..." else "Send code", onClick = { sendCode() }, enabled = !loading && phone.length >= 8 && acceptTerms)
         } else {
             YugmTextField(value = otp, onValueChange = { otp = it.filter(Char::isDigit).take(6) }, label = "6-digit code", keyboardType = KeyboardType.Number)
             if (error != null) {
@@ -133,7 +142,7 @@ fun PhoneAuthScreen(
                 Text(error!!, color = TextMuted)
             }
             Spacer(Modifier.height(12.dp))
-            PrimaryButton(text = if (loading) "Verifying..." else "Verify and continue", onClick = { verifyCode() }, enabled = !loading && otp.length == 6)
+            PrimaryButton(text = if (loading) "Verifying..." else "Verify and continue", onClick = { verifyCode() }, enabled = !loading && otp.length == 6 && acceptTerms)
         }
         Spacer(Modifier.height(10.dp))
         TextButton(onClick = {

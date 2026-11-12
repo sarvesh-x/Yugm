@@ -8,143 +8,114 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.yugm.core.api.IYugmApi
 import com.example.yugm.core.model.Session
+import com.google.android.gms.tasks.Tasks
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import javax.inject.Inject
-import com.google.firebase.auth.FirebaseAuth
-import com.google.android.gms.tasks.Tasks
 import java.util.Locale
+import javax.inject.Inject
 
 @HiltViewModel
-class AuthViewModel @Inject constructor(
-    private val yugmApi: IYugmApi
-) : ViewModel() {
-
+class AuthViewModel @Inject constructor(private val yugmApi: IYugmApi) : ViewModel() {
     var isLoading by mutableStateOf(false)
         private set
-
     var error by mutableStateOf<String?>(null)
         private set
-
     var session by mutableStateOf<Session?>(null)
         private set
+    var googleCredentialLoading by mutableStateOf(false)
+        private set
 
-    fun clearError() {
-        error = null
-    }
+    fun setGoogleCredentialBusy(value: Boolean) { googleCredentialLoading = value }
 
-    fun emailAuth(email: String, password: String, createAccount: Boolean) {
+    fun clearError() { error = null }
+
+    fun emailAuth(email: String, password: String, createAccount: Boolean, acceptTerms: Boolean) {
         val normalizedEmail = email.trim().lowercase(Locale.ROOT)
-        if (!Patterns.EMAIL_ADDRESS.matcher(normalizedEmail).matches()) {
-            error = "Enter a valid email address, for example name@example.com."
-            return
+        if (!Patterns.EMAIL_ADDRESS.matcher(normalizedEmail).matches()) { error = "Enter a valid email address."; return }
+        if (!acceptTerms) { error = "Confirm that you are 18+ and accept the Terms and Privacy Policy."; return }
+        if (password.length < 8 || password.none(Char::isDigit) || password.none(Char::isLetter)) {
+            error = "Use at least 8 characters with a letter and a number."; return
         }
+        launchAuth {
+            val auth = FirebaseAuth.getInstance()
+            val priorSignup = auth.currentUser?.takeIf { createAccount && it.email.equals(normalizedEmail, true) }
+            val user = priorSignup ?: if (createAccount) {
+                Tasks.await(auth.createUserWithEmailAndPassword(normalizedEmail, password)).user
+            } else {
+                Tasks.await(auth.signInWithEmailAndPassword(normalizedEmail, password)).user
+            } ?: error("Firebase did not return a user")
+            if (createAccount && !user.isEmailVerified) runCatching { Tasks.await(user.sendEmailVerification()) }
+            val firebaseToken = Tasks.await(user.getIdToken(true)).token ?: error("Firebase did not return an ID token")
+            yugmApi.googleAuth(firebaseToken, acceptTerms, provider = "email")
+        }
+    }
+
+    fun googleAuth(googleIdToken: String, acceptTerms: Boolean) {
+        if (!acceptTerms) { error = "Confirm that you are 18+ and accept the Terms and Privacy Policy."; return }
+        launchAuth {
+            val credential = GoogleAuthProvider.getCredential(googleIdToken, null)
+            val user = Tasks.await(FirebaseAuth.getInstance().signInWithCredential(credential)).user ?: error("Google sign-in returned no user")
+            val firebaseToken = Tasks.await(user.getIdToken(true)).token ?: error("Firebase did not return an ID token")
+            yugmApi.googleAuth(firebaseToken, acceptTerms, provider = "google")
+        }
+    }
+
+    fun phoneAuth(firebaseIdToken: String, acceptTerms: Boolean) {
+        if (!acceptTerms) { error = "Confirm that you are 18+ and accept the Terms and Privacy Policy."; return }
+        launchAuth { yugmApi.phoneAuth(firebaseIdToken, acceptTerms) }
+    }
+
+    fun forgotPassword(email: String) {
+        val normalizedEmail = email.trim().lowercase(Locale.ROOT)
+        if (!Patterns.EMAIL_ADDRESS.matcher(normalizedEmail).matches()) { error = "Enter your email address first."; return }
         viewModelScope.launch {
             isLoading = true
             error = null
-            runCatching {
+            runCatching { withContext(Dispatchers.IO) { Tasks.await(FirebaseAuth.getInstance().sendPasswordResetEmail(normalizedEmail)) } }
+                .onFailure { error = mapAuthError(it) }
+            isLoading = false
+        }
+    }
+
+    fun refreshEmailVerification(onComplete: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val result = runCatching {
                 withContext(Dispatchers.IO) {
-                    val auth = FirebaseAuth.getInstance()
-                    // If Firebase account creation succeeded but the Yugm API
-                    // timed out, Firebase keeps the new user signed in. Reuse
-                    // that user on a signup retry instead of attempting to
-                    // create the same Firebase account again.
-                    val existingSignupUser = auth.currentUser?.takeIf {
-                        createAccount && it.email.equals(normalizedEmail, ignoreCase = true)
-                    }
-                    val firebaseUser = existingSignupUser ?: if (createAccount) {
-                        Tasks.await(auth.createUserWithEmailAndPassword(normalizedEmail, password)).user
-                    } else {
-                        Tasks.await(auth.signInWithEmailAndPassword(normalizedEmail, password)).user
-                    } ?: throw IllegalStateException("Firebase did not return a user")
-                    val idToken = Tasks.await(
-                        firebaseUser.getIdToken(false)
-                    ).token ?: throw IllegalStateException("Firebase did not return an ID token")
-                    yugmApi.googleAuth(idToken)
-                }
-            }.onSuccess {
-                session = it
-                isLoading = false
-            }.onFailure {
-                isLoading = false
-                error = when (it) {
-                    is com.google.firebase.auth.FirebaseAuthInvalidCredentialsException -> "Check your email and password, then try again."
-                    is com.google.firebase.auth.FirebaseAuthUserCollisionException -> "An account already uses this email. Sign in instead."
-                    is com.google.firebase.auth.FirebaseAuthInvalidUserException -> "No account found for this email. Create an account first."
-                    is java.net.SocketTimeoutException -> "The server took too long to respond. Try again; your Firebase signup is saved."
-                    else -> it.message ?: "Email sign-in failed"
+                    val user = FirebaseAuth.getInstance().currentUser ?: error("Sign in again to check verification.")
+                    Tasks.await(user.reload())
+                    user.isEmailVerified
                 }
             }
+            result.onSuccess(onComplete).onFailure { error = mapAuthError(it) }
         }
     }
 
-    fun requestOtp(identifier: String, onSuccess: () -> Unit) {
+    private fun launchAuth(block: suspend () -> Session) {
+        if (isLoading) return
         viewModelScope.launch {
             isLoading = true
             error = null
-            runCatching {
-                withContext(Dispatchers.IO) { yugmApi.requestOtp(identifier) }
-            }.onSuccess {
-                isLoading = false
-                onSuccess()
-            }.onFailure {
-                isLoading = false
-                error = it.message ?: "Failed to send OTP"
-            }
+            runCatching { withContext(Dispatchers.IO) { block() } }
+                .onSuccess { session = it }
+                .onFailure { error = mapAuthError(it) }
+            isLoading = false
         }
     }
 
-    fun verifyOtp(identifier: String, otp: String) {
-        viewModelScope.launch {
-            isLoading = true
-            error = null
-            runCatching {
-                withContext(Dispatchers.IO) { yugmApi.verifyOtp(identifier, otp) }
-            }.onSuccess {
-                session = it
-                isLoading = false
-            }.onFailure {
-                isLoading = false
-                error = it.message ?: "Verification failed"
-            }
-        }
-    }
-
-    fun googleAuth(idToken: String) {
-        viewModelScope.launch {
-            isLoading = true
-            error = null
-            runCatching {
-                withContext(Dispatchers.IO) { yugmApi.googleAuth(idToken) }
-            }.onSuccess {
-                session = it
-                isLoading = false
-            }.onFailure {
-                isLoading = false
-                error = if (it is java.net.SocketTimeoutException) {
-                    "The server took too long to respond. Try Google sign-in again."
-                } else {
-                    it.message ?: "Google sign-in failed"
-                }
-            }
-        }
-    }
-
-    fun phoneAuth(idToken: String) {
-        viewModelScope.launch {
-            isLoading = true
-            error = null
-            runCatching {
-                withContext(Dispatchers.IO) { yugmApi.phoneAuth(idToken) }
-            }.onSuccess {
-                session = it
-                isLoading = false
-            }.onFailure {
-                isLoading = false
-                error = it.message ?: "Phone auth failed"
-            }
+    private fun mapAuthError(error: Throwable): String {
+        val root = generateSequence(error) { it.cause }.last()
+        return when (root) {
+            is com.google.firebase.auth.FirebaseAuthInvalidCredentialsException -> "Check your email, password, or verification code."
+            is com.google.firebase.auth.FirebaseAuthUserCollisionException -> "An account already uses this email. Sign in instead."
+            is com.google.firebase.auth.FirebaseAuthInvalidUserException -> "No account was found for this email. Create one first."
+            is com.google.firebase.auth.FirebaseAuthWeakPasswordException -> "Choose a stronger password with at least 8 characters."
+            is com.google.firebase.FirebaseNetworkException, is java.io.IOException -> "Check your connection and try again."
+            else -> if (root.message?.contains("too many", ignoreCase = true) == true) "Too many attempts. Wait a little before trying again."
+                else root.message?.takeIf(String::isNotBlank) ?: "Sign-in failed. Please try again."
         }
     }
 }

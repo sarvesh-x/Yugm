@@ -6,10 +6,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import kotlinx.coroutines.launch
 import com.example.yugm.core.api.VibeApi
 import com.example.yugm.core.model.CoinPack
 import com.example.yugm.core.model.RazorpayCheckoutData
@@ -29,40 +32,17 @@ import com.example.yugm.feature.settings.navigation.settingsNavGraph
 import com.example.yugm.feature.social.navigation.socialNavGraph
 import com.example.yugm.feature.wallet.navigation.walletNavGraph
 import com.example.yugm.ui.screens.WingmanScreen
-import com.example.yugm.ui.viewmodel.AuthViewModel
 import com.example.yugm.ui.viewmodel.MainViewModel
 
 @Composable
 fun NavGraph(
     navController: NavHostController,
     mainViewModel: MainViewModel,
-    isGoogleSignInLoading: Boolean = false,
-    onGoogleSignIn: () -> Unit,
     onRechargeOrderReady: (RazorpayCheckoutData) -> Unit,
     onStartGooglePlayPurchase: (CoinPack) -> Unit,
 ) {
-    val authViewModel: AuthViewModel = hiltViewModel()
-    val authSuccess by authViewModel.authSuccess.collectAsState(initial = null)
-
-    LaunchedEffect(authSuccess) {
-        authSuccess?.let { session ->
-            mainViewModel.updateSession(
-                token = session.token,
-                userId = session.user.id,
-                name = session.user.name,
-                username = session.user.username,
-                balance = session.user.walletBalance,
-            )
-            val destination = if (session.isNewUser) {
-                Screen.ProfileSetup.route
-            } else {
-                Screen.Discover.route
-            }
-            navController.navigate(destination) {
-                popUpTo(Screen.Login.route) { inclusive = true }
-            }
-        }
-    }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     val vibeInitDone = remember { mutableStateOf(false) }
     LaunchedEffect(mainViewModel.authToken) {
@@ -80,6 +60,10 @@ fun NavGraph(
             name = session.user.name,
             username = session.user.username,
             balance = session.user.walletBalance,
+            refreshToken = session.refreshToken,
+            sessionId = session.sessionId,
+            expiresIn = session.expiresIn,
+            emailVerified = session.user.emailVerified,
         )
         val dest = if (session.isNewUser) {
             Screen.ProfileSetup.route
@@ -99,8 +83,16 @@ fun NavGraph(
             navController = navController,
             isLoggedIn = mainViewModel.authToken.isNotBlank(),
             authTokenProvider = { mainViewModel.authToken },
-            onGoogleSignIn = onGoogleSignIn,
-            isGoogleSignInLoading = isGoogleSignInLoading,
+            googleWebClientId = context.getString(com.example.yugm.R.string.default_web_client_id),
+            onValidateSession = {
+                runCatching {
+                    val user = com.example.yugm.core.api.YugmApi.authMe(mainViewModel.authToken)
+                    mainViewModel.validateAndUpdate(user)
+                    true
+                }.getOrElse { error ->
+                    if (error is com.example.yugm.core.api.ApiHttpException && error.statusCode == 401) false else true
+                }
+            },
             navigateAfterLogin = ::navigateAfterLogin,
             onProfileComplete = { session ->
                 mainViewModel.updateSession(
@@ -109,6 +101,10 @@ fun NavGraph(
                     name = session.user.name,
                     username = session.user.username,
                     balance = session.user.walletBalance,
+                    refreshToken = session.refreshToken,
+                    sessionId = session.sessionId,
+                    expiresIn = session.expiresIn,
+                    emailVerified = session.user.emailVerified,
                 )
                 navController.navigate(Screen.Discover.route) {
                     popUpTo(Screen.ProfileSetup.route) { inclusive = true }
@@ -153,7 +149,7 @@ fun NavGraph(
             currentUserId = mainViewModel.currentUserId,
             userName = mainViewModel.userName,
             username = mainViewModel.username,
-            onLogout = { mainViewModel.logout() }
+            onLogout = { scope.launch { mainViewModel.logout() } }
         )
         roomModesNavGraph(navController, mainViewModel.authToken, mainViewModel.currentUserId)
         moderationNavGraph(navController, mainViewModel.authToken)

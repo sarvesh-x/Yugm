@@ -59,6 +59,7 @@ data class YugmUser(
     val name: String = "",
     val username: String = "",
     val profileCompleted: Boolean = false,
+    val emailVerified: Boolean = false,
     val walletBalance: Int = 0,
     val isVip: Boolean = false,
     val vipTier: String = "",
@@ -69,6 +70,15 @@ data class YugmUser(
     val activeCosmetics: ActiveCosmetics = ActiveCosmetics()
 )
 
-data class Session(val token: String, val user: YugmUser, val isNewUser: Boolean = false)
+data class Session(
+    val token: String,
+    val user: YugmUser,
+    val isNewUser: Boolean = false,
+    val refreshToken: String = "",
+    val sessionId: String = "",
+    val expiresIn: Long = 2700
+)
+
+data class RefreshedSession(val accessToken: String, val refreshToken: String, val sessionId: String, val expiresIn: Long)
 
 data class MediaSession(val token: String, val url: String, val roomName: String, val role: String)

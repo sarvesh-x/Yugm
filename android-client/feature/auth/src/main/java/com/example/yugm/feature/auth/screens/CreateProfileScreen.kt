@@ -38,7 +38,8 @@ fun CreateProfileScreen(
         gender: String,
         age: Int,
         lookingFor: String,
-        avatar: String
+        avatar: String,
+        acceptTerms: Boolean
     ) -> Unit
 ) {
     val context = LocalContext.current
@@ -346,7 +347,7 @@ fun CreateProfileScreen(
                                 onDone(
                                     name, handle, bio, city,
                                     selectedInterests.toList(), selectedLanguages.toList(),
-                                    gender, age, lookingFor, avatarUrl
+                                    gender, age, lookingFor, avatarUrl, termsAccepted
                                 )
                             } else {
                                 step++

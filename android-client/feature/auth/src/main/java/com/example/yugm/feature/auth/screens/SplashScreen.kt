@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.sp
 import com.example.yugm.core.ui.theme.*
 
 @Composable
-fun SplashScreen(onTimeout: () -> Unit) {
+fun SplashScreen(onTimeout: suspend () -> Unit) {
     val scale = remember { Animatable(0.6f) }
 
     LaunchedEffect(Unit) {

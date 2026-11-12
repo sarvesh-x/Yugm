@@ -105,6 +105,7 @@ import com.example.yugm.core.model.RoomType
 import com.example.yugm.core.model.SavedGameScoreResult
 import com.example.yugm.core.model.SupportTicket
 import com.example.yugm.core.model.Session
+import com.example.yugm.core.model.RefreshedSession
 import com.example.yugm.core.model.TrustVerificationStatus
 import com.example.yugm.core.model.UserThemesResponse
 import com.example.yugm.core.model.VipPlan
@@ -146,10 +147,11 @@ object YugmApi : IYugmApi {
     fun endpoint(path: String): String = YugmHttpClient.endpoint(path)
 
     // Auth
-    override suspend fun requestOtp(identifier: String) = AuthApi.requestOtp(identifier)
-    override suspend fun verifyOtp(identifier: String, otp: String): Session = AuthApi.verifyOtp(identifier, otp)
-    override suspend fun googleAuth(idToken: String): Session = AuthApi.googleAuth(idToken)
-    override suspend fun phoneAuth(idToken: String): Session = AuthApi.phoneAuth(idToken)
+    override suspend fun googleAuth(idToken: String, acceptTerms: Boolean, provider: String): Session = AuthApi.googleAuth(idToken, acceptTerms, provider)
+    override suspend fun phoneAuth(idToken: String, acceptTerms: Boolean): Session = AuthApi.phoneAuth(idToken, acceptTerms)
+    override suspend fun refreshAuth(refreshToken: String): RefreshedSession = AuthApi.refresh(refreshToken)
+    override suspend fun logoutAuth(token: String, refreshToken: String) = AuthApi.logout(token, refreshToken)
+    override suspend fun authMe(token: String): YugmUser = AuthApi.me(token)
 
     // Rooms
     override suspend fun rooms(type: RoomType?): List<Room> = RoomApi.rooms(type)
@@ -281,6 +283,8 @@ object YugmApi : IYugmApi {
     override suspend fun reportUser(token: String, roomId: String, targetUserId: String, reason: String) = UserApi.reportUser(token, roomId, targetUserId, reason)
     override suspend fun sendFeedback(token: String, subject: String, message: String, category: String) = UserApi.sendFeedback(token, subject, message, category)
     override suspend fun registerFcmToken(token: String, fcmToken: String) = UserApi.registerFcmToken(token, fcmToken)
+    override suspend fun removeFcmToken(token: String, fcmToken: String) = UserApi.removeFcmToken(token, fcmToken)
+    override suspend fun deleteOwnAccount(token: String) = UserApi.deleteOwnAccount(token)
     override suspend fun level(token: String): LevelStatus = UserApi.level(token)
     override suspend fun checkIn(token: String): DailyCheckInResult = UserApi.checkIn(token)
     override suspend fun claimAchievement(token: String, achievementId: String): ClaimAchievementResult = CreatorApi.claimAchievement(token, achievementId)

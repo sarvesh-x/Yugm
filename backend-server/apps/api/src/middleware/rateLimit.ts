@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import rateLimit from "express-rate-limit";
 import type { Request } from "express";
 import type { AuthRequest } from "./auth.js";
@@ -9,8 +10,35 @@ function userOrIpKey(req: Request) {
 
 export const authLimiter = rateLimit({
   windowMs: 60_000,
-  max: 12,
+  max: 20,
   store: new ResilientRedisRateLimitStore("auth"),
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+export const authIdentifierLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  keyGenerator: (req) => {
+    const value = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase()
+      : typeof req.body?.phone === "string" ? req.body.phone.replace(/[\s()-]/g, "")
+        : "";
+    return value ? `identifier:${crypto.createHash("sha256").update(value).digest("hex")}` : `ip:${req.ip ?? "unknown"}`;
+  },
+  store: new ResilientRedisRateLimitStore("auth-identifier"),
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+export const refreshLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  keyGenerator: (req) => {
+    const token = typeof req.body?.refreshToken === "string" ? req.body.refreshToken : "";
+    const identity = token ? crypto.createHash("sha256").update(token).digest("hex").slice(0, 20) : (req.ip ?? "unknown");
+    return `refresh:${req.ip ?? "unknown"}:${identity}`;
+  },
+  store: new ResilientRedisRateLimitStore("auth-refresh"),
   standardHeaders: true,
   legacyHeaders: false
 });

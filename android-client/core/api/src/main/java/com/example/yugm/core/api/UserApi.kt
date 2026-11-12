@@ -135,6 +135,14 @@ object UserApi {
         YugmHttpClient.post("/notifications/device-token", token, JSONObject().put("token", fcmToken).put("platform", "android"))
     }
 
+    suspend fun removeFcmToken(token: String, fcmToken: String) {
+        YugmHttpClient.post("/notifications/device-token/remove", token, JSONObject().put("token", fcmToken))
+    }
+
+    suspend fun deleteOwnAccount(token: String) {
+        YugmHttpClient.delete("/users/me", token)
+    }
+
     suspend fun level(token: String): LevelStatus {
         return YugmHttpClient.get("/users/me/level", token).getJSONObject("data").getJSONObject("level").toLevelStatus()
     }

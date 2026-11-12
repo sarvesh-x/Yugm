@@ -27,6 +27,7 @@ export interface IUser extends mongoose.Document {
   clanId?: mongoose.Types.ObjectId;
   role: UserRole;
   isVerified: boolean;
+  emailVerified: boolean;
   isBlocked: boolean;
   followersCount: number;
   followingCount: number;
@@ -37,6 +38,7 @@ export interface IUser extends mongoose.Document {
   lastDailyCheckInAt?: Date;
   streakCount: number;
   profileCompletedAt?: Date;
+  deletionRequestedAt?: Date;
   ownedCosmeticIds: string[];
   claimedAchievementIds: string[];
   claimedAchievementTiers: Array<{ achievementId: string; tier: string; claimedAt: Date }>;
@@ -122,6 +124,7 @@ const userSchema = new Schema<IUser>(
     clanId: { type: Schema.Types.ObjectId, ref: "Clan" },
     role: { type: String, enum: ["USER", "HOST", "MODERATOR", "ADMIN"], default: "USER" },
     isVerified: { type: Boolean, default: false },
+    emailVerified: { type: Boolean, default: false },
     isBlocked: { type: Boolean, default: false },
     followersCount: { type: Number, default: 0 },
     followingCount: { type: Number, default: 0 },
@@ -132,6 +135,7 @@ const userSchema = new Schema<IUser>(
     lastDailyCheckInAt: Date,
     streakCount: { type: Number, default: 0 },
     profileCompletedAt: Date,
+    deletionRequestedAt: Date,
     termsAcceptedAt: Date,
     ownedCosmeticIds: [{ type: String }],
     claimedAchievementIds: [{ type: String }],
@@ -204,5 +208,6 @@ userSchema.index({ mutedUntil: 1 });
 userSchema.index({ suspendedUntil: 1 });
 userSchema.index({ level: -1, xp: -1 });
 userSchema.index({ clanId: 1 });
+userSchema.index({ deletionRequestedAt: 1 });
 
 export const User = mongoose.model<IUser>("User", userSchema);

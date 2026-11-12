@@ -57,6 +57,7 @@ import { getMetricsSnapshot, recordHttpRequest } from "./services/metrics.js";
 import { getRedisHealth } from "./services/redis.js";
 import { getStorageHealth } from "./services/storage.js";
 import { ErrorCode, HttpError } from "./utils/http.js";
+import { requireAppCheck } from "./middleware/appCheck.js";
 
 function responseError(error: unknown) {
   if (error instanceof HttpError) {
@@ -102,6 +103,8 @@ function responseError(error: unknown) {
 
 export function createApp() {
   const app = express();
+
+  app.set("trust proxy", env.TRUST_PROXY);
 
   app.use(helmet());
   app.use(compression());
@@ -194,7 +197,7 @@ export function createApp() {
   app.use("/api/admin", adminRouter);
   app.use("/api/admin", adminSupportRouter);
   app.use("/api/admin", adminCosmeticsRouter);
-  app.use("/api/auth", authRouter);
+  app.use("/api/auth", requireAppCheck, authRouter);
   app.use("/api/clans", clansRouter);
   app.use("/api/creator", creatorRouter);
   app.use("/api/dating", datingRouter);

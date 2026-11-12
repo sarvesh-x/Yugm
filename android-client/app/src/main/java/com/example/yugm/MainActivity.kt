@@ -7,18 +7,20 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Build
 import android.os.Bundle
+import android.Manifest
+import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.lifecycleScope
 import com.example.yugm.core.api.YugmApi
 import com.example.yugm.core.api.YugmHttpClient
@@ -32,17 +34,14 @@ import com.example.yugm.payments.RazorpayCoordinator
 import com.example.yugm.payments.GooglePlayBillingManager
 import com.razorpay.PaymentData
 import com.razorpay.PaymentResultWithDataListener
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.common.api.ApiException
-import com.google.android.gms.tasks.Tasks
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -66,7 +65,18 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                 val mainViewModel: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
                 val scope = rememberCoroutineScope()
                 val context = this@MainActivity
-                var googleSignInLoading by remember { mutableStateOf(false) }
+                val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+                LaunchedEffect(mainViewModel.authToken) {
+                    if (Build.VERSION.SDK_INT >= 33 && mainViewModel.authToken.isNotBlank() &&
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        val prefs = context.getSharedPreferences("yugm_permissions", MODE_PRIVATE)
+                        if (!prefs.getBoolean("notification_prompted", false)) {
+                            prefs.edit().putBoolean("notification_prompted", true).apply()
+                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    }
+                }
 
                 val pushRoute = pendingPushRoute.value
                 LaunchedEffect(pushRoute, mainViewModel.authToken) {
@@ -77,13 +87,27 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                 }
 
                 LaunchedEffect(Unit) {
+                    val refreshMutex = kotlinx.coroutines.sync.Mutex()
+                    YugmHttpClient.refreshAccessToken = { rejectedToken ->
+                        refreshMutex.withLock {
+                            val current = sessionManager.authToken
+                            if (current != rejectedToken) return@withLock current
+                            val refreshToken = sessionManager.refreshToken
+                            if (refreshToken.isBlank()) return@withLock null
+                            runCatching {
+                                val pair = withContext(Dispatchers.IO) { YugmApi.refreshAuth(refreshToken) }
+                                mainViewModel.updateTokens(pair)
+                                pair.accessToken
+                            }.getOrNull()
+                        }
+                    }
                     YugmHttpClient.onUnauthorized = { rejectedToken ->
                         // Several requests may fail together. Only clear the session if
                         // the rejected token is still the current one, and navigate once.
                         if (rejectedToken == sessionManager.authToken &&
                             rejectedToken == mainViewModel.authToken
                         ) {
-                            mainViewModel.logout()
+                            scope.launch { mainViewModel.logout() }
                             if (navController.currentDestination?.route != Screen.Login.route) {
                                 navController.navigate(Screen.Login.route) {
                                     popUpTo(0) { inclusive = true }
@@ -127,88 +151,10 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                     onDispose { cm.unregisterNetworkCallback(callback) }
                 }
 
-                // Google Sign In configuration
-                @Suppress("DEPRECATION")
-                val googleClientId = stringResource(R.string.default_web_client_id)
-                val gso = remember(googleClientId) {
-                    GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                        .requestIdToken(googleClientId)
-                        .requestEmail()
-                        .build()
-                }
-                @Suppress("DEPRECATION")
-                val googleSignInClient = remember(googleClientId, context) { com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso) }
-
-                val googleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-                    if (result.resultCode != RESULT_OK) {
-                        googleSignInLoading = false
-                        if (result.resultCode != RESULT_CANCELED) {
-                            Toast.makeText(this@MainActivity, "Google sign-in did not complete (result ${result.resultCode}).", Toast.LENGTH_LONG).show()
-                        }
-                        return@rememberLauncherForActivityResult
-                    }
-                    @Suppress("DEPRECATION")
-                    val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
-                    try {
-                        val account = task.getResult(ApiException::class.java)
-                        val idToken = account.idToken
-                        if (idToken.isNullOrBlank()) {
-                            googleSignInLoading = false
-                            Toast.makeText(
-                                this@MainActivity,
-                                "Google returned no ID token. Check this app's SHA-1 in Firebase, then replace google-services.json.",
-                                Toast.LENGTH_LONG
-                            ).show()
-                            return@rememberLauncherForActivityResult
-                        }
-                        scope.launch {
-                            runCatching {
-                                val credential = GoogleAuthProvider.getCredential(idToken, null)
-                                val authResult = withContext(Dispatchers.IO) {
-                                    Tasks.await(FirebaseAuth.getInstance().signInWithCredential(credential))
-                                }
-                                val tokenResult = withContext(Dispatchers.IO) {
-                                    Tasks.await(authResult.user?.getIdToken(false) ?: throw IllegalStateException("No authenticated user"))
-                                }
-                                val fbToken = tokenResult.token ?: throw IllegalStateException("No Firebase token")
-                                YugmApi.googleAuth(fbToken)
-                            }.onSuccess { session ->
-                                mainViewModel.updateSession(
-                                    token = session.token,
-                                    userId = session.user.id,
-                                    name = session.user.name,
-                                    username = session.user.username,
-                                    balance = session.user.walletBalance,
-                                )
-                                val destination = if (session.isNewUser) {
-                                    Screen.ProfileSetup.route
-                                } else {
-                                    Screen.Discover.route
-                                }
-                                navController.navigate(destination) {
-                                    popUpTo(Screen.Login.route) { inclusive = true }
-                                }
-                            }.onFailure {
-                                Toast.makeText(context, "Google Sign-In failed: ${it.message}", Toast.LENGTH_LONG).show()
-                            }
-                            googleSignInLoading = false
-                        }
-                    } catch (e: Exception) {
-                        googleSignInLoading = false
-                        Timber.tag(TAG).e(e, "Google auth exception")
-                        Toast.makeText(this@MainActivity, "Google sign-in failed: ${e.message ?: "code ${ (e as? ApiException)?.statusCode ?: "unknown" }"}", Toast.LENGTH_LONG).show()
-                    }
-                }
-
                 Box(Modifier.fillMaxSize().background(Background)) {
                     NavGraph(
                         navController = navController,
                         mainViewModel = mainViewModel,
-                        isGoogleSignInLoading = googleSignInLoading,
-                        onGoogleSignIn = {
-                            googleSignInLoading = true
-                            googleLauncher.launch(googleSignInClient.signInIntent)
-                        },
                         onRechargeOrderReady = { checkout ->
                             runCatching { RazorpayCoordinator.start(this@MainActivity, checkout) }
                                 .onFailure { Toast.makeText(context, it.message ?: "Checkout could not start", Toast.LENGTH_LONG).show() }

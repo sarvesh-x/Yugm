@@ -5,6 +5,14 @@ import { ClanMessage } from "../models/ClanMessage.js";
 import { Story } from "../models/Story.js";
 import { Room } from "../models/Room.js";
 import { User } from "../models/User.js";
+import { AuthSession } from "../models/AuthSession.js";
+import { DeviceToken } from "../models/DeviceToken.js";
+import { Follow } from "../models/Follow.js";
+import { Block } from "../models/Block.js";
+import { Notification } from "../models/Notification.js";
+import { DirectMessage } from "../models/DirectMessage.js";
+import { ChatMessage } from "../models/ChatMessage.js";
+import { RoomParticipant } from "../models/RoomParticipant.js";
 
 type PushPayload = {
   userId: string;
@@ -56,6 +64,29 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
 
 async function runMaintenanceTasks() {
   const results: string[] = [];
+
+  try {
+    const expiredDeletionCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const deletedUsers = await User.find({ deletionRequestedAt: { $lte: expiredDeletionCutoff } }).select("_id").limit(100).lean();
+    for (const user of deletedUsers) {
+      const userId = user._id;
+      await Promise.all([
+        AuthSession.deleteMany({ userId }),
+        DeviceToken.deleteMany({ userId }),
+        Follow.deleteMany({ $or: [{ followerId: userId }, { followingId: userId }] }),
+        Block.deleteMany({ $or: [{ blockerId: userId }, { blockedUserId: userId }] }),
+        Notification.deleteMany({ userId }),
+        DirectMessage.deleteMany({ $or: [{ senderId: userId }, { receiverId: userId }] }),
+        ChatMessage.deleteMany({ senderId: userId }),
+        RoomParticipant.deleteMany({ userId })
+      ]);
+      await Room.deleteMany({ hostId: userId });
+      await User.deleteOne({ _id: userId, deletionRequestedAt: { $lte: expiredDeletionCutoff } });
+    }
+    if (deletedUsers.length) results.push(`Hard-deleted ${deletedUsers.length} accounts past their grace period`);
+  } catch (error) {
+    results.push(`Account deletion cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
   try {
     const expiredStories = await Story.updateMany(

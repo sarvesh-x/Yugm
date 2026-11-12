@@ -34,7 +34,10 @@ const envSchema = z.object({
   SEED_SUPER_ADMIN_NAME: z.string().optional(),
   SEED_SUPER_ADMIN_FIREBASE_UID: z.string().optional(),
   SEED_SUPER_ADMIN_PASSWORD: z.string().min(8).optional(),
-  DEV_BYPASS_OTP: z.string().optional(),
+  ACCESS_TOKEN_TTL: z.string().default("45m"),
+  REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(60),
+  TRUST_PROXY: z.string().optional(),
+  APP_CHECK_ENFORCE: z.preprocess((v) => v === true || v === "true" || v === "1", z.boolean()).default(false),
   LIVEKIT_API_KEY: z.string().optional(),
   LIVEKIT_API_SECRET: z.string().optional(),
   LIVEKIT_URL: z.string().default("ws://localhost:7880"),
@@ -78,6 +81,11 @@ const deriveSecret = (purpose: string) =>
 // secrets are not configured in the hosting environment.
 export const env = {
   ...parsed,
+  TRUST_PROXY: parsed.TRUST_PROXY === undefined
+    ? parsed.NODE_ENV === "production" ? 1 : false
+    : parsed.TRUST_PROXY === "true" ? 1
+      : parsed.TRUST_PROXY === "false" ? false
+        : Number(parsed.TRUST_PROXY),
   JWT_SECRET: jwtSecret,
   ADMIN_JWT_SECRET: parsed.ADMIN_JWT_SECRET || deriveSecret("admin-access-token"),
   ADMIN_REFRESH_SECRET: parsed.ADMIN_REFRESH_SECRET || deriveSecret("admin-refresh-token")

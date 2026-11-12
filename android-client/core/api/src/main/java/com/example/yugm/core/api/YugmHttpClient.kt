@@ -24,6 +24,8 @@ object YugmHttpClient {
     var onUnauthorized: ((rejectedToken: String) -> Unit)? = null
     /** Supplies the persisted session token when a navigation callback captured an empty token. */
     var authTokenProvider: (() -> String)? = null
+    var refreshAccessToken: (suspend (rejectedToken: String) -> String?)? = null
+    var appCheckTokenProvider: (suspend () -> String?)? = null
     private const val TAG = "YugmHttp"
     private val json = "application/json; charset=utf-8".toMediaType()
     private val client = OkHttpClient.Builder()
@@ -70,7 +72,7 @@ object YugmHttpClient {
     suspend fun patch(path: String, auth: String?, body: JSONObject): JSONObject = request("PATCH", path, auth, body)
     suspend fun delete(path: String, auth: String?): JSONObject = request("DELETE", path, auth, null)
 
-    private suspend fun request(method: String, path: String, auth: String?, body: JSONObject?): JSONObject = withContext(Dispatchers.IO) {
+    private suspend fun request(method: String, path: String, auth: String?, body: JSONObject?, allowRefresh: Boolean = true): JSONObject = withContext(Dispatchers.IO) {
         if (!isOnline) throw IllegalStateException("No internet connection")
         val canRetry = isSafeRetryMethod(method)
         // Firebase auth has already created/authenticated the Firebase user by
@@ -108,6 +110,9 @@ object YugmHttpClient {
                         ?: auth?.takeIf(String::isNotBlank)
                 }
                 if (requestAuth != null) builder.header("Authorization", "Bearer $requestAuth")
+                val appCheckRequired = path.startsWith("/auth/") || path.startsWith("/notifications/device-token")
+                val appCheck = if (appCheckRequired) appCheckTokenProvider?.invoke()?.takeIf(String::isNotBlank) else null
+                if (appCheck != null) builder.header("X-Firebase-AppCheck", appCheck)
                 val requestBody = body?.toString()?.toRequestBody(json)
                 when (method) {
                     "POST" -> builder.post(requestBody ?: "{}".toRequestBody(json))
@@ -145,7 +150,14 @@ object YugmHttpClient {
                     return@withContext payload
                 }
             } catch (error: ApiHttpException) {
-                if (error.statusCode == 401 && requestAuth != null) {
+                val mayRefresh = !path.startsWith("/auth/") || path == "/auth/me"
+                if (error.statusCode == 401 && requestAuth != null && allowRefresh && mayRefresh) {
+                    val renewed = runCatching { refreshAccessToken?.invoke(requestAuth) }.getOrNull()
+                    if (!renewed.isNullOrBlank() && renewed != requestAuth) {
+                        return@withContext request(method, path, renewed, body, allowRefresh = false)
+                    }
+                    withContext(Dispatchers.Main) { onUnauthorized?.invoke(requestAuth) }
+                } else if (error.statusCode == 401 && requestAuth != null && mayRefresh) {
                     onUnauthorized?.let { callback ->
                         withContext(Dispatchers.Main) { callback(requestAuth) }
                     }
