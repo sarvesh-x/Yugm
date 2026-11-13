@@ -108,7 +108,21 @@ usersRouter.patch("/me", validateBody(profileSchema.partial().refine((data) => d
     if (key in req.body) update[key] = req.body[key];
   }
   if (req.body.acceptTerms === true && !req.user!.termsAcceptedAt) update.termsAcceptedAt = new Date();
-  let user: any = await User.findByIdAndUpdate(req.user!.id, { $set: update }, { new: true }).select("-__v");
+  if (typeof update.username === "string") {
+    update.username = update.username.trim().toLowerCase();
+    const existing = await User.exists({ username: update.username, _id: { $ne: req.user!._id } });
+    if (existing) throw new HttpError(409, "That username is already taken. Choose another one.", ErrorCode.CONFLICT);
+  }
+  let user: any;
+  try {
+    user = await User.findByIdAndUpdate(req.user!.id, { $set: update }, { new: true }).select("-__v");
+  } catch (error: any) {
+    // Keep the database unique index as the final guard against simultaneous claims.
+    if (error?.code === 11000 && (error?.keyPattern?.username || error?.keyValue?.username)) {
+      throw new HttpError(409, "That username is already taken. Choose another one.", ErrorCode.CONFLICT);
+    }
+    throw error;
+  }
   if (user && !user.profileCompletedAt && hasCompletedProfile(user)) {
     user.profileCompletedAt = new Date();
     await user.save();
@@ -613,6 +627,27 @@ usersRouter.delete("/:id/follow", asyncHandler(async (req: AuthRequest, res) => 
   sendOk(res, { following: false });
 }));
 
+usersRouter.delete("/me/followers/:id", asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
+  if (req.params.id === req.user!.id) throw new HttpError(400, "Invalid follower", ErrorCode.VALIDATION);
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const deleted = await Follow.findOneAndDelete({ followerId: req.params.id, followingId: req.user!._id }).session(session);
+    if (deleted) {
+      await User.updateOne({ _id: req.params.id, followingCount: { $gt: 0 } }, { $inc: { followingCount: -1 } }, { session });
+      await User.updateOne({ _id: req.user!._id, followersCount: { $gt: 0 } }, { $inc: { followersCount: -1 } }, { session });
+    }
+    await session.commitTransaction();
+  } catch (err) {
+    await session.abortTransaction();
+    throw err;
+  } finally {
+    await session.endSession();
+  }
+  sendOk(res, { removed: true });
+}));
+
 usersRouter.post("/:id/block", asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
   await Block.updateOne({ blockerId: req.user!.id, blockedUserId: req.params.id }, {}, { upsert: true });
@@ -645,7 +680,7 @@ usersRouter.get("/:id/followers", asyncHandler(async (req: AuthRequest, res) => 
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean();
-  const users = followers.map(f => f.followerId);
+  const users = followers.map(f => f.followerId).filter(Boolean);
   sendOk(res, { followers: users, users });
 }));
 
@@ -657,7 +692,7 @@ usersRouter.get("/:id/following", asyncHandler(async (req: AuthRequest, res) => 
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean();
-  const users = following.map(f => f.followingId);
+  const users = following.map(f => f.followingId).filter(Boolean);
   sendOk(res, { following: users, users });
 }));
 

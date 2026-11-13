@@ -8,7 +8,11 @@ export async function requireAppCheck(req: Request, _res: Response, next: NextFu
   const token = req.header("X-Firebase-AppCheck");
   if (!token) return next(new HttpError(401, "App verification token is required", ErrorCode.UNAUTHORIZED));
   try {
-    (req as any).appCheck = await verifyAppCheckToken(token);
+    const decoded = await verifyAppCheckToken(token);
+    if (decoded.alreadyConsumed) {
+      return next(new HttpError(401, "App verification token has already been used", ErrorCode.UNAUTHORIZED));
+    }
+    (req as any).appCheck = decoded;
     next();
   } catch {
     next(new HttpError(401, "App verification failed", ErrorCode.UNAUTHORIZED));

@@ -21,6 +21,8 @@ export interface IRoom extends mongoose.Document {
   isDuet: boolean;
   livekitRoomName: string;
   allowAudienceMicRequests: boolean;
+  micLocked: boolean;
+  lockedSeatIndices: number[];
   theme?: string;
   vipOnly: boolean;
   badge?: string;
@@ -52,6 +54,8 @@ const roomSchema = new Schema<IRoom>(
     isDuet: { type: Boolean, default: false },
     livekitRoomName: { type: String, required: true, unique: true },
     allowAudienceMicRequests: { type: Boolean, default: true },
+    micLocked: { type: Boolean, default: false },
+    lockedSeatIndices: { type: [Number], default: [] },
     theme: String,
     vipOnly: { type: Boolean, default: false },
     badge: String,

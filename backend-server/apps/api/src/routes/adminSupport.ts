@@ -50,7 +50,7 @@ adminSupportRouter.get("/support/tickets", requirePermission("support.read"),
 adminSupportRouter.get("/support/tickets/:ticketId", requirePermission("support.read"),
   asyncHandler(async (req: AdminAuthRequest, res) => {
     const ticket = await SupportTicket.findById(req.params.ticketId)
-      .populate("userId", "username displayName avatar email")
+      .populate("userId", "username displayName avatar")
       .populate("assignedTo", "username email")
       .populate("messages.senderId", "username displayName avatar")
       .lean();

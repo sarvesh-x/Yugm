@@ -39,6 +39,7 @@ const patchSchema = z.object({
   visibility: z.enum(["PUBLIC", "PRIVATE"]).optional(),
   maxSpeakers: z.number().int().min(1).max(50).optional(),
   allowAudienceMicRequests: z.boolean().optional(),
+  micLocked: z.boolean().optional(),
   coverImage: z.string().optional(),
   scheduledFor: z.string().datetime().optional(),
   theme: z.string().optional(),
@@ -103,6 +104,40 @@ async function requireActiveParticipant(roomId: unknown, userId: string) {
   const participant = await RoomParticipant.findOne({ roomId, userId, leftAt: null }).lean();
   if (!participant) throw new HttpError(403, "You are not a participant in this room", ErrorCode.FORBIDDEN);
   return participant;
+}
+
+async function getOccupiedSeatIndices(room: any, excludeUserId?: string) {
+  const occupied = await RoomParticipant.find({
+    roomId: room._id,
+    leftAt: null,
+    ...(excludeUserId ? { userId: { $ne: excludeUserId } } : {}),
+    role: { $in: ["HOST", "SPEAKER", "MODERATOR"] }
+  }).select("seatIndex joinedAt").sort({ joinedAt: 1, _id: 1 }).lean();
+  const used = new Set<number>();
+  occupied.forEach((participant: any) => {
+    if (Number.isInteger(participant.seatIndex) && participant.seatIndex >= 0 && participant.seatIndex < room.maxSpeakers) used.add(participant.seatIndex);
+  });
+  occupied.filter((participant: any) => !Number.isInteger(participant.seatIndex)).forEach(() => {
+    for (let seat = 0; seat < room.maxSpeakers; seat++) {
+      if (!used.has(seat)) { used.add(seat); break; }
+    }
+  });
+  return used;
+}
+
+async function findOpenSeat(room: any, requestedSeat?: number, excludeUserId?: string) {
+  const used = await getOccupiedSeatIndices(room, excludeUserId);
+  const locked = new Set<number>((room.lockedSeatIndices ?? []).filter((seat: number) => Number.isInteger(seat)));
+  if (requestedSeat !== undefined) {
+    if (requestedSeat < 0 || requestedSeat >= room.maxSpeakers) throw new HttpError(400, "Invalid mic seat", ErrorCode.VALIDATION);
+    if (locked.has(requestedSeat)) throw new HttpError(423, "This mic seat is locked", ErrorCode.FORBIDDEN);
+    if (used.has(requestedSeat)) throw new HttpError(409, "This mic seat is already occupied", ErrorCode.CONFLICT);
+    return requestedSeat;
+  }
+  for (let seat = 0; seat < room.maxSpeakers; seat++) {
+    if (!used.has(seat) && !locked.has(seat)) return seat;
+  }
+  throw new HttpError(409, "No open mic seats are available", ErrorCode.CONFLICT);
 }
 
 function roomObjectIdListIncludes(values: unknown[] | undefined, userId: string) {
@@ -170,7 +205,7 @@ roomsRouter.post("/", requireAuth, requireNotMuted, requireNotRoomRestricted, re
     startedAt: isScheduled ? undefined : new Date()
   });
   if (!isScheduled) {
-    await RoomParticipant.create({ roomId: room.id, userId: req.user!.id, role: "HOST" });
+    await RoomParticipant.create({ roomId: room.id, userId: req.user!.id, role: "HOST", seatIndex: 0 });
     await addActivity(room.id, "MISSION", `${req.user!.name} started the room`, req.user!.id);
   }
   await invalidateCache("rooms:*");
@@ -306,8 +341,25 @@ roomsRouter.get("/:id", requireAuth, asyncHandler(async (req: AuthRequest, res) 
   if (!room) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
   const participants = await RoomParticipant.find({ roomId: req.params.id, leftAt: null }).populate("userId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle").lean();
   const speakerRequests = await SpeakerRequest.find({ roomId: req.params.id, status: "PENDING" }).populate("userId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle").lean();
+  const orderedSpeakers = participants.filter((participant: any) => ["HOST", "SPEAKER", "MODERATOR"].includes(participant.role))
+    .sort((a: any, b: any) => new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime());
+  const legacySeatById = new Map<string, number>();
+  const assignedSeats = new Set<number>();
+  orderedSpeakers.forEach((participant: any) => {
+    if (Number.isInteger(participant.seatIndex)) assignedSeats.add(participant.seatIndex);
+  });
+  orderedSpeakers.filter((participant: any) => !Number.isInteger(participant.seatIndex)).forEach((participant: any) => {
+    for (let seatIndex = 0; seatIndex < room.maxSpeakers; seatIndex++) {
+      if (!assignedSeats.has(seatIndex)) {
+        assignedSeats.add(seatIndex);
+        legacySeatById.set(participant._id.toString(), seatIndex);
+        break;
+      }
+    }
+  });
   const participantPayload = participants.map((participant: any) => ({
     ...participant,
+    seatIndex: participant.seatIndex ?? legacySeatById.get(participant._id.toString()),
     isRoomAdmin: roomObjectIdListIncludes(rawRoom.roomAdminIds, participant.userId?._id?.toString?.() ?? participant.userId?.toString?.() ?? "")
   }));
   sendOk(res, { room, participants: participantPayload, speakerRequests });
@@ -365,12 +417,38 @@ roomsRouter.post("/:id/end", requireAuth, asyncHandler(async (req: AuthRequest, 
 }));
 
 roomsRouter.patch("/:id", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
-  const room = await assertHost(req, req.params.id);
+  const { room } = await assertHostOrRoomAdmin(req, req.params.id);
   const parsed = patchSchema.parse(req.body);
   await validateRoomCosmetics(req.user!.id, { theme: parsed.theme, badge: parsed.badge, ambience: parsed.ambience });
   await Room.findByIdAndUpdate(req.params.id, { $set: parsed }, { new: true });
   await invalidateCache("rooms:*");
+  emitRoom(room._id.toString(), socketEvents.roomParticipantUpdate, { roomId: room.id, action: "settings_updated" });
   sendOk(res, { room });
+}));
+
+roomsRouter.post("/:id/mic-lock", requireAuth, validateBody(z.object({ locked: z.boolean() })), asyncHandler(async (req: AuthRequest, res) => {
+  const { room } = await assertHostOrRoomAdmin(req, req.params.id);
+  await Room.updateOne({ _id: room._id }, { $set: { micLocked: req.body.locked } });
+  await invalidateCache("rooms:*");
+  emitRoom(room._id.toString(), socketEvents.roomParticipantUpdate, {
+    roomId: room.id,
+    action: "mic_lock_changed",
+    micLocked: req.body.locked
+  });
+  sendOk(res, { micLocked: req.body.locked });
+}));
+
+roomsRouter.post("/:id/seat-lock", requireAuth, validateBody(z.object({ seatIndex: z.number().int().min(0), locked: z.boolean() })), asyncHandler(async (req: AuthRequest, res) => {
+  const { room } = await assertHostOrRoomAdmin(req, req.params.id);
+  const { seatIndex, locked } = req.body;
+  if (seatIndex >= room.maxSpeakers) throw new HttpError(400, "Invalid mic seat", ErrorCode.VALIDATION);
+  if ((await getOccupiedSeatIndices(room)).has(seatIndex)) throw new HttpError(409, "An occupied mic cannot be locked", ErrorCode.CONFLICT);
+  await Room.updateOne({ _id: room._id }, locked
+    ? { $addToSet: { lockedSeatIndices: seatIndex } }
+    : { $pull: { lockedSeatIndices: seatIndex } });
+  await invalidateCache("rooms:*");
+  emitRoom(room._id.toString(), socketEvents.roomParticipantUpdate, { roomId: room.id, action: "seat_lock_changed", seatIndex, locked });
+  sendOk(res, { seatIndex, locked });
 }));
 
 roomsRouter.post("/:id/request-speaker", requireAuth, requireNotMuted, asyncHandler(async (req: AuthRequest, res) => {
@@ -389,26 +467,62 @@ roomsRouter.post("/:id/request-speaker", requireAuth, requireNotMuted, asyncHand
 }));
 
 roomsRouter.post("/:id/approve-speaker", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
-  const room = await assertHost(req, req.params.id);
+  const { room } = await assertHostOrRoomAdmin(req, req.params.id);
   if (room.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
   const userId = objectIdBody(req.body.userId, "user ID");
   assertNotHostTarget(room, userId, "approve");
   const participant = await RoomParticipant.findOne({ roomId: room._id, userId, leftAt: null }).lean();
   if (!participant) throw new HttpError(404, "Active participant not found", ErrorCode.NOT_FOUND);
   if (participant.role !== "AUDIENCE") throw new HttpError(409, "User is already allowed to speak", ErrorCode.CONFLICT);
-  if (!roomObjectIdListIncludes(room.speakerIds, userId) && (room.speakerIds?.length ?? 0) >= room.maxSpeakers) {
-    throw new HttpError(409, "Speaker limit reached", ErrorCode.CONFLICT);
-  }
+  const seatIndex = await findOpenSeat(room);
   const request = await SpeakerRequest.findOneAndUpdate({ roomId: room._id, userId, status: "PENDING" }, { status: "APPROVED" }, { new: true });
   if (!request) throw new HttpError(404, "Pending speaker request not found", ErrorCode.NOT_FOUND);
   await Room.findByIdAndUpdate(room._id, { $addToSet: { speakerIds: userId } });
-  await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { role: "SPEAKER" });
-  emitRoom(room._id.toString(), socketEvents.roomSpeakerApprove, { userId });
+  await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { role: "SPEAKER", micEnabled: true, seatIndex });
+  emitRoom(room._id.toString(), socketEvents.roomSpeakerApprove, { userId, seatIndex });
   sendOk(res, { approved: true });
 }));
 
+// Listeners can claim a seat; current speakers and the host can move to an open seat.
+roomsRouter.post("/:id/take-seat", requireAuth, requireNotMuted, validateBody(z.object({ seatIndex: z.number().int().min(0).optional() })), asyncHandler(async (req: AuthRequest, res) => {
+  const room = await getRoomOrThrow(req.params.id);
+  if (room.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
+  const userId = req.user!.id;
+  const participant = await requireActiveParticipant(room._id, userId);
+  if (!["AUDIENCE", "HOST", "SPEAKER", "MODERATOR"].includes(participant.role)) throw new HttpError(409, "You cannot change seats right now", ErrorCode.CONFLICT);
+  const wasAudience = participant.role === "AUDIENCE";
+  const seatIndex = await findOpenSeat(room, req.body.seatIndex, userId);
+  if (wasAudience) {
+    await Room.findByIdAndUpdate(room._id, { $addToSet: { speakerIds: userId } });
+    await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { role: "SPEAKER", micEnabled: true, seatIndex });
+    await SpeakerRequest.updateOne({ roomId: room._id, userId, status: "PENDING" }, { status: "APPROVED" });
+    emitRoom(room._id.toString(), socketEvents.roomSpeakerApprove, { userId, seatIndex });
+  } else {
+    await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { seatIndex });
+  }
+  emitRoom(room._id.toString(), socketEvents.roomParticipantUpdate, { roomId: room.id, action: wasAudience ? "seat_taken" : "seat_changed", userId, seatIndex });
+  sendOk(res, { seated: true, seatIndex, moved: !wasAudience });
+}));
+
+roomsRouter.post("/:id/invite-speaker", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
+  const { room } = await assertHostOrRoomAdmin(req, req.params.id);
+  if (room.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
+  const userId = objectIdBody(req.body.userId, "user ID");
+  assertNotHostTarget(room, userId, "invite");
+  const participant = await RoomParticipant.findOne({ roomId: room._id, userId, leftAt: null }).lean();
+  if (!participant) throw new HttpError(404, "Active participant not found", ErrorCode.NOT_FOUND);
+  if (participant.role !== "AUDIENCE") throw new HttpError(409, "User already has a speaker seat", ErrorCode.CONFLICT);
+  const seatIndex = await findOpenSeat(room);
+  await Room.findByIdAndUpdate(room._id, { $addToSet: { speakerIds: userId } });
+  await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { role: "SPEAKER", micEnabled: true, seatIndex });
+  await SpeakerRequest.updateOne({ roomId: room._id, userId, status: "PENDING" }, { status: "APPROVED" });
+  emitRoom(room._id.toString(), socketEvents.roomSpeakerApprove, { userId, seatIndex });
+  emitRoom(room._id.toString(), socketEvents.roomParticipantUpdate, { roomId: room.id, action: "speaker_invited", userId, seatIndex });
+  sendOk(res, { invited: true });
+}));
+
 roomsRouter.post("/:id/reject-speaker", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
-  const room = await assertHost(req, req.params.id);
+  const { room } = await assertHostOrRoomAdmin(req, req.params.id);
   const userId = objectIdBody(req.body.userId, "user ID");
   assertNotHostTarget(room, userId, "reject");
   const request = await SpeakerRequest.findOneAndUpdate({ roomId: room._id, userId, status: "PENDING" }, { status: "REJECTED" }, { new: true });
@@ -426,6 +540,23 @@ roomsRouter.post("/:id/mute-user", requireAuth, asyncHandler(async (req: AuthReq
   if (!participant) throw new HttpError(404, "Active participant not found", ErrorCode.NOT_FOUND);
   emitRoom(room._id.toString(), socketEvents.roomUserMute, { userId });
   sendOk(res, { muted: true });
+}));
+
+roomsRouter.post("/:id/remove-speaker", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
+  const { room, isHost } = await assertHostOrRoomAdmin(req, req.params.id);
+  const userId = objectIdBody(req.body.userId, "user ID");
+  assertNotHostTarget(room, userId, "remove from the mic");
+  if (!isHost && roomObjectIdListIncludes(room.roomAdminIds, userId)) throw new HttpError(403, "Room admins cannot remove each other from the mic", ErrorCode.FORBIDDEN);
+  const participant = await RoomParticipant.findOneAndUpdate(
+    { roomId: room._id, userId, leftAt: null, role: { $in: ["SPEAKER", "MODERATOR"] } },
+    { role: "AUDIENCE", micEnabled: false, $unset: { seatIndex: 1 } },
+    { new: true }
+  );
+  if (!participant) throw new HttpError(404, "Active speaker not found", ErrorCode.NOT_FOUND);
+  await Room.findByIdAndUpdate(room._id, { $pull: { speakerIds: userId, moderatorIds: userId } });
+  emitRoom(room._id.toString(), socketEvents.roomParticipantUpdate, { roomId: room.id, action: "speaker_removed", userId });
+  emitRoom(room._id.toString(), socketEvents.roomUserMute, { userId });
+  sendOk(res, { removedFromSeat: true });
 }));
 
 roomsRouter.post("/:id/remove-user", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
@@ -637,8 +768,9 @@ roomsRouter.post("/:id/messages", requireAuth, requireNotMuted, requireNotChatRe
     message: sanitizeText(req.body.message),
     type: "TEXT"
   });
+  const populatedMessage = await message.populate("senderId", "name username avatar");
   // NOTE: emitRoom is called after the socket room join for consistent ordering
-  emitRoom(req.params.id, socketEvents.roomChatMessage, { message });
+  emitRoom(req.params.id, socketEvents.roomChatMessage, { message: populatedMessage });
   await grantRoomXp(req.user!.id, "CHAT_MESSAGE", { roomId: req.params.id });
-  sendOk(res, { message }, 201);
+  sendOk(res, { message: populatedMessage }, 201);
 }));

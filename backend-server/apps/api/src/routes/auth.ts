@@ -49,9 +49,12 @@ async function findOrCreateFirebaseUser(input: {
     // became the identity provider. Attach the authenticated Firebase identity to
     // that existing record instead of violating the unique email index.
     const byEmail = normalizedEmail
-      ? await User.findOne({ email: normalizedEmail }).select("-__v")
+      ? await User.findOne({ email: normalizedEmail }).select("+email -__v")
       : null;
     if (byEmail) {
+      if (!input.emailVerified) {
+        throw new HttpError(409, "Verify this email address before linking it to an existing account.", ErrorCode.CONFLICT);
+      }
       if (byEmail.firebaseUid && byEmail.firebaseUid !== input.firebaseUid) {
         throw new HttpError(409, "This email is already linked to another sign-in. Contact support to recover the account.", ErrorCode.CONFLICT);
       }
@@ -100,6 +103,10 @@ async function findOrCreateFirebaseUser(input: {
   throw new HttpError(409, "Could not finish creating your account. Please retry.", ErrorCode.CONFLICT);
 }
 
+function isProfileCompleted(user: any): boolean {
+  return Boolean(user.profileCompletedAt || (user.bio && user.city && user.interests?.length));
+}
+
 function publicUser(user: any) {
   const levelStatus = getLevelStatus(user);
   return {
@@ -123,7 +130,7 @@ function publicUser(user: any) {
     languages: user.languages,
     city: user.city,
     bio: user.bio,
-    profileCompleted: Boolean(user.profileCompletedAt || (user.bio && user.city && user.interests?.length)),
+    profileCompleted: isProfileCompleted(user),
     followersCount: user.followersCount,
     followingCount: user.followingCount
   };
@@ -141,7 +148,7 @@ authRouter.post("/google", authLimiter, authIdentifierLimiter, validateBody(auth
   if (!firebaseUid) throw new HttpError(401, "Invalid Firebase identity token", ErrorCode.UNAUTHORIZED);
   const { user, isNewUser } = await findOrCreateFirebaseUser({ firebaseUid, name, email, avatar: picture, acceptTerms, emailVerified: email_verified });
   const tokens = await issueSession(user, req);
-  sendOk(res, { ...tokens, user: publicUser(user), isNewUser });
+  sendOk(res, { ...tokens, user: publicUser(user), isNewUser: isNewUser || !isProfileCompleted(user) });
 }));
 
 authRouter.post("/phone", authLimiter, authIdentifierLimiter, validateBody(phoneAuthSchema), asyncHandler(async (req, res) => {
@@ -153,7 +160,7 @@ authRouter.post("/phone", authLimiter, authIdentifierLimiter, validateBody(phone
   if (!firebaseUid) throw new HttpError(401, "Invalid Firebase identity token", ErrorCode.UNAUTHORIZED);
   const { user, isNewUser } = await findOrCreateFirebaseUser({ firebaseUid, phone: phone_number, acceptTerms });
   const tokens = await issueSession(user, req);
-  sendOk(res, { ...tokens, user: publicUser(user), isNewUser });
+  sendOk(res, { ...tokens, user: publicUser(user), isNewUser: isNewUser || !isProfileCompleted(user) });
 }));
 
 authRouter.post("/refresh", refreshLimiter, validateBody(z.object({ refreshToken: z.string().min(30) })), asyncHandler(async (req, res) => {
@@ -175,6 +182,19 @@ authRouter.patch("/profile", requireAuth, validateBody(profileSchema.partial().r
   for (const key of allowedFields) {
     if (key in req.body) update[key] = req.body[key];
   }
-  const user = await User.findByIdAndUpdate(req.user!.id, { $set: update }, { new: true }).select("-__v");
+  if (typeof update.username === "string") {
+    update.username = update.username.trim().toLowerCase();
+    const existing = await User.exists({ username: update.username, _id: { $ne: req.user!._id } });
+    if (existing) throw new HttpError(409, "That username is already taken. Choose another one.", ErrorCode.CONFLICT);
+  }
+  let user;
+  try {
+    user = await User.findByIdAndUpdate(req.user!.id, { $set: update }, { new: true }).select("-__v");
+  } catch (error: any) {
+    if (error?.code === 11000 && (error?.keyPattern?.username || error?.keyValue?.username)) {
+      throw new HttpError(409, "That username is already taken. Choose another one.", ErrorCode.CONFLICT);
+    }
+    throw error;
+  }
   sendOk(res, { user: publicUser(user) });
 }));

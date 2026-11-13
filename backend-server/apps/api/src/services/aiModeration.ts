@@ -1,7 +1,9 @@
 import * as toxicity from "@tensorflow-models/toxicity";
 
 const THRESHOLD = 0.85;
-const LABELS = ["toxicity", "severe_toxicity", "identity_attack", "insult", "threat", "sexually_explicit"];
+// Keep these names in sync with the output heads exported by
+// @tensorflow-models/toxicity. The model calls this head `sexual_explicit`.
+const LABELS = ["toxicity", "severe_toxicity", "identity_attack", "insult", "threat", "sexual_explicit"];
 let model: toxicity.ToxicityClassifier | null = null;
 let modelLoading = false;
 let modelLoadPromise: Promise<void> | null = null;
@@ -21,6 +23,9 @@ async function getModel(): Promise<toxicity.ToxicityClassifier> {
       throw err;
     } finally {
       modelLoading = false;
+      // A failed download/model init should be retryable on the next request,
+      // rather than caching a permanently rejected promise.
+      if (!model) modelLoadPromise = null;
     }
   })();
   await modelLoadPromise;
@@ -100,7 +105,7 @@ export async function classifyToxicity(text: string): Promise<AiModerationResult
         case "threat":
           result.threatScore = probability;
           break;
-        case "sexually_explicit":
+        case "sexual_explicit":
           result.sexuallyExplicitScore = probability;
           break;
       }

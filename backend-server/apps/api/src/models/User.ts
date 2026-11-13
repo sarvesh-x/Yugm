@@ -101,8 +101,10 @@ const userSchema = new Schema<IUser>(
   {
     name: { type: String, required: true, trim: true },
     username: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    email: { type: String, lowercase: true, trim: true },
-    phone: { type: String, trim: true },
+    // Contact identifiers are used for identity matching only. Keep them out of
+    // ordinary User queries so a new populate/serialization cannot expose them.
+    email: { type: String, lowercase: true, trim: true, select: false },
+    phone: { type: String, trim: true, select: false },
     firebaseUid: String,
     avatar: String,
     gender: String,

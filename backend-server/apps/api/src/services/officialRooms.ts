@@ -27,8 +27,7 @@ const officialRooms = [
     category: "Trending",
     tags: ["official", "trending", "welcome"],
     language: "Hindi",
-    maxSpeakers: 8,
-    participantCount: 24
+    maxSpeakers: 8
   },
   {
     livekitRoomName: "official-yugm-music",
@@ -39,8 +38,7 @@ const officialRooms = [
     category: "Music",
     tags: ["official", "music", "lofi"],
     language: "Hindi",
-    maxSpeakers: 10,
-    participantCount: 18
+    maxSpeakers: 10
   },
   {
     livekitRoomName: "official-yugm-gaming",
@@ -51,8 +49,7 @@ const officialRooms = [
     category: "Gaming",
     tags: ["official", "gaming", "squad"],
     language: "English",
-    maxSpeakers: 8,
-    participantCount: 16
+    maxSpeakers: 8
   },
   {
     livekitRoomName: "official-yugm-video",
@@ -63,8 +60,7 @@ const officialRooms = [
     category: "Friends",
     tags: ["official", "video", "friends"],
     language: "English",
-    maxSpeakers: 4,
-    participantCount: 12
+    maxSpeakers: 4
   }
 ] as const;
 
@@ -111,6 +107,8 @@ export async function ensureOfficialRooms() {
       },
       { upsert: true, setDefaultsOnInsert: true }
     );
+    const actualParticipantCount = await RoomParticipant.countDocuments({ roomId: officialRoom._id, leftAt: null });
+    await Room.updateOne({ _id: officialRoom._id }, { $set: { participantCount: actualParticipantCount } });
   }
 
   await invalidateCache("rooms:*");

@@ -220,7 +220,12 @@ experienceRouter.get("/home", asyncHandler(async (req: AuthRequest, res) => {
     Notification.find({ userId }).sort({ createdAt: -1 }).limit(5).lean(),
     Notification.countDocuments({ userId, read: false }),
     buildAchievements(userId, user),
-    RoomInvite.find({ inviteeId: userId, status: "PENDING" }).populate("roomId inviterId").sort({ createdAt: -1 }).limit(5).lean()
+    RoomInvite.find({ inviteeId: userId, status: "PENDING" })
+      .populate("roomId", "title type status hostId")
+      .populate("inviterId", "name username avatar")
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .lean()
   ]);
 
   sendOk(res, {
