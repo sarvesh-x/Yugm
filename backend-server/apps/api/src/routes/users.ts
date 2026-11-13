@@ -197,6 +197,7 @@ usersRouter.post("/friend-match/search", chatLimiter, asyncHandler(async (req: A
     request.expiresAt = new Date(now.getTime() + FRIEND_MATCH_WAIT_MS);
     await request.save();
   }
+  if (!request) throw new HttpError(500, "Could not start friend matching", ErrorCode.INTERNAL);
 
   const reservedRequest = await FriendMatchRequest.findOneAndUpdate(
     { _id: request._id, status: "WAITING", expiresAt: { $gt: now } },
