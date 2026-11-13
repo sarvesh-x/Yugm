@@ -81,7 +81,7 @@ jobs:
           YUGM_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
           YUGM_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
           YUGM_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
-        run: ./gradlew --no-daemon :app:assembleRelease
+        run: bash ./gradlew --no-daemon :app:assembleRelease
 
       - name: Publish APK to GitHub Release
         uses: softprops/action-gh-release@v2
