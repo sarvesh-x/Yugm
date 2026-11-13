@@ -160,7 +160,10 @@ uploadRouter.post("/upload/avatar", requireAuth, upload.single("avatar"), asyncH
   assertSafeImage(req.file);
   const file = req.file!;
   const { url, storage } = await persistUploadedFile(file, "avatars");
-  await req.user!.updateOne({ avatar: url });
+  await req.user!.updateOne({
+    avatar: url,
+    "activeCosmetics.avatarAsset": ""
+  });
   sendOk(res, { url, storage });
 }));
 

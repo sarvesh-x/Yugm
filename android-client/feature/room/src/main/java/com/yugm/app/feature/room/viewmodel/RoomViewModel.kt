@@ -104,6 +104,8 @@ class RoomViewModel @Inject constructor(
         private set
     var isLoading by mutableStateOf(false)
         private set
+    var isRoomListLoading by mutableStateOf(false)
+        private set
     var cosmeticCatalog by mutableStateOf<CosmeticCatalog?>(null)
         private set
     var watchParty by mutableStateOf<WatchParty?>(null)
@@ -171,7 +173,14 @@ class RoomViewModel @Inject constructor(
         viewModelScope.launch {
             roomState = UiState.Loading
             val detailResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomDetail(authToken, roomId) } }
-            detailResult.onSuccess { roomDetail = it; roomState = UiState.Success(it) }
+            detailResult.onSuccess {
+                roomDetail = it
+                roomError = null
+                roomState = UiState.Success(it)
+            }.onFailure { error ->
+                roomError = error.message ?: "Couldn't open this room."
+                roomState = UiState.Error(roomError!!, error)
+            }
             val pollsResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomPolls(roomId) } }
             pollsResult.onSuccess { polls = it }
             val missionsResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomMissions(authToken, roomId) } }
@@ -636,11 +645,25 @@ class RoomViewModel @Inject constructor(
 
     fun updateRoom(room: Room, coverImage: String? = null, onSuccess: () -> Unit = {}, onFailure: (String) -> Unit = {}) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
+            val result = withContext(Dispatchers.IO) {
                 runCatching { yugmApi.updateRoom(authToken, roomId, room, coverImage) }
-                    .onSuccess { onSuccess() }
-                    .onFailure { onFailure(it.message ?: "Update failed") }
             }
+            result.onSuccess { updatedRoom ->
+                roomDetail = roomDetail?.copy(room = updatedRoom)
+                roomState = UiState.Success(roomDetail!!)
+                onSuccess()
+            }.onFailure {
+                onFailure(it.message ?: "Update failed")
+            }
+        }
+    }
+
+    fun resetRoomRanking(onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { yugmApi.reactToRoom(authToken, roomId, "RESET_RANKING") }
+            }
+            onSuccess()
         }
     }
 
@@ -708,13 +731,14 @@ class RoomViewModel @Inject constructor(
     }
 
     fun loadRooms(type: RoomType? = null) {
+        if (isRoomListLoading) return
         viewModelScope.launch {
-            isLoading = true
+            isRoomListLoading = true
             roomListError = null
             runCatching { withContext(Dispatchers.IO) { yugmApi.rooms(type) } }
                 .onSuccess { rooms = it }
                 .onFailure { roomListError = it.message ?: "Couldn't load live rooms" }
-            isLoading = false
+            isRoomListLoading = false
         }
     }
 

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
-import { coinPacks, cosmeticBundles, createPurchaseOrderSchema, equipProfileCosmeticSchema, profileCosmetics, purchaseCosmeticBundleSchema, purchaseProfileCosmeticSchema, purchaseVipSchema, sendGiftSchema, socketEvents, transferCosmeticSchema, verifyGooglePlayPurchaseSchema, verifyRazorpayPurchaseSchema, vipPlans, walletSourceLabels } from "@yugm/shared";
+import { coinPacks, cosmeticBundles, createPurchaseOrderSchema, equipProfileCosmeticSchema, purchaseCosmeticBundleSchema, purchaseProfileCosmeticSchema, purchaseVipSchema, sendGiftSchema, socketEvents, transferCosmeticSchema, verifyGooglePlayPurchaseSchema, verifyRazorpayPurchaseSchema, vipPlans, walletSourceLabels } from "@yugm/shared";
 import { requireAuth, requireRole, type AuthRequest } from "../middleware/auth.js";
 import { requireWalletNotFrozen } from "../middleware/requireSafety.js";
 import { validateBody } from "../middleware/validate.js";
@@ -21,7 +21,7 @@ import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId } from "../
 import { env } from "../config/env.js";
 import { getCachedJson, setCachedJson } from "../services/redis.js";
 import { addVipDays, findVipPlan, getVipStatus } from "../services/vip.js";
-import { activeCosmeticKey, findProfileCosmetic } from "../services/cosmetics.js";
+import { activeCosmeticKey, ensureDefaultCosmetics, findProfileCosmetic, listPublicCosmetics, toPublicCosmetic } from "../services/cosmetics.js";
 import { getLevelStatus, grantXp } from "../services/levels.js";
 import { grantRelationshipXp } from "../services/relationships.js";
 import { assertUsersCanInteract } from "../services/safety.js";
@@ -137,34 +137,36 @@ walletRouter.post("/admin/wallet/adjust", requireRole("ADMIN"), validateBody(adm
 
 walletRouter.get("/wallet/packs", (_req: AuthRequest, res) => sendOk(res, { packs: coinPacks }));
 
-walletRouter.get("/wallet/cosmetics", (req: AuthRequest, res) => {
+walletRouter.get("/wallet/cosmetics", asyncHandler(async (req: AuthRequest, res) => {
+  await ensureDefaultCosmetics();
   sendOk(res, {
-    cosmetics: profileCosmetics,
+    cosmetics: await listPublicCosmetics(),
     ownedCosmeticIds: req.user!.ownedCosmeticIds ?? [],
     activeCosmetics: req.user!.activeCosmetics ?? {}
   });
-});
+}));
 
 walletRouter.post("/wallet/cosmetics/purchase", requireWalletNotFrozen, validateBody(purchaseProfileCosmeticSchema), asyncHandler(async (req: AuthRequest, res) => {
-  const cosmetic = findProfileCosmetic(req.body.cosmeticId);
-  if (!cosmetic) throw new HttpError(400, "Invalid profile cosmetic", ErrorCode.VALIDATION);
-  if ((req.user!.ownedCosmeticIds ?? []).includes(cosmetic.id)) {
-    return sendOk(res, { cosmetic, ownedCosmeticIds: req.user!.ownedCosmeticIds, activeCosmetics: req.user!.activeCosmetics, balance: req.user!.walletBalance });
+  await ensureDefaultCosmetics();
+  const cosmetic = await findProfileCosmetic(req.body.cosmeticId);
+  if (!cosmetic || !cosmetic.isActive) throw new HttpError(400, "Invalid profile cosmetic", ErrorCode.VALIDATION);
+  if ((req.user!.ownedCosmeticIds ?? []).includes(req.body.cosmeticId)) {
+    return sendOk(res, { cosmetic: toPublicCosmetic(cosmetic), ownedCosmeticIds: req.user!.ownedCosmeticIds, activeCosmetics: req.user!.activeCosmetics, balance: req.user!.walletBalance, cosmetics: await listPublicCosmetics() });
   }
 
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    await debitWallet(req.user!.id, cosmetic.coinPrice, "PROFILE_COSMETIC_PURCHASE", { cosmeticId: cosmetic.id, type: cosmetic.type }, session);
+    await debitWallet(req.user!.id, cosmetic.coinPrice, "PROFILE_COSMETIC_PURCHASE", { cosmeticId: req.body.cosmeticId, type: cosmetic.type }, session);
     const key = activeCosmeticKey(cosmetic.type);
-    const update: Record<string, unknown> = { $addToSet: { ownedCosmeticIds: cosmetic.id } };
-    if (key) update.$set = { [`activeCosmetics.${key}`]: cosmetic.id };
+    const update: Record<string, unknown> = { $addToSet: { ownedCosmeticIds: req.body.cosmeticId } };
+    if (key) update.$set = { [`activeCosmetics.${key}`]: req.body.cosmeticId };
     await User.findByIdAndUpdate(req.user!.id, update, { session });
     await session.commitTransaction();
     session.endSession();
-    const level = await runWalletSideEffect("cosmetic purchase XP", () => grantXp(req.user!.id, "COSMETIC_PURCHASE", { cosmeticId: cosmetic.id }));
+    const level = await runWalletSideEffect("cosmetic purchase XP", () => grantXp(req.user!.id, "COSMETIC_PURCHASE", { cosmeticId: req.body.cosmeticId }));
     const user = await User.findById(req.user!.id).select("walletBalance ownedCosmeticIds activeCosmetics xp level levelTitle lastDailyCheckInAt").lean();
-    sendOk(res, { cosmetic, balance: user?.walletBalance ?? 0, ownedCosmeticIds: user?.ownedCosmeticIds ?? [], activeCosmetics: user?.activeCosmetics ?? {}, level: level?.level ?? getLevelStatus(user) }, 201);
+    sendOk(res, { cosmetic: toPublicCosmetic(cosmetic), balance: user?.walletBalance ?? 0, ownedCosmeticIds: user?.ownedCosmeticIds ?? [], activeCosmetics: user?.activeCosmetics ?? {}, level: level?.level ?? getLevelStatus(user), cosmetics: await listPublicCosmetics() }, 201);
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
@@ -175,21 +177,27 @@ walletRouter.post("/wallet/cosmetics/purchase", requireWalletNotFrozen, validate
 walletRouter.post("/wallet/cosmetics/equip", validateBody(equipProfileCosmeticSchema), asyncHandler(async (req: AuthRequest, res) => {
   const key = activeCosmeticKey(req.body.type);
   if (!key) throw new HttpError(400, "Invalid cosmetic type", ErrorCode.VALIDATION);
-  if (req.body.cosmeticId) {
-    const cosmetic = findProfileCosmetic(req.body.cosmeticId);
+  const cosmeticId = req.body.cosmeticId && typeof req.body.cosmeticId === "string" && req.body.cosmeticId.trim() !== "" ? req.body.cosmeticId.trim() : null;
+  if (cosmeticId) {
+    await ensureDefaultCosmetics();
+    const cosmetic = await findProfileCosmetic(cosmeticId);
     if (!cosmetic || cosmetic.type !== req.body.type) throw new HttpError(400, "Cosmetic type mismatch", ErrorCode.VALIDATION);
-    if (!(req.user!.ownedCosmeticIds ?? []).includes(req.body.cosmeticId)) throw new HttpError(403, "Cosmetic is not owned", ErrorCode.FORBIDDEN);
+    if (!(req.user!.ownedCosmeticIds ?? []).includes(cosmeticId)) throw new HttpError(403, "Cosmetic is not owned", ErrorCode.FORBIDDEN);
   }
-  const update = req.body.cosmeticId
-    ? { $set: { [`activeCosmetics.${key}`]: req.body.cosmeticId } }
+  const update = cosmeticId
+    ? { $set: { [`activeCosmetics.${key}`]: cosmeticId } }
     : { $unset: { [`activeCosmetics.${key}`]: "" } };
   const user = await User.findByIdAndUpdate(req.user!.id, update, { new: true }).select("ownedCosmeticIds activeCosmetics walletBalance").lean();
-  sendOk(res, { ownedCosmeticIds: user?.ownedCosmeticIds ?? [], activeCosmetics: user?.activeCosmetics ?? {}, balance: user?.walletBalance ?? 0 });
+  sendOk(res, { ownedCosmeticIds: user?.ownedCosmeticIds ?? [], activeCosmetics: user?.activeCosmetics ?? {}, balance: user?.walletBalance ?? 0, cosmetics: await listPublicCosmetics() });
 }));
 
 walletRouter.post("/wallet/cosmetics/bundle-purchase", requireWalletNotFrozen, validateBody(purchaseCosmeticBundleSchema), asyncHandler(async (req: AuthRequest, res) => {
+  await ensureDefaultCosmetics();
   const bundle = cosmeticBundles.find((b) => b.id === req.body.bundleId);
   if (!bundle) throw new HttpError(404, "Bundle not found", ErrorCode.NOT_FOUND);
+  const availableIds = new Set((await listPublicCosmetics()).map((cosmetic) => cosmetic.id));
+  const missing = bundle.cosmeticIds.filter((id) => !availableIds.has(id));
+  if (missing.length > 0) throw new HttpError(409, "This bundle is temporarily unavailable", ErrorCode.CONFLICT);
   const alreadyOwned = bundle.cosmeticIds.filter((id) => (req.user!.ownedCosmeticIds ?? []).includes(id));
   if (alreadyOwned.length === bundle.cosmeticIds.length) throw new HttpError(409, "You already own all cosmetics in this bundle", ErrorCode.CONFLICT);
   if ((req.user!.walletBalance ?? 0) < bundle.coinPrice) throw new HttpError(403, "Insufficient balance", ErrorCode.INSUFFICIENT_FUNDS);
@@ -197,11 +205,12 @@ walletRouter.post("/wallet/cosmetics/bundle-purchase", requireWalletNotFrozen, v
   await debitWallet(req.user!.id, bundle.coinPrice, "COSMETIC_BUNDLE_PURCHASE", { bundleId: bundle.id });
   const user = await User.findByIdAndUpdate(req.user!.id, { $push: { ownedCosmeticIds: { $each: newIds } } }, { new: true }).select("ownedCosmeticIds activeCosmetics walletBalance").lean();
   await grantXp(req.user!.id, "COSMETIC_PURCHASE", { bundleId: bundle.id });
-  sendOk(res, { ownedCosmeticIds: user?.ownedCosmeticIds ?? [], activeCosmetics: user?.activeCosmetics ?? {}, balance: user?.walletBalance ?? 0, newCosmetics: newIds });
+  sendOk(res, { ownedCosmeticIds: user?.ownedCosmeticIds ?? [], activeCosmetics: user?.activeCosmetics ?? {}, balance: user?.walletBalance ?? 0, newCosmetics: newIds, cosmetics: await listPublicCosmetics() });
 }));
 
 walletRouter.post("/wallet/cosmetics/transfer", requireWalletNotFrozen, validateBody(transferCosmeticSchema), asyncHandler(async (req: AuthRequest, res) => {
-  const cosmetic = findProfileCosmetic(req.body.cosmeticId);
+  await ensureDefaultCosmetics();
+  const cosmetic = await findProfileCosmetic(req.body.cosmeticId);
   if (!cosmetic) throw new HttpError(404, "Cosmetic not found", ErrorCode.NOT_FOUND);
   if (!(req.user!.ownedCosmeticIds ?? []).includes(req.body.cosmeticId)) throw new HttpError(403, "You don't own this cosmetic", ErrorCode.FORBIDDEN);
   const [receiver] = await Promise.all([
@@ -215,7 +224,7 @@ walletRouter.post("/wallet/cosmetics/transfer", requireWalletNotFrozen, validate
 }));
 
 walletRouter.get("/wallet/vip/plans", (req: AuthRequest, res) => {
-  sendOk(res, { plans: vipPlans, vip: getVipStatus(req.user) });
+  sendOk(res, { plans: vipPlans, vip: getVipStatus(req.user), balance: req.user?.walletBalance ?? 0 });
 });
 
 walletRouter.post("/wallet/vip/activate", requireWalletNotFrozen, validateBody(purchaseVipSchema), asyncHandler(async (req: AuthRequest, res) => {

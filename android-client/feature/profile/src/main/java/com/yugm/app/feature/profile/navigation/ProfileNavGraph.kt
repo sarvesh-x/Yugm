@@ -12,9 +12,11 @@ import androidx.navigation.navArgument
 import com.yugm.app.core.navigation.Screen
 import com.yugm.app.core.navigation.navigateTopLevel
 import com.yugm.app.feature.profile.screens.CosmeticsStoreScreen
+import com.yugm.app.feature.profile.screens.CustomizeProfileScreen
 import com.yugm.app.feature.profile.screens.HighlightsManagementScreen
 import com.yugm.app.feature.profile.screens.ProfileDetailScreen
 import com.yugm.app.feature.profile.screens.ProfileSocialListScreen
+import com.yugm.app.feature.profile.screens.PublicProfilePreviewScreen
 import kotlinx.coroutines.launch
 
 fun NavGraphBuilder.profileNavGraph(
@@ -22,8 +24,15 @@ fun NavGraphBuilder.profileNavGraph(
     authToken: String,
     currentUserId: String,
     onProfileUpdated: (com.yugm.app.core.model.YugmUser) -> Unit,
-    onLogout: () -> Unit,
     onSettings: () -> Unit = {},
+    onOpenStore: () -> Unit = {},
+    onOpenCustomize: () -> Unit = { navController.navigate(Screen.CustomizeProfile.route) },
+    onOpenPublicProfile: (String) -> Unit = { id -> navController.navigate(Screen.PublicProfilePreview.createRoute(id)) },
+    onOpenVip: () -> Unit = {},
+    onOpenTasks: () -> Unit = {},
+    onOpenLevel: () -> Unit = {},
+    onOpenWallet: () -> Unit = {},
+    onOpenInventory: () -> Unit = {},
 ) {
     val onProfileBack: () -> Unit = {
         if (!navController.popBackStack()) {
@@ -62,11 +71,18 @@ fun NavGraphBuilder.profileNavGraph(
             isOwnProfile = userId == currentUserId,
             onOpenSocialList = { list -> navController.navigate(Screen.ProfileSocial.createRoute(userId, list)) },
             onProfileUpdated = onProfileUpdated,
-            onLogout = onLogout,
             onSettings = onSettings,
             onDiscover = { navController.navigateTopLevel(Screen.Discover.route) },
             onParty = { navController.navigateTopLevel(Screen.VoiceRooms.route) },
-            onChatTab = { navController.navigateTopLevel(Screen.ChatList.route) }
+            onChatTab = { navController.navigateTopLevel(Screen.ChatList.route) },
+            onOpenStore = onOpenStore,
+            onOpenCustomize = onOpenCustomize,
+            onOpenPublicProfile = { onOpenPublicProfile(userId) },
+            onOpenVip = onOpenVip,
+            onOpenTasks = onOpenTasks,
+            onOpenLevel = onOpenLevel,
+            onOpenWallet = onOpenWallet,
+            onOpenInventory = onOpenInventory
         )
     }
 
@@ -92,7 +108,31 @@ fun NavGraphBuilder.profileNavGraph(
     composable(Screen.Cosmetics.route) {
         CosmeticsStoreScreen(
             token = authToken,
-            onBack = onProfileBack
+            onBack = onProfileBack,
+            onOpenCustomize = onOpenCustomize
+        )
+    }
+
+    composable(Screen.CustomizeProfile.route) {
+        CustomizeProfileScreen(
+            token = authToken,
+            userId = currentUserId,
+            onBack = onProfileBack,
+            onOpenStore = onOpenStore,
+            onOpenPublicProfile = { onOpenPublicProfile(currentUserId) }
+        )
+    }
+
+    composable(
+        route = Screen.PublicProfilePreview.route,
+        arguments = listOf(navArgument("userId") { type = NavType.StringType })
+    ) { backStackEntry ->
+        val previewUserId = backStackEntry.arguments?.getString("userId") ?: currentUserId
+        PublicProfilePreviewScreen(
+            token = authToken,
+            userId = previewUserId,
+            onBack = onProfileBack,
+            onOpenCustomize = onOpenCustomize
         )
     }
 

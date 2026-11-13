@@ -107,7 +107,8 @@ fun ActiveVideoRoomScreen(
     onRemoveUser: (String) -> Unit = {},
     onReportUser: (String) -> Unit = {},
     onOpenModes: (() -> Unit)? = null,
-    onOpenThemes: (() -> Unit)? = null
+    onOpenThemes: (() -> Unit)? = null,
+    onEditRoom: (() -> Unit)? = null
 ) {
     DisposableEffect(room.id) {
         onJoin()
@@ -199,6 +200,9 @@ fun ActiveVideoRoomScreen(
             }
             if (isHost) {
                 Spacer(Modifier.width(8.dp))
+                if (onEditRoom != null) {
+                    ControlButton("Edit room") { onEditRoom() }
+                }
                 if (pkBattle == null || pkBattle.status !in listOf(PkStatus.ACTIVE, PkStatus.INVITED, PkStatus.WAITING)) {
                     ControlButton("Start PK") { showPkSetup = true }
                 }

@@ -28,8 +28,10 @@ import com.yugm.app.core.model.FriendRequest
 import com.yugm.app.core.model.FriendStatusResponse
 import com.yugm.app.core.model.MutualFriendsResponse
 import com.yugm.app.core.model.Subscription
-import com.yugm.app.core.model.SubscriptionCheckResponse
 import com.yugm.app.core.model.SubscribersResponse
+import com.yugm.app.core.model.SubscriptionCheckResponse
+import com.yugm.app.core.model.UserFullInventory
+import com.yugm.app.core.model.LevelOverview
 import com.yugm.app.core.model.EquippedThemes
 import com.yugm.app.core.model.FeedResponse
 import com.yugm.app.core.model.Achievement
@@ -265,9 +267,13 @@ object YugmApi : IYugmApi {
     override suspend fun shareGameScore(token: String, scoreId: String, targetUserId: String) = GameApi.shareGameScore(token, scoreId, targetUserId)
 
     // User profile, search, follow, block, notifications, messaging
-    override suspend fun updateProfile(token: String, name: String, username: String, bio: String?, city: String?, interests: List<String>?, languages: List<String>?, gender: String?, age: Int?, lookingFor: String?, avatar: String?, acceptTerms: Boolean, vibeLine: String?): YugmUser = UserApi.updateProfile(token, name, username, bio, city, interests, languages, gender, age, lookingFor, avatar, acceptTerms, vibeLine)
+    override suspend fun updateProfile(token: String, name: String, username: String, bio: String?, city: String?, interests: List<String>?, languages: List<String>?, gender: String?, age: Int?, lookingFor: String?, avatar: String?, acceptTerms: Boolean, vibeLine: String?, hobbies: List<String>?): YugmUser = UserApi.updateProfile(token, name, username, bio, city, interests, languages, gender, age, lookingFor, avatar, acceptTerms, vibeLine, hobbies)
     override suspend fun searchUsers(query: String, token: String?): List<Host> = UserApi.searchUsers(query, token)
     override suspend fun getUser(userId: String, token: String?): Host = UserApi.getUser(userId, token)
+    override suspend fun getPublicProfile(userId: String, token: String?): Host = UserApi.getPublicProfile(userId, token)
+    override suspend fun getPublicProfileByUsername(username: String, token: String?): Host = UserApi.getPublicProfileByUsername(username, token)
+    override suspend fun fullInventory(token: String): UserFullInventory = UserApi.fullInventory(token)
+    override suspend fun levelOverview(token: String): LevelOverview = UserApi.levelOverview(token)
     override suspend fun getUserRooms(userId: String, token: String?): List<Room> = UserApi.getUserRooms(userId, token)
     override suspend fun getFollowers(userId: String, token: String?): List<Host> = UserApi.getFollowers(userId, token)
     override suspend fun getFollowing(userId: String, token: String?): List<Host> = UserApi.getFollowing(userId, token)
@@ -283,6 +289,7 @@ object YugmApi : IYugmApi {
     override suspend fun addProfileMedia(token: String, mediaUrl: String, mediaType: String) = UserApi.addProfileMedia(token, mediaUrl, mediaType)
     override suspend fun deleteProfileMedia(token: String, mediaId: String) = UserApi.deleteProfileMedia(token, mediaId)
     override suspend fun suggestedHosts(token: String): List<Host> = UserApi.suggestedHosts(token)
+    override suspend fun recommendedChatUsers(token: String): List<Host> = UserApi.recommendedChatUsers(token)
     override suspend fun levelLeaderboard(token: String): List<Host> = UserApi.levelLeaderboard(token)
     override suspend fun getNotifications(token: String): Pair<List<NotificationItem>, Int> = UserApi.getNotifications(token)
     override suspend fun markNotificationRead(token: String, notificationId: String) = UserApi.markNotificationRead(token, notificationId)
@@ -301,6 +308,9 @@ object YugmApi : IYugmApi {
     override suspend fun sendDirectMessage(token: String, userId: String, message: String): Conversation = UserApi.sendDirectMessage(token, userId, message)
     override suspend fun sendDirectMediaMessage(token: String, userId: String, mediaUrl: String, mediaType: String, caption: String): Conversation = UserApi.sendDirectMediaMessage(token, userId, mediaUrl, mediaType, caption)
     override suspend fun startPrivateCall(token: String, userId: String, type: RoomType): Room = UserApi.startPrivateCall(token, userId, type)
+    override suspend fun searchRandomFriend(token: String): Room? = UserApi.searchRandomFriend(token)
+    override suspend fun randomFriendMatch(token: String): Room? = UserApi.randomFriendMatch(token)
+    override suspend fun cancelRandomFriendSearch(token: String) = UserApi.cancelRandomFriendSearch(token)
     override suspend fun reactToDirectMessage(token: String, userId: String, messageId: String, type: String): DirectMessage = UserApi.reactToDirectMessage(token, userId, messageId, type)
     override suspend fun markAllMessagesRead(token: String) = UserApi.markAllMessagesRead(token)
     override suspend fun getRecentMessages(token: String): List<DirectMessage> = UserApi.getRecentMessages(token)

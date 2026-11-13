@@ -40,6 +40,35 @@ export async function requireAuth(req: AuthRequest, _res: Response, next: NextFu
   }
 }
 
+export async function optionalAuth(req: AuthRequest, _res: Response, next: NextFunction) {
+  try {
+    const header = req.headers.authorization;
+    const token = header?.startsWith("Bearer ") ? header.slice(7) : undefined;
+    if (!token) return next();
+
+    const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] }) as { sub: string; tokenVersion?: number; sid?: string; typ?: string };
+    if (decoded.typ !== "access" || !decoded.sid || !decoded.sub) return next();
+
+    const [user, session] = await Promise.all([
+      User.findById(decoded.sub).select("-__v"),
+      AuthSession.findOne({ _id: decoded.sid, userId: decoded.sub, revokedAt: null, expiresAt: { $gt: new Date() } })
+    ]);
+    if (
+      user &&
+      !user.isBlocked &&
+      session &&
+      !(user.suspendedUntil && user.suspendedUntil.getTime() > Date.now()) &&
+      (decoded.tokenVersion === undefined || user.tokenVersion === decoded.tokenVersion)
+    ) {
+      req.user = user;
+      req.authSession = session;
+    }
+    next();
+  } catch {
+    next();
+  }
+}
+
 export function requireRole(...roles: UserRole[]) {
   return (req: AuthRequest, _res: Response, next: NextFunction) => {
     if (!req.user) return next(new HttpError(401, "Missing user"));

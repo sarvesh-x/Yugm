@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yugm.app.core.api.IYugmApi
+import com.yugm.app.core.model.ActiveCosmetics
 import com.yugm.app.core.model.DirectMessage
 import com.yugm.app.core.model.Host
 import com.yugm.app.core.model.RelationshipStatus
@@ -34,6 +35,9 @@ class ChatViewModel @Inject constructor(
         private set
 
     var relationship by mutableStateOf<RelationshipStatus?>(null)
+        private set
+
+    var myActiveCosmetics by mutableStateOf(ActiveCosmetics())
         private set
 
     var isLoading by mutableStateOf(false)
@@ -102,6 +106,9 @@ class ChatViewModel @Inject constructor(
                     val partnerRequest = async(Dispatchers.IO) {
                         runCatching { yugmApi.getUser(partnerUserId, authToken) }
                     }
+                    val myProfileRequest = async(Dispatchers.IO) {
+                        runCatching { yugmApi.authMe(authToken) }
+                    }
                     historyRequest.await()
                         .onSuccess { conversation ->
                             mergeMessages(conversation.messages)
@@ -117,6 +124,7 @@ class ChatViewModel @Inject constructor(
                             if (failure is CancellationException) throw failure
                             if (loadError == null) loadError = failure
                         }
+                    myProfileRequest.await().onSuccess { myActiveCosmetics = it.activeCosmetics }
                 }
             } finally {
                 isLoading = false

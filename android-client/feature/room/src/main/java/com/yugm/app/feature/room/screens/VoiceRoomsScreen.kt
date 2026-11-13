@@ -50,6 +50,7 @@ import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.ui.components.Avatar
 import com.yugm.app.core.ui.components.YugmBottomDock
+import com.yugm.app.core.ui.components.YugmPullToRefreshBox
 import com.yugm.app.core.ui.components.YugmDockTab
 import com.yugm.app.feature.room.viewmodel.RoomViewModel
 
@@ -74,11 +75,16 @@ fun VoiceRoomsScreen(
     LaunchedEffect(Unit) { viewModel.loadRooms(RoomType.Voice) }
     val liveRooms = viewModel.rooms.filter { it.type == RoomType.Voice && it.status == "LIVE" }
     Box(Modifier.fillMaxSize().background(PartyBackground)) {
-        LazyColumn(
-            contentPadding = PaddingValues(top = 14.dp, bottom = 120.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+        YugmPullToRefreshBox(
+            isRefreshing = viewModel.isRoomListLoading,
+            onRefresh = { viewModel.loadRooms(RoomType.Voice) },
             modifier = Modifier.fillMaxSize()
         ) {
+            LazyColumn(
+                contentPadding = PaddingValues(top = 14.dp, bottom = 120.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
             item {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -124,7 +130,7 @@ fun VoiceRoomsScreen(
                     }
                 }
                 items(liveRooms, key = { it.id }) { room -> PartyRoomCard(room = room, onClick = { onOpenRoom(room) }) }
-            } else if (viewModel.isLoading) {
+            } else if (viewModel.isRoomListLoading) {
                 item {
                     Column(Modifier.fillMaxWidth().padding(top = 90.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(color = PartyPurple, strokeWidth = 3.dp)
@@ -142,6 +148,7 @@ fun VoiceRoomsScreen(
                         }
                     }
                 }
+            }
             }
         }
         YugmBottomDock(

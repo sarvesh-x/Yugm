@@ -1,63 +1,124 @@
-package com.yugm.app.feature.room.screens
+﻿package com.yugm.app.feature.room.screens
 
+import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.pm.PackageManager
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.lazy.items
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton as MaterialTextButton
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.compose.BackHandler
-import android.Manifest
-import android.content.pm.PackageManager
-import androidx.core.content.ContextCompat
-import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import coil.compose.AsyncImage
 import com.yugm.app.core.api.YugmMediaRoom
-import com.yugm.app.core.api.YugmSocket
 import com.yugm.app.core.model.ChatMessage
 import com.yugm.app.core.model.GiftItem
 import com.yugm.app.core.model.Host
@@ -74,25 +135,41 @@ import com.yugm.app.core.model.RoomMission
 import com.yugm.app.core.model.RoomParticipant
 import com.yugm.app.core.model.RoomPoll
 import com.yugm.app.core.model.SpeakerRequest
-import com.yugm.app.core.util.cosmeticDisplayName
-import com.yugm.app.core.ui.components.*
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
+import com.yugm.app.core.ui.components.AuroraBackground
+import com.yugm.app.core.ui.components.Avatar
+import com.yugm.app.core.ui.components.FloatingEmoji
+import com.yugm.app.core.ui.components.FloatingEmojiOverlay
+import com.yugm.app.core.ui.components.GiftPanel
+import com.yugm.app.core.ui.components.GlassCard
+import com.yugm.app.core.ui.components.PkBattleHeader
+import com.yugm.app.core.ui.components.PkBattleScoreBar
+import com.yugm.app.core.ui.components.PkGiftPanel
+import com.yugm.app.core.ui.components.PkInviteCard
+import com.yugm.app.core.ui.components.PkLeaderboard
+import com.yugm.app.core.ui.components.PkLiveEffectBurst
+import com.yugm.app.core.ui.components.PkOpponentSearchSheet
+import com.yugm.app.core.ui.components.PkReactionPanel
+import com.yugm.app.core.ui.components.PkResultDialog
+import com.yugm.app.core.ui.components.PkSetupBottomSheet
+import com.yugm.app.core.ui.components.PkSideCard
+import com.yugm.app.core.ui.components.PkTeamSelector
+import com.yugm.app.core.ui.components.PkWaitingState
+import com.yugm.app.core.ui.theme.Background
+import com.yugm.app.core.ui.theme.Gold
+import com.yugm.app.core.ui.theme.Pink
+import com.yugm.app.core.ui.theme.PrimaryPink
+import com.yugm.app.core.ui.theme.PrimaryPurple
+import com.yugm.app.core.ui.theme.SaffronGold
 import com.yugm.app.core.ui.theme.TextMuted
 import com.yugm.app.core.ui.theme.TextPrimary
-import com.yugm.app.core.ui.theme.Gold
-import com.yugm.app.core.ui.theme.PrimaryPurple
-import com.yugm.app.core.ui.theme.Pink
-import androidx.compose.foundation.background
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.geometry.Offset
 import kotlinx.coroutines.delay
+
+// Room Theme Colors matching the visual reference & dark cosmic aesthetic
+private val RoomPurplePrimary = Color(0xFF8D35F6)
+private val RoomDarkOverlay = Color(0xB8090715)
+private val RoomGlassBorder = Color(0x33FFFFFF)
+private val RoomSeatEmptyBg = Color(0x40161426)
+private val RoomGoldAccent = Color(0xFFFFB300)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -158,17 +235,21 @@ fun ActiveVoiceRoomScreen(
     roomReactionEvent: Pair<Int, String> = 0 to "",
     onOpenModes: (() -> Unit)? = null,
     onOpenThemes: (() -> Unit)? = null,
+    onEditRoom: (() -> Unit)? = null,
     canSpeak: Boolean = isHost
 ) {
     DisposableEffect(room.id) {
         onJoin()
         onDispose { }
     }
+
     var muted by rememberSaveable(room.id) { mutableStateOf(true) }
+    var roomAudioMuted by rememberSaveable(room.id) { mutableStateOf(false) }
     val speakingIdentities by YugmMediaRoom.speakingIdentities.collectAsState()
     val context = LocalContext.current
     val selfParticipant = participants.firstOrNull { it.user.id == currentUserId }
     val micMutedByRoomAdmin = selfParticipant?.moderatorMuted == true
+
     val microphonePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted && !micMutedByRoomAdmin) {
             muted = false
@@ -182,6 +263,7 @@ fun ActiveVoiceRoomScreen(
             onToast("Microphone permission is needed to speak")
         }
     }
+
     LaunchedEffect(room.id, canSpeak, selfParticipant?.micEnabled, micMutedByRoomAdmin) {
         when {
             !canSpeak || micMutedByRoomAdmin || selfParticipant?.micEnabled == false -> {
@@ -198,6 +280,7 @@ fun ActiveVoiceRoomScreen(
             }
         }
     }
+
     LaunchedEffect(forcedMuteVersion) {
         if (forcedMuteVersion > 0) {
             muted = true
@@ -205,6 +288,7 @@ fun ActiveVoiceRoomScreen(
             onToast("A room admin muted your microphone")
         }
     }
+
     LaunchedEffect(forcedRemoveVersion) {
         if (forcedRemoveVersion > 0) {
             onToast("You were removed from this room")
@@ -212,6 +296,7 @@ fun ActiveVoiceRoomScreen(
             onBack()
         }
     }
+
     LaunchedEffect(roomEndedVersion) {
         if (roomEndedVersion > 0) {
             onToast("This room has ended")
@@ -219,8 +304,9 @@ fun ActiveVoiceRoomScreen(
             onBack()
         }
     }
+
+    // Dialog & bottom sheet states
     var giftOpen by rememberSaveable { mutableStateOf(false) }
-    var reactionBurst by rememberSaveable { mutableStateOf("") }
     val floatingEmojis = remember { mutableStateListOf<FloatingEmoji>() }
     var showInvitePicker by rememberSaveable { mutableStateOf(false) }
     var showPollComposer by rememberSaveable { mutableStateOf(false) }
@@ -236,20 +322,37 @@ fun ActiveVoiceRoomScreen(
     var selectedEmptySeat by remember { mutableStateOf<Int?>(null) }
     var showReactionPicker by rememberSaveable { mutableStateOf(false) }
     var showExitPrompt by rememberSaveable { mutableStateOf(false) }
+    var showToolsSheet by rememberSaveable { mutableStateOf(false) }
+    var showListenersSheet by rememberSaveable { mutableStateOf(false) }
+    var showChatInputSheet by rememberSaveable { mutableStateOf(false) }
+    var showLuckyWheelDialog by rememberSaveable { mutableStateOf(false) }
+    var showRoomInfoSheet by rememberSaveable { mutableStateOf(false) }
+    var chatMessageDraft by rememberSaveable { mutableStateOf("") }
+    val seatReactions = remember { mutableStateMapOf<Int, String>() }
+    var activeGiftBanner by remember { mutableStateOf<Triple<String, String, String>?>(null) }
+    val scope = rememberCoroutineScope()
+
     BackHandler { showExitPrompt = true }
-    var showEntryOverlay by rememberSaveable { mutableStateOf(true) }
-    LaunchedEffect(Unit) {
-        delay(2000)
-        showEntryOverlay = false
-    }
-    LaunchedEffect(reactionBurst) {
-        if (reactionBurst.isNotBlank()) {
-            delay(1200)
-            reactionBurst = ""
+
+    // Listen to gift activities across the room
+    LaunchedEffect(activity.size) {
+        val latest = activity.lastOrNull()
+        if (latest != null && latest.type.uppercase() == "GIFT") {
+            val sender = latest.label.substringBefore(" sent").ifBlank { "Someone" }
+            val giftName = latest.label.substringAfter("sent ").ifBlank { "Gift" }
+            activeGiftBanner = Triple(sender, giftName, "🎁")
         }
     }
+
+    LaunchedEffect(activeGiftBanner) {
+        if (activeGiftBanner != null) {
+            delay(3200)
+            activeGiftBanner = null
+        }
+    }
+
+    // Floating reaction events & seat avatar reactions
     val emojiCounter = remember { mutableStateOf(0) }
-    val emojiClicks = remember { androidx.compose.runtime.mutableStateMapOf<String, Int>() }
     LaunchedEffect(floatingEmojis.size) {
         if (floatingEmojis.isNotEmpty()) {
             delay(2200)
@@ -260,7 +363,7 @@ fun ActiveVoiceRoomScreen(
         val emoji = when (roomReactionEvent.second) {
             "heart" -> "🫶"
             "fire" -> "✨"
-            "laugh" -> "😹"
+            "laugh" -> "😂"
             "clap" -> "🙌"
             "wow" -> "🤯"
             else -> "✨"
@@ -268,272 +371,994 @@ fun ActiveVoiceRoomScreen(
         if (roomReactionEvent.first > 0) {
             emojiCounter.value++
             floatingEmojis.add(FloatingEmoji(id = "live-${emojiCounter.value}", emoji = emoji))
+            // Animate reaction directly above the seat avatar of the user
+            val seatIdx = selfParticipant?.seatIndex ?: 0
+            seatReactions[seatIdx] = emoji
+            scope.launch {
+                delay(1800)
+                if (seatReactions[seatIdx] == emoji) seatReactions.remove(seatIdx)
+            }
         }
     }
-    Box(Modifier.fillMaxSize()) {
-        AuroraBackground(speed = 0.4f)
+
+    val speakers = participants.filter { it.role in listOf("HOST", "SPEAKER", "MODERATOR") }
+    val chatListState = rememberLazyListState()
+
+    LaunchedEffect(chat.size) {
+        if (chat.isNotEmpty()) {
+            chatListState.animateScrollToItem((chat.size - 1).coerceAtLeast(0))
+        }
+    }
+
+    GiftPanel(
+        open = giftOpen,
+        gifts = gifts,
+        balance = balance,
+        onDismiss = { giftOpen = false },
+        onSend = { gift ->
+            onGift(gift)
+            activeGiftBanner = Triple("You", gift.name, "🎁")
+        }
+    )
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Atmospheric Sunset / Dusk Rooftop Background matching reference image
         Image(
             painter = painterResource(com.yugm.app.feature.room.R.drawable.late_night_rooftop),
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize().alpha(0.42f)
+            modifier = Modifier.fillMaxSize()
         )
-        Box(Modifier.fillMaxSize().background(Color(0x550A0912)))
-        RoomShell(
-            room = room,
-            chat = chat,
-            onBack = { showExitPrompt = true },
-            onSendMessage = onSendMessage,
-            giftOpen = giftOpen,
-            gifts = gifts,
-            balance = balance,
-            onGiftOpen = { giftOpen = it },
-            onGift = onGift,
-            controls = {
-            val guestId = participants.firstOrNull { it.user.id.isNotBlank() && it.user.id != room.host?.id && !it.isRoomAdmin }?.user?.id
-            if (canSpeak) {
-                if (micMutedByRoomAdmin) {
-                    ControlButton("Muted", active = true, accessibilityLabel = "Microphone muted by a room admin") {
-                        onToast("The host or an admin muted your microphone")
-                    }
-                } else ControlButton(
-                    if (muted) "Unmute" else "Mute",
-                    active = !muted,
-                    accessibilityLabel = if (muted) "Unmute microphone" else "Mute microphone"
-                ) {
-                    if (!muted) {
-                        muted = true
-                        YugmMediaRoom.setMicEnabled(false)
-                        onOwnMicStateChanged(false)
-                    } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                        muted = false
-                        YugmMediaRoom.setMicEnabled(true)
-                        onOwnMicStateChanged(true)
-                    } else {
-                        microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
-                    }
-                }
-            }
-            if (!canSpeak && !isHost) {
-                val requestPending = speakerRequests.isNotEmpty()
-                ControlButton(if (requestPending) "Mic pending" else "Request mic", active = requestPending) { onRequestSpeaker() }
-            }
-            if (!isHost) {
-                ControlButton("Gift") { giftOpen = true }
-            }
-            ControlButton("React") {
-                showReactionPicker = true
-            }
-            ControlButton("Invite") {
-                showInvitePicker = true
-            }
-            ControlButton("Share") { onToast("Room link copied") }
-            ControlButton("Minimize") { onMinimize() }
-            ControlButton("DM") { onDirectMessage(if (isHost) guestId else null) }
-            if (onOpenModes != null && room.mode != null) {
-                ControlButton("Modes") { onOpenModes() }
-            }
-            if (onOpenThemes != null) {
-                ControlButton("Themes") { onOpenThemes() }
-            }
-            if (isHost) {
-                Spacer(Modifier.width(8.dp))
-                if (pkBattle == null || pkBattle.status !in listOf(PkStatus.ACTIVE, PkStatus.INVITED, PkStatus.WAITING)) {
-                    ControlButton("Start PK") { showPkSetup = true }
-                }
-                ControlButton("End", danger = true) { showExitPrompt = true }
-            }
-            if (!isHost) room.host?.let { host ->
-                ControlButton("Report", danger = true) { onReportUser(host.id) }
-            }
-            if (!isHost) ControlButton("Leave", danger = true) { showExitPrompt = true }
-        }
-    ) {
-        AnimatedEntrance(delay = 200) {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                if (room.ambience.isNotBlank()) {
-                    androidx.compose.foundation.layout.Row(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        ReferenceChip("♪ ${cosmeticDisplayName(room.ambience)}", selected = true, onClick = {})
-                    }
-                }
-                room.host?.let { RoomHostBanner(host = it, listenerCount = participants.size, isHost = isHost) }
-                if (pkBattle != null && pkBattle.status == PkStatus.ACTIVE) {
-                    PkBattleHeader(pkBattle, isHost = isHost, onEnd = onEndPk)
-                    androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
-                        PkSideCard(pkBattle.left, PkSideType.LEFT, pkBattle.leader == PkSideType.LEFT, modifier = Modifier.weight(1f))
-                        PkSideCard(pkBattle.right, PkSideType.RIGHT, pkBattle.leader == PkSideType.RIGHT, modifier = Modifier.weight(1f))
-                    }
-                    PkBattleScoreBar(pkBattle)
-                    PkTeamSelector(pkBattle, selectedSide = pkGiftSide, onSelect = { pkGiftSide = it })
-                    PkLiveEffectBurst(pkLiveEffect)
-                    val ownPkSide = when (room.id) {
-                        pkBattle.left.roomId -> PkSideType.LEFT
-                        pkBattle.right.roomId -> PkSideType.RIGHT
-                        else -> null
-                    }
-                    PkGiftPanel(
-                        gifts = gifts,
-                        balance = balance,
-                        selectedSide = pkGiftSide,
-                        onSideChange = { pkGiftSide = it },
-                        onSend = { gift, side ->
-                            if (isHost && side == ownPkSide) {
-                                onToast("Choose the opponent side for PK gifts")
-                            } else {
-                                onSendPkGift(gift, side)
-                            }
-                        }
+
+        // Gradient dusk tint overlay (Warm dusk purple -> deep twilight black)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color(0x772B1055),
+                            Color(0x9952174A),
+                            Color(0xB31C132B),
+                            Color(0xF00A0915)
+                        )
                     )
-                    PkReactionPanel(
-                        onReact = { reaction, side ->
-                            if (isHost && side == ownPkSide) {
-                                onToast("Choose the opponent side for PK reactions")
-                            } else {
-                                onSendPkReaction(reaction, side)
-                            }
-                        },
-                        side = pkGiftSide
-                    )
-                    PkLeaderboard(pkLeaderboard)
-                } else if (pkBattle != null && pkBattle.status == PkStatus.INVITED && isHost && pkBattle.right.roomId == room.id && !pkInviteId.isNullOrBlank()) {
-                    PkInviteCard(
-                        battle = pkBattle,
-                        inviterName = pkBattle.left.hostName,
-                        onAccept = { onAcceptPk(pkInviteId) },
-                        onReject = { onRejectPk(pkInviteId) }
-                    )
-                } else if (pkBattle != null && pkBattle.status in listOf(PkStatus.INVITED, PkStatus.WAITING)) {
-                    PkWaitingState(pkBattle)
-                } else if (isHost) {
-                    PkBattleButton { showPkSetup = true }
-                }
-                if (isHost && speakerRequests.isNotEmpty()) {
-                    SectionTitle("Speaker requests")
-                    speakerRequests.forEach { request ->
-                        GlassCard {
-                            Text("${request.user.name} wants to speak", color = TextPrimary, fontWeight = FontWeight.Bold)
-                            androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-                                ControlButton("Approve") { onApproveSpeaker(request.user.id) }
-                                ControlButton("Deny", danger = true) { onRejectSpeaker(request.user.id) }
-                            }
-                        }
-                    }
-                }
+                )
+        )
+
+        // Subtle aurora shimmer for extra polish
+        AuroraBackground(speed = 0.25f)
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+        ) {
+            // ================= 1. TOP BAR =================
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Room info box on the left (clickable to open room info & settings)
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0x66000000))
+                        .border(1.dp, RoomGlassBorder, RoundedCornerShape(14.dp))
+                        .clickable { showRoomInfoSheet = true }
+                        .padding(horizontal = 8.dp, vertical = 5.dp)
                 ) {
-                    SectionTitle(when {
-                    isHost || isRoomAdmin -> "Speaker seats · manage listeners and open mics"
-                    room.lockedSeatIndices.isNotEmpty() -> "Speaker seats · locked mics require approval"
-                    canSpeak -> "Speaker seats"
-                    else -> "Speaker seats · tap an open mic to join"
-                    })
-                    ReferenceChip("${speakersCount(participants)}/${room.maxSpeakers} mics", selected = room.lockedSeatIndices.isNotEmpty(), onClick = {})
-                }
-                val speakers = participants.filter { it.role in listOf("HOST", "SPEAKER", "MODERATOR") }
-                androidx.compose.foundation.layout.Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
-                    repeat((room.maxSpeakers + 4) / 5) { row ->
-                        androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)) {
-                            repeat(5) { col ->
-                                val index = row * 5 + col
-                                if (index < room.maxSpeakers) {
-                                    val participant = speakers.firstOrNull { it.seatIndex == index }
-                                    val seatLocked = index in room.lockedSeatIndices
-                                    Box(
-                                        Modifier.weight(1f)
-                                            .semantics {
-                                                contentDescription = participant?.let { "${it.user.name}${if (it.isRoomAdmin) ", room admin" else ""}" } ?: if (seatLocked) {
-                                                    "Mic seat ${index + 1} locked. Tap to view seat options"
-                                                } else "Open mic seat ${index + 1}. Tap for seat options"
-                                            }
-                                            .clickable(
-                                                role = Role.Button,
-                                                onClickLabel = participant?.let { "View ${it.user.name}" } ?: "Open options for mic seat ${index + 1}"
-                                            ) {
-                                                if (participant != null) selectedParticipant = participant else selectedEmptySeat = index
-                                            }
-                                    ) {
-                                        SeatCard(
-                                            name = participant?.user?.name ?: if (seatLocked) "Locked" else "Open seat",
-                                            cosmetics = participant?.user?.activeCosmetics ?: com.yugm.app.core.model.ActiveCosmetics(),
-                                            imageUrl = participant?.user?.avatar,
-                                            isSpeaking = participant?.user?.id?.let(speakingIdentities::contains) == true,
-                                            showEntry = participant != null,
-                                            isEmpty = participant == null,
-                                            isLocked = seatLocked,
-                                            isMuted = participant != null && (
-                                                participant.user.id == currentUserId && muted ||
-                                                    participant.micEnabled == false || participant.moderatorMuted
-                                                ),
-                                            compact = true,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                        if (participant?.isRoomAdmin == true) {
-                                            Text(
-                                                "ADMIN",
-                                                color = Gold,
-                                                fontSize = 8.sp,
-                                                fontWeight = FontWeight.Black,
-                                                modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp)
-                                            )
-                                        }
+                    // Room avatar square (uses room cover or host avatar)
+                    val roomHost = room.host
+                    val roomAvatarUrl = room.coverImage?.takeIf(String::isNotBlank)
+                        ?: roomHost?.avatar?.takeIf(String::isNotBlank)
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Brush.linearGradient(listOf(RoomPurplePrimary, Pink))),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (!roomAvatarUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = roomAvatarUrl,
+                                contentDescription = "Room Avatar",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Icon(Icons.Filled.Mic, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Column {
+                        Text(
+                            text = room.title.ifBlank { "Voice Room" },
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.widthIn(max = 110.dp)
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "ID:${room.id.takeLast(8)}",
+                                color = TextMuted,
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    // Follow "+" button
+                    if (!isHost) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(RoomPurplePrimary)
+                                .clickable {
+                                    room.host?.let { host ->
+                                        if (host.isFollowing) onUnfollowUser(host.id) else onFollowUser(host.id)
+                                        onToast(if (host.isFollowing) "Unfollowed" else "Following ${host.name}")
                                     }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Add,
+                                contentDescription = "Follow host",
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+
+            }
+
+            // Trophy / Ranking pill right below header
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 2.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(Color(0x664A3515))
+                        .border(1.dp, RoomGoldAccent.copy(alpha = 0.6f), RoundedCornerShape(50))
+                        .clickable { onToast("Room Ranking #1 in Live Audio") }
+                        .padding(horizontal = 9.dp, vertical = 3.dp)
+                ) {
+                    Text("🏆", fontSize = 11.sp)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("1 >", color = RoomGoldAccent, fontSize = 11.sp, fontWeight = FontWeight.Black)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // ================= 2. VOICE STAGE (DYNAMIC USER-CONFIGURED SEATS) =================
+            // Render exactly the capacity saved during room creation. Keep the
+            // UI in sync with the server's seat index validation and lobby count.
+            val totalSeats = room.maxSpeakers.coerceAtLeast(1)
+            val itemsPerRow = if (totalSeats <= 4) totalSeats else if (totalSeats <= 6) 3 else if (totalSeats <= 8) 4 else 5
+            val seatRows = (0 until totalSeats).chunked(itemsPerRow)
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                seatRows.forEach { rowIndices ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceAround
+                    ) {
+                        rowIndices.forEach { index ->
+                            VoiceSeatItem(
+                                index = index,
+                                participant = speakers.firstOrNull { it.seatIndex == index },
+                                isSpeaking = speakers.firstOrNull { it.seatIndex == index }?.user?.id?.let(speakingIdentities::contains) == true,
+                                isLocked = index in room.lockedSeatIndices,
+                                isCurrentMuted = speakers.firstOrNull { it.seatIndex == index }?.let { p ->
+                                    (p.user.id == currentUserId && muted) || p.micEnabled == false || p.moderatorMuted
+                                } ?: false,
+                                reactionEmoji = seatReactions[index],
+                                onClick = {
+                                    val p = speakers.firstOrNull { it.seatIndex == index }
+                                    if (p != null) selectedParticipant = p else selectedEmptySeat = index
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ================= 3. MIDDLE AREA: PK / FEED / CHAT =================
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                // PK Battle Banner (if battle is active)
+                if (pkBattle != null && pkBattle.status == PkStatus.ACTIVE) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp)
+                            .align(Alignment.TopCenter),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        PkBattleHeader(pkBattle, isHost = isHost, onEnd = onEndPk)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            PkSideCard(pkBattle.left, PkSideType.LEFT, pkBattle.leader == PkSideType.LEFT, modifier = Modifier.weight(1f))
+                            PkSideCard(pkBattle.right, PkSideType.RIGHT, pkBattle.leader == PkSideType.RIGHT, modifier = Modifier.weight(1f))
+                        }
+                        PkBattleScoreBar(pkBattle)
+                        PkTeamSelector(pkBattle, selectedSide = pkGiftSide, onSelect = { pkGiftSide = it })
+                        PkLiveEffectBurst(pkLiveEffect)
+                    }
+                }
+
+                // Feed / Live Chat / Entrance announcements
+                LazyColumn(
+                    state = chatListState,
+                    modifier = Modifier
+                        .fillMaxWidth(0.85f)
+                        .fillMaxHeight()
+                        .padding(start = 14.dp, bottom = 6.dp)
+                        .align(Alignment.BottomStart),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(bottom = 8.dp)
+                ) {
+                    // System entrance cards (matching reference screenshot with purple clap pill button!)
+                    val recentEntrances = activity.filter { it.type.uppercase() == "JOIN" }.takeLast(4)
+                    items(recentEntrances, key = { "join-${it.id}" }) { item ->
+                        EntranceAnnouncementCard(
+                            label = item.label,
+                            onWelcomeClick = {
+                                onReact("clap")
+                                emojiCounter.value++
+                                floatingEmojis.add(FloatingEmoji(id = "clap-${emojiCounter.value}", emoji = "👏"))
+                                onToast("Welcomed to the room! 👏")
+                            }
+                        )
+                    }
+
+                    // Chat messages
+                    itemsIndexed(chat.takeLast(16), key = { index, msg -> "$index-${msg.author}-${msg.text.hashCode()}" }) { _, msg ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color(0x88141424))
+                                .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(14.dp))
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "${msg.author}: ",
+                                color = if (msg.author == "System") Pink else Color(0xFFC084FC),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = msg.text,
+                                color = Color.White,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+
+                // ================= 4. FLOATING RIGHT WIDGETS =================
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 12.dp, bottom = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Floating Treasure Chest (Lucky Box)
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .shadow(8.dp, CircleShape)
+                            .clip(CircleShape)
+                            .background(Brush.radialGradient(listOf(Color(0xFFFFD54F), Color(0xFFFF8F00))))
+                            .clickable { onToast("Lucky Box drop active! Gift to trigger coins.") },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("🎁", fontSize = 24.sp)
+                    }
+
+                    // Floating Mini-game / Lucky Draw widget
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .shadow(6.dp, RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Brush.verticalGradient(listOf(Color(0xFF6B21A8), Color(0xFF3B0764))))
+                            .border(1.dp, Gold, RoundedCornerShape(12.dp))
+                            .clickable { showLuckyWheelDialog = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("🦁", fontSize = 18.sp)
+                            Text("2.0", color = Gold, fontSize = 8.sp, fontWeight = FontWeight.Black)
+                        }
+                    }
+
+                    // Floating Quick Chat shortcut bubble
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(RoomPurplePrimary)
+                            .clickable { showChatInputSheet = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Chat,
+                            contentDescription = "Chat",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+
+            // ================= 5. BOTTOM CONTROL DOCK BAR (Exact match to reference image!) =================
+            Surface(
+                color = Color(0xEE090716),
+                border = BorderStroke(1.dp, RoomGlassBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 8.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceAround
+                ) {
+                    // 1. Speaker output mute toggle
+                    IconButton(
+                        onClick = {
+                            roomAudioMuted = !roomAudioMuted
+                            onToast(if (roomAudioMuted) "Room audio muted" else "Room audio unmuted")
+                        },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(if (roomAudioMuted) Color(0x44FF3B30) else Color(0x33FFFFFF))
+                    ) {
+                        Icon(
+                            imageVector = if (roomAudioMuted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
+                            contentDescription = "Room Speaker Audio",
+                            tint = if (roomAudioMuted) Color(0xFFFF5252) else Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    // 2. Microphone toggle button
+                    IconButton(
+                        onClick = {
+                            if (!canSpeak && !isHost) {
+                                onRequestSpeaker()
+                                onToast("Requested microphone seat")
+                            } else {
+                                if (!muted) {
+                                    muted = true
+                                    YugmMediaRoom.setMicEnabled(false)
+                                    onOwnMicStateChanged(false)
+                                } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                    muted = false
+                                    YugmMediaRoom.setMicEnabled(true)
+                                    onOwnMicStateChanged(true)
+                                    onToast("Microphone unmuted")
                                 } else {
-                                    androidx.compose.foundation.layout.Spacer(androidx.compose.ui.Modifier.weight(1f))
+                                    microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
                                 }
                             }
-                        }
+                        },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(
+                                when {
+                                    !canSpeak && !isHost -> Color(0x33FFFFFF)
+                                    muted -> Color(0x44FF3B30)
+                                    else -> RoomPurplePrimary
+                                }
+                            )
+                    ) {
+                        Icon(
+                            imageVector = if (muted) Icons.Filled.MicOff else Icons.Filled.Mic,
+                            contentDescription = "Microphone",
+                            tint = if (muted) Color(0xFFFF5252) else Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
-                }
-                val audience = participants.filter { it.role == "AUDIENCE" }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    SectionTitle("In the room")
-                    Text("${audience.size} listening", color = TextMuted, fontSize = 12.sp)
-                }
-                if (audience.isNotEmpty()) {
-                    androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
-                        items(audience.take(12).size) { index ->
-                            val listener = audience[index].user
-                            androidx.compose.foundation.layout.Column(
-                                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-                                modifier = Modifier
-                                    .heightIn(min = 64.dp)
-                                    .semantics { contentDescription = "${listener.name}${if (audience[index].isRoomAdmin) ", room admin" else ""}" }
-                                    .clickable(role = Role.Button, onClickLabel = "View ${listener.name}") { selectedParticipant = audience[index] }
-                            ) {
-                                com.yugm.app.core.ui.components.Avatar(listener.name.take(1), 38, listener.avatar, listener.activeCosmetics)
-                                Text(listener.name.take(10), color = TextPrimary, fontSize = 10.sp, maxLines = 1)
-                                if (audience[index].isRoomAdmin) Text("ADMIN", color = Gold, fontSize = 8.sp, fontWeight = FontWeight.Black)
-                            }
-                        }
+
+                    // 3. Reaction button
+                    IconButton(
+                        onClick = { showReactionPicker = true },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x33FFFFFF))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.SentimentSatisfiedAlt,
+                            contentDescription = "Reactions",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
-                } else {
-                    Text("No listeners yet. Invite someone to join the room.", color = TextMuted, fontSize = 13.sp)
+
+                    // 4. Chat input button
+                    IconButton(
+                        onClick = { showChatInputSheet = true },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x33FFFFFF))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Chat,
+                            contentDescription = "Open Chat",
+                            tint = Color.White,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+
+                    // 5. Gift box button
+                    IconButton(
+                        onClick = { giftOpen = true },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(Color(0xFFFF2A6D), Color(0xFF9100FF))
+                                )
+                            )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.CardGiftcard,
+                            contentDescription = "Send Gift",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    // 6. Lucky Wheel / Game button
+                    IconButton(
+                        onClick = { showLuckyWheelDialog = true },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.radialGradient(
+                                    listOf(Color(0xFFFFB300), Color(0xFFE65100))
+                                )
+                            )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Casino,
+                            contentDescription = "Games",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
                 }
-                if (activity.isNotEmpty()) LiveRoomActivity(activity.takeLast(2))
-                MissionStrip(missions)
-                PollCard(poll = polls.firstOrNull(), isHost = isHost, onCreate = { showPollComposer = true }, onVote = onVotePoll)
-                ActivityFeed(activity)
             }
         }
-    }
-        if (showEntryOverlay) {
-            RoomEntryOverlay(room.host?.activeCosmetics?.roomEntry ?: "")
+
+        // Full-Room Gift Celebratory Animation Overlay
+        AnimatedVisibility(
+            visible = activeGiftBanner != null,
+            enter = scaleIn(initialScale = 0.6f) + fadeIn() + slideInVertically { -it / 3 },
+            exit = scaleOut(targetScale = 1.2f) + fadeOut() + slideOutVertically { -it },
+            modifier = Modifier.align(Alignment.Center)
+        ) {
+            activeGiftBanner?.let { (sender, giftName, icon) ->
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 24.dp)
+                        .clip(RoundedCornerShape(26.dp))
+                        .background(
+                            Brush.radialGradient(
+                                listOf(Color(0xF54A154B), Color(0xF7130B29))
+                            )
+                        )
+                        .border(2.dp, Brush.linearGradient(listOf(Gold, Pink)), RoundedCornerShape(26.dp))
+                        .padding(horizontal = 28.dp, vertical = 20.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(icon, fontSize = 58.sp)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "$sender sent $giftName!",
+                            color = Gold,
+                            fontSize = 19.sp,
+                            fontWeight = FontWeight.Black,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "✨ Room Intimacy Boosted +100 ✨",
+                            color = Color.White.copy(alpha = 0.85f),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
         }
+
+        // Floating reaction emoji layer
         FloatingEmojiOverlay(
             emojis = floatingEmojis.toList(),
             modifier = Modifier.matchParentSize()
         )
     }
+
+    // ================= ALL BOTTOM SHEETS & DIALOGS =================
+
+    // Room Info, Settings & Perks Sheet
+    if (showRoomInfoSheet) {
+        RoomSettingsAndInfoSheet(
+            room = room,
+            isHost = isHost,
+            isRoomAdmin = isRoomAdmin,
+            participantCount = participants.size,
+            onDismiss = { showRoomInfoSheet = false },
+            onFollowHost = {
+                room.host?.let { h ->
+                    if (h.isFollowing) onUnfollowUser(h.id) else onFollowUser(h.id)
+                    onToast(if (h.isFollowing) "Unfollowed room host" else "Following room host")
+                }
+            },
+            onOpenThemes = {
+                showRoomInfoSheet = false
+                onOpenThemes?.invoke()
+            },
+            onOpenTools = {
+                scope.launch {
+                    showRoomInfoSheet = false
+                    delay(220)
+                    showToolsSheet = true
+                }
+            },
+            onViewListeners = {
+                scope.launch {
+                    showRoomInfoSheet = false
+                    delay(220)
+                    showListenersSheet = true
+                }
+            },
+            onMinimize = {
+                showRoomInfoSheet = false
+                onMinimize()
+            },
+            onExit = {
+                scope.launch {
+                    showRoomInfoSheet = false
+                    delay(220)
+                    showExitPrompt = true
+                }
+            },
+            onToast = onToast
+        )
+    }
+
+    // 1. Quick Chat Input Sheet
+    if (showChatInputSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showChatInputSheet = false },
+            containerColor = Color(0xFF141224)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .navigationBarsPadding()
+            ) {
+                Text("Send a message to the room", color = TextMuted, fontSize = 12.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = chatMessageDraft,
+                        onValueChange = { chatMessageDraft = it.take(200) },
+                        placeholder = { Text("Say something nice...", color = TextMuted) },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    Button(
+                        onClick = {
+                            if (chatMessageDraft.isNotBlank()) {
+                                onSendMessage(chatMessageDraft.trim())
+                                chatMessageDraft = ""
+                                showChatInputSheet = false
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = RoomPurplePrimary),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Filled.Send, contentDescription = "Send", tint = Color.White)
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Room Tools Menu Sheet (Grid button)
+    if (showToolsSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showToolsSheet = false },
+            containerColor = Color(0xFF141224)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+                    .navigationBarsPadding(),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text("Room Features & Tools", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceAround
+                ) {
+                    ToolGridItem("⚔️", "PK Battle") {
+                        showToolsSheet = false
+                        showPkSetup = true
+                    }
+                    ToolGridItem("🎨", "Themes") {
+                        showToolsSheet = false
+                        onOpenThemes?.invoke()
+                    }
+                    ToolGridItem("📻", "Modes") {
+                        showToolsSheet = false
+                        onOpenModes?.invoke()
+                    }
+                    ToolGridItem("📊", "Poll") {
+                        showToolsSheet = false
+                        showPollComposer = true
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceAround
+                ) {
+                    ToolGridItem("⚙️", "Settings") {
+                        showToolsSheet = false
+                        showRoomInfoSheet = true
+                    }
+                    ToolGridItem("👥", "Invite") {
+                        showToolsSheet = false
+                        showInvitePicker = true
+                    }
+                    ToolGridItem("💬", "DM Host") {
+                        showToolsSheet = false
+                        onDirectMessage(room.host?.id)
+                    }
+                    ToolGridItem("↙️", "Minimize") {
+                        showToolsSheet = false
+                        onMinimize()
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+            }
+        }
+    }
+
+    // 3. Reaction Picker Sheet
+    if (showReactionPicker) {
+        ModalBottomSheet(
+            onDismissRequest = { showReactionPicker = false },
+            containerColor = Color(0xFF141224)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+                    .navigationBarsPadding()
+            ) {
+                Text("Live Reactions", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                Text("Tap an emoji to react live on the stage", color = TextMuted, fontSize = 12.sp)
+                Spacer(modifier = Modifier.height(14.dp))
+                val reactions = listOf(
+                    "🙌" to "clap",
+                    "😍" to "heart",
+                    "🔥" to "fire",
+                    "😂" to "laugh",
+                    "🤯" to "wow",
+                    "👑" to "crown",
+                    "✨" to "stars",
+                    "🎉" to "party"
+                )
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(bottom = 16.dp)
+                ) {
+                    items(reactions) { (emoji, type) ->
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Color(0xFF26203B))
+                                .clickable {
+                                    onReact(type)
+                                    emojiCounter.value++
+                                    floatingEmojis.add(FloatingEmoji(id = "live-${emojiCounter.value}", emoji = emoji))
+                                    val seatIdx = selfParticipant?.seatIndex ?: 0
+                                    seatReactions[seatIdx] = emoji
+                                    scope.launch {
+                                        delay(1800)
+                                        if (seatReactions[seatIdx] == emoji) seatReactions.remove(seatIdx)
+                                    }
+                                    showReactionPicker = false
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(emoji, fontSize = 28.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 4. Lucky Wheel Dialog
+    if (showLuckyWheelDialog) {
+        AlertDialog(
+            onDismissRequest = { showLuckyWheelDialog = false },
+            title = { Text("🦁 Lucky Draw & Mini-Games", color = Color.White, fontWeight = FontWeight.Black) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Spin the wheel for a chance to win exclusive room frames, badges, and coin boosts!", color = TextMuted, fontSize = 13.sp)
+                    Text("• Grand Prize: Legendary Electric Dragon Frame 🐉", color = RoomGoldAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("• Tier 2: Supreme Crown Frame 👑", color = Color.White, fontSize = 12.sp)
+                    Text("• Tier 3: 500 Coins Bonus 💎", color = Color(0xFF60A5FA), fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showLuckyWheelDialog = false
+                        onToast("Spinning wheel... You won 50 Bonus Coins! 🎉")
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = RoomPurplePrimary)
+                ) {
+                    Text("Spin for 20 Coins", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLuckyWheelDialog = false }) {
+                    Text("Close", color = TextMuted)
+                }
+            },
+            containerColor = Color(0xFF18152B)
+        )
+    }
+
+    // 6. Audience / Listeners Sheet
+    if (showListenersSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showListenersSheet = false },
+            containerColor = Color(0xFF141224)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+                    .navigationBarsPadding()
+            ) {
+                Text("People in this room (${participants.size})", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                Spacer(modifier = Modifier.height(12.dp))
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 350.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(participants, key = { it.user.id }) { p ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showListenersSheet = false
+                                    selectedParticipant = p
+                                }
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Avatar(p.user.name.take(1), 38, p.user.avatar, p.user.activeCosmetics)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(p.user.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    when {
+                                        p.user.id == room.host?.id -> "Host 👑"
+                                        p.isRoomAdmin -> "Admin 🛡️"
+                                        p.role in listOf("SPEAKER", "MODERATOR") -> "Speaker 🎙️"
+                                        else -> "Listener"
+                                    },
+                                    color = TextMuted,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            if (p.user.id != currentUserId) {
+                                TextButton(onClick = {
+                                    if (p.user.isFollowing) onUnfollowUser(p.user.id) else onFollowUser(p.user.id)
+                                }) {
+                                    Text(if (p.user.isFollowing) "Following" else "+ Follow", color = RoomPurplePrimary, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 7. Empty Seat Click BottomSheet
+    selectedEmptySeat?.let { seatIndex ->
+        val locked = seatIndex in room.lockedSeatIndices
+        val canManage = isHost || isRoomAdmin
+        ModalBottomSheet(
+            onDismissRequest = { selectedEmptySeat = null },
+            containerColor = Color(0xFF171522)
+        ) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 22.dp)
+                    .padding(bottom = 24.dp)
+            ) {
+                Text("Mic Seat ${seatIndex + 1}", color = TextPrimary, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    when {
+                        locked && canManage -> "This seat is locked. Unlock it before taking the seat."
+                        locked -> "This mic is locked by the host or an admin."
+                        else -> "Take this open seat to join the stage and speak."
+                    },
+                    color = TextMuted,
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(top = 6.dp, bottom = 16.dp)
+                )
+                Button(
+                    onClick = {
+                        onTakeSeat(seatIndex)
+                        selectedEmptySeat = null
+                    },
+                    enabled = !locked,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = RoomPurplePrimary)
+                ) {
+                    Text("Take Seat", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+                if (canManage) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = {
+                            onSetSeatLocked(seatIndex, !locked)
+                            selectedEmptySeat = null
+                        },
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Text(if (locked) "Unlock Mic Seat" else "Lock Mic Seat", color = if (locked) RoomPurplePrimary else Pink, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+
+    // 8. Selected Participant Details Sheet
+    selectedParticipant?.let { target ->
+        val isSelf = target.user.id == currentUserId
+        val targetIsHost = target.role == "HOST" || target.user.id == room.host?.id
+        val canManageTarget = !isSelf && !targetIsHost && (!target.isRoomAdmin || isHost)
+        ModalBottomSheet(
+            onDismissRequest = { selectedParticipant = null },
+            containerColor = Color(0xFF171522)
+        ) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Avatar(target.user.name.take(1), 76, target.user.avatar, target.user.activeCosmetics)
+                Text(target.user.name.ifBlank { "Yugm user" }, color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
+                Text(
+                    buildString {
+                        append(if (targetIsHost) "Host" else if (target.isRoomAdmin) "Room admin" else target.role.lowercase().replaceFirstChar { it.uppercase() })
+                        if (target.role in listOf("SPEAKER", "MODERATOR", "HOST")) target.seatIndex?.let { append(" · Mic ${it + 1}") }
+                    },
+                    color = TextMuted,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(top = 3.dp, bottom = 12.dp)
+                )
+                Column(Modifier.fillMaxWidth()) {
+                    TextButton(onClick = { onOpenProfile(target.user.id); selectedParticipant = null }, modifier = Modifier.fillMaxWidth()) {
+                        Text("View Profile", color = TextPrimary, fontWeight = FontWeight.Bold)
+                    }
+                    if (isSelf && target.role in listOf("SPEAKER", "MODERATOR")) {
+                        TextButton(
+                            onClick = {
+                                onRemoveSpeaker(target.user.id)
+                                selectedParticipant = null
+                                onToast("Stepped down from stage. Tap any open mic to join again.")
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Leave Seat (Step Down to Audience)", color = Pink, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    if (!isSelf) {
+                        TextButton(onClick = {
+                            if (target.user.isFollowing) onUnfollowUser(target.user.id) else onFollowUser(target.user.id)
+                            selectedParticipant = target.copy(user = target.user.copy(isFollowing = !target.user.isFollowing))
+                        }, modifier = Modifier.fillMaxWidth()) {
+                            Text(if (target.user.isFollowing) "Following" else "+ Follow", color = RoomPurplePrimary, fontWeight = FontWeight.Bold)
+                        }
+                        TextButton(onClick = { onDirectMessage(target.user.id); selectedParticipant = null }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Direct Message", color = TextPrimary)
+                        }
+                    }
+                    if ((isHost || isRoomAdmin) && target.role == "AUDIENCE" && canManageTarget) {
+                        TextButton(onClick = { onInviteSpeaker(target.user.id); selectedParticipant = null }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Invite to Mic", color = RoomPurplePrimary)
+                        }
+                    }
+                    if ((isHost || isRoomAdmin) && target.role in listOf("SPEAKER", "MODERATOR") && canManageTarget) {
+                        TextButton(onClick = { onRemoveSpeaker(target.user.id); selectedParticipant = null }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Remove from Mic", color = Pink)
+                        }
+                    }
+                    if (isHost && !isSelf && !targetIsHost) {
+                        TextButton(onClick = { onSetRoomAdmin(target.user.id, !target.isRoomAdmin); selectedParticipant = null }, modifier = Modifier.fillMaxWidth()) {
+                            Text(if (target.isRoomAdmin) "Remove Admin" else "Make Room Admin", color = Gold)
+                        }
+                    }
+                    if ((isHost || isRoomAdmin) && canManageTarget) {
+                        TextButton(onClick = { onMuteUser(target.user.id); selectedParticipant = null }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Mute Microphone", color = Pink)
+                        }
+                        TextButton(onClick = { onRemoveUser(target.user.id); selectedParticipant = null }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Kick from Room", color = Pink)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 9. Friend Invite Sheet
     if (showInvitePicker) {
         FriendInviteSheet(
             hosts = inviteCandidates,
@@ -544,6 +1369,8 @@ fun ActiveVoiceRoomScreen(
             }
         )
     }
+
+    // 10. Poll Composer Sheet
     if (showPollComposer) {
         PollComposerSheet(
             onDismiss = { showPollComposer = false },
@@ -553,6 +1380,8 @@ fun ActiveVoiceRoomScreen(
             }
         )
     }
+
+    // 11. PK Setup Sheets
     if (showPkSetup) {
         PkSetupBottomSheet(
             onDismiss = { showPkSetup = false },
@@ -573,6 +1402,7 @@ fun ActiveVoiceRoomScreen(
             }
         )
     }
+
     if (showPkOpponents) {
         PkOpponentSearchSheet(
             opponents = pkOpponents,
@@ -588,6 +1418,7 @@ fun ActiveVoiceRoomScreen(
             }
         )
     }
+
     PkResultDialog(
         battle = pkBattle?.takeUnless { it.id == dismissedPkResultId },
         onDismiss = { dismissedPkResultId = pkBattle?.id },
@@ -596,275 +1427,300 @@ fun ActiveVoiceRoomScreen(
             showPkSetup = true
         }
     )
-    selectedEmptySeat?.let { seatIndex ->
-        val locked = seatIndex in room.lockedSeatIndices
-        val canManage = isHost || isRoomAdmin
-        ModalBottomSheet(onDismissRequest = { selectedEmptySeat = null }, containerColor = Color(0xFF171522)) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp).padding(bottom = 24.dp)) {
-                Text("Mic ${seatIndex + 1}", color = TextPrimary, fontSize = 21.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    when {
-                        locked && canManage -> "This seat is locked. Unlock it before taking the seat."
-                        locked -> "This mic is locked by the host or an admin."
-                        else -> "Take this open seat to join the stage."
-                    },
-                    color = TextMuted,
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(top = 6.dp, bottom = 16.dp)
-                )
-                MaterialTextButton(
-                    onClick = {
-                        onTakeSeat(seatIndex)
-                        selectedEmptySeat = null
-                    },
-                    enabled = !locked,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
-                ) { Text("Take seat", color = if (locked) TextMuted else PrimaryPurple, fontWeight = FontWeight.Bold) }
-                if (canManage) {
-                    MaterialTextButton(
-                        onClick = {
-                            onSetSeatLocked(seatIndex, !locked)
-                            selectedEmptySeat = null
-                        },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
-                    ) { Text(if (locked) "Unlock mic" else "Lock mic", color = if (locked) PrimaryPurple else Pink, fontWeight = FontWeight.Bold) }
-                }
-            }
-        }
-    }
-    selectedParticipant?.let { target ->
-        val isSelf = target.user.id == currentUserId
-        val targetIsHost = target.role == "HOST" || target.user.id == room.host?.id
-        val canManageTarget = !isSelf && !targetIsHost && (!target.isRoomAdmin || isHost)
-        ModalBottomSheet(onDismissRequest = { selectedParticipant = null }, containerColor = Color(0xFF171522)) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Avatar(target.user.name.take(1), 76, target.user.avatar, target.user.activeCosmetics)
-                Text(target.user.name.ifBlank { "Yugm user" }, color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
-                Text(
-                    buildString {
-                        append(if (targetIsHost) "Host" else if (target.isRoomAdmin) "Room admin" else target.role.lowercase().replaceFirstChar { it.uppercase() })
-                        if (target.role in listOf("SPEAKER", "MODERATOR", "HOST")) target.seatIndex?.let { append(" · Mic ${it + 1}") }
-                    },
-                    color = TextMuted,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(top = 3.dp, bottom = 12.dp)
-                )
-                Column(Modifier.fillMaxWidth()) {
-                    MaterialTextButton(onClick = { onOpenProfile(target.user.id); selectedParticipant = null }, modifier = Modifier.fillMaxWidth()) { Text("View profile", color = TextPrimary) }
-                    if (!isSelf) MaterialTextButton(onClick = {
-                        if (target.user.isFollowing) onUnfollowUser(target.user.id) else onFollowUser(target.user.id)
-                        selectedParticipant = target.copy(user = target.user.copy(isFollowing = !target.user.isFollowing))
-                    }, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (target.user.isFollowing) "Following" else "Follow", color = PrimaryPurple)
-                    }
-                    MaterialTextButton(onClick = { onDirectMessage(target.user.id); selectedParticipant = null }, modifier = Modifier.fillMaxWidth()) { Text("Chat", color = TextPrimary) }
-                    if ((isHost || isRoomAdmin) && target.role == "AUDIENCE" && canManageTarget) MaterialTextButton(onClick = { onInviteSpeaker(target.user.id); selectedParticipant = null }, modifier = Modifier.fillMaxWidth()) { Text("Invite to mic", color = PrimaryPurple) }
-                    if ((isHost || isRoomAdmin) && target.role in listOf("SPEAKER", "MODERATOR") && canManageTarget) MaterialTextButton(onClick = { onRemoveSpeaker(target.user.id); selectedParticipant = null }, modifier = Modifier.fillMaxWidth()) { Text("Remove from mic", color = Pink) }
-                    if (isHost && !isSelf && !targetIsHost) MaterialTextButton(onClick = { onSetRoomAdmin(target.user.id, !target.isRoomAdmin); selectedParticipant = null }, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (target.isRoomAdmin) "Remove admin" else "Make admin", color = Gold)
-                    }
-                    if ((isHost || isRoomAdmin) && canManageTarget) {
-                        MaterialTextButton(onClick = { onMuteUser(target.user.id); selectedParticipant = null }, modifier = Modifier.fillMaxWidth()) { Text("Mute", color = Pink) }
-                        MaterialTextButton(onClick = { onRemoveUser(target.user.id); selectedParticipant = null }, modifier = Modifier.fillMaxWidth()) { Text("Kick from room", color = Pink) }
-                    }
-                }
-            }
-        }
-    }
-    if (showReactionPicker) {
-        ModalBottomSheet(onDismissRequest = { showReactionPicker = false }, containerColor = Color(0xFF171522)) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
-                Text("Send a reaction", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text("Your reaction appears live in the room", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 3.dp, bottom = 18.dp))
-                val reactions = listOf("🙌" to "clap", "😍" to "heart", "😹" to "laugh", "🔥" to "fire", "🤯" to "wow")
-                androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 28.dp)) {
-                    items(reactions, key = { it.second }) { (emoji, type) ->
-                        Column(
-                            Modifier.size(62.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(18.dp))
-                                .background(Color(0xFF28243A))
-                                .semantics { contentDescription = "Send $type reaction" }
-                                .clickable(role = Role.Button, onClickLabel = "Send $type reaction") {
-                                    onReact(type)
-                                    showReactionPicker = false
-                                },
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) { Text(emoji, fontSize = 29.sp) }
-                    }
-                }
-            }
-        }
-    }
+
+    // 12. Exit Confirmation Prompt
     if (showExitPrompt) {
         AlertDialog(
             onDismissRequest = { showExitPrompt = false },
-            title = { Text(if (isHost) "Close this room?" else "Leave this room?", fontWeight = FontWeight.Bold) },
-            text = { Text("Keep the room active in a bubble, or close and exit now.") },
+            title = { Text(if (isHost) "Close this room?" else "Leave this room?", fontWeight = FontWeight.Black, color = Color.White) },
+            text = { Text("Keep the room active in floating bubble, or exit now.", color = TextMuted) },
             confirmButton = {
                 Column(horizontalAlignment = Alignment.End) {
-                    MaterialTextButton(onClick = {
+                    TextButton(onClick = {
                         showExitPrompt = false
                         onMinimize()
-                    }) { Text("Keep room active", color = PrimaryPurple) }
-                    MaterialTextButton(onClick = {
+                    }) { Text("Keep room active", color = RoomPurplePrimary, fontWeight = FontWeight.Bold) }
+                    TextButton(onClick = {
                         showExitPrompt = false
                         if (isHost) onEndRoom() else onBack()
-                    }) { Text(if (isHost) "Close and exit" else "Leave and exit", color = Pink) }
+                    }) { Text(if (isHost) "Close and exit" else "Leave and exit", color = Pink, fontWeight = FontWeight.Bold) }
                 }
             },
-            dismissButton = { MaterialTextButton(onClick = { showExitPrompt = false }) { Text("Stay in room", color = TextMuted) } }
+            dismissButton = {
+                TextButton(onClick = { showExitPrompt = false }) { Text("Stay in room", color = TextMuted) }
+            },
+            containerColor = Color(0xFF171522)
         )
     }
 }
 
+/**
+ * Individual Voice Seat component matching the screenshot:
+ * - Empty: clean circular disc with mic/lock icon and seat number below
+ * - Occupied: avatar with speaking wave aura, mic status indicator badge, and index pill + name below
+ */
 @Composable
-private fun RoomHostBanner(host: Host, listenerCount: Int, isHost: Boolean) {
+private fun VoiceSeatItem(
+    index: Int,
+    participant: RoomParticipant?,
+    isSpeaking: Boolean,
+    isLocked: Boolean,
+    isCurrentMuted: Boolean,
+    reactionEmoji: String? = null,
+    onClick: () -> Unit
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = if (isSpeaking) 1.14f else 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseScale"
+    )
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .width(64.dp)
+            .clickable(onClick = onClick)
+    ) {
+        if (participant != null) {
+            // Occupied Seat Avatar
+            Box(
+                modifier = Modifier.size(54.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                // Speaking pulse ripple ring
+                if (isSpeaking) {
+                    Box(
+                        modifier = Modifier
+                            .size(54.dp * pulseScale)
+                            .clip(CircleShape)
+                            .border(2.dp, Color(0xFF00E5FF), CircleShape)
+                    )
+                }
+
+                // Avatar with custom frame
+                Avatar(
+                    initial = participant.user.name.take(1).uppercase(),
+                    size = 46,
+                    imageUrl = participant.user.avatar,
+                    cosmetics = participant.user.activeCosmetics,
+                    isSpeaking = isSpeaking,
+                    isMuted = isCurrentMuted
+                )
+
+                // Animated live reaction centered directly over the avatar!
+                if (!reactionEmoji.isNullOrBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .clip(CircleShape)
+                            .background(Color(0xD9000000))
+                            .border(1.5.dp, Gold, CircleShape)
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(reactionEmoji, fontSize = 24.sp)
+                    }
+                }
+
+
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Pill with Seat Number + Truncated Name
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(Color(0x88000000))
+                    .padding(horizontal = 4.dp, vertical = 2.dp)
+            ) {
+                // Number badge
+                Box(
+                    modifier = Modifier
+                        .size(14.dp)
+                        .clip(CircleShape)
+                        .background(
+                            when (index) {
+                                0 -> Color(0xFF3B82F6)
+                                1 -> Color(0xFF60A5FA)
+                                2 -> Color(0xFFEC4899)
+                                3 -> Color(0xFF8B5CF6)
+                                else -> Color(0xFFA855F7)
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "${index + 1}",
+                        color = Color.White,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(3.dp))
+
+                Text(
+                    text = participant.user.name,
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        } else {
+            // Empty Seat: Circular disc with mic / lock icon
+            Box(
+                modifier = Modifier
+                    .size(50.dp)
+                    .clip(CircleShape)
+                    .background(RoomSeatEmptyBg)
+                    .border(1.dp, RoomGlassBorder, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (isLocked) Icons.Filled.Lock else Icons.Filled.Mic,
+                    contentDescription = null,
+                    tint = if (isLocked) Color(0xFFFFB300) else Color(0xB3FFFFFF),
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Seat number below empty disc
+            Text(
+                text = "${index + 1}",
+                color = TextMuted,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+/**
+ * Entrance Announcement Card matching the reference screenshot:
+ * Translucent dark card with avatar, badge, name, "entered the room" subtitle, and purple clap pill button
+ */
+@Composable
+private fun EntranceAnnouncementCard(
+    label: String,
+    onWelcomeClick: () -> Unit
+) {
+    val name = label.substringBefore(" joined").substringBefore(" entered").ifBlank { label }
+
     Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
-            .background(Brush.horizontalGradient(listOf(Color(0xCC142C54), Color(0xCC211947))))
-            .semantics { contentDescription = "Room hosted by ${host.name}. $listenerCount people in the room" }
-            .padding(horizontal = 14.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(11.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xA6181729))
+            .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(16.dp))
+            .padding(horizontal = 10.dp, vertical = 7.dp)
     ) {
-        com.yugm.app.core.ui.components.Avatar(host.name.take(1), 42, host.avatar, host.activeCosmetics, showEntry = true)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(if (isHost) "Your room is live" else "${host.name}'s room", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-            Text(if (host.username.isNotBlank()) "@${host.username}" else "Room host", color = TextMuted, fontSize = 11.sp, maxLines = 1)
-        }
-        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("● LIVE", color = Color(0xFFFF647C), fontSize = 10.sp, fontWeight = FontWeight.Black)
-            Text("$listenerCount here", color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-        }
-    }
-}
-
-private fun speakersCount(participants: List<RoomParticipant>): Int =
-    participants.count { it.role in listOf("HOST", "SPEAKER", "MODERATOR") }
-
-@Composable
-private fun LiveRoomActivity(items: List<RoomActivityItem>) {
-    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        Text("LIVE ACTIVITY", color = TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Black, modifier = Modifier.semantics { heading() })
-        items.forEach { item ->
-            Row(
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
+        ) {
+            // User Avatar
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
-                    .background(Color(0xCC13223C))
-                    .padding(horizontal = 12.dp, vertical = 9.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(9.dp)
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(Brush.linearGradient(listOf(RoomPurplePrimary, Pink))),
+                contentAlignment = Alignment.Center
             ) {
-                Text(activityGlyph(item.type), fontSize = 16.sp)
-                Text(item.label, color = TextPrimary, fontSize = 12.sp, maxLines = 2, modifier = Modifier.weight(1f))
+                Text(
+                    name.take(1).uppercase(),
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Black
+                )
             }
-        }
-    }
-}
 
-private fun activityGlyph(type: String): String = when (type.uppercase()) {
-    "JOIN" -> "👋"
-    "LEAVE" -> "↗"
-    "GIFT" -> "🎁"
-    "REACTION" -> "✨"
-    "SPEAKER_REQUEST" -> "🎙"
-    "POLL" -> "📊"
-    else -> "💬"
-}
+            Spacer(modifier = Modifier.width(8.dp))
 
-@Composable
-fun MissionStrip(missions: List<RoomMission>) {
-    if (missions.isEmpty()) return
-    SectionTitle("Room missions")
-    missions.forEach { mission ->
-        GlassCard {
-            Text(mission.title, color = TextPrimary, fontWeight = FontWeight.Black)
-            Text("${mission.progress}/${mission.target} / ${mission.reward} coins", color = if (mission.complete) Gold else TextMuted, fontSize = 12.sp)
-        }
-    }
-}
-
-@Composable
-fun PollCard(
-    poll: RoomPoll?,
-    isHost: Boolean,
-    onCreate: () -> Unit,
-    onVote: (String, Int) -> Unit
-) {
-    if (poll == null) {
-        if (isHost) {
-            GlassCard {
-                Text("ROOM PROMPT", color = Pink, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 1.1.sp)
-                Text("Ask the room", color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Black)
-                Text("Create a quick vote and let everyone weigh in.", color = TextMuted, fontSize = 13.sp)
-                PrimaryButton(
-                    text = "Create poll",
-                    modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
-                    onClick = onCreate
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("🛡️", fontSize = 11.sp)
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(
+                        text = name,
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Text(
+                    text = "entered the room",
+                    color = RoomGoldAccent,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium
                 )
             }
         }
-        return
-    }
-    val total = poll.options.sumOf { it.votes }.coerceAtLeast(1)
-    GlassCard {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-            Text("ROOM POLL", color = Pink, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 1.1.sp)
-            Text(poll.question, color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Black)
-            poll.options.forEachIndexed { index, option ->
-                val pct = (option.votes * 100) / total
-                androidx.compose.foundation.layout.Row(
-                    modifier = androidx.compose.ui.Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
-                        .background(com.yugm.app.core.ui.theme.SurfaceElevated)
-                        .semantics { contentDescription = "Vote for ${option.text}, $pct percent" }
-                        .clickable(role = Role.Button, onClickLabel = "Vote for ${option.text}") { onVote(poll.id, index) }
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                ) {
-                    Text(option.text, color = TextPrimary, modifier = Modifier.weight(1f), fontSize = 14.sp)
-                    Text("$pct%", color = Gold, fontWeight = FontWeight.Black, fontSize = 13.sp)
-                }
-            }
+
+        // Welcome / Clap action button (purple pill button with clapping emoji)
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(RoomPurplePrimary)
+                .clickable(onClick = onWelcomeClick)
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("👏", fontSize = 16.sp)
         }
     }
 }
 
+/**
+ * Tool item in the 4-square grid sheet
+ */
 @Composable
-fun ActivityFeed(activity: List<RoomActivityItem>) {
-    if (activity.isEmpty()) return
-    GlassCard {
-        Column(verticalArrangement = Arrangement.spacedBy(9.dp), modifier = Modifier.fillMaxWidth()) {
-            Text("LIVE ACTIVITY", color = TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 1.1.sp)
-            activity.takeLast(4).forEach {
-                androidx.compose.foundation.layout.Row(
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(9.dp)
-                ) {
-                    Box(Modifier.size(7.dp).background(Pink, androidx.compose.foundation.shape.CircleShape))
-                    Text(it.label, color = TextPrimary, fontSize = 13.sp)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ReactionBurst(label: String) {
-    AnimatedVisibility(
-        visible = label.isNotBlank(),
-        enter = fadeIn() + scaleIn(initialScale = 0.82f) + slideInVertically { it / 2 },
-        exit = fadeOut() + scaleOut(targetScale = 1.18f) + slideOutVertically { -it / 2 }
+private fun ToolGridItem(
+    glyph: String,
+    label: String,
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .width(72.dp)
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp)
     ) {
-        GlassCard {
-            Text(label, color = Gold, fontSize = 24.sp, fontWeight = FontWeight.Black)
-            Text("Reaction sent", color = TextMuted, fontSize = 12.sp)
+        Box(
+            modifier = Modifier
+                .size(50.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFF231E38))
+                .border(1.dp, RoomGlassBorder, RoundedCornerShape(16.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(glyph, fontSize = 22.sp)
         }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            label,
+            color = Color.White,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -875,20 +1731,43 @@ fun FriendInviteSheet(
     onDismiss: () -> Unit,
     onInvite: (String) -> Unit
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF141224)) {
         Column(
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 8.dp)
+                .navigationBarsPadding()
         ) {
-            Text("Invite friends", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Black)
+            Text("Invite Friends to Room", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Black)
             if (hosts.isEmpty()) {
                 Text("Follow people first, then invite them into rooms from here.", color = TextMuted)
             } else {
-                hosts.take(12).forEach { host ->
-                    HostRow(host = host, onClick = { onInvite(host.id) })
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 300.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(hosts.take(12), key = { it.id }) { host ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0x33FFFFFF))
+                                .clickable { onInvite(host.id) }
+                                .padding(10.dp)
+                        ) {
+                            Avatar(host.name.take(1), 38, host.avatar, host.activeCosmetics)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(host.name, color = Color.White, fontWeight = FontWeight.Bold)
+                                Text("@${host.username}", color = TextMuted, fontSize = 11.sp)
+                            }
+                            Text("Invite", color = RoomPurplePrimary, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
-            Spacer(Modifier.width(1.dp))
         }
     }
 }
@@ -904,55 +1783,360 @@ fun PollComposerSheet(
     var optionB by rememberSaveable { mutableStateOf("") }
     var optionC by rememberSaveable { mutableStateOf("") }
     var optionD by rememberSaveable { mutableStateOf("") }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF141224)) {
         Column(
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 8.dp)
+                .navigationBarsPadding()
         ) {
-            Text("Create poll", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Black)
-            YugmTextField(question, { question = it }, "Question")
+            Text("Create Room Poll", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Black)
+            OutlinedTextField(
+                value = question,
+                onValueChange = { question = it },
+                label = { Text("Poll Question") },
+                modifier = Modifier.fillMaxWidth()
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                YugmTextField(optionA, { optionA = it }, "Option 1", modifier = Modifier.weight(1f))
-                YugmTextField(optionB, { optionB = it }, "Option 2", modifier = Modifier.weight(1f))
+                OutlinedTextField(optionA, { optionA = it }, label = { Text("Option 1") }, modifier = Modifier.weight(1f))
+                OutlinedTextField(optionB, { optionB = it }, label = { Text("Option 2") }, modifier = Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                YugmTextField(optionC, { optionC = it }, "Option 3", modifier = Modifier.weight(1f))
-                YugmTextField(optionD, { optionD = it }, "Option 4", modifier = Modifier.weight(1f))
+                OutlinedTextField(optionC, { optionC = it }, label = { Text("Option 3") }, modifier = Modifier.weight(1f))
+                OutlinedTextField(optionD, { optionD = it }, label = { Text("Option 4") }, modifier = Modifier.weight(1f))
             }
-            TextButton(
+            Button(
                 onClick = {
                     val options = listOf(optionA, optionB, optionC, optionD).map { it.trim() }.filter { it.isNotBlank() }
                     if (question.isNotBlank() && options.size >= 2) onCreate(question.trim(), options)
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = RoomGoldAccent)
             ) {
-                Text("Launch poll", color = Gold, fontWeight = FontWeight.Black)
+                Text("Launch Poll", color = Background, fontWeight = FontWeight.Black)
             }
         }
     }
 }
 
 @Composable
-private fun RoomEntryOverlay(entryId: String) {
-    if (entryId.isBlank()) return
-    val alpha by animateFloatAsState(targetValue = 0f, animationSpec = tween(1800), finishedListener = {})
-    Box(
-        Modifier.fillMaxSize().alpha(alpha),
-        contentAlignment = Alignment.Center
+fun MissionStrip(missions: List<RoomMission>) {
+    if (missions.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        missions.forEach { mission ->
+            GlassCard {
+                Text(mission.title, color = TextPrimary, fontWeight = FontWeight.Black)
+                Text("${mission.progress}/${mission.target} / ${mission.reward} coins", color = if (mission.complete) Gold else TextMuted, fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+@Composable
+fun PollCard(
+    poll: RoomPoll?,
+    isHost: Boolean,
+    onCreate: () -> Unit,
+    onVote: (String, Int) -> Unit
+) {
+    if (poll == null) {
+        if (isHost) {
+            GlassCard {
+                Text("Ask the room", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Black)
+                Text("Create a quick vote and let everyone weigh in.", color = TextMuted, fontSize = 12.sp)
+                Button(
+                    onClick = onCreate,
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryPurple)
+                ) {
+                    Text("Create poll", color = Color.White)
+                }
+            }
+        }
+        return
+    }
+    val total = poll.options.sumOf { it.votes }.coerceAtLeast(1)
+    GlassCard {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Text(poll.question, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Black)
+            poll.options.forEachIndexed { index, option ->
+                val pct = (option.votes * 100) / total
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0x33FFFFFF))
+                        .clickable { onVote(poll.id, index) }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(option.text, color = TextPrimary, modifier = Modifier.weight(1f), fontSize = 13.sp)
+                    Text("$pct%", color = Gold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ActivityFeed(activity: List<RoomActivityItem>) {
+    if (activity.isEmpty()) return
+    GlassCard {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+            Text("LIVE ACTIVITY", color = TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Black)
+            activity.takeLast(4).forEach {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(Modifier.size(6.dp).background(Pink, CircleShape))
+                    Text(it.label, color = TextPrimary, fontSize = 12.sp)
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RoomSettingsAndInfoSheet(
+    room: Room,
+    isHost: Boolean,
+    isRoomAdmin: Boolean,
+    participantCount: Int,
+    onDismiss: () -> Unit,
+    onFollowHost: () -> Unit,
+    onOpenThemes: () -> Unit,
+    onOpenTools: () -> Unit,
+    onViewListeners: () -> Unit,
+    onMinimize: () -> Unit,
+    onExit: () -> Unit,
+    onToast: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val host = room.host
+    val cover = room.coverImage?.takeIf(String::isNotBlank)
+        ?: host?.avatar?.takeIf(String::isNotBlank)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF141224)
     ) {
-        when (entryId) {
-            "room_entry_confetti" -> {
-                Text("🎉✨🎊", fontSize = 60.sp)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 10.dp)
+                .navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            // Room Avatar, Title, Unique ID
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Brush.linearGradient(listOf(RoomPurplePrimary, Pink))),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (!cover.isNullOrBlank()) {
+                        AsyncImage(
+                            model = cover,
+                            contentDescription = "Room Avatar",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Icon(Icons.Filled.Mic, contentDescription = null, tint = Color.White, modifier = Modifier.size(30.dp))
+                    }
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = room.title.ifBlank { "Voice Room" },
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Black,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Unique ID: ${room.id.takeLast(8)}",
+                            color = Gold,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Copy",
+                            color = RoomPurplePrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0x338D35F6))
+                                .clickable {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    clipboard.setPrimaryClip(ClipData.newPlainText("Room ID", room.id))
+                                    onToast("Room ID copied: ${room.id.takeLast(8)}")
+                                }
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
             }
-            "room_entry_spotlight" -> {
-                Box(Modifier.fillMaxSize().background(Brush.radialGradient(listOf(Color.White.copy(alpha = 0.4f), Color.Transparent), radius = 200f)))
+
+            // Description
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF1E1A34))
+                    .padding(12.dp)
+            ) {
+                Text("Room Vibe & Description", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = room.description.ifBlank { "Welcome to our room! Join the live voice stream, share your thoughts, and vibe together." },
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
             }
-            "entry_rainbow" -> {
-                Box(Modifier.fillMaxSize().background(Brush.sweepGradient(listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red), Offset(500f, 500f))))
+
+            // Follow / Unfollow Host Button
+            if (host != null) {
+                Button(
+                    onClick = onFollowHost,
+                    modifier = Modifier.fillMaxWidth().height(42.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (host.isFollowing) Color(0x33FFFFFF) else RoomPurplePrimary
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = if (host.isFollowing) "Following Room Host ✓" else "+ Follow Room Host (${host.name})",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
             }
-            "entry_ghost" -> {
-                Text("👻💨", fontSize = 64.sp)
+
+            // Room Perks Section
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF1E1A34))
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text("Room Perks & Privileges", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Black)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("💎", fontSize = 13.sp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("1.5x Intimacy & Room XP on all gifts", color = Color.White, fontSize = 12.sp)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("✨", fontSize = 13.sp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("High-Fidelity Spatial Audio Active", color = Color.White, fontSize = 12.sp)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("👑", fontSize = 13.sp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("VIP Stage Frame priority unlocked", color = Color.White, fontSize = 12.sp)
+                }
             }
+
+            // Cosmetics Section
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF1E1A34))
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text("Room Cosmetics", color = Color(0xFFC084FC), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("Theme: ${room.theme.ifBlank { "Cosmic Twilight" }}", color = TextMuted, fontSize = 12.sp)
+                Text("Ambience: ${room.ambience.ifBlank { "Lofi Chill" }}", color = TextMuted, fontSize = 12.sp)
+                if (room.badge.isNotBlank()) {
+                    Text("Badge: ${room.badge}", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            if (isHost || isRoomAdmin) {
+                Button(
+                    onClick = onOpenThemes,
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B2D60)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Customize Room Themes & Ambience", color = Gold, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+            }
+
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onOpenTools,
+                    modifier = Modifier.weight(1.2f).height(42.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B2D60)),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp)
+                ) {
+                    Icon(Icons.Filled.GridView, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("Tools", fontSize = 12.sp, maxLines = 1)
+                }
+                Button(
+                    onClick = onViewListeners,
+                    modifier = Modifier.weight(1f).height(42.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF28243A)),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp)
+                ) {
+                    Icon(Icons.Filled.Groups, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("People · $participantCount", fontSize = 12.sp, maxLines = 1)
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onMinimize,
+                    modifier = Modifier.weight(1f).height(42.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF28243A)),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp)
+                ) {
+                    Text("Minimize", fontSize = 12.sp, maxLines = 1)
+                }
+                Button(
+                    onClick = onExit,
+                    modifier = Modifier.weight(1f).height(42.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8E3045)),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp)
+                ) {
+                    Text(if (isHost) "End room" else "Leave", fontSize = 12.sp, maxLines = 1)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
         }
     }
 }

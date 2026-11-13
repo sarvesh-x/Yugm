@@ -1,5 +1,6 @@
 package com.yugm.app.feature.discover.screens
 
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
@@ -25,7 +26,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,6 +36,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -56,6 +58,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -68,7 +71,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.EventNote
@@ -106,6 +109,8 @@ import com.yugm.app.core.ui.theme.TextPrimary
 import com.yugm.app.feature.discover.viewmodel.DiscoverViewModel
 import com.yugm.app.feature.discover.R
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
 
 private data class DiscoveryFilter(val label: String, val icon: ImageVector)
 
@@ -136,6 +141,8 @@ fun DiscoverScreen(
     onWallet: () -> Unit = {},
     onSelfProfile: () -> Unit = {},
     onVoiceRooms: () -> Unit = {},
+    onJoinParty: (Room) -> Unit = onOpenRoom,
+    onOpenMatchedCall: (Room) -> Unit = onJoinParty,
     onVibeGraph: () -> Unit = {},
     onCreatorDashboard: () -> Unit = {},
     viewModel: DiscoverViewModel = hiltViewModel(),
@@ -149,15 +156,50 @@ fun DiscoverScreen(
     }
     val onlineHosts = viewModel.home?.suggestedHosts.orEmpty().filter { it.isOnline }
     var selectedDiscoveryFilter by remember { mutableStateOf("Trending") }
+    var isFriendSearchOpen by remember { mutableStateOf(false) }
+    var isJoiningParty by remember { mutableStateOf(false) }
+    var friendSearchError by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(isFriendSearchOpen, token) {
+        if (!isFriendSearchOpen) return@LaunchedEffect
+        friendSearchError = null
+        try {
+            val searchDeadline = System.currentTimeMillis() + 90_000
+            var matchedRoom = viewModel.searchRandomFriend(token)
+            while (isFriendSearchOpen && matchedRoom == null && System.currentTimeMillis() < searchDeadline) {
+                delay(2_000)
+                matchedRoom = viewModel.randomFriendMatch(token)
+            }
+            val match = matchedRoom
+            if (isFriendSearchOpen && match != null) {
+                isFriendSearchOpen = false
+                onOpenMatchedCall(match)
+            } else if (isFriendSearchOpen) {
+                viewModel.cancelRandomFriendSearch(token)
+                friendSearchError = "No one joined the search yet. Try again in a little while."
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            friendSearchError = error.message ?: "Could not find a friend right now. Please try again."
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().background(Background)) {
             AmbientBackdrop()
-            LazyColumn(
-                contentPadding = PaddingValues(top = 8.dp, bottom = 150.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp),
-                modifier = Modifier.fillMaxSize().statusBarsPadding()
+            YugmPullToRefreshBox(
+                isRefreshing = viewModel.isLoading,
+                onRefresh = { viewModel.refreshHome(token) },
+                modifier = Modifier.fillMaxSize()
             ) {
+                LazyColumn(
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 150.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
                 item {
                     HomeTopBar(
                         unreadCount = viewModel.home?.unreadNotifications ?: 0,
@@ -173,19 +215,35 @@ fun DiscoverScreen(
                     ) {
                         HomeFeatureCard(
                             title = "Find Friends",
-                            subtitle = "${viewModel.home?.suggestedHosts?.size ?: 0} people to meet",
-                            icon = Icons.Filled.Favorite,
+                            subtitle = "Random private call",
+                            icon = Icons.Filled.Call,
                             colors = listOf(Color(0xFFD946A6), Color(0xFF8B35E8)),
                             modifier = Modifier.weight(1f),
-                            onClick = onGrowth
+                            onClick = { isFriendSearchOpen = true }
                         )
                         HomeFeatureCard(
-                            title = "Truth & Dare",
-                            subtitle = "Play together",
-                            icon = Icons.Filled.Casino,
+                            title = "Join Party",
+                            subtitle = if (isJoiningParty) "Finding a live room…" else "Join a random live room",
+                            icon = Icons.Filled.Groups,
                             colors = listOf(Color(0xFFB241CA), Color(0xFF6932D6)),
                             modifier = Modifier.weight(1f),
-                            onClick = onGames
+                            onClick = {
+                                if (!isJoiningParty) scope.launch {
+                                    isJoiningParty = true
+                                    runCatching { viewModel.randomLivePublicRoom() }
+                                        .onSuccess { room ->
+                                            if (room == null) {
+                                                Toast.makeText(context, "No joinable public rooms are live right now. Try again soon.", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                onJoinParty(room)
+                                            }
+                                        }
+                                        .onFailure { error ->
+                                            Toast.makeText(context, error.message ?: "Could not join a party.", Toast.LENGTH_SHORT).show()
+                                        }
+                                    isJoiningParty = false
+                                }
+                            }
                         )
                     }
                 }
@@ -237,6 +295,7 @@ fun DiscoverScreen(
                         HomeRoomCard(room = room, onClick = { onOpenRoom(room) })
                     }
                 }
+                }
             }
         }
 
@@ -258,6 +317,32 @@ fun DiscoverScreen(
             onChat = onChat,
             onWallet = onWallet,
             onProfile = onSelfProfile
+        )
+    }
+
+    if (isFriendSearchOpen) {
+        AlertDialog(
+            onDismissRequest = {
+                isFriendSearchOpen = false
+                scope.launch { runCatching { viewModel.cancelRandomFriendSearch(token) } }
+            },
+            title = { Text("Find a friend", fontWeight = FontWeight.Black) },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text(
+                        friendSearchError ?: "We’re finding someone who is looking for a private voice call too.",
+                        color = TextMuted
+                    )
+                    if (friendSearchError == null) CircularProgressIndicator(color = Pink)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    isFriendSearchOpen = false
+                    scope.launch { runCatching { viewModel.cancelRandomFriendSearch(token) } }
+                }) { Text("Cancel search") }
+            },
+            containerColor = SurfaceElevated
         )
     }
 }
@@ -294,19 +379,50 @@ private fun HomeFeatureCard(
 ) {
     Box(
         modifier
-            .height(108.dp)
-            .clip(RoundedCornerShape(23.dp))
+            .height(100.dp)
+            .clip(RoundedCornerShape(22.dp))
             .background(Brush.linearGradient(colors))
-            .border(1.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(23.dp))
+            .border(1.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(22.dp))
             .semantics { contentDescription = "$title. $subtitle" }
             .clickable(role = Role.Button, onClickLabel = title, onClick = onClick)
-            .padding(start = 14.dp, top = 12.dp, bottom = 10.dp, end = 48.dp)
     ) {
-        Column(Modifier.align(Alignment.CenterStart)) {
-            Text(title, color = Color.White, fontSize = 16.sp, lineHeight = 19.sp, fontWeight = FontWeight.Black, maxLines = 2)
-            Text(subtitle, color = Color.White.copy(alpha = 0.78f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(
+            Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Column(
+                Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Text(
+                    title,
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    lineHeight = 17.sp,
+                    fontWeight = FontWeight.Black,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    subtitle,
+                    color = Color.White.copy(alpha = 0.82f),
+                    fontSize = 10.sp,
+                    lineHeight = 13.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Box(
+                Modifier.size(38.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.16f))
+                    .border(1.dp, Color.White.copy(alpha = 0.22f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = Color.White)
+            }
         }
-        Icon(icon, contentDescription = null, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 3.dp).size(32.dp), tint = Color.White)
     }
 }
 

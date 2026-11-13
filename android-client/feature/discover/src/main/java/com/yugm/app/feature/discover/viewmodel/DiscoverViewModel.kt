@@ -51,7 +51,24 @@ class DiscoverViewModel @Inject constructor(
         }
     }
 
+    suspend fun randomLivePublicRoom(): Room? = withContext(Dispatchers.IO) {
+        yugmApi.rooms().filter { it.status.equals("LIVE", ignoreCase = true) && !it.vipOnly }.randomOrNull()
+    }
+
+    suspend fun searchRandomFriend(token: String): Room? = withContext(Dispatchers.IO) {
+        yugmApi.searchRandomFriend(token)
+    }
+
+    suspend fun randomFriendMatch(token: String): Room? = withContext(Dispatchers.IO) {
+        yugmApi.randomFriendMatch(token)
+    }
+
+    suspend fun cancelRandomFriendSearch(token: String) = withContext(Dispatchers.IO) {
+        yugmApi.cancelRandomFriendSearch(token)
+    }
+
     fun refreshHome(token: String) {
+        if (isLoading) return
         viewModelScope.launch {
             isLoading = true
             error = null

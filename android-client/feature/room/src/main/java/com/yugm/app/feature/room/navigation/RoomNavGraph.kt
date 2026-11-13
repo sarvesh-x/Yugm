@@ -4,6 +4,20 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
@@ -125,7 +139,7 @@ fun NavGraphBuilder.roomNavGraph(
                 username = username
             ),
             onBack = { navController.popBackStack() },
-            onCreate = { room, scheduleLater, visibility, allowMicRequests, coverImage ->
+            onCreate = { room, scheduleLater, visibility, allowMicRequests, coverImage, onFailure ->
                 val scheduledFor = if (scheduleLater) {
                     SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
                         timeZone = TimeZone.getTimeZone("UTC")
@@ -155,6 +169,7 @@ fun NavGraphBuilder.roomNavGraph(
                         }
                     },
                     onError = { msg ->
+                        onFailure(msg)
                         android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
                     }
                 )
@@ -209,7 +224,7 @@ fun NavGraphBuilder.roomNavGraph(
                 polls = roomViewModel.polls,
                 missions = roomViewModel.missions,
                 activity = roomViewModel.activity,
-                onBack = { roomViewModel.leaveAndDisconnect { navController.popBackStack() } },
+                onBack = { roomViewModel.leaveAndDisconnect { navController.returnFromRoom() } },
                 onSendMessage = roomViewModel::sendMessage,
                 onGift = { gift -> roomViewModel.sendGift(gift, room.host?.id ?: "") },
                 onToast = { msg -> android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show() },
@@ -256,7 +271,7 @@ fun NavGraphBuilder.roomNavGraph(
                 onRejectPk = roomViewModel::rejectPk,
                 onEndPk = roomViewModel::endPk,
                 onEndRoom = {
-                    roomViewModel.endRoomAndDisconnect { navController.popBackStack() }
+                    roomViewModel.endRoomAndDisconnect { navController.returnFromRoom() }
                 },
                 onMuteUser = roomViewModel::muteUser,
                 onOwnMicStateChanged = roomViewModel::setOwnMicState,
@@ -274,7 +289,12 @@ fun NavGraphBuilder.roomNavGraph(
                     navController.navigate(Screen.ThemeGallery.createRoute(roomId))
                 }
             )
-        }
+        } ?: RoomConnectionFallback(
+            isLoading = roomViewModel.roomState !is com.yugm.app.core.util.UiState.Error,
+            message = roomViewModel.roomError,
+            onRetry = roomViewModel::refresh,
+            onExit = { navController.returnFromRoom() }
+        )
     }
 
     composable(
@@ -309,7 +329,7 @@ fun NavGraphBuilder.roomNavGraph(
                 polls = roomViewModel.polls,
                 missions = roomViewModel.missions,
                 activity = roomViewModel.activity,
-                onBack = { roomViewModel.disconnect(); navController.popBackStack() },
+                onBack = { roomViewModel.leaveAndDisconnect { navController.returnFromRoom() } },
                 onSendMessage = roomViewModel::sendMessage,
                 onGift = { gift -> roomViewModel.sendGift(gift, room.host?.id ?: "") },
                 onToast = { msg -> android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show() },
@@ -348,8 +368,7 @@ fun NavGraphBuilder.roomNavGraph(
                 onRejectPk = roomViewModel::rejectPk,
                 onEndPk = roomViewModel::endPk,
                 onEndRoom = {
-                    roomViewModel.endRoom()
-                    navController.popBackStack()
+                    roomViewModel.endRoomAndDisconnect { navController.returnFromRoom() }
                 },
                 onMuteUser = roomViewModel::muteUser,
                 onRemoveUser = roomViewModel::removeUser,
@@ -360,9 +379,17 @@ fun NavGraphBuilder.roomNavGraph(
                 },
                 onOpenThemes = {
                     navController.navigate(Screen.ThemeGallery.createRoute(roomId))
+                },
+                onEditRoom = {
+                    navController.navigate(Screen.EditRoom.createRoute(roomId))
                 }
             )
-        }
+        } ?: RoomConnectionFallback(
+            isLoading = roomViewModel.roomState !is com.yugm.app.core.util.UiState.Error,
+            message = roomViewModel.roomError,
+            onRetry = roomViewModel::refresh,
+            onExit = { navController.returnFromRoom() }
+        )
     }
 
     composable(
@@ -375,5 +402,42 @@ fun NavGraphBuilder.roomNavGraph(
             roomId = roomId,
             onBack = { navController.popBackStack() }
         )
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun RoomConnectionFallback(
+    isLoading: Boolean,
+    message: String?,
+    onRetry: () -> Unit,
+    onExit: () -> Unit
+) {
+    Box(
+        Modifier.fillMaxSize().background(Color(0xFF100D1B)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(24.dp)
+        ) {
+            if (isLoading) CircularProgressIndicator()
+            Text(
+                if (isLoading) "Opening room…" else message ?: "Couldn't open this room.",
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold
+            )
+            if (!isLoading) TextButton(onClick = onRetry) { Text("Try again") }
+            TextButton(onClick = onExit) { Text("Back to Home") }
+        }
+    }
+}
+
+private fun NavHostController.returnFromRoom() {
+    if (!popBackStack()) {
+        navigate(Screen.Discover.route) {
+            popUpTo(0) { inclusive = true }
+            launchSingleTop = true
+        }
     }
 }

@@ -27,6 +27,8 @@ class ChatListViewModel @Inject constructor(private val yugmApi: IYugmApi) : Vie
         private set
     var following by mutableStateOf<List<Host>>(emptyList())
         private set
+    var recommendedChatUsers by mutableStateOf<List<Host>>(emptyList())
+        private set
     var isLoading by mutableStateOf(false)
         private set
     var error by mutableStateOf<String?>(null)
@@ -37,27 +39,34 @@ class ChatListViewModel @Inject constructor(private val yugmApi: IYugmApi) : Vie
     }
 
     fun load(token: String, currentUserId: String = "") {
+        if (isLoading) return
         viewModelScope.launch {
             isLoading = true
             error = null
             runCatching {
-                val resultMatches = withContext(Dispatchers.IO) {
-                    yugmApi.datingMatches(token)
-                }
-                val resultMessages = withContext(Dispatchers.IO) {
-                    yugmApi.getRecentMessages(token)
-                }
-                val socialLists = if (currentUserId.isNotBlank()) withContext(Dispatchers.IO) {
-                    kotlinx.coroutines.coroutineScope {
-                        val followerRequest = async { runCatching { yugmApi.getFollowers(currentUserId, token) } }
-                        val followingRequest = async { runCatching { yugmApi.getFollowing(currentUserId, token) } }
-                        followerRequest.await().getOrDefault(emptyList()) to followingRequest.await().getOrDefault(emptyList())
+                coroutineScope {
+                    val matchesRequest = async(Dispatchers.IO) { yugmApi.datingMatches(token) }
+                    val messagesRequest = async(Dispatchers.IO) { yugmApi.getRecentMessages(token) }
+                    val followersRequest = async(Dispatchers.IO) {
+                        if (currentUserId.isBlank()) emptyList() else runCatching {
+                            yugmApi.getFollowers(currentUserId, token)
+                        }.getOrDefault(emptyList())
                     }
-                } else emptyList<Host>() to emptyList()
-                matches = resultMatches
-                recentMessages = resultMessages
-                followers = socialLists.first
-                following = socialLists.second
+                    val followingRequest = async(Dispatchers.IO) {
+                        if (currentUserId.isBlank()) emptyList() else runCatching {
+                            yugmApi.getFollowing(currentUserId, token)
+                        }.getOrDefault(emptyList())
+                    }
+                    val recommendedRequest = async(Dispatchers.IO) {
+                        runCatching { yugmApi.recommendedChatUsers(token) }.getOrDefault(emptyList())
+                    }
+
+                    matches = matchesRequest.await()
+                    recentMessages = messagesRequest.await()
+                    followers = followersRequest.await()
+                    following = followingRequest.await()
+                    recommendedChatUsers = recommendedRequest.await()
+                }
             }.onFailure {
                 error = it.message ?: "Failed to load messages"
             }

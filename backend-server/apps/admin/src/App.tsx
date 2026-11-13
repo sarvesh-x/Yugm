@@ -953,10 +953,10 @@ function CosmeticsPage({ token, setNotice }: { token: string; setNotice: (notice
   };
 
   const seedFromCode = async () => {
-    if (!window.confirm("Seed all code-defined cosmetics into the database? Only works if empty.")) return;
+    if (!window.confirm("Add any missing default cosmetics to the database? Existing items and edits are preserved.")) return;
     try {
       const result = await adminApi<any>("/cosmetics/seed", { token, method: "POST" });
-      setNotice({ tone: "success", text: `Seeded ${result.data?.seeded || 0} cosmetics` });
+      setNotice({ tone: "success", text: `Added ${result.data?.seeded || 0} missing cosmetics` });
       resource.refresh();
     } catch (err: any) {
       setNotice({ tone: "error", text: err.message });
@@ -973,7 +973,7 @@ function CosmeticsPage({ token, setNotice }: { token: string; setNotice: (notice
           <p>Create, edit, and manage profile cosmetics that users can purchase in the store.</p>
         </div>
         <div className="action-row">
-          <button className="ghost-button" onClick={seedFromCode}>Seed from code</button>
+          <button className="ghost-button" onClick={seedFromCode}>Sync missing defaults</button>
           <button className="primary-action compact" onClick={openNew}>New cosmetic</button>
         </div>
       </div>

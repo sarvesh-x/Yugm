@@ -1,7 +1,7 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
-import { chatMessageSchema, createPollSchema, createRoomSchema, directMessageSchema, inviteSchema, profileCosmetics, reactionSchema, reportBaseSchema, socketEvents, votePollSchema } from "@yugm/shared";
+import { chatMessageSchema, createPollSchema, createRoomSchema, directMessageSchema, inviteSchema, reactionSchema, reportBaseSchema, socketEvents, votePollSchema } from "@yugm/shared";
 import { requireAuth, requireNotMuted, type AuthRequest } from "../middleware/auth.js";
 import { chatLimiter, reportLimiter } from "../middleware/rateLimit.js";
 import { requireNotChatRestricted, requireNotRoomRestricted, requireNotShadowBanned, requireWalletNotFrozen } from "../middleware/requireSafety.js";
@@ -404,6 +404,26 @@ roomsRouter.post("/:id/leave", requireAuth, asyncHandler(async (req: AuthRequest
   }
   emitRoom(req.params.id, socketEvents.roomParticipantUpdate, { userId: req.user!.id, action: "leave" });
   await addActivity(req.params.id, "LEAVE", `${req.user!.name} left`, req.user!.id);
+
+  // If host leaves and there is no admin user in the room then the room gets closed; if admin is available the room can stay active
+  const room = await Room.findById(req.params.id);
+  if (room && room.status === "LIVE" && room.hostId.toString() === req.user!.id) {
+    const activeAdmin = await RoomParticipant.findOne({
+      roomId: req.params.id,
+      userId: { $ne: req.user!.id },
+      leftAt: null,
+      isRoomAdmin: true
+    });
+    if (!activeAdmin) {
+      await Room.findByIdAndUpdate(req.params.id, { $set: { status: "ENDED", endedAt: new Date() } });
+      await invalidateCache("rooms:*");
+      emitRoom(req.params.id, socketEvents.roomEnded, { roomId: req.params.id });
+      await addActivity(req.params.id, "MISSION", "Room closed (host left without admin)");
+    } else {
+      await addActivity(req.params.id, "MISSION", "Host left. Room kept open by admin");
+    }
+  }
+
   sendOk(res, { left: true });
 }));
 

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -48,6 +49,7 @@ import com.yugm.app.core.model.DirectMessage
 import com.yugm.app.core.model.Host
 import com.yugm.app.core.ui.components.Avatar
 import com.yugm.app.core.ui.components.YugmBottomDock
+import com.yugm.app.core.ui.components.YugmPullToRefreshBox
 import com.yugm.app.core.ui.components.YugmDockTab
 import com.yugm.app.feature.chat.viewmodel.ChatListViewModel
 
@@ -99,11 +101,16 @@ fun ChatListScreen(
     }.filter { query.isBlank() || it.name.contains(query, true) || it.username.contains(query, true) }
 
     Box(Modifier.fillMaxSize().background(ChatBg)) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = 18.dp, bottom = 110.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+        YugmPullToRefreshBox(
+            isRefreshing = viewModel.isLoading,
+            onRefresh = { viewModel.load(token, currentUserId) },
+            modifier = Modifier.fillMaxSize()
         ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(top = 18.dp, bottom = 110.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp)
+            ) {
             item {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp), verticalAlignment = Alignment.CenterVertically) {
                     ChatTopTab("Chats", selected = mainTab == 0) { mainTab = 0 }
@@ -127,12 +134,27 @@ fun ChatListScreen(
                 }
             }
             if (mainTab == 0) {
-                item {
-                    LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(listOf("🎙" to "Voice Party", "💜" to "Truth & Dare", "🎲" to "Ludo", "🁫" to "Dominoes")) { (emoji, label) ->
-                            Column(Modifier.width(82.dp).clip(RoundedCornerShape(18.dp)).background(ChatPanel).clickable(role = Role.Button) { if (label == "Voice Party") onLive() }.padding(9.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Box(Modifier.size(62.dp).clip(RoundedCornerShape(17.dp)).background(Color(0xFF28243A)), contentAlignment = Alignment.Center) { Text(emoji, fontSize = 30.sp) }
-                                Text(label, color = ChatInk, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 5.dp))
+                // Recommended users to chat with - real data, online dot indicator
+                if (viewModel.recommendedChatUsers.isNotEmpty() || viewModel.isLoading) {
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 22.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Say Hi 👋", color = ChatInk, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.weight(1f))
+                                if (viewModel.isLoading && viewModel.recommendedChatUsers.isEmpty()) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = ChatPurple, strokeWidth = 2.dp)
+                                }
+                            }
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 20.dp),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                items(viewModel.recommendedChatUsers.take(25), key = { "rec-${it.id}" }) { user ->
+                                    RecommendedUserChip(user = user, onClick = { onOpenChat(user.id) })
+                                }
                             }
                         }
                     }
@@ -168,11 +190,15 @@ fun ChatListScreen(
                         Text("Find interesting people and say hello.", color = ChatMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 5.dp))
                         TextButton(onClick = onDiscover) { Text("Find friends", color = ChatPurple, fontWeight = FontWeight.Bold) }
                     }
-                } else item {
-                    Column(Modifier.padding(horizontal = 16.dp).clip(RoundedCornerShape(20.dp)).background(ChatCard)) {
-                        conversations.forEachIndexed { index, item ->
+                } else {
+                    itemsIndexed(conversations, key = { _, item -> "conversation-${item.partner.id}" }) { index, item ->
+                        Column(
+                            Modifier.padding(horizontal = 16.dp, vertical = 1.dp)
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(ChatCard)
+                        ) {
+                            if (index > 0) Box(Modifier.fillMaxWidth().padding(start = 82.dp).height(1.dp).background(ChatLine))
                             LightChatRow(item, unread = !item.lastMessage.read && item.lastMessage.receiverId == currentUserId) { onOpenChat(item.partner.id) }
-                            if (index < conversations.lastIndex) Box(Modifier.fillMaxWidth().padding(start = 82.dp).height(1.dp).background(ChatLine))
                         }
                     }
                 }
@@ -195,9 +221,14 @@ fun ChatListScreen(
                 }
                 if (viewModel.isLoading && contactList.isEmpty()) item { Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ChatPurple) } }
                 else if (contactList.isEmpty()) item { Text("No people to show yet.", color = ChatMuted, modifier = Modifier.padding(horizontal = 22.dp, vertical = 35.dp)) }
-                else item {
-                    Column(Modifier.padding(horizontal = 16.dp).clip(RoundedCornerShape(20.dp)).background(ChatCard)) {
-                        contactList.forEachIndexed { index, person ->
+                else {
+                    itemsIndexed(contactList, key = { _, person -> "contact-${person.id}" }) { index, person ->
+                        Column(
+                            Modifier.padding(horizontal = 16.dp, vertical = 1.dp)
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(ChatCard)
+                        ) {
+                            if (index > 0) Box(Modifier.fillMaxWidth().padding(start = 74.dp).height(1.dp).background(ChatLine))
                             Row(Modifier.fillMaxWidth().height(76.dp).clickable(role = Role.Button, onClickLabel = "Open chat with ${person.name}") { onOpenChat(person.id) }.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Avatar(person.name.take(1), 48, person.avatar, person.activeCosmetics)
                                 Column(Modifier.weight(1f).padding(start = 12.dp)) {
@@ -206,10 +237,10 @@ fun ChatListScreen(
                                 }
                                 Text("›", color = ChatMuted, fontSize = 25.sp)
                             }
-                            if (index < contactList.lastIndex) Box(Modifier.fillMaxWidth().padding(start = 74.dp).height(1.dp).background(ChatLine))
                         }
                     }
                 }
+            }
             }
         }
         YugmBottomDock(
@@ -238,7 +269,7 @@ private fun ChatTopTab(label: String, selected: Boolean, onClick: () -> Unit) {
 private fun ChatSearch(query: String, onQuery: (String) -> Unit, hint: String) {
     Row(Modifier.width(126.dp).height(42.dp).clip(CircleShape).background(ChatPanel).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Text("⌕", color = ChatMuted, fontSize = 20.sp)
-        BasicTextField(query, onQuery, singleLine = true, textStyle = TextStyle(color = ChatInk, fontSize = 13.sp), modifier = Modifier.weight(1f).padding(start = 5.dp), decorationBox = { inner -> if (query.isBlank()) Text(hint, color = Color(0xFFB6B8C5), fontSize = 13.sp) else inner() })
+        BasicTextField(query, onQuery, singleLine = true, textStyle = TextStyle(color = ChatInk, fontSize = 13.sp), cursorBrush = androidx.compose.ui.graphics.SolidColor(ChatPurple), modifier = Modifier.weight(1f).padding(start = 5.dp), decorationBox = { inner -> if (query.isBlank()) Text(hint, color = Color(0xFFB6B8C5), fontSize = 13.sp) else inner() })
     }
 }
 
@@ -254,6 +285,52 @@ private fun LightChatRow(item: ConversationItem, unread: Boolean, onClick: () ->
             Text(item.lastMessage.message, color = ChatMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
         }
         if (unread) Box(Modifier.size(9.dp).clip(CircleShape).background(ChatPurple))
+    }
+}
+
+@Composable
+private fun RecommendedUserChip(user: Host, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .width(66.dp)
+            .clickable(role = Role.Button, onClickLabel = "Chat with ${user.name}", onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        Box(contentAlignment = Alignment.BottomEnd) {
+            // Avatar with frame cosmetics
+            Box(
+                modifier = Modifier
+                    .size(58.dp)
+                    .clip(CircleShape)
+                    .background(ChatPanel)
+                    .border(2.dp, if (user.isOnline) Color(0xFF39C891).copy(alpha = 0.6f) else Color(0xFF2E3050), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Avatar(
+                    initial = user.name.take(1),
+                    size = 54,
+                    imageUrl = user.avatar,
+                    cosmetics = user.activeCosmetics
+                )
+            }
+            // Online / offline dot
+            Box(
+                modifier = Modifier
+                    .size(14.dp)
+                    .clip(CircleShape)
+                    .background(if (user.isOnline) Color(0xFF39C891) else Color(0xFF4A4D6A))
+                    .border(2.dp, ChatBg, CircleShape)
+            )
+        }
+        Text(
+            text = user.name.ifBlank { user.username }.take(10),
+            color = ChatInk,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

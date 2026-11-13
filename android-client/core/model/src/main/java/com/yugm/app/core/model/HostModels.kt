@@ -26,7 +26,10 @@ data class Host(
     val lookingFor: String = "",
     val languages: List<String> = emptyList(),
     val interests: List<String> = emptyList(),
-    val isOnline: Boolean = false
+    val hobbies: List<String> = emptyList(),
+    val isOnline: Boolean = false,
+    val isVerified: Boolean = false,
+    val verificationLevel: String = "NONE"
 )
 
 data class ActiveCosmetics(
@@ -45,6 +48,7 @@ data class ActiveCosmetics(
     val avatarDecoration: String = "",
     val reactionPack: String = "",
     val profileLayout: String = "",
+    val profileBanner: String = "",
     val introCard: String = "",
     val collectibleTitle: String = "",
     val giftShelf: String = "",

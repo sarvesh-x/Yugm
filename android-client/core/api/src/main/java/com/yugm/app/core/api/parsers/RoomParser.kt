@@ -49,7 +49,10 @@ fun JSONObject.toHost(): Host = Host(
     lookingFor = optString("lookingFor", ""),
     languages = optJSONArray("languages")?.let { arr -> List(arr.length()) { arr.optString(it) } } ?: emptyList(),
     interests = optJSONArray("interests")?.let { arr -> List(arr.length()) { arr.optString(it) } } ?: emptyList(),
-    isOnline = optBoolean("isOnline", false)
+    hobbies = optJSONArray("hobbies")?.let { arr -> List(arr.length()) { arr.optString(it) } } ?: emptyList(),
+    isOnline = optBoolean("isOnline", false),
+    isVerified = optBoolean("isVerified", false),
+    verificationLevel = optString("verificationLevel", "NONE")
 )
 
 fun JSONArray.toHosts(): List<Host> = buildList {
@@ -62,13 +65,18 @@ fun JSONObject.toRoom(): Room {
     val hostJson = optJSONObject("hostId") ?: optJSONObject("host")
     val tagsJson = optJSONArray("tags") ?: JSONArray()
     val type = if (optString("type").equals("VIDEO", ignoreCase = true)) RoomType.Video else RoomType.Voice
+    val desc = optString("description", optString("bio", ""))
+    val bioStr = optString("bio", desc)
+    val maxMicsCount = optInt("maxSpeakers", optInt("maxMics", optInt("maxSeats", optInt("speakerLimit", optInt("micCount", if (type == RoomType.Video) 4 else 6)))))
     return Room(
         id = optString("_id", optString("id", "")),
         title = optString("title", ""),
-        description = optString("description", ""),
+        description = desc,
+        bio = bioStr,
         type = type,
         status = optString("status", "LIVE"),
         scheduledFor = optString("scheduledFor", ""),
+        coverImage = if (has("coverImage") && !isNull("coverImage")) optString("coverImage", "") else null,
         host = hostJson?.toHost(),
         category = optString("category", ""),
         language = optString("language", ""),
@@ -76,7 +84,7 @@ fun JSONObject.toRoom(): Room {
             for (index in 0 until tagsJson.length()) add(tagsJson.optString(index))
         },
         participants = optInt("participantCount", optInt("participants", 0)),
-        maxSpeakers = optInt("maxSpeakers", if (type == RoomType.Video) 4 else 6),
+        maxSpeakers = maxMicsCount,
         gradient = roomGradient(optString("_id", optString("title"))),
         theme = optString("theme", ""),
         vipOnly = optBoolean("vipOnly", false),

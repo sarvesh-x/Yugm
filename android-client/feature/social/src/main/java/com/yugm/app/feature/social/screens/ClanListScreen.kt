@@ -184,6 +184,7 @@ private fun YugmSearchBar(query: String, onQueryChange: (String) -> Unit, placeh
             modifier = Modifier.weight(1f),
             singleLine = true,
             textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 14.sp),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(Pink),
             decorationBox = { innerTextField ->
                 Box {
                     if (query.isEmpty()) Text(placeholder, color = TextMuted, fontSize = 14.sp)

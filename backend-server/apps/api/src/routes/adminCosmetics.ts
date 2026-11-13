@@ -6,7 +6,7 @@ import { validateBody } from "../middleware/validate.js";
 import { asyncHandler, HttpError } from "../utils/http.js";
 import { Cosmetic } from "../models/Cosmetic.js";
 import { AdminAuditLog } from "../models/AdminAuditLog.js";
-import { profileCosmetics } from "@yugm/shared";
+import { syncDefaultCosmetics } from "../services/cosmetics.js";
 
 const adminCosmeticsRouter = Router();
 
@@ -14,7 +14,7 @@ const cosmeticTypes = [
   "AVATAR_ASSET", "AVATAR_FRAME", "SPEAKING_WAVE", "PROFILE_THEME",
   "ENTRANCE_EFFECT", "PROFILE_BADGE", "NAME_STYLE", "ROOM_ENTRY",
   "MOOD_STATUS", "PROFILE_MUSIC", "VOICE_BADGE", "ROOM_THEME",
-  "AVATAR_DECORATION", "REACTION_PACK", "PROFILE_LAYOUT", "INTRO_CARD",
+  "AVATAR_DECORATION", "REACTION_PACK", "PROFILE_LAYOUT", "PROFILE_BANNER", "INTRO_CARD",
   "COLLECTIBLE_TITLE", "GIFT_SHELF", "CHAT_BUBBLE", "SEASONAL_EVENT",
   "CALL_SCREEN", "ROOM_BADGE", "ROOM_AMBIENCE"
 ] as const;
@@ -32,6 +32,7 @@ const createCosmeticSchema = z.object({
 });
 
 const updateCosmeticSchema = z.object({
+  type: z.enum(cosmeticTypes).optional(),
   name: z.string().min(2).max(80).optional(),
   coinPrice: z.number().int().min(0).optional(),
   rarity: z.enum(["COMMON", "RARE", "EPIC", "LEGENDARY"]).optional(),
@@ -136,32 +137,15 @@ adminCosmeticsRouter.delete("/cosmetics/:id", requirePermission("cosmetics.write
 
 adminCosmeticsRouter.post("/cosmetics/seed", requirePermission("cosmetics.write"),
   asyncHandler(async (req: AdminAuthRequest, res) => {
-    const existing = await Cosmetic.countDocuments().lean();
-    if (existing > 0) {
-      throw new HttpError(409, "Cosmetics already seeded. Delete all first to re-seed.");
-    }
-
-    const docs = profileCosmetics.map((c) => ({
-      _id: c.id,
-      type: c.type,
-      name: c.name,
-      coinPrice: c.coinPrice,
-      rarity: c.rarity,
-      preview: c.preview,
-      isActive: true,
-      assetKind: ("assetKind" in c ? c.assetKind : undefined) as string | undefined,
-      assetUrl: ("assetUrl" in c ? c.assetUrl : undefined) as string | undefined
-    }));
-
-    await Cosmetic.insertMany(docs);
+    const seeded = await syncDefaultCosmetics();
     await AdminAuditLog.create({
       adminId: req.admin!._id,
       action: "SEED_COSMETICS",
       entityType: "Cosmetic",
-      metadata: { count: docs.length }
+      metadata: { seeded }
     });
 
-    adminOk(res, { data: { seeded: docs.length } }, {}, 201);
+    adminOk(res, { data: { seeded } });
   })
 );
 

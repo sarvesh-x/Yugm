@@ -52,7 +52,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.yugm.app.core.ui.cosmetics.RoomAmbienceBackdrop
 import com.yugm.app.core.ui.theme.Background
+import com.yugm.app.core.ui.theme.LocalMotionEnabled
 import com.yugm.app.core.ui.theme.AccessiblePrimaryPink
 import com.yugm.app.core.ui.theme.AccessibleSaffron
 import com.yugm.app.core.ui.theme.BorderColor
@@ -67,10 +69,12 @@ import com.yugm.app.core.ui.theme.TextPrimary
 enum class YugmDockTab { DISCOVER, LIVE, CHAT, WALLET, PROFILE }
 
 @Composable
-fun YugmAmbientBackground(themeOverride: List<Color>? = null, content: @Composable () -> Unit) {
+fun YugmAmbientBackground(
+    themeOverride: List<Color>? = null,
+    ambienceId: String = "",
+    content: @Composable () -> Unit
+) {
     val bg = themeOverride?.getOrNull(0) ?: Background
-    val accent1 = themeOverride?.getOrNull(1)?.copy(alpha = 0.14f) ?: PrimaryPurple.copy(alpha = 0.14f)
-    val accent2 = themeOverride?.getOrNull(1)?.let { Color.Transparent } ?: Pink.copy(alpha = 0.08f)
     Box(Modifier.fillMaxSize().background(bg)) {
         if (themeOverride == null) {
             Canvas(Modifier.fillMaxSize()) {
@@ -93,6 +97,13 @@ fun YugmAmbientBackground(themeOverride: List<Color>? = null, content: @Composab
                     radius = size.width * 0.58f
                 )
             }
+        }
+        if (ambienceId.isNotBlank()) {
+            RoomAmbienceBackdrop(
+                id = ambienceId,
+                modifier = Modifier.fillMaxSize(),
+                animate = LocalMotionEnabled.current
+            )
         }
         content()
     }

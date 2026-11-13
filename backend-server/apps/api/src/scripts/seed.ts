@@ -1,6 +1,7 @@
 import { pathToFileURL } from "url";
 import { connectDatabase, disconnectDatabase } from "../config/db.js";
 import { ensureAuthIndexes } from "../services/authIndexes.js";
+import { ensureDefaultCosmetics } from "../services/cosmetics.js";
 import { ensureOfficialRooms } from "../services/officialRooms.js";
 import { ChatMessage } from "../models/ChatMessage.js";
 import { DirectMessage } from "../models/DirectMessage.js";
@@ -60,6 +61,7 @@ export async function removeSeededDemoData() {
 export async function seedDatabase() {
   await ensureAuthIndexes();
   await removeSeededDemoData();
+  await ensureDefaultCosmetics();
   await ensureOfficialRooms();
 }
 

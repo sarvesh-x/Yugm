@@ -7,6 +7,7 @@ import { DirectMessage } from "../models/DirectMessage.js";
 import { CreatorPayoutKyc } from "../models/CreatorPayoutKyc.js";
 import { FaceVerificationSubmission } from "../models/FaceVerificationSubmission.js";
 import { Follow } from "../models/Follow.js";
+import { FriendMatchRequest } from "../models/FriendMatchRequest.js";
 import { GiftInventory } from "../models/GiftInventory.js";
 import { GiftTransaction } from "../models/GiftTransaction.js";
 import { Match } from "../models/Match.js";
@@ -37,6 +38,7 @@ const indexedModels = [
   Notification,
   DeviceToken,
   Follow,
+  FriendMatchRequest,
   Block,
   Match,
   Relationship,

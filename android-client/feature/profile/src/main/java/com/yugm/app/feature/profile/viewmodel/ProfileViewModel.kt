@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
@@ -46,16 +47,37 @@ class ProfileViewModel @Inject constructor(
     var profileLoadError by mutableStateOf<String?>(null)
         private set
 
-    fun setOwnProfile(name: String, username: String, bio: String, vibeLine: String, city: String) {
-        profile = profile?.copy(name = name, username = username, bio = bio, vibeLine = vibeLine, city = city)
+    fun setOwnProfile(
+        name: String,
+        username: String,
+        bio: String,
+        vibeLine: String,
+        city: String,
+        interests: List<String> = profile?.interests ?: emptyList(),
+        hobbies: List<String> = profile?.hobbies ?: emptyList()
+    ) {
+        profile = profile?.copy(
+            name = name,
+            username = username,
+            bio = bio,
+            vibeLine = vibeLine,
+            city = city,
+            interests = interests,
+            hobbies = hobbies
+        )
     }
 
     fun setOwnAvatar(url: String) {
-        profile = profile?.copy(avatar = url)
+        profile = profile?.let { current ->
+            current.copy(
+                avatar = url,
+                activeCosmetics = current.activeCosmetics.copy(avatarAsset = "")
+            )
+        }
     }
 
-    fun loadProfile(token: String, userId: String, force: Boolean = false) {
-        viewModelScope.launch {
+    fun loadProfile(token: String, userId: String, force: Boolean = false): Job {
+        return viewModelScope.launch {
             if (!force && profile?.id == userId && !isLoading) return@launch
             if (profile?.id != userId) {
                 profile = null

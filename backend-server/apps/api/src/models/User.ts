@@ -59,6 +59,7 @@ export interface IUser extends mongoose.Document {
     avatarDecoration?: string;
     reactionPack?: string;
     profileLayout?: string;
+    profileBanner?: string;
     introCard?: string;
     collectibleTitle?: string;
     giftShelf?: string;
@@ -163,6 +164,7 @@ const userSchema = new Schema<IUser>(
       avatarDecoration: String,
       reactionPack: String,
       profileLayout: String,
+      profileBanner: String,
       introCard: String,
       collectibleTitle: String,
       giftShelf: String,

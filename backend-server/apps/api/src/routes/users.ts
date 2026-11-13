@@ -1,20 +1,22 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
-import { profileSchema, reactionSchema, socketEvents, streakCosmeticRewards } from "@yugm/shared";
-import { requireAuth, requireNotMuted, type AuthRequest } from "../middleware/auth.js";
+import { levelMilestones, profileSchema, reactionSchema, socketEvents, streakCosmeticRewards, xpEvents } from "@yugm/shared";
+import { optionalAuth, requireAuth, requireNotMuted, type AuthRequest } from "../middleware/auth.js";
+import { activeCosmeticKey, ensureDefaultCosmetics, listCosmeticsByIds } from "../services/cosmetics.js";
 import { chatLimiter } from "../middleware/rateLimit.js";
 import { requireNotChatRestricted } from "../middleware/requireSafety.js";
 import { validateBody } from "../middleware/validate.js";
 import { Block } from "../models/Block.js";
 import { DirectMessage } from "../models/DirectMessage.js";
 import { Follow } from "../models/Follow.js";
+import { FriendMatchRequest } from "../models/FriendMatchRequest.js";
 import { PkBattle } from "../models/PkBattle.js";
 import { pkState } from "../services/pk.js";
 import { Room } from "../models/Room.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
 import { SupportTicket } from "../models/SupportTicket.js";
-import { User } from "../models/User.js";
+import { User, type IUser } from "../models/User.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId, sanitizeText } from "../utils/http.js";
 import { TrustVerification } from "../models/TrustVerification.js";
 import { createNotification } from "../services/notifications.js";
@@ -28,6 +30,66 @@ import { DeviceToken } from "../models/DeviceToken.js";
 import { revokeAllForUser } from "../services/tokens.js";
 
 export const usersRouter = Router();
+
+async function handlePublicProfile(identifier: string, isUsername: boolean, req: AuthRequest, res: any) {
+  let user: any;
+  if (isUsername) {
+    const cleanUsername = identifier.trim().toLowerCase().replace(/^@/, "");
+    user = await User.findOne({ username: cleanUsername, isBlocked: { $ne: true } }).select("-email -phone -__v").lean();
+  } else {
+    if (!isValidObjectId(identifier)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
+    user = await User.findOne({ _id: identifier, isBlocked: { $ne: true } }).select("-email -phone -__v").lean();
+  }
+  if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+
+  let isFollowing = false;
+  let isCloseFriend = false;
+  if (req.user) {
+    const callerId = req.user.id;
+    const targetId = user._id.toString();
+    const blocked = await Block.exists({
+      $or: [
+        { blockerId: callerId, blockedUserId: targetId },
+        { blockerId: targetId, blockedUserId: callerId }
+      ]
+    });
+    if (blocked) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+
+    if (callerId !== targetId) {
+      isFollowing = Boolean(await Follow.exists({ followerId: callerId, followingId: targetId }));
+      const closeFriendIds = (req.user.closeFriendIds ?? []).map((id: any) => id.toString());
+      isCloseFriend = closeFriendIds.includes(targetId);
+    }
+  }
+
+  let verificationLevel: string = "NONE";
+  if (user.isVerified) {
+    const trustStatus = await TrustVerification.findOne({ userId: user._id }).lean().catch(() => null);
+    verificationLevel = trustStatus?.level === "ADVANCED" ? "ADVANCED" : "BASIC";
+  }
+
+  const isSelf = req.user ? req.user.id === user._id.toString() : false;
+  sendOk(res, {
+    user: publicUser({
+      ...user,
+      isFollowing,
+      isCloseFriend,
+      isOnline: isUserOnline(user._id.toString()),
+      verificationLevel,
+      ...(!isSelf ? { walletBalance: undefined } : {})
+    })
+  });
+}
+
+// Public endpoints accessible without authentication (optionalAuth attached)
+usersRouter.get("/public/:id", optionalAuth, asyncHandler(async (req: AuthRequest, res) => {
+  await handlePublicProfile(req.params.id, false, req, res);
+}));
+
+usersRouter.get("/by-username/:username", optionalAuth, asyncHandler(async (req: AuthRequest, res) => {
+  await handlePublicProfile(req.params.username, true, req, res);
+}));
+
 usersRouter.use(requireAuth);
 
 const privateCallSchema = z.object({ type: z.enum(["VOICE", "VIDEO"]) });
@@ -41,6 +103,160 @@ const feedbackSchema = z.object({
   subject: z.string().min(3).max(120),
   message: z.string().min(5).max(1200)
 });
+
+const FRIEND_MATCH_WAIT_MS = 90_000;
+const FRIEND_MATCHED_TTL_MS = 5 * 60_000;
+
+async function friendMatchState(userId: string) {
+  const request = await FriendMatchRequest.findOne({ userId, expiresAt: { $gt: new Date() } }).lean();
+  if (!request) return { status: "IDLE" as const };
+  if (request.status !== "MATCHED" || !request.roomId || !request.matchedUserId) {
+    return { status: "WAITING" as const };
+  }
+  const room = await Room.findOne({ _id: request.roomId, status: "LIVE" }).lean();
+  if (!room) {
+    await FriendMatchRequest.updateMany({ roomId: request.roomId, status: "MATCHED" }, { $set: { status: "CANCELLED", expiresAt: new Date() } });
+    return { status: "IDLE" as const };
+  }
+  return { status: "MATCHED" as const, room };
+}
+
+async function createRandomFriendCall(user: IUser, matchedUserId: mongoose.Types.ObjectId) {
+  const matchedUser = await User.findById(matchedUserId).select("name languages isBlocked").lean();
+  if (!matchedUser || matchedUser.isBlocked) throw new HttpError(409, "That match is no longer available", ErrorCode.CONFLICT);
+
+  const session = await mongoose.startSession();
+  let createdRoom: any;
+  try {
+    await session.withTransaction(async () => {
+      const rooms = await Room.create([{
+        title: `${user.name} and ${matchedUser.name}`,
+        description: "Private voice call",
+        type: "VOICE",
+        hostId: user._id,
+        category: "Private",
+        tags: ["private-call", "random-match"],
+        language: user.languages?.[0] ?? "English",
+        status: "LIVE",
+        visibility: "PRIVATE",
+        maxSpeakers: 2,
+        participantCount: 2,
+        speakerIds: [user._id, matchedUserId],
+        livekitRoomName: `yugm-friend-match-${new mongoose.Types.ObjectId().toString()}`,
+        allowAudienceMicRequests: false,
+        startedAt: new Date()
+      }], { session });
+      createdRoom = rooms[0];
+
+      await RoomParticipant.create([
+        { roomId: createdRoom._id, userId: user._id, role: "HOST", micEnabled: true, cameraEnabled: false },
+        { roomId: createdRoom._id, userId: matchedUserId, role: "SPEAKER", micEnabled: true, cameraEnabled: false }
+      ], { session });
+
+      const expiresAt = new Date(Date.now() + FRIEND_MATCHED_TTL_MS);
+      const first = await FriendMatchRequest.updateOne(
+        { userId: user._id, status: "PAIRING" },
+        { $set: { status: "MATCHED", matchedUserId, roomId: createdRoom._id, expiresAt } },
+        { session }
+      );
+      const second = await FriendMatchRequest.updateOne(
+        { userId: matchedUserId, status: "PAIRING" },
+        { $set: { status: "MATCHED", matchedUserId: user._id, roomId: createdRoom._id, expiresAt } },
+        { session }
+      );
+      if (first.modifiedCount !== 1 || second.modifiedCount !== 1) {
+        throw new HttpError(409, "The match was cancelled", ErrorCode.CONFLICT);
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+  return createdRoom;
+}
+
+usersRouter.post("/friend-match/search", chatLimiter, asyncHandler(async (req: AuthRequest, res) => {
+  const userId = req.user!._id;
+  const now = new Date();
+  let request = await FriendMatchRequest.findOne({ userId });
+  if (request?.status === "MATCHED" && request.roomId && request.expiresAt > now) {
+    const existingMatch = await friendMatchState(req.user!.id);
+    if (existingMatch.status === "MATCHED") return sendOk(res, existingMatch);
+  }
+  if (request?.status === "PAIRING" && request.expiresAt > now) return sendOk(res, { status: "WAITING" });
+
+  if (!request) {
+    request = await FriendMatchRequest.findOneAndUpdate(
+      { userId },
+      { $set: { status: "WAITING", expiresAt: new Date(now.getTime() + FRIEND_MATCH_WAIT_MS) }, $unset: { matchedUserId: 1, roomId: 1 } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+  } else {
+    request.status = "WAITING";
+    request.matchedUserId = undefined;
+    request.roomId = undefined;
+    request.expiresAt = new Date(now.getTime() + FRIEND_MATCH_WAIT_MS);
+    await request.save();
+  }
+
+  const reservedRequest = await FriendMatchRequest.findOneAndUpdate(
+    { _id: request._id, status: "WAITING", expiresAt: { $gt: now } },
+    { $set: { status: "PAIRING" } },
+    { new: true }
+  );
+  if (!reservedRequest) return sendOk(res, await friendMatchState(req.user!.id));
+
+  const blockedRows = await Block.find({ $or: [{ blockerId: userId }, { blockedUserId: userId }] }).select("blockerId blockedUserId").lean();
+  const excludedIds = new Set([userId.toString()]);
+  for (const row of blockedRows) {
+    excludedIds.add(row.blockerId.toString());
+    excludedIds.add(row.blockedUserId.toString());
+  }
+
+  let matchedRoom: any = null;
+  const candidates = await FriendMatchRequest.find({
+    userId: { $nin: [...excludedIds] },
+    status: "WAITING",
+    expiresAt: { $gt: now }
+  }).sort({ createdAt: 1 }).limit(10);
+  for (const candidate of candidates) {
+    if (!isUserOnline(candidate.userId.toString())) {
+      await FriendMatchRequest.updateOne({ _id: candidate._id, status: "WAITING" }, { $set: { status: "CANCELLED", expiresAt: now } });
+      continue;
+    }
+    const claimed = await FriendMatchRequest.findOneAndUpdate(
+      { _id: candidate._id, status: "WAITING", expiresAt: { $gt: now } },
+      { $set: { status: "PAIRING" } },
+      { new: true }
+    );
+    if (!claimed) continue;
+    try {
+      matchedRoom = await createRandomFriendCall(req.user!, candidate.userId);
+      break;
+    } catch (error) {
+      await FriendMatchRequest.updateMany(
+        { _id: { $in: [reservedRequest._id, claimed._id] }, status: "PAIRING" },
+        { $set: { status: "WAITING" } }
+      );
+      throw error;
+    }
+  }
+
+  if (matchedRoom) return sendOk(res, { status: "MATCHED", room: matchedRoom }, 200);
+  await FriendMatchRequest.updateOne({ _id: reservedRequest._id, status: "PAIRING" }, { $set: { status: "WAITING" } });
+  sendOk(res, { status: "WAITING" });
+}));
+
+usersRouter.get("/friend-match", chatLimiter, asyncHandler(async (req: AuthRequest, res) => {
+  sendOk(res, await friendMatchState(req.user!.id));
+}));
+
+usersRouter.post("/friend-match/cancel", chatLimiter, asyncHandler(async (req: AuthRequest, res) => {
+  await FriendMatchRequest.updateOne(
+    { userId: req.user!._id, status: "WAITING" },
+    { $set: { status: "CANCELLED", expiresAt: new Date() } }
+  );
+  sendOk(res, { cancelled: true });
+}));
 
 function publicUser(user: any) {
   const levelStatus = getLevelStatus(user);
@@ -81,7 +297,7 @@ function publicUser(user: any) {
     datingAgeMin: user.datingAgeMin,
     datingAgeMax: user.datingAgeMax,
     isFollowing: user.isFollowing,
-    isCloseFriend: user.isCloseFriend
+    isCloseFriend: user.isCloseFriend, isVerified: Boolean(user.isVerified), verificationLevel: user.verificationLevel ?? (user.isVerified ? "BASIC" : "NONE"), showcasedBadgeIds: user.showcasedBadgeIds ?? []
   };
 }
 
@@ -188,6 +404,128 @@ usersRouter.get("/me/level", (req: AuthRequest, res) => {
   sendOk(res, { level: getLevelStatus(req.user) });
 });
 
+usersRouter.get("/me/level-overview", asyncHandler(async (req: AuthRequest, res) => {
+  const user = await User.findById(req.user!.id)
+    .select("name username avatar xp level levelTitle lastDailyCheckInAt streakCount walletBalance activeCosmetics")
+    .lean();
+  if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+
+  const levelStatus = getLevelStatus(user);
+  const streak = user.streakCount ?? 0;
+  const streakBonuses: Record<number, number> = { 3: 10, 7: 25, 14: 50, 30: 100, 60: 200, 90: 500 };
+  const milestones = Object.keys(streakBonuses).map(Number).sort((a, b) => a - b);
+  const nextMilestone = milestones.find((m) => m > streak) ?? null;
+
+  const topUsers = await User.find({ isBlocked: { $ne: true } })
+    .sort({ level: -1, xp: -1 })
+    .limit(10)
+    .select("name username avatar level levelTitle xp activeCosmetics")
+    .lean();
+
+  sendOk(res, {
+    level: levelStatus,
+    streak: {
+      count: streak,
+      canCheckIn: levelStatus.canDailyCheckIn,
+      nextMilestone,
+      nextMilestoneReward: nextMilestone ? streakBonuses[nextMilestone] : 0,
+      streakBonuses
+    },
+    milestones: levelMilestones,
+    xpEvents: {
+      DAILY_CHECKIN: { name: "Daily Check-In", xp: xpEvents.DAILY_CHECKIN, icon: "ðŸ“…" },
+      PROFILE_COMPLETE: { name: "Complete Profile", xp: xpEvents.PROFILE_COMPLETE, icon: "â­" },
+      ROOM_CREATE: { name: "Host Live Room", xp: xpEvents.ROOM_CREATE, icon: "ðŸŽ™ï¸" },
+      ROOM_JOIN: { name: "Join Room", xp: xpEvents.ROOM_JOIN, icon: "ðŸŽ§" },
+      CHAT_MESSAGE: { name: "Send Chat Message", xp: xpEvents.CHAT_MESSAGE, icon: "ðŸ’¬" },
+      GIFT_SENT: { name: "Send Gift", xp: xpEvents.GIFT_SENT, icon: "ðŸŽ" },
+      VIP_PURCHASE: { name: "VIP Subscription", xp: xpEvents.VIP_PURCHASE, icon: "ðŸ‘‘" },
+      COSMETIC_PURCHASE: { name: "Cosmetic Purchase", xp: xpEvents.COSMETIC_PURCHASE, icon: "ðŸŽ¨" }
+    },
+    leaderboard: topUsers.map((u, i) => ({
+      rank: i + 1,
+      id: u._id.toString(),
+      name: u.name,
+      username: u.username,
+      avatar: u.avatar,
+      level: u.level ?? 1,
+      levelTitle: u.levelTitle ?? "New Vibe",
+      xp: u.xp ?? 0,
+      activeCosmetics: u.activeCosmetics ?? {}
+    }))
+  });
+}));
+
+usersRouter.get("/me/inventory", asyncHandler(async (req: AuthRequest, res) => {
+  const user = await User.findById(req.user!.id)
+    .select("ownedCosmeticIds activeCosmetics claimedAchievementTiers walletBalance")
+    .lean();
+  if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+
+  const ownedIds = new Set(user.ownedCosmeticIds ?? []);
+  const activeCosmetics = user.activeCosmetics ?? {};
+  await ensureDefaultCosmetics();
+  const cosmetics = (await listCosmeticsByIds([...ownedIds])).map((item) => {
+    const key = activeCosmeticKey(item.type);
+    const isEquipped = key ? (activeCosmetics as any)[key] === item.id : false;
+    return {
+      ...item,
+      isEquipped
+    };
+  });
+
+  const { GiftInventory } = await import("../models/GiftInventory.js");
+  const giftItems = await GiftInventory.find({ userId: req.user!.id, quantity: { $gt: 0 } })
+    .populate("giftId")
+    .sort({ updatedAt: -1 })
+    .lean();
+  const gifts = giftItems.map((item: any) => ({
+    id: item._id.toString(),
+    giftId: item.giftId?._id?.toString() ?? item.giftId,
+    name: item.giftId?.name ?? "Gift",
+    icon: item.giftId?.icon ?? "ðŸŽ",
+    coinPrice: item.giftId?.coinPrice ?? 0,
+    quantity: item.quantity,
+    source: item.source,
+    tradable: item.tradable,
+    upgradeLevel: item.upgradeLevel ?? 1,
+    upgradeable: Boolean(item.giftId?.upgradeable)
+  }));
+
+  const claimedTiers = user.claimedAchievementTiers ?? [];
+  const { Achievement } = await import("../models/Achievement.js");
+  const achievementIds = [...new Set(claimedTiers.map((t: any) => t.achievementId))];
+  const achievements = achievementIds.length > 0
+    ? await Achievement.find({ id: { $in: achievementIds } }).lean()
+    : [];
+  const badges = claimedTiers.map((ct: any) => {
+    const ach = achievements.find((a: any) => a.id === ct.achievementId);
+    return {
+      achievementId: ct.achievementId,
+      tier: ct.tier,
+      claimedAt: ct.claimedAt,
+      title: ach?.title ?? ct.achievementId,
+      description: ach?.description ?? "",
+      icon: ach?.icon ?? "ðŸ…"
+    };
+  });
+
+  sendOk(res, {
+    cosmetics,
+    activeCosmetics,
+    gifts,
+    badges,
+    summary: {
+      totalCosmetics: cosmetics.length,
+      equippedCosmetics: cosmetics.filter((c) => c.isEquipped).length,
+      totalGifts: gifts.reduce((acc: number, g: any) => acc + g.quantity, 0),
+      totalBadges: badges.length,
+      walletBalance: user.walletBalance ?? 0
+    }
+  });
+}));
+
+
 usersRouter.post("/me/check-in", asyncHandler(async (req: AuthRequest, res) => {
   const now = new Date();
   const user = await User.findById(req.user!.id).select("xp level levelTitle lastDailyCheckInAt walletBalance streakCount ownedCosmeticIds").lean();
@@ -277,6 +615,44 @@ usersRouter.get("/hosts/suggested", asyncHandler(async (req: AuthRequest, res) =
   sendOk(res, { users: users.map((user) => ({ ...user, ...getVipStatus(user), xp: getLevelStatus(user).xp, level: getLevelStatus(user).level, levelTitle: getLevelStatus(user).title, levelStatus: getLevelStatus(user), isFollowing: false })) });
 }));
 
+// Recommended users to chat with: people you follow + suggested, online users sorted first
+usersRouter.get("/users/recommended-chat", asyncHandler(async (req: AuthRequest, res) => {
+  const limit = Math.min(Number(req.query.limit) || 30, 60);
+  const followingRows = await Follow.find({ followerId: req.user!.id }).lean();
+  const followingIds = followingRows.map((row) => row.followingId);
+
+  const followingUsers = await User.find({
+    _id: { $in: followingIds, $ne: req.user!.id },
+    isBlocked: { $ne: true }
+  })
+    .select("name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .limit(limit)
+    .lean();
+
+  let suggestedUsers: any[] = [];
+  if (followingUsers.length < limit) {
+    const existingIds = new Set([req.user!.id.toString(), ...followingUsers.map((u: any) => u._id.toString())]);
+    suggestedUsers = await User.find({
+      _id: { $nin: Array.from(existingIds) },
+      isBlocked: { $ne: true }
+    })
+      .select("name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+      .sort({ level: -1 })
+      .limit(limit - followingUsers.length)
+      .lean();
+  }
+
+  const allUsers = [...followingUsers, ...suggestedUsers];
+  const withOnline = allUsers.map((user: any) => ({
+    ...user,
+    ...getVipStatus(user),
+    isOnline: isUserOnline(user._id.toString()),
+    isFollowing: followingIds.some((id: any) => id.toString() === user._id.toString())
+  }));
+  withOnline.sort((a: any, b: any) => (b.isOnline ? 1 : 0) - (a.isOnline ? 1 : 0));
+  sendOk(res, { users: withOnline });
+}));
+
 usersRouter.get("/messages", asyncHandler(async (req: AuthRequest, res) => {
   const messages = await DirectMessage.find({
     $or: [{ senderId: req.user!.id }, { receiverId: req.user!.id }]
@@ -346,7 +722,7 @@ usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, requireNotCh
   const created = await DirectMessage.create({
     senderId: req.user!.id,
     receiverId,
-    message: messageText ? sanitizeText(messageText) : mediaType === "VIDEO" ? "Shared a video" : mediaType === "AUDIO" ? "🎤 Voice note" : "Shared a photo",
+    message: messageText ? sanitizeText(messageText) : mediaType === "VIDEO" ? "Shared a video" : mediaType === "AUDIO" ? "ðŸŽ¤ Voice note" : "Shared a photo",
     mediaUrl,
     mediaType,
     duration: mediaType === "AUDIO" ? duration : 0
@@ -526,27 +902,7 @@ usersRouter.get("/:userId/pk-history", asyncHandler(async (req: AuthRequest, res
 }));
 
 usersRouter.get("/:id", asyncHandler(async (req: AuthRequest, res) => {
-  if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
-  const blocked = await Block.exists({
-    $or: [
-      { blockerId: req.user!.id, blockedUserId: req.params.id },
-      { blockerId: req.params.id, blockedUserId: req.user!.id }
-    ]
-  });
-  if (blocked) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
-  const user = await User.findById(req.params.id).select("-email -phone -__v").lean();
-  if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
-  const following = req.params.id === req.user!.id
-    ? false
-    : Boolean(await Follow.exists({ followerId: req.user!.id, followingId: req.params.id }));
-  const closeFriendIds = (req.user?.closeFriendIds ?? []).map((friendId: any) => friendId.toString());
-  const isCloseFriend = closeFriendIds.includes(req.params.id);
-  let verificationLevel: string = "NONE";
-  if (user.isVerified) {
-    const trustStatus = await TrustVerification.findOne({ userId: user._id }).lean().catch(() => null);
-    verificationLevel = trustStatus?.level === "ADVANCED" ? "ADVANCED" : "BASIC";
-  }
-  sendOk(res, { user: publicUser({ ...user, ...getVipStatus(user), isFollowing: following, isCloseFriend, isOnline: isUserOnline(req.params.id), verificationLevel }) });
+  await handlePublicProfile(req.params.id, false, req, res);
 }));
 
 usersRouter.post("/:id/follow", asyncHandler(async (req: AuthRequest, res) => {

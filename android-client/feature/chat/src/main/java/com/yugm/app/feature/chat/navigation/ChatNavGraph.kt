@@ -51,6 +51,7 @@ fun NavGraphBuilder.chatNavGraph(
         ChatScreen(
             partner = chatViewModel.partner,
             currentUserId = currentUserId,
+            myActiveCosmetics = chatViewModel.myActiveCosmetics,
             messages = chatViewModel.messages,
             relationship = chatViewModel.relationship,
             loading = chatViewModel.isLoading,

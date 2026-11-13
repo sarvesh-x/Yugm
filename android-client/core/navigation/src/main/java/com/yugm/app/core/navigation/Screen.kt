@@ -59,6 +59,10 @@ sealed class Screen(val route: String) {
     object GiftCatalog : Screen("gift_catalog")
     object Vip : Screen("vip")
     object Cosmetics : Screen("cosmetics")
+    object CustomizeProfile : Screen("customize_profile")
+    object PublicProfilePreview : Screen("public_profile_preview/{userId}") {
+        fun createRoute(userId: String) = "public_profile_preview/$userId"
+    }
     object Notifications : Screen("notifications")
     object Settings : Screen("settings")
     object Safety : Screen("safety")

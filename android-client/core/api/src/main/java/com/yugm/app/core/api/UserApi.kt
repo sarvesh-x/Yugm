@@ -11,6 +11,8 @@ import com.yugm.app.core.model.NotificationPreferences
 import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.model.YugmUser
+import com.yugm.app.core.model.UserFullInventory
+import com.yugm.app.core.model.LevelOverview
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -28,7 +30,8 @@ object UserApi {
         lookingFor: String? = null,
         avatar: String? = null,
         acceptTerms: Boolean = false,
-        vibeLine: String? = null
+        vibeLine: String? = null,
+        hobbies: List<String>? = null
     ): YugmUser {
         val body = JSONObject()
             .put("name", name)
@@ -36,6 +39,7 @@ object UserApi {
         if (city != null) body.put("city", city)
         if (bio != null) body.put("bio", bio)
         if (interests != null) body.put("interests", JSONArray(interests))
+        if (hobbies != null) body.put("hobbies", JSONArray(hobbies))
         if (languages != null) body.put("languages", JSONArray(languages))
         if (gender != null) body.put("gender", gender)
         if (age != null) body.put("age", age)
@@ -53,8 +57,30 @@ object UserApi {
     }
 
     suspend fun getUser(userId: String, token: String? = null): Host {
-        val data = YugmHttpClient.get("/users/$userId", auth = token).getJSONObject("data")
+        val path = if (token.isNullOrBlank()) "/users/public/$userId" else "/users/$userId"
+        val data = YugmHttpClient.get(path, auth = token?.ifBlank { null }).getJSONObject("data")
         return data.getJSONObject("user").toHost()
+    }
+
+    suspend fun getPublicProfile(userId: String, token: String? = null): Host {
+        val data = YugmHttpClient.get("/users/public/$userId", auth = token?.ifBlank { null }).getJSONObject("data")
+        return data.getJSONObject("user").toHost()
+    }
+
+    suspend fun getPublicProfileByUsername(username: String, token: String? = null): Host {
+        val clean = java.net.URLEncoder.encode(username.removePrefix("@"), "UTF-8")
+        val data = YugmHttpClient.get("/users/by-username/$clean", auth = token?.ifBlank { null }).getJSONObject("data")
+        return data.getJSONObject("user").toHost()
+    }
+
+    suspend fun fullInventory(token: String): UserFullInventory {
+        val data = YugmHttpClient.get("/users/me/inventory", token).getJSONObject("data")
+        return data.toUserFullInventory()
+    }
+
+    suspend fun levelOverview(token: String): LevelOverview {
+        val data = YugmHttpClient.get("/users/me/level-overview", token).getJSONObject("data")
+        return data.toLevelOverview()
     }
 
     suspend fun getUserRooms(userId: String, token: String? = null): List<Room> {
@@ -215,6 +241,21 @@ object UserApi {
         return data.getJSONObject("room").toRoom()
     }
 
+    suspend fun searchRandomFriend(token: String): Room? {
+        val data = YugmHttpClient.post("/users/friend-match/search", token, JSONObject()).getJSONObject("data")
+        return data.optJSONObject("room")?.toRoom()
+    }
+
+    suspend fun randomFriendMatch(token: String): Room? {
+        // Re-run the idempotent search while waiting so two simultaneous searches can still pair.
+        val data = YugmHttpClient.post("/users/friend-match/search", token, JSONObject()).getJSONObject("data")
+        return data.optJSONObject("room")?.toRoom()
+    }
+
+    suspend fun cancelRandomFriendSearch(token: String) {
+        YugmHttpClient.post("/users/friend-match/cancel", token, JSONObject())
+    }
+
     suspend fun reactToDirectMessage(token: String, userId: String, messageId: String, type: String = "heart"): DirectMessage {
         val data = YugmHttpClient.post(
             "/users/messages/$userId/$messageId/reactions",
@@ -252,6 +293,11 @@ object UserApi {
     suspend fun suggestedHosts(token: String): List<Host> {
         val data = YugmHttpClient.get("/hosts/suggested", token).getJSONObject("data")
         return data.optJSONArray("hosts")?.toHosts() ?: emptyList()
+    }
+
+    suspend fun recommendedChatUsers(token: String): List<Host> {
+        val data = YugmHttpClient.get("/users/recommended-chat", token).getJSONObject("data")
+        return data.optJSONArray("users")?.toHosts() ?: emptyList()
     }
 
     suspend fun levelLeaderboard(token: String): List<Host> {

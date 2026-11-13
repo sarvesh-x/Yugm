@@ -145,14 +145,13 @@ fun NavGraph(
             authToken = mainViewModel.authToken,
             currentUserId = mainViewModel.currentUserId,
             onProfileUpdated = mainViewModel::validateAndUpdate,
-            onLogout = {
-                mainViewModel.logout()
-                navController.navigate(Screen.Login.route) {
-                    popUpTo(0) { inclusive = true }
-                    launchSingleTop = true
-                }
-            },
-            onSettings = { navController.navigate(Screen.Settings.route) }
+            onSettings = { navController.navigate(Screen.Settings.route) },
+            onOpenStore = { navController.navigate(Screen.Cosmetics.route) },
+            onOpenVip = { navController.navigate(Screen.Vip.route) },
+            onOpenTasks = { navController.navigate(Screen.Missions.route) },
+            onOpenLevel = { navController.navigate(Screen.BattlePass.route) },
+            onOpenWallet = { navController.navigate(Screen.Wallet.route) },
+            onOpenInventory = { navController.navigate(Screen.Inventory.route) }
         )
         socialNavGraph(
             navController = navController,

@@ -94,7 +94,7 @@ fun RoomShell(
     val themeGradient = roomThemeGradients[room.theme]
     GiftPanel(open = giftOpen, gifts = gifts, balance = balance, onDismiss = { onGiftOpen(false) }, onSend = onGift)
 
-    YugmAmbientBackground(themeOverride = themeGradient) {
+    YugmAmbientBackground(themeOverride = themeGradient, ambienceId = room.ambience) {
         Column(Modifier.fillMaxSize()) {
             Row(
                 Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 14.dp, vertical = 11.dp),
@@ -155,6 +155,7 @@ fun RoomShell(
                         value = message,
                         onValueChange = { message = it.take(500) },
                         textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 13.sp),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(PrimaryPurple),
                         modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Write a room message" },
                         decorationBox = { inner -> if (message.isBlank()) Text("Say something…", color = TextMuted, fontSize = 12.sp) else inner() }
                     )

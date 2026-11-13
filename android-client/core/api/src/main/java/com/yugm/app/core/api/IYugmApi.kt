@@ -28,6 +28,8 @@ import com.yugm.app.core.model.GiftCollection
 import com.yugm.app.core.model.GiftItem
 import com.yugm.app.core.model.GiftLeaderboardResponse
 import com.yugm.app.core.model.GiftV2
+import com.yugm.app.core.model.UserFullInventory
+import com.yugm.app.core.model.LevelOverview
 import com.yugm.app.core.model.ComboResult
 import com.yugm.app.core.model.RoomWideGiftResult
 import com.yugm.app.core.model.SurpriseBoxResult
@@ -259,9 +261,13 @@ interface IYugmApi {
     suspend fun sendGameChallenge(token: String, gameId: String, score: Int, scoreId: String, targetUserId: String? = null, clanId: String? = null, message: String? = null): MiniGameChallenge
     suspend fun shareGameScore(token: String, scoreId: String, targetUserId: String)
 
-    suspend fun updateProfile(token: String, name: String, username: String, bio: String? = null, city: String? = null, interests: List<String>? = null, languages: List<String>? = null, gender: String? = null, age: Int? = null, lookingFor: String? = null, avatar: String? = null, acceptTerms: Boolean = false, vibeLine: String? = null): YugmUser
+    suspend fun updateProfile(token: String, name: String, username: String, bio: String? = null, city: String? = null, interests: List<String>? = null, languages: List<String>? = null, gender: String? = null, age: Int? = null, lookingFor: String? = null, avatar: String? = null, acceptTerms: Boolean = false, vibeLine: String? = null, hobbies: List<String>? = null): YugmUser
     suspend fun searchUsers(query: String, token: String? = null): List<Host>
     suspend fun getUser(userId: String, token: String? = null): Host
+    suspend fun getPublicProfile(userId: String, token: String? = null): Host
+    suspend fun getPublicProfileByUsername(username: String, token: String? = null): Host
+    suspend fun fullInventory(token: String): UserFullInventory
+    suspend fun levelOverview(token: String): LevelOverview
     suspend fun getUserRooms(userId: String, token: String? = null): List<Room>
     suspend fun getFollowers(userId: String, token: String? = null): List<Host>
     suspend fun getFollowing(userId: String, token: String? = null): List<Host>
@@ -277,6 +283,8 @@ interface IYugmApi {
     suspend fun addProfileMedia(token: String, mediaUrl: String, mediaType: String)
     suspend fun deleteProfileMedia(token: String, mediaId: String)
     suspend fun suggestedHosts(token: String): List<Host>
+
+    suspend fun recommendedChatUsers(token: String): List<Host>
     suspend fun levelLeaderboard(token: String): List<Host>
     suspend fun getNotifications(token: String): Pair<List<NotificationItem>, Int>
     suspend fun markNotificationRead(token: String, notificationId: String)
@@ -295,6 +303,9 @@ interface IYugmApi {
     suspend fun sendDirectMessage(token: String, userId: String, message: String): Conversation
     suspend fun sendDirectMediaMessage(token: String, userId: String, mediaUrl: String, mediaType: String, caption: String = ""): Conversation
     suspend fun startPrivateCall(token: String, userId: String, type: RoomType): Room
+    suspend fun searchRandomFriend(token: String): Room?
+    suspend fun randomFriendMatch(token: String): Room?
+    suspend fun cancelRandomFriendSearch(token: String)
     suspend fun reactToDirectMessage(token: String, userId: String, messageId: String, type: String = "heart"): DirectMessage
     suspend fun markAllMessagesRead(token: String)
     suspend fun getRecentMessages(token: String): List<DirectMessage>

@@ -67,12 +67,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.yugm.app.core.model.ActiveCosmetics
 import com.yugm.app.core.model.DirectMessage
 import com.yugm.app.core.model.GiftItem
 import com.yugm.app.core.model.Host
 import com.yugm.app.feature.chat.R
 import com.yugm.app.core.model.RelationshipStatus
 import com.yugm.app.core.ui.components.*
+import com.yugm.app.core.ui.cosmetics.chatBubbleVisual
 import com.yugm.app.core.ui.theme.LocalMotionEnabled
 import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
@@ -95,6 +97,7 @@ private val ChatSurface = Color(0xFF0E1121)
 fun ChatScreen(
     partner: Host?,
     currentUserId: String,
+    myActiveCosmetics: ActiveCosmetics = ActiveCosmetics(),
     messages: List<DirectMessage>,
     relationship: RelationshipStatus?,
     gifts: List<GiftItem> = emptyList(),
@@ -230,6 +233,7 @@ fun ChatScreen(
                                 MessageBubble(
                                     message = message,
                                     mine = message.senderId == currentUserId,
+                                    bubbleId = myActiveCosmetics.chatBubble,
                                     reactionCount = message.reactionCount + (reactions[message.id.ifBlank { index.toString() }] ?: 0),
                                     onReact = {
                                         val key = message.id.ifBlank { index.toString() }
@@ -280,6 +284,7 @@ fun ChatScreen(
                                 value = draft,
                                 onValueChange = { draft = it.take(1000) },
                                 textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 14.sp),
+                                cursorBrush = androidx.compose.ui.graphics.SolidColor(Pink),
                                 modifier = Modifier.weight(1f).semantics { contentDescription = messageFieldLabel },
                                 decorationBox = { inner -> if (draft.isBlank()) Text("Message…", color = TextMuted, fontSize = 14.sp) else inner() }
                             )
@@ -401,13 +406,14 @@ private fun ConversationDivider(label: String, highlight: Boolean = false) {
 }
 
 @Composable
-private fun MessageBubble(message: DirectMessage, mine: Boolean, reactionCount: Int, onReact: () -> Unit) {
+private fun MessageBubble(message: DirectMessage, mine: Boolean, bubbleId: String, reactionCount: Int, onReact: () -> Unit) {
+    val bubble = if (mine) chatBubbleVisual(bubbleId) else null
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
         Column(horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
             Box(
                 Modifier.widthIn(max = 290.dp).clip(RoundedCornerShape(topStart = 19.dp, topEnd = 19.dp, bottomStart = if (mine) 19.dp else 5.dp, bottomEnd = if (mine) 5.dp else 19.dp))
-                    .background(if (mine) Brush.horizontalGradient(listOf(PrimaryPurple, Pink, Color(0xFFFF5866))) else Brush.horizontalGradient(listOf(SurfaceElevated, Color(0xFF1A1D31))))
-                    .border(1.dp, if (mine) Pink.copy(alpha = 0.35f) else BorderColor, RoundedCornerShape(19.dp))
+                    .background(bubble?.fill ?: Brush.horizontalGradient(listOf(SurfaceElevated, Color(0xFF1A1D31))))
+                    .border(1.dp, bubble?.border ?: BorderColor, RoundedCornerShape(19.dp))
                     .clickable(onClick = onReact).padding(horizontal = 14.dp, vertical = 11.dp)
             ) {
                 Column {
@@ -420,12 +426,12 @@ private fun MessageBubble(message: DirectMessage, mine: Boolean, reactionCount: 
                         )
                         Spacer(Modifier.height(7.dp))
                     }
-                    Text(message.message, color = if (mine) Color.White else TextPrimary, fontSize = 14.sp, lineHeight = 19.sp)
+                    Text(message.message, color = bubble?.text ?: TextPrimary, fontSize = 14.sp, lineHeight = 19.sp)
                     Row(Modifier.align(Alignment.End).padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(messageTime(message.createdAt), color = if (mine) Color.White.copy(alpha = 0.76f) else TextMuted, fontSize = 9.sp)
+                        Text(messageTime(message.createdAt), color = (bubble?.text ?: TextMuted).copy(alpha = 0.76f), fontSize = 9.sp)
                         if (mine) Text(
                             if (message.read) "  ✓✓" else "  ✓",
-                            color = if (message.read) Color(0xFF80D8FF) else Color.White.copy(alpha = 0.8f),
+                            color = if (message.read) Color(0xFF80D8FF) else (bubble?.text ?: Color.White).copy(alpha = 0.8f),
                             fontSize = 9.sp
                         )
                     }

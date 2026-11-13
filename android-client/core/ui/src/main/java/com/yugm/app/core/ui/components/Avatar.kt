@@ -1,4 +1,4 @@
-package com.yugm.app.core.ui.components
+﻿package com.yugm.app.core.ui.components
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
@@ -53,6 +53,9 @@ import com.yugm.app.core.ui.theme.PanelStrong
 import com.yugm.app.core.ui.theme.Pink
 import com.yugm.app.core.ui.theme.Purple
 import com.yugm.app.core.ui.theme.LocalMotionEnabled
+import com.yugm.app.core.ui.cosmetics.CosmeticArtwork
+import com.yugm.app.core.ui.cosmetics.CosmeticFrameOverlay
+import com.yugm.app.core.ui.cosmetics.CosmeticWaveOverlay
 
 @Composable
 fun Avatar(
@@ -67,14 +70,14 @@ fun Avatar(
 ) {
     val avatarAsset = avatarAssetUrl(cosmetics.avatarAsset)
     val finalImageUrl = avatarAsset ?: imageUrl
+    val hasArtFrame = cosmetics.avatarFrame.isNotBlank()
     val frameBrush = avatarFrameBrush(cosmetics.avatarFrame)
-    val waveColor = speakingWaveColor(cosmetics.speakingWave)
     val speakingLabel = stringResource(com.yugm.app.core.ui.R.string.a11y_speaking)
     val motionEnabled = LocalMotionEnabled.current
     val entryScale = remember(motionEnabled) { Animatable(if (showEntry && motionEnabled) 0.86f else 1f) }
     val entryAlpha = remember(motionEnabled) { Animatable(if (showEntry && motionEnabled) 0f else 1f) }
 
-    LaunchedEffect(showEntry, cosmetics.entranceEffect, motionEnabled) {
+    LaunchedEffect(showEntry, cosmetics.entranceEffect, cosmetics.roomEntry, motionEnabled) {
         if (showEntry && motionEnabled) {
             entryScale.snapTo(0.86f)
             entryAlpha.snapTo(0f)
@@ -101,13 +104,17 @@ fun Avatar(
         contentAlignment = Alignment.Center
     ) {
         if (isSpeaking) {
-            SpeakingWave(waveColor = waveColor)
+            CosmeticWaveOverlay(
+                id = cosmetics.speakingWave,
+                modifier = Modifier.fillMaxSize(),
+                animate = motionEnabled
+            )
         }
         Box(
             modifier = Modifier
                 .size((size + 8).dp)
                 .clip(CircleShape)
-                .background(frameBrush)
+                .then(if (hasArtFrame) Modifier else Modifier.background(frameBrush))
                 .padding(4.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -131,12 +138,19 @@ fun Avatar(
                 }
             }
         }
+        if (hasArtFrame) {
+            CosmeticFrameOverlay(
+                id = cosmetics.avatarFrame,
+                modifier = Modifier.size((size + 8).dp),
+                animate = motionEnabled
+            )
+        }
         if (isSpeaking || isMuted) {
             val badgeColor = if (isMuted) Color(0xFFE54769) else Purple
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                .size(22.dp)
+                    .size(22.dp)
                     .clip(CircleShape)
                     .background(badgeColor)
                     .border(1.5.dp, PanelStrong, CircleShape)
@@ -151,7 +165,15 @@ fun Avatar(
                 )
             }
         }
-        if (showEntry && cosmetics.entranceEffect.isNotBlank()) {
+        if (showEntry && cosmetics.roomEntry.isNotBlank()) {
+            CosmeticArtwork(
+                id = cosmetics.roomEntry,
+                type = "ROOM_ENTRY",
+                modifier = Modifier.align(Alignment.BottomCenter).offset(y = 8.dp).size(38.dp),
+                animate = motionEnabled,
+                showBackdrop = false
+            )
+        } else if (showEntry && cosmetics.entranceEffect.isNotBlank()) {
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -186,20 +208,6 @@ fun Avatar(
                     .padding(horizontal = 5.dp, vertical = 1.dp)
             ) {
                 Text(voiceBadgeLabel(cosmetics.voiceBadge), color = Ink, fontSize = 7.sp, fontWeight = FontWeight.Black)
-            }
-        }
-        if (isSpeaking) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .offset(x = 2.dp, y = 2.dp)
-                    .size(18.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFF14B8A6))
-                    .border(1.5.dp, Color.White, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("🎤", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Black)
             }
         }
     }
@@ -294,6 +302,7 @@ private fun avatarAssetUrl(id: String): String? = when (id) {
     "avatar_nova_static" -> "https://api.dicebear.com/9.x/adventurer/png?seed=YugmNova&backgroundColor=ffd5dc"
     "avatar_pixel_gif" -> "https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif"
     "avatar_cosmic_gif" -> "https://media.giphy.com/media/l0HlNaQ6gWfllcjDO/giphy.gif"
+    "avatar_kitsune_gif" -> "https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif"
     else -> null
 }
 
@@ -306,6 +315,7 @@ private fun avatarFrameBrush(id: String): Brush = when (id) {
     "frame_sakura_blossom" -> Brush.linearGradient(listOf(Color(0xFFFF80AB), Color(0xFFFF4081), Color(0xFFF8BBD0)))
     "frame_cyber_punk" -> Brush.linearGradient(listOf(Color(0xFF00E5FF), Color(0xFFFF007F), Color(0xFF76FF03)))
     "frame_phoenix_wings" -> Brush.linearGradient(listOf(Color(0xFFD50000), Color(0xFFFF6D00), Color(0xFFFFD600)))
+    "frame_minimal" -> Brush.sweepGradient(listOf(Gold, Color(0xFFFFF8E1), Gold, Color(0xFF8A6A2A), Gold))
     else -> Brush.linearGradient(listOf(PanelStrong, Gold, PanelStrong))
 }
 

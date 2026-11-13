@@ -59,6 +59,17 @@ fun NavGraphBuilder.discoverNavGraph(
             onVoiceRooms = {
                 navController.navigateTopLevel(Screen.VoiceRooms.route)
             },
+            onJoinParty = { room ->
+                val route = if (room.type == com.yugm.app.core.model.RoomType.Video) {
+                    Screen.VideoRoom.createRoute(room.id)
+                } else {
+                    Screen.VoiceRoom.createRoute(room.id)
+                }
+                navController.navigate(route)
+            },
+            onOpenMatchedCall = { room ->
+                navController.navigate(Screen.VoiceRoom.createRoute(room.id))
+            },
             onVibeGraph = {
                 navController.navigate(Screen.VibeGraph.route)
             },

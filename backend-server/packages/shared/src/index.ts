@@ -193,6 +193,10 @@ export const profileCosmetics = [
   { id: "layout_vip_luxe", type: "PROFILE_LAYOUT", name: "VIP Luxe Layout", coinPrice: 999, rarity: "EPIC", preview: "vip_luxe" },
   { id: "layout_minimal", type: "PROFILE_LAYOUT", name: "Minimal Clean Layout", coinPrice: 299, rarity: "COMMON", preview: "minimal" },
   { id: "layout_bold", type: "PROFILE_LAYOUT", name: "Bold Grid Layout", coinPrice: 699, rarity: "RARE", preview: "bold" },
+  { id: "banner_deep_purple", type: "PROFILE_BANNER", name: "Deep Velvet Purple Banner", coinPrice: 299, rarity: "COMMON", preview: "banner_purple" },
+  { id: "banner_cosmic_aurora", type: "PROFILE_BANNER", name: "Cosmic Aurora Banner", coinPrice: 599, rarity: "RARE", preview: "banner_aurora" },
+  { id: "banner_midnight_sky", type: "PROFILE_BANNER", name: "Midnight Sky Banner", coinPrice: 799, rarity: "EPIC", preview: "banner_midnight" },
+  { id: "banner_royal_gold", type: "PROFILE_BANNER", name: "Royal Gold Banner", coinPrice: 1199, rarity: "LEGENDARY", preview: "banner_gold" },
   { id: "intro_ask_me", type: "INTRO_CARD", name: "Ask Me About Card", coinPrice: 199, rarity: "COMMON", preview: "Ask me about music, memes, and late-night rooms." },
   { id: "intro_my_vibe", type: "INTRO_CARD", name: "My Vibe Card", coinPrice: 199, rarity: "COMMON", preview: "My vibe is warm chaos and good playlists." },
   { id: "intro_two_truths", type: "INTRO_CARD", name: "Two Truths Card", coinPrice: 299, rarity: "RARE", preview: "Two truths and a lie — ask me which is which." },
@@ -262,6 +266,7 @@ export const profileCosmeticTypes = [
   "AVATAR_DECORATION",
   "REACTION_PACK",
   "PROFILE_LAYOUT",
+  "PROFILE_BANNER",
   "INTRO_CARD",
   "COLLECTIBLE_TITLE",
   "GIFT_SHELF",
@@ -471,8 +476,10 @@ export const purchaseVipSchema = z.object({
 
 export const cosmeticBundleIds = cosmeticBundles.map((b) => b.id) as [typeof cosmeticBundles[number]["id"], ...typeof cosmeticBundles[number]["id"][]];
 
+export const profileCosmeticIdSchema = z.string().min(2).max(64);
+
 export const purchaseProfileCosmeticSchema = z.object({
-  cosmeticId: z.enum(profileCosmeticIds)
+  cosmeticId: profileCosmeticIdSchema
 });
 
 export const purchaseCosmeticBundleSchema = z.object({
@@ -480,12 +487,12 @@ export const purchaseCosmeticBundleSchema = z.object({
 });
 
 export const transferCosmeticSchema = z.object({
-  cosmeticId: z.enum(profileCosmeticIds),
+  cosmeticId: profileCosmeticIdSchema,
   receiverId: z.string().regex(objectIdPattern, "Invalid receiverId format")
 });
 
 export const equipProfileCosmeticSchema = z.object({
-  cosmeticId: z.enum(profileCosmeticIds).nullable(),
+  cosmeticId: z.union([profileCosmeticIdSchema, z.literal(""), z.null()]).optional(),
   type: z.enum(profileCosmeticTypes)
 });
 

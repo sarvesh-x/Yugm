@@ -148,6 +148,7 @@ fun ClanChatScreen(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                         singleLine = true,
                         textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 14.sp),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Pink),
                         decorationBox = { innerTextField ->
                             Box {
                                 if (input.isEmpty()) Text("Type a message…", color = TextMuted, fontSize = 14.sp)

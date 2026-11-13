@@ -28,6 +28,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -147,6 +151,7 @@ fun EditRoomScreen(
                 room.copy(
                     title = title.trim(),
                     description = description.trim(),
+                    bio = description.trim(),
                     category = category,
                     language = language,
                     maxSpeakers = maxSpeakers,
@@ -154,7 +159,8 @@ fun EditRoomScreen(
                     theme = selectedTheme,
                     badge = selectedBadge,
                     ambience = selectedAmbience,
-                    vipOnly = vipOnly
+                    vipOnly = vipOnly,
+                    coverImage = uploadedCover ?: room.coverImage
                 )
             )
         }
@@ -168,6 +174,57 @@ fun EditRoomScreen(
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
+                item {
+                    // Room Avatar / Cover Picker & Unique ID
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(SurfaceElevated)
+                            .border(1.dp, BorderColor, RoundedCornerShape(18.dp))
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color(0xFF28243A))
+                                .border(1.dp, Gold, RoundedCornerShape(14.dp))
+                                .clickable { coverPicker.launch("image/*") },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (coverUri != null) {
+                                AsyncImage(
+                                    model = coverUri,
+                                    contentDescription = "Room Avatar",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else if (!room.coverImage.isNullOrBlank()) {
+                                AsyncImage(
+                                    model = room.coverImage,
+                                    contentDescription = "Room Avatar",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("📷", fontSize = 20.sp)
+                                    Text("Avatar", color = TextMuted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Room Avatar & Unique ID", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text("ID: ${room.id.takeLast(8)}", color = Gold, fontWeight = FontWeight.Black, fontSize = 12.sp)
+                            Text("Tap avatar box to change room cover photo", color = TextMuted, fontSize = 11.sp)
+                        }
+                    }
+                }
                 item { RoomTextBlock("Room Title", true, title, 60, "Late Night Talks ✨") { title = it.take(60) } }
                 item { RoomTextBlock("Room Topic", true, description, 120, "Deep conversations, good vibes and new people.", singleLine = false) { description = it.take(120) } }
                 item {
@@ -193,11 +250,11 @@ fun EditRoomScreen(
                 }
                 item {
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(SurfaceElevated).border(1.dp, BorderColor, RoundedCornerShape(22.dp))) {
-                        SettingRow("▣", "Room Privacy", "Choose who can join your room") {
+                        SettingRow(Icons.Filled.Public, "Room Privacy", "Choose who can join your room") {
                             ReferenceChip(if (isPublic) "Public" else "Private", glyph = if (isPublic) "◎" else "▣", selected = !isPublic, onClick = { isPublic = !isPublic })
                         }
                         DividerLine()
-                        SettingRow("♙", "Max Speakers", "Maximum number of speakers") {
+                        SettingRow(Icons.Filled.Groups, "Max Speakers", "Maximum number of speakers") {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 StepperButton("−", "Decrease speaker limit") { maxSpeakers = (maxSpeakers - 1).coerceAtLeast(2) }
                                 Text(maxSpeakers.toString(), color = TextPrimary, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 13.dp))
@@ -205,7 +262,7 @@ fun EditRoomScreen(
                             }
                         }
                         DividerLine()
-                        SettingRow("♛", "VIP Only Room", "Only VIP members can join") {
+                        SettingRow(Icons.Filled.WorkspacePremium, "VIP Only Room", "Only VIP members can join") {
                             Switch(
                                 checked = vipOnly,
                                 onCheckedChange = { vipOnly = it },

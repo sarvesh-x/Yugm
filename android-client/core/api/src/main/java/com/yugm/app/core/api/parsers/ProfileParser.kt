@@ -15,6 +15,16 @@ import com.yugm.app.core.model.RelationshipStatus
 import com.yugm.app.core.model.TrustVerificationStatus
 import com.yugm.app.core.model.VipStatus
 import com.yugm.app.core.model.YugmUser
+import com.yugm.app.core.model.InventoryCosmetic
+import com.yugm.app.core.model.InventoryBadge
+import com.yugm.app.core.model.InventorySummary
+import com.yugm.app.core.model.UserFullInventory
+import com.yugm.app.core.model.InventoryItem
+import com.yugm.app.core.model.GiftV2
+import com.yugm.app.core.model.LevelMilestoneInfo
+import com.yugm.app.core.model.XpEventInfo
+import com.yugm.app.core.model.LevelOverview
+import com.yugm.app.core.model.Host
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -50,7 +60,8 @@ fun JSONObject.toVipStatus(): VipStatus = VipStatus(
     isVip = optBoolean("isVip", false),
     vipTier = optString("vipTier", ""),
     vipStartedAt = optString("vipStartedAt", ""),
-    vipExpiresAt = optString("vipExpiresAt", "")
+    vipExpiresAt = optString("vipExpiresAt", ""),
+    daysRemaining = optInt("daysRemaining", 0)
 )
 
 fun JSONObject.toActiveCosmetics(): ActiveCosmetics = ActiveCosmetics(
@@ -69,6 +80,7 @@ fun JSONObject.toActiveCosmetics(): ActiveCosmetics = ActiveCosmetics(
     avatarDecoration = optString("avatarDecoration", ""),
     reactionPack = optString("reactionPack", ""),
     profileLayout = optString("profileLayout", ""),
+    profileBanner = optString("profileBanner", ""),
     introCard = optString("introCard", ""),
     collectibleTitle = optString("collectibleTitle", ""),
     giftShelf = optString("giftShelf", ""),
@@ -91,7 +103,9 @@ fun JSONObject.toCosmeticCatalog(): CosmeticCatalog {
                     type = item.optString("type", ""),
                     name = item.optString("name", "Cosmetic"),
                     coinPrice = item.optInt("coinPrice", 0),
-                    rarity = item.optString("rarity", "COMMON")
+                    rarity = item.optString("rarity", "COMMON"),
+                    preview = item.optString("preview", ""),
+                    assetUrl = item.optString("assetUrl", "")
                 ))
             }
         },
@@ -190,5 +204,117 @@ fun JSONObject.toCreatorDashboard(): CreatorDashboard {
         rooms = optJSONArray("rooms")?.toRooms() ?: emptyList(),
         scheduledRooms = optJSONArray("scheduledRooms")?.toRooms() ?: emptyList(),
         nextSteps = if (steps == null) emptyList() else List(steps.length()) { steps.optString(it) }
+    )
+}
+
+fun JSONObject.toUserFullInventory(): UserFullInventory {
+    val cosmeticsArr = optJSONArray("cosmetics") ?: JSONArray()
+    val giftsArr = optJSONArray("gifts") ?: JSONArray()
+    val badgesArr = optJSONArray("badges") ?: JSONArray()
+    val summaryJson = optJSONObject("summary") ?: JSONObject()
+
+    return UserFullInventory(
+        cosmetics = buildList {
+            for (i in 0 until cosmeticsArr.length()) {
+                val item = cosmeticsArr.getJSONObject(i)
+                add(InventoryCosmetic(
+                    id = item.optString("id", ""),
+                    type = item.optString("type", ""),
+                    name = item.optString("name", ""),
+                    coinPrice = item.optInt("coinPrice", 0),
+                    rarity = item.optString("rarity", "COMMON"),
+                    preview = item.optString("preview", ""),
+                    assetUrl = item.optString("assetUrl", ""),
+                    isEquipped = item.optBoolean("isEquipped", false)
+                ))
+            }
+        },
+        activeCosmetics = optJSONObject("activeCosmetics")?.toActiveCosmetics() ?: ActiveCosmetics(),
+        gifts = buildList {
+            for (i in 0 until giftsArr.length()) {
+                val item = giftsArr.getJSONObject(i)
+                add(InventoryItem(
+                    id = item.optString("id", ""),
+                    gift = GiftV2(
+                        id = item.optString("giftId", ""),
+                        name = item.optString("name", "Gift"),
+                        icon = item.optString("icon", "🎁"),
+                        coinPrice = item.optInt("coinPrice", 0),
+                        tradable = item.optBoolean("tradable", false),
+                        upgradeable = item.optBoolean("upgradeable", false)
+                    ),
+                    quantity = item.optInt("quantity", 1),
+                    tradable = item.optBoolean("tradable", false),
+                    source = item.optString("source", "purchased")
+                ))
+            }
+        },
+        badges = buildList {
+            for (i in 0 until badgesArr.length()) {
+                val item = badgesArr.getJSONObject(i)
+                add(InventoryBadge(
+                    achievementId = item.optString("achievementId", ""),
+                    tier = item.optString("tier", "BRONZE"),
+                    title = item.optString("title", ""),
+                    description = item.optString("description", ""),
+                    icon = item.optString("icon", "🏅"),
+                    claimedAt = item.optString("claimedAt", "")
+                ))
+            }
+        },
+        summary = InventorySummary(
+            totalCosmetics = summaryJson.optInt("totalCosmetics", 0),
+            equippedCosmetics = summaryJson.optInt("equippedCosmetics", 0),
+            totalGifts = summaryJson.optInt("totalGifts", 0),
+            totalBadges = summaryJson.optInt("totalBadges", 0),
+            walletBalance = summaryJson.optInt("walletBalance", 0)
+        )
+    )
+}
+
+fun JSONObject.toLevelOverview(): LevelOverview {
+    val levelJson = optJSONObject("level") ?: JSONObject()
+    val streakJson = optJSONObject("streak") ?: JSONObject()
+    val milestonesArr = optJSONArray("milestones") ?: JSONArray()
+    val xpEventsJson = optJSONObject("xpEvents") ?: JSONObject()
+    val leaderboardArr = optJSONArray("leaderboard") ?: JSONArray()
+
+    return LevelOverview(
+        level = levelJson.toLevelStatus(),
+        streak = streakJson.optInt("count", 0),
+        canCheckIn = streakJson.optBoolean("canCheckIn", false),
+        nextMilestone = if (streakJson.has("nextMilestone") && !streakJson.isNull("nextMilestone")) streakJson.optInt("nextMilestone") else null,
+        nextMilestoneReward = streakJson.optInt("nextMilestoneReward", 0),
+        milestones = buildList {
+            for (i in 0 until milestonesArr.length()) {
+                val item = milestonesArr.getJSONObject(i)
+                add(LevelMilestoneInfo(
+                    level = item.optInt("level", i + 1),
+                    requiredXp = item.optInt("requiredXp", 0),
+                    title = item.optString("title", "Level ${i + 1}"),
+                    coinReward = item.optInt("coinReward", 0)
+                ))
+            }
+        },
+        xpEvents = buildList {
+            val keys = xpEventsJson.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val event = xpEventsJson.optJSONObject(key)
+                if (event != null) {
+                    add(XpEventInfo(
+                        key = key,
+                        name = event.optString("name", key),
+                        xp = event.optInt("xp", 0),
+                        icon = event.optString("icon", "⭐")
+                    ))
+                }
+            }
+        },
+        leaderboard = buildList {
+            for (i in 0 until leaderboardArr.length()) {
+                add(leaderboardArr.getJSONObject(i).toHost())
+            }
+        }
     )
 }
