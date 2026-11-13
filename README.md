@@ -118,6 +118,26 @@ For the Android emulator, the default `development` mode reaches your computer's
 
 Release builds require the Play upload keystore outside source control. Supply `YUGM_UPLOAD_KEYSTORE_FILE`, `YUGM_UPLOAD_KEYSTORE_PASSWORD`, `YUGM_UPLOAD_KEY_ALIAS`, and `YUGM_UPLOAD_KEY_PASSWORD` as Gradle properties or environment variables. The Android release target is API 36. Before uploading, confirm the permanent package ID and register the Play app-signing and upload certificate fingerprints in Firebase.
 
+### Publish an APK to GitHub Releases
+
+Create a signed tag such as `v1.2.3` and push it to GitHub:
+
+```bash
+git tag v1.2.3
+git push origin v1.2.3
+```
+
+The `Android Release` workflow builds a signed production APK, assigns its app version from the tag, and attaches it to the matching GitHub Release. Add these repository Actions secrets first:
+
+| Secret | Value |
+| --- | --- |
+| `ANDROID_UPLOAD_KEYSTORE_BASE64` | Base64-encoded Play upload `.jks` keystore |
+| `ANDROID_UPLOAD_KEYSTORE_PASSWORD` | Keystore password |
+| `ANDROID_UPLOAD_KEY_ALIAS` | Upload key alias |
+| `ANDROID_UPLOAD_KEY_PASSWORD` | Upload key password |
+
+Encode the keystore locally with `base64 -w 0 yugm-upload.jks` on Linux/macOS, or `[Convert]::ToBase64String([IO.File]::ReadAllBytes('yugm-upload.jks'))` in PowerShell. Keep the keystore and its passwords private. Tags must follow `vMAJOR.MINOR.PATCH`, with the minor and patch numbers below 1000.
+
 The Render API build command is `npm ci --include=dev && npm --workspace apps/api run build` from `backend-server/`. If an existing Render service has a custom build command, sync the Blueprint or set that exact command in its Settings; running `tsc` without `npm ci` leaves workspace packages and type definitions unavailable.
 
 Firebase ID tokens are verified against Google's public Firebase signing certificates using the project ID in `google-services.json`; the Firebase Admin service-account key is optional and only enables push notifications. Google Play service-account credentials are optional at startup and are required only to verify purchases. The Render service still requires its database, persistent JWT secrets, and production LiveKit configuration (`wss://` URL and API credentials) for those features.

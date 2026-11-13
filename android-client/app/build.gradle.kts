@@ -82,6 +82,8 @@ val defaultSocketBaseUrl = if (yugmServerMode == "deploy") {
 }
 val yugmApiBaseUrl = configValue("YUGM_API_BASE_URL") ?: defaultApiBaseUrl
 val yugmSocketBaseUrl = configValue("YUGM_SOCKET_BASE_URL") ?: defaultSocketBaseUrl
+val yugmVersionCode = configValue("YUGM_VERSION_CODE")?.toIntOrNull() ?: 1
+val yugmVersionName = configValue("YUGM_VERSION_NAME")?.takeIf(String::isNotBlank) ?: "1.0"
 val uploadKeystoreFile = configValue("YUGM_UPLOAD_KEYSTORE_FILE")
 val uploadKeystorePassword = configValue("YUGM_UPLOAD_KEYSTORE_PASSWORD")
 val uploadKeyAlias = configValue("YUGM_UPLOAD_KEY_ALIAS")
@@ -115,8 +117,8 @@ android {
         applicationId = "com.yugm.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = yugmVersionCode
+        versionName = yugmVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
