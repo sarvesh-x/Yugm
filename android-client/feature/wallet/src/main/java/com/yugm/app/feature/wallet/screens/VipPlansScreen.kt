@@ -55,6 +55,9 @@ fun VipPlansScreen(
         containerColor = Background
     ) { innerPadding ->
         val vipState = vipViewModel.vipState
+        LaunchedEffect(vipState) {
+            if (vipState is UiState.Success) walletViewModel.refreshBalance(token)
+        }
         when (vipState) {
             is UiState.Loading -> {
                 Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
@@ -86,9 +89,11 @@ fun VipPlansScreen(
                                 if (vipStatus?.isVip == true) {
                                     Text("VIP Active", color = Gold, fontSize = 20.sp, fontWeight = FontWeight.Black)
                                     Text("Expires: ${vipStatus.vipExpiresAt?.take(10).orEmpty()}", color = TextMuted, fontSize = 12.sp)
+                                    Text("${vipStatus.daysRemaining} days remaining", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text("Your VIP benefits stay active until this date. Buying another plan extends your membership.", color = TextMuted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
                                 } else {
                                     Text("Upgrade to Yugm VIP", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
-                                    Text("Unlock profile boosts, premium frames, and more.", color = TextMuted, fontSize = 12.sp, textAlign = TextAlign.Center)
+                                    Text("Choose a plan to unlock its listed benefits.", color = TextMuted, fontSize = 12.sp, textAlign = TextAlign.Center)
                                 }
                             }
                         }
@@ -102,24 +107,6 @@ fun VipPlansScreen(
                         ) {
                             Text("Your Coins", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                             Text("${walletViewModel.balance} Coins", color = Gold, fontWeight = FontWeight.Black, fontSize = 16.sp)
-                        }
-                    }
-
-                    item {
-                        Text("VIP Benefits", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf(
-                                "👑 Golden Profile Crown & Glow Frame",
-                                "🚀 Profile boosted in swiping algorithm",
-                                "🔥 Double relationship bonding XP points",
-                                "💬 Access to exclusive custom name styles",
-                                "✨ Enter live rooms with custom flash effects"
-                            ).forEach { perk ->
-                                GlassCard(modifier = Modifier.fillMaxWidth()) {
-                                    Text(perk, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                                }
-                            }
                         }
                     }
 
@@ -141,7 +128,7 @@ fun VipPlansScreen(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(plan.name, color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
-                                    Text("Duration: ${plan.durationDays} Days", color = TextMuted, fontSize = 12.sp)
+                                    Text("${plan.durationDays} days · ${plan.coinPrice} coins", color = TextMuted, fontSize = 12.sp)
                                 }
                                 Button(
                                     onClick = {
@@ -149,10 +136,21 @@ fun VipPlansScreen(
                                             vipViewModel.activateVip(token, plan.id)
                                         }
                                     },
+                                    enabled = walletViewModel.balance >= plan.coinPrice,
                                     colors = ButtonDefaults.buttonColors(containerColor = Gold),
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    Text("${plan.coinPrice} Coins", color = Background, fontWeight = FontWeight.Black)
+                                    Text(if (vipStatus?.isVip == true) "Extend" else "Buy", color = Background, fontWeight = FontWeight.Black)
+                                }
+                            }
+                            if (walletViewModel.balance < plan.coinPrice) {
+                                Text("You need ${plan.coinPrice - walletViewModel.balance} more coins", color = TextMuted, fontSize = 11.sp, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 8.dp))
+                            }
+                            if (plan.benefits.isNotEmpty()) {
+                                Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    plan.benefits.forEach { benefit ->
+                                        Text("• $benefit", color = TextMuted, fontSize = 12.sp)
+                                    }
                                 }
                             }
                         }

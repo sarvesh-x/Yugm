@@ -20,13 +20,13 @@ import kotlinx.coroutines.launch
 
 fun NavGraphBuilder.eventsNavGraph(
     navController: NavHostController,
-    authToken: String,
-    currentUserId: String
+    authTokenProvider: () -> String,
+    currentUserIdProvider: () -> String
 ) {
     composable(Screen.Events.route) {
         EventsScreen(
-            token = authToken,
-            currentUserId = currentUserId,
+            token = authTokenProvider(),
+            currentUserId = currentUserIdProvider(),
             onBack = { navController.popBackStack() },
             onCreateEvent = { navController.navigate(Screen.EventCreate.route) },
             onEventDetail = { eventId ->
@@ -62,7 +62,7 @@ fun NavGraphBuilder.eventsNavGraph(
                 scope.launch {
                     runCatching {
                         YugmApi.createEvent(
-                            token = authToken,
+                            token = authTokenProvider(),
                             title = title,
                             description = description.ifBlank { null },
                             category = category,
@@ -91,7 +91,7 @@ fun NavGraphBuilder.eventsNavGraph(
         var event by remember { mutableStateOf<com.yugm.app.core.model.YugmEvent?>(null) }
         var eventError by remember { mutableStateOf(false) }
         LaunchedEffect(eventId) {
-            runCatching { YugmApi.eventDetail(eventId, authToken) }
+            runCatching { YugmApi.eventDetail(eventId, authTokenProvider()) }
                 .onSuccess { event = it }
                 .onFailure { eventError = true; android.widget.Toast.makeText(context, it.message ?: "Failed to load event", android.widget.Toast.LENGTH_SHORT).show() }
         }
@@ -101,12 +101,12 @@ fun NavGraphBuilder.eventsNavGraph(
         event?.let { ev ->
             EventDetailScreen(
                 event = ev,
-                token = authToken,
-                currentUserId = currentUserId,
+                token = authTokenProvider(),
+                currentUserId = currentUserIdProvider(),
                 onBack = { navController.popBackStack() },
                 onJoin = {
                     scope.launch {
-                        runCatching { YugmApi.joinEvent(authToken, eventId) }
+                        runCatching { YugmApi.joinEvent(authTokenProvider(), eventId) }
                             .onSuccess {
                                 event = it
                                 android.widget.Toast.makeText(context, "Joined event", android.widget.Toast.LENGTH_SHORT).show()
@@ -116,7 +116,7 @@ fun NavGraphBuilder.eventsNavGraph(
                 },
                 onLeave = {
                     scope.launch {
-                        runCatching { YugmApi.leaveEvent(authToken, eventId) }
+                        runCatching { YugmApi.leaveEvent(authTokenProvider(), eventId) }
                             .onSuccess {
                                 event = it
                                 android.widget.Toast.makeText(context, "Left event", android.widget.Toast.LENGTH_SHORT).show()
@@ -126,7 +126,7 @@ fun NavGraphBuilder.eventsNavGraph(
                 },
                 onCancel = {
                     scope.launch {
-                        runCatching { YugmApi.cancelEvent(authToken, eventId) }
+                        runCatching { YugmApi.cancelEvent(authTokenProvider(), eventId) }
                             .onSuccess {
                                 event = it
                                 android.widget.Toast.makeText(context, "Cancelled", android.widget.Toast.LENGTH_SHORT).show()

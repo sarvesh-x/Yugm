@@ -10,11 +10,11 @@ import com.yugm.app.feature.moderation.screens.ReportScreen
 
 fun NavGraphBuilder.moderationNavGraph(
     navController: NavHostController,
-    authToken: String,
+    authTokenProvider: () -> String,
 ) {
     composable(route = Screen.ModerationStatus.route) {
         ModerationStatusScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() },
             onNavigateToReport = { navController.navigate(Screen.ModerationReport.route) },
             onNavigateToAppeal = { navController.navigate(Screen.ModerationAppeal.route) },
@@ -23,14 +23,14 @@ fun NavGraphBuilder.moderationNavGraph(
 
     composable(route = Screen.ModerationReport.route) {
         ReportScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() },
         )
     }
 
     composable(route = Screen.ModerationAppeal.route) {
         AppealScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() },
         )
     }

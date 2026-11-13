@@ -286,7 +286,12 @@ fun ChatScreen(
                                 textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 14.sp),
                                 cursorBrush = androidx.compose.ui.graphics.SolidColor(Pink),
                                 modifier = Modifier.weight(1f).semantics { contentDescription = messageFieldLabel },
-                                decorationBox = { inner -> if (draft.isBlank()) Text("Message…", color = TextMuted, fontSize = 14.sp) else inner() }
+                                decorationBox = { inner ->
+                                    Box {
+                                        if (draft.isBlank()) Text("Message…", color = TextMuted, fontSize = 14.sp)
+                                        inner()
+                                    }
+                                }
                             )
                             Box(Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics { contentDescription = attachPhotoLabel }.clickable(role = Role.Button, onClickLabel = attachPhotoLabel) { attachmentPicker.launch("image/*") }, contentAlignment = Alignment.Center) {
                                 Text("⌕", color = TextMuted, fontSize = 20.sp)

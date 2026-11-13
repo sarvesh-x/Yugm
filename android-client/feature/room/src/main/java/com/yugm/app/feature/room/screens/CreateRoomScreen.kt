@@ -382,7 +382,12 @@ internal fun RoomTextBlock(label: String, required: Boolean, value: String, maxL
             textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold),
             cursorBrush = androidx.compose.ui.graphics.SolidColor(Pink),
             modifier = Modifier.fillMaxWidth().padding(top = 9.dp),
-            decorationBox = { inner -> if (value.isBlank()) Text(placeholder, color = TextMuted, fontSize = 14.sp) else inner() }
+            decorationBox = { inner ->
+                Box {
+                    if (value.isBlank()) Text(placeholder, color = TextMuted, fontSize = 14.sp)
+                    inner()
+                }
+            }
         )
     }
 }

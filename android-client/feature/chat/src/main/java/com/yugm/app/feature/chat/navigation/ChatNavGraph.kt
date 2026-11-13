@@ -15,13 +15,13 @@ import com.yugm.app.feature.chat.viewmodel.ChatViewModel
 
 fun NavGraphBuilder.chatNavGraph(
     navController: NavHostController,
-    authToken: String,
-    currentUserId: String
+    authTokenProvider: () -> String,
+    currentUserIdProvider: () -> String
 ) {
     composable(Screen.ChatList.route) {
         ChatListScreen(
-            token = authToken,
-            currentUserId = currentUserId,
+            token = authTokenProvider(),
+            currentUserId = currentUserIdProvider(),
             onOpenChat = { partnerId ->
                 navController.navigate(Screen.Chat.createRoute(partnerId))
             },
@@ -30,8 +30,8 @@ fun NavGraphBuilder.chatNavGraph(
             onLive = { navController.navigateTopLevel(Screen.VoiceRooms.route) },
             onWallet = { navController.navigateTopLevel(Screen.Wallet.route) },
             onProfile = {
-                if (currentUserId.isNotBlank()) {
-                    navController.navigateTopLevel(Screen.ProfileDetail.createRoute(currentUserId))
+                if (currentUserIdProvider().isNotBlank()) {
+                    navController.navigateTopLevel(Screen.ProfileDetail.createRoute(currentUserIdProvider()))
                 } else {
                     navController.navigate(Screen.ProfileSetup.route)
                 }
@@ -45,12 +45,12 @@ fun NavGraphBuilder.chatNavGraph(
     ) { backStackEntry ->
         val partnerId = backStackEntry.arguments?.getString("partnerId") ?: ""
         val chatViewModel: ChatViewModel = hiltViewModel(backStackEntry)
-        LaunchedEffect(authToken, currentUserId, partnerId) {
-            chatViewModel.connect(authToken, currentUserId, partnerId)
+        LaunchedEffect(authTokenProvider(), currentUserIdProvider(), partnerId) {
+            chatViewModel.connect(authTokenProvider(), currentUserIdProvider(), partnerId)
         }
         ChatScreen(
             partner = chatViewModel.partner,
-            currentUserId = currentUserId,
+            currentUserId = currentUserIdProvider(),
             myActiveCosmetics = chatViewModel.myActiveCosmetics,
             messages = chatViewModel.messages,
             relationship = chatViewModel.relationship,

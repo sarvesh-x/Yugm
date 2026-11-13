@@ -10,8 +10,8 @@ import com.yugm.app.feature.roommodes.screens.RoomModeHostScreen
 
 fun NavGraphBuilder.roomModesNavGraph(
     navController: NavHostController,
-    authToken: String,
-    currentUserId: String,
+    authTokenProvider: () -> String,
+    currentUserIdProvider: () -> String,
 ) {
     composable(
         route = Screen.RoomMode.route,
@@ -23,9 +23,9 @@ fun NavGraphBuilder.roomModesNavGraph(
         val roomId = backStackEntry.arguments?.getString("roomId") ?: ""
         val isHost = backStackEntry.arguments?.getBoolean("isHost") ?: false
         RoomModeHostScreen(
-            token = authToken,
+            token = authTokenProvider(),
             roomId = roomId,
-            currentUserId = currentUserId,
+            currentUserId = currentUserIdProvider(),
             isHost = isHost,
             onBack = { navController.popBackStack() },
             onJoinRoom = {

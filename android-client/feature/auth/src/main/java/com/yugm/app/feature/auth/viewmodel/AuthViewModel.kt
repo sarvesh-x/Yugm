@@ -57,7 +57,6 @@ class AuthViewModel @Inject constructor(
             error = "Use at least 8 characters with a letter and a number."; return
         }
         launchAuth {
-            AppCheckReadiness.requireReady(context)
             val auth = FirebaseAuth.getInstance()
             val priorSignup = auth.currentUser?.takeIf { createAccount && it.email.equals(normalizedEmail, true) }
             val user = if (priorSignup != null) {
@@ -88,7 +87,6 @@ class AuthViewModel @Inject constructor(
     fun googleAuth(googleIdToken: String, acceptTerms: Boolean) {
         if (!acceptTerms) { error = "Confirm that you are 18+ and accept the Terms and Privacy Policy."; return }
         launchAuth {
-            AppCheckReadiness.requireReady(context)
             val credential = GoogleAuthProvider.getCredential(googleIdToken, null)
             val user = Tasks.await(FirebaseAuth.getInstance().signInWithCredential(credential)).user ?: error("Google sign-in returned no user")
             val firebaseToken = Tasks.await(user.getIdToken(false)).token ?: error("Firebase did not return an ID token")

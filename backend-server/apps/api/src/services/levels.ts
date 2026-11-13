@@ -1,8 +1,10 @@
 import type { XpEvent } from "@yugm/shared";
+import mongoose from "mongoose";
 import { levelMilestones, xpEvents } from "@yugm/shared";
 import { User } from "../models/User.js";
 import { createNotification } from "./notifications.js";
 import { creditWallet } from "./wallet.js";
+import { XpDailyCap } from "../models/XpDailyCap.js";
 
 type LevelUser = {
   _id?: unknown;
@@ -27,8 +29,6 @@ const dailyXpCaps: Partial<Record<XpEvent, number>> = {
   MINI_GAME_PLAY: 80,
   VIP_PURCHASE: 200
 };
-const dailyXpAwards = new Map<string, { amount: number; resetAt: number }>();
-
 function startOfUtcDay(date = new Date()) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
@@ -75,13 +75,40 @@ export async function grantXp(userId: string, event: XpEvent, metadata: Record<s
   let xpAwarded: number = xpEvents[event];
   const cap = dailyXpCaps[event];
   if (cap !== undefined) {
-    const key = `${userId}:${event}`;
-    const now = Date.now();
-    const resetAt = startOfUtcDay(new Date(now + 24 * 60 * 60 * 1000)).getTime();
-    const entry = dailyXpAwards.get(key);
-    const current = entry && entry.resetAt > now ? entry.amount : 0;
-    const allowed = Math.max(0, cap - current);
-    if (allowed <= 0) {
+    const day = startOfUtcDay();
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    let awarded = false;
+
+    // A compare-and-set counter keeps the cap correct across API instances and
+    // process restarts. The unique index also makes first-use creation safe.
+    for (let attempt = 0; attempt < 6 && !awarded; attempt += 1) {
+      const entry = await XpDailyCap.findOne({ userId: userObjectId, event, day }).select("amount").lean();
+      const current = entry?.amount ?? 0;
+      const allowed = Math.min(xpAwarded, Math.max(0, cap - current));
+      if (allowed <= 0) break;
+
+      if (!entry) {
+        try {
+          await XpDailyCap.create({ userId: userObjectId, event, day, amount: allowed });
+          xpAwarded = allowed;
+          awarded = true;
+        } catch (error) {
+          if ((error as { code?: number })?.code !== 11000) throw error;
+        }
+      } else {
+        const updatedCounter = await XpDailyCap.findOneAndUpdate(
+          { userId: userObjectId, event, day, amount: current },
+          { $inc: { amount: allowed } },
+          { new: true }
+        ).select("amount").lean();
+        if (updatedCounter) {
+          xpAwarded = allowed;
+          awarded = true;
+        }
+      }
+    }
+
+    if (!awarded) {
       const user = await User.findById(userId).select("xp level levelTitle lastDailyCheckInAt walletBalance").lean();
       return {
         xpAwarded: 0,
@@ -92,8 +119,6 @@ export async function grantXp(userId: string, event: XpEvent, metadata: Record<s
         walletBalance: user?.walletBalance
       };
     }
-    xpAwarded = Math.min(xpAwarded, allowed);
-    dailyXpAwards.set(key, { amount: current + xpAwarded, resetAt });
   }
   const updated = await User.findByIdAndUpdate(
     userId,

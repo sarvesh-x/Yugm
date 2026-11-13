@@ -7,6 +7,7 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import android.Manifest
 import android.content.pm.PackageManager
 import android.widget.Toast
@@ -53,6 +54,16 @@ private const val TAG = "MainActivity"
 class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
     @Inject lateinit var sessionManager: SessionManager
     private val pendingPushRoute = mutableStateOf<String?>(null)
+
+    override fun onResume() {
+        super.onResume()
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
+    override fun onPause() {
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        super.onPause()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

@@ -21,8 +21,8 @@ import kotlinx.coroutines.launch
 
 fun NavGraphBuilder.profileNavGraph(
     navController: NavHostController,
-    authToken: String,
-    currentUserId: String,
+    authTokenProvider: () -> String,
+    currentUserIdProvider: () -> String,
     onProfileUpdated: (com.yugm.app.core.model.YugmUser) -> Unit,
     onSettings: () -> Unit = {},
     onOpenStore: () -> Unit = {},
@@ -47,7 +47,7 @@ fun NavGraphBuilder.profileNavGraph(
         val profileScope = rememberCoroutineScope()
         val profileContext = androidx.compose.ui.platform.LocalContext.current
         ProfileDetailScreen(
-            token = authToken,
+            token = authTokenProvider(),
             userId = userId,
             onBack = onProfileBack,
             onMessage = { partnerId ->
@@ -56,19 +56,19 @@ fun NavGraphBuilder.profileNavGraph(
             onInviteToRoom = { inviteeId ->
                 profileScope.launch {
                     val ownLiveRoom = runCatching { com.yugm.app.core.api.YugmApi.rooms() }.getOrDefault(emptyList())
-                        .firstOrNull { it.status.equals("LIVE", ignoreCase = true) && it.host?.id == currentUserId }
+                        .firstOrNull { it.status.equals("LIVE", ignoreCase = true) && it.host?.id == currentUserIdProvider() }
                     if (ownLiveRoom == null) {
                         android.widget.Toast.makeText(profileContext, "Start a room first, then invite ${userId.take(6)}", android.widget.Toast.LENGTH_SHORT).show()
                         navController.navigate(Screen.CreateRoom.route)
                     } else {
-                        runCatching { com.yugm.app.core.api.YugmApi.inviteToRoom(authToken, ownLiveRoom.id, inviteeId) }
+                        runCatching { com.yugm.app.core.api.YugmApi.inviteToRoom(authTokenProvider(), ownLiveRoom.id, inviteeId) }
                             .onSuccess { android.widget.Toast.makeText(profileContext, "Room invite sent", android.widget.Toast.LENGTH_SHORT).show() }
                             .onFailure { android.widget.Toast.makeText(profileContext, it.message, android.widget.Toast.LENGTH_SHORT).show() }
                     }
                 }
             },
             onOpenRoom = { room -> navController.navigate(Screen.RoomLobby.createRoute(room.id, room.type.name.uppercase())) },
-            isOwnProfile = userId == currentUserId,
+            isOwnProfile = userId == currentUserIdProvider(),
             onOpenSocialList = { list -> navController.navigate(Screen.ProfileSocial.createRoute(userId, list)) },
             onProfileUpdated = onProfileUpdated,
             onSettings = onSettings,
@@ -96,10 +96,10 @@ fun NavGraphBuilder.profileNavGraph(
         val userId = backStackEntry.arguments?.getString("userId").orEmpty()
         val list = backStackEntry.arguments?.getString("list").orEmpty()
         ProfileSocialListScreen(
-            token = authToken,
+            token = authTokenProvider(),
             userId = userId,
             initialList = list,
-            isOwnProfile = userId == currentUserId,
+            isOwnProfile = userId == currentUserIdProvider(),
             onBack = onProfileBack,
             onOpenProfile = { targetId -> navController.navigate(Screen.ProfileDetail.createRoute(targetId)) }
         )
@@ -107,7 +107,7 @@ fun NavGraphBuilder.profileNavGraph(
 
     composable(Screen.Cosmetics.route) {
         CosmeticsStoreScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = onProfileBack,
             onOpenCustomize = onOpenCustomize
         )
@@ -115,11 +115,11 @@ fun NavGraphBuilder.profileNavGraph(
 
     composable(Screen.CustomizeProfile.route) {
         CustomizeProfileScreen(
-            token = authToken,
-            userId = currentUserId,
+            token = authTokenProvider(),
+            userId = currentUserIdProvider(),
             onBack = onProfileBack,
             onOpenStore = onOpenStore,
-            onOpenPublicProfile = { onOpenPublicProfile(currentUserId) }
+            onOpenPublicProfile = { onOpenPublicProfile(currentUserIdProvider()) }
         )
     }
 
@@ -127,9 +127,9 @@ fun NavGraphBuilder.profileNavGraph(
         route = Screen.PublicProfilePreview.route,
         arguments = listOf(navArgument("userId") { type = NavType.StringType })
     ) { backStackEntry ->
-        val previewUserId = backStackEntry.arguments?.getString("userId") ?: currentUserId
+        val previewUserId = backStackEntry.arguments?.getString("userId") ?: currentUserIdProvider()
         PublicProfilePreviewScreen(
-            token = authToken,
+            token = authTokenProvider(),
             userId = previewUserId,
             onBack = onProfileBack,
             onOpenCustomize = onOpenCustomize
@@ -142,7 +142,7 @@ fun NavGraphBuilder.profileNavGraph(
     ) { backStackEntry ->
         val userId = backStackEntry.arguments?.getString("userId") ?: ""
         HighlightsManagementScreen(
-            token = authToken,
+            token = authTokenProvider(),
             userId = userId,
             onBack = onProfileBack
         )

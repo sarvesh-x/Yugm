@@ -9,11 +9,11 @@ import com.yugm.app.feature.missions.screens.MissionsScreen
 
 fun NavGraphBuilder.missionsNavGraph(
     navController: NavHostController,
-    authToken: String
+    authTokenProvider: () -> String
 ) {
     composable(route = Screen.Missions.route) {
         MissionsScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() },
             onBattlePass = { navController.navigate(Screen.BattlePass.route) }
         )
@@ -21,7 +21,7 @@ fun NavGraphBuilder.missionsNavGraph(
 
     composable(route = Screen.BattlePass.route) {
         BattlePassScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() }
         )
     }

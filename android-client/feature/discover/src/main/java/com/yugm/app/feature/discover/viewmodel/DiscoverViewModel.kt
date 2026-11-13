@@ -12,6 +12,8 @@ import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.util.UiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -67,41 +69,49 @@ class DiscoverViewModel @Inject constructor(
         yugmApi.cancelRandomFriendSearch(token)
     }
 
+    private var activeHomeToken: String = ""
+    private var homeLoadJob: Job? = null
+
     fun refreshHome(token: String) {
-        if (isLoading) return
-        viewModelScope.launch {
+        if (token.isBlank()) return
+        if (isLoading && activeHomeToken == token) return
+        activeHomeToken = token
+        homeLoadJob?.cancel()
+        homeLoadJob = viewModelScope.launch {
             isLoading = true
             error = null
-            runCatching {
-                val payload = withContext(Dispatchers.IO) {
-                    if (token.isNotBlank()) yugmApi.experienceHome(token) else null
-                }
+            try {
+                val payload = withContext(Dispatchers.IO) { yugmApi.experienceHome(token) }
+                if (activeHomeToken != token) return@launch
                 home = payload
-                if (payload != null) {
-                    rooms = payload.liveRooms
-                    recommendedRooms = payload.followingRooms.ifEmpty { payload.liveRooms }
-                    scheduledRooms = payload.scheduledRooms
-                } else {
+                rooms = payload.liveRooms
+                recommendedRooms = payload.followingRooms.ifEmpty { payload.liveRooms }
+                scheduledRooms = payload.scheduledRooms
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (primary: Exception) {
+                if (activeHomeToken != token) return@launch
+                try {
                     val live = withContext(Dispatchers.IO) { yugmApi.trendingRooms() }
+                    val scheduled = withContext(Dispatchers.IO) { yugmApi.scheduledRooms() }
+                    if (activeHomeToken != token) return@launch
+                    home = null
                     rooms = live
                     recommendedRooms = live
-                    scheduledRooms = withContext(Dispatchers.IO) { yugmApi.scheduledRooms() }
+                    scheduledRooms = scheduled
+                    error = null
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (fallback: Exception) {
+                    if (activeHomeToken == token) error = fallback.message ?: primary.message ?: "Failed to load discovery"
                 }
-            }.onFailure { primary ->
-                runCatching {
-                    val live = withContext(Dispatchers.IO) { yugmApi.trendingRooms() }
-                    rooms = live
-                    recommendedRooms = live
-                    scheduledRooms = withContext(Dispatchers.IO) { yugmApi.scheduledRooms() }
-                }.onFailure {
-                    error = it.message ?: primary.message ?: "Failed to load discovery"
-                }
+            } finally {
+                if (activeHomeToken == token) isLoading = false
             }
-            isLoading = false
         }
     }
 
-    var isLoading by mutableStateOf(false)
+    var isLoading by mutableStateOf(true)
         private set
 
     var error by mutableStateOf<String?>(null)

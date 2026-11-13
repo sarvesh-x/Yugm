@@ -39,7 +39,6 @@ import com.google.firebase.FirebaseException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.PhoneAuthOptions
 import com.google.firebase.auth.PhoneAuthProvider
-import com.yugm.app.feature.auth.AppCheckReadiness
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -75,7 +74,6 @@ fun PhoneAuthScreen(
         scope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    AppCheckReadiness.requireReady(context)
                     val result = Tasks.await(FirebaseAuth.getInstance().signInWithCredential(credential))
                     val token = Tasks.await(
                         result.user?.getIdToken(false)
@@ -131,7 +129,6 @@ fun PhoneAuthScreen(
             .build()
         scope.launch {
             try {
-                withContext(Dispatchers.IO) { AppCheckReadiness.requireReady(context) }
                 PhoneAuthProvider.verifyPhoneNumber(options)
             } catch (cancelled: CancellationException) {
                 throw cancelled

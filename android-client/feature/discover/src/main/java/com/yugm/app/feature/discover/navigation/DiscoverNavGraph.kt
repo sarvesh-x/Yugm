@@ -10,12 +10,12 @@ import com.yugm.app.feature.discover.screens.SearchScreen
 
 fun NavGraphBuilder.discoverNavGraph(
     navController: NavHostController,
-    authToken: String,
-    currentUserId: String,
+    authTokenProvider: () -> String,
+    currentUserIdProvider: () -> String,
 ) {
     composable(Screen.Discover.route) {
         DiscoverScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onOpenRoom = { room ->
                 navController.navigate(Screen.RoomLobby.createRoute(room.id, room.type.name.uppercase()))
             },
@@ -50,8 +50,8 @@ fun NavGraphBuilder.discoverNavGraph(
                 navController.navigateTopLevel(Screen.Wallet.route)
             },
             onSelfProfile = {
-                if (currentUserId.isNotBlank()) {
-                    navController.navigateTopLevel(Screen.ProfileDetail.createRoute(currentUserId))
+                if (currentUserIdProvider().isNotBlank()) {
+                    navController.navigateTopLevel(Screen.ProfileDetail.createRoute(currentUserIdProvider()))
                 } else {
                     navController.navigate(Screen.ProfileSetup.route)
                 }
@@ -81,7 +81,7 @@ fun NavGraphBuilder.discoverNavGraph(
 
     composable(Screen.Search.route) {
         SearchScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() },
             onOpenRoom = { room ->
                 navController.navigate(Screen.RoomLobby.createRoute(room.id, room.type.name.uppercase()))

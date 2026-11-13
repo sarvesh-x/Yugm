@@ -36,11 +36,11 @@ import java.util.TimeZone
 
 fun NavGraphBuilder.roomNavGraph(
     navController: NavHostController,
-    authToken: String,
-    currentUserId: String,
-    userName: String,
-    username: String,
-    balance: Int,
+    authTokenProvider: () -> String,
+    currentUserIdProvider: () -> String,
+    userNameProvider: () -> String,
+    usernameProvider: () -> String,
+    balanceProvider: () -> Int,
     onMinimizeRoom: (String) -> Unit = {},
 ) {
     composable(Screen.VoiceRooms.route) {
@@ -51,7 +51,7 @@ fun NavGraphBuilder.roomNavGraph(
             onChat = { navController.navigateTopLevel(Screen.ChatList.route) },
             onWallet = { navController.navigateTopLevel(Screen.Wallet.route) },
             onProfile = {
-                if (currentUserId.isNotBlank()) navController.navigateTopLevel(Screen.ProfileDetail.createRoute(currentUserId))
+                if (currentUserIdProvider().isNotBlank()) navController.navigateTopLevel(Screen.ProfileDetail.createRoute(currentUserIdProvider()))
                 else navController.navigate(Screen.ProfileSetup.route)
             },
             onSearch = { navController.navigate(Screen.Search.route) }
@@ -72,10 +72,10 @@ fun NavGraphBuilder.roomNavGraph(
             com.yugm.app.core.model.RoomType.Voice
         }
         RoomLobbyScreen(
-            token = authToken,
+            token = authTokenProvider(),
             roomId = roomId,
             fallbackType = fallbackType,
-            currentUserId = currentUserId,
+            currentUserId = currentUserIdProvider(),
             onBack = { navController.popBackStack() },
             onJoin = { type ->
                 val route = if (type == com.yugm.app.core.model.RoomType.Video) {
@@ -103,12 +103,12 @@ fun NavGraphBuilder.roomNavGraph(
         val roomViewModel: RoomViewModel = hiltViewModel()
 
         LaunchedEffect(roomId) {
-            roomViewModel.connect(authToken, roomId, currentUserId)
+            roomViewModel.connect(authTokenProvider(), roomId, currentUserIdProvider())
         }
 
         roomViewModel.roomDetail?.let { detail ->
             EditRoomScreen(
-                token = authToken,
+                token = authTokenProvider(),
                 room = detail.room,
                 host = detail.room.host ?: com.yugm.app.core.model.Host(),
                 onBack = { navController.popBackStack() },
@@ -132,11 +132,11 @@ fun NavGraphBuilder.roomNavGraph(
         val roomViewModel: RoomViewModel = hiltViewModel()
         val context = androidx.compose.ui.platform.LocalContext.current
         CreateRoomScreen(
-            token = authToken,
+            token = authTokenProvider(),
             host = com.yugm.app.core.model.Host(
-                id = currentUserId,
-                name = userName,
-                username = username
+                id = currentUserIdProvider(),
+                name = userNameProvider(),
+                username = usernameProvider()
             ),
             onBack = { navController.popBackStack() },
             onCreate = { room, scheduleLater, visibility, allowMicRequests, coverImage, onFailure ->
@@ -146,7 +146,7 @@ fun NavGraphBuilder.roomNavGraph(
                     }.format(Date(System.currentTimeMillis() + 60 * 60 * 1000))
                 } else null
                 roomViewModel.createRoom(
-                    token = authToken,
+                    token = authTokenProvider(),
                     room = room,
                     visibility = visibility,
                     allowMicRequests = allowMicRequests,
@@ -187,7 +187,7 @@ fun NavGraphBuilder.roomNavGraph(
         val scope = rememberCoroutineScope()
 
         LaunchedEffect(roomId) {
-            roomViewModel.connect(authToken, roomId, currentUserId, video = false)
+            roomViewModel.connect(authTokenProvider(), roomId, currentUserIdProvider(), video = false)
         }
         LaunchedEffect(roomViewModel.actionError) {
             roomViewModel.actionError?.let { message ->
@@ -202,16 +202,16 @@ fun NavGraphBuilder.roomNavGraph(
                 room = room,
                 chat = roomViewModel.chat,
                 gifts = roomViewModel.gifts,
-                balance = balance,
-                isHost = room.host?.id == currentUserId,
-                currentUserId = currentUserId,
-                isRoomAdmin = detail.participants.any { it.user.id == currentUserId && it.isRoomAdmin },
+                balance = balanceProvider(),
+                isHost = room.host?.id == currentUserIdProvider(),
+                currentUserId = currentUserIdProvider(),
+                isRoomAdmin = detail.participants.any { it.user.id == currentUserIdProvider() && it.isRoomAdmin },
                 forcedMuteVersion = roomViewModel.forcedMuteVersion,
                 forcedRemoveVersion = roomViewModel.forcedRemoveVersion,
                 roomEndedVersion = roomViewModel.roomEndedVersion,
                 roomReactionEvent = roomViewModel.roomReactionEvent,
-                canSpeak = room.host?.id == currentUserId || detail.participants.any {
-                    it.user.id == currentUserId && it.role in listOf("SPEAKER", "MODERATOR")
+                canSpeak = room.host?.id == currentUserIdProvider() || detail.participants.any {
+                    it.user.id == currentUserIdProvider() && it.role in listOf("SPEAKER", "MODERATOR")
                 },
                 participants = detail.participants,
                 inviteCandidates = roomViewModel.inviteCandidates,
@@ -248,7 +248,7 @@ fun NavGraphBuilder.roomNavGraph(
                 onDirectMessage = { receiverId ->
                     val targetId = receiverId ?: room.host?.id
                     roomViewModel.roomDirectMessage(
-                        authToken, roomId,
+                        authTokenProvider(), roomId,
                         "Loved this room. Let's continue after the live.", receiverId
                     )
                     if (!targetId.isNullOrBlank()) navController.navigate(Screen.Chat.createRoute(targetId))
@@ -283,7 +283,7 @@ fun NavGraphBuilder.roomNavGraph(
                 onReportUser = { userId -> roomViewModel.reportUser(userId) },
                 onJoin = roomViewModel::join,
                 onOpenModes = {
-                    navController.navigate(Screen.RoomMode.createRoute(roomId, room.host?.id == currentUserId))
+                    navController.navigate(Screen.RoomMode.createRoute(roomId, room.host?.id == currentUserIdProvider()))
                 },
                 onOpenThemes = {
                     navController.navigate(Screen.ThemeGallery.createRoute(roomId))
@@ -307,7 +307,7 @@ fun NavGraphBuilder.roomNavGraph(
         val scope = rememberCoroutineScope()
 
         LaunchedEffect(roomId) {
-            roomViewModel.connect(authToken, roomId, currentUserId, video = true)
+            roomViewModel.connect(authTokenProvider(), roomId, currentUserIdProvider(), video = true)
         }
 
         roomViewModel.roomDetail?.let { detail ->
@@ -316,8 +316,8 @@ fun NavGraphBuilder.roomNavGraph(
                 room = room,
                 chat = roomViewModel.chat,
                 gifts = roomViewModel.gifts,
-                balance = balance,
-                isHost = room.host?.id == currentUserId,
+                balance = balanceProvider(),
+                isHost = room.host?.id == currentUserIdProvider(),
                 participants = detail.participants,
                 inviteCandidates = roomViewModel.inviteCandidates,
                 pkBattle = roomViewModel.pkBattle,
@@ -347,7 +347,7 @@ fun NavGraphBuilder.roomNavGraph(
                 onDirectMessage = { receiverId ->
                     val targetId = receiverId ?: room.host?.id
                     roomViewModel.roomDirectMessage(
-                        authToken, roomId,
+                        authTokenProvider(), roomId,
                         "Loved this room. Let's continue after the live.", receiverId
                     )
                     if (!targetId.isNullOrBlank()) navController.navigate(Screen.Chat.createRoute(targetId))
@@ -375,7 +375,7 @@ fun NavGraphBuilder.roomNavGraph(
                 onReportUser = { userId -> roomViewModel.reportUser(userId) },
                 onJoin = roomViewModel::join,
                 onOpenModes = {
-                    navController.navigate(Screen.RoomMode.createRoute(roomId, room.host?.id == currentUserId))
+                    navController.navigate(Screen.RoomMode.createRoute(roomId, room.host?.id == currentUserIdProvider()))
                 },
                 onOpenThemes = {
                     navController.navigate(Screen.ThemeGallery.createRoute(roomId))
@@ -398,7 +398,7 @@ fun NavGraphBuilder.roomNavGraph(
     ) { backStackEntry ->
         val roomId = backStackEntry.arguments?.getString("roomId") ?: ""
         ThemeGalleryScreen(
-            token = authToken,
+            token = authTokenProvider(),
             roomId = roomId,
             onBack = { navController.popBackStack() }
         )

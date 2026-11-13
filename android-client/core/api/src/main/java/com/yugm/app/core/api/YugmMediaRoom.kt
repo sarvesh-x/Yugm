@@ -41,6 +41,7 @@ object YugmMediaRoom {
             return
         }
         if (token.isBlank() || url.isBlank()) return
+        RoomAudioForegroundService.start(context)
         scope.launch {
             runCatching {
                 speakingObserver?.cancel()
@@ -59,6 +60,7 @@ object YugmMediaRoom {
                 Timber.tag(TAG).d("Connected to LiveKit media room")
             }.onFailure {
                 connected = false
+                RoomAudioForegroundService.stop(context)
                 Timber.tag(TAG).e(it, "LiveKit connection failed")
             }
         }
@@ -126,6 +128,7 @@ object YugmMediaRoom {
         room = null
         connected = false
         disconnectOpponent()
+        appContext?.let { RoomAudioForegroundService.stop(it) }
         Timber.tag(TAG).d("Disconnected from media room")
     }
 

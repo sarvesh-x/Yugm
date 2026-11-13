@@ -52,6 +52,13 @@ class WalletViewModel @Inject constructor(
         }
     }
 
+    fun refreshBalance(token: String) {
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { yugmApi.wallet(token) } }
+                .onSuccess { balance = it }
+        }
+    }
+
     var razorpayCheckoutData by mutableStateOf<RazorpayCheckoutData?>(null)
         private set
 

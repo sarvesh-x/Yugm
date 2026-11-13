@@ -9,6 +9,7 @@ import com.yugm.app.core.api.IYugmApi
 import com.yugm.app.core.model.CreatorDashboard
 import com.yugm.app.core.model.DailyCheckInResult
 import com.yugm.app.core.model.ExperienceHome
+import com.yugm.app.core.model.LevelOverview
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -24,6 +25,8 @@ class GrowthViewModel @Inject constructor(
         private set
     var creator by mutableStateOf<CreatorDashboard?>(null)
         private set
+    var levelOverview by mutableStateOf<LevelOverview?>(null)
+        private set
     var checkInResult by mutableStateOf<DailyCheckInResult?>(null)
         private set
     var isLoading by mutableStateOf(false)
@@ -38,6 +41,8 @@ class GrowthViewModel @Inject constructor(
                 runCatching { yugmApi.experienceHome(token) }
                     .onSuccess { home = it; error = null }
                     .onFailure { error = it.message ?: "Failed to load growth" }
+                runCatching { yugmApi.levelOverview(token) }
+                    .onSuccess { levelOverview = it }
                 runCatching { yugmApi.creatorDashboard(token) }
                     .onSuccess { creator = it }
             }

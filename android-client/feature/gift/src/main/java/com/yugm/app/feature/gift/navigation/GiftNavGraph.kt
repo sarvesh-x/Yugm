@@ -9,18 +9,18 @@ import com.yugm.app.feature.gift.screens.InventoryScreen
 
 fun NavGraphBuilder.giftNavGraph(
     navController: NavHostController,
-    authToken: String
+    authTokenProvider: () -> String
 ) {
     composable(route = Screen.GiftCatalog.route) {
         GiftCatalogScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() }
         )
     }
 
     composable(route = Screen.Inventory.route) {
         InventoryScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() }
         )
     }

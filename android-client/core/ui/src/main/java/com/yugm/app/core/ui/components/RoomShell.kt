@@ -157,7 +157,12 @@ fun RoomShell(
                         textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 13.sp),
                         cursorBrush = androidx.compose.ui.graphics.SolidColor(PrimaryPurple),
                         modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Write a room message" },
-                        decorationBox = { inner -> if (message.isBlank()) Text("Say something…", color = TextMuted, fontSize = 12.sp) else inner() }
+                        decorationBox = { inner ->
+                            Box {
+                                if (message.isBlank()) Text("Say something…", color = TextMuted, fontSize = 12.sp)
+                                inner()
+                            }
+                        }
                     )
                 }
                 Box(Modifier.size(48.dp).clip(CircleShape).background(Brush.linearGradient(listOf(PrimaryPurple, Pink))).semantics {

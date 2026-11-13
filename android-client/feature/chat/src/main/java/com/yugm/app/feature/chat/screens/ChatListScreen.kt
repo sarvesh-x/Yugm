@@ -269,7 +269,12 @@ private fun ChatTopTab(label: String, selected: Boolean, onClick: () -> Unit) {
 private fun ChatSearch(query: String, onQuery: (String) -> Unit, hint: String) {
     Row(Modifier.width(126.dp).height(42.dp).clip(CircleShape).background(ChatPanel).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Text("⌕", color = ChatMuted, fontSize = 20.sp)
-        BasicTextField(query, onQuery, singleLine = true, textStyle = TextStyle(color = ChatInk, fontSize = 13.sp), cursorBrush = androidx.compose.ui.graphics.SolidColor(ChatPurple), modifier = Modifier.weight(1f).padding(start = 5.dp), decorationBox = { inner -> if (query.isBlank()) Text(hint, color = Color(0xFFB6B8C5), fontSize = 13.sp) else inner() })
+        BasicTextField(query, onQuery, singleLine = true, textStyle = TextStyle(color = ChatInk, fontSize = 13.sp), cursorBrush = androidx.compose.ui.graphics.SolidColor(ChatPurple), modifier = Modifier.weight(1f).padding(start = 5.dp), decorationBox = { inner ->
+            Box {
+                if (query.isBlank()) Text(hint, color = Color(0xFFB6B8C5), fontSize = 13.sp)
+                inner()
+            }
+        })
     }
 }
 

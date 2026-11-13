@@ -15,16 +15,16 @@ import kotlinx.coroutines.launch
 
 fun NavGraphBuilder.walletNavGraph(
     navController: NavHostController,
-    authToken: String,
-    balance: Int,
-    currentUserId: String,
+    authTokenProvider: () -> String,
+    balanceProvider: () -> Int,
+    currentUserIdProvider: () -> String,
     onRechargeOrderReady: (RazorpayCheckoutData) -> Unit,
     onStartGooglePlayPurchase: (CoinPack) -> Unit,
 ) {
     composable(Screen.Wallet.route) {
         WalletScreen(
-            token = authToken,
-            initialBalance = balance,
+            token = authTokenProvider(),
+            initialBalance = balanceProvider(),
             onBack = { navController.popBackStack() },
             onOpenEarnings = { navController.navigate(Screen.Growth.route) },
             onBalanceChanged = { },
@@ -35,7 +35,7 @@ fun NavGraphBuilder.walletNavGraph(
 
     composable(Screen.Vip.route) {
         VipPlansScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() }
         )
     }
@@ -54,7 +54,7 @@ fun NavGraphBuilder.walletNavGraph(
             onBack = { navController.popBackStack() },
             onSubmit = { legalName, pan, upi ->
                 scope.launch {
-                    runCatching { com.yugm.app.core.api.YugmApi.submitCreatorPayoutKyc(authToken, legalName, pan, upiId = upi) }
+                    runCatching { com.yugm.app.core.api.YugmApi.submitCreatorPayoutKyc(authTokenProvider(), legalName, pan, upiId = upi) }
                         .onSuccess { navController.navigate(Screen.CreatorPayoutKycStatus.route) }
                         .onFailure { android.widget.Toast.makeText(context, it.message ?: "Payout verification failed", android.widget.Toast.LENGTH_SHORT).show() }
                 }
@@ -64,8 +64,8 @@ fun NavGraphBuilder.walletNavGraph(
 
     composable(Screen.CreatorPayoutKycStatus.route) {
         var status by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(com.yugm.app.core.model.CreatorPayoutKycStatus()) }
-        LaunchedEffect(authToken) {
-            runCatching { com.yugm.app.core.api.YugmApi.creatorPayoutKycStatus(authToken) }
+        LaunchedEffect(authTokenProvider()) {
+            runCatching { com.yugm.app.core.api.YugmApi.creatorPayoutKycStatus(authTokenProvider()) }
                 .onSuccess { status = it }
         }
         CreatorPayoutKycStatusScreen(status = status, onBack = { navController.popBackStack() })
@@ -77,12 +77,12 @@ fun NavGraphBuilder.walletNavGraph(
         var eligibility by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(com.yugm.app.core.model.WithdrawalEligibility()) }
         fun refreshEligibility() {
             scope.launch {
-                runCatching { com.yugm.app.core.api.YugmApi.withdrawalEligibility(authToken) }
+                runCatching { com.yugm.app.core.api.YugmApi.withdrawalEligibility(authTokenProvider()) }
                     .onSuccess { eligibility = it }
                     .onFailure { android.widget.Toast.makeText(context, it.message ?: "Could not load withdrawals", android.widget.Toast.LENGTH_SHORT).show() }
             }
         }
-        LaunchedEffect(authToken) { refreshEligibility() }
+        LaunchedEffect(authTokenProvider()) { refreshEligibility() }
         WithdrawalEligibilityScreen(
             balance = eligibility.balance,
             payoutKyc = eligibility.payoutKyc,
@@ -92,7 +92,7 @@ fun NavGraphBuilder.walletNavGraph(
             onOpenKyc = { navController.navigate(Screen.CreatorPayoutKycIntro.route) },
             onWithdraw = { amount ->
                 scope.launch {
-                    runCatching { com.yugm.app.core.api.YugmApi.requestWithdrawal(authToken, amount) }
+                    runCatching { com.yugm.app.core.api.YugmApi.requestWithdrawal(authTokenProvider(), amount) }
                         .onSuccess {
                             android.widget.Toast.makeText(context, it.message.ifBlank { "Withdrawal requested" }, android.widget.Toast.LENGTH_SHORT).show()
                             refreshEligibility()

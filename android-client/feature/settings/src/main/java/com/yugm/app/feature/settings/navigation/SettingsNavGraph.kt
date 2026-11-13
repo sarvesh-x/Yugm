@@ -15,15 +15,15 @@ import kotlinx.coroutines.launch
 
 fun NavGraphBuilder.settingsNavGraph(
     navController: NavHostController,
-    authToken: String,
-    currentUserId: String,
-    userName: String,
-    username: String,
+    authTokenProvider: () -> String,
+    currentUserIdProvider: () -> String,
+    userNameProvider: () -> String,
+    usernameProvider: () -> String,
     onLogout: () -> Unit,
 ) {
     composable(Screen.Safety.route) {
         SafetyScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onNavigateToBlocked = { navController.navigate(Screen.BlockedUsers.route) },
             onBack = { navController.popBackStack() }
         )
@@ -31,16 +31,16 @@ fun NavGraphBuilder.settingsNavGraph(
 
     composable(Screen.BlockedUsers.route) {
         BlockedUsersScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() }
         )
     }
 
     composable(Screen.Settings.route) {
         SettingsScreen(
-            token = authToken,
-            userName = userName,
-            username = username,
+            token = authTokenProvider(),
+            userName = userNameProvider(),
+            username = usernameProvider(),
             onLogout = {
                 onLogout()
                 navController.navigate(Screen.Login.route) {
@@ -50,7 +50,7 @@ fun NavGraphBuilder.settingsNavGraph(
             onBack = { navController.popBackStack() },
             onNavigateToSafety = { navController.navigate(Screen.Safety.route) },
             onNavigateToSupport = { navController.navigate(Screen.Support.route) },
-            onNavigateToProfileSetup = { navController.navigate(Screen.ProfileDetail.createRoute(currentUserId)) },
+            onNavigateToProfileSetup = { navController.navigate(Screen.ProfileDetail.createRoute(currentUserIdProvider())) },
             onNavigateToGames = { navController.navigate(Screen.Games.route) },
             onNavigateToClans = { navController.navigate(Screen.ClanList.route) },
             onNavigateToTrustVerification = { navController.navigate(Screen.TrustVerificationIntro.route) }
@@ -59,7 +59,7 @@ fun NavGraphBuilder.settingsNavGraph(
 
     composable(Screen.Support.route) {
         SupportScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() },
             onTicketClick = { ticketId -> navController.navigate(Screen.TicketDetail.createRoute(ticketId)) }
         )
@@ -71,7 +71,7 @@ fun NavGraphBuilder.settingsNavGraph(
     ) { backStackEntry ->
         val ticketId = backStackEntry.arguments?.getString("ticketId") ?: ""
         TicketDetailScreen(
-            token = authToken,
+            token = authTokenProvider(),
             ticketId = ticketId,
             onBack = { navController.popBackStack() }
         )

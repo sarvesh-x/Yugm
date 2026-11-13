@@ -65,6 +65,7 @@ fun GrowthScreen(
 
     val home = viewModel.home
     val creator = viewModel.creator
+    val levelOverview = viewModel.levelOverview
     val isLoading = viewModel.isLoading
     val error = viewModel.error
 
@@ -95,6 +96,49 @@ fun GrowthScreen(
                 val creatorSteps = creator?.nextSteps.orEmpty()
 
                 item {
+                    val level = payload.level
+                    val progress = if (level.requiredXp > 0) (level.progressXp.toFloat() / level.requiredXp).coerceIn(0f, 1f) else 1f
+                    GlassCard(Modifier.fillMaxWidth()) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column {
+                                Text("Level ${level.level} · ${level.title}", color = Gold, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                                Text(if (level.nextLevel != null) "${level.requiredXp - level.progressXp} XP to Level ${level.nextLevel}" else "Max level reached", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 3.dp))
+                            }
+                            val reward = levelOverview?.milestones?.firstOrNull { it.level == level.nextLevel }?.coinReward ?: 0
+                            if (reward > 0) Text("+$reward coins", color = Gold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                        LinearProgressIndicator(
+                            progress = { progress },
+                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp).height(7.dp),
+                            color = Gold,
+                            trackColor = TextMuted.copy(alpha = 0.24f)
+                        )
+                        Text("${level.progressXp} / ${level.requiredXp} XP", color = TextMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 5.dp))
+                    }
+                }
+                levelOverview?.let { overview ->
+                    val preferredEvents = listOf("DAILY_CHECKIN", "ROOM_JOIN", "ROOM_CREATE", "CHAT_MESSAGE")
+                    val earningEvents = preferredEvents.mapNotNull { key -> overview.xpEvents.firstOrNull { it.key == key } }
+                    if (earningEvents.isNotEmpty()) {
+                        item {
+                            GlassCard(Modifier.fillMaxWidth()) {
+                                Text("Earn XP", color = TextPrimary, fontWeight = FontWeight.Black)
+                                earningEvents.chunked(2).forEach { rowEvents ->
+                                    Row(Modifier.fillMaxWidth().padding(top = 9.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        rowEvents.forEach { event ->
+                                            Column(Modifier.weight(1f)) {
+                                                Text(event.name, color = TextMuted, fontSize = 11.sp)
+                                                Text("+${event.xp} XP", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                        if (rowEvents.size == 1) Spacer(Modifier.weight(1f))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                item {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                         StatCard("Profile", "${payload.profileCompletion.percent}%", Modifier.weight(1f))
                         StatCard("Level", "${payload.level.level}", Modifier.weight(1f))
@@ -122,6 +166,9 @@ fun GrowthScreen(
                             }
                         }
                         Text("$streakCount-day streak", color = Gold, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                        levelOverview?.nextMilestone?.let { milestone ->
+                            Text("Next reward: $milestone days · ${levelOverview.nextMilestoneReward} coins", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 3.dp))
+                        }
                         Button(
                             onClick = {
                                 viewModel.checkIn(token) { result ->
@@ -130,8 +177,9 @@ fun GrowthScreen(
                                 }
                             },
                             modifier = Modifier.padding(top = 10.dp),
-                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Gold)
-                        ) { Text("Check In", color = TextPrimary, fontWeight = FontWeight.Black) }
+                            enabled = payload.level.canDailyCheckIn,
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Gold, disabledContainerColor = BorderColor)
+                        ) { Text(if (payload.level.canDailyCheckIn) "Check in today" else "Checked in today", color = TextPrimary, fontWeight = FontWeight.Black) }
                         checkInResult?.let { result ->
                             if (result.claimed) {
                                 Text("Checked in! Streak: ${result.streak}", color = Gold, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
@@ -181,14 +229,6 @@ fun GrowthScreen(
                                 Text("${item.rewardCoins} coins", color = Gold, fontWeight = FontWeight.Bold)
                             }
                         }
-                    }
-                }
-                item {
-                    GlassCard(Modifier.fillMaxWidth()) {
-                        Text("Next Best Action", color = Gold, fontWeight = FontWeight.Black)
-                        val next = payload.achievements.firstOrNull { !it.complete }
-                        Text(next?.description ?: "You are caught up. Schedule a room to build momentum.", color = TextPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
-                        Text("Unread notifications: ${payload.unreadNotifications} / Scheduled rooms: ${payload.scheduledRooms.size}", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
                     }
                 }
                 if (payload.userRole in setOf("HOST", "MODERATOR", "ADMIN")) {

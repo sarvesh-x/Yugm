@@ -125,16 +125,16 @@ fun NavGraph(
         )
         discoverNavGraph(
             navController = navController,
-            authToken = mainViewModel.authToken,
-            currentUserId = mainViewModel.currentUserId
+            authTokenProvider = { mainViewModel.authToken },
+            currentUserIdProvider = { mainViewModel.currentUserId }
         )
         roomNavGraph(
             navController = navController,
-            authToken = mainViewModel.authToken,
-            currentUserId = mainViewModel.currentUserId,
-            userName = mainViewModel.userName,
-            username = mainViewModel.username,
-            balance = mainViewModel.balance,
+            authTokenProvider = { mainViewModel.authToken },
+            currentUserIdProvider = { mainViewModel.currentUserId },
+            userNameProvider = { mainViewModel.userName },
+            usernameProvider = { mainViewModel.username },
+            balanceProvider = { mainViewModel.balance },
             onMinimizeRoom = { roomId ->
                 minimizedRoomId = roomId
                 navController.navigate(Screen.Discover.route) { launchSingleTop = true }
@@ -142,8 +142,8 @@ fun NavGraph(
         )
         profileNavGraph(
             navController = navController,
-            authToken = mainViewModel.authToken,
-            currentUserId = mainViewModel.currentUserId,
+            authTokenProvider = { mainViewModel.authToken },
+            currentUserIdProvider = { mainViewModel.currentUserId },
             onProfileUpdated = mainViewModel::validateAndUpdate,
             onSettings = { navController.navigate(Screen.Settings.route) },
             onOpenStore = { navController.navigate(Screen.Cosmetics.route) },
@@ -155,39 +155,39 @@ fun NavGraph(
         )
         socialNavGraph(
             navController = navController,
-            authToken = mainViewModel.authToken,
-            currentUserId = mainViewModel.currentUserId
+            authTokenProvider = { mainViewModel.authToken },
+            currentUserIdProvider = { mainViewModel.currentUserId }
         )
         walletNavGraph(
             navController = navController,
-            authToken = mainViewModel.authToken,
-            balance = mainViewModel.balance,
-            currentUserId = mainViewModel.currentUserId,
+            authTokenProvider = { mainViewModel.authToken },
+            balanceProvider = { mainViewModel.balance },
+            currentUserIdProvider = { mainViewModel.currentUserId },
             onRechargeOrderReady = onRechargeOrderReady,
             onStartGooglePlayPurchase = onStartGooglePlayPurchase
         )
         settingsNavGraph(
             navController = navController,
-            authToken = mainViewModel.authToken,
-            currentUserId = mainViewModel.currentUserId,
-            userName = mainViewModel.userName,
-            username = mainViewModel.username,
+            authTokenProvider = { mainViewModel.authToken },
+            currentUserIdProvider = { mainViewModel.currentUserId },
+            userNameProvider = { mainViewModel.userName },
+            usernameProvider = { mainViewModel.username },
             onLogout = { mainViewModel.logout() }
         )
-        roomModesNavGraph(navController, mainViewModel.authToken, mainViewModel.currentUserId)
-        moderationNavGraph(navController, mainViewModel.authToken)
-        missionsNavGraph(navController, mainViewModel.authToken)
-        eventsNavGraph(navController, mainViewModel.authToken, mainViewModel.currentUserId)
-        giftNavGraph(navController, mainViewModel.authToken)
+        roomModesNavGraph(navController, { mainViewModel.authToken }, { mainViewModel.currentUserId })
+        moderationNavGraph(navController, { mainViewModel.authToken })
+        missionsNavGraph(navController, { mainViewModel.authToken })
+        eventsNavGraph(navController, { mainViewModel.authToken }, { mainViewModel.currentUserId })
+        giftNavGraph(navController, { mainViewModel.authToken })
         chatNavGraph(
             navController = navController,
-            authToken = mainViewModel.authToken,
-            currentUserId = mainViewModel.currentUserId
+            authTokenProvider = { mainViewModel.authToken },
+            currentUserIdProvider = { mainViewModel.currentUserId }
         )
         creatorNavGraph(
             navController = navController,
-            authToken = mainViewModel.authToken,
-            currentUserId = mainViewModel.currentUserId
+            authTokenProvider = { mainViewModel.authToken },
+            currentUserIdProvider = { mainViewModel.currentUserId }
         )
 
         composable(Screen.Wingman.route) {

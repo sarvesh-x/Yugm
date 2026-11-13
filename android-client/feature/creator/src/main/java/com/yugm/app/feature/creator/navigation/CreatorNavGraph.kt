@@ -8,12 +8,12 @@ import com.yugm.app.feature.creator.screens.CreatorDashboardScreen
 
 fun NavGraphBuilder.creatorNavGraph(
     navController: NavHostController,
-    authToken: String,
-    currentUserId: String
+    authTokenProvider: () -> String,
+    currentUserIdProvider: () -> String
 ) {
     composable(Screen.CreatorDashboard.route) {
         CreatorDashboardScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() },
             onWithdrawal = { navController.navigate(Screen.WithdrawalEligibility.route) },
             onKyc = { navController.navigate(Screen.CreatorPayoutKycIntro.route) }

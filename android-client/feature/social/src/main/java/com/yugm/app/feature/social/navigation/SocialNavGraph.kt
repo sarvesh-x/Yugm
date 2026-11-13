@@ -16,12 +16,12 @@ import kotlinx.coroutines.launch
 
 fun NavGraphBuilder.socialNavGraph(
     navController: NavHostController,
-    authToken: String,
-    currentUserId: String,
+    authTokenProvider: () -> String,
+    currentUserIdProvider: () -> String,
 ) {
     composable(Screen.DatingDiscovery.route) {
         DatingDiscoveryScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onNavigateToChat = { partnerId ->
                 navController.navigate(Screen.Chat.createRoute(partnerId))
             },
@@ -34,7 +34,7 @@ fun NavGraphBuilder.socialNavGraph(
             onLive = { navController.navigateTopLevel(Screen.VoiceRooms.route) },
             onWallet = { navController.navigate(Screen.Wallet.route) },
             onSelfProfile = {
-                if (currentUserId.isNotBlank()) navController.navigateTopLevel(Screen.ProfileDetail.createRoute(currentUserId))
+                if (currentUserIdProvider().isNotBlank()) navController.navigateTopLevel(Screen.ProfileDetail.createRoute(currentUserIdProvider()))
                 else navController.navigate(Screen.ProfileSetup.route)
             }
         )
@@ -42,14 +42,14 @@ fun NavGraphBuilder.socialNavGraph(
 
     composable(Screen.GiftLeaderboard.route) {
         GiftLeaderboardScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() }
         )
     }
 
     composable(Screen.Wishlist.route) {
         WishlistScreen(
-            token = authToken,
+            token = authTokenProvider(),
             userId = null,
             onBack = { navController.popBackStack() }
         )
@@ -57,14 +57,14 @@ fun NavGraphBuilder.socialNavGraph(
 
     composable(Screen.Referral.route) {
         ReferralScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() }
         )
     }
 
     composable(Screen.GroupChats.route) {
         GroupChatScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() },
             onOpenGroup = { groupId ->
                 navController.navigate(Screen.GroupChatDetail.createRoute(groupId))
@@ -84,7 +84,7 @@ fun NavGraphBuilder.socialNavGraph(
 
         fun loadMessages() {
             scope.launch {
-                runCatching { com.yugm.app.core.api.YugmApi.groupMessages(authToken, groupId) }
+                runCatching { com.yugm.app.core.api.YugmApi.groupMessages(authTokenProvider(), groupId) }
                     .onSuccess {
                         messages.clear()
                         messages.addAll(it)
@@ -104,7 +104,7 @@ fun NavGraphBuilder.socialNavGraph(
                 scope.launch {
                     runCatching {
                         com.yugm.app.core.api.YugmApi.sendGroupMessage(
-                            token = authToken,
+                            token = authTokenProvider(),
                             groupId = groupId,
                             message = messageText
                         )
@@ -125,7 +125,7 @@ fun NavGraphBuilder.socialNavGraph(
     ) { backStackEntry ->
         val userId = backStackEntry.arguments?.getString("userId") ?: ""
         StoryViewerScreen(
-            token = authToken,
+            token = authTokenProvider(),
             userId = userId,
             onBack = { navController.popBackStack() }
         )
@@ -137,7 +137,7 @@ fun NavGraphBuilder.socialNavGraph(
     ) { backStackEntry ->
         val roomId = backStackEntry.arguments?.getString("roomId") ?: ""
         WatchPartyPlayerScreen(
-            token = authToken,
+            token = authTokenProvider(),
             roomId = roomId,
             onBack = { navController.popBackStack() },
             onStop = { navController.popBackStack() }
@@ -146,7 +146,7 @@ fun NavGraphBuilder.socialNavGraph(
 
     composable(Screen.ScheduledCalendar.route) {
         ScheduledCalendarScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() },
             onOpenRoom = { roomId -> navController.navigate(Screen.RoomLobby.createRoute(roomId)) }
         )
@@ -162,7 +162,7 @@ fun NavGraphBuilder.socialNavGraph(
 
     composable(Screen.Recordings.route) {
         RecordingsScreen(
-            token = authToken,
+            token = authTokenProvider(),
             roomId = null,
             onBack = { navController.popBackStack() },
             onPlayRecording = { recordingId ->
@@ -180,7 +180,7 @@ fun NavGraphBuilder.socialNavGraph(
         var recording by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<com.yugm.app.core.model.RoomRecording?>(null) }
         var recordingError by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
         LaunchedEffect(recordingId) {
-            runCatching { com.yugm.app.core.api.YugmApi.recordingDetail(authToken, recordingId) }
+            runCatching { com.yugm.app.core.api.YugmApi.recordingDetail(authTokenProvider(), recordingId) }
                 .onSuccess { recording = it }
                 .onFailure { recordingError = true; android.widget.Toast.makeText(recordingContext, it.message ?: "Failed to load recording", android.widget.Toast.LENGTH_SHORT).show() }
         }
@@ -196,7 +196,7 @@ fun NavGraphBuilder.socialNavGraph(
 
     composable(Screen.Hosts.route) {
         HostsScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() },
             onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) }
         )
@@ -204,14 +204,14 @@ fun NavGraphBuilder.socialNavGraph(
 
     composable(Screen.MoodActivity.route) {
         MoodActivityScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() }
         )
     }
 
     composable(Screen.WaveInbox.route) {
         WaveInboxScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() },
             onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) }
         )
@@ -219,14 +219,14 @@ fun NavGraphBuilder.socialNavGraph(
 
     composable(Screen.DailyQuestion.route) {
         DailyQuestionScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() }
         )
     }
 
     composable(Screen.VoicePolls.route) {
         VoicePollScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() },
             onPollDetail = { pollId -> navController.navigate(Screen.VoicePollDetail.createRoute(pollId)) }
         )
@@ -238,8 +238,8 @@ fun NavGraphBuilder.socialNavGraph(
     ) { backStackEntry ->
         val pollId = backStackEntry.arguments?.getString("pollId") ?: ""
         VoicePollDetailScreen(
-            token = authToken,
-            userId = currentUserId,
+            token = authTokenProvider(),
+            userId = currentUserIdProvider(),
             pollId = pollId,
             onBack = { navController.popBackStack() }
         )
@@ -247,14 +247,14 @@ fun NavGraphBuilder.socialNavGraph(
 
     composable(Screen.Countdowns.route) {
         CountdownScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() }
         )
     }
 
     composable(Screen.Games.route) {
         GamesScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() },
             onOpenChat = { partnerId -> navController.navigate(Screen.Chat.createRoute(partnerId)) }
         )
@@ -262,7 +262,7 @@ fun NavGraphBuilder.socialNavGraph(
 
     composable(Screen.Friends.route) {
         FriendsScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() },
             onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) }
         )
@@ -270,7 +270,7 @@ fun NavGraphBuilder.socialNavGraph(
 
     composable(Screen.Notifications.route) {
         NotificationsScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() },
             onOpenTarget = { notification ->
                 when {
@@ -284,7 +284,7 @@ fun NavGraphBuilder.socialNavGraph(
 
     composable(Screen.Growth.route) {
         GrowthScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() },
             onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
             onPayoutVerification = { navController.navigate(Screen.CreatorPayoutKycIntro.route) },
@@ -295,7 +295,7 @@ fun NavGraphBuilder.socialNavGraph(
 
     composable(Screen.Matches.route) {
         MatchesScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() },
             onOpenChat = { partnerId -> navController.navigate(Screen.Chat.createRoute(partnerId)) },
             onDiscover = { navController.navigateTopLevel(Screen.Discover.route) },
@@ -304,7 +304,7 @@ fun NavGraphBuilder.socialNavGraph(
             onWallet = { navController.navigateTopLevel(Screen.Wallet.route) },
             onLive = { navController.navigateTopLevel(Screen.VoiceRooms.route) },
             onProfile = {
-                if (currentUserId.isNotBlank()) navController.navigateTopLevel(Screen.ProfileDetail.createRoute(currentUserId))
+                if (currentUserIdProvider().isNotBlank()) navController.navigateTopLevel(Screen.ProfileDetail.createRoute(currentUserIdProvider()))
                 else navController.navigate(Screen.ProfileSetup.route)
             }
         )
@@ -312,7 +312,7 @@ fun NavGraphBuilder.socialNavGraph(
 
     composable(Screen.Subscriptions.route) {
         SubscriptionsScreen(
-            token = authToken,
+            token = authTokenProvider(),
             onBack = { navController.popBackStack() },
             onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) }
         )
