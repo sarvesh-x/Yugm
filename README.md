@@ -1,6 +1,6 @@
 # Yugm
 
-Yugm is a production-minded MVP for a Gen Z Indian live social discovery app.
+Yugm is a production-minded MVP for an Indian live social discovery app.
 
 Tagline: **Match the vibe.**
 

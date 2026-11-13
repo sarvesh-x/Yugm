@@ -478,7 +478,7 @@ roomsRouter.post("/:id/approve-speaker", requireAuth, asyncHandler(async (req: A
   const request = await SpeakerRequest.findOneAndUpdate({ roomId: room._id, userId, status: "PENDING" }, { status: "APPROVED" }, { new: true });
   if (!request) throw new HttpError(404, "Pending speaker request not found", ErrorCode.NOT_FOUND);
   await Room.findByIdAndUpdate(room._id, { $addToSet: { speakerIds: userId } });
-  await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { role: "SPEAKER", micEnabled: true, seatIndex });
+  await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { role: "SPEAKER", micEnabled: true, moderatorMuted: false, seatIndex });
   emitRoom(room._id.toString(), socketEvents.roomSpeakerApprove, { userId, seatIndex });
   sendOk(res, { approved: true });
 }));
@@ -494,7 +494,7 @@ roomsRouter.post("/:id/take-seat", requireAuth, requireNotMuted, validateBody(z.
   const seatIndex = await findOpenSeat(room, req.body.seatIndex, userId);
   if (wasAudience) {
     await Room.findByIdAndUpdate(room._id, { $addToSet: { speakerIds: userId } });
-    await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { role: "SPEAKER", micEnabled: true, seatIndex });
+    await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { role: "SPEAKER", micEnabled: true, moderatorMuted: false, seatIndex });
     await SpeakerRequest.updateOne({ roomId: room._id, userId, status: "PENDING" }, { status: "APPROVED" });
     emitRoom(room._id.toString(), socketEvents.roomSpeakerApprove, { userId, seatIndex });
   } else {
@@ -514,7 +514,7 @@ roomsRouter.post("/:id/invite-speaker", requireAuth, asyncHandler(async (req: Au
   if (participant.role !== "AUDIENCE") throw new HttpError(409, "User already has a speaker seat", ErrorCode.CONFLICT);
   const seatIndex = await findOpenSeat(room);
   await Room.findByIdAndUpdate(room._id, { $addToSet: { speakerIds: userId } });
-  await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { role: "SPEAKER", micEnabled: true, seatIndex });
+  await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { role: "SPEAKER", micEnabled: true, moderatorMuted: false, seatIndex });
   await SpeakerRequest.updateOne({ roomId: room._id, userId, status: "PENDING" }, { status: "APPROVED" });
   emitRoom(room._id.toString(), socketEvents.roomSpeakerApprove, { userId, seatIndex });
   emitRoom(room._id.toString(), socketEvents.roomParticipantUpdate, { roomId: room.id, action: "speaker_invited", userId, seatIndex });
@@ -536,10 +536,28 @@ roomsRouter.post("/:id/mute-user", requireAuth, asyncHandler(async (req: AuthReq
   const userId = objectIdBody(req.body.userId, "user ID");
   assertNotHostTarget(room, userId, "mute");
   if (!isHost && roomObjectIdListIncludes(room.roomAdminIds, userId)) throw new HttpError(403, "Room admins cannot mute each other", ErrorCode.FORBIDDEN);
-  const participant = await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { micEnabled: false }, { new: true });
+  const participant = await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { micEnabled: false, moderatorMuted: true }, { new: true });
   if (!participant) throw new HttpError(404, "Active participant not found", ErrorCode.NOT_FOUND);
   emitRoom(room._id.toString(), socketEvents.roomUserMute, { userId });
   sendOk(res, { muted: true });
+}));
+
+roomsRouter.post("/:id/mic-state", requireAuth, requireNotMuted, validateBody(z.object({ enabled: z.boolean() })), asyncHandler(async (req: AuthRequest, res) => {
+  const room = await getRoomOrThrow(req.params.id);
+  const participant = await RoomParticipant.findOne({ roomId: room._id, userId: req.user!.id, leftAt: null });
+  if (!participant) throw new HttpError(403, "You are not an active room participant", ErrorCode.FORBIDDEN);
+  if (!["HOST", "SPEAKER", "MODERATOR"].includes(participant.role)) throw new HttpError(403, "You do not have an active mic seat", ErrorCode.FORBIDDEN);
+  if (req.body.enabled && participant.moderatorMuted) throw new HttpError(423, "The host or an admin muted your microphone", ErrorCode.FORBIDDEN);
+  participant.micEnabled = req.body.enabled;
+  await participant.save();
+  emitRoom(room._id.toString(), socketEvents.roomParticipantUpdate, {
+    roomId: room.id,
+    action: "mic_state_changed",
+    userId: req.user!.id,
+    micEnabled: participant.micEnabled,
+    moderatorMuted: participant.moderatorMuted
+  });
+  sendOk(res, { micEnabled: participant.micEnabled, moderatorMuted: participant.moderatorMuted });
 }));
 
 roomsRouter.post("/:id/remove-speaker", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
@@ -549,7 +567,7 @@ roomsRouter.post("/:id/remove-speaker", requireAuth, asyncHandler(async (req: Au
   if (!isHost && roomObjectIdListIncludes(room.roomAdminIds, userId)) throw new HttpError(403, "Room admins cannot remove each other from the mic", ErrorCode.FORBIDDEN);
   const participant = await RoomParticipant.findOneAndUpdate(
     { roomId: room._id, userId, leftAt: null, role: { $in: ["SPEAKER", "MODERATOR"] } },
-    { role: "AUDIENCE", micEnabled: false, $unset: { seatIndex: 1 } },
+    { role: "AUDIENCE", micEnabled: false, moderatorMuted: false, $unset: { seatIndex: 1 } },
     { new: true }
   );
   if (!participant) throw new HttpError(404, "Active speaker not found", ErrorCode.NOT_FOUND);

@@ -18,6 +18,7 @@ android-client/.idea/
 /build
 android-client/build
 android-client/app/build
+android-client/app/release/
 /captures
 .externalNativeBuild
 .cxx

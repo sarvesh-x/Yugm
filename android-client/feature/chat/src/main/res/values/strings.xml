@@ -1,0 +1,21 @@
+<resources>
+    <string name="a11y_back">Back</string>
+    <string name="a11y_conversation_options">Conversation options</string>
+    <string name="a11y_report_conversation">Report this conversation</string>
+    <string name="a11y_block_person">Block this person</string>
+    <string name="a11y_retry_messages">Retry loading messages</string>
+    <string name="a11y_profile_picture">Profile picture for %1$s</string>
+    <string name="a11y_insert_emoji">Insert %1$s</string>
+    <string name="a11y_message_field">Message</string>
+    <string name="a11y_toggle_emoji_picker">Toggle emoji picker</string>
+    <string name="a11y_attach_photo">Attach a photo</string>
+    <string name="a11y_send_gift">Send a gift</string>
+    <string name="a11y_send_message">Send message</string>
+    <string name="a11y_new_match">New match, %1$s</string>
+    <string name="a11y_open_chat_with">Open chat with %1$s</string>
+    <string name="a11y_open_conversation_with">Open conversation with %1$s</string>
+    <string name="a11y_person_online">%1$s, online</string>
+    <string name="a11y_person_offline">%1$s, offline</string>
+    <string name="a11y_unread_message_suffix">, unread message</string>
+    <string name="a11y_default_match">your match</string>
+</resources>

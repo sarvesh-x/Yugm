@@ -94,16 +94,23 @@ export async function initSocket(server: HttpServer) {
       socket.broadcast.emit(socketEvents.userOnline, { userId });
     }
 
-    socket.on(socketEvents.roomJoin, async ({ roomId }) => {
+    socket.on(socketEvents.roomJoin, async ({ roomId }: { roomId?: string }, acknowledge?: (result: { joined: boolean; reason?: string }) => void) => {
       const socketUserId = socket.data.userId as string | undefined;
-      if (!socketUserId || !/^[0-9a-fA-F]{24}$/.test(String(roomId))) return;
-      const room = await Room.findById(roomId).select("hostId status visibility").lean();
-      if (!room || room.status !== "LIVE") return;
-      const blocked = await Block.exists({ blockerId: room.hostId, blockedUserId: socketUserId });
-      if (blocked) return;
-      const participant = await RoomParticipant.exists({ roomId, userId: socketUserId, leftAt: null });
-      if (!participant) return;
-      socket.join(`room:${roomId}`);
+      const reject = (reason: string) => acknowledge?.({ joined: false, reason });
+      try {
+        if (!socketUserId || !/^[0-9a-fA-F]{24}$/.test(String(roomId))) return reject("invalid_request");
+        const room = await Room.findById(roomId).select("hostId status visibility").lean();
+        if (!room || room.status !== "LIVE") return reject("room_unavailable");
+        const blocked = await Block.exists({ blockerId: room.hostId, blockedUserId: socketUserId });
+        if (blocked) return reject("access_denied");
+        const participant = await RoomParticipant.exists({ roomId, userId: socketUserId, leftAt: null });
+        if (!participant) return reject("not_a_participant");
+        await socket.join(`room:${roomId}`);
+        acknowledge?.({ joined: true });
+      } catch (error) {
+        console.warn("Socket room join failed:", error instanceof Error ? error.message : String(error));
+        reject("join_failed");
+      }
     });
 
     socket.on(socketEvents.roomLeave, ({ roomId }) => {

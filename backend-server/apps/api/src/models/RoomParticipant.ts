@@ -6,6 +6,7 @@ export interface IRoomParticipant extends mongoose.Document {
   userId: mongoose.Types.ObjectId;
   role: RoomParticipantRole;
   micEnabled: boolean;
+  moderatorMuted: boolean;
   seatIndex?: number;
   cameraEnabled: boolean;
   joinedAt: Date;
@@ -17,6 +18,7 @@ const roomParticipantSchema = new Schema<IRoomParticipant>({
   userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
   role: { type: String, enum: ["HOST", "SPEAKER", "AUDIENCE", "MODERATOR"], default: "AUDIENCE" },
   micEnabled: { type: Boolean, default: true },
+  moderatorMuted: { type: Boolean, default: false },
   seatIndex: { type: Number, min: 0 },
   cameraEnabled: { type: Boolean, default: true },
   joinedAt: { type: Date, default: Date.now },

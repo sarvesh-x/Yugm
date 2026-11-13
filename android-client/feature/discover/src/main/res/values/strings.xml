@@ -1,0 +1,12 @@
+<resources>
+    <string name="a11y_notifications">Notifications</string>
+    <string name="a11y_notifications_unread">Notifications, %1$d unread</string>
+    <string name="a11y_create_room">Create a room</string>
+    <string name="a11y_your_profile">Your profile</string>
+    <string name="a11y_host_online">%1$s, online</string>
+    <string name="a11y_host_away">%1$s, away</string>
+    <string name="a11y_open_profile">Open %1$s profile</string>
+    <string name="a11y_unfollow_user">Unfollow %1$s</string>
+    <string name="a11y_follow_user">Follow %1$s</string>
+    <string name="a11y_host_followers">%1$s, %2$s followers</string>
+</resources>
