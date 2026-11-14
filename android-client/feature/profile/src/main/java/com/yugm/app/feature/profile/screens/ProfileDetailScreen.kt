@@ -26,6 +26,8 @@ import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,11 +49,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
@@ -104,12 +109,15 @@ fun ProfileDetailScreen(
     var liked by remember { mutableStateOf(false) }
     var profileRefreshing by remember { mutableStateOf(false) }
     var vibeMatch by remember { mutableStateOf<com.yugm.app.core.model.VibeMatchResponse?>(null) }
-    var showNameDialog by remember { mutableStateOf(false) }
+    var showEditProfileScreen by remember { mutableStateOf(false) }
     var nameDraft by remember { mutableStateOf("") }
     var usernameDraft by remember { mutableStateOf("") }
     var bioDraft by remember { mutableStateOf("") }
     var vibeLineDraft by remember { mutableStateOf("") }
     var cityDraft by remember { mutableStateOf("") }
+    var stateDraft by remember { mutableStateOf("") }
+    var genderDraft by remember { mutableStateOf("") }
+    var ageDraft by remember { mutableStateOf("") }
     var interestsDraft by remember { mutableStateOf<List<String>>(emptyList()) }
     var hobbiesDraft by remember { mutableStateOf<List<String>>(emptyList()) }
     var customInterestInput by remember { mutableStateOf("") }
@@ -122,10 +130,13 @@ fun ProfileDetailScreen(
             bioDraft = it.bio
             vibeLineDraft = it.vibeLine
             cityDraft = it.city
+            stateDraft = it.state
+            genderDraft = it.gender
+            ageDraft = it.age.takeIf { age -> age > 0 }?.toString().orEmpty()
             interestsDraft = it.interests
             hobbiesDraft = it.hobbies
         }
-        showNameDialog = true
+        showEditProfileScreen = true
     }
     var showPasswordDialog by remember { mutableStateOf(false) }
     var currentPassword by remember { mutableStateOf("") }
@@ -273,7 +284,8 @@ fun ProfileDetailScreen(
                             compatibilityScore = vibeMatch?.compatibility?.score?.takeUnless { isOwnProfile },
                             isOwnProfile = isOwnProfile,
                             onEditProfile = if (isOwnProfile) openProfileEditor else null,
-                            onOpenSocialList = onOpenSocialList
+                            onOpenSocialList = onOpenSocialList,
+                            onOpenWallet = onOpenWallet
                         )
                     }
                 }
@@ -510,217 +522,29 @@ fun ProfileDetailScreen(
     }
     }
 
-    if (showNameDialog) {
-        AlertDialog(
-            onDismissRequest = { if (!accountBusy) showNameDialog = false },
-            title = { Text("Edit Vibe Profile", color = TextPrimary, fontWeight = FontWeight.Black) },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 480.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text("Update your vibe, bio, interests and hobbies so people match your frequency.", color = TextMuted, fontSize = 12.sp)
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedButton(
-                            onClick = { avatarPicker.launch("image/*") },
-                            enabled = !accountBusy,
-                            modifier = Modifier.weight(1f),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
-                        ) {
-                            Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(5.dp))
-                            Text("Change avatar", fontSize = 11.sp, maxLines = 1)
-                        }
-                        OutlinedButton(
-                            onClick = {
-                                showNameDialog = false
-                                accountError = null
-                                showPasswordDialog = true
-                            },
-                            enabled = !accountBusy,
-                            modifier = Modifier.weight(1f),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
-                        ) {
-                            Icon(Icons.Filled.Key, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(5.dp))
-                            Text("Change password", fontSize = 11.sp, maxLines = 1)
-                        }
-                    }
-
-                    OutlinedTextField(
-                        value = nameDraft,
-                        onValueChange = { nameDraft = it.take(60); accountError = null },
-                        label = { Text("Display name") },
-                        singleLine = true,
-                        isError = accountError != null,
-                        supportingText = { Text("${nameDraft.length}/60") }
-                    )
-                    OutlinedTextField(
-                        value = usernameDraft,
-                        onValueChange = {
-                            usernameDraft = it.take(24).filter { char -> char in 'a'..'z' || char in 'A'..'Z' || char in '0'..'9' || char == '_' || char == '.' }
-                            accountError = null
-                        },
-                        label = { Text("Username") },
-                        prefix = { Text("@") },
-                        singleLine = true,
-                        supportingText = { Text("3–24 letters, numbers, dots, or underscores") }
-                    )
-                    OutlinedTextField(
-                        value = vibeLineDraft,
-                        onValueChange = { vibeLineDraft = it.take(120); accountError = null },
-                        label = { Text("Short vibe line") },
-                        singleLine = true,
-                        supportingText = { Text("${vibeLineDraft.length}/120") }
-                    )
-                    OutlinedTextField(
-                        value = bioDraft,
-                        onValueChange = { bioDraft = it.take(180); accountError = null },
-                        label = { Text("Bio") },
-                        minLines = 2,
-                        maxLines = 4,
-                        supportingText = { Text("${bioDraft.length}/180") }
-                    )
-                    OutlinedTextField(
-                        value = cityDraft,
-                        onValueChange = { cityDraft = it.take(60); accountError = null },
-                        label = { Text("City / Location") },
-                        singleLine = true,
-                        supportingText = { Text("${cityDraft.length}/60") }
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    // Interests Selector
-                    Text("Interests & Passions 🎯", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        PresetInterests.forEach { interest ->
-                            val isSelected = interestsDraft.contains(interest)
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSelected) PrimaryPurple else Color(0x22FFFFFF))
-                                    .border(1.dp, if (isSelected) Gold else Color(0x33FFFFFF), RoundedCornerShape(8.dp))
-                                    .clickable {
-                                        interestsDraft = if (isSelected) interestsDraft - interest else interestsDraft + interest
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    interest,
-                                    color = if (isSelected) Color.White else TextMuted,
-                                    fontSize = 11.sp,
-                                    fontWeight = if (isSelected) FontWeight.Black else FontWeight.Medium
-                                )
-                            }
-                        }
-                    }
-
-                    // Custom Interest input
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = customInterestInput,
-                            onValueChange = { customInterestInput = it.take(24) },
-                            label = { Text("Add custom interest", fontSize = 11.sp) },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Button(
-                            onClick = {
-                                if (customInterestInput.isNotBlank()) {
-                                    val cleaned = customInterestInput.trim()
-                                    if (!interestsDraft.contains(cleaned)) {
-                                        interestsDraft = interestsDraft + cleaned
-                                    }
-                                    customInterestInput = ""
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryPurple),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("+", fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // Hobbies Selector
-                    Text("Hobbies & Pastimes 🎸", color = SaffronGold, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        PresetHobbies.forEach { hobby ->
-                            val isSelected = hobbiesDraft.contains(hobby)
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSelected) SaffronGold.copy(alpha = 0.35f) else Color(0x22FFFFFF))
-                                    .border(1.dp, if (isSelected) SaffronGold else Color(0x33FFFFFF), RoundedCornerShape(8.dp))
-                                    .clickable {
-                                        hobbiesDraft = if (isSelected) hobbiesDraft - hobby else hobbiesDraft + hobby
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    hobby,
-                                    color = if (isSelected) Color.White else TextMuted,
-                                    fontSize = 11.sp,
-                                    fontWeight = if (isSelected) FontWeight.Black else FontWeight.Medium
-                                )
-                            }
-                        }
-                    }
-
-                    // Custom Hobby input
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = customHobbyInput,
-                            onValueChange = { customHobbyInput = it.take(24) },
-                            label = { Text("Add custom hobby", fontSize = 11.sp) },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Button(
-                            onClick = {
-                                if (customHobbyInput.isNotBlank()) {
-                                    val cleaned = customHobbyInput.trim()
-                                    if (!hobbiesDraft.contains(cleaned)) {
-                                        hobbiesDraft = hobbiesDraft + cleaned
-                                    }
-                                    customHobbyInput = ""
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = SaffronGold),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("+", color = Background, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    accountError?.let { Text(it, color = Danger) }
-                }
-            },
-            confirmButton = {
-                TextButton(enabled = !accountBusy && nameDraft.trim().length in 2..60 && usernameDraft.trim().length in 3..24, onClick = {
-                    val current = viewModel.profile ?: return@TextButton
+    if (showEditProfileScreen) {
+        BackHandler { if (!accountBusy) showEditProfileScreen = false }
+        EditProfilePage(
+            profile = viewModel.profile,
+            name = nameDraft, onNameChange = { nameDraft = it.take(60); accountError = null },
+            username = usernameDraft, onUsernameChange = { usernameDraft = it.take(24).filter { char -> char in 'a'..'z' || char in 'A'..'Z' || char in '0'..'9' || char == '_' || char == '.' }; accountError = null },
+            gender = genderDraft, onGenderChange = { genderDraft = it; accountError = null },
+            age = ageDraft, onAgeChange = { ageDraft = it.filter(Char::isDigit).take(3); accountError = null },
+            vibeLine = vibeLineDraft, onVibeLineChange = { vibeLineDraft = it.take(120); accountError = null },
+            bio = bioDraft, onBioChange = { bioDraft = it.take(180); accountError = null },
+            city = cityDraft, onCityChange = { cityDraft = it.take(60); accountError = null },
+            state = stateDraft, onStateChange = { stateDraft = it.take(60); accountError = null },
+            interests = interestsDraft, onInterestsChange = { interestsDraft = it },
+            hobbies = hobbiesDraft, onHobbiesChange = { hobbiesDraft = it },
+            customInterest = customInterestInput, onCustomInterestChange = { customInterestInput = it.take(24) },
+            customHobby = customHobbyInput, onCustomHobbyChange = { customHobbyInput = it.take(24) },
+            error = accountError, isBusy = accountBusy,
+            onClose = { if (!accountBusy) { showEditProfileScreen = false; accountError = null } },
+            onChangePhoto = { avatarPicker.launch("image/*") },
+            onChangePassword = { if (!accountBusy) { showEditProfileScreen = false; accountError = null; showPasswordDialog = true } },
+            onSave = {
+                val current = viewModel.profile
+                if (current != null) {
                     accountBusy = true
                     accountError = null
                     coroutineScope.launch {
@@ -730,32 +554,25 @@ fun ProfileDetailScreen(
                                     token = token,
                                     name = nameDraft.trim(),
                                     username = usernameDraft.trim().lowercase(java.util.Locale.ROOT),
-                                    bio = bioDraft.trim(),
-                                    city = cityDraft.trim(),
-                                    vibeLine = vibeLineDraft.trim(),
-                                    interests = interestsDraft,
-                                    hobbies = hobbiesDraft
+                                    bio = bioDraft.trim(), city = cityDraft.trim(), state = stateDraft.trim(),
+                                    vibeLine = vibeLineDraft.trim(), interests = interestsDraft, hobbies = hobbiesDraft,
+                                    gender = genderDraft, age = ageDraft.toIntOrNull()
                                 )
                             }
                         }.onSuccess { user ->
                             viewModel.setOwnProfile(
-                                name = user.name,
-                                username = user.username,
-                                bio = bioDraft.trim(),
-                                vibeLine = vibeLineDraft.trim(),
-                                city = cityDraft.trim(),
-                                interests = interestsDraft,
-                                hobbies = hobbiesDraft
+                                name = user.name, username = user.username, bio = bioDraft.trim(),
+                                vibeLine = vibeLineDraft.trim(), city = cityDraft.trim(), state = stateDraft.trim(),
+                                gender = genderDraft, age = ageDraft.toIntOrNull() ?: 0,
+                                interests = interestsDraft, hobbies = hobbiesDraft
                             )
                             onProfileUpdated(user)
-                            showNameDialog = false
+                            showEditProfileScreen = false
                         }.onFailure { accountError = it.message ?: "Could not update your profile." }
                         accountBusy = false
                     }
-                }) { Text(if (accountBusy) "Saving…" else "Save Profile", color = Gold, fontWeight = FontWeight.Bold) }
-            },
-            dismissButton = { TextButton(enabled = !accountBusy, onClick = { showNameDialog = false }) { Text("Cancel", color = TextMuted) } },
-            containerColor = SurfaceElevated
+                }
+            }
         )
     }
 
@@ -814,7 +631,7 @@ fun ProfileDetailScreen(
         )
     }
 
-    if (accountError != null && !showNameDialog && !showPasswordDialog) {
+    if (accountError != null && !showEditProfileScreen && !showPasswordDialog) {
         AlertDialog(
             onDismissRequest = { accountError = null },
             title = { Text("Profile update failed", color = TextPrimary) },
@@ -898,6 +715,179 @@ fun ProfileDetailScreen(
     }
 }
 
+@Composable
+private fun EditProfilePage(
+    profile: Host?,
+    name: String, onNameChange: (String) -> Unit,
+    username: String, onUsernameChange: (String) -> Unit,
+    gender: String, onGenderChange: (String) -> Unit,
+    age: String, onAgeChange: (String) -> Unit,
+    vibeLine: String, onVibeLineChange: (String) -> Unit,
+    bio: String, onBioChange: (String) -> Unit,
+    city: String, onCityChange: (String) -> Unit,
+    state: String, onStateChange: (String) -> Unit,
+    interests: List<String>, onInterestsChange: (List<String>) -> Unit,
+    hobbies: List<String>, onHobbiesChange: (List<String>) -> Unit,
+    customInterest: String, onCustomInterestChange: (String) -> Unit,
+    customHobby: String, onCustomHobbyChange: (String) -> Unit,
+    error: String?, isBusy: Boolean,
+    onClose: () -> Unit, onChangePhoto: () -> Unit,
+    onChangePassword: () -> Unit, onSave: () -> Unit
+) {
+    val clipboard = LocalClipboardManager.current
+    val canSave = !isBusy && profile != null && name.trim().length in 2..60 && username.trim().length in 3..24 && (age.isBlank() || age.toIntOrNull()?.let { it in 18..100 } == true)
+    Column(
+        Modifier.fillMaxSize().background(Color(0xFF101116)).systemBarsPadding(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(
+            Modifier.fillMaxWidth().height(58.dp).padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onClose, enabled = !isBusy, modifier = Modifier.size(42.dp).clip(CircleShape).background(Color(0xFF1A1B22))) {
+                Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+            }
+            Text("Edit Profile", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).padding(start = 12.dp))
+            IconButton(onClick = onChangePassword, enabled = !isBusy) {
+                Icon(Icons.Filled.Key, contentDescription = "Change password", tint = Color(0xFFB8BAC7))
+            }
+            Button(
+                onClick = onSave,
+                enabled = canSave,
+                shape = CircleShape,
+                contentPadding = PaddingValues(horizontal = 17.dp, vertical = 8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF3E83), disabledContainerColor = Color(0xFF66304A))
+            ) { Text(if (isBusy) "Saving…" else "Save", color = Color.White, fontWeight = FontWeight.Bold) }
+        }
+
+        Column(
+            Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).imePadding().padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            Column(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(contentAlignment = Alignment.BottomEnd) {
+                    Box(Modifier.size(104.dp).clip(CircleShape).background(Color(0xFF20212A)).border(3.dp, Color.White.copy(alpha = .86f), CircleShape), contentAlignment = Alignment.Center) {
+                        Avatar(name.take(1).ifBlank { "?" }, 96, profile?.avatar, profile?.activeCosmetics ?: com.yugm.app.core.model.ActiveCosmetics())
+                    }
+                    IconButton(
+                        onClick = onChangePhoto,
+                        enabled = !isBusy,
+                        modifier = Modifier.size(34.dp).clip(CircleShape).background(Color(0xFFEF3E83)).border(2.dp, Color(0xFF101116), CircleShape)
+                    ) { Icon(Icons.Filled.CameraAlt, contentDescription = "Change photo", tint = Color.White, modifier = Modifier.size(17.dp)) }
+                }
+                Text("Change Photo", color = Color(0xFFA4A6B3), fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 9.dp).clickable(onClick = onChangePhoto))
+            }
+
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFF291923)).border(1.dp, Color(0x55EF3E83), RoundedCornerShape(16.dp)).padding(13.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("ⓘ", color = Color(0xFFFF6B9E), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("Make your profile yours. Add a little detail so people can find a reason to connect.", color = Color(0xFFE4DDE2), fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(start = 10.dp))
+            }
+
+            EditProfileSection("BASIC INFO") {
+                EditProfileTextField("Name", name, onNameChange, maxLength = 60)
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("ID", color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                    Text(profile?.id?.takeLast(9).orEmpty(), color = Color(0xFFC3C5D0), fontSize = 14.sp)
+                    TextButton(onClick = { clipboard.setText(AnnotatedString(profile?.id?.takeLast(9).orEmpty())) }) {
+                        Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = Color(0xFFC3C5D0), modifier = Modifier.size(15.dp))
+                        Text("Copy", color = Color(0xFFC3C5D0), modifier = Modifier.padding(start = 4.dp))
+                    }
+                }
+                EditProfileTextField("Username", username, onUsernameChange, prefix = "@", maxLength = 24)
+                Text("Gender", color = Color(0xFFDADBE2), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("Female", "Male", "Non-Binary", "Other", "Prefer not to say").forEach { option ->
+                        ProfileEditChip(option, selected = gender.equals(option, ignoreCase = true)) { onGenderChange(option) }
+                    }
+                }
+                EditProfileTextField("Age", age, onAgeChange, maxLength = 3, numberOnly = true, helper = "Must be between 18 and 100")
+                EditProfileTextField("Short vibe line", vibeLine, onVibeLineChange, maxLength = 120)
+                EditProfileTextField("About you", bio, onBioChange, maxLength = 180, minLines = 3)
+            }
+
+            EditProfileSection("LOCATION") {
+                EditProfileTextField("City / Region", city, onCityChange, maxLength = 60)
+                EditProfileTextField("State", state, onStateChange, maxLength = 60)
+            }
+
+            EditProfileSection("INTERESTS & PASSIONS") {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    PresetInterests.forEach { item -> ProfileEditChip(item, interests.contains(item)) { onInterestsChange(if (interests.contains(item)) interests - item else interests + item) } }
+                    interests.filterNot(PresetInterests::contains).forEach { item -> ProfileEditChip("$item  ×", true) { onInterestsChange(interests - item) } }
+                }
+                EditProfileAddRow("Add an interest", customInterest, onCustomInterestChange) {
+                    val value = customInterest.trim()
+                    if (value.isNotEmpty() && value !in interests) onInterestsChange(interests + value)
+                    onCustomInterestChange("")
+                }
+            }
+
+            EditProfileSection("HOBBIES & PASTIMES") {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    PresetHobbies.forEach { item -> ProfileEditChip(item, hobbies.contains(item), accent = Color(0xFFFFB84D)) { onHobbiesChange(if (hobbies.contains(item)) hobbies - item else hobbies + item) } }
+                    hobbies.filterNot(PresetHobbies::contains).forEach { item -> ProfileEditChip("$item  ×", true, accent = Color(0xFFFFB84D)) { onHobbiesChange(hobbies - item) } }
+                }
+                EditProfileAddRow("Add a hobby", customHobby, onCustomHobbyChange, accent = Color(0xFFFFB84D)) {
+                    val value = customHobby.trim()
+                    if (value.isNotEmpty() && value !in hobbies) onHobbiesChange(hobbies + value)
+                    onCustomHobbyChange("")
+                }
+            }
+            if (error != null) Text(error, color = Color(0xFFFF647C), fontSize = 13.sp, modifier = Modifier.padding(bottom = 20.dp))
+        }
+    }
+}
+
+@Composable
+private fun EditProfileSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(title, color = Color(0xFF9EA3B4), fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, modifier = Modifier.padding(start = 4.dp))
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color(0xFF191A20)).border(1.dp, Color(0xFF292A31), RoundedCornerShape(18.dp)).padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            content = content
+        )
+    }
+}
+
+@Composable
+private fun EditProfileTextField(label: String, value: String, onValueChange: (String) -> Unit, prefix: String? = null, maxLength: Int, numberOnly: Boolean = false, helper: String? = null, minLines: Int = 1) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { input -> onValueChange(if (numberOnly) input.filter(Char::isDigit).take(maxLength) else input.take(maxLength)) },
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text(label) },
+        prefix = prefix?.let { { Text(it) } },
+        singleLine = minLines == 1,
+        minLines = minLines,
+        supportingText = { Text(helper ?: "${value.length}/$maxLength") },
+        keyboardOptions = if (numberOnly) KeyboardOptions(keyboardType = KeyboardType.Number) else KeyboardOptions.Default,
+        shape = RoundedCornerShape(13.dp)
+    )
+}
+
+@Composable
+private fun ProfileEditChip(label: String, selected: Boolean, accent: Color = Color(0xFFB777FF), onClick: () -> Unit) {
+    Box(
+        Modifier.clip(CircleShape).background(if (selected) accent.copy(alpha = .28f) else Color(0xFF22232A))
+            .border(1.dp, if (selected) accent.copy(alpha = .72f) else Color(0xFF373840), CircleShape)
+            .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp)
+    ) { Text(label, color = if (selected) Color.White else Color(0xFFC2C4CF), fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium) }
+}
+
+@Composable
+private fun EditProfileAddRow(label: String, value: String, onValueChange: (String) -> Unit, accent: Color = Color(0xFFB777FF), onAdd: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(value, onValueChange, modifier = Modifier.weight(1f), label = { Text(label) }, singleLine = true, shape = RoundedCornerShape(13.dp))
+        Button(onClick = onAdd, enabled = value.isNotBlank(), colors = ButtonDefaults.buttonColors(containerColor = accent), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 13.dp)) {
+            Text("Add", color = Color.White, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
 private fun readProfileImageUpload(context: android.content.Context, uri: android.net.Uri): Pair<String, ByteArray> {
     val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
     require(mime.startsWith("image/", ignoreCase = true)) { "Choose an image file." }
@@ -925,7 +915,132 @@ private fun ProfileHero(
     isOwnProfile: Boolean = false,
     onEditProfile: (() -> Unit)? = null,
     onViewPublicProfile: (() -> Unit)? = null,
-    onOpenSocialList: ((String) -> Unit)? = null
+    onOpenSocialList: ((String) -> Unit)? = null,
+    onOpenWallet: (() -> Unit)? = null
+) {
+    val surface = Color(0xE80C0D19)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(26.dp))
+            .background(Brush.verticalGradient(listOf(Color(0xFF261044), surface, Color(0xFF0B0C15))))
+            .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(26.dp))
+            .padding(horizontal = 16.dp, vertical = 18.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(Modifier.fillMaxWidth()) {
+            if (isOwnProfile && onEditProfile != null) {
+                OutlinedButton(
+                    onClick = onEditProfile,
+                    shape = RoundedCornerShape(50),
+                    border = BorderStroke(1.dp, Color(0x55FFFFFF)),
+                    colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0x22FFFFFF), contentColor = Color.White),
+                    contentPadding = PaddingValues(horizontal = 11.dp, vertical = 6.dp),
+                    modifier = Modifier.align(Alignment.TopEnd).height(34.dp)
+                ) {
+                    Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.White)
+                    Spacer(Modifier.width(5.dp))
+                    Text("Edit", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            } else if (compatibilityScore != null) {
+                Text("$compatibilityScore% match", color = Gold, fontSize = 12.sp, modifier = Modifier.align(Alignment.TopEnd))
+            }
+            Box(
+                Modifier.align(Alignment.TopCenter).size(104.dp).clip(CircleShape)
+                    .background(Color(0xFF11121D)).border(3.dp, Color.White.copy(alpha = 0.9f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Avatar(
+                    initial = profile.name.firstOrNull()?.toString() ?: "?",
+                    size = 96,
+                    imageUrl = profile.avatar,
+                    cosmetics = profile.activeCosmetics
+                )
+            }
+        }
+        Spacer(Modifier.height(30.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            StyledName(text = profile.name.ifBlank { "Yugm Member" }, nameStyle = profile.activeCosmetics.nameStyle, fontSize = 25, maxLines = 1)
+            if (profile.isOnline) Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF22C55E)))
+            if (profile.isVip) ProfilePill("VIP", Gold)
+        }
+        Row(
+            modifier = Modifier.padding(top = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            Text("ID: ${profile.id.takeLast(9)}", color = Color(0xFFB8BAC8), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Text("🇮🇳", fontSize = 14.sp)
+            Box(Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFF9AD968)).padding(horizontal = 8.dp, vertical = 2.dp)) {
+                Text("Lv.${profile.level}", color = Color(0xFF18240E), fontSize = 10.sp, fontWeight = FontWeight.Black)
+            }
+        }
+        val headline = profile.vibeLine.ifBlank { profile.bio }
+        if (headline.isNotBlank()) {
+            Text(headline, color = Color(0xFFE7E5EE), fontSize = 15.sp, textAlign = TextAlign.Center, maxLines = 2, modifier = Modifier.padding(top = 12.dp))
+        }
+        if (profile.city.isNotBlank()) {
+            Text(profile.city, color = Gold, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 3.dp))
+        }
+        Spacer(Modifier.height(16.dp))
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xCC0E0F18)).border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(16.dp)).padding(vertical = 10.dp, horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ProfileHeroStat("Friends", profile.closeFriendsCount.toString(), Modifier.weight(1f), null)
+            Box(Modifier.width(1.dp).height(28.dp).background(Color(0x44FFFFFF)))
+            ProfileHeroStat("Following", profile.followingCount.toString(), Modifier.weight(1f)) { onOpenSocialList?.invoke("following") }
+            Box(Modifier.width(1.dp).height(28.dp).background(Color(0x44FFFFFF)))
+            ProfileHeroStat("Followers", profile.followers.toString(), Modifier.weight(1f)) { onOpenSocialList?.invoke("followers") }
+        }
+        if (isOwnProfile) {
+            Spacer(Modifier.height(9.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ProfileBalanceTile("🪙", profile.walletBalance.toString(), "Coins", Modifier.weight(1f), onOpenWallet)
+                ProfileBalanceTile("💎", profile.diamondBalance.toString(), "Diamonds", Modifier.weight(1f), onOpenWallet)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileHeroStat(label: String, value: String, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
+    Column(
+        modifier = modifier.then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier).padding(vertical = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(value, color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Black)
+        Text(label, color = Color(0xFFB0B2BF), fontSize = 12.sp, maxLines = 1)
+    }
+}
+
+@Composable
+private fun ProfileBalanceTile(icon: String, value: String, label: String, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
+    Row(
+        modifier = modifier.height(64.dp).clip(RoundedCornerShape(15.dp)).background(Color(0xD8171822))
+            .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(15.dp))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Text(icon, fontSize = 19.sp)
+        Spacer(Modifier.width(6.dp))
+        Column {
+            Text(value, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
+            Text(label, color = Color(0xFFB0B2BF), fontSize = 11.sp)
+        }
+    }
+}
+
+@Composable
+private fun ProfileHeroLegacy(
+    profile: Host,
+    compatibilityScore: Int?,
+    isOwnProfile: Boolean = false,
+    onEditProfile: (() -> Unit)? = null,
+    onViewPublicProfile: (() -> Unit)? = null,
+    onOpenSocialList: ((String) -> Unit)? = null,
+    onOpenWallet: (() -> Unit)? = null
 ) {
     val themeColors = profileThemeColors(profile.activeCosmetics.profileTheme)
     val themeAccent = profileThemeAccent(profile.activeCosmetics.profileTheme)

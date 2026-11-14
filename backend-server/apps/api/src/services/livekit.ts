@@ -1,4 +1,4 @@
-import { AccessToken } from "livekit-server-sdk";
+import { AccessToken, TrackSource } from "livekit-server-sdk";
 import { env } from "../config/env.js";
 import { HttpError } from "../utils/http.js";
 
@@ -7,6 +7,7 @@ export interface MediaTokenRequest {
   roomName: string;
   canPublish: boolean;
   canSubscribe: boolean;
+  publishSources?: TrackSource[];
 }
 
 export interface MediaProvider {
@@ -31,6 +32,7 @@ export class LiveKitMediaProvider implements MediaProvider {
       room: input.roomName,
       roomJoin: true,
       canPublish: input.canPublish,
+      canPublishSources: input.publishSources ?? (input.canPublish ? [TrackSource.MICROPHONE, TrackSource.CAMERA] : []),
       canSubscribe: input.canSubscribe
     });
 

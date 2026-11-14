@@ -9,7 +9,7 @@ Yugm uses **Yugm Trust Verification** for user safety, fake-profile prevention, 
 ## Project Layout
 
 - `backend-server/`: Standalone Node.js server project with the API, admin app, shared TypeScript schemas/constants, npm workspace, and Docker Compose services.
-- `android-client/`: Standalone Android client project. The **native Kotlin/Compose app** is the canonical, shipping client (`com.yugm.app`). The `expo-mobile/` React Native client is **frozen/deprecated** and is not part of the Play Store release path.
+- `android-client/`: Standalone Android project containing the canonical Kotlin/Compose app (`com.yugm.app`).
 
 Each project has its own build configuration and dependency manifests. Open `android-client/` in Android Studio, and run npm commands from `backend-server/`.
 
@@ -36,7 +36,6 @@ PAYOUT_KYC_ENCRYPTION_KEY=
 LIVEKIT_API_KEY=
 LIVEKIT_API_SECRET=
 LIVEKIT_URL=ws://localhost:7880
-CORS_ORIGIN=http://localhost:8081
 ```
 
 Redis is optional for the MVP; the API uses in-memory presence if `REDIS_URL` is empty.
@@ -154,30 +153,6 @@ For a physical Android device on the same Wi-Fi, point the debug build at your c
 
 Replace `192.168.1.20` with your computer's current LAN IP. Keep the backend listening on port `4000` and allow that port through the computer's firewall.
 
-## Expo Client Setup
-
-> **Deprecated:** the Expo React Native client is frozen and is not part of the Play Store release path. These instructions are kept only for reference.
-
-```bash
-cd android-client/expo-mobile
-npm install
-cp .env.example .env
-npm run android
-```
-
-### Expo Environment
-
-```env
-EXPO_PUBLIC_SERVER_MODE=development
-EXPO_PUBLIC_LIVEKIT_URL=ws://localhost:7880
-
-EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=
-EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=
-EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=
-```
-
-For a local Android emulator backend, development mode resolves to `http://10.0.2.2:4000/api` and `http://10.0.2.2:4000`. Set `EXPO_PUBLIC_SERVER_MODE=deploy` in `.env` and restart Expo with `npx expo start --clear` to use Render. For a physical device, use your computer's LAN IP with the optional `EXPO_PUBLIC_API_URL` and `EXPO_PUBLIC_SOCKET_URL` overrides.
-
 ## Firebase Auth Setup
 
 Google Sign-In and Phone Auth require a Firebase project:
@@ -188,9 +163,7 @@ Google Sign-In and Phone Auth require a Firebase project:
 4. Android app for native Android:
    - Package name: `com.yugm.app`
    - Place `google-services.json` in `android-client/app/`
-5. Web client ID for Expo Google Sign-In:
-   - Put the web client ID in `android-client/expo-mobile/.env` as `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`
-   - Put the Android client ID in `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`
+5. Configure the OAuth client IDs required by the native Android sign-in flow.
 
 ## LiveKit Local Development
 
@@ -213,14 +186,6 @@ npm run env:check
 npm run seed
 npm run typecheck
 npm run test
-```
-
-Expo client:
-
-```bash
-cd android-client/expo-mobile
-npm run android
-npm run typecheck
 ```
 
 Native Android:

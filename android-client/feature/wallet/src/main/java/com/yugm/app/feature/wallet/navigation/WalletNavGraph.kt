@@ -30,6 +30,8 @@ fun NavGraphBuilder.walletNavGraph(
             onBalanceChanged = { },
             onRechargeOrderReady = onRechargeOrderReady,
             onStartGooglePlayPurchase = onStartGooglePlayPurchase,
+            onOpenGiftCatalog = { navController.navigate(Screen.GiftCatalog.route) },
+            onOpenGiftInventory = { navController.navigate(Screen.Inventory.route) },
         )
     }
 

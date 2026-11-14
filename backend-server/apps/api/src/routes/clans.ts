@@ -5,6 +5,7 @@ import { requireAuth, requireNotMuted, type AuthRequest } from "../middleware/au
 import { chatLimiter, reportLimiter } from "../middleware/rateLimit.js";
 import { validateBody } from "../middleware/validate.js";
 import { Clan } from "../models/Clan.js";
+import { ClanInvite } from "../models/ClanInvite.js";
 import { ClanMessage } from "../models/ClanMessage.js";
 import { Report } from "../models/Report.js";
 import { User } from "../models/User.js";
@@ -23,6 +24,8 @@ const clanSchema = z.object({
   familyLabel: z.string().min(2).max(32).default("Family")
 });
 const clanMessageSchema = z.object({ message: z.string().min(1).max(600) });
+const clanInviteSchema = z.object({ userId: z.string().regex(/^[0-9a-fA-F]{24}$/) });
+const ownershipSchema = z.object({ userId: z.string().regex(/^[0-9a-fA-F]{24}$/) });
 const clanMessageReportSchema = z.object({
   reason: z.string().min(2).max(80),
   description: z.string().max(500).optional()
@@ -92,6 +95,82 @@ clansRouter.get("/me", asyncHandler(async (req: AuthRequest, res) => {
     .populate("memberIds", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .lean();
   sendOk(res, { clan: clan ? publicClan(clan, req.user!.id) : null });
+}));
+
+clansRouter.get("/invitations", asyncHandler(async (req: AuthRequest, res) => {
+  const now = new Date();
+  await ClanInvite.updateMany({ inviteeId: req.user!.id, status: "PENDING", expiresAt: { $lte: now } }, { $set: { status: "EXPIRED" } });
+  const invitations = await ClanInvite.find({ inviteeId: req.user!.id, status: "PENDING", expiresAt: { $gt: now } })
+    .populate("clanId", "name slug avatar familyLabel memberCount privacy")
+    .populate("inviterId", "name username avatar")
+    .sort({ createdAt: -1 }).limit(30).lean();
+  sendOk(res, { invitations });
+}));
+
+clansRouter.get("/leaderboard", asyncHandler(async (req: AuthRequest, res) => {
+  const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 50);
+  const clans = await Clan.aggregate([
+    { $match: { privacy: "PUBLIC", memberCount: { $gt: 0 } } },
+    { $lookup: { from: "users", let: { ids: "$memberIds" }, pipeline: [
+      { $match: { $expr: { $in: ["$_id", "$$ids"] } } },
+      { $project: { xp: 1 } }
+    ], as: "members" } },
+    { $addFields: { totalXp: { $sum: "$members.xp" } } },
+    { $sort: { totalXp: -1, memberCount: -1, createdAt: 1 } },
+    { $limit: limit },
+    { $project: { name: 1, slug: 1, avatar: 1, familyLabel: 1, memberCount: 1, totalXp: 1 } }
+  ]);
+  sendOk(res, { clans: clans.map((clan, index) => ({ ...clan, id: clan._id.toString(), rank: index + 1 })) });
+}));
+
+clansRouter.post("/:id/invitations", validateBody(clanInviteSchema), asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid clan ID", ErrorCode.VALIDATION);
+  const clan = await Clan.findById(req.params.id);
+  if (!clan) throw new HttpError(404, "Clan not found", ErrorCode.NOT_FOUND);
+  if (clan.ownerId.toString() !== req.user!.id) throw new HttpError(403, "Only the clan owner can invite members", ErrorCode.FORBIDDEN);
+  if (req.body.userId === req.user!.id) throw new HttpError(400, "You are already in this clan", ErrorCode.VALIDATION);
+  const invitee = await User.findById(req.body.userId).select("name").lean();
+  if (!invitee) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+  if (await Clan.exists({ memberIds: req.body.userId })) throw new HttpError(409, "This user already belongs to a clan", ErrorCode.CONFLICT);
+  await ClanInvite.updateMany({ clanId: clan._id, inviteeId: req.body.userId, status: "PENDING", expiresAt: { $lte: new Date() } }, { $set: { status: "EXPIRED" } });
+  let invitation = await ClanInvite.findOne({ clanId: clan._id, inviteeId: req.body.userId, status: "PENDING" });
+  if (!invitation) invitation = await ClanInvite.create({ clanId: clan._id, inviterId: req.user!._id, inviteeId: req.body.userId, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
+  await createNotification(req.body.userId, "ROOM_INVITE", "Clan invitation", `${req.user!.name} invited you to join ${clan.name}`, { clanId: clan.id, clanInviteId: invitation.id });
+  sendOk(res, { invitation }, 201);
+}));
+
+clansRouter.post("/invitations/:inviteId/:action(accept|decline)", asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.inviteId)) throw new HttpError(400, "Invalid invitation ID", ErrorCode.VALIDATION);
+  const invite = await ClanInvite.findOne({ _id: req.params.inviteId, inviteeId: req.user!.id, status: "PENDING", expiresAt: { $gt: new Date() } });
+  if (!invite) throw new HttpError(404, "Invitation not found or expired", ErrorCode.NOT_FOUND);
+  if (req.params.action === "decline") {
+    invite.status = "DECLINED";
+    await invite.save();
+    return sendOk(res, { invitation: invite });
+  }
+  if (await Clan.exists({ memberIds: req.user!.id })) throw new HttpError(409, "Leave your current clan before accepting another invitation", ErrorCode.CONFLICT);
+  const clan = await Clan.findById(invite.clanId);
+  if (!clan) throw new HttpError(404, "Clan no longer exists", ErrorCode.NOT_FOUND);
+  if (!clan.memberIds.some((memberId) => memberId.toString() === req.user!.id)) {
+    clan.memberIds = [...clan.memberIds, req.user!._id];
+    clan.memberCount = clan.memberIds.length;
+    await clan.save();
+  }
+  await User.findByIdAndUpdate(req.user!.id, { $set: { clanId: clan._id } });
+  invite.status = "ACCEPTED";
+  await invite.save();
+  sendOk(res, { invitation: invite, clan: publicClan(clan, req.user!.id) });
+}));
+
+clansRouter.post("/:id/transfer-ownership", validateBody(ownershipSchema), asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid clan ID", ErrorCode.VALIDATION);
+  const clan = await Clan.findById(req.params.id);
+  if (!clan) throw new HttpError(404, "Clan not found", ErrorCode.NOT_FOUND);
+  if (clan.ownerId.toString() !== req.user!.id) throw new HttpError(403, "Only the owner can transfer ownership", ErrorCode.FORBIDDEN);
+  if (!clan.memberIds.some((memberId) => memberId.toString() === req.body.userId)) throw new HttpError(400, "Ownership can only be transferred to a clan member", ErrorCode.VALIDATION);
+  clan.ownerId = req.body.userId;
+  await clan.save();
+  sendOk(res, { clan: publicClan(clan, req.user!.id) });
 }));
 
 clansRouter.get("/:id/messages", asyncHandler(async (req: AuthRequest, res) => {

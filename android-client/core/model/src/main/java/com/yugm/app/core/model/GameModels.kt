@@ -1,6 +1,6 @@
 package com.yugm.app.core.model
 
-data class GiftItem(val id: String, val name: String, val price: Int)
+data class GiftItem(val id: String, val name: String, val price: Int, val diamondPrice: Int = 0)
 
 data class MiniGameBest(
     val score: Int = 0,

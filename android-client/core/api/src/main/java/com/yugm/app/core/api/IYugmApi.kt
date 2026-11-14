@@ -1,4 +1,4 @@
-package com.yugm.app.core.api
+﻿package com.yugm.app.core.api
 
 import com.yugm.app.core.model.Achievement
 import com.yugm.app.core.model.ChatMessage
@@ -6,12 +6,15 @@ import com.yugm.app.core.model.ClaimAchievementResult
 import com.yugm.app.core.model.Clan
 import com.yugm.app.core.model.ClanMessage
 import com.yugm.app.core.model.ClanSummary
+import com.yugm.app.core.model.ClanInvitation
+import com.yugm.app.core.model.ClanRankingEntry
 import com.yugm.app.core.model.CoinPack
 import com.yugm.app.core.model.Conversation
 import com.yugm.app.core.model.CosmeticCatalog
 import com.yugm.app.core.model.CreatorDashboard
 import com.yugm.app.core.model.CreatorPayoutKycStatus
 import com.yugm.app.core.model.DailyCheckInResult
+import com.yugm.app.core.model.DailyRewardClaimResult
 import com.yugm.app.core.model.DirectMessage
 import com.yugm.app.core.model.EventPagination
 import com.yugm.app.core.model.ExperienceHome
@@ -63,6 +66,7 @@ import com.yugm.app.core.model.PkMode
 import com.yugm.app.core.model.PkOpponent
 import com.yugm.app.core.model.PkSideType
 import com.yugm.app.core.model.PkStats
+import com.yugm.app.core.model.PurchaseRecord
 import com.yugm.app.core.model.RazorpayCheckoutData
 import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomModeInfo
@@ -210,11 +214,12 @@ interface IYugmApi {
     suspend fun purchaseCosmetic(token: String, cosmeticId: String): CosmeticCatalog
     suspend fun purchaseCosmeticBundle(token: String, bundleId: String): CosmeticCatalog
     suspend fun equipCosmetic(token: String, cosmeticId: String, type: String): CosmeticCatalog
-    suspend fun sendGift(token: String, roomId: String, gift: GiftItem, receiverId: String)
+    suspend fun sendGift(token: String, roomId: String, gift: GiftItem, receiverId: String, currency: String = "COINS")
     suspend fun devRecharge(token: String, amount: Int)
     suspend fun walletTransactions(token: String): List<WalletTransaction>
     suspend fun transferCosmetic(token: String, cosmeticId: String, receiverId: String)
-    suspend fun purchaseHistory(token: String): List<WalletTransaction>
+    suspend fun claimDailyReward(token: String): DailyRewardClaimResult
+    suspend fun purchaseHistory(token: String): List<PurchaseRecord>
     suspend fun sendDirectGift(token: String, giftId: String, receiverId: String): Conversation
 
     suspend fun datingExplore(token: String, filters: Set<String> = emptySet()): List<Host>
@@ -252,6 +257,11 @@ interface IYugmApi {
     suspend fun reactToClanMessage(token: String, clanId: String, messageId: String, type: String): JSONObject
     suspend fun deleteClanMessage(token: String, clanId: String, messageId: String)
     suspend fun reportClanMessage(token: String, clanId: String, messageId: String, reason: String = "", description: String = "")
+    suspend fun clanInvitations(token: String): List<ClanInvitation>
+    suspend fun respondToClanInvitation(token: String, invitationId: String, accept: Boolean)
+    suspend fun inviteClanMember(token: String, clanId: String, userId: String)
+    suspend fun transferClanOwnership(token: String, clanId: String, userId: String)
+    suspend fun clanLeaderboard(token: String): List<ClanRankingEntry>
 
     suspend fun gameCatalog(token: String): GameCatalog
     suspend fun gameMissions(token: String): GameMissions
@@ -261,7 +271,7 @@ interface IYugmApi {
     suspend fun sendGameChallenge(token: String, gameId: String, score: Int, scoreId: String, targetUserId: String? = null, clanId: String? = null, message: String? = null): MiniGameChallenge
     suspend fun shareGameScore(token: String, scoreId: String, targetUserId: String)
 
-    suspend fun updateProfile(token: String, name: String, username: String, bio: String? = null, city: String? = null, interests: List<String>? = null, languages: List<String>? = null, gender: String? = null, age: Int? = null, lookingFor: String? = null, avatar: String? = null, acceptTerms: Boolean = false, vibeLine: String? = null, hobbies: List<String>? = null): YugmUser
+    suspend fun updateProfile(token: String, name: String, username: String, bio: String? = null, city: String? = null, interests: List<String>? = null, languages: List<String>? = null, gender: String? = null, age: Int? = null, lookingFor: String? = null, avatar: String? = null, acceptTerms: Boolean = false, vibeLine: String? = null, hobbies: List<String>? = null, state: String? = null): YugmUser
     suspend fun searchUsers(query: String, token: String? = null): List<Host>
     suspend fun getUser(userId: String, token: String? = null): Host
     suspend fun getPublicProfile(userId: String, token: String? = null): Host

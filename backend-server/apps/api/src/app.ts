@@ -96,7 +96,13 @@ function responseError(error: unknown) {
       : 500;
   return {
     status: status >= 400 && status < 600 ? status : 500,
-    message: status >= 400 && status < 500 && error instanceof Error ? error.message : "Unexpected server error",
+    message: status >= 400 && status < 500
+        ? typeof error === "object" && error != null && "message" in error
+          ? (error as { message?: unknown }).message
+          : "Unexpected server error"
+        : error instanceof Error
+          ? error.message
+          : "Unexpected server error",
     code: status >= 400 && status < 500 ? ErrorCode.VALIDATION : ErrorCode.INTERNAL
   };
 }

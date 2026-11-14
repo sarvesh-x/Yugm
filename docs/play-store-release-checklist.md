@@ -6,7 +6,7 @@ Build verification: `:app:assembleDebug`, `testDebugUnitTest`, `:app:lintDebug`,
 
 Complete these account and operator steps before production submission:
 
-- Choose and freeze a permanent Android package ID. The native app currently uses `com.yugm.app`; the Expo client uses `com.yugm.app`. Update Firebase, Google OAuth, `GOOGLE_PLAY_PACKAGE_NAME`, and the native app together before the first Play upload.
+- Confirm the permanent Android package ID is `com.yugm.app`. Update Firebase, Google OAuth, `GOOGLE_PLAY_PACKAGE_NAME`, and the native app together before the first Play upload.
 - Create a Play upload keystore and provide `YUGM_UPLOAD_KEYSTORE_FILE`, `YUGM_UPLOAD_KEYSTORE_PASSWORD`, `YUGM_UPLOAD_KEY_ALIAS`, and `YUGM_UPLOAD_KEY_PASSWORD` only through a secure local/CI secret store. Enroll in Play App Signing and register the Play app-signing and upload certificate fingerprints in Firebase.
 - Configure the production `wss://` LiveKit URL and credentials in Render. Firebase Admin service-account credentials are optional for push notifications, and Google Play credentials are needed only when enabling purchase verification; neither blocks API startup.
 - Create and activate all seven one-time Play products from `backend-server/packages/shared/src/index.ts` (`yugm_coins_290` through `yugm_coins_24990`) with prices matching the app’s coin packs. Add the service account to Play Console with purchase verification access.

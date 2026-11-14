@@ -82,9 +82,11 @@ data class CosmeticCatalog(
 
 data class WalletOverview(
     val balance: Int = 0,
+    val diamondBalance: Int = 0,
     val vip: VipStatus = VipStatus(),
     val level: LevelStatus = LevelStatus(),
-    val cosmetics: CosmeticCatalog = CosmeticCatalog()
+    val cosmetics: CosmeticCatalog = CosmeticCatalog(),
+    val dailyReward: DailyRewardStatus = DailyRewardStatus()
 )
 
 data class WalletProgressResult(

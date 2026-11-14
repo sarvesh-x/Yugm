@@ -19,6 +19,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -56,8 +58,12 @@ fun ClanDetailScreen(
     val viewModel: ClanViewModel = hiltViewModel()
     var actionLoading by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
+    var transferTarget by remember { mutableStateOf<com.yugm.app.core.model.Host?>(null) }
 
-    LaunchedEffect(clanId) { viewModel.loadDetail(token, clanId) }
+    LaunchedEffect(clanId) {
+        viewModel.loadDetail(token, clanId)
+        if (currentUserId.isNotBlank()) viewModel.loadInviteCandidates(token, currentUserId)
+    }
 
     YugmAmbientBackground {
         val currentClan = viewModel.clanDetail
@@ -100,7 +106,7 @@ fun ClanDetailScreen(
                         if (currentClan.isMember) {
                             GradientAction("Chat", modifier = Modifier.weight(1f), onClick = { onChat(clanId) })
                             if (currentClan.ownerId == currentUserId) {
-                                GradientAction("Members", modifier = Modifier.weight(1f), onClick = {})
+                                GradientAction("Invite members", modifier = Modifier.weight(1f), onClick = { viewModel.loadInviteCandidates(token, currentUserId) })
                             } else {
                                 GradientAction(
                                     "Leave",
@@ -161,10 +167,52 @@ fun ClanDetailScreen(
                             if (member.isOnline) {
                                 Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF00C853)))
                             }
+                            if (currentClan.ownerId == currentUserId && member.id != currentUserId) {
+                                TextButton(onClick = { transferTarget = member }) { Text("Make owner", color = Pink, fontSize = 10.sp) }
+                            }
+                        }
+                    }
+                }
+                if (currentClan.ownerId == currentUserId) {
+                    item {
+                        Text("Invite people you follow", color = TextMuted, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp))
+                    }
+                    val existingIds = currentClan.members.map { it.id }.toSet()
+                    val candidates = viewModel.inviteCandidates.filter { it.id !in existingIds }
+                    if (candidates.isEmpty()) {
+                        item { Text("No available people to invite right now.", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp)) }
+                    } else {
+                        items(candidates, key = { "invite-${it.id}" }) { candidate ->
+                            Row(Modifier.padding(horizontal = 20.dp).fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                com.yugm.app.core.ui.components.Avatar(candidate.name.firstOrNull()?.toString() ?: "?", 36, candidate.avatar)
+                                Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                                    Text(candidate.name, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                    if (candidate.username.isNotBlank()) Text("@${candidate.username}", color = TextMuted, fontSize = 10.sp)
+                                }
+                                TextButton(
+                                    enabled = candidate.id !in viewModel.sentInviteIds,
+                                    onClick = { viewModel.inviteMember(token, clanId, candidate.id) }
+                                ) { Text(if (candidate.id in viewModel.sentInviteIds) "Sent" else "Invite", color = Pink, fontSize = 11.sp) }
+                            }
                         }
                     }
                 }
             }
         }
+    }
+    transferTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { transferTarget = null },
+            title = { Text("Transfer clan ownership?", color = TextPrimary, fontWeight = FontWeight.Bold) },
+            text = { Text("${target.name} will become the owner and you’ll be a regular member.", color = TextMuted) },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.transferOwnership(token, clanId, target.id)
+                    transferTarget = null
+                    status = "Ownership transferred"
+                }) { Text("Transfer", color = Pink) }
+            },
+            dismissButton = { TextButton(onClick = { transferTarget = null }) { Text("Cancel", color = TextMuted) } }
+        )
     }
 }

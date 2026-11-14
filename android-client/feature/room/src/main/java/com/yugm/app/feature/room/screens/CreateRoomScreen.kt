@@ -280,12 +280,14 @@ fun CreateRoomScreen(
                         SettingRow(Icons.Filled.Public, "Room Privacy", "Choose who can join your room") {
                             RoomChoiceChip(if (isPublic) "Public" else "Private", icon = if (isPublic) Icons.Filled.Public else Icons.Filled.Lock, selected = !isPublic) { isPublic = !isPublic }
                         }
-                        DividerLine()
-                        SettingRow(Icons.Filled.Groups, "Max Speakers", "Maximum number of speakers") {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                StepperButton("−", "Decrease speaker limit") { maxSpeakers = (maxSpeakers - 1).coerceAtLeast(2) }
-                                Text(maxSpeakers.toString(), color = TextPrimary, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 13.dp))
-                                StepperButton("+", "Increase speaker limit") { maxSpeakers = (maxSpeakers + 1).coerceAtMost(20) }
+                        if (type == RoomType.Voice) {
+                            DividerLine()
+                            SettingRow(Icons.Filled.Groups, "Mic Seats", "Choose 2–20 microphones") {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    StepperButton("−", "Decrease speaker limit") { maxSpeakers = (maxSpeakers - 1).coerceAtLeast(2) }
+                                    Text(maxSpeakers.toString(), color = TextPrimary, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 13.dp))
+                                    StepperButton("+", "Increase speaker limit") { maxSpeakers = (maxSpeakers + 1).coerceAtMost(20) }
+                                }
                             }
                         }
                         DividerLine()

@@ -1,4 +1,4 @@
-package com.yugm.app.core.api
+﻿package com.yugm.app.core.api
 
 import com.yugm.app.core.model.ClaimAchievementResult
 import com.yugm.app.core.model.GiftLeaderboardResponse
@@ -45,11 +45,14 @@ import com.yugm.app.core.model.ChatMessage
 import com.yugm.app.core.model.Clan
 import com.yugm.app.core.model.ClanMessage
 import com.yugm.app.core.model.ClanSummary
+import com.yugm.app.core.model.ClanInvitation
+import com.yugm.app.core.model.ClanRankingEntry
 import com.yugm.app.core.model.CoinPack
 import com.yugm.app.core.model.Conversation
 import com.yugm.app.core.model.CosmeticCatalog
 import com.yugm.app.core.model.CreatorPayoutKycStatus
 import com.yugm.app.core.model.DailyCheckInResult
+import com.yugm.app.core.model.DailyRewardClaimResult
 import com.yugm.app.core.model.DirectMessage
 import com.yugm.app.core.model.GameCatalog
 import com.yugm.app.core.model.GameChallenges
@@ -94,6 +97,7 @@ import com.yugm.app.core.model.PkMode
 import com.yugm.app.core.model.PkOpponent
 import com.yugm.app.core.model.PkSideType
 import com.yugm.app.core.model.PkStats
+import com.yugm.app.core.model.PurchaseRecord
 import com.yugm.app.core.model.RazorpayCheckoutData
 import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomActivityItem
@@ -211,11 +215,12 @@ object YugmApi : IYugmApi {
     override suspend fun purchaseCosmetic(token: String, cosmeticId: String): CosmeticCatalog = WalletApi.purchaseCosmetic(token, cosmeticId)
     override suspend fun purchaseCosmeticBundle(token: String, bundleId: String): CosmeticCatalog = WalletApi.purchaseCosmeticBundle(token, bundleId)
     override suspend fun equipCosmetic(token: String, cosmeticId: String, type: String): CosmeticCatalog = WalletApi.equipCosmetic(token, cosmeticId, type)
-    override suspend fun sendGift(token: String, roomId: String, gift: GiftItem, receiverId: String) = WalletApi.sendGift(token, roomId, gift, receiverId)
+    override suspend fun sendGift(token: String, roomId: String, gift: GiftItem, receiverId: String, currency: String) = WalletApi.sendGift(token, roomId, gift, receiverId, currency)
     override suspend fun devRecharge(token: String, amount: Int) = WalletApi.devRecharge(token, amount)
     override suspend fun walletTransactions(token: String): List<WalletTransaction> = WalletApi.transactions(token)
     override suspend fun transferCosmetic(token: String, cosmeticId: String, receiverId: String) = WalletApi.transferCosmetic(token, cosmeticId, receiverId)
-    override suspend fun purchaseHistory(token: String): List<WalletTransaction> = WalletApi.purchaseHistory(token)
+    override suspend fun claimDailyReward(token: String): DailyRewardClaimResult = WalletApi.claimDailyReward(token)
+    override suspend fun purchaseHistory(token: String): List<PurchaseRecord> = WalletApi.purchaseHistory(token)
     override suspend fun sendDirectGift(token: String, giftId: String, receiverId: String): Conversation = WalletApi.sendDirectGift(token, giftId, receiverId)
 
     // Dating
@@ -256,6 +261,11 @@ object YugmApi : IYugmApi {
     override suspend fun reactToClanMessage(token: String, clanId: String, messageId: String, type: String): JSONObject = ClanApi.reactToClanMessage(token, clanId, messageId, type)
     override suspend fun deleteClanMessage(token: String, clanId: String, messageId: String) = ClanApi.deleteClanMessage(token, clanId, messageId)
     override suspend fun reportClanMessage(token: String, clanId: String, messageId: String, reason: String, description: String) = ClanApi.reportClanMessage(token, clanId, messageId, reason, description)
+    override suspend fun clanInvitations(token: String): List<ClanInvitation> = ClanApi.invitations(token)
+    override suspend fun respondToClanInvitation(token: String, invitationId: String, accept: Boolean) = ClanApi.respondToInvitation(token, invitationId, accept)
+    override suspend fun inviteClanMember(token: String, clanId: String, userId: String) = ClanApi.inviteMember(token, clanId, userId)
+    override suspend fun transferClanOwnership(token: String, clanId: String, userId: String) = ClanApi.transferOwnership(token, clanId, userId)
+    override suspend fun clanLeaderboard(token: String): List<ClanRankingEntry> = ClanApi.leaderboard(token)
 
     // Games
     override suspend fun gameCatalog(token: String): GameCatalog = GameApi.gameCatalog(token)
@@ -267,7 +277,7 @@ object YugmApi : IYugmApi {
     override suspend fun shareGameScore(token: String, scoreId: String, targetUserId: String) = GameApi.shareGameScore(token, scoreId, targetUserId)
 
     // User profile, search, follow, block, notifications, messaging
-    override suspend fun updateProfile(token: String, name: String, username: String, bio: String?, city: String?, interests: List<String>?, languages: List<String>?, gender: String?, age: Int?, lookingFor: String?, avatar: String?, acceptTerms: Boolean, vibeLine: String?, hobbies: List<String>?): YugmUser = UserApi.updateProfile(token, name, username, bio, city, interests, languages, gender, age, lookingFor, avatar, acceptTerms, vibeLine, hobbies)
+    override suspend fun updateProfile(token: String, name: String, username: String, bio: String?, city: String?, interests: List<String>?, languages: List<String>?, gender: String?, age: Int?, lookingFor: String?, avatar: String?, acceptTerms: Boolean, vibeLine: String?, hobbies: List<String>?, state: String?): YugmUser = UserApi.updateProfile(token, name, username, bio, city, interests, languages, gender, age, lookingFor, avatar, acceptTerms, vibeLine, hobbies, state)
     override suspend fun searchUsers(query: String, token: String?): List<Host> = UserApi.searchUsers(query, token)
     override suspend fun getUser(userId: String, token: String?): Host = UserApi.getUser(userId, token)
     override suspend fun getPublicProfile(userId: String, token: String?): Host = UserApi.getPublicProfile(userId, token)

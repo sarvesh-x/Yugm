@@ -37,7 +37,7 @@ const patchSchema = z.object({
   tags: z.array(z.string()).optional(),
   category: z.string().optional(),
   visibility: z.enum(["PUBLIC", "PRIVATE"]).optional(),
-  maxSpeakers: z.number().int().min(1).max(50).optional(),
+  maxSpeakers: z.number().int().min(2).max(20).optional(),
   allowAudienceMicRequests: z.boolean().optional(),
   micLocked: z.boolean().optional(),
   coverImage: z.string().optional(),
@@ -106,6 +106,10 @@ async function requireActiveParticipant(roomId: unknown, userId: string) {
   return participant;
 }
 
+function roomMicLimit(room: { maxSpeakers?: number }): number {
+  return Math.min(20, Math.max(2, Number.isFinite(room.maxSpeakers) ? room.maxSpeakers! : 8));
+}
+
 async function getOccupiedSeatIndices(room: any, excludeUserId?: string) {
   const occupied = await RoomParticipant.find({
     roomId: room._id,
@@ -114,11 +118,12 @@ async function getOccupiedSeatIndices(room: any, excludeUserId?: string) {
     role: { $in: ["HOST", "SPEAKER", "MODERATOR"] }
   }).select("seatIndex joinedAt").sort({ joinedAt: 1, _id: 1 }).lean();
   const used = new Set<number>();
+  const micLimit = roomMicLimit(room);
   occupied.forEach((participant: any) => {
-    if (Number.isInteger(participant.seatIndex) && participant.seatIndex >= 0 && participant.seatIndex < room.maxSpeakers) used.add(participant.seatIndex);
+    if (Number.isInteger(participant.seatIndex) && participant.seatIndex >= 0 && participant.seatIndex < micLimit) used.add(participant.seatIndex);
   });
   occupied.filter((participant: any) => !Number.isInteger(participant.seatIndex)).forEach(() => {
-    for (let seat = 0; seat < room.maxSpeakers; seat++) {
+    for (let seat = 0; seat < micLimit; seat++) {
       if (!used.has(seat)) { used.add(seat); break; }
     }
   });
@@ -128,13 +133,14 @@ async function getOccupiedSeatIndices(room: any, excludeUserId?: string) {
 async function findOpenSeat(room: any, requestedSeat?: number, excludeUserId?: string) {
   const used = await getOccupiedSeatIndices(room, excludeUserId);
   const locked = new Set<number>((room.lockedSeatIndices ?? []).filter((seat: number) => Number.isInteger(seat)));
+  const micLimit = roomMicLimit(room);
   if (requestedSeat !== undefined) {
-    if (requestedSeat < 0 || requestedSeat >= room.maxSpeakers) throw new HttpError(400, "Invalid mic seat", ErrorCode.VALIDATION);
+    if (requestedSeat < 0 || requestedSeat >= micLimit) throw new HttpError(400, "Invalid mic seat", ErrorCode.VALIDATION);
     if (locked.has(requestedSeat)) throw new HttpError(423, "This mic seat is locked", ErrorCode.FORBIDDEN);
     if (used.has(requestedSeat)) throw new HttpError(409, "This mic seat is already occupied", ErrorCode.CONFLICT);
     return requestedSeat;
   }
-  for (let seat = 0; seat < room.maxSpeakers; seat++) {
+  for (let seat = 0; seat < micLimit; seat++) {
     if (!used.has(seat) && !locked.has(seat)) return seat;
   }
   throw new HttpError(409, "No open mic seats are available", ErrorCode.CONFLICT);
@@ -349,7 +355,7 @@ roomsRouter.get("/:id", requireAuth, asyncHandler(async (req: AuthRequest, res) 
     if (Number.isInteger(participant.seatIndex)) assignedSeats.add(participant.seatIndex);
   });
   orderedSpeakers.filter((participant: any) => !Number.isInteger(participant.seatIndex)).forEach((participant: any) => {
-    for (let seatIndex = 0; seatIndex < room.maxSpeakers; seatIndex++) {
+    for (let seatIndex = 0; seatIndex < roomMicLimit(room); seatIndex++) {
       if (!assignedSeats.has(seatIndex)) {
         assignedSeats.add(seatIndex);
         legacySeatById.set(participant._id.toString(), seatIndex);
@@ -461,7 +467,7 @@ roomsRouter.post("/:id/mic-lock", requireAuth, validateBody(z.object({ locked: z
 roomsRouter.post("/:id/seat-lock", requireAuth, validateBody(z.object({ seatIndex: z.number().int().min(0), locked: z.boolean() })), asyncHandler(async (req: AuthRequest, res) => {
   const { room } = await assertHostOrRoomAdmin(req, req.params.id);
   const { seatIndex, locked } = req.body;
-  if (seatIndex >= room.maxSpeakers) throw new HttpError(400, "Invalid mic seat", ErrorCode.VALIDATION);
+  if (seatIndex >= roomMicLimit(room)) throw new HttpError(400, "Invalid mic seat", ErrorCode.VALIDATION);
   if ((await getOccupiedSeatIndices(room)).has(seatIndex)) throw new HttpError(409, "An occupied mic cannot be locked", ErrorCode.CONFLICT);
   await Room.updateOne({ _id: room._id }, locked
     ? { $addToSet: { lockedSeatIndices: seatIndex } }

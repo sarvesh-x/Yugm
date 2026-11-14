@@ -4,9 +4,11 @@ import com.yugm.app.core.api.parsers.*
 import com.yugm.app.core.model.CoinPack
 import com.yugm.app.core.model.Conversation
 import com.yugm.app.core.model.CosmeticCatalog
+import com.yugm.app.core.model.DailyRewardClaimResult
 import com.yugm.app.core.model.DirectMessage
 import com.yugm.app.core.model.GiftItem
 import com.yugm.app.core.model.LevelStatus
+import com.yugm.app.core.model.PurchaseRecord
 import com.yugm.app.core.model.RazorpayCheckoutData
 import com.yugm.app.core.model.VipPlan
 import com.yugm.app.core.model.VipStatus
@@ -105,7 +107,7 @@ object WalletApi {
                 val item = data.getJSONObject(index)
                 val gid = item.optString("_id", "")
                 val gname = item.optString("name", "Gift")
-                if (gid.isNotBlank()) add(GiftItem(gid, gname, item.optInt("coinPrice")))
+                if (gid.isNotBlank()) add(GiftItem(gid, gname, item.optInt("coinPrice"), item.optInt("diamondPrice")))
             }
         }
     }
@@ -134,8 +136,8 @@ object WalletApi {
         return data.toCosmeticCatalog()
     }
 
-    suspend fun sendGift(token: String, roomId: String, gift: GiftItem, receiverId: String) {
-        YugmHttpClient.post("/rooms/$roomId/send-gift", token, JSONObject().put("giftId", gift.id).put("receiverId", receiverId))
+    suspend fun sendGift(token: String, roomId: String, gift: GiftItem, receiverId: String, currency: String = "COINS") {
+        YugmHttpClient.post("/rooms/$roomId/send-gift", token, JSONObject().put("giftId", gift.id).put("receiverId", receiverId).put("currency", currency))
     }
 
     suspend fun devRecharge(token: String, amount: Int) {
@@ -151,9 +153,14 @@ object WalletApi {
         YugmHttpClient.post("/wallet/cosmetics/transfer", token, JSONObject().put("cosmeticId", cosmeticId).put("receiverId", receiverId))
     }
 
-    suspend fun purchaseHistory(token: String): List<com.yugm.app.core.model.WalletTransaction> {
+    suspend fun claimDailyReward(token: String): DailyRewardClaimResult {
+        val data = YugmHttpClient.post("/wallet/rewards/daily", token, JSONObject()).getJSONObject("data")
+        return data.toDailyRewardClaimResult()
+    }
+
+    suspend fun purchaseHistory(token: String): List<PurchaseRecord> {
         val data = YugmHttpClient.get("/wallet/purchases", token).getJSONObject("data")
-        return data.optJSONArray("purchases")?.toWalletTransactions() ?: emptyList()
+        return data.optJSONArray("purchases")?.toPurchaseRecords() ?: emptyList()
     }
 
     suspend fun sendDirectGift(token: String, giftId: String, receiverId: String): Conversation {

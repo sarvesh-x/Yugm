@@ -54,7 +54,10 @@ class ProfileViewModel @Inject constructor(
         vibeLine: String,
         city: String,
         interests: List<String> = profile?.interests ?: emptyList(),
-        hobbies: List<String> = profile?.hobbies ?: emptyList()
+        hobbies: List<String> = profile?.hobbies ?: emptyList(),
+        state: String = profile?.state.orEmpty(),
+        gender: String = profile?.gender.orEmpty(),
+        age: Int = profile?.age ?: 0
     ) {
         profile = profile?.copy(
             name = name,
@@ -62,6 +65,9 @@ class ProfileViewModel @Inject constructor(
             bio = bio,
             vibeLine = vibeLine,
             city = city,
+            state = state,
+            gender = gender,
+            age = age,
             interests = interests,
             hobbies = hobbies
         )

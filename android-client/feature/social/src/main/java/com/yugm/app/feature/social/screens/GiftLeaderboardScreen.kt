@@ -63,9 +63,10 @@ fun GiftLeaderboardScreen(
     val viewModel: SocialViewModel = hiltViewModel()
     val context = LocalContext.current
     var selectedTab by remember { mutableStateOf(0) }
+    var selectedBoard by remember { mutableStateOf(0) }
     var selectedPeriod by remember { mutableStateOf("all") }
 
-    LaunchedEffect(token, selectedPeriod) { viewModel.loadGiftLeaderboard(token, selectedPeriod) }
+    LaunchedEffect(token, selectedPeriod) { viewModel.loadLeaderboardHub(token, selectedPeriod) }
 
     YugmAmbientBackground {
         LazyColumn(
@@ -74,17 +75,25 @@ fun GiftLeaderboardScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                YugmPageHeader("Gift Leaderboard", onBack = onBack)
+                YugmPageHeader("Yugm", "Leaderboards", onBack = onBack)
             }
             item {
                 SegmentedTabs(
-                    items = listOf("" to "Top Senders", "" to "Top Receivers"),
+                    items = listOf("✦" to "Gifts", "♛" to "Clans", "⚡" to "Hosts", "◈" to "Rooms"),
+                    selectedIndex = selectedBoard,
+                    onSelected = { selectedBoard = it },
+                    modifier = Modifier.padding(horizontal = 20.dp)
+                )
+            }
+            if (selectedBoard == 0) item {
+                SegmentedTabs(
+                    items = listOf("↗" to "Top Senders", "↙" to "Top Receivers"),
                     selectedIndex = selectedTab,
                     onSelected = { selectedTab = it },
                     modifier = Modifier.padding(horizontal = 20.dp)
                 )
             }
-            item {
+            if (selectedBoard == 0) item {
                 Row(
                     modifier = Modifier.padding(horizontal = 20.dp).fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -105,24 +114,81 @@ fun GiftLeaderboardScreen(
                 }
             }
             if (viewModel.isLoading) {
-                item { Box(Modifier.padding(horizontal = 20.dp)) { LoadingState("Loading leaderboard...") } }
-            } else {
-                val entries = if (selectedTab == 0) viewModel.leaderboard?.topSenders else viewModel.leaderboard?.topReceivers
-                if (entries.isNullOrEmpty()) {
-                    item {
-                        Box(Modifier.padding(horizontal = 20.dp)) {
-                            GlassCard {
-                                Text("No entries yet.", color = TextPrimary, fontWeight = FontWeight.Black)
+                item { Box(Modifier.padding(horizontal = 20.dp)) { LoadingState("Loading rankings...") } }
+            } else when (selectedBoard) {
+                0 -> {
+                    val entries = if (selectedTab == 0) viewModel.leaderboard?.topSenders else viewModel.leaderboard?.topReceivers
+                    if (entries.isNullOrEmpty()) item { EmptyLeaderboard("No gift activity for this period yet.") }
+                    else itemsIndexed(entries) { index, entry -> LeaderboardRow(rank = index + 1, entry = entry) }
+                }
+                1 -> {
+                    if (viewModel.clanRankings.isEmpty()) item { EmptyLeaderboard("Public clan rankings appear as members earn XP.") }
+                    itemsIndexed(viewModel.clanRankings) { index, entry ->
+                        Row(
+                            Modifier.padding(horizontal = 20.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                                .background(if (index < 3) PrimaryPurple.copy(alpha = .12f) else SurfaceElevated)
+                                .border(1.dp, if (index < 3) Gold.copy(alpha = .3f) else BorderColor, RoundedCornerShape(16.dp)).padding(13.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("#${entry.rank}", color = Gold, fontWeight = FontWeight.Black, modifier = Modifier.width(38.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(entry.name, color = TextPrimary, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("${entry.familyLabel} · ${entry.memberCount} members", color = TextMuted, fontSize = 11.sp)
                             }
+                            Text("${entry.totalXp} XP", color = Gold, fontWeight = FontWeight.Black, fontSize = 12.sp)
                         }
                     }
-                } else {
-                    itemsIndexed(entries) { index, entry ->
-                        LeaderboardRow(rank = index + 1, entry = entry)
+                }
+                2 -> {
+                    if (viewModel.levelRankings.isEmpty()) item { EmptyLeaderboard("No host level rankings are available yet.") }
+                    itemsIndexed(viewModel.levelRankings) { index, host -> HostRankingRow(index + 1, host) }
+                }
+                else -> {
+                    val rooms = viewModel.roomRankings.topRooms
+                    if (rooms.isEmpty()) item { EmptyLeaderboard("No live room rankings are available yet.") }
+                    itemsIndexed(rooms) { index, room ->
+                        Row(
+                            Modifier.padding(horizontal = 20.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                                .background(if (index < 3) PrimaryPurple.copy(alpha = .12f) else SurfaceElevated)
+                                .border(1.dp, if (index < 3) Gold.copy(alpha = .3f) else BorderColor, RoundedCornerShape(16.dp)).padding(13.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("#${index + 1}", color = Gold, fontWeight = FontWeight.Black, modifier = Modifier.width(38.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(room.title.ifBlank { "Live room" }, color = TextPrimary, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("${room.category.ifBlank { "Live" }} · ${room.participants} watching", color = TextMuted, fontSize = 11.sp)
+                            }
+                            room.host?.let { Avatar(it.name.firstOrNull()?.toString() ?: "?", 40, it.avatar, it.activeCosmetics) }
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun EmptyLeaderboard(message: String) {
+    Box(Modifier.padding(horizontal = 20.dp)) {
+        GlassCard { Text(message, color = TextPrimary, fontWeight = FontWeight.Medium, fontSize = 13.sp) }
+    }
+}
+
+@Composable
+private fun HostRankingRow(rank: Int, host: com.yugm.app.core.model.Host) {
+    Row(
+        Modifier.padding(horizontal = 20.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp))
+            .background(if (rank <= 3) PrimaryPurple.copy(alpha = .12f) else SurfaceElevated)
+            .border(1.dp, if (rank <= 3) Gold.copy(alpha = .3f) else BorderColor, RoundedCornerShape(16.dp)).padding(13.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("#$rank", color = Gold, fontWeight = FontWeight.Black, modifier = Modifier.width(38.dp))
+        Avatar(host.name.firstOrNull()?.toString() ?: "?", 42, host.avatar, host.activeCosmetics)
+        Column(Modifier.weight(1f).padding(start = 10.dp)) {
+            Text(host.name, color = TextPrimary, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(host.levelTitle.ifBlank { "Level ${host.level}" }, color = TextMuted, fontSize = 11.sp)
+        }
+        Text("${host.xp} XP", color = Gold, fontWeight = FontWeight.Black, fontSize = 12.sp)
     }
 }
 

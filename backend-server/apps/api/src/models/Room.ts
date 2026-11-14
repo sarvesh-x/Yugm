@@ -45,7 +45,7 @@ const roomSchema = new Schema<IRoom>(
     language: { type: String, required: true },
     status: { type: String, enum: ["LIVE", "ENDED", "SCHEDULED"], default: "LIVE", index: true },
     visibility: { type: String, enum: ["PUBLIC", "PRIVATE"], default: "PUBLIC" },
-    maxSpeakers: { type: Number, default: 6 },
+    maxSpeakers: { type: Number, default: 8 },
     participantCount: { type: Number, default: 0 },
     speakerIds: [{ type: Schema.Types.ObjectId, ref: "User" }],
     moderatorIds: [{ type: Schema.Types.ObjectId, ref: "User" }],

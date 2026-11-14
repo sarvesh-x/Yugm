@@ -7,6 +7,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yugm.app.core.api.IYugmApi
 import com.yugm.app.core.model.CoinPack
+import com.yugm.app.core.model.DailyRewardClaimResult
+import com.yugm.app.core.model.DailyRewardStatus
 import com.yugm.app.core.model.GiftItem
 import com.yugm.app.core.model.RazorpayCheckoutData
 import com.yugm.app.core.model.WalletOverview
@@ -37,18 +39,52 @@ class WalletViewModel @Inject constructor(
     var balance by mutableStateOf(0)
         private set
 
+    var dailyReward by mutableStateOf(DailyRewardStatus())
+        private set
+
     var isLoading by mutableStateOf(false)
+        private set
+
+    var isClaimingReward by mutableStateOf(false)
         private set
 
     fun loadWallet(token: String) {
         viewModelScope.launch {
             isLoading = true
-            overview = withContext(Dispatchers.IO) { yugmApi.walletOverview(token) }
-            coinPacks = withContext(Dispatchers.IO) { yugmApi.coinPacks(token) }
-            giftItems = withContext(Dispatchers.IO) { yugmApi.gifts(token) }
-            transactions = withContext(Dispatchers.IO) { yugmApi.walletTransactions(token) }
-            balance = withContext(Dispatchers.IO) { yugmApi.wallet(token) }
+            runCatching {
+                val ov = withContext(Dispatchers.IO) { yugmApi.walletOverview(token) }
+                val packs = withContext(Dispatchers.IO) { yugmApi.coinPacks(token) }
+                val gifts = withContext(Dispatchers.IO) { yugmApi.gifts(token) }
+                val tx = withContext(Dispatchers.IO) { yugmApi.walletTransactions(token) }
+                overview = ov
+                coinPacks = packs
+                giftItems = gifts
+                transactions = tx
+                balance = ov.balance
+                dailyReward = ov.dailyReward
+            }.onFailure {
+                error = it.message ?: "Failed to load wallet"
+            }
             isLoading = false
+        }
+    }
+
+    fun claimDailyReward(token: String, onResult: (String) -> Unit = {}) {
+        if (isClaimingReward || !dailyReward.canClaim) return
+        viewModelScope.launch {
+            isClaimingReward = true
+            runCatching {
+                withContext(Dispatchers.IO) { yugmApi.claimDailyReward(token) }
+            }.onSuccess { result: DailyRewardClaimResult ->
+                balance = result.balance
+                dailyReward = result.dailyReward
+                overview = overview?.copy(balance = result.balance, level = result.level, dailyReward = result.dailyReward) ?: overview
+                transactions = withContext(Dispatchers.IO) { runCatching { yugmApi.walletTransactions(token) }.getOrDefault(transactions) }
+                onResult(if (result.claimed) "Daily reward claimed: +${result.rewardCoins} coins" else "Daily reward already claimed")
+            }.onFailure {
+                onResult(it.message ?: "Failed to claim reward")
+            }
+            isClaimingReward = false
         }
     }
 

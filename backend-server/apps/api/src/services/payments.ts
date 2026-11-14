@@ -82,7 +82,7 @@ function base64Url(input: string | Buffer) {
   return Buffer.from(input).toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
 
-async function getGoogleAccessToken() {
+export async function getGoogleAccessToken() {
   if (!env.GOOGLE_PLAY_CLIENT_EMAIL || !env.GOOGLE_PLAY_PRIVATE_KEY) {
     throw new HttpError(503, "Google Play verification is not configured", ErrorCode.VALIDATION);
   }

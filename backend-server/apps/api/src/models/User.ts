@@ -32,6 +32,7 @@ export interface IUser extends mongoose.Document {
   followersCount: number;
   followingCount: number;
   walletBalance: number;
+  diamondBalance: number;
   xp: number;
   level: number;
   levelTitle?: string;
@@ -132,6 +133,7 @@ const userSchema = new Schema<IUser>(
     followersCount: { type: Number, default: 0 },
     followingCount: { type: Number, default: 0 },
     walletBalance: { type: Number, default: 0 },
+    diamondBalance: { type: Number, default: 0, min: 0 },
     xp: { type: Number, default: 0 },
     level: { type: Number, default: 1 },
     levelTitle: { type: String, default: "New Vibe" },

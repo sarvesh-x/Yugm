@@ -92,9 +92,11 @@ fun WishlistScreen(
                     }
                 } else {
                     items(viewModel.wishlist, key = { it._id }) { item ->
-                        WishlistItemRow(item = item, onDelete = {
-                            viewModel.deleteWishlistItem(token, item._id)
-                        })
+                        WishlistItemRow(
+                            item = item,
+                            onClick = { Toast.makeText(context, "Coming soon", Toast.LENGTH_SHORT).show() },
+                            onDelete = { viewModel.deleteWishlistItem(token, item._id) }
+                        )
                     }
                 }
                 if (userId == null) {
@@ -185,7 +187,7 @@ fun WishlistScreen(
 }
 
 @Composable
-private fun WishlistItemRow(item: WishlistItem, onDelete: () -> Unit) {
+private fun WishlistItemRow(item: WishlistItem, onClick: () -> Unit, onDelete: () -> Unit) {
     val gift = item.giftId
     val name = gift?.name ?: "Unknown Gift"
     val icon = gift?.icon ?: "🎁"
@@ -197,7 +199,7 @@ private fun WishlistItemRow(item: WishlistItem, onDelete: () -> Unit) {
             .clip(RoundedCornerShape(16.dp))
             .background(SurfaceElevated)
             .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
-            .clickable { }
+            .clickable(onClick = onClick)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

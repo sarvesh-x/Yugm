@@ -127,15 +127,19 @@ object YugmHttpClient {
                             Timber.tag(TAG).e(e, "Error parsing error response")
                             null
                         }
-                        val errMsg = apiError?.optString("message")?.takeIf { it.isNotBlank() }
-                            ?: "API ${response.code}"
-                        val requestId = apiError?.optString("requestId")?.takeIf { it.isNotBlank() && it != "null" }
-                        val displayMessage = if (response.code >= 500 && requestId != null) {
-                            "$errMsg (reference: $requestId)"
-                        } else {
-                            errMsg
-                        }
-                        throw ApiHttpException(response.code, displayMessage)
+val errMsg = apiError?.optString("message")?.takeIf { it.isNotBlank() }
+    ?: "API ${response.code}"
+val requestId = apiError?.optString("requestId")?.takeIf { it.isNotBlank() && it != "null" }
+
+// Show full error context: status code, request ID, and server message
+// This helps debugging when server returns inconsistent errors (e.g., 422 with "Unexpected server error")
+val errorContext = when {
+    response.code >= 500 && requestId != null -> "$errMsg (reference: $requestId)"
+    response.code == 422 && requestId != null -> "Validation error (reference: $requestId)"
+    response.code >= 500 -> "$errMsg"
+    else -> errMsg
+}
+throw ApiHttpException(response.code, errorContext)
                     }
                     val payload = try {
                         JSONObject(raw)

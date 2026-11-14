@@ -9,6 +9,9 @@ import com.yugm.app.core.api.IYugmApi
 import com.yugm.app.core.model.Clan
 import com.yugm.app.core.model.ClanMessage
 import com.yugm.app.core.model.ClanSummary
+import com.yugm.app.core.model.ClanInvitation
+import com.yugm.app.core.model.ClanRankingEntry
+import com.yugm.app.core.model.Host
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -30,6 +33,15 @@ class ClanViewModel @Inject constructor(
         private set
 
     var messages by mutableStateOf<List<ClanMessage>>(emptyList())
+        private set
+
+    var invitations by mutableStateOf<List<ClanInvitation>>(emptyList())
+        private set
+    var leaderboard by mutableStateOf<List<ClanRankingEntry>>(emptyList())
+        private set
+    var inviteCandidates by mutableStateOf<List<Host>>(emptyList())
+        private set
+    var sentInviteIds by mutableStateOf<Set<String>>(emptySet())
         private set
 
     var isLoading by mutableStateOf(false)
@@ -63,6 +75,57 @@ class ClanViewModel @Inject constructor(
             }.onFailure {
                 error = it.message ?: "Failed to load clans"
             }
+            isLoading = false
+        }
+    }
+
+    fun loadCommunity(token: String) {
+        viewModelScope.launch {
+            runCatching {
+                val result = withContext(Dispatchers.IO) {
+                    yugmApi.clanInvitations(token) to yugmApi.clanLeaderboard(token)
+                }
+                invitations = result.first
+                leaderboard = result.second
+            }.onFailure { error = it.message ?: "Couldn't load clan community" }
+        }
+    }
+
+    fun loadInviteCandidates(token: String, userId: String) {
+        if (userId.isBlank()) return
+        viewModelScope.launch {
+            runCatching { inviteCandidates = withContext(Dispatchers.IO) { yugmApi.getFollowing(userId, token) } }
+                .onFailure { error = it.message ?: "Couldn't load people to invite" }
+        }
+    }
+
+    fun inviteMember(token: String, clanId: String, userId: String) {
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { yugmApi.inviteClanMember(token, clanId, userId) } }
+                .onSuccess { sentInviteIds = sentInviteIds + userId }
+                .onFailure { error = it.message ?: "Couldn't send clan invitation" }
+        }
+    }
+
+    fun respondToInvitation(token: String, invitationId: String, accept: Boolean) {
+        viewModelScope.launch {
+            isLoading = true
+            runCatching { withContext(Dispatchers.IO) { yugmApi.respondToClanInvitation(token, invitationId, accept) } }
+                .onSuccess {
+                    invitations = invitations.filterNot { it.id == invitationId }
+                    if (accept) myClan = withContext(Dispatchers.IO) { yugmApi.myClan(token) }
+                }
+                .onFailure { error = it.message ?: "Couldn't respond to clan invitation" }
+            isLoading = false
+        }
+    }
+
+    fun transferOwnership(token: String, clanId: String, userId: String) {
+        viewModelScope.launch {
+            isLoading = true
+            runCatching { withContext(Dispatchers.IO) { yugmApi.transferClanOwnership(token, clanId, userId) } }
+                .onSuccess { loadDetail(token, clanId); loadMyClan(token) }
+                .onFailure { error = it.message ?: "Couldn't transfer clan ownership" }
             isLoading = false
         }
     }

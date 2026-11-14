@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -278,7 +279,7 @@ fun ActiveVideoRoomScreen(
         SectionTitle("Room reactions")
         val emojiRow = listOf(
             "❤️" to "heart", "🔥" to "fire", "😂" to "laugh",
-            "👏" to "clap", "😮" to "wow", "🎉" to "laugh"
+            "👏" to "clap", "😮" to "wow", "🎉" to "party"
         )
         Row(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -384,18 +385,18 @@ private fun LiveVideoGrid(feeds: List<YugmMediaRoom.VideoFeed>) {
     val side = feeds.drop(1).take(2)
     val lower = feeds.drop(3).take(3)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(Modifier.fillMaxWidth().height(300.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            LiveVideoTile(main, Modifier.weight(2f).fillMaxSize())
-            Column(Modifier.weight(1f).fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                side.forEach { feed -> LiveVideoTile(feed, Modifier.weight(1f).fillMaxWidth()) }
+        Row(Modifier.fillMaxWidth().height(280.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            LiveVideoTile(main, Modifier.weight(2f).fillMaxHeight())
+            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                side.forEach { feed -> LiveVideoTile(feed, Modifier.fillMaxWidth().weight(1f)) }
                 repeat((2 - side.size).coerceAtLeast(0)) {
                     Box(Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Background))
                 }
             }
         }
         if (lower.isNotEmpty()) {
-            Row(Modifier.fillMaxWidth().height(150.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                lower.forEach { feed -> LiveVideoTile(feed, Modifier.weight(1f).fillMaxSize()) }
+            Row(Modifier.fillMaxWidth().height(120.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                lower.forEach { feed -> LiveVideoTile(feed, Modifier.fillMaxWidth().weight(1f)) }
             }
         }
     }

@@ -6,6 +6,39 @@ data class WalletTransaction(
     val description: String = "",
     val balanceAfter: Int = 0,
     val createdAt: String = ""
+) {
+    val isCredit: Boolean get() = type.equals("CREDIT", ignoreCase = true)
+    val signedAmount: Int get() = if (isCredit) amount else -amount
+    val displayAmount: String get() = "${if (isCredit) "+" else "-"}$amount"
+}
+
+data class PurchaseRecord(
+    val id: String = "",
+    val provider: String = "",
+    val status: String = "",
+    val packId: String = "",
+    val assetCurrency: String = "COINS",
+    val coinAmount: Int = 0,
+    val diamondAmount: Int = 0,
+    val amountInr: Int = 0,
+    val createdAt: String = ""
+)
+
+data class DailyRewardStatus(
+    val canClaim: Boolean = false,
+    val coinReward: Int = 0,
+    val xpReward: Int = 0,
+    val nextClaimAt: String? = null
+)
+
+data class DailyRewardClaimResult(
+    val claimed: Boolean = false,
+    val alreadyClaimed: Boolean = false,
+    val rewardCoins: Int = 0,
+    val rewardXp: Int = 0,
+    val balance: Int = 0,
+    val level: LevelStatus = LevelStatus(),
+    val dailyReward: DailyRewardStatus = DailyRewardStatus()
 )
 
 data class CreatorPayoutKycStatus(

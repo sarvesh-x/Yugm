@@ -29,10 +29,14 @@ fun JSONObject.toHost(): Host = Host(
     name = optString("name", ""),
     username = optString("username", ""),
     city = optString("city", ""),
+    state = optString("state", ""),
     vibe = optString("bio", optString("vibeLine", "")),
     vibeLine = optString("vibeLine", ""),
     followers = optInt("followersCount", 0),
     followingCount = optInt("followingCount", 0),
+    closeFriendsCount = optInt("closeFriendsCount", 0),
+    walletBalance = optInt("walletBalance", 0),
+    diamondBalance = optInt("diamondBalance", 0),
     bio = optString("bio", ""),
     avatar = if (has("avatar") && !isNull("avatar")) resolveMediaUrl(optString("avatar", "")) else null,
     isVip = optBoolean("isVip", false),
@@ -68,7 +72,7 @@ fun JSONObject.toRoom(): Room {
     val type = if (optString("type").equals("VIDEO", ignoreCase = true)) RoomType.Video else RoomType.Voice
     val desc = optString("description", optString("bio", ""))
     val bioStr = optString("bio", desc)
-    val maxMicsCount = optInt("maxSpeakers", optInt("maxMics", optInt("maxSeats", optInt("speakerLimit", optInt("micCount", if (type == RoomType.Video) 4 else 6)))))
+    val maxMicsCount = optInt("maxSpeakers", optInt("maxMics", optInt("maxSeats", optInt("speakerLimit", optInt("micCount", if (type == RoomType.Video) 4 else 8))))).coerceIn(2, 20)
     return Room(
         id = optString("_id", optString("id", "")),
         title = optString("title", ""),

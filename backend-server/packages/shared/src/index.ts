@@ -8,7 +8,7 @@ export const roomTypes = ["VOICE", "VIDEO"] as const;
 export const roomStatuses = ["LIVE", "ENDED", "SCHEDULED"] as const;
 export const roomVisibilities = ["PUBLIC", "PRIVATE"] as const;
 export const roomParticipantRoles = ["HOST", "SPEAKER", "AUDIENCE", "MODERATOR"] as const;
-export const reactionTypes = ["heart", "fire", "laugh", "clap", "wow"] as const;
+export const reactionTypes = ["heart", "fire", "laugh", "clap", "wow", "crown", "stars", "party"] as const;
 export const miniGameIds = ["vibe_tap", "memory_match", "reflex_ring"] as const;
 
 export type UserRole = (typeof roles)[number];
@@ -112,6 +112,28 @@ export const coinPacks = [
   { id: "coins_9990", coinAmount: 9990, priceInr: 999, googleProductId: "yugm_coins_9990" },
   { id: "coins_24990", coinAmount: 24990, priceInr: 2499, googleProductId: "yugm_coins_24990" }
 ] as const;
+
+export const diamondPacks = [
+  { id: "diamonds_30", diamondAmount: 30, priceInr: 29, googleProductId: "yugm_diamonds_30" },
+  { id: "diamonds_55", diamondAmount: 55, priceInr: 49, googleProductId: "yugm_diamonds_55" },
+  { id: "diamonds_120", diamondAmount: 120, priceInr: 99, googleProductId: "yugm_diamonds_120" },
+  { id: "diamonds_260", diamondAmount: 260, priceInr: 199, googleProductId: "yugm_diamonds_260" }
+] as const;
+
+export function findDiamondPack(id: string) {
+  return diamondPacks.find((pack) => pack.id === id);
+}
+
+export const subscriptionPlans = [
+  { id: "MONTHLY", name: "Monthly Creator Support", googleProductId: "yugm_creator_monthly", basePlanId: "monthly", coinPrice: 299 },
+  { id: "YEARLY", name: "Yearly Creator Support", googleProductId: "yugm_creator_yearly", basePlanId: "yearly", coinPrice: 2999 }
+] as const;
+
+export type SubscriptionPlan = (typeof subscriptionPlans)[number];
+
+export function findSubscriptionPlanByGoogleProductId(productId: string) {
+  return subscriptionPlans.find((plan) => plan.googleProductId === productId);
+}
 
 export const profileCosmetics = [
   { id: "avatar_nova_static", type: "AVATAR_ASSET", name: "Nova Static Avatar", coinPrice: 299, rarity: "RARE", preview: "avatar_nova", assetKind: "STATIC", assetUrl: "https://api.dicebear.com/9.x/adventurer/png?seed=YugmNova&backgroundColor=ffd5dc" },
@@ -339,6 +361,38 @@ export const relationshipXpEvents = {
 
 export type RelationshipXpEvent = keyof typeof relationshipXpEvents;
 
+export const diamondSources = [
+  "ADMIN_ADJUSTMENT",
+  "GIFT_SENT",
+  "GIFT_RECEIVED",
+  "RAZORPAY_PURCHASE",
+  "GOOGLE_PLAY_PURCHASE",
+  "REWARD",
+  "REFUND"
+] as const;
+
+export const diamondSourceLabels = {
+  ADMIN_ADJUSTMENT: "Admin adjustment",
+  GIFT_SENT: "Gift sent",
+  GIFT_RECEIVED: "Gift received",
+  RAZORPAY_PURCHASE: "Razorpay purchase",
+  GOOGLE_PLAY_PURCHASE: "Google Play purchase",
+  REWARD: "Reward",
+  REFUND: "Refund"
+} as const satisfies Record<(typeof diamondSources)[number], string>;
+
+export const walletSources = [
+  "RECHARGE", "GIFT_SENT", "GIFT_RECEIVED", "GIFT_SENT_DM", "GIFT_RECEIVED_DM", "VIP_PURCHASE",
+  "PROFILE_COSMETIC_PURCHASE", "COSMETIC_BUNDLE_PURCHASE", "COSMETIC_GIFT_SENT", "COSMETIC_GIFT_RECEIVED",
+  "LEVEL_REWARD", "STREAK_BONUS", "DAILY_REWARD", "ADMIN_ADJUSTMENT", "RAZORPAY_PURCHASE",
+  "GOOGLE_PLAY_PURCHASE", "PAYMENT_REFUND", "REFERRAL_BONUS", "STORY_REWARD", "SUBSCRIPTION"
+] as const;
+
+export const dailyRewardConfig = {
+  coinAmount: 25,
+  xpEvent: "DAILY_CHECKIN" as const
+};
+
 export const walletSourceLabels = {
   RECHARGE: "Recharge",
   GIFT_SENT: "Gift sent",
@@ -352,10 +406,14 @@ export const walletSourceLabels = {
   COSMETIC_GIFT_RECEIVED: "Cosmetic gift received",
   LEVEL_REWARD: "Level reward",
   STREAK_BONUS: "Streak bonus",
+  DAILY_REWARD: "Daily reward",
   ADMIN_ADJUSTMENT: "Admin adjustment",
   RAZORPAY_PURCHASE: "Razorpay recharge",
   GOOGLE_PLAY_PURCHASE: "Google Play recharge",
   SUBSCRIPTION: "Creator subscription"
+  ,PAYMENT_REFUND: "Payment refund"
+  ,REFERRAL_BONUS: "Referral bonus"
+  ,STORY_REWARD: "Story reward"
 } as const;
 
 export const vipPlans = [
@@ -434,7 +492,7 @@ export const createRoomSchema = z.object({
   tags: z.array(z.string().min(1).max(24)).max(8).default([]),
   language: z.string().min(2).max(32),
   category: z.string().min(2).max(32),
-  maxSpeakers: z.number().int().min(1).max(12).default(6),
+  maxSpeakers: z.number().int().min(2).max(20).default(8),
   visibility: z.enum(roomVisibilities).default("PUBLIC"),
   coverImage: z.string().optional(),
   allowAudienceMicRequests: z.boolean().default(true),
@@ -462,7 +520,8 @@ export const reportSchema = reportBaseSchema.refine((value) => Boolean(value.tar
 
 export const sendGiftSchema = z.object({
   giftId: z.string().regex(objectIdPattern, "Invalid giftId format"),
-  receiverId: z.string().regex(objectIdPattern, "Invalid receiverId format")
+  receiverId: z.string().regex(objectIdPattern, "Invalid receiverId format"),
+  currency: z.enum(["COINS", "DIAMONDS"]).optional()
 });
 
 export const createPurchaseOrderSchema = z.object({

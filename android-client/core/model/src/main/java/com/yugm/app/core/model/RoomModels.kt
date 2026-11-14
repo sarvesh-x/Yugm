@@ -16,7 +16,7 @@ data class Room(
     val language: String = "",
     val tags: List<String> = emptyList(),
     val participants: Int = 0,
-    val maxSpeakers: Int = 6,
+    val maxSpeakers: Int = 8,
     val gradient: List<Color> = emptyList(),
     val theme: String = "",
     val vipOnly: Boolean = false,

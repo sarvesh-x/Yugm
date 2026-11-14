@@ -4,8 +4,11 @@ import android.content.Intent
 import android.net.Uri
 import android.util.Patterns
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -32,6 +35,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Public
 import com.yugm.app.core.ui.components.*
 import com.yugm.app.core.ui.theme.*
 
@@ -146,17 +154,19 @@ fun LoginScreen(
                     }
                 } else {
                     Text("Choose how you want to sign in", color = TextMuted, fontSize = 13.sp, modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 12.dp))
-                    GlassOutlinedButton(
-                        text = if (googleLoading) "Connecting…" else "Continue with Google",
+                    LoginMethodButton(
+                        text = if (googleLoading) "Connecting…" else " Google",
+                        icon = Icons.Filled.Public,
                         onClick = { if (acceptTerms) onGoogleSignIn(acceptTerms) else localError = "Accept the terms to continue." },
-                        modifier = Modifier.fillMaxWidth(), height = 54.dp, cornerRadius = 16.dp,
+                        modifier = Modifier.fillMaxWidth(),
                         enabled = !loading && !googleLoading && acceptTerms
                     )
                     Spacer(Modifier.height(10.dp))
-                    GlassOutlinedButton(
-                        text = "Continue with phone",
+                    LoginMethodButton(
+                        text = " Phone",
+                        icon = Icons.Filled.Phone,
                         onClick = onPhoneSignIn,
-                        modifier = Modifier.fillMaxWidth(), height = 54.dp, cornerRadius = 16.dp,
+                        modifier = Modifier.fillMaxWidth(),
                         enabled = !loading && !googleLoading && acceptTerms
                     )
                     TextButton(onClick = { manualLogin = true; clearErrors() }, enabled = !loading && !googleLoading, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
@@ -176,15 +186,16 @@ fun LoginScreen(
                 }
                 if (manualLogin) {
                     Spacer(Modifier.height(14.dp))
-                    GlassButton(
+                    LoginMethodButton(
                         text = if (createAccount) "Create account" else "Sign in with email",
+                        icon = Icons.Filled.Email,
                         onClick = {
                             if (createAccount && confirmPassword != password) localError = "Passwords do not match."
                             else onEmailAuth(email.trim(), password, createAccount, acceptTerms)
                         },
                         enabled = canSubmit,
-                        loading = loading,
-                        gradient = Brush.horizontalGradient(auroraGradientPrimary)
+                        isPrimary = true,
+                        loading = loading
                     )
                     if (!createAccount) {
                         TextButton(onClick = { manualLogin = false; clearErrors() }, enabled = !loading && !googleLoading, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
@@ -232,6 +243,79 @@ fun LoginScreen(
             dismissButton = { TextButton(onClick = { forgotDialog = false }) { Text("Cancel", color = TextMuted) } },
             containerColor = SurfaceElevated
         )
+    }
+}
+
+@Composable
+private fun LoginMethodButton(
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    isPrimary: Boolean = false,
+    loading: Boolean = false
+) {
+    val shape = RoundedCornerShape(16.dp)
+    val interactionSource = remember { MutableInteractionSource() }
+    val borderModifier = if (isPrimary) {
+        Modifier
+    } else {
+        Modifier.border(
+            1.dp,
+            Brush.horizontalGradient(listOf(PrimaryPurple.copy(alpha = 0.3f), PrimaryPink.copy(alpha = 0.3f))),
+            shape
+        )
+    }
+    val backgroundBrush = if (isPrimary) {
+        Brush.horizontalGradient(auroraGradientPrimary)
+    } else {
+        Brush.linearGradient(listOf(Surface.copy(alpha = 0.4f), Surface.copy(alpha = 0.4f)))
+    }
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(54.dp)
+            .clip(shape)
+            .background(backgroundBrush, alpha = if (enabled) 1f else 0.4f)
+            .then(borderModifier)
+            .semantics { contentDescription = text }
+            .clickable(
+                interactionSource = interactionSource,
+                role = Role.Button,
+                onClickLabel = text,
+                enabled = enabled,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        if (loading) {
+            CircularProgressIndicator(
+                color = Color.White,
+                modifier = Modifier.size(24.dp),
+                strokeWidth = 2.dp
+            )
+        } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (isPrimary) Color.White else Gold,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = text,
+                    color = Color.White,
+                    fontWeight = if (isPrimary) FontWeight.Black else FontWeight.Medium,
+                    fontSize = 15.sp
+                )
+            }
+        }
     }
 }
 

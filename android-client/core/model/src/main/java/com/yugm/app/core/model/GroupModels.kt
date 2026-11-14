@@ -63,3 +63,22 @@ data class ClanSummary(
     val familyLabel: String = "",
     val memberCount: Int = 0
 )
+
+data class ClanInvitation(
+    val id: String = "",
+    val clanId: String = "",
+    val clanName: String = "Clan",
+    val clanAvatar: String? = null,
+    val inviterName: String = "",
+    val expiresAt: String = ""
+)
+
+data class ClanRankingEntry(
+    val id: String = "",
+    val rank: Int = 0,
+    val name: String = "",
+    val avatar: String? = null,
+    val familyLabel: String = "",
+    val memberCount: Int = 0,
+    val totalXp: Long = 0
+)

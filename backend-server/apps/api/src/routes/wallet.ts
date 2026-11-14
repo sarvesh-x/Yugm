@@ -1,7 +1,7 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
-import { coinPacks, cosmeticBundles, createPurchaseOrderSchema, equipProfileCosmeticSchema, purchaseCosmeticBundleSchema, purchaseProfileCosmeticSchema, purchaseVipSchema, sendGiftSchema, socketEvents, transferCosmeticSchema, verifyGooglePlayPurchaseSchema, verifyRazorpayPurchaseSchema, vipPlans, walletSourceLabels } from "@yugm/shared";
+import { coinPacks, cosmeticBundles, createPurchaseOrderSchema, equipProfileCosmeticSchema, purchaseCosmeticBundleSchema, purchaseProfileCosmeticSchema, purchaseVipSchema, sendGiftSchema, socketEvents, transferCosmeticSchema, verifyGooglePlayPurchaseSchema, verifyRazorpayPurchaseSchema, vipPlans, walletSourceLabels, xpEvents } from "@yugm/shared";
 import { requireAuth, requireRole, type AuthRequest } from "../middleware/auth.js";
 import { requireWalletNotFrozen } from "../middleware/requireSafety.js";
 import { validateBody } from "../middleware/validate.js";
@@ -25,9 +25,14 @@ import { activeCosmeticKey, ensureDefaultCosmetics, findProfileCosmetic, listPub
 import { getLevelStatus, grantXp } from "../services/levels.js";
 import { grantRelationshipXp } from "../services/relationships.js";
 import { assertUsersCanInteract } from "../services/safety.js";
+import { creditPurchase } from "../services/purchaseCredit.js";
+import { assertDiamondsEnabled, creditDiamonds, debitDiamonds } from "../services/diamonds.js";
 
 export const walletRouter = Router();
 walletRouter.use(requireAuth);
+
+const DAILY_REWARD_COINS = 25;
+const DAILY_REWARD_SOURCE = "DAILY_REWARD";
 
 const adminWalletAdjustSchema = z.object({
   userId: z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid userId format"),
@@ -42,6 +47,15 @@ function findCoinPack(packId: string) {
   return pack;
 }
 
+function startOfUtcDay(date = new Date()) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function nextUtcDay(date = new Date()) {
+  const start = startOfUtcDay(date);
+  return new Date(start.getTime() + 24 * 60 * 60 * 1000);
+}
+
 async function runWalletSideEffect<T>(label: string, task: () => Promise<T>) {
   try {
     return await task();
@@ -51,41 +65,10 @@ async function runWalletSideEffect<T>(label: string, task: () => Promise<T>) {
   }
 }
 
-async function creditPurchase(purchaseId: string, userId: string, metadata: Record<string, unknown>) {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    const purchase = await Purchase.findOneAndUpdate(
-      { _id: purchaseId, userId, status: { $ne: "CREDITED" } },
-      { $set: { status: "CREDITED", creditedAt: new Date() }, $setOnInsert: {} },
-      { new: true, session }
-    );
-    if (!purchase) throw new HttpError(404, "Purchase not found", ErrorCode.NOT_FOUND);
-    purchase.metadata = { ...purchase.metadata, ...metadata };
-    const tx = await creditWallet(userId, purchase.coinAmount, `${purchase.provider}_PURCHASE`, {
-      purchaseId: purchase._id.toString(),
-      packId: purchase.packId,
-      provider: purchase.provider,
-      ...metadata
-    }, session);
-    purchase.creditedTransactionId = tx[0]._id;
-    await purchase.save({ session });
-    await session.commitTransaction();
-    session.endSession();
-    return purchase;
-  } catch (err) {
-    await session.abortTransaction();
-    session.endSession();
-    const alreadyCredited = await Purchase.findOne({ _id: purchaseId, userId, status: "CREDITED" });
-    if (alreadyCredited) return alreadyCredited;
-    throw err;
-  }
-}
-
 async function consumeGooglePurchaseIfNeeded(purchase: any, productId: string, purchaseToken: string) {
   if (purchase.metadata?.googleConsumedAt) return purchase;
   await consumeGooglePlayProduct({ productId, purchaseToken });
-  purchase.metadata = { ...purchase.metadata, googleConsumedAt: new Date().toISOString() };
+  purchase.metadata = { ...(purchase.metadata ?? {}), googleConsumedAt: new Date().toISOString() };
   await purchase.save();
   return purchase;
 }
@@ -99,14 +82,75 @@ walletRouter.get("/gifts", asyncHandler(async (_req, res) => {
   sendOk(res, payload);
 }));
 
-walletRouter.get("/wallet", (req: AuthRequest, res) => sendOk(res, {
-  balance: req.user!.walletBalance,
-  vip: getVipStatus(req.user),
-  level: getLevelStatus(req.user),
-  cosmetics: {
-    ownedCosmeticIds: req.user!.ownedCosmeticIds ?? [],
-    activeCosmetics: req.user!.activeCosmetics ?? {}
+walletRouter.get("/wallet", asyncHandler(async (req: AuthRequest, res) => {
+  const dayStart = startOfUtcDay();
+  const claimedToday = await WalletTransaction.exists({
+    userId: req.user!.id,
+    source: DAILY_REWARD_SOURCE,
+    createdAt: { $gte: dayStart }
+  });
+  sendOk(res, {
+    balance: req.user!.walletBalance,
+    diamondBalance: req.user!.diamondBalance ?? 0,
+    vip: getVipStatus(req.user),
+    level: getLevelStatus(req.user),
+    cosmetics: {
+      ownedCosmeticIds: req.user!.ownedCosmeticIds ?? [],
+      activeCosmetics: req.user!.activeCosmetics ?? {}
+    },
+    dailyReward: {
+      canClaim: !claimedToday,
+      coinReward: DAILY_REWARD_COINS,
+      xpReward: 0,
+      nextClaimAt: claimedToday ? nextUtcDay().toISOString() : null
+    }
+  });
+}));
+
+walletRouter.post("/wallet/rewards/daily", requireWalletNotFrozen, asyncHandler(async (req: AuthRequest, res) => {
+  const dayStart = startOfUtcDay();
+  const existingClaim = await WalletTransaction.findOne({
+    userId: req.user!.id,
+    source: DAILY_REWARD_SOURCE,
+    createdAt: { $gte: dayStart }
+  }).sort({ createdAt: -1 }).lean();
+  if (existingClaim) {
+    const fresh = await User.findById(req.user!.id).select("walletBalance xp level levelTitle lastDailyCheckInAt").lean();
+    return sendOk(res, {
+      claimed: false,
+      alreadyClaimed: true,
+      rewardCoins: DAILY_REWARD_COINS,
+      rewardXp: 0,
+      balance: fresh?.walletBalance ?? req.user!.walletBalance ?? 0,
+      level: getLevelStatus(fresh),
+      dailyReward: {
+        canClaim: false,
+        coinReward: DAILY_REWARD_COINS,
+        xpReward: 0,
+        nextClaimAt: nextUtcDay().toISOString()
+      }
+    });
   }
+
+  await creditWallet(req.user!.id, DAILY_REWARD_COINS, DAILY_REWARD_SOURCE, {
+    day: dayStart.toISOString().slice(0, 10),
+    reason: "daily_reward"
+  });
+  const fresh = await User.findById(req.user!.id).select("walletBalance xp level levelTitle lastDailyCheckInAt").lean();
+  sendOk(res, {
+    claimed: true,
+    alreadyClaimed: false,
+    rewardCoins: DAILY_REWARD_COINS,
+    rewardXp: 0,
+    balance: fresh?.walletBalance ?? 0,
+    level: getLevelStatus(fresh),
+    dailyReward: {
+      canClaim: false,
+      coinReward: DAILY_REWARD_COINS,
+      xpReward: 0,
+      nextClaimAt: nextUtcDay().toISOString()
+    }
+  }, 201);
 }));
 
 walletRouter.get("/wallet/transactions", asyncHandler(async (req: AuthRequest, res) => {
@@ -270,7 +314,9 @@ walletRouter.post("/wallet/purchases/razorpay/order", requireWalletNotFrozen, va
     provider: "RAZORPAY",
     status: "PENDING",
     packId: pack.id,
+    assetCurrency: "COINS",
     coinAmount: pack.coinAmount,
+    diamondAmount: 0,
     amountInr: pack.priceInr,
     currency: "INR"
   });
@@ -288,7 +334,7 @@ walletRouter.post("/wallet/purchases/razorpay/order", requireWalletNotFrozen, va
     checkout: {
       key: env.RAZORPAY_KEY_ID,
       amount: order.amount,
-      currency: order.currency,
+      currency: String(order.currency || "INR").toUpperCase(),
       orderId: order.id,
       name: "Yugm",
       description: `${pack.coinAmount} coins`
@@ -299,7 +345,10 @@ walletRouter.post("/wallet/purchases/razorpay/order", requireWalletNotFrozen, va
 walletRouter.post("/wallet/purchases/razorpay/verify", requireWalletNotFrozen, validateBody(verifyRazorpayPurchaseSchema), asyncHandler(async (req: AuthRequest, res) => {
   const purchase = await Purchase.findOne({ _id: req.body.purchaseId, userId: req.user!.id, provider: "RAZORPAY" });
   if (!purchase) throw new HttpError(404, "Purchase not found", ErrorCode.NOT_FOUND);
-  if (purchase.status === "CREDITED") return sendOk(res, { purchase });
+  if (purchase.status === "CREDITED") {
+    const user = await User.findById(req.user!.id).select("walletBalance").lean();
+    return sendOk(res, { purchase, balance: user?.walletBalance ?? 0 });
+  }
   if (purchase.providerOrderId !== req.body.razorpay_order_id) throw new HttpError(400, "Order mismatch", ErrorCode.VALIDATION);
   const validSignature = verifyRazorpaySignature({
     orderId: req.body.razorpay_order_id,
@@ -308,7 +357,7 @@ walletRouter.post("/wallet/purchases/razorpay/verify", requireWalletNotFrozen, v
   });
   if (!validSignature) throw new HttpError(400, "Invalid Razorpay signature", ErrorCode.VALIDATION);
   const payment = await fetchRazorpayPayment(req.body.razorpay_payment_id);
-  if (payment.order_id !== purchase.providerOrderId || payment.amount !== purchase.amountInr * 100 || payment.currency !== "INR") {
+  if (payment.order_id !== purchase.providerOrderId || payment.amount !== purchase.amountInr * 100 || String(payment.currency || "").toUpperCase() !== "INR") {
     throw new HttpError(400, "Razorpay payment details do not match purchase", ErrorCode.VALIDATION);
   }
   if (payment.status !== "captured") {
@@ -334,32 +383,45 @@ walletRouter.post("/wallet/purchases/google-play/verify", requireWalletNotFrozen
   if (pack.googleProductId !== req.body.productId) throw new HttpError(400, "Product does not match coin pack", ErrorCode.VALIDATION);
   const existing = await Purchase.findOne({ provider: "GOOGLE_PLAY", purchaseToken: req.body.purchaseToken });
   if (existing && existing.userId.toString() !== req.user!.id) throw new HttpError(409, "Purchase token already used", ErrorCode.CONFLICT);
-  if (existing?.status === "CREDITED") {
-    const consumed = await consumeGooglePurchaseIfNeeded(existing, req.body.productId, req.body.purchaseToken);
-    return sendOk(res, { purchase: consumed });
-  }
   const product = await verifyGooglePlayProduct({ productId: req.body.productId, purchaseToken: req.body.purchaseToken });
   if (product.purchaseState !== 0) throw new HttpError(402, "Google Play purchase is not completed", ErrorCode.VALIDATION);
-  const purchase = existing ?? await Purchase.create({
-    userId: req.user!.id,
-    provider: "GOOGLE_PLAY",
-    status: "PAID",
-    packId: pack.id,
-    coinAmount: pack.coinAmount,
-    amountInr: pack.priceInr,
-    currency: "INR",
-    productId: req.body.productId,
-    purchaseToken: req.body.purchaseToken,
-    googleOrderId: req.body.orderId ?? product.orderId,
-    metadata: { product }
-  });
-  purchase.status = "PAID";
-  purchase.productId = req.body.productId;
-  purchase.purchaseToken = req.body.purchaseToken;
-  purchase.googleOrderId = req.body.orderId ?? product.orderId;
-  purchase.metadata = { ...purchase.metadata, product };
-  await purchase.save();
-  const credited = await creditPurchase(purchase.id, req.user!.id, { productId: req.body.productId, googleOrderId: purchase.googleOrderId });
+
+  let purchase = existing;
+  if (!purchase) {
+    purchase = await Purchase.create({
+      userId: req.user!.id,
+      provider: "GOOGLE_PLAY",
+      status: "PAID",
+      packId: pack.id,
+      assetCurrency: "COINS",
+      coinAmount: pack.coinAmount,
+      diamondAmount: 0,
+      amountInr: pack.priceInr,
+      currency: "INR",
+      productId: req.body.productId,
+      purchaseToken: req.body.purchaseToken,
+      googleOrderId: req.body.orderId ?? product.orderId,
+      metadata: { product }
+    });
+  } else {
+    if (purchase.packId !== pack.id || purchase.productId && purchase.productId !== req.body.productId) {
+      throw new HttpError(400, "Purchase token does not match requested product", ErrorCode.VALIDATION);
+    }
+    purchase.status = purchase.status === "CREDITED" ? "CREDITED" : "PAID";
+    purchase.packId = pack.id;
+    purchase.assetCurrency = purchase.assetCurrency || "COINS";
+    purchase.coinAmount = purchase.coinAmount || pack.coinAmount;
+    purchase.diamondAmount = purchase.diamondAmount ?? 0;
+    purchase.productId = req.body.productId;
+    purchase.purchaseToken = req.body.purchaseToken;
+    purchase.googleOrderId = req.body.orderId ?? product.orderId ?? purchase.googleOrderId;
+    purchase.metadata = { ...(purchase.metadata ?? {}), product };
+    await purchase.save();
+  }
+
+  const credited = purchase.status === "CREDITED"
+    ? purchase
+    : await creditPurchase(purchase.id, req.user!.id, { productId: req.body.productId, googleOrderId: purchase.googleOrderId });
   await consumeGooglePurchaseIfNeeded(credited, req.body.productId, req.body.purchaseToken);
   const user = await User.findById(req.user!.id).select("walletBalance").lean();
   sendOk(res, { purchase: credited, balance: user?.walletBalance ?? 0 });
@@ -395,17 +457,33 @@ walletRouter.post("/rooms/:id/send-gift", requireWalletNotFrozen, validateBody(s
   await assertUsersCanInteract(req.user!.id, req.body.receiverId, "Cannot send gifts to this user");
 
   const session = await mongoose.startSession();
+  const currency = req.body.currency ?? "COINS";
+  const giftAmount = currency === "DIAMONDS" ? gift.diamondPrice : gift.coinPrice;
+  if (currency === "DIAMONDS") {
+    assertDiamondsEnabled();
+    if (!giftAmount || giftAmount <= 0) throw new HttpError(400, "This gift cannot be purchased with diamonds", ErrorCode.VALIDATION);
+  }
   session.startTransaction();
   try {
-    await debitWallet(req.user!.id, gift.coinPrice, "GIFT_SENT", { roomId: room._id.toString(), giftId: gift._id.toString() }, session);
-    const receiverCredit = creatorShare(gift.coinPrice);
-    await creditWallet(req.body.receiverId, receiverCredit, "GIFT_RECEIVED", { roomId: room._id.toString(), giftId: gift._id.toString(), senderId: req.user!.id, platformFee: platformFee(gift.coinPrice) }, session);
+    const giftMetadata = { roomId: room._id.toString(), giftId: gift._id.toString(), currency };
+    if (currency === "DIAMONDS") {
+      await debitDiamonds(req.user!.id, giftAmount, "GIFT_SENT", giftMetadata, { session });
+      const receiverCredit = creatorShare(giftAmount);
+      await creditDiamonds(req.body.receiverId, receiverCredit, "GIFT_RECEIVED", { ...giftMetadata, senderId: req.user!.id }, { session });
+    } else {
+      await debitWallet(req.user!.id, giftAmount, "GIFT_SENT", giftMetadata, session);
+      const receiverCredit = creatorShare(giftAmount);
+      await creditWallet(req.body.receiverId, receiverCredit, "GIFT_RECEIVED", { ...giftMetadata, senderId: req.user!.id, platformFee: platformFee(giftAmount) }, session);
+    }
     const giftTransaction = await GiftTransaction.create([{
       roomId: room._id,
       senderId: req.user!.id,
       receiverId: req.body.receiverId,
       giftId: gift._id,
-      coinAmount: gift.coinPrice
+      coinAmount: currency === "COINS" ? giftAmount : 0,
+      diamondAmount: currency === "DIAMONDS" ? giftAmount : 0,
+      currency,
+      totalValue: giftAmount
     }], { session });
     await session.commitTransaction();
     session.endSession();
@@ -424,7 +502,7 @@ walletRouter.post("/rooms/:id/send-gift", requireWalletNotFrozen, validateBody(s
       userId: req.user!.id,
       type: "GIFT",
       label: `${req.user!.name} sent ${gift.name}`,
-      metadata: { giftId: gift._id.toString(), receiverId: req.body.receiverId, coinPrice: gift.coinPrice }
+      metadata: { giftId: gift._id.toString(), receiverId: req.body.receiverId, price: giftAmount, currency }
     }));
     if (activity) emitRoom(room._id.toString(), socketEvents.roomActivityNew, { activity });
     sendOk(res, { giftTransaction: giftTransaction[0] }, 201);

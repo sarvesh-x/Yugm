@@ -5,6 +5,7 @@ import { validateBody } from "../middleware/validate.js";
 import { Room } from "../models/Room.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
 import { mediaProvider } from "../services/livekit.js";
+import { TrackSource } from "livekit-server-sdk";
 import { asyncHandler, ErrorCode, HttpError, isValidObjectId, sendOk } from "../utils/http.js";
 
 export const livekitRouter = Router();
@@ -18,11 +19,17 @@ livekitRouter.post("/token", validateBody(livekitTokenSchema), asyncHandler(asyn
   const participant = await RoomParticipant.findOne({ roomId: room.id, userId: req.user!.id, leftAt: null });
   if (!participant) throw new HttpError(403, "Join the room before requesting a media token", ErrorCode.FORBIDDEN);
   const role = participant?.role ?? "AUDIENCE";
-  const canPublish = participant.micEnabled && !participant.moderatorMuted && (role === "HOST" || role === "SPEAKER" || role === "MODERATOR");
+  const canSpeak = participant.micEnabled && !participant.moderatorMuted && (role === "HOST" || role === "SPEAKER" || role === "MODERATOR");
+  const canPublishVideo = room.type === "VIDEO" && role === "HOST";
+  const publishSources = [
+    ...(canPublishVideo ? [TrackSource.CAMERA] : []),
+    ...(canSpeak ? [TrackSource.MICROPHONE] : [])
+  ];
   const token = await mediaProvider.createToken({
     identity: req.user!.id,
     roomName: room.livekitRoomName,
-    canPublish,
+    canPublish: publishSources.length > 0,
+    publishSources,
     canSubscribe: true
   });
 

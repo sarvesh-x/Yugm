@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -40,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import android.widget.Toast
 import com.yugm.app.core.model.CoinPack
 import com.yugm.app.core.model.CreatorDashboardSummary
 import com.yugm.app.core.model.GiftItem
@@ -67,11 +69,14 @@ fun WalletScreen(
     onOpenEarnings: () -> Unit = {},
     onBalanceChanged: (Int) -> Unit = {},
     onRechargeOrderReady: (RazorpayCheckoutData) -> Unit = {},
-    onStartGooglePlayPurchase: ((pack: CoinPack) -> Unit)? = null
+    onStartGooglePlayPurchase: ((pack: CoinPack) -> Unit)? = null,
+    onOpenGiftCatalog: () -> Unit = {},
+    onOpenGiftInventory: () -> Unit = {}
 ) {
     var selectedTab by remember { mutableStateOf(0) }
     var earnings by remember { mutableStateOf(CreatorDashboardSummary()) }
     var status by remember { mutableStateOf("") }
+    val context = LocalContext.current
     val viewModel: WalletViewModel = hiltViewModel()
 
     LaunchedEffect(token) { viewModel.loadWallet(token) }
@@ -89,7 +94,7 @@ fun WalletScreen(
             ) {
             item {
                 YugmPageHeader("Yugm", "Wallet & Gifts", onBack = onBack) {
-                    RoundAction("♢", onClick = {})
+                    RoundAction("♢", onClick = { Toast.makeText(context, "Coming soon", Toast.LENGTH_SHORT).show() })
                 }
             }
             item {
@@ -106,12 +111,14 @@ fun WalletScreen(
                 when (selectedTab) {
                     0 -> {
                          item {
-                            AnimatedEntrance(delay = 100) {
+                        AnimatedEntrance(delay = 100) {
                             BalanceHero(
                                 balance = viewModel.balance,
+                                canClaimReward = viewModel.dailyReward.canClaim,
+                                isClaiming = viewModel.isClaimingReward,
+                                rewardCoins = viewModel.dailyReward.coinReward,
                                 onFreeCoins = {
-                                    status = "Free reward claimed!"
-                                    viewModel.loadWallet(token)
+                                    viewModel.claimDailyReward(token) { msg -> status = msg }
                                 },
                                 onRecharge = {
                                     viewModel.coinPacks.getOrNull(2)?.let { pack ->
@@ -154,6 +161,12 @@ fun WalletScreen(
                         item { AnimatedEntrance(delay = 500) { TransactionList(viewModel.transactions) } }
                     }
                     1 -> {
+                        item {
+                            Row(Modifier.padding(horizontal = 20.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                GradientAction("Explore gifts", modifier = Modifier.weight(1f), onClick = onOpenGiftCatalog)
+                                GradientAction("My collection", modifier = Modifier.weight(1f), onClick = onOpenGiftInventory)
+                            }
+                        }
                         item { GiftCatalog(viewModel.giftItems, expanded = true) }
                         item {
                             Column(Modifier.padding(horizontal = 20.dp)) {
@@ -163,7 +176,7 @@ fun WalletScreen(
                     }
                     else -> {
                         item { EarningsPanel(earnings, onOpenEarnings) }
-                        item { TransactionList(viewModel.transactions.filter { it.amount > 0 }) }
+                        item { TransactionList(viewModel.transactions.filter { it.isCredit }) }
                     }
                 }
             }
@@ -173,7 +186,14 @@ fun WalletScreen(
 }
 
 @Composable
-private fun BalanceHero(balance: Int, onFreeCoins: () -> Unit, onRecharge: () -> Unit) {
+private fun BalanceHero(
+    balance: Int,
+    canClaimReward: Boolean,
+    isClaiming: Boolean,
+    rewardCoins: Int,
+    onFreeCoins: () -> Unit,
+    onRecharge: () -> Unit
+) {
     Column(
         modifier = Modifier
             .padding(horizontal = 20.dp)
@@ -194,10 +214,26 @@ private fun BalanceHero(balance: Int, onFreeCoins: () -> Unit, onRecharge: () ->
         }
         Text("≈ ₹${String.format(Locale.US, "%,.2f", balance / 10.0)}", color = TextMuted, fontSize = 14.sp, modifier = Modifier.padding(top = 2.dp))
         Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            val claimLabel = when {
+                isClaiming -> "Claiming…"
+                canClaimReward -> "Daily Reward  +${if (rewardCoins > 0) rewardCoins else 25}"
+                else -> "Reward Claimed"
+            }
             Box(
-                Modifier.weight(1f).heightIn(min = 50.dp).clip(RoundedCornerShape(16.dp)).background(Color.White.copy(alpha = 0.08f)).border(1.dp, BorderColor, RoundedCornerShape(16.dp)).clickable(role = Role.Button, onClickLabel = "Get free coins", onClick = onFreeCoins),
+                Modifier
+                    .weight(1f)
+                    .heightIn(min = 50.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color.White.copy(alpha = if (canClaimReward && !isClaiming) 0.12f else 0.05f))
+                    .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
+                    .clickable(
+                        enabled = canClaimReward && !isClaiming,
+                        role = Role.Button,
+                        onClickLabel = "Claim daily reward",
+                        onClick = onFreeCoins
+                    ),
                 contentAlignment = Alignment.Center
-            ) { Text("♢  Free Coins  +XP", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
+            ) { Text("♢  $claimLabel", color = if (canClaimReward && !isClaiming) Color.White else TextMuted, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
             GradientAction("Recharge Now", modifier = Modifier.weight(1f), leading = "ϟ", onClick = onRecharge)
         }
     }
@@ -281,14 +317,15 @@ private fun TransactionList(transactions: List<WalletTransaction>) {
             } else {
                 transactions.take(8).forEachIndexed { index, tx ->
                     Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(38.dp).clip(CircleShape).background(if (tx.amount >= 0) Success.copy(alpha = 0.18f) else Pink.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
-                            Text(if (tx.amount >= 0) "+" else "−", color = if (tx.amount >= 0) Success else Pink, fontSize = 18.sp, fontWeight = FontWeight.Black)
+                        val credit = tx.isCredit
+                        Box(Modifier.size(38.dp).clip(CircleShape).background(if (credit) Success.copy(alpha = 0.18f) else Pink.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+                            Text(if (credit) "+" else "−", color = if (credit) Success else Pink, fontSize = 18.sp, fontWeight = FontWeight.Black)
                         }
                         Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                             Text(tx.description.ifBlank { tx.type.replace("_", " ").lowercase().replaceFirstChar { it.titlecase() } }, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                             Text(tx.createdAt.take(10), color = TextMuted, fontSize = 10.sp)
                         }
-                        Text("${if (tx.amount >= 0) "+" else ""}${tx.amount} ●", color = if (tx.amount >= 0) Success else Danger, fontWeight = FontWeight.Black, fontSize = 13.sp)
+                        Text("${if (credit) "+" else "-"}${tx.amount} ●", color = if (credit) Success else Danger, fontWeight = FontWeight.Black, fontSize = 13.sp)
                     }
                     if (index < transactions.take(8).lastIndex) Box(Modifier.fillMaxWidth().height(1.dp).background(BorderColor))
                 }

@@ -65,6 +65,9 @@ class RoomViewModel @Inject constructor(
 
     val gifts = mutableStateListOf<GiftItem>()
 
+    var diamondBalance by mutableStateOf(0)
+        private set
+
     var inviteCandidates by mutableStateOf<List<Host>>(emptyList())
         private set
 
@@ -195,6 +198,8 @@ class RoomViewModel @Inject constructor(
             giftsResult.onSuccess {
                 gifts.clear(); gifts.addAll(it)
             }
+            runCatching { withContext(Dispatchers.IO) { yugmApi.walletOverview(authToken).diamondBalance } }
+                .onSuccess { diamondBalance = it }
             if (currentUserId.isNotBlank()) {
                 val followingResult = withContext(Dispatchers.IO) { runCatching { yugmApi.getFollowing(currentUserId, authToken) } }
                 followingResult.onSuccess { inviteCandidates = it }
@@ -223,13 +228,23 @@ class RoomViewModel @Inject constructor(
         }
     }
 
-    fun join() {
+    fun join() = joinInternal()
+
+    fun joinVideo(publishCamera: Boolean, publishMicrophone: Boolean) = joinInternal(publishCamera, publishMicrophone)
+
+    private fun joinInternal(cameraPermissionGranted: Boolean? = null, microphonePermissionGranted: Boolean? = null) {
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     yugmApi.joinRoom(authToken, roomId)
                     val mediaSession = yugmApi.liveKitToken(authToken, roomId)
-                    YugmMediaRoom.connect(mediaSession.token, mediaSession.url)
+                    val isHostVideoRoom = isVideo && roomDetail?.room?.host?.id == currentUserId
+                    YugmMediaRoom.connect(
+                        mediaSession.token,
+                        mediaSession.url,
+                        publishCamera = cameraPermissionGranted ?: isHostVideoRoom,
+                        publishMicrophone = microphonePermissionGranted ?: isHostVideoRoom
+                    )
                     YugmSocket.connect(
                         // API calls above may have rotated an expired access token.
                         // Read the session source of truth for Socket.IO too; the
@@ -285,7 +300,7 @@ class RoomViewModel @Inject constructor(
                         onSpeakerApproved = { approvedUserId ->
                             if (approvedUserId == currentUserId) {
                                 scheduleRealtimeRefresh("room:speaker:approve")
-                                refreshMediaSession()
+                                refreshMediaSession(enableMicrophone = true)
                             }
                         },
                         onUserMuted = { targetId ->
@@ -336,18 +351,22 @@ class RoomViewModel @Inject constructor(
         }
     }
 
-    fun sendGift(gift: GiftItem, receiverId: String) {
+    fun sendGift(gift: GiftItem, receiverId: String, currency: String = "COINS") {
         viewModelScope.launch {
             actionLoading = true
             actionError = null
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    yugmApi.sendGift(token = authToken, roomId = roomId, gift = gift, receiverId = receiverId)
+                    yugmApi.sendGift(token = authToken, roomId = roomId, gift = gift, receiverId = receiverId, currency = currency)
                 }
             }
             result.onSuccess {
                 viewModelScope.launch {
-                    runCatching { sessionManager.balance = withContext(Dispatchers.IO) { yugmApi.wallet(authToken) } }
+                    runCatching {
+                        val overview = withContext(Dispatchers.IO) { yugmApi.walletOverview(authToken) }
+                        sessionManager.balance = overview.balance
+                        diamondBalance = overview.diamondBalance
+                    }
                 }
                 gifts.add(gift)
             }.onFailure {
@@ -370,7 +389,7 @@ class RoomViewModel @Inject constructor(
             actionError = null
             withContext(Dispatchers.IO) {
                 runCatching { yugmApi.takeRoomSeat(authToken, roomId, seatIndex) }
-                    .onSuccess { scheduleRealtimeRefresh("room:speaker:approve"); refreshMediaSession() }
+                    .onSuccess { scheduleRealtimeRefresh("room:speaker:approve") }
                     .onFailure { actionError = it.message ?: "Could not take the seat" }
             }
         }
@@ -483,8 +502,13 @@ class RoomViewModel @Inject constructor(
             runCatching {
                 withContext(Dispatchers.IO) { yugmApi.liveKitToken(authToken, roomId) }
             }.onSuccess {
-                YugmMediaRoom.connect(it.token, it.url)
-                if (enableMicrophone) YugmMediaRoom.setMicEnabled(true)
+                val isHostVideoRoom = isVideo && roomDetail?.room?.host?.id == currentUserId
+                YugmMediaRoom.connect(
+                    it.token,
+                    it.url,
+                    publishCamera = isHostVideoRoom,
+                    publishMicrophone = enableMicrophone || YugmMediaRoom.isMicEnabled()
+                )
             }
                 .onFailure { actionError = it.message ?: "Could not enable room audio" }
         }
@@ -690,6 +714,7 @@ class RoomViewModel @Inject constructor(
                 runCatching { yugmApi.setOwnRoomMicState(roomId, enabled, authToken) }
                     .onSuccess {
                         scheduleRealtimeRefresh("room:participant:update")
+                        YugmMediaRoom.setMicEnabled(enabled)
                         if (enabled) refreshMediaSession(enableMicrophone = true)
                     }
                     .onFailure { actionError = it.message ?: "Could not update microphone state" }

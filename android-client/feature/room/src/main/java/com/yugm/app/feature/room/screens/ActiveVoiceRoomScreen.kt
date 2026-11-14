@@ -181,9 +181,10 @@ fun ActiveVoiceRoomScreen(
     chat: List<ChatMessage>,
     gifts: List<GiftItem>,
     balance: Int,
+    diamondBalance: Int = 0,
     onBack: () -> Unit,
     onSendMessage: (String) -> Unit,
-    onGift: (GiftItem) -> Unit,
+    onGift: (GiftItem, String) -> Unit,
     onToast: (String) -> Unit,
     onJoin: () -> Unit,
     participants: List<RoomParticipant> = emptyList(),
@@ -326,7 +327,6 @@ fun ActiveVoiceRoomScreen(
     var showExitPrompt by rememberSaveable { mutableStateOf(false) }
     var showToolsSheet by rememberSaveable { mutableStateOf(false) }
     var showListenersSheet by rememberSaveable { mutableStateOf(false) }
-    var showChatInputSheet by rememberSaveable { mutableStateOf(false) }
     var showLuckyWheelDialog by rememberSaveable { mutableStateOf(false) }
     var showRoomInfoSheet by rememberSaveable { mutableStateOf(false) }
     var chatMessageDraft by rememberSaveable { mutableStateOf("") }
@@ -379,9 +379,14 @@ fun ActiveVoiceRoomScreen(
         open = giftOpen,
         gifts = gifts,
         balance = balance,
+        diamondBalance = diamondBalance,
         onDismiss = { giftOpen = false },
         onSend = { gift ->
-            onGift(gift)
+            onGift(gift, "COINS")
+            activeGiftBanner = Triple("You", gift.name, "🎁")
+        },
+        onSendWithCurrency = { gift, currency ->
+            onGift(gift, currency)
             activeGiftBanner = Triple("You", gift.name, "🎁")
         }
     )
@@ -419,169 +424,26 @@ fun ActiveVoiceRoomScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
         ) {
-            // ================= 1. TOP BAR =================
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                // Room info box on the left (clickable to open room info & settings)
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0x66000000))
-                        .border(1.dp, RoomGlassBorder, RoundedCornerShape(14.dp))
-                        .clickable { showRoomInfoSheet = true }
-                        .padding(horizontal = 8.dp, vertical = 5.dp)
-                ) {
-                    // Resolve relative upload paths in case this Room instance predates normalized API parsing.
-                    val roomAvatarUrl = resolveMediaUrl(room.coverImage)
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Brush.linearGradient(listOf(RoomPurplePrimary, Pink))),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (!roomAvatarUrl.isNullOrBlank()) {
-                            AsyncImage(
-                                model = roomAvatarUrl,
-                                contentDescription = "Room Avatar",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                        } else {
-                            Icon(Icons.Filled.Mic, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-                        }
+            SharedRoomHeader(
+                room = room,
+                participants = participants,
+                isHost = isHost,
+                onShare = {
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, "Join ${room.title.ifBlank { "my room" }} on Yugm: yugm.live/room/${room.id}")
                     }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    Column {
-                        Text(
-                            text = room.title.ifBlank { "Voice Room" },
-                            color = Color.White,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.widthIn(max = 110.dp)
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "ID:${room.id.takeLast(8)}",
-                                color = TextMuted,
-                                fontSize = 10.sp
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(6.dp))
-
-                    // Follow-room shortcut follows the room host.
-                    if (!isHost) {
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .clip(CircleShape)
-                                .background(RoomPurplePrimary)
-                                .clickable {
-                                    room.host?.let { host ->
-                                        if (host.isFollowing) onUnfollowUser(host.id) else onFollowUser(host.id)
-                                        onToast(if (host.isFollowing) "Unfollowed" else "Following ${host.name}")
-                                    }
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = if (room.host?.isFollowing == true) Icons.Filled.Check else Icons.Filled.Add,
-                                contentDescription = if (room.host?.isFollowing == true) "Following room host" else "Follow room host",
-                                tint = Color.White,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                }
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RoomHeaderAction(Icons.Filled.Share, "Share room") {
-                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, "Join ${room.title.ifBlank { "my room" }} on Yugm: yugm.live/room/${room.id}")
-                        }
-                        context.startActivity(Intent.createChooser(shareIntent, "Share room"))
-                    }
-                    RoomHeaderAction(Icons.Filled.MoreVert, "Room options") { showRoomInfoSheet = true }
-                    RoomHeaderAction(Icons.Filled.PowerSettingsNew, "Leave room") { showExitPrompt = true }
-                }
-            }
-
-            // Active audience strip with direct profile access.
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text("${participants.size} active", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(end = 4.dp)
-                ) {
-                    items(participants, key = { it.user.id.ifBlank { it.id } }) { participant ->
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.width(54.dp).clickable(enabled = participant.user.id.isNotBlank()) {
-                                participant.user.id.takeIf(String::isNotBlank)?.let(onOpenProfile)
-                            }
-                        ) {
-                            Avatar(
-                                initial = participant.user.name.take(1).ifBlank { "?" },
-                                size = 38,
-                                imageUrl = participant.user.avatar,
-                                cosmetics = participant.user.activeCosmetics,
-                                accessibilityLabel = "View ${participant.user.name}'s profile"
-                            )
-                            Text(
-                                participant.user.name,
-                                color = Color.White.copy(alpha = 0.86f),
-                                fontSize = 9.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Trophy / Ranking pill below the active user strip.
-            Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(Color(0x664A3515))
-                        .border(1.dp, RoomGoldAccent.copy(alpha = 0.6f), RoundedCornerShape(50))
-                        .clickable { onToast("Room Ranking #1 in Live Audio") }
-                        .padding(horizontal = 9.dp, vertical = 3.dp)
-                ) {
-                    Text("🏆", fontSize = 11.sp)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("1 >", color = RoomGoldAccent, fontSize = 11.sp, fontWeight = FontWeight.Black)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
+                    context.startActivity(Intent.createChooser(shareIntent, "Share room"))
+                },
+                onMore = { showRoomInfoSheet = true },
+                onRankClick = { onToast("Room Ranking #1 in Live Audio") },
+                onLeave = { showExitPrompt = true }
+            )
 
             // ================= 2. VOICE STAGE (DYNAMIC USER-CONFIGURED SEATS) =================
             // Render exactly the capacity saved during room creation. Keep the
             // UI in sync with the server's seat index validation and lobby count.
-            val totalSeats = room.maxSpeakers.coerceAtLeast(1)
+            val totalSeats = room.maxSpeakers.coerceIn(2, 20)
             val itemsPerRow = if (totalSeats <= 4) totalSeats else if (totalSeats <= 6) 3 else if (totalSeats <= 8) 4 else 5
             val seatRows = (0 until totalSeats).chunked(itemsPerRow)
 
@@ -693,151 +555,94 @@ fun ActiveVoiceRoomScreen(
 
             }
 
-            // ================= 5. BOTTOM CONTROL DOCK BAR (Exact match to reference image!) =================
+            // Compact room composer matching the reference controls.
             Surface(
-                color = Color(0xEE090716),
-                border = BorderStroke(1.dp, RoomGlassBorder),
+                color = Color.Transparent,
+                border = BorderStroke(0.dp, Color.Transparent),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 8.dp, vertical = 7.dp),
+                    modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 10.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceAround
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    // 1. Speaker output mute toggle
-                    IconButton(
-                        onClick = {
-                            roomAudioMuted = !roomAudioMuted
-                            onToast(if (roomAudioMuted) "Room audio muted" else "Room audio unmuted")
-                        },
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(if (roomAudioMuted) Color(0x44FF3B30) else Color(0x33FFFFFF))
+                    Row(
+                        modifier = Modifier.weight(1f).height(44.dp).clip(CircleShape)
+                            .background(Color(0x66201B2B)).border(1.dp, Color(0x553C3154), CircleShape)
+                            .padding(start = 15.dp, end = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = if (roomAudioMuted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
-                            contentDescription = "Room Speaker Audio",
-                            tint = if (roomAudioMuted) Color(0xFFFF5252) else Color.White,
-                            modifier = Modifier.size(20.dp)
+                        BasicTextField(
+                            value = chatMessageDraft,
+                            onValueChange = { chatMessageDraft = it.take(200) },
+                            modifier = Modifier.weight(1f).semantics { contentDescription = "Write a room message" },
+                            singleLine = true,
+                            textStyle = TextStyle(color = Color.White, fontSize = 14.sp),
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(RoomPurplePrimary),
+                            decorationBox = { inner ->
+                                Box {
+                                    if (chatMessageDraft.isBlank()) Text("Say Something...", color = Color(0xFFBAB6C3), fontSize = 14.sp)
+                                    inner()
+                                }
+                            }
                         )
+                        if (chatMessageDraft.isNotBlank()) {
+                            IconButton(onClick = {
+                                onSendMessage(chatMessageDraft.trim())
+                                chatMessageDraft = ""
+                            }, modifier = Modifier.size(34.dp).semantics { contentDescription = "Send message" }) {
+                                Icon(Icons.Filled.Send, contentDescription = null, tint = RoomPurplePrimary, modifier = Modifier.size(18.dp))
+                            }
+                        }
                     }
-
-                    // 2. Microphone toggle button
+                    IconButton(
+                        onClick = { showReactionPicker = true },
+                        modifier = Modifier.size(32.dp).clip(CircleShape)
+                            .border(1.dp, Color(0x667E718D), CircleShape)
+                            .semantics { contentDescription = "Open emoji reactions" }
+                    ) {
+                        Icon(Icons.Filled.SentimentSatisfiedAlt, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                    }
                     IconButton(
                         onClick = {
                             if (!canSpeak && !isHost) {
                                 onRequestSpeaker()
                                 onToast("Requested microphone seat")
-                            } else {
-                                if (!muted) {
-                                    muted = true
-                                    YugmMediaRoom.setMicEnabled(false)
-                                    onOwnMicStateChanged(false)
-                                } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                                    muted = false
-                                    YugmMediaRoom.setMicEnabled(true)
-                                    onOwnMicStateChanged(true)
-                                    onToast("Microphone unmuted")
-                                } else {
-                                    microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
-                                }
-                            }
+                            } else if (!muted) {
+                                muted = true
+                                YugmMediaRoom.setMicEnabled(false)
+                                onOwnMicStateChanged(false)
+                            } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                muted = false
+                                YugmMediaRoom.setMicEnabled(true)
+                                onOwnMicStateChanged(true)
+                                onToast("Microphone unmuted")
+                            } else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
                         },
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(
-                                when {
-                                    !canSpeak && !isHost -> Color(0x33FFFFFF)
-                                    muted -> Color(0x44FF3B30)
-                                    else -> RoomPurplePrimary
-                                }
-                            )
+                        modifier = Modifier.size(32.dp).clip(CircleShape)
+                            .border(1.dp, Color(0x667E718D), CircleShape)
                     ) {
                         Icon(
-                            imageVector = if (muted) Icons.Filled.MicOff else Icons.Filled.Mic,
-                            contentDescription = "Microphone",
-                            tint = if (muted) Color(0xFFFF5252) else Color.White,
-                            modifier = Modifier.size(20.dp)
+                            if (muted || (!canSpeak && !isHost)) Icons.Filled.MicOff else Icons.Filled.Mic,
+                            contentDescription = if (!canSpeak && !isHost) "Request microphone" else if (muted) "Unmute microphone" else "Mute microphone",
+                            tint = if (muted || (!canSpeak && !isHost)) Color(0xFFE5DDEC) else Color(0xFFFF79BC),
+                            modifier = Modifier.size(14.dp)
                         )
                     }
-
-                    // 3. Reaction button
-                    IconButton(
-                        onClick = { showReactionPicker = true },
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(Color(0x33FFFFFF))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.SentimentSatisfiedAlt,
-                            contentDescription = "Reactions",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    // 4. Chat input button
-                    IconButton(
-                        onClick = { showChatInputSheet = true },
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(Color(0x33FFFFFF))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Chat,
-                            contentDescription = "Open Chat",
-                            tint = Color.White,
-                            modifier = Modifier.size(19.dp)
-                        )
-                    }
-
-                    // 5. Gift box button
                     IconButton(
                         onClick = { giftOpen = true },
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.linearGradient(
-                                    listOf(Color(0xFFFF2A6D), Color(0xFF9100FF))
-                                )
-                            )
+                        modifier = Modifier.size(32.dp).clip(CircleShape)
+                            .border(1.dp, Color(0x667E718D), CircleShape).semantics { contentDescription = "Send a gift" }
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.CardGiftcard,
-                            contentDescription = "Send Gift",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        Icon(Icons.Filled.CardGiftcard, contentDescription = null, tint = Color(0xFFFF80B8), modifier = Modifier.size(14.dp))
                     }
-
-                    // 6. Lucky Wheel / Game button
                     IconButton(
-                        onClick = { showLuckyWheelDialog = true },
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.radialGradient(
-                                    listOf(Color(0xFFFFB300), Color(0xFFE65100))
-                                )
-                            )
+                        onClick = { showToolsSheet = true },
+                        modifier = Modifier.size(32.dp).clip(CircleShape)
+                            .border(1.dp, Color(0x667E718D), CircleShape).semantics { contentDescription = "More room actions" }
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.Casino,
-                            contentDescription = "Games",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        Icon(Icons.Filled.MoreVert, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                     }
-
                 }
             }
         }
@@ -936,50 +741,6 @@ fun ActiveVoiceRoomScreen(
         )
     }
 
-    // 1. Quick Chat Input Sheet
-    if (showChatInputSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showChatInputSheet = false },
-            containerColor = Color(0xFF141224)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-                    .navigationBarsPadding()
-            ) {
-                Text("Send a message to the room", color = TextMuted, fontSize = 12.sp)
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = chatMessageDraft,
-                        onValueChange = { chatMessageDraft = it.take(200) },
-                        placeholder = { Text("Say something nice...", color = TextMuted) },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                    Button(
-                        onClick = {
-                            if (chatMessageDraft.isNotBlank()) {
-                                onSendMessage(chatMessageDraft.trim())
-                                chatMessageDraft = ""
-                                showChatInputSheet = false
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = RoomPurplePrimary),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Icon(Icons.Filled.Send, contentDescription = "Send", tint = Color.White)
-                    }
-                }
-            }
-        }
-    }
-
     // 2. Room Tools Menu Sheet (Grid button)
     if (showToolsSheet) {
         ModalBottomSheet(
@@ -1003,13 +764,13 @@ fun ActiveVoiceRoomScreen(
                         showToolsSheet = false
                         showPkSetup = true
                     }
+                    ToolGridItem("😍", "Reactions") {
+                        showToolsSheet = false
+                        showReactionPicker = true
+                    }
                     ToolGridItem("🎨", "Themes") {
                         showToolsSheet = false
                         onOpenThemes?.invoke()
-                    }
-                    ToolGridItem("📻", "Modes") {
-                        showToolsSheet = false
-                        onOpenModes?.invoke()
                     }
                     ToolGridItem("📊", "Poll") {
                         showToolsSheet = false
@@ -1032,6 +793,25 @@ fun ActiveVoiceRoomScreen(
                     ToolGridItem("💬", "DM Host") {
                         showToolsSheet = false
                         onDirectMessage(room.host?.id)
+                    }
+                    ToolGridItem("📻", "Modes") {
+                        showToolsSheet = false
+                        onOpenModes?.invoke()
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceAround
+                ) {
+                    ToolGridItem("🎲", "Lucky wheel") {
+                        showToolsSheet = false
+                        showLuckyWheelDialog = true
+                    }
+                    ToolGridItem(if (roomAudioMuted) "🔇" else "🔊", "Room audio") {
+                        roomAudioMuted = !roomAudioMuted
+                        onToast(if (roomAudioMuted) "Room audio muted" else "Room audio unmuted")
+                        showToolsSheet = false
                     }
                     ToolGridItem("↙️", "Minimize") {
                         showToolsSheet = false
@@ -1407,15 +1187,12 @@ fun ActiveVoiceRoomScreen(
                     TextButton(onClick = {
                         showExitPrompt = false
                         onMinimize()
-                    }) { Text("Keep room active", color = RoomPurplePrimary, fontWeight = FontWeight.Bold) }
+                    }) { Text("Minimize room", color = RoomPurplePrimary, fontWeight = FontWeight.Bold) }
                     TextButton(onClick = {
                         showExitPrompt = false
                         if (isHost) onEndRoom() else onBack()
                     }) { Text(if (isHost) "Close and exit" else "Leave and exit", color = Pink, fontWeight = FontWeight.Bold) }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showExitPrompt = false }) { Text("Stay in room", color = TextMuted) }
             },
             containerColor = Color(0xFF171522)
         )
@@ -1481,6 +1258,7 @@ private fun VoiceSeatItem(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
             .fillMaxWidth()
+            .height(82.dp)
             .clickable(onClick = onClick)
     ) {
         if (participant != null) {
@@ -1502,7 +1280,7 @@ private fun VoiceSeatItem(
                 // Avatar with custom frame
                 Avatar(
                     initial = participant.user.name.take(1).uppercase(),
-                    size = 46,
+                    size = 40,
                     imageUrl = participant.user.avatar,
                     cosmetics = participant.user.activeCosmetics,
                     isSpeaking = isSpeaking,
@@ -1531,13 +1309,14 @@ private fun VoiceSeatItem(
 
             // Pill with Seat Number + Name
             Row(
+                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 3.dp, vertical = 3.dp)
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 3.dp)
             ) {
                 // Number badge
                 Box(
                     modifier = Modifier
-                        .size(14.dp)
+                        .size(13.dp)
                         .clip(CircleShape)
                         .background(
                             when (index) {
@@ -1553,7 +1332,7 @@ private fun VoiceSeatItem(
                     Text(
                         "${index + 1}",
                         color = Color.White,
-                        fontSize = 9.sp,
+                        fontSize = 8.sp,
                         fontWeight = FontWeight.Black
                     )
                 }
@@ -1561,11 +1340,12 @@ private fun VoiceSeatItem(
                 Text(
                     text = participant.user.name,
                     color = Color.White,
-                    fontSize = 10.sp,
+                    fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     textAlign = TextAlign.Start,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false).padding(start = 3.dp)
                 )
             }
         } else {

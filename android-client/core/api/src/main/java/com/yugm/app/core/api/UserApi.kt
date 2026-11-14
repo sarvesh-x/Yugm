@@ -31,12 +31,14 @@ object UserApi {
         avatar: String? = null,
         acceptTerms: Boolean = false,
         vibeLine: String? = null,
-        hobbies: List<String>? = null
+        hobbies: List<String>? = null,
+        state: String? = null
     ): YugmUser {
         val body = JSONObject()
             .put("name", name)
             .put("username", username.lowercase().replace(" ", "_"))
         if (city != null) body.put("city", city)
+        if (state != null) body.put("state", state)
         if (bio != null) body.put("bio", bio)
         if (interests != null) body.put("interests", JSONArray(interests))
         if (hobbies != null) body.put("hobbies", JSONArray(hobbies))

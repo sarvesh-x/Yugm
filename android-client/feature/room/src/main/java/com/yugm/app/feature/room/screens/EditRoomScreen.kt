@@ -85,7 +85,7 @@ fun EditRoomScreen(
     var description by rememberSaveable { mutableStateOf(room.description) }
     var category by rememberSaveable { mutableStateOf(room.category.ifBlank { "Voice" }) }
     var language by rememberSaveable { mutableStateOf(room.language.ifBlank { "English" }) }
-    var maxSpeakers by rememberSaveable { mutableStateOf(room.maxSpeakers) }
+    var maxSpeakers by rememberSaveable(room.id) { mutableStateOf(room.maxSpeakers.coerceIn(2, 20)) }
     var tags by rememberSaveable { mutableStateOf(room.tags) }
     var coverUri by remember { mutableStateOf<Uri?>(null) }
     var isPublic by rememberSaveable { mutableStateOf(room.status != "PRIVATE") }
@@ -253,12 +253,14 @@ fun EditRoomScreen(
                         SettingRow(Icons.Filled.Public, "Room Privacy", "Choose who can join your room") {
                             ReferenceChip(if (isPublic) "Public" else "Private", glyph = if (isPublic) "◎" else "▣", selected = !isPublic, onClick = { isPublic = !isPublic })
                         }
-                        DividerLine()
-                        SettingRow(Icons.Filled.Groups, "Max Speakers", "Maximum number of speakers") {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                StepperButton("−", "Decrease speaker limit") { maxSpeakers = (maxSpeakers - 1).coerceAtLeast(2) }
-                                Text(maxSpeakers.toString(), color = TextPrimary, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 13.dp))
-                                StepperButton("+", "Increase speaker limit") { maxSpeakers = (maxSpeakers + 1).coerceAtMost(20) }
+                        if (room.type == com.yugm.app.core.model.RoomType.Voice) {
+                            DividerLine()
+                            SettingRow(Icons.Filled.Groups, "Mic Seats", "Choose 2–20 microphones") {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    StepperButton("−", "Decrease speaker limit") { maxSpeakers = (maxSpeakers - 1).coerceAtLeast(2) }
+                                    Text(maxSpeakers.toString(), color = TextPrimary, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 13.dp))
+                                    StepperButton("+", "Increase speaker limit") { maxSpeakers = (maxSpeakers + 1).coerceAtMost(20) }
+                                }
                             }
                         }
                         DividerLine()

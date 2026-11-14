@@ -15,7 +15,7 @@ export function creatorShare(amount: number) {
   return amount - platformFee(amount);
 }
 
-async function assertWalletNotFrozen(userId: string) {
+export async function assertWalletNotFrozen(userId: string) {
   const status = await UserSafetyStatus.findOne({ userId }).lean();
   if (status?.isWalletFrozen) throw new HttpError(403, "Wallet is frozen");
 }

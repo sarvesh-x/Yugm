@@ -26,6 +26,8 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import com.yugm.app.core.api.YugmApi
 import com.yugm.app.core.api.ApiHttpException
+import com.yugm.app.core.model.CoinPack
+import com.yugm.app.core.model.RazorpayCheckoutData
 import com.yugm.app.core.api.YugmHttpClient
 import com.yugm.app.navigation.NavGraph
 import com.yugm.app.core.navigation.Screen
@@ -43,6 +45,7 @@ import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
@@ -148,17 +151,23 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                     GooglePlayBillingManager.init(context)
                     GooglePlayBillingManager.setPendingPurchaseHandler { productId, purchaseToken, orderId ->
                         val token = mainViewModel.authToken
-                        check(token.isNotBlank()) { "Sign in again to finish your purchase." }
-                        val pack = YugmApi.coinPacks(token).firstOrNull { it.googleProductId == productId }
-                            ?: error("This Play Store product is not configured for Yugm.")
-                        val balance = YugmApi.verifyGooglePlayPurchase(
-                            token = token,
-                            packId = pack.id,
-                            productId = productId,
-                            purchaseToken = purchaseToken,
-                            orderId = orderId,
-                        )
-                        mainViewModel.updateBalance(balance)
+                        if (token.isBlank()) return@setPendingPurchaseHandler GooglePlayBillingManager.PurchaseHandleResult.RETRY
+                        runCatching {
+                            val pack = YugmApi.coinPacks(token).firstOrNull { it.googleProductId == productId }
+                                ?: error("Unknown product: $productId")
+                            val balance = YugmApi.verifyGooglePlayPurchase(
+                                token = token,
+                                packId = pack.id,
+                                productId = productId,
+                                purchaseToken = purchaseToken,
+                                orderId = orderId,
+                            )
+                            mainViewModel.updateBalance(balance)
+                            GooglePlayBillingManager.PurchaseHandleResult.VERIFIED
+                        }.getOrElse {
+                            Timber.tag("GooglePlay").w(it, "Purchase verification pending/retry")
+                            GooglePlayBillingManager.PurchaseHandleResult.RETRY
+                        }
                     }
                 }
 
@@ -176,6 +185,23 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                     onDispose { cm.unregisterNetworkCallback(callback) }
                 }
 
+                val startRazorpayFallback: (CoinPack) -> Unit = { pack ->
+                    val token = mainViewModel.authToken
+                    if (token.isBlank()) {
+                        Toast.makeText(context, "Sign in again to finish your purchase.", Toast.LENGTH_LONG).show()
+                    } else {
+                        scope.launch {
+                            runCatching {
+                                withContext(Dispatchers.IO) { YugmApi.createRazorpayOrder(token, pack.id) }
+                            }.onSuccess { checkout: RazorpayCheckoutData ->
+                                RazorpayCoordinator.start(this@MainActivity, checkout)
+                            }.onFailure {
+                                Toast.makeText(context, it.message ?: "Checkout could not start", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                }
+
                 Box(Modifier.fillMaxSize().background(Background)) {
                     NavGraph(
                         navController = navController,
@@ -186,13 +212,29 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                         },
                         onStartGooglePlayPurchase = { pack ->
                             scope.launch {
+                                if (GooglePlayBillingManager.isBillingUnavailable()) {
+                                    startRazorpayFallback(pack)
+                                    return@launch
+                                }
                                 runCatching {
+                                    if (pack.googleProductId.isBlank()) {
+                                        error("This coin pack is not configured for Google Play.")
+                                    }
+                                    if (!GooglePlayBillingManager.isBillingReady()) {
+                                        GooglePlayBillingManager.init(this@MainActivity)
+                                        val ready = GooglePlayBillingManager.awaitBillingReady()
+                                        if (!ready) error("Google Play Billing could not connect. Check Play Store sign-in/network, then try again.")
+                                    }
                                     GooglePlayBillingManager.queryRawProductDetails(listOf(pack.googleProductId))
-                                        .firstOrNull() ?: error("This coin pack is not available in Google Play yet.")
+                                        .firstOrNull() ?: error("This coin pack isn't available in Google Play for this app yet. Check Play Console product IDs and app version.")
                                 }.onSuccess { details ->
                                     GooglePlayBillingManager.launchBillingFlow(this@MainActivity, details)
                                 }.onFailure {
-                                    Toast.makeText(context, it.message ?: "Purchase could not start", Toast.LENGTH_LONG).show()
+                                    if (GooglePlayBillingManager.isBillingUnavailable()) {
+                                        startRazorpayFallback(pack)
+                                    } else {
+                                        Toast.makeText(context, it.message ?: "Purchase could not start", Toast.LENGTH_LONG).show()
+                                    }
                                 }
                             }
                         },

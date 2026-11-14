@@ -24,11 +24,9 @@ android-client/app/release/
 .cxx
 local.properties
 node_modules
-.expo
 .env
 dist
 backend-server/apps/api/dist
-android-client/expo-mobile/.expo
 npm-debug.log*
 *.log
 *.err.log

@@ -36,6 +36,7 @@ import androidx.navigation.compose.composable
 import com.yugm.app.core.api.VibeApi
 import com.yugm.app.core.model.CoinPack
 import com.yugm.app.core.model.RazorpayCheckoutData
+import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.navigation.Screen
 import com.yugm.app.feature.auth.navigation.authNavGraph
 import com.yugm.app.feature.chat.navigation.chatNavGraph
@@ -64,6 +65,7 @@ fun NavGraph(
     val resources = LocalResources.current
     val vibeInitDone = remember { mutableStateOf(false) }
     var minimizedRoomId by remember { mutableStateOf<String?>(null) }
+    var minimizedRoomType by remember { mutableStateOf(RoomType.Voice) }
     LaunchedEffect(mainViewModel.authToken) {
         if (mainViewModel.authToken.isNotBlank() && !vibeInitDone.value) {
             runCatching { VibeApi.init(mainViewModel.authToken) }
@@ -135,8 +137,9 @@ fun NavGraph(
             userNameProvider = { mainViewModel.userName },
             usernameProvider = { mainViewModel.username },
             balanceProvider = { mainViewModel.balance },
-            onMinimizeRoom = { roomId ->
+            onMinimizeRoom = { roomId, roomType ->
                 minimizedRoomId = roomId
+                minimizedRoomType = roomType
                 navController.navigate(Screen.Discover.route) { launchSingleTop = true }
             }
         )
@@ -213,17 +216,25 @@ fun NavGraph(
                   .size(58.dp)
                   .background(Color(0xFF7C3AED), CircleShape)
                   .semantics {
-                      contentDescription = "Return to live voice room"
+                      contentDescription = if (minimizedRoomType == RoomType.Video) "Return to video room" else "Return to voice room"
                   }
                   .clickable(role = androidx.compose.ui.semantics.Role.Button) {
-                      val roomRoute = Screen.VoiceRoom.createRoute(roomId)
+                      val roomRoute = if (minimizedRoomType == RoomType.Video) {
+                          Screen.VideoRoom.createRoute(roomId)
+                      } else {
+                          Screen.VoiceRoom.createRoute(roomId)
+                      }
                       val restored = navController.popBackStack(roomRoute, inclusive = false)
                       if (!restored) navController.navigate(roomRoute) { launchSingleTop = true }
                       minimizedRoomId = null
                   },
               contentAlignment = Alignment.Center
           ) {
-              Icon(Icons.Filled.Mic, contentDescription = null, modifier = Modifier.size(26.dp), tint = Color.White)
+              if (minimizedRoomType == RoomType.Video) {
+                  Text("▶", color = Color.White, fontWeight = FontWeight.Bold)
+              } else {
+                  Icon(Icons.Filled.Mic, contentDescription = null, modifier = Modifier.size(26.dp), tint = Color.White)
+              }
           }
       }
     }

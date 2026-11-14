@@ -27,6 +27,7 @@ object YugmMediaRoom {
     private var speakingObserver: Job? = null
     private var connected = false
     @Volatile private var desiredMicEnabled = false
+    @Volatile private var desiredCameraEnabled = false
     private var opponentRoomName: String? = null
     private val mutableSpeakingIdentities = MutableStateFlow<Set<String>>(emptySet())
     val speakingIdentities = mutableSpeakingIdentities.asStateFlow()
@@ -35,12 +36,14 @@ object YugmMediaRoom {
         appContext = context.applicationContext
     }
 
-    fun connect(token: String, url: String) {
+    fun connect(token: String, url: String, publishCamera: Boolean = false, publishMicrophone: Boolean = desiredMicEnabled) {
         val context = appContext ?: run {
             Timber.tag(TAG).e("Media room was not initialized")
             return
         }
         if (token.isBlank() || url.isBlank()) return
+        desiredCameraEnabled = publishCamera
+        desiredMicEnabled = publishMicrophone
         RoomAudioForegroundService.start(context)
         scope.launch {
             runCatching {
@@ -51,6 +54,7 @@ object YugmMediaRoom {
                 nextRoom.connect(url, token)
                 room = nextRoom
                 nextRoom.localParticipant.setMicrophoneEnabled(desiredMicEnabled)
+                nextRoom.localParticipant.setCameraEnabled(desiredCameraEnabled)
                 speakingObserver = scope.launch {
                     nextRoom::activeSpeakers.flow.collect { speakers ->
                         mutableSpeakingIdentities.value = speakers.mapNotNull { it.identity?.value }.toSet()
@@ -75,22 +79,29 @@ object YugmMediaRoom {
     }
 
     fun setCameraEnabled(enabled: Boolean) {
+        desiredCameraEnabled = enabled
         scope.launch {
             runCatching { room?.localParticipant?.setCameraEnabled(enabled) }
                 .onFailure { Timber.tag(TAG).e(it, "Unable to update camera") }
         }
     }
 
-    data class VideoFeed(val label: String, val track: VideoTrack)
+    data class VideoFeed(val label: String, val track: VideoTrack, val identity: String, val isLocal: Boolean)
 
     fun videoFeeds(): List<VideoFeed> {
-        val currentRoom = room ?: return emptyList()
+        return videoFeeds(room)
+    }
+
+    fun opponentVideoFeeds(): List<VideoFeed> = videoFeeds(opponentRoom)
+
+    private fun videoFeeds(currentRoom: Room?): List<VideoFeed> {
+        currentRoom ?: return emptyList()
         val local = currentRoom.localParticipant.videoTrackPublications.mapNotNull { (_, track) ->
-            (track as? VideoTrack)?.let { VideoFeed(currentRoom.localParticipant.name ?: "You", it) }
+            (track as? VideoTrack)?.let { VideoFeed(currentRoom.localParticipant.name ?: "You", it, currentRoom.localParticipant.identity?.value.orEmpty(), true) }
         }
         val remote = currentRoom.remoteParticipants.values.flatMap { participant ->
             participant.videoTrackPublications.mapNotNull { (_, track) ->
-                (track as? VideoTrack)?.let { VideoFeed(participant.name ?: participant.identity?.value ?: "Guest", it) }
+                (track as? VideoTrack)?.let { VideoFeed(participant.name ?: participant.identity?.value ?: "Guest", it, participant.identity?.value.orEmpty(), false) }
             }
         }
         return local + remote
@@ -98,6 +109,10 @@ object YugmMediaRoom {
 
     fun initializeVideoRenderer(renderer: SurfaceViewRenderer) {
         room?.initVideoRenderer(renderer)
+    }
+
+    fun initializeOpponentVideoRenderer(renderer: SurfaceViewRenderer) {
+        opponentRoom?.initVideoRenderer(renderer)
     }
 
     fun connectOpponent(token: String, url: String, roomName: String) {
@@ -121,6 +136,7 @@ object YugmMediaRoom {
 
     fun disconnect() {
         desiredMicEnabled = false
+        desiredCameraEnabled = false
         speakingObserver?.cancel()
         speakingObserver = null
         mutableSpeakingIdentities.value = emptySet()
@@ -133,5 +149,6 @@ object YugmMediaRoom {
     }
 
     fun isConnected(): Boolean = connected
+    fun isMicEnabled(): Boolean = desiredMicEnabled
     fun opponentRoomName(): String? = opponentRoomName
 }

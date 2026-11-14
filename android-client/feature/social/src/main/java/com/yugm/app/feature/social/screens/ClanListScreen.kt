@@ -36,6 +36,7 @@ import com.yugm.app.core.model.Clan
 import com.yugm.app.core.model.ClanSummary
 import com.yugm.app.core.ui.components.LoadingState
 import com.yugm.app.core.ui.components.RoundAction
+import com.yugm.app.core.ui.components.SegmentedTabs
 import com.yugm.app.core.ui.components.YugmAmbientBackground
 import com.yugm.app.core.ui.components.YugmPageHeader
 import com.yugm.app.core.ui.theme.Pink
@@ -53,10 +54,12 @@ fun ClanListScreen(
 ) {
     val viewModel: ClanViewModel = hiltViewModel()
     var searchQuery by remember { mutableStateOf("") }
+    var selectedTab by remember { mutableStateOf(0) }
 
     LaunchedEffect(token) {
         viewModel.loadMyClan(token)
         viewModel.loadClans(token, searchQuery)
+        viewModel.loadCommunity(token)
     }
     LaunchedEffect(searchQuery) {
         if (searchQuery.length >= 2 || searchQuery.isEmpty()) {
@@ -76,15 +79,23 @@ fun ClanListScreen(
                 }
             }
             item {
+                SegmentedTabs(
+                    items = listOf("✦" to "Discover", "♛" to "Rankings", "✉" to "Invites"),
+                    selectedIndex = selectedTab,
+                    onSelected = { selectedTab = it },
+                    modifier = Modifier.padding(horizontal = 20.dp)
+                )
+            }
+            if (selectedTab == 0) item {
                 YugmSearchBar(
                     query = searchQuery,
                     onQueryChange = { searchQuery = it },
                     placeholder = "Search clans…"
                 )
             }
-            if (viewModel.isLoading) {
+            if (selectedTab == 0 && viewModel.isLoading) {
                 item { Box(Modifier.padding(horizontal = 20.dp)) { LoadingState("Loading clans…") } }
-            } else {
+            } else if (selectedTab == 0) {
                 if (viewModel.myClan != null) {
                     item {
                         MyClanCard(viewModel.myClan!!) { onMyClanClick(viewModel.myClan!!.id) }
@@ -114,6 +125,57 @@ fun ClanListScreen(
                     }
                 }
             }
+            if (selectedTab == 1) {
+                item { Text("Most active communities", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
+                if (viewModel.leaderboard.isEmpty()) {
+                    item { Text("Clan rankings will appear as members earn XP.", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp)) }
+                }
+                items(viewModel.leaderboard, key = { it.id }) { entry ->
+                    ClanRankingCard(entry.rank, entry.name, entry.familyLabel, entry.memberCount, entry.totalXp)
+                }
+            }
+            if (selectedTab == 2) {
+                item { Text("Invitations to join a clan", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
+                if (viewModel.invitations.isEmpty()) {
+                    item { Text("You’re all caught up. New invitations will show here.", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp)) }
+                }
+                items(viewModel.invitations, key = { it.id }) { invitation ->
+                    ClanInvitationCard(
+                        invitation.clanName,
+                        invitation.inviterName,
+                        onAccept = { viewModel.respondToInvitation(token, invitation.id, true) },
+                        onDecline = { viewModel.respondToInvitation(token, invitation.id, false) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ClanRankingCard(rank: Int, name: String, familyLabel: String, members: Int, xp: Long) {
+    Row(
+        Modifier.padding(horizontal = 20.dp).fillMaxWidth().clip(RoundedCornerShape(18.dp))
+            .background(androidx.compose.ui.graphics.Color(0xFF171522)).padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("#$rank", color = Pink, fontSize = 17.sp, fontWeight = FontWeight.Black, modifier = Modifier.width(42.dp))
+        Column(Modifier.weight(1f)) {
+            Text(name, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text("$familyLabel · $members members", color = TextMuted, fontSize = 11.sp)
+        }
+        Text("${xp.coerceAtLeast(0)} XP", color = Pink, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun ClanInvitationCard(name: String, inviter: String, onAccept: () -> Unit, onDecline: () -> Unit) {
+    Column(Modifier.padding(horizontal = 20.dp).fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(androidx.compose.ui.graphics.Color(0xFF171522)).padding(14.dp)) {
+        Text(name, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        Text("Invited by ${inviter.ifBlank { "a clan member" }}", color = TextMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp, bottom = 10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            androidx.compose.material3.OutlinedButton(onClick = onDecline, modifier = Modifier.weight(1f)) { Text("Decline") }
+            androidx.compose.material3.Button(onClick = onAccept, modifier = Modifier.weight(1f)) { Text("Join clan") }
         }
     }
 }

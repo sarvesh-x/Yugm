@@ -11,6 +11,8 @@ import com.yugm.app.core.model.GroupChat
 import com.yugm.app.core.model.Host
 import com.yugm.app.core.model.ReferralStatsResponse
 import com.yugm.app.core.model.WishlistItem
+import com.yugm.app.core.model.ClanRankingEntry
+import com.yugm.app.core.model.RoomLeaderboard
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -23,6 +25,12 @@ class SocialViewModel @Inject constructor(
 ) : ViewModel() {
 
     var leaderboard by mutableStateOf<GiftLeaderboardResponse?>(null)
+        private set
+    var clanRankings by mutableStateOf<List<ClanRankingEntry>>(emptyList())
+        private set
+    var levelRankings by mutableStateOf<List<Host>>(emptyList())
+        private set
+    var roomRankings by mutableStateOf(RoomLeaderboard())
         private set
     var referralCode by mutableStateOf("")
         private set
@@ -91,6 +99,20 @@ class SocialViewModel @Inject constructor(
             }.onFailure {
                 error = it.message ?: "Failed to load leaderboard"
             }
+            isLoading = false
+        }
+    }
+
+    fun loadLeaderboardHub(token: String, period: String = "all") {
+        viewModelScope.launch {
+            isLoading = true
+            error = null
+            runCatching {
+                leaderboard = withContext(Dispatchers.IO) { yugmApi.giftLeaderboard(token, period) }
+            }.onFailure { error = it.message ?: "Failed to load gift rankings" }
+            runCatching { clanRankings = withContext(Dispatchers.IO) { yugmApi.clanLeaderboard(token) } }
+            runCatching { levelRankings = withContext(Dispatchers.IO) { yugmApi.levelLeaderboard(token) } }
+            runCatching { roomRankings = withContext(Dispatchers.IO) { yugmApi.leaderboard() } }
             isLoading = false
         }
     }
