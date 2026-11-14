@@ -61,6 +61,7 @@ fun NavGraphBuilder.chatNavGraph(
             onRetry = chatViewModel::refresh,
             onSend = chatViewModel::sendMessage,
             onTyping = chatViewModel::sendTypingStatus,
+            onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) },
         )
     }
 }

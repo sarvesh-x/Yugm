@@ -308,7 +308,8 @@ fun RoomLobbyScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(14.dp)
                             ) {
-                                val cover = room.coverImage ?: host?.avatar
+                                // Never substitute the host's profile photo for room artwork.
+                                val cover = room.coverImage
                                 Box(
                                     modifier = Modifier
                                         .size(68.dp)

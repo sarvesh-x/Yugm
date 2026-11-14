@@ -77,7 +77,7 @@ fun JSONObject.toRoom(): Room {
         type = type,
         status = optString("status", "LIVE"),
         scheduledFor = optString("scheduledFor", ""),
-        coverImage = if (has("coverImage") && !isNull("coverImage")) optString("coverImage", "") else null,
+        coverImage = if (has("coverImage") && !isNull("coverImage")) resolveMediaUrl(optString("coverImage", "")) else null,
         host = hostJson?.toHost(),
         category = optString("category", ""),
         language = optString("language", ""),

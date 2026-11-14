@@ -38,6 +38,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -115,7 +124,8 @@ fun ChatScreen(
     onVideoCall: () -> Unit = {},
     onAttachmentSelected: (ByteArray, String, String) -> Unit = { _, _, _ -> },
     onReport: () -> Unit = {},
-    onBlock: () -> Unit = {}
+    onBlock: () -> Unit = {},
+    onOpenProfile: (String) -> Unit = {}
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
     var showGiftSheet by rememberSaveable { mutableStateOf(false) }
@@ -174,9 +184,15 @@ fun ChatScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
                 ) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        LightChatAction("‹", stringResource(R.string.a11y_back), onBack)
+                        LightChatAction(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.a11y_back), onBack)
                         Spacer(Modifier.width(10.dp))
-                        Avatar(partner?.name?.take(1) ?: "?", 44, partner?.avatar, partner?.activeCosmetics ?: com.yugm.app.core.model.ActiveCosmetics(), accessibilityLabel = stringResource(R.string.a11y_profile_picture, partner?.name ?: defaultMatchName))
+                        Box(
+                            Modifier.clip(CircleShape).clickable(enabled = !partner?.id.isNullOrBlank(), role = Role.Button) {
+                                partner?.id?.takeIf(String::isNotBlank)?.let(onOpenProfile)
+                            }
+                        ) {
+                            Avatar(partner?.name?.take(1) ?: "?", 44, partner?.avatar, partner?.activeCosmetics ?: ActiveCosmetics(), accessibilityLabel = stringResource(R.string.a11y_profile_picture, partner?.name ?: defaultMatchName))
+                        }
                         Column(Modifier.weight(1f).padding(start = 10.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(partner?.name ?: "Loading match…", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -188,7 +204,7 @@ fun ChatScreen(
                                 fontSize = 12.sp
                             )
                         }
-                        LightChatAction("⋮", stringResource(R.string.a11y_conversation_options)) { showMore = !showMore }
+                        LightChatAction(Icons.Filled.MoreVert, stringResource(R.string.a11y_conversation_options)) { showMore = !showMore }
                     }
                 }
 
@@ -275,7 +291,7 @@ fun ChatScreen(
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
                 ) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        LightChatAction("☺", stringResource(R.string.a11y_toggle_emoji_picker)) { showEmojiBar = !showEmojiBar }
+                        LightChatAction(Icons.Filled.SentimentSatisfiedAlt, stringResource(R.string.a11y_toggle_emoji_picker)) { showEmojiBar = !showEmojiBar }
                         Row(
                             Modifier.weight(1f).height(50.dp).clip(RoundedCornerShape(18.dp)).background(SurfaceElevated).border(1.dp, BorderColor, RoundedCornerShape(18.dp)).padding(horizontal = 14.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -294,10 +310,10 @@ fun ChatScreen(
                                 }
                             )
                             Box(Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics { contentDescription = attachPhotoLabel }.clickable(role = Role.Button, onClickLabel = attachPhotoLabel) { attachmentPicker.launch("image/*") }, contentAlignment = Alignment.Center) {
-                                Text("⌕", color = TextMuted, fontSize = 20.sp)
+                                Icon(Icons.Filled.AttachFile, contentDescription = null, tint = TextMuted, modifier = Modifier.size(20.dp))
                             }
                             Box(Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics { contentDescription = sendGiftLabel }.clickable(role = Role.Button, onClickLabel = sendGiftLabel) { showGiftSheet = true }, contentAlignment = Alignment.Center) {
-                                Text("♢", color = TextMuted, fontSize = 20.sp)
+                                Icon(Icons.Filled.CardGiftcard, contentDescription = null, tint = TextMuted, modifier = Modifier.size(20.dp))
                             }
                         }
                         Box(
@@ -306,7 +322,7 @@ fun ChatScreen(
                                 if (text.isNotBlank()) { draft = ""; onSend(text) }
                             },
                             contentAlignment = Alignment.Center
-                        ) { Text("➤", color = Color.White, fontSize = 21.sp) }
+                        ) { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp)) }
                     }
                 }
             }
@@ -338,14 +354,14 @@ fun ChatScreen(
 }
 
 @Composable
-private fun LightChatAction(glyph: String, label: String, onClick: () -> Unit) {
+private fun LightChatAction(icon: ImageVector, label: String, onClick: () -> Unit) {
     Box(
         Modifier.size(44.dp).clip(CircleShape).background(SurfaceElevated)
             .semantics { contentDescription = label }
             .clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Text(glyph, color = TextPrimary, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+        Icon(icon, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(20.dp))
     }
 }
 

@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -57,6 +58,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Chat
@@ -67,6 +69,9 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
 import androidx.compose.material.icons.filled.VolumeOff
@@ -87,7 +92,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -119,6 +123,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import com.yugm.app.core.api.YugmMediaRoom
+import com.yugm.app.core.api.resolveMediaUrl
 import com.yugm.app.core.model.ChatMessage
 import com.yugm.app.core.model.GiftItem
 import com.yugm.app.core.model.Host
@@ -137,8 +142,6 @@ import com.yugm.app.core.model.RoomPoll
 import com.yugm.app.core.model.SpeakerRequest
 import com.yugm.app.core.ui.components.AuroraBackground
 import com.yugm.app.core.ui.components.Avatar
-import com.yugm.app.core.ui.components.FloatingEmoji
-import com.yugm.app.core.ui.components.FloatingEmojiOverlay
 import com.yugm.app.core.ui.components.GiftPanel
 import com.yugm.app.core.ui.components.GlassCard
 import com.yugm.app.core.ui.components.PkBattleHeader
@@ -307,7 +310,6 @@ fun ActiveVoiceRoomScreen(
 
     // Dialog & bottom sheet states
     var giftOpen by rememberSaveable { mutableStateOf(false) }
-    val floatingEmojis = remember { mutableStateListOf<FloatingEmoji>() }
     var showInvitePicker by rememberSaveable { mutableStateOf(false) }
     var showPollComposer by rememberSaveable { mutableStateOf(false) }
     var showPkSetup by rememberSaveable { mutableStateOf(false) }
@@ -351,27 +353,10 @@ fun ActiveVoiceRoomScreen(
         }
     }
 
-    // Floating reaction events & seat avatar reactions
-    val emojiCounter = remember { mutableStateOf(0) }
-    LaunchedEffect(floatingEmojis.size) {
-        if (floatingEmojis.isNotEmpty()) {
-            delay(2200)
-            floatingEmojis.removeFirstOrNull()
-        }
-    }
+    // Show the selected reaction on the reacting user's seat.
     LaunchedEffect(roomReactionEvent.first) {
-        val emoji = when (roomReactionEvent.second) {
-            "heart" -> "🫶"
-            "fire" -> "✨"
-            "laugh" -> "😂"
-            "clap" -> "🙌"
-            "wow" -> "🤯"
-            else -> "✨"
-        }
+        val emoji = roomReactionEmoji(roomReactionEvent.second)
         if (roomReactionEvent.first > 0) {
-            emojiCounter.value++
-            floatingEmojis.add(FloatingEmoji(id = "live-${emojiCounter.value}", emoji = emoji))
-            // Animate reaction directly above the seat avatar of the user
             val seatIdx = selfParticipant?.seatIndex ?: 0
             seatReactions[seatIdx] = emoji
             scope.launch {
@@ -452,10 +437,8 @@ fun ActiveVoiceRoomScreen(
                         .clickable { showRoomInfoSheet = true }
                         .padding(horizontal = 8.dp, vertical = 5.dp)
                 ) {
-                    // Room avatar square (uses room cover or host avatar)
-                    val roomHost = room.host
-                    val roomAvatarUrl = room.coverImage?.takeIf(String::isNotBlank)
-                        ?: roomHost?.avatar?.takeIf(String::isNotBlank)
+                    // Resolve relative upload paths in case this Room instance predates normalized API parsing.
+                    val roomAvatarUrl = resolveMediaUrl(room.coverImage)
                     Box(
                         modifier = Modifier
                             .size(36.dp)
@@ -498,7 +481,7 @@ fun ActiveVoiceRoomScreen(
 
                     Spacer(modifier = Modifier.width(6.dp))
 
-                    // Follow "+" button
+                    // Follow-room shortcut follows the room host.
                     if (!isHost) {
                         Box(
                             modifier = Modifier
@@ -514,8 +497,8 @@ fun ActiveVoiceRoomScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Add,
-                                contentDescription = "Follow host",
+                                imageVector = if (room.host?.isFollowing == true) Icons.Filled.Check else Icons.Filled.Add,
+                                contentDescription = if (room.host?.isFollowing == true) "Following room host" else "Follow room host",
                                 tint = Color.White,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -523,13 +506,61 @@ fun ActiveVoiceRoomScreen(
                     }
                 }
 
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RoomHeaderAction(Icons.Filled.Share, "Share room") {
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, "Join ${room.title.ifBlank { "my room" }} on Yugm: yugm.live/room/${room.id}")
+                        }
+                        context.startActivity(Intent.createChooser(shareIntent, "Share room"))
+                    }
+                    RoomHeaderAction(Icons.Filled.MoreVert, "Room options") { showRoomInfoSheet = true }
+                    RoomHeaderAction(Icons.Filled.PowerSettingsNew, "Leave room") { showExitPrompt = true }
+                }
             }
 
-            // Trophy / Ranking pill right below header
-            Row(
-                modifier = Modifier
-                    .padding(horizontal = 16.dp, vertical = 2.dp)
+            // Active audience strip with direct profile access.
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
+                Text("${participants.size} active", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(end = 4.dp)
+                ) {
+                    items(participants, key = { it.user.id.ifBlank { it.id } }) { participant ->
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.width(54.dp).clickable(enabled = participant.user.id.isNotBlank()) {
+                                participant.user.id.takeIf(String::isNotBlank)?.let(onOpenProfile)
+                            }
+                        ) {
+                            Avatar(
+                                initial = participant.user.name.take(1).ifBlank { "?" },
+                                size = 38,
+                                imageUrl = participant.user.avatar,
+                                cosmetics = participant.user.activeCosmetics,
+                                accessibilityLabel = "View ${participant.user.name}'s profile"
+                            )
+                            Text(
+                                participant.user.name,
+                                color = Color.White.copy(alpha = 0.86f),
+                                fontSize = 9.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Trophy / Ranking pill below the active user strip.
+            Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
@@ -557,8 +588,8 @@ fun ActiveVoiceRoomScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 seatRows.forEach { rowIndices ->
                     Row(
@@ -575,6 +606,7 @@ fun ActiveVoiceRoomScreen(
                                     (p.user.id == currentUserId && muted) || p.micEnabled == false || p.moderatorMuted
                                 } ?: false,
                                 reactionEmoji = seatReactions[index],
+                                modifier = Modifier.weight(1f),
                                 onClick = {
                                     val p = speakers.firstOrNull { it.seatIndex == index }
                                     if (p != null) selectedParticipant = p else selectedEmptySeat = index
@@ -629,8 +661,6 @@ fun ActiveVoiceRoomScreen(
                             label = item.label,
                             onWelcomeClick = {
                                 onReact("clap")
-                                emojiCounter.value++
-                                floatingEmojis.add(FloatingEmoji(id = "clap-${emojiCounter.value}", emoji = "👏"))
                                 onToast("Welcomed to the room! 👏")
                             }
                         )
@@ -661,61 +691,6 @@ fun ActiveVoiceRoomScreen(
                     }
                 }
 
-                // ================= 4. FLOATING RIGHT WIDGETS =================
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 12.dp, bottom = 12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    // Floating Treasure Chest (Lucky Box)
-                    Box(
-                        modifier = Modifier
-                            .size(46.dp)
-                            .shadow(8.dp, CircleShape)
-                            .clip(CircleShape)
-                            .background(Brush.radialGradient(listOf(Color(0xFFFFD54F), Color(0xFFFF8F00))))
-                            .clickable { onToast("Lucky Box drop active! Gift to trigger coins.") },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("🎁", fontSize = 24.sp)
-                    }
-
-                    // Floating Mini-game / Lucky Draw widget
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .shadow(6.dp, RoundedCornerShape(12.dp))
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Brush.verticalGradient(listOf(Color(0xFF6B21A8), Color(0xFF3B0764))))
-                            .border(1.dp, Gold, RoundedCornerShape(12.dp))
-                            .clickable { showLuckyWheelDialog = true },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("🦁", fontSize = 18.sp)
-                            Text("2.0", color = Gold, fontSize = 8.sp, fontWeight = FontWeight.Black)
-                        }
-                    }
-
-                    // Floating Quick Chat shortcut bubble
-                    Box(
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(RoomPurplePrimary)
-                            .clickable { showChatInputSheet = true },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Chat,
-                            contentDescription = "Chat",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
             }
 
             // ================= 5. BOTTOM CONTROL DOCK BAR (Exact match to reference image!) =================
@@ -910,11 +885,6 @@ fun ActiveVoiceRoomScreen(
             }
         }
 
-        // Floating reaction emoji layer
-        FloatingEmojiOverlay(
-            emojis = floatingEmojis.toList(),
-            modifier = Modifier.matchParentSize()
-        )
     }
 
     // ================= ALL BOTTOM SHEETS & DIALOGS =================
@@ -1111,8 +1081,6 @@ fun ActiveVoiceRoomScreen(
                                 .background(Color(0xFF26203B))
                                 .clickable {
                                     onReact(type)
-                                    emojiCounter.value++
-                                    floatingEmojis.add(FloatingEmoji(id = "live-${emojiCounter.value}", emoji = emoji))
                                     val seatIdx = selfParticipant?.seatIndex ?: 0
                                     seatReactions[seatIdx] = emoji
                                     scope.launch {
@@ -1459,8 +1427,37 @@ fun ActiveVoiceRoomScreen(
  * - Empty: clean circular disc with mic/lock icon and seat number below
  * - Occupied: avatar with speaking wave aura, mic status indicator badge, and index pill + name below
  */
+private fun roomReactionEmoji(type: String): String = when (type.lowercase()) {
+    "heart" -> "😍"
+    "fire" -> "🔥"
+    "laugh" -> "😂"
+    "clap" -> "🙌"
+    "wow" -> "🤯"
+    "crown" -> "👑"
+    "stars" -> "✨"
+    "party" -> "🎉"
+    else -> "✨"
+}
+
+@Composable
+private fun RoomHeaderAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clip(CircleShape)
+            .background(Color(0x66000000))
+            .border(1.dp, RoomGlassBorder, CircleShape)
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+    }
+}
+
 @Composable
 private fun VoiceSeatItem(
+    modifier: Modifier = Modifier,
     index: Int,
     participant: RoomParticipant?,
     isSpeaking: Boolean,
@@ -1482,8 +1479,8 @@ private fun VoiceSeatItem(
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .width(64.dp)
+        modifier = modifier
+            .fillMaxWidth()
             .clickable(onClick = onClick)
     ) {
         if (participant != null) {
@@ -1533,13 +1530,9 @@ private fun VoiceSeatItem(
             Spacer(modifier = Modifier.height(4.dp))
 
             // Pill with Seat Number + Truncated Name
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .background(Color(0x88000000))
-                    .padding(horizontal = 4.dp, vertical = 2.dp)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0x55000000)).padding(horizontal = 3.dp, vertical = 3.dp)
             ) {
                 // Number badge
                 Box(
@@ -1565,14 +1558,13 @@ private fun VoiceSeatItem(
                     )
                 }
 
-                Spacer(modifier = Modifier.width(3.dp))
-
                 Text(
                     text = participant.user.name,
                     color = Color.White,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
-                    maxLines = 1,
+                    maxLines = 2,
+                    textAlign = TextAlign.Center,
                     overflow = TextOverflow.Ellipsis
                 )
             }
@@ -1918,7 +1910,6 @@ private fun RoomSettingsAndInfoSheet(
     val context = LocalContext.current
     val host = room.host
     val cover = room.coverImage?.takeIf(String::isNotBlank)
-        ?: host?.avatar?.takeIf(String::isNotBlank)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,

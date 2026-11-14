@@ -247,7 +247,7 @@ object RoomApi {
         }
         val url = data.getJSONObject("data").optString("url")
         if (url.isBlank()) throw ApiProtocolException("Cover upload returned no URL")
-        return url
+        return resolveMediaUrl(url) ?: throw ApiProtocolException("Cover upload returned an invalid URL")
     }
 
     suspend fun roomPkHistory(roomId: String, token: String): List<com.yugm.app.core.model.PkBattle> {

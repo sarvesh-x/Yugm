@@ -8,7 +8,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -47,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yugm.app.core.model.ActiveCosmetics
+import com.yugm.app.core.api.resolveMediaUrl
 import com.yugm.app.core.ui.theme.Gold
 import com.yugm.app.core.ui.theme.Ink
 import com.yugm.app.core.ui.theme.PanelStrong
@@ -69,7 +69,9 @@ fun Avatar(
     accessibilityLabel: String? = null
 ) {
     val avatarAsset = avatarAssetUrl(cosmetics.avatarAsset)
-    val finalImageUrl = avatarAsset ?: imageUrl
+    // Resolve relative upload paths centrally so avatars from every API-backed
+    // feature (friends, chat, rooms, leaderboards, and profiles) load correctly.
+    val finalImageUrl = avatarAsset ?: resolveMediaUrl(imageUrl)
     val hasArtFrame = cosmetics.avatarFrame.isNotBlank()
     val frameBrush = avatarFrameBrush(cosmetics.avatarFrame)
     val speakingLabel = stringResource(com.yugm.app.core.ui.R.string.a11y_speaking)
@@ -127,16 +129,18 @@ fun Avatar(
                 contentAlignment = Alignment.Center
             ) {
                 if (!finalImageUrl.isNullOrBlank()) {
-                    val imagePainter = coil.compose.rememberAsyncImagePainter(model = finalImageUrl)
-                    if (imagePainter.state is coil.compose.AsyncImagePainter.State.Success) {
-                        Image(
-                            painter = imagePainter,
+                    // Keep a visible fallback underneath while Coil loads or if the URL fails.
+                    // AsyncImage must be composed immediately so its request can start; gating
+                    // Image on rememberAsyncImagePainter.State.Success leaves the painter stuck
+                    // in Loading because it is never drawn.
+                    Box(Modifier.fillMaxSize()) {
+                        DefaultAvatarPlaceholder(Modifier.fillMaxSize())
+                        coil.compose.AsyncImage(
+                            model = finalImageUrl,
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
                         )
-                    } else {
-                        DefaultAvatarPlaceholder(Modifier.fillMaxSize())
                     }
                 } else {
                     DefaultAvatarPlaceholder(Modifier.fillMaxSize())

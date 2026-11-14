@@ -29,6 +29,7 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":core:api"))
     implementation(project(":core:model"))
     implementation(project(":core:util"))
     implementation(platform(libs.androidx.compose.bom))
