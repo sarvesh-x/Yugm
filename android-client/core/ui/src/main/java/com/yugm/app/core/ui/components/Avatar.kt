@@ -127,12 +127,17 @@ fun Avatar(
                 contentAlignment = Alignment.Center
             ) {
                 if (!finalImageUrl.isNullOrBlank()) {
-                    Image(
-                        painter = coil.compose.rememberAsyncImagePainter(model = finalImageUrl),
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
+                    val imagePainter = coil.compose.rememberAsyncImagePainter(model = finalImageUrl)
+                    if (imagePainter.state is coil.compose.AsyncImagePainter.State.Success) {
+                        Image(
+                            painter = imagePainter,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        DefaultAvatarPlaceholder(Modifier.fillMaxSize())
+                    }
                 } else {
                     DefaultAvatarPlaceholder(Modifier.fillMaxSize())
                 }

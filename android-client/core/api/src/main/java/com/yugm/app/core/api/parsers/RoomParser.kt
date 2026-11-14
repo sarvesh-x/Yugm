@@ -1,6 +1,7 @@
 package com.yugm.app.core.api.parsers
 
 import androidx.compose.ui.graphics.Color
+import com.yugm.app.core.api.resolveMediaUrl
 import com.yugm.app.core.model.ActiveCosmetics
 import com.yugm.app.core.model.ChatMessage
 import com.yugm.app.core.model.Host
@@ -33,7 +34,7 @@ fun JSONObject.toHost(): Host = Host(
     followers = optInt("followersCount", 0),
     followingCount = optInt("followingCount", 0),
     bio = optString("bio", ""),
-    avatar = if (has("avatar") && !isNull("avatar")) optString("avatar", "") else null,
+    avatar = if (has("avatar") && !isNull("avatar")) resolveMediaUrl(optString("avatar", "")) else null,
     isVip = optBoolean("isVip", false),
     vipTier = optString("vipTier", ""),
     level = optJSONObject("levelStatus")?.optInt("level", optInt("level", 1)) ?: optInt("level", 1),

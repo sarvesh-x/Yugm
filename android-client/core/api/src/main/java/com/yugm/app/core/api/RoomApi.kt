@@ -263,7 +263,7 @@ object RoomApi {
         }
         val url = data.getJSONObject("data").optString("url")
         if (url.isBlank()) throw ApiProtocolException("Avatar upload returned no URL")
-        return url
+        return resolveMediaUrl(url) ?: throw ApiProtocolException("Avatar upload returned an invalid URL")
     }
 
     suspend fun uploadMessageMedia(token: String, bytes: ByteArray, mimeType: String, fileName: String): Pair<String, String> {
