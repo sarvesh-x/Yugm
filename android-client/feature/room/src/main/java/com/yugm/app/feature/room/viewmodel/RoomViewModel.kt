@@ -536,7 +536,7 @@ class RoomViewModel @Inject constructor(
             actionError = null
             withContext(Dispatchers.IO) {
                 runCatching { yugmApi.reactToRoom(authToken, roomId, type) }
-                    .onFailure { actionError = it.message ?: "Failed to react" }
+                    .onFailure { actionError = "Failed to react" }
             }
             actionLoading = false
         }

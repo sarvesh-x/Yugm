@@ -1529,10 +1529,10 @@ private fun VoiceSeatItem(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // Pill with Seat Number + Truncated Name
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0x55000000)).padding(horizontal = 3.dp, vertical = 3.dp)
+            // Pill with Seat Number + Name
+            Row(
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 3.dp, vertical = 3.dp)
             ) {
                 // Number badge
                 Box(
@@ -1563,8 +1563,8 @@ private fun VoiceSeatItem(
                     color = Color.White,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    textAlign = TextAlign.Start,
                     overflow = TextOverflow.Ellipsis
                 )
             }
