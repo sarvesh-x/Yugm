@@ -28,6 +28,13 @@ export let io: Server;
 export async function disconnectOtherUserSockets(userId: string, activeSessionId: string) {
   if (!io) return;
   try {
+    const [user, activeSession] = await Promise.all([
+      User.findById(userId).select("tokenVersion").lean(),
+      AuthSession.findOne({ _id: activeSessionId, userId, revokedAt: null }).select("tokenVersion").lean()
+    ]);
+    // Concurrent sign-ins can finish out of order. Never disconnect sockets
+    // for a session that has already lost the account's current generation.
+    if (!user || !activeSession || activeSession.tokenVersion !== user.tokenVersion) return;
     const sockets = await io.in(`user:${userId}`).fetchSockets();
     sockets
       .filter((socket) => socket.data.sessionId !== activeSessionId)
