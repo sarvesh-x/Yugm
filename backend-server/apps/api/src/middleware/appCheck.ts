@@ -14,7 +14,11 @@ export async function requireAppCheck(req: Request, _res: Response, next: NextFu
     }
     (req as any).appCheck = decoded;
     next();
-  } catch {
+  } catch (error) {
+    // Never log the bearer token. Keep the underlying Firebase error so a
+    // rejected production token can be distinguished from missing verifier IAM
+    // credentials without exposing implementation details to the client.
+    console.error("Firebase App Check verification failed:", error instanceof Error ? error.message : String(error));
     next(new HttpError(401, "App verification failed", ErrorCode.UNAUTHORIZED));
   }
 }

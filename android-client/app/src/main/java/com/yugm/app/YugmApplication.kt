@@ -8,7 +8,6 @@ import com.yugm.app.core.api.YugmHttpClient
 import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.AppCheckProviderFactory
-import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import com.google.android.gms.tasks.Tasks
 import android.util.Log
 import timber.log.Timber
@@ -36,10 +35,7 @@ class YugmApplication : Application() {
         ApiConfig.lanApiBaseUrl = BuildConfig.LAN_API_BASE_URL
         ApiConfig.lanSocketBaseUrl = BuildConfig.LAN_SOCKET_BASE_URL
         ApiConfig.isDebug = BuildConfig.DEBUG
-        val appCheckFactory = if (BuildConfig.DEBUG) {
-            Class.forName("com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory")
-                .getMethod("getInstance").invoke(null) as AppCheckProviderFactory
-        } else PlayIntegrityAppCheckProviderFactory.getInstance()
+        val appCheckFactory: AppCheckProviderFactory = YugmAppCheckProviderFactory.getInstance()
         val appCheck = FirebaseAppCheck.getInstance()
         appCheck.installAppCheckProviderFactory(appCheckFactory)
         if (BuildConfig.DEBUG) {

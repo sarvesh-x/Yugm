@@ -23,8 +23,8 @@ const keys: EnvKey[] = [
   { key: "LIVEKIT_API_SECRET", group: "livekit", required: false, note: "required for media tokens" },
   { key: "LIVEKIT_URL", group: "livekit", required: false, note: "defaults to ws://localhost:7880" },
   { key: "FCM_PROJECT_ID", group: "firebase", required: false, note: "defaults to the Yugm Firebase project ID; used to verify auth tokens" },
-  { key: "FCM_CLIENT_EMAIL", group: "firebase", required: false, note: "optional service account for push notifications" },
-  { key: "FCM_PRIVATE_KEY", group: "firebase", required: false, note: "optional service account for push notifications" },
+  { key: "FCM_CLIENT_EMAIL", group: "firebase", required: false, note: "required for enforced App Check and optional for push notifications" },
+  { key: "FCM_PRIVATE_KEY", group: "firebase", required: false, note: "required for enforced App Check and optional for push notifications" },
   { key: "RAZORPAY_KEY_ID", group: "payments", required: false, note: "required for Razorpay orders" },
   { key: "RAZORPAY_KEY_SECRET", group: "payments", required: false, note: "required for Razorpay verification" },
   { key: "GOOGLE_PLAY_PACKAGE_NAME", group: "payments", required: false, note: "required for Google Play purchases" },
@@ -66,6 +66,10 @@ if (missingRequired.length) {
 const isProduction = process.env.NODE_ENV === "production";
 const productionErrors: string[] = [];
 if (isProduction) {
+  if (["true", "1"].includes((process.env.APP_CHECK_ENFORCE ?? "").toLowerCase()) &&
+      (!process.env.FCM_CLIENT_EMAIL?.trim() || !process.env.FCM_PRIVATE_KEY?.trim())) {
+    productionErrors.push("APP_CHECK_ENFORCE requires FCM_CLIENT_EMAIL and FCM_PRIVATE_KEY for Firebase Admin token verification");
+  }
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET === "replace-me" || process.env.JWT_SECRET.length < 24) {
     productionErrors.push("JWT_SECRET must be set to a strong value in production");
   }

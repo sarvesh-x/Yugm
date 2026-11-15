@@ -119,7 +119,9 @@ export async function verifyIdToken(idToken: string): Promise<VerifiedFirebaseId
 
 export async function verifyAppCheckToken(token: string) {
   const firebase = fb();
-  if (!firebase.apps.length) throw new Error("Firebase Admin service account is required for App Check verification");
+  if (!firebase.apps.length) {
+    throw new Error("App Check enforcement requires FCM_CLIENT_EMAIL and FCM_PRIVATE_KEY for Firebase Admin verification");
+  }
   return firebase.appCheck().verifyToken(token, { consume: true });
 }
 
