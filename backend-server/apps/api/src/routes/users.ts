@@ -1283,7 +1283,12 @@ usersRouter.delete("/me/followers/:id", asyncHandler(async (req: AuthRequest, re
 
 usersRouter.post("/:id/block", asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
-  await Block.updateOne({ blockerId: req.user!.id, blockedUserId: req.params.id }, {}, { upsert: true });
+  if (req.params.id === req.user!.id) throw new HttpError(400, "You cannot block yourself", ErrorCode.VALIDATION);
+  await Block.updateOne(
+    { blockerId: req.user!.id, blockedUserId: req.params.id },
+    { $setOnInsert: { blockerId: req.user!.id, blockedUserId: req.params.id } },
+    { upsert: true }
+  );
   await User.findByIdAndUpdate(req.user!.id, { $pull: { closeFriendIds: req.params.id } });
   sendOk(res, { blocked: true });
 }));

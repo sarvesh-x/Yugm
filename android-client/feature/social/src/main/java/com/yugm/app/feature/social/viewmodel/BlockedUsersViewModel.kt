@@ -47,7 +47,7 @@ class BlockedUsersViewModel @Inject constructor(private val yugmApi: IYugmApi) :
         viewModelScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
-                    yugmApi.unblockUser(token, userId)
+                    yugmApi.unblockUser(userId, token)
                 }
             }
             load(token)
