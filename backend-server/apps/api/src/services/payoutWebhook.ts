@@ -71,7 +71,9 @@ export async function handlePayoutWebhook(req: Request, res: Response) {
     if (review.withdrawalRequestId) {
       await WithdrawalRequest.findByIdAndUpdate(review.withdrawalRequestId, {
         status: "PAID",
-        paidAt: review.payout?.processedAt ?? new Date()
+        paidAt: review.payout?.processedAt ?? new Date(),
+        activeLock: false,
+        ...(payoutId ? { payoutReference: payoutId } : {})
       });
     }
 
@@ -106,7 +108,18 @@ export async function handlePayoutWebhook(req: Request, res: Response) {
     }
 
     if (review.withdrawalRequestId) {
-      await WithdrawalRequest.findByIdAndUpdate(review.withdrawalRequestId, { status: "FAILED" });
+      const failureReason = event.payload.payout.failure_reason || reason;
+      await WithdrawalRequest.findByIdAndUpdate(review.withdrawalRequestId, {
+        $set: {
+          status: "REJECTED",
+          activeLock: false,
+          rejectedAt: new Date(),
+          rejectionReason: `Payout ${reason.toLowerCase()}: ${failureReason}`,
+          "metadata.payoutProviderStatus": reason,
+          "metadata.payoutFailureReason": failureReason,
+          "metadata.payoutProviderId": payoutId
+        }
+      });
     }
 
     await AdminAuditLog.create({

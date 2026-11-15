@@ -76,7 +76,16 @@ export const socketEvents = {
   clanTypingStop: "clan:typing:stop",
   clanTypingUpdate: "clan:typing:update",
   clanMessageNew: "clan:message:new",
+  clanMessageDeleted: "clan:message:deleted",
+  clanMessageUpdated: "clan:message:updated",
   clanChatCleaned: "clan:chat:cleaned",
+  clanUpdated: "clan:updated",
+  clanDeleted: "clan:deleted",
+  clanMemberJoined: "clan:member:joined",
+  clanMemberLeft: "clan:member:left",
+  clanMemberRemoved: "clan:member:removed",
+  clanMemberRoleUpdated: "clan:member:role_updated",
+  clanOwnershipTransferred: "clan:ownership:transferred",
   notificationNew: "notification:new",
   watchPartyStarted: "room:watchparty:started",
   watchPartyStopped: "room:watchparty:stopped",
@@ -542,7 +551,8 @@ export const reportSchema = reportBaseSchema.refine((value) => Boolean(value.tar
 export const sendGiftSchema = z.object({
   giftId: z.string().regex(objectIdPattern, "Invalid giftId format"),
   receiverId: z.string().regex(objectIdPattern, "Invalid receiverId format"),
-  currency: z.enum(["COINS", "DIAMONDS"]).optional()
+  currency: z.enum(["COINS", "DIAMONDS"]).optional(),
+  idempotencyKey: z.string().min(8).max(128).optional()
 });
 
 export const createPurchaseOrderSchema = z.object({

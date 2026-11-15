@@ -1,7 +1,9 @@
 package com.yugm.app.core.api
 
+import com.yugm.app.core.api.parsers.toClan
 import com.yugm.app.core.api.parsers.toClanMessage
 import com.yugm.app.core.api.parsers.toDirectMessage
+import com.yugm.app.core.model.Clan
 import com.yugm.app.core.model.ClanMessage
 import com.yugm.app.core.model.DirectMessage
 import io.socket.client.IO
@@ -22,7 +24,12 @@ sealed class SocketEvent {
     data class UserOnline(val userId: String) : SocketEvent()
     data class UserOffline(val userId: String) : SocketEvent()
     data class ClanMessageReceived(val clanId: String, val message: ClanMessage) : SocketEvent()
+    data class ClanMessageDeleted(val clanId: String, val messageId: String) : SocketEvent()
+    data class ClanMessageUpdated(val clanId: String, val message: ClanMessage) : SocketEvent()
     data class ClanChatCleaned(val clanId: String) : SocketEvent()
+    data class ClanUpdated(val clanId: String, val clan: Clan?) : SocketEvent()
+    data class ClanDeleted(val clanId: String) : SocketEvent()
+    data class ClanMembershipChanged(val clanId: String, val type: String, val userId: String, val clan: Clan?) : SocketEvent()
     data class ClanTypingUpdate(val clanId: String, val userId: String, val typing: Boolean) : SocketEvent()
     object Connected : SocketEvent()
     object Disconnected : SocketEvent()
@@ -103,9 +110,65 @@ class SocketManager @Inject constructor() {
                     }
                 }
             }
+            socket?.on("clan:message:deleted") { args ->
+                (args.firstOrNull() as? JSONObject)?.let { payload ->
+                    _events.tryEmit(SocketEvent.ClanMessageDeleted(payload.optString("clanId"), payload.optString("messageId")))
+                }
+            }
+            socket?.on("clan:message:updated") { args ->
+                (args.firstOrNull() as? JSONObject)?.let { payload ->
+                    val clanId = payload.optString("clanId")
+                    payload.optJSONObject("message")?.let { messageJson ->
+                        runCatching { _events.tryEmit(SocketEvent.ClanMessageUpdated(clanId, messageJson.toClanMessage())) }
+                            .onFailure { Timber.tag("SocketManager").e(it, "Failed to parse clan message update") }
+                    }
+                }
+            }
             socket?.on("clan:chat:cleaned") { args ->
                 (args.firstOrNull() as? JSONObject)?.let { payload ->
                     _events.tryEmit(SocketEvent.ClanChatCleaned(payload.optString("clanId")))
+                }
+            }
+            socket?.on("clan:updated") { args ->
+                (args.firstOrNull() as? JSONObject)?.let { payload ->
+                    val clanId = payload.optString("clanId")
+                    val clan = payload.optJSONObject("clan")?.let { runCatching { it.toClan() }.getOrNull() }
+                    _events.tryEmit(SocketEvent.ClanUpdated(clanId, clan))
+                }
+            }
+            socket?.on("clan:deleted") { args ->
+                (args.firstOrNull() as? JSONObject)?.let { payload ->
+                    _events.tryEmit(SocketEvent.ClanDeleted(payload.optString("clanId")))
+                }
+            }
+            socket?.on("clan:member:joined") { args ->
+                (args.firstOrNull() as? JSONObject)?.let { payload ->
+                    val clan = payload.optJSONObject("clan")?.let { runCatching { it.toClan() }.getOrNull() }
+                    _events.tryEmit(SocketEvent.ClanMembershipChanged(payload.optString("clanId"), "joined", payload.optString("userId"), clan))
+                }
+            }
+            socket?.on("clan:member:left") { args ->
+                (args.firstOrNull() as? JSONObject)?.let { payload ->
+                    val clan = if (payload.isNull("clan")) null else payload.optJSONObject("clan")?.let { runCatching { it.toClan() }.getOrNull() }
+                    _events.tryEmit(SocketEvent.ClanMembershipChanged(payload.optString("clanId"), "left", payload.optString("userId"), clan))
+                }
+            }
+            socket?.on("clan:member:removed") { args ->
+                (args.firstOrNull() as? JSONObject)?.let { payload ->
+                    val clan = if (payload.isNull("clan")) null else payload.optJSONObject("clan")?.let { runCatching { it.toClan() }.getOrNull() }
+                    _events.tryEmit(SocketEvent.ClanMembershipChanged(payload.optString("clanId"), "removed", payload.optString("userId"), clan))
+                }
+            }
+            socket?.on("clan:member:role_updated") { args ->
+                (args.firstOrNull() as? JSONObject)?.let { payload ->
+                    val clan = payload.optJSONObject("clan")?.let { runCatching { it.toClan() }.getOrNull() }
+                    _events.tryEmit(SocketEvent.ClanMembershipChanged(payload.optString("clanId"), "role", payload.optString("userId"), clan))
+                }
+            }
+            socket?.on("clan:ownership:transferred") { args ->
+                (args.firstOrNull() as? JSONObject)?.let { payload ->
+                    val clan = payload.optJSONObject("clan")?.let { runCatching { it.toClan() }.getOrNull() }
+                    _events.tryEmit(SocketEvent.ClanMembershipChanged(payload.optString("clanId"), "ownership", payload.optString("toUserId", payload.optString("userId")), clan))
                 }
             }
             socket?.on("clan:typing:update") { args ->
@@ -113,11 +176,19 @@ class SocketManager @Inject constructor() {
                     _events.tryEmit(SocketEvent.ClanTypingUpdate(payload.optString("clanId"), payload.optString("userId"), payload.optBoolean("typing")))
                 }
             }
-            socket?.on("user_online") { args ->
-                if (args.isNotEmpty()) _events.tryEmit(SocketEvent.UserOnline(args[0].toString()))
+            socket?.on("user:online") { args ->
+                val userId = when (val first = args.firstOrNull()) {
+                    is JSONObject -> first.optString("userId")
+                    else -> first?.toString().orEmpty()
+                }
+                if (userId.isNotBlank()) _events.tryEmit(SocketEvent.UserOnline(userId))
             }
-            socket?.on("user_offline") { args ->
-                if (args.isNotEmpty()) _events.tryEmit(SocketEvent.UserOffline(args[0].toString()))
+            socket?.on("user:offline") { args ->
+                val userId = when (val first = args.firstOrNull()) {
+                    is JSONObject -> first.optString("userId")
+                    else -> first?.toString().orEmpty()
+                }
+                if (userId.isNotBlank()) _events.tryEmit(SocketEvent.UserOffline(userId))
             }
             socket?.on(Socket.EVENT_DISCONNECT) {
                 Timber.tag("SocketManager").d("Disconnected")

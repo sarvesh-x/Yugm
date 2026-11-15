@@ -70,7 +70,9 @@ data class DirectMessage(
 data class Conversation(
     val messages: List<DirectMessage> = emptyList(),
     val relationship: RelationshipStatus? = null,
-    val muted: Boolean = false
+    val muted: Boolean = false,
+    val hasMore: Boolean = false,
+    val nextBefore: String? = null
 )
 
 data class NotificationItem(

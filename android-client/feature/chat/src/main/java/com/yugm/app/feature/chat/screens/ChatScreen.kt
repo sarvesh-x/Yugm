@@ -135,6 +135,9 @@ fun ChatScreen(
     isMuted: Boolean = false,
     forwardTargets: List<Host> = emptyList(),
     searchResults: List<DirectMessage>? = null,
+    hasMoreHistory: Boolean = false,
+    isLoadingMore: Boolean = false,
+    onLoadOlder: () -> Unit = {},
     onReply: (String, DirectMessage) -> Unit = { _, _ -> },
     onEdit: (DirectMessage, String) -> Unit = { _, _ -> },
     onForward: (DirectMessage, String) -> Unit = { _, _ -> },
@@ -161,7 +164,6 @@ fun ChatScreen(
     val context = LocalContext.current
     val messageFieldLabel = stringResource(R.string.a11y_message_field)
     val attachPhotoLabel = stringResource(R.string.a11y_attach_photo)
-    val sendGiftLabel = stringResource(R.string.a11y_send_gift)
     val sendMessageLabel = stringResource(R.string.a11y_send_message)
     val defaultMatchName = stringResource(R.string.a11y_default_match)
     val scope = rememberCoroutineScope()
@@ -311,27 +313,55 @@ fun ChatScreen(
                             TextButton(onClick = { selectedMessageIds = emptySet() }) { Text("Cancel") }
                         }
                     } else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        YugmBackButton(onBack, accessibilityLabel = stringResource(R.string.a11y_back))
+                        LightChatAction(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.a11y_back), onBack)
                         Spacer(Modifier.width(10.dp))
                         Box(
-                            Modifier.clip(CircleShape).clickable(enabled = !partner?.id.isNullOrBlank(), role = Role.Button) {
+                            Modifier.size(44.dp).clip(CircleShape).clickable(enabled = !partner?.id.isNullOrBlank(), role = Role.Button) {
                                 partner?.id?.takeIf(String::isNotBlank)?.let(onOpenProfile)
                             }
                         ) {
-                            Box(Modifier.border(1.dp, Brush.linearGradient(listOf(Pink, PrimaryPurple)), CircleShape).padding(2.dp)) {
-                                Avatar(partner?.name?.take(1) ?: "?", 42, partner?.avatar, partner?.activeCosmetics ?: ActiveCosmetics(), accessibilityLabel = stringResource(R.string.a11y_profile_picture, partner?.name ?: defaultMatchName))
+                            Box(Modifier.fillMaxSize().border(2.dp, Brush.linearGradient(listOf(Pink, PrimaryPurple)), CircleShape).padding(2.dp)) {
+                                Avatar(partner?.name?.take(1) ?: "?", 38, partner?.avatar, partner?.activeCosmetics ?: ActiveCosmetics(), accessibilityLabel = stringResource(R.string.a11y_profile_picture, partner?.name ?: defaultMatchName))
+                            }
+                            if (partner?.isOnline == true) {
+                                Box(
+                                    Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .size(12.dp)
+                                        .clip(CircleShape)
+                                        .background(Success)
+                                        .border(2.dp, SurfaceElevated, CircleShape)
+                                )
                             }
                         }
                         Column(Modifier.weight(1f).padding(start = 10.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(partner?.name ?: "Loading match…", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                if (partner?.isVip == true) Text("  ✦", color = Pink, fontSize = 15.sp)
+                                Spacer(Modifier.width(4.dp))
+                                Box(
+                                    Modifier
+                                        .size(16.dp)
+                                        .clip(CircleShape)
+                                        .background(Brush.linearGradient(listOf(PrimaryPurple, Pink))),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("✓", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Black)
+                                }
                             }
-                            Text(
-                                if (partner?.isOnline == true) "Online" else partner?.username?.let { "@$it" } ?: "Your conversation",
-                                color = if (partner?.isOnline == true) Success else TextMuted,
-                                fontSize = 12.sp
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Box(
+                                    Modifier
+                                        .size(7.dp)
+                                        .clip(CircleShape)
+                                        .background(if (partner?.isOnline == true) Success else TextMuted)
+                                )
+                                Text(
+                                    if (partner?.isOnline == true) "Online" else partner?.username?.let { "@$it" } ?: "Your conversation",
+                                    color = if (partner?.isOnline == true) Success else TextMuted,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
                         }
                         LightChatAction(Icons.Filled.Call, "Start voice call", onAudioCall)
                         Spacer(Modifier.width(6.dp))
@@ -382,7 +412,22 @@ fun ChatScreen(
                             if (messages.isEmpty()) item { MatchedBanner(partner?.name ?: "your match") }
                             if (showSafety) item { SafetyTip(onDismiss = { showSafety = false }) }
                             relationship?.let { bond -> item { BondStrip(bond) } }
-                            item { ConversationDivider("Today") }
+                            if (searchQuery.isBlank() && visibleMessages.isNotEmpty() && hasMoreHistory) item {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                                    Text(
+                                        text = if (isLoadingMore) "Loading earlier messages…" else "Load earlier messages",
+                                        color = if (isLoadingMore) TextMuted else PrimaryPurple,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(SurfaceElevated)
+                                            .border(1.dp, BorderColor, CircleShape)
+                                            .clickable(enabled = !isLoadingMore, role = Role.Button, onClickLabel = "Load earlier messages", onClick = onLoadOlder)
+                                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                                    )
+                                }
+                            }
                             if (error.isNotBlank()) item {
                                 Text("$error · Retry", color = Pink, fontSize = 12.sp, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.clickable(role = Role.Button, onClickLabel = stringResource(R.string.a11y_retry_messages), onClick = onRetry).padding(vertical = 12.dp))
                             }
@@ -402,13 +447,20 @@ fun ChatScreen(
                                 }
                             }
                             itemsIndexed(visibleMessages, key = { index, message -> message.id.ifBlank { "$index-${message.createdAt}-${message.message}" } }) { index, message ->
-                                if (visibleMessages.size > 2 && index == visibleMessages.size - 2) ConversationDivider("New Messages", highlight = true)
+                                val currentDate = messageDateLabel(message.createdAt)
+                                val previousDate = visibleMessages.getOrNull(index - 1)?.let { messageDateLabel(it.createdAt) }
+                                if (currentDate.isNotBlank() && currentDate != previousDate) {
+                                    ConversationDivider(currentDate)
+                                }
                                 MessageBubble(
                                     message = message,
                                     mine = message.senderId == currentUserId,
                                     selected = message.id in selectedMessageIds,
                                     bubbleId = myActiveCosmetics.chatBubble,
                                     reactionCount = message.reactionCount,
+                                    partner = partner,
+                                    currentUserId = currentUserId,
+                                    myActiveCosmetics = myActiveCosmetics,
                                     onReact = {
                                         if (selectionMode) toggleSelection(message.id)
                                         else if (message.id.isNotBlank()) onReactMessage(message)
@@ -458,9 +510,9 @@ fun ChatScreen(
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         LightChatAction(Icons.Filled.SentimentSatisfiedAlt, stringResource(R.string.a11y_toggle_emoji_picker)) { showEmojiBar = !showEmojiBar }
                         Row(
-                            Modifier.weight(1f).height(50.dp).clip(RoundedCornerShape(25.dp))
-                                .background(Color(0xFF111426))
-                                .border(1.dp, Color(0x30FFFFFF), RoundedCornerShape(25.dp))
+                            Modifier.weight(1f).height(52.dp).clip(RoundedCornerShape(26.dp))
+                                .background(Color(0xFF131629))
+                                .border(1.dp, Color(0x30FFFFFF), RoundedCornerShape(26.dp))
                                 .padding(horizontal = 14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -472,24 +524,26 @@ fun ChatScreen(
                                 modifier = Modifier.weight(1f).semantics { contentDescription = messageFieldLabel },
                                 decorationBox = { inner ->
                                     Box {
-                                if (draft.isBlank()) Text(if (editingTarget != null) "Edit message…" else if (replyTarget != null) "Write a reply…" else "Message…", color = TextMuted, fontSize = 14.sp)
+                                        if (draft.isBlank()) Text(if (editingTarget != null) "Edit message…" else if (replyTarget != null) "Write a reply…" else "Type a message...", color = TextMuted, fontSize = 14.sp)
                                         inner()
                                     }
                                 }
                             )
-                            Box(Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics { contentDescription = attachPhotoLabel }.clickable(role = Role.Button, onClickLabel = attachPhotoLabel) { attachmentPicker.launch("image/*") }, contentAlignment = Alignment.Center) {
-                                Icon(Icons.Filled.AttachFile, contentDescription = null, tint = TextMuted, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Box(Modifier.sizeIn(minWidth = 36.dp, minHeight = 36.dp).semantics { contentDescription = attachPhotoLabel }.clickable(role = Role.Button, onClickLabel = attachPhotoLabel) { attachmentPicker.launch("image/*") }, contentAlignment = Alignment.Center) {
+                                Icon(Icons.Filled.AttachFile, contentDescription = null, tint = TextMuted, modifier = Modifier.size(19.dp))
                             }
-                            Box(Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics { contentDescription = sendGiftLabel }.clickable(role = Role.Button, onClickLabel = sendGiftLabel) { showGiftSheet = true }, contentAlignment = Alignment.Center) {
-                                Icon(Icons.Filled.CardGiftcard, contentDescription = null, tint = TextMuted, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Box(Modifier.sizeIn(minWidth = 36.dp, minHeight = 36.dp).semantics { contentDescription = "Select photo" }.clickable(role = Role.Button, onClickLabel = "Select photo") { attachmentPicker.launch("image/*") }, contentAlignment = Alignment.Center) {
+                                Text("🖼️", fontSize = 16.sp)
                             }
                         }
                         Box(
-                            Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).clip(CircleShape).background(Brush.linearGradient(listOf(PrimaryPurple, Pink))).semantics { contentDescription = sendMessageLabel }.clickable(role = Role.Button, onClickLabel = sendMessageLabel) {
+                            Modifier.size(48.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Color(0xFF6B2FD9), Color(0xFF9E37F9)))).semantics { contentDescription = sendMessageLabel }.clickable(role = Role.Button, onClickLabel = sendMessageLabel) {
                                 submitDraft()
                             },
                             contentAlignment = Alignment.Center
-                        ) { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp)) }
+                        ) { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp)) }
                     }
                 }
             }
@@ -596,56 +650,198 @@ private fun BondStrip(bond: RelationshipStatus) {
 
 @Composable
 private fun ConversationDivider(label: String, highlight: Boolean = false) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.weight(1f).height(1.dp).background(if (highlight) Pink.copy(alpha = 0.6f) else BorderColor))
-        Text(label, color = if (highlight) Pink else TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp))
-        Box(Modifier.weight(1f).height(1.dp).background(if (highlight) Pink.copy(alpha = 0.6f) else BorderColor))
+    Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .clip(RoundedCornerShape(50))
+                .background(SurfaceElevated)
+                .border(1.dp, BorderColor, RoundedCornerShape(50))
+                .padding(horizontal = 16.dp, vertical = 6.dp)
+        ) {
+            Text(label, color = if (highlight) Pink else TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
     }
 }
 
 @Composable
-private fun MessageBubble(message: DirectMessage, mine: Boolean, selected: Boolean, bubbleId: String, reactionCount: Int, onReact: () -> Unit, onLongPress: () -> Unit) {
+private fun MessageBubble(
+    message: DirectMessage,
+    mine: Boolean,
+    selected: Boolean,
+    bubbleId: String,
+    reactionCount: Int,
+    partner: Host?,
+    currentUserId: String,
+    myActiveCosmetics: ActiveCosmetics,
+    onReact: () -> Unit,
+    onLongPress: () -> Unit
+) {
     val bubble = if (mine) chatBubbleVisual(bubbleId) else null
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.Bottom
+    ) {
+        if (!mine) {
+            Box(Modifier.size(32.dp).clip(CircleShape).background(SurfaceElevated)) {
+                Avatar(
+                    initial = partner?.name?.firstOrNull()?.toString() ?: "?",
+                    size = 32,
+                    imageUrl = partner?.avatar,
+                    cosmetics = partner?.activeCosmetics ?: ActiveCosmetics(),
+                    accessibilityLabel = null
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+        }
+
         Column(horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
             Box(
-                Modifier.widthIn(max = 290.dp).clip(RoundedCornerShape(topStart = 19.dp, topEnd = 19.dp, bottomStart = if (mine) 19.dp else 5.dp, bottomEnd = if (mine) 5.dp else 19.dp))
-                    .background(bubble?.fill ?: Brush.horizontalGradient(if (mine) listOf(Color(0xFF5426A8), Color(0xFF8D35F6)) else listOf(Color(0xFF191C30), Color(0xFF20243A))))
-                    .border(if (selected) 2.dp else 1.dp, if (selected) Pink else bubble?.border ?: Color(0x20FFFFFF), RoundedCornerShape(19.dp))
-                    .combinedClickable(onClick = onReact, onLongClick = onLongPress).padding(horizontal = 15.dp, vertical = 12.dp)
+                Modifier
+                    .widthIn(max = 280.dp)
+                    .clip(
+                        RoundedCornerShape(
+                            topStart = 20.dp,
+                            topEnd = 20.dp,
+                            bottomStart = if (mine) 20.dp else 6.dp,
+                            bottomEnd = if (mine) 6.dp else 20.dp
+                        )
+                    )
+                    .background(
+                        bubble?.fill ?: if (mine) {
+                            Brush.horizontalGradient(listOf(Color(0xFF6B2FD9), Color(0xFF9E37F9)))
+                        } else {
+                            Brush.linearGradient(listOf(Color(0xFF1E1736), Color(0xFF15122B)))
+                        }
+                    )
+                    .border(
+                        if (selected) 2.dp else 1.dp,
+                        if (selected) Pink else bubble?.border ?: Color(0x33FFFFFF),
+                        RoundedCornerShape(20.dp)
+                    )
+                    .combinedClickable(onClick = onReact, onLongClick = onLongPress)
+                    .padding(horizontal = 14.dp, vertical = 11.dp)
             ) {
                 Column {
-                    if (message.forwarded) Text("Forwarded", color = Pink, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 4.dp))
+                    if (message.forwarded) {
+                        Text("Forwarded", color = Pink, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 4.dp))
+                    }
                     message.replyTo?.let { reply ->
-                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).background(Color.Black.copy(alpha = 0.16f)).padding(7.dp)) {
-                            Text(reply.author.ifBlank { "Replied message" }, color = Pink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            Text(reply.text.ifBlank { "Media" }, color = TextMuted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color.Black.copy(alpha = 0.22f)).padding(8.dp)) {
+                            Text(reply.author.ifBlank { "Replied message" }, color = Pink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text(reply.text.ifBlank { "Media" }, color = TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
-                        Spacer(Modifier.height(5.dp))
+                        Spacer(Modifier.height(6.dp))
                     }
                     if (message.mediaUrl.isNotBlank()) {
-                        AsyncImage(
-                            model = resolveMediaUrl(message.mediaUrl),
-                            contentDescription = "Shared media",
-                            modifier = Modifier.width(230.dp).height(150.dp).clip(RoundedCornerShape(13.dp)),
-                            contentScale = ContentScale.Crop
-                        )
-                        Spacer(Modifier.height(7.dp))
+                        Box(Modifier.width(230.dp).height(150.dp).clip(RoundedCornerShape(14.dp))) {
+                            AsyncImage(
+                                model = resolveMediaUrl(message.mediaUrl),
+                                contentDescription = "Shared media",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                            Box(
+                                Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(8.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color.Black.copy(alpha = 0.6f))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text("HD", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
                     }
-                    Text(message.message, color = bubble?.text ?: TextPrimary, fontSize = 14.sp, lineHeight = 19.sp)
+                    if (message.mediaType == "audio") {
+                        Row(
+                            Modifier.width(200.dp).padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                Modifier.size(36.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("▶", color = Color.White, fontSize = 14.sp)
+                            }
+                            Row(
+                                Modifier.weight(1f),
+                                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                repeat(18) { i ->
+                                    val h = (10 + (i * 7) % 22).dp
+                                    Box(Modifier.width(2.dp).height(h).clip(CircleShape).background(Color.White.copy(alpha = 0.8f)))
+                                }
+                            }
+                            Text("0:12", color = TextMuted, fontSize = 11.sp)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                    }
+                    val isCallMessage = message.message.contains("call started", ignoreCase = true)
+                    if (isCallMessage) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.White.copy(alpha = 0.12f))
+                                .padding(horizontal = 10.dp, vertical = 8.dp)
+                        ) {
+                            Text("📞", fontSize = 16.sp)
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    if (message.message.contains("video", true)) "Video call" else "Voice call",
+                                    color = bubble?.text ?: TextPrimary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text("Tap call actions above to start a new one", color = (bubble?.text ?: TextMuted).copy(alpha = 0.8f), fontSize = 10.sp)
+                            }
+                        }
+                    } else if (message.message.isNotBlank()) {
+                        Text(message.message, color = bubble?.text ?: TextPrimary, fontSize = 14.sp, lineHeight = 20.sp)
+                    }
                     Row(Modifier.align(Alignment.End).padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (message.isEdited) Text("edited · ", color = TextMuted, fontSize = 9.sp)
                         Text(messageTime(message.createdAt), color = (bubble?.text ?: TextMuted).copy(alpha = 0.76f), fontSize = 9.sp)
-                        if (mine) Text(
-                            if (message.read) "  ✓✓" else "  ✓",
-                            color = if (message.read) Color(0xFF80D8FF) else (bubble?.text ?: Color.White).copy(alpha = 0.8f),
-                            fontSize = 9.sp
-                        )
+                        if (mine) {
+                            Text(
+                                if (message.read) "  ✓✓" else "  ✓",
+                                color = if (message.read) Color(0xFF69F0AE) else (bubble?.text ?: Color.White).copy(alpha = 0.8f),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
-            if (reactionCount > 0) Box(Modifier.offset(y = (-5).dp).clip(CircleShape).background(SurfaceElevated).border(1.dp, BorderColor, CircleShape).padding(horizontal = 7.dp, vertical = 3.dp)) {
-                Text("💗 $reactionCount", color = TextPrimary, fontSize = 9.sp)
+            if (reactionCount > 0) {
+                Box(
+                    Modifier
+                        .offset(y = (-6).dp)
+                        .clip(CircleShape)
+                        .background(SurfaceElevated)
+                        .border(1.dp, BorderColor, CircleShape)
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text("❤️ $reactionCount", color = TextPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        if (mine) {
+            Spacer(Modifier.width(8.dp))
+            Box(Modifier.size(32.dp).clip(CircleShape).background(SurfaceElevated)) {
+                Avatar(
+                    initial = "You".first().toString(),
+                    size = 32,
+                    imageUrl = null,
+                    cosmetics = myActiveCosmetics,
+                    accessibilityLabel = null
+                )
             }
         }
     }
@@ -668,7 +864,27 @@ fun TypingBubble() {
     }
 }
 
-private fun messageTime(value: String) = if (value.length >= 16) value.substring(11, 16) else "now"
+private fun messageTime(value: String) = runCatching {
+    val instant = java.time.Instant.parse(value)
+    val local = instant.atZone(java.time.ZoneId.systemDefault())
+    java.time.format.DateTimeFormatter.ofPattern("HH:mm").format(local)
+}.getOrElse { if (value.length >= 16) value.substring(11, 16) else "now" }
+
+private fun messageDateLabel(value: String): String = runCatching {
+    val instant = java.time.Instant.parse(value)
+    val local = instant.atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+    val today = java.time.LocalDate.now()
+    when (local) {
+        today -> "Today"
+        today.minusDays(1) -> "Yesterday"
+        else -> if (local.year == today.year) {
+            local.format(java.time.format.DateTimeFormatter.ofPattern("MMM d"))
+        } else {
+            local.format(java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy"))
+        }
+    }
+}.getOrDefault("")
+
 private fun DirectMessage.canStillEdit(): Boolean = runCatching {
     java.time.Instant.parse(createdAt).isAfter(java.time.Instant.now().minusSeconds(15 * 60))
 }.getOrDefault(false)

@@ -51,4 +51,5 @@ dependencies {
     kapt(libs.hilt.compiler)
     implementation(libs.timber)
     implementation(libs.coil.compose)
+    implementation(project(":feature:social"))
 }

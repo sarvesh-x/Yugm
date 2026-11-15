@@ -205,12 +205,19 @@ object UserApi {
         return NotificationPreferences(prefs.toBooleanMap())
     }
 
-    suspend fun conversation(token: String, userId: String): Conversation {
-        val data = YugmHttpClient.get("/users/messages/$userId", token).getJSONObject("data")
+    suspend fun conversation(token: String, userId: String, before: String? = null, limit: Int? = null): Conversation {
+        val query = buildList {
+            if (!before.isNullOrBlank()) add("before=${java.net.URLEncoder.encode(before, "UTF-8")}")
+            if (limit != null) add("limit=$limit")
+        }.joinToString("&")
+        val path = if (query.isBlank()) "/users/messages/$userId" else "/users/messages/$userId?$query"
+        val data = YugmHttpClient.get(path, token).getJSONObject("data")
         return Conversation(
             messages = data.optJSONArray("messages")?.toDirectMessages() ?: emptyList(),
             relationship = data.optJSONObject("relationship")?.toRelationshipStatus(),
-            muted = data.optBoolean("muted", false)
+            muted = data.optBoolean("muted", false),
+            hasMore = data.optBoolean("hasMore", false),
+            nextBefore = data.optString("nextBefore").takeIf { it.isNotBlank() && it != "null" }
         )
     }
 

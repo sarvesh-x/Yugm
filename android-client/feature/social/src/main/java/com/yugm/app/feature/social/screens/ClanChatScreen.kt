@@ -259,7 +259,7 @@ fun ClanChatScreen(
                         Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = ClanChatMuted)
                         Text("  Reply", color = ClanChatMuted)
                     }
-                    if (target.senderId?.id == currentUserId || clan?.ownerId == currentUserId) {
+                    if (target.senderId?.id == currentUserId || clan?.canModerate == true) {
                         TextButton(onClick = { deleteMessage = target; actionMessage = null }) {
                             Icon(Icons.Filled.DeleteOutline, contentDescription = null, tint = ClanChatPink)
                             Text("  Delete message", color = ClanChatPink)
@@ -303,7 +303,7 @@ fun ClanChatScreen(
                         text = { Text("Clan details") }, leadingIcon = { Icon(Icons.Filled.Groups, null) },
                         onClick = { menuOpen = false; onClanDetails() }
                     )
-                    if (clan?.ownerId == currentUserId) {
+                    if (clan?.canModerate == true) {
                         DropdownMenuItem(
                             text = { Text("Clean chat", color = ClanChatPink) }, leadingIcon = { Icon(Icons.Filled.DeleteOutline, null, tint = ClanChatPink) },
                             onClick = { menuOpen = false; cleanConfirm = true }

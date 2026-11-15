@@ -52,6 +52,15 @@ export const chatLimiter = rateLimit({
   legacyHeaders: false
 });
 
+export const giftLimiter = rateLimit({
+  windowMs: 10_000,
+  max: 20,
+  keyGenerator: userOrIpKey,
+  store: new ResilientRedisRateLimitStore("gift"),
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 export const reportLimiter = rateLimit({
   windowMs: 60_000,
   max: 5,

@@ -64,6 +64,13 @@ class ChatListViewModel @Inject constructor(
                         following = following.filterNot { it.id == partnerId }
                         recommendedChatUsers = recommendedChatUsers.filterNot { it.id == partnerId }
                     }
+                    is SocketEvent.DirectMessageReceived -> {
+                        val msg = event.message
+                        recentMessages = (listOf(msg) + recentMessages.filterNot { it.id == msg.id }).sortedByDescending { it.createdAt }
+                    }
+                    is SocketEvent.DirectMessagesRead -> {
+                        unreadCounts = unreadCounts - event.partnerId
+                    }
                     is SocketEvent.UserOnline -> updateHostOnline(event.userId, true)
                     is SocketEvent.UserOffline -> updateHostOnline(event.userId, false)
                     else -> Unit

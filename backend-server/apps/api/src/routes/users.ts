@@ -683,18 +683,33 @@ usersRouter.get("/recommended-chat", asyncHandler(async (req: AuthRequest, res) 
 
 usersRouter.get("/messages", asyncHandler(async (req: AuthRequest, res) => {
   const unavailableUsers = await User.distinct("_id", { deletionRequestedAt: { $type: "date" } });
-  const messages = await DirectMessage.find({
+  const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 200);
+  const beforeRaw = String(req.query.before || "").trim();
+  let beforeDate: Date | null = null;
+  if (beforeRaw) {
+    const parsed = new Date(beforeRaw);
+    if (!Number.isNaN(parsed.getTime())) beforeDate = parsed;
+  }
+  const filter: Record<string, unknown> = {
     $or: [
       { senderId: req.user!._id, receiverId: { $nin: unavailableUsers } },
       { receiverId: req.user!._id, senderId: { $nin: unavailableUsers } }
     ],
     hiddenFor: { $ne: req.user!._id }
-  })
+  };
+  if (beforeDate) filter.createdAt = { $lt: beforeDate };
+  const rows = await DirectMessage.find(filter)
     .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
-    .sort({ createdAt: -1 })
-    .limit(100)
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(limit + 1)
     .lean();
-  sendOk(res, { messages });
+  const hasMore = rows.length > limit;
+  const messages = hasMore ? rows.slice(0, limit) : rows;
+  sendOk(res, {
+    messages,
+    hasMore,
+    nextBefore: messages.length ? (messages[messages.length - 1] as any).createdAt : null
+  });
 }));
 
 usersRouter.post("/messages/read-all", asyncHandler(async (req: AuthRequest, res) => {
@@ -735,15 +750,26 @@ usersRouter.get("/messages/:userId/search", asyncHandler(async (req: AuthRequest
   ] });
   if (blocked) throw new HttpError(403, "Cannot search this conversation", ErrorCode.FORBIDDEN);
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const messages = await DirectMessage.find({
+  const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 200);
+  const beforeRaw = String(req.query.before || "").trim();
+  let beforeDate: Date | null = null;
+  if (beforeRaw) {
+    const parsed = new Date(beforeRaw);
+    if (!Number.isNaN(parsed.getTime())) beforeDate = parsed;
+  }
+  const filter: Record<string, unknown> = {
     $or: [
       { senderId: req.user!._id, receiverId: req.params.userId },
       { senderId: req.params.userId, receiverId: req.user!._id }
     ],
     hiddenFor: { $ne: req.user!._id },
     message: { $regex: escaped, $options: "i" }
-  }).sort({ createdAt: -1 }).limit(100).lean();
-  sendOk(res, { messages: messages.reverse() });
+  };
+  if (beforeDate) filter.createdAt = { $lt: beforeDate };
+  const rows = await DirectMessage.find(filter).sort({ createdAt: -1, _id: -1 }).limit(limit + 1).lean();
+  const hasMore = rows.length > limit;
+  const messages = hasMore ? rows.slice(0, limit) : rows;
+  sendOk(res, { messages: messages.reverse(), hasMore, nextBefore: messages.length ? (messages[messages.length - 1] as any).createdAt : null });
 }));
 
 usersRouter.put("/messages/:userId/mute", asyncHandler(async (req: AuthRequest, res) => {
@@ -766,25 +792,52 @@ usersRouter.get("/messages/:userId", asyncHandler(async (req: AuthRequest, res) 
     ]
   });
   if (blocked) throw new HttpError(403, "Cannot view this conversation", ErrorCode.FORBIDDEN);
-  const messages = await DirectMessage.find({
+  const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 100);
+  const beforeRaw = String(req.query.before || "").trim();
+  let beforeDate: Date | null = null;
+  if (beforeRaw) {
+    const parsed = new Date(beforeRaw);
+    if (!Number.isNaN(parsed.getTime())) beforeDate = parsed;
+    else if (isValidObjectId(beforeRaw)) {
+      const cursorMsg = await DirectMessage.findById(beforeRaw).select("createdAt").lean();
+      if (cursorMsg?.createdAt) beforeDate = new Date(cursorMsg.createdAt as any);
+    }
+  }
+  const baseFilter: Record<string, unknown> = {
     $or: [
       { senderId: req.user!.id, receiverId: req.params.userId },
       { senderId: req.params.userId, receiverId: req.user!.id }
     ],
     hiddenFor: { $ne: req.user!._id }
-  })
+  };
+  if (beforeDate) baseFilter.createdAt = { $lt: beforeDate };
+
+  const messages = await DirectMessage.find(baseFilter)
     .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
-    .sort({ createdAt: -1 })
-    .limit(100)
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(limit + 1)
     .lean();
+  const hasMore = messages.length > limit;
+  const page = hasMore ? messages.slice(0, limit) : messages;
   const relationship = await findRelationship(req.user!.id, req.params.userId);
   const mutePreference: any = await ConversationMute.findOne({ ownerId: req.user!._id, partnerId: req.params.userId }).lean();
-  const readResult = await DirectMessage.updateMany(
-    { senderId: req.params.userId, receiverId: req.user!.id, read: false, hiddenFor: { $ne: req.user!._id } },
-    { $set: { read: true } }
-  );
-  if (readResult.modifiedCount > 0) emitUser(req.params.userId, socketEvents.directMessageRead, { partnerId: req.user!.id, readThrough: new Date().toISOString() });
-  sendOk(res, { messages: messages.reverse(), relationship, muted: Boolean(mutePreference?.muted) });
+
+  // Only mark as read / emit receipts on initial (latest) fetch to avoid side effects when paginating older history.
+  if (!beforeDate) {
+    const readResult = await DirectMessage.updateMany(
+      { senderId: req.params.userId, receiverId: req.user!.id, read: false, hiddenFor: { $ne: req.user!._id } },
+      { $set: { read: true } }
+    );
+    if (readResult.modifiedCount > 0) emitUser(req.params.userId, socketEvents.directMessageRead, { partnerId: req.user!.id, readThrough: new Date().toISOString() });
+  }
+
+  sendOk(res, {
+    messages: page.reverse(),
+    relationship,
+    muted: Boolean(mutePreference?.muted),
+    hasMore,
+    nextBefore: page.length ? (page[page.length - 1] as any).createdAt : null
+  });
 }));
 
 usersRouter.put("/messages/:userId/:messageId", requireNotMuted, requireNotChatRestricted, chatLimiter, autoModerate("message"), asyncHandler(async (req: AuthRequest, res) => {
@@ -831,18 +884,18 @@ usersRouter.post("/messages/:userId/forward", requireNotMuted, requireNotChatRes
   sendOk(res, { message }, 201);
 }));
 
-// Deleting a conversation removes it for both participants because messages are shared records.
+// Hide conversation for the current user only (preserves shared history for the other participant).
 usersRouter.delete("/messages/:userId", asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.userId)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
-  const result = await DirectMessage.deleteMany({
+  const result = await DirectMessage.updateMany({
     $or: [
       { senderId: req.user!.id, receiverId: req.params.userId },
       { senderId: req.params.userId, receiverId: req.user!.id }
-    ]
-  });
+    ],
+    hiddenFor: { $ne: req.user!._id }
+  }, { $addToSet: { hiddenFor: req.user!._id } });
   emitUser(req.user!.id, socketEvents.directConversationDeleted, { partnerId: req.params.userId });
-  emitUser(req.params.userId, socketEvents.directConversationDeleted, { partnerId: req.user!.id });
-  sendOk(res, { deletedCount: result.deletedCount ?? 0 });
+  sendOk(res, { deletedCount: result.modifiedCount ?? 0 });
 }));
 
 usersRouter.post("/messages/:userId/delete-selected", chatLimiter, asyncHandler(async (req: AuthRequest, res) => {

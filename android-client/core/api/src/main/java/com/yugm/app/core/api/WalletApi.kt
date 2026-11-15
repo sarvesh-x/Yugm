@@ -100,14 +100,27 @@ object WalletApi {
         return data.optInt("balance", 0)
     }
 
-    suspend fun gifts(token: String): List<GiftItem> {
-        val data = YugmHttpClient.get("/gifts", token).getJSONObject("data").getJSONArray("gifts")
+    suspend fun gifts(token: String, page: Int = 1, limit: Int = 50): List<GiftItem> {
+        val data = YugmHttpClient.get("/gifts/v2?page=$page&limit=$limit", token).getJSONObject("data")
+        val arr = data.optJSONArray("gifts") ?: data.optJSONArray("gifts")
         return buildList {
-            for (index in 0 until data.length()) {
-                val item = data.getJSONObject(index)
-                val gid = item.optString("_id", "")
+            val source = arr ?: return@buildList
+            for (index in 0 until source.length()) {
+                val item = source.getJSONObject(index)
+                val gid = item.optString("_id", item.optString("id", ""))
                 val gname = item.optString("name", "Gift")
-                if (gid.isNotBlank()) add(GiftItem(gid, gname, item.optInt("coinPrice"), item.optInt("diamondPrice"), item.optString("icon", "")))
+                if (gid.isNotBlank()) add(GiftItem(
+                    id = gid,
+                    name = gname,
+                    price = item.optInt("coinPrice", item.optInt("price", 0)),
+                    diamondPrice = item.optInt("diamondPrice", 0),
+                    icon = item.optString("icon", ""),
+                    rarity = item.optString("rarity", "common"),
+                    category = item.optString("category", "normal"),
+                    tradable = item.optBoolean("tradable", false),
+                    upgradeable = item.optBoolean("upgradeable", false),
+                    animationKey = item.optString("animationKey", "")
+                ))
             }
         }
     }

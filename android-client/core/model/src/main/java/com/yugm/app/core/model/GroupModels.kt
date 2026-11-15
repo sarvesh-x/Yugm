@@ -40,7 +40,10 @@ data class Clan(
     val memberRoles: List<ClanMemberRole> = emptyList(),
     val myRole: String = "",
     val canManage: Boolean = false,
-    val isMember: Boolean = false
+    val canModerate: Boolean = false,
+    val canInvite: Boolean = false,
+    val isMember: Boolean = false,
+    val isOwner: Boolean = false
 )
 
 data class ClanMemberRole(
@@ -78,6 +81,17 @@ data class ClanInvitation(
     val clanName: String = "Clan",
     val clanAvatar: String? = null,
     val inviterName: String = "",
+    val expiresAt: String = ""
+)
+
+data class ClanSentInvitation(
+    val id: String = "",
+    val inviteeId: String = "",
+    val inviteeName: String = "",
+    val inviteeUsername: String = "",
+    val inviteeAvatar: String? = null,
+    val inviterName: String = "",
+    val createdAt: String = "",
     val expiresAt: String = ""
 )
 

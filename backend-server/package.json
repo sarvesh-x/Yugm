@@ -17,6 +17,7 @@
     "start:api": "npm --workspace apps/api run start",
     "env:check": "npm --workspace apps/api run env:check",
     "seed": "npm --workspace apps/api run seed",
+    "seed:gifts": "npm --workspace apps/api run seed:gifts",
     "seed:admin": "npm --workspace apps/api run seed:admin",
     "build": "npm run build:admin && npm run build:api",
     "build:api": "npm --workspace apps/api run build",

@@ -12,6 +12,7 @@ import com.yugm.app.core.model.Clan
 import com.yugm.app.core.model.ClanMessage
 import com.yugm.app.core.model.ClanSummary
 import com.yugm.app.core.model.ClanInvitation
+import com.yugm.app.core.model.ClanSentInvitation
 import com.yugm.app.core.model.ClanRankingEntry
 import com.yugm.app.core.model.Host
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -47,6 +48,8 @@ class ClanViewModel @Inject constructor(
         private set
     var sentInviteIds by mutableStateOf<Set<String>>(emptySet())
         private set
+    var sentInvitations by mutableStateOf<List<ClanSentInvitation>>(emptyList())
+        private set
 
     var isLoading by mutableStateOf(false)
         private set
@@ -76,6 +79,21 @@ class ClanViewModel @Inject constructor(
                             }
                         }
                     }
+                    is SocketEvent.ClanMessageDeleted -> {
+                        if (event.clanId == currentClanId) {
+                            messages = messages.filterNot { it.id == event.messageId }
+                        }
+                    }
+                    is SocketEvent.ClanMessageUpdated -> {
+                        if (event.clanId == currentClanId && currentClanId.isNotBlank()) {
+                            val idx = messages.indexOfFirst { it.id == event.message.id }
+                            messages = if (idx >= 0) {
+                                messages.toMutableList().also { it[idx] = event.message }
+                            } else {
+                                (messages + event.message).sortedBy { it.createdAt }
+                            }
+                        }
+                    }
                     is SocketEvent.ClanChatCleaned -> {
                         if (event.clanId == currentClanId) messages = emptyList()
                     }
@@ -84,10 +102,68 @@ class ClanViewModel @Inject constructor(
                             typingUserIds = if (event.typing) typingUserIds + event.userId else typingUserIds - event.userId
                         }
                     }
+                    is SocketEvent.ClanUpdated -> handleClanStateEvent(event.clanId, event.clan)
+                    is SocketEvent.ClanDeleted -> handleClanDeleted(event.clanId)
+                    is SocketEvent.ClanMembershipChanged -> handleMembershipEvent(event)
                     is SocketEvent.Disconnected -> typingUserIds = emptySet()
                     else -> Unit
                 }
             }
+        }
+    }
+
+    private fun handleClanDeleted(clanId: String) {
+        if (clanDetail?.id == clanId) clanDetail = null
+        if (myClan?.id == clanId) myClan = null
+        if (currentClanId == clanId) {
+            messages = emptyList()
+            typingUserIds = emptySet()
+        }
+    }
+
+    private fun handleClanStateEvent(clanId: String, clan: Clan?) {
+        if (clan != null) {
+            if (clanDetail?.id == clanId) clanDetail = clan
+            if (myClan?.id == clanId || clan.isMember) myClan = if (clan.isMember) clan else myClan?.takeUnless { it.id == clanId }
+            if (clan.isMember && myClan == null) myClan = clan
+        }
+        refreshClanState(clanId)
+    }
+
+    private fun handleMembershipEvent(event: SocketEvent.ClanMembershipChanged) {
+        val clanId = event.clanId
+        val removedFromClan = (event.type == "left" || event.type == "removed") && event.userId == currentUserId
+        if (removedFromClan) {
+            if (myClan?.id == clanId) myClan = null
+            if (clanDetail?.id == clanId) clanDetail = event.clan
+            if (currentClanId == clanId) {
+                messages = emptyList()
+                typingUserIds = emptySet()
+            }
+            if (authToken.isNotBlank()) loadMyClan(authToken)
+            return
+        }
+        if (event.clan != null) {
+            if (clanDetail?.id == clanId) clanDetail = event.clan
+            if (myClan?.id == clanId) myClan = event.clan
+            if (event.type == "joined" && event.userId == currentUserId) myClan = event.clan
+        }
+        refreshClanState(clanId)
+    }
+
+    private fun refreshClanState(clanId: String) {
+        if (authToken.isBlank()) return
+        if (myClan?.id == clanId || clanDetail?.id == clanId || currentClanId == clanId) {
+            viewModelScope.launch {
+                runCatching {
+                    if (clanDetail?.id == clanId || currentClanId == clanId) {
+                        clanDetail = withContext(Dispatchers.IO) { yugmApi.getClanDetail(authToken, clanId) }
+                    }
+                    myClan = withContext(Dispatchers.IO) { yugmApi.myClan(authToken) }
+                }
+            }
+        } else if (clanId.isNotBlank()) {
+            loadMyClan(authToken)
         }
     }
 
@@ -155,11 +231,31 @@ class ClanViewModel @Inject constructor(
         }
     }
 
+    fun loadSentInvitations(token: String, clanId: String) {
+        viewModelScope.launch {
+            runCatching { sentInvitations = withContext(Dispatchers.IO) { yugmApi.clanSentInvitations(token, clanId) } }
+                .onFailure { error = it.message ?: "Couldn't load pending invitations" }
+        }
+    }
+
     fun inviteMember(token: String, clanId: String, userId: String) {
         viewModelScope.launch {
             runCatching { withContext(Dispatchers.IO) { yugmApi.inviteClanMember(token, clanId, userId) } }
-                .onSuccess { sentInviteIds = sentInviteIds + userId }
+                .onSuccess {
+                    sentInviteIds = sentInviteIds + userId
+                    loadSentInvitations(token, clanId)
+                }
                 .onFailure { error = it.message ?: "Couldn't send clan invitation" }
+        }
+    }
+
+    fun cancelSentInvitation(token: String, clanId: String, inviteId: String) {
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { yugmApi.cancelClanInvitation(token, clanId, inviteId) } }
+                .onSuccess {
+                    sentInvitations = sentInvitations.filterNot { it.id == inviteId }
+                }
+                .onFailure { error = it.message ?: "Couldn't cancel invitation" }
         }
     }
 
@@ -362,7 +458,7 @@ class ClanViewModel @Inject constructor(
             error = null
             runCatching {
                 withContext(Dispatchers.IO) { yugmApi.reactToClanMessage(token, clanId, messageId, type) }
-                messages = withContext(Dispatchers.IO) { yugmApi.getClanMessages(token, clanId) }
+                // Realtime update event will refresh for all members (including sender).
             }.onFailure {
                 error = it.message ?: "Failed to react to message"
             }
@@ -381,17 +477,6 @@ class ClanViewModel @Inject constructor(
         }
     }
 
-    fun reportMessage(token: String, clanId: String, messageId: String) {
-        viewModelScope.launch {
-            error = null
-            runCatching {
-                withContext(Dispatchers.IO) { yugmApi.reportClanMessage(token, clanId, messageId, "INAPPROPRIATE") }
-            }.onFailure {
-                error = it.message ?: "Failed to report message"
-            }
-        }
-    }
-
     fun cleanChat(token: String, clanId: String, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             isLoading = true
@@ -405,6 +490,17 @@ class ClanViewModel @Inject constructor(
                 error = it.message ?: "Failed to clean chat"
             }
             isLoading = false
+        }
+    }
+
+    fun reportMessage(token: String, clanId: String, messageId: String) {
+        viewModelScope.launch {
+            error = null
+            runCatching {
+                withContext(Dispatchers.IO) { yugmApi.reportClanMessage(token, clanId, messageId, "INAPPROPRIATE") }
+            }.onFailure {
+                error = it.message ?: "Failed to report message"
+            }
         }
     }
 

@@ -46,6 +46,7 @@ import com.yugm.app.core.model.Clan
 import com.yugm.app.core.model.ClanMessage
 import com.yugm.app.core.model.ClanSummary
 import com.yugm.app.core.model.ClanInvitation
+import com.yugm.app.core.model.ClanSentInvitation
 import com.yugm.app.core.model.ClanRankingEntry
 import com.yugm.app.core.model.CoinPack
 import com.yugm.app.core.model.Conversation
@@ -275,6 +276,8 @@ object YugmApi : IYugmApi {
 
   override suspend fun cleanClanChat(token: String, clanId: String): Int = ClanApi.cleanClanChat(token, clanId)
     override suspend fun clanInvitations(token: String): List<ClanInvitation> = ClanApi.invitations(token)
+    override suspend fun clanSentInvitations(token: String, clanId: String): List<ClanSentInvitation> = ClanApi.clanInvitations(token, clanId)
+    override suspend fun cancelClanInvitation(token: String, clanId: String, inviteId: String) = ClanApi.cancelClanInvitation(token, clanId, inviteId)
     override suspend fun respondToClanInvitation(token: String, invitationId: String, accept: Boolean) = ClanApi.respondToInvitation(token, invitationId, accept)
     override suspend fun inviteClanMember(token: String, clanId: String, userId: String) = ClanApi.inviteMember(token, clanId, userId)
     override suspend fun transferClanOwnership(token: String, clanId: String, userId: String) = ClanApi.transferOwnership(token, clanId, userId)
@@ -327,7 +330,7 @@ object YugmApi : IYugmApi {
     override suspend fun claimAchievement(token: String, achievementId: String): ClaimAchievementResult = CreatorApi.claimAchievement(token, achievementId)
     override suspend fun notificationPreferences(token: String): NotificationPreferences = UserApi.notificationPreferences(token)
     override suspend fun updateNotificationPreferences(token: String, preferences: Map<String, Boolean>): NotificationPreferences = UserApi.updateNotificationPreferences(token, preferences)
-    override suspend fun conversation(token: String, userId: String): Conversation = UserApi.conversation(token, userId)
+    override suspend fun conversation(token: String, userId: String, before: String?, limit: Int?): Conversation = UserApi.conversation(token, userId, before, limit)
     override suspend fun deleteConversation(token: String, userId: String) = UserApi.deleteConversation(token, userId)
     override suspend fun deleteSelectedDirectMessages(token: String, userId: String, messageIds: List<String>, scope: String) = UserApi.deleteSelectedDirectMessages(token, userId, messageIds, scope)
     override suspend fun editDirectMessage(token: String, userId: String, messageId: String, message: String) = UserApi.editDirectMessage(token, userId, messageId, message)

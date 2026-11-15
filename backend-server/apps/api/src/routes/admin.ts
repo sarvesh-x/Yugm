@@ -31,6 +31,7 @@ import { Notification } from "../models/Notification.js";
 import { PkBattle } from "../models/PkBattle.js";
 import { PkEvent } from "../models/PkEvent.js";
 import { PayoutReview } from "../models/PayoutReview.js";
+import { socketEvents } from "@yugm/shared";
 import { Purchase } from "../models/Purchase.js";
 import { Referral } from "../models/Referral.js";
 import { Report } from "../models/Report.js";
@@ -45,10 +46,11 @@ import { WalletTransaction } from "../models/WalletTransaction.js";
 import { WithdrawalRequest } from "../models/WithdrawalRequest.js";
 import { verifyIdToken } from "../services/firebase.js";
 import { createNotification } from "../services/notifications.js";
-import { emitRoom } from "../services/socket.js";
+import { emitRoom, emitClanMembers } from "../services/socket.js";
 import { endRoom } from "../services/roomLifecycle.js";
 import { creditWallet, debitWallet } from "../services/wallet.js";
 import { auditLog } from "../services/adminAudit.js";
+import { invalidateCache } from "../services/redis.js";
 import { createRazorpayRefund, fetchRazorpayPayment, refundGooglePlayOrder, verifyGooglePlayProduct } from "../services/payments.js";
 import { endPkBattle, pkState } from "../services/pk.js";
 import { flagSafetyState, refreshUserSafetyStatus } from "../services/safetyScore.js";
@@ -1064,6 +1066,7 @@ adminRouter.post("/clans/:clanId/clean-messages", requireAnyPermission(["message
   const clan = await Clan.findById(clanId).select("name memberIds").lean();
   if (!clan) throw new HttpError(404, "Clan not found", ErrorCode.NOT_FOUND);
   const result = await ClanMessage.deleteMany({ clanId });
+  emitClanMembers((clan.memberIds ?? []) as any[], socketEvents.clanChatCleaned, { clanId });
   await auditLog({ adminId: req.admin!.id, action: "clan.clean_messages", entityType: "clan", entityId: clanId, metadata: { deletedCount: result.deletedCount }, req });
   adminOk(res, { deletedCount: result.deletedCount });
 }));
@@ -1405,24 +1408,27 @@ adminRouter.post("/withdrawals/:withdrawalId/mark-paid", requirePermission("with
 adminRouter.post("/withdrawals/:withdrawalId/request-info", requirePermission("withdrawals.read"), validateBody(reasonSchema), asyncHandler(async (req: AdminAuthRequest, res) => { await auditLog({ adminId: req.admin!.id, action: "withdrawal.info_requested", entityType: "withdrawal", metadata: { withdrawalId: req.params.withdrawalId, reason: req.body.reason }, req }); adminOk(res, { requested: true }); }));
 
 adminRouter.get("/gifts", requirePermission("gifts.manage"), asyncHandler(async (_req, res) => adminOk(res, await Gift.find().sort({ coinPrice: 1 }).lean())));
-adminRouter.post("/gifts", requirePermission("gifts.manage"), validateBody(z.object({ name: z.string().min(1).max(80), icon: z.string().min(1).max(500), coinPrice: z.number().int().min(1), isActive: z.boolean().optional() })), asyncHandler(async (req: AdminAuthRequest, res) => {
+adminRouter.post("/gifts", requirePermission("gifts.manage"), validateBody(z.object({ name: z.string().min(1).max(80), icon: z.string().min(1).max(500), coinPrice: z.number().int().min(1), diamondPrice: z.number().int().min(0).optional(), animationKey: z.string().max(80).optional(), isActive: z.boolean().optional() })), asyncHandler(async (req: AdminAuthRequest, res) => {
   const gift = await Gift.create(req.body);
   await auditLog({ adminId: req.admin!.id, action: "gift.created", entityType: "gift", entityId: gift.id, metadata: req.body, req });
+  await invalidateCache("gifts:list");
   adminOk(res, { gift }, {}, 201);
 }));
 adminRouter.get("/gifts/:giftId", requirePermission("gifts.manage"), asyncHandler(async (req, res) => adminOk(res, await Gift.findById(req.params.giftId).lean())));
-adminRouter.patch("/gifts/:giftId", requirePermission("gifts.manage"), validateBody(z.object({ name: z.string().min(1).max(80).optional(), icon: z.string().min(1).max(500).optional(), coinPrice: z.number().int().min(1).optional(), isActive: z.boolean().optional() })), asyncHandler(async (req: AdminAuthRequest, res) => {
+adminRouter.patch("/gifts/:giftId", requirePermission("gifts.manage"), validateBody(z.object({ name: z.string().min(1).max(80).optional(), icon: z.string().min(1).max(500).optional(), coinPrice: z.number().int().min(1).optional(), diamondPrice: z.number().int().min(0).optional(), animationKey: z.string().max(80).optional(), isActive: z.boolean().optional() })), asyncHandler(async (req: AdminAuthRequest, res) => {
   const before = await Gift.findById(req.params.giftId).lean();
   const gift = await Gift.findByIdAndUpdate(req.params.giftId, req.body, { new: true }).lean();
   await auditLog({ adminId: req.admin!.id, action: "gift.updated", entityType: "gift", entityId: req.params.giftId, metadata: { before, after: gift }, req });
+  await invalidateCache("gifts:list");
   adminOk(res, { gift });
 }));
-adminRouter.post("/gifts/:giftId/activate", requirePermission("gifts.manage"), asyncHandler(async (req: AdminAuthRequest, res) => { const gift = await Gift.findByIdAndUpdate(req.params.giftId, { isActive: true }, { new: true }); await auditLog({ adminId: req.admin!.id, action: "gift.activated", entityType: "gift", entityId: req.params.giftId, req }); adminOk(res, { gift }); }));
-adminRouter.post("/gifts/:giftId/deactivate", requirePermission("gifts.manage"), asyncHandler(async (req: AdminAuthRequest, res) => { const gift = await Gift.findByIdAndUpdate(req.params.giftId, { isActive: false }, { new: true }); await auditLog({ adminId: req.admin!.id, action: "gift.deactivated", entityType: "gift", entityId: req.params.giftId, req }); adminOk(res, { gift }); }));
+adminRouter.post("/gifts/:giftId/activate", requirePermission("gifts.manage"), asyncHandler(async (req: AdminAuthRequest, res) => { const gift = await Gift.findByIdAndUpdate(req.params.giftId, { isActive: true }, { new: true }); await auditLog({ adminId: req.admin!.id, action: "gift.activated", entityType: "gift", entityId: req.params.giftId, req }); await invalidateCache("gifts:list"); adminOk(res, { gift }); }));
+adminRouter.post("/gifts/:giftId/deactivate", requirePermission("gifts.manage"), asyncHandler(async (req: AdminAuthRequest, res) => { const gift = await Gift.findByIdAndUpdate(req.params.giftId, { isActive: false }, { new: true }); await auditLog({ adminId: req.admin!.id, action: "gift.deactivated", entityType: "gift", entityId: req.params.giftId, req }); await invalidateCache("gifts:list"); adminOk(res, { gift }); }));
 adminRouter.delete("/gifts/:giftId", requirePermission("gifts.manage"), asyncHandler(async (req: AdminAuthRequest, res) => {
   const used = await GiftTransaction.exists({ giftId: req.params.giftId });
   const gift = used ? await Gift.findByIdAndUpdate(req.params.giftId, { isActive: false }, { new: true }) : await Gift.findByIdAndDelete(req.params.giftId);
   await auditLog({ adminId: req.admin!.id, action: used ? "gift.soft_deleted" : "gift.deleted", entityType: "gift", entityId: req.params.giftId, req });
+  await invalidateCache("gifts:list");
   adminOk(res, { gift, softDeleted: Boolean(used) });
 }));
 

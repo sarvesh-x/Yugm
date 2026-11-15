@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { randomInt } from "node:crypto";
 import { Gift } from "../models/Gift.js";
 import { GiftCollection } from "../models/GiftCollection.js";
 import { GiftTransaction } from "../models/GiftTransaction.js";
@@ -8,7 +9,7 @@ import { grantXp } from "./levels.js";
 import { HttpError, ErrorCode } from "../utils/http.js";
 
 export async function getGiftsV2(category?: string, rarity?: string, page = 1, limit = 20) {
-  const filter: Record<string, unknown> = { isActive: true };
+  const filter: Record<string, unknown> = { isActive: true, $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }] };
   if (category) filter.category = category;
   if (rarity) filter.rarity = rarity;
 
@@ -28,6 +29,15 @@ export async function purchaseGift(userId: string, giftId: string) {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
+    // Enforce limited-edition stock atomically.
+    if (gift.limitedEdition?.active) {
+      const stockUpdate = await Gift.updateOne(
+        { _id: gift._id, "limitedEdition.remaining": { $gt: 0 } },
+        { $inc: { "limitedEdition.remaining": -1 } },
+        { session }
+      );
+      if (stockUpdate.modifiedCount !== 1) throw new HttpError(409, "This limited-edition gift is sold out", ErrorCode.CONFLICT);
+    }
     await debitWallet(userId, gift.coinPrice, "GIFT_PURCHASE", { giftId: gift._id }, session);
     await GiftInventory.findOneAndUpdate(
       { userId, giftId: gift._id },
@@ -164,7 +174,7 @@ export async function surpriseBox(userId: string, tier: "basic" | "premium" | "l
   const pool = await Gift.find({ rarity: { $in: allowedRarities }, isActive: true }).lean();
   if (pool.length === 0) throw new HttpError(500, "No gifts available in this tier");
 
-  const randomGift = pool[Math.floor(Math.random() * pool.length)];
+  const randomGift = pool[randomInt(0, pool.length)];
 
   const session = await mongoose.startSession();
   session.startTransaction();

@@ -21,6 +21,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
@@ -69,6 +70,12 @@ class ChatViewModel @Inject constructor(
 
     var forwardTargets by mutableStateOf<List<Host>>(emptyList())
         private set
+
+    var hasMoreHistory by mutableStateOf(false)
+        private set
+    var isLoadingMore by mutableStateOf(false)
+        private set
+    private var nextBefore: String? = null
 
     private var authToken = ""
     private var currentUserId = ""
@@ -159,6 +166,8 @@ class ChatViewModel @Inject constructor(
                             mergeMessages(conversation.messages)
                             relationship = conversation.relationship
                             isMuted = conversation.muted
+                            hasMoreHistory = conversation.hasMore
+                            nextBefore = conversation.nextBefore ?: conversation.messages.firstOrNull()?.createdAt
                         }
                         .onFailure { failure ->
                             if (failure is CancellationException) throw failure
@@ -324,6 +333,29 @@ class ChatViewModel @Inject constructor(
     fun sendTypingStatus(isTyping: Boolean) {
         if (partnerUserId.isBlank()) return
         socketManager.sendTypingStatus(partnerUserId, isTyping)
+    }
+
+    fun loadOlderMessages() {
+        val token = authToken
+        val partnerId = partnerUserId
+        val before = nextBefore ?: messages.minByOrNull { it.createdAt }?.createdAt
+        if (token.isBlank() || partnerId.isBlank() || before.isNullOrBlank() || isLoading || isLoadingMore || !hasMoreHistory) return
+        viewModelScope.launch {
+            isLoadingMore = true
+            runCatching {
+                withContext(Dispatchers.IO) { yugmApi.conversation(token, partnerId, before = before, limit = 50) }
+            }.onSuccess { conversation ->
+                val older = conversation.messages.filter { olderMsg -> messages.none { it.id == olderMsg.id } }
+                if (older.isNotEmpty()) {
+                    messages.addAll(0, older.sortedBy { it.createdAt })
+                }
+                hasMoreHistory = conversation.hasMore
+                nextBefore = conversation.nextBefore ?: older.minByOrNull { it.createdAt }?.createdAt ?: nextBefore
+            }.onFailure { failure ->
+                if (error.isBlank()) error = failure.message ?: "Couldn't load older messages"
+            }
+            isLoadingMore = false
+        }
     }
 
     fun startPrivateCall(

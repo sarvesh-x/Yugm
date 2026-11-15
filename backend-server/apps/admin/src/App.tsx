@@ -850,16 +850,65 @@ function WalletPage({ token, setNotice }: { token: string; setNotice: (notice: N
 }
 
 function GiftsPage({ token, setNotice }: { token: string; setNotice: (notice: Notice) => void }) {
-  const [name, setName] = useState("");
-  const [icon, setIcon] = useState("🎁");
-  const [coinPrice, setCoinPrice] = useState(99);
+  const [selected, setSelected] = useState<any>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [form, setForm] = useState({ id: "", name: "", icon: "🎁", coinPrice: 99, diamondPrice: 0, animationKey: "", isActive: true });
   const resource = useResource<any[]>("/gifts", token);
 
-  const createGift = async () => {
+  const openNew = () => {
+    setForm({ id: "", name: "", icon: "🎁", coinPrice: 99, diamondPrice: 0, animationKey: "", isActive: true });
+    setEditMode(true);
+    setSelected(null);
+  };
+
+  const openEdit = (gift: any) => {
+    setForm({
+      id: gift._id || gift.id,
+      name: gift.name || "",
+      icon: gift.icon || "🎁",
+      coinPrice: gift.coinPrice || 99,
+      diamondPrice: gift.diamondPrice || 0,
+      animationKey: gift.animationKey || "",
+      isActive: gift.isActive !== false
+    });
+    setEditMode(true);
+    setSelected(gift);
+  };
+
+  const save = async () => {
     try {
-      await adminApi("/gifts", { token, method: "POST", body: JSON.stringify({ name, icon, coinPrice, isActive: true }) });
-      setName("");
-      setNotice({ tone: "success", text: "Gift created" });
+      if (selected) {
+        const { id, ...body } = form;
+        await adminApi(`/gifts/${selected._id || selected.id}`, { token, method: "PATCH", body: JSON.stringify(body) });
+        setNotice({ tone: "success", text: "Gift updated" });
+      } else {
+        await adminApi("/gifts", { token, method: "POST", body: JSON.stringify({ name: form.name, icon: form.icon, coinPrice: form.coinPrice, diamondPrice: form.diamondPrice, animationKey: form.animationKey, isActive: form.isActive }) });
+        setNotice({ tone: "success", text: "Gift created" });
+      }
+      setEditMode(false);
+      setSelected(null);
+      resource.refresh();
+    } catch (err: any) {
+      setNotice({ tone: "error", text: err.message });
+    }
+  };
+
+  const toggleActive = async (gift: any) => {
+    try {
+      const endpoint = gift.isActive ? `/gifts/${gift._id || gift.id}/deactivate` : `/gifts/${gift._id || gift.id}/activate`;
+      await adminApi(endpoint, { token, method: "POST" });
+      setNotice({ tone: "success", text: gift.isActive ? "Gift deactivated" : "Gift activated" });
+      resource.refresh();
+    } catch (err: any) {
+      setNotice({ tone: "error", text: err.message });
+    }
+  };
+
+  const remove = async (gift: any) => {
+    if (!window.confirm(`Delete "${gift.name}"? This cannot be undone.`)) return;
+    try {
+      await adminApi(`/gifts/${gift._id || gift.id}`, { token, method: "DELETE" });
+      setNotice({ tone: "success", text: "Gift removed" });
       resource.refresh();
     } catch (err: any) {
       setNotice({ tone: "error", text: err.message });
@@ -868,16 +917,43 @@ function GiftsPage({ token, setNotice }: { token: string; setNotice: (notice: No
 
   return (
     <div className="page-grid">
-      <Panel title="Create gift" action="Catalog">
-        <div className="form-grid">
-          <label>Name<input value={name} onChange={(event) => setName(event.target.value)} /></label>
-          <label>Icon<input value={icon} onChange={(event) => setIcon(event.target.value)} /></label>
-          <label>Coin price<input type="number" value={coinPrice} onChange={(event) => setCoinPrice(Number(event.target.value))} /></label>
-        </div>
-        <button className="primary-action compact" onClick={createGift}>Create gift</button>
+      <Panel title={editMode ? (selected ? "Edit gift" : "Create gift") : "Gift catalog"} action="Catalog">
+        {editMode ? (
+          <div className="form-grid">
+            <label>Name<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
+            <label>Icon<input value={form.icon} onChange={(event) => setForm({ ...form, icon: event.target.value })} /></label>
+            <label>Coin price<input type="number" value={form.coinPrice} onChange={(event) => setForm({ ...form, coinPrice: Number(event.target.value) })} /></label>
+            <label>Diamond price<input type="number" value={form.diamondPrice} onChange={(event) => setForm({ ...form, diamondPrice: Number(event.target.value) })} /></label>
+            <label>Animation key<input value={form.animationKey} onChange={(event) => setForm({ ...form, animationKey: event.target.value })} /></label>
+            <label>Active
+              <select value={form.isActive ? "true" : "false"} onChange={(event) => setForm({ ...form, isActive: event.target.value === "true" })}>
+                <option value="true">Active</option>
+                <option value="false">Inactive</option>
+              </select>
+            </label>
+            <div className="action-row">
+              <button className="primary-action compact" onClick={save}>{selected ? "Save changes" : "Create gift"}</button>
+              <button className="ghost-action compact" onClick={() => { setEditMode(false); setSelected(null); }}>Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <div className="action-row">
+            <button className="primary-action compact" onClick={openNew}>Create gift</button>
+          </div>
+        )}
       </Panel>
       <ResourceFrame title="Gift Catalog" loading={resource.loading} error={resource.error} onRetry={resource.refresh}>
-        <DataTable rows={resource.data || []} columns={giftColumns} />
+        <DataTable
+          rows={resource.data || []}
+          columns={giftColumns}
+          actions={(row: any) => (
+            <div className="action-row">
+              <button className="ghost-action compact" onClick={() => openEdit(row)}>Edit</button>
+              <button className="ghost-action compact" onClick={() => toggleActive(row)}>{row.isActive ? "Deactivate" : "Activate"}</button>
+              <button className="danger-action compact" onClick={() => remove(row)}>Delete</button>
+            </div>
+          )}
+        />
       </ResourceFrame>
     </div>
   );
@@ -2158,7 +2234,9 @@ const paymentColumns: ColumnDef[] = [
 const giftColumns: ColumnDef[] = [
   { key: "name", label: "Name" },
   { key: "icon", label: "Icon" },
-  { key: "coinPrice", label: "Price", render: (row) => formatNumber(row.coinPrice) },
+  { key: "coinPrice", label: "Coins", render: (row) => formatNumber(row.coinPrice) },
+  { key: "diamondPrice", label: "Diamonds", render: (row) => formatNumber(row.diamondPrice || 0) },
+  { key: "rarity", label: "Rarity" },
   { key: "isActive", label: "Status", render: (row) => <StatusBadge value={row.isActive ? "ACTIVE" : "DISABLED"} /> }
 ];
 

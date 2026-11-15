@@ -10,7 +10,7 @@ import { ClanMessage } from "../models/ClanMessage.js";
 import { Report } from "../models/Report.js";
 import { User } from "../models/User.js";
 import { createNotification } from "../services/notifications.js";
-import { emitUser } from "../services/socket.js";
+import { emitClanMembers, emitUser } from "../services/socket.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId, sanitizeText } from "../utils/http.js";
 
 export const clansRouter = Router();
@@ -47,8 +47,57 @@ function slugify(name: string) {
 
 const CLAN_MEMBER_FIELDS = "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle";
 
+const ROLE_RANK: Record<string, number> = {
+  MEMBER: 1,
+  OFFICER: 2,
+  CO_LEADER: 3,
+  LEADER: 4
+};
+
 function idOf(value: any): string {
   return value?._id?.toString?.() ?? value?.toString?.() ?? "";
+}
+
+function roleRank(role: string | null | undefined) {
+  return ROLE_RANK[role || "MEMBER"] ?? 0;
+}
+
+function clanRoleFor(clan: any, userId: string): "LEADER" | "CO_LEADER" | "OFFICER" | "MEMBER" | null {
+  const members = (clan.memberIds ?? []).map(idOf).filter(Boolean);
+  if (!members.includes(userId)) return null;
+  if (idOf(clan.ownerId) === userId) return "LEADER";
+  const entry = (clan.memberRoles ?? []).find((item: any) => idOf(item.userId) === userId);
+  const role = entry?.role as string | undefined;
+  if (role === "CO_LEADER" || role === "OFFICER" || role === "MEMBER") return role;
+  return "MEMBER";
+}
+
+function canManageClan(role: string | null) {
+  return role === "LEADER" || role === "CO_LEADER";
+}
+
+function canInviteMembers(role: string | null) {
+  return role === "LEADER" || role === "CO_LEADER" || role === "OFFICER";
+}
+
+function canModerateChat(role: string | null) {
+  return role === "LEADER" || role === "CO_LEADER" || role === "OFFICER";
+}
+
+function canAssignRole(actorRole: string | null, targetRole: string | null, nextRole: string) {
+  if (actorRole === "LEADER") return nextRole === "CO_LEADER" || nextRole === "OFFICER" || nextRole === "MEMBER";
+  if (actorRole === "CO_LEADER") {
+    if (nextRole === "CO_LEADER") return false;
+    if (roleRank(targetRole) >= roleRank("CO_LEADER")) return false;
+    return nextRole === "OFFICER" || nextRole === "MEMBER";
+  }
+  return false;
+}
+
+function canRemoveMember(actorRole: string | null, targetRole: string | null) {
+  if (actorRole === "LEADER") return targetRole !== "LEADER";
+  if (actorRole === "CO_LEADER") return targetRole === "MEMBER" || targetRole === "OFFICER";
+  return false;
 }
 
 async function populateClanMembers(clan: any) {
@@ -89,7 +138,7 @@ function publicClan(clan: any, userId: string, includeRoles = true) {
   const members = (clan.memberIds ?? []).map(idOf).filter(Boolean);
   const ownerId = idOf(clan.ownerId);
   const memberRoles = includeRoles ? memberRolesFor(clan, members) : [];
-  const myRole = includeRoles ? (memberRoles.find((entry) => entry.userId === userId)?.role ?? null) : null;
+  const myRole = includeRoles ? (memberRoles.find((entry) => entry.userId === userId)?.role ?? (members.includes(userId) ? (ownerId === userId ? "LEADER" : "MEMBER") : null)) : null;
   return {
     id: idOf(clan._id) || clan.id,
     _id: idOf(clan._id) || clan.id,
@@ -104,18 +153,27 @@ function publicClan(clan: any, userId: string, includeRoles = true) {
     members: includeRoles ? clan.memberIds : [],
     memberRoles,
     myRole,
-    canManage: myRole === "LEADER",
+    canManage: canManageClan(myRole),
+    canModerate: canModerateChat(myRole),
+    canInvite: canInviteMembers(myRole),
     isMember: members.includes(userId),
     isOwner: ownerId === userId,
     createdAt: clan.createdAt
   };
 }
 
-async function requireClanLeader(clanId: string, userId: string) {
+async function requireClanMemberDoc(clanId: string, userId: string) {
   if (!isValidObjectId(clanId)) throw new HttpError(400, "Invalid clan ID", ErrorCode.VALIDATION);
   const clan = await Clan.findById(clanId);
   if (!clan) throw new HttpError(404, "Clan not found", ErrorCode.NOT_FOUND);
-  if (idOf(clan.ownerId) !== userId) throw new HttpError(403, "Only the clan leader can manage this clan", ErrorCode.FORBIDDEN);
+  const role = clanRoleFor(clan, userId);
+  if (!role) throw new HttpError(403, "Join this clan to continue", ErrorCode.FORBIDDEN);
+  return { clan, role };
+}
+
+async function requireClanLeader(clanId: string, userId: string) {
+  const { clan, role } = await requireClanMemberDoc(clanId, userId);
+  if (role !== "LEADER") throw new HttpError(403, "Only the clan leader can perform this action", ErrorCode.FORBIDDEN);
   return clan;
 }
 
@@ -132,16 +190,18 @@ async function uniqueSlug(name: string) {
 
 async function requireClanMember(clanId: string, userId: string) {
   if (!isValidObjectId(clanId)) throw new HttpError(400, "Invalid clan ID", ErrorCode.VALIDATION);
-  const clan = await Clan.findById(clanId).select("memberIds name ownerId").lean();
+  const clan = await Clan.findById(clanId).select("memberIds name ownerId memberRoles").lean();
   if (!clan) throw new HttpError(404, "Clan not found", ErrorCode.NOT_FOUND);
   const members = (clan.memberIds ?? []).map((memberId: any) => memberId.toString());
   if (!members.includes(userId)) throw new HttpError(403, "Join this clan to chat", ErrorCode.FORBIDDEN);
-  return { clan, members };
+  const role = clanRoleFor(clan, userId);
+  return { clan, members, role };
 }
 
 clansRouter.get("/", asyncHandler(async (req: AuthRequest, res) => {
   const q = String(req.query.q || "").trim();
   const regex = q ? new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") : undefined;
+  const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
   const clans = await Clan.find({
     $and: [
       { $or: [{ privacy: "PUBLIC" }, { memberIds: req.user!.id }] },
@@ -149,7 +209,7 @@ clansRouter.get("/", asyncHandler(async (req: AuthRequest, res) => {
     ]
   })
     .sort({ memberCount: -1, createdAt: -1 })
-    .limit(50)
+    .limit(limit)
     .lean();
   sendOk(res, { clans: clans.map((clan) => publicClan(clan, req.user!.id, false)) });
 }));
@@ -187,20 +247,47 @@ clansRouter.get("/leaderboard", asyncHandler(async (req: AuthRequest, res) => {
   sendOk(res, { clans: clans.map((clan, index) => ({ ...clan, id: clan._id.toString(), rank: index + 1 })) });
 }));
 
+clansRouter.get("/:id/invitations", asyncHandler(async (req: AuthRequest, res) => {
+  const { clan, role } = await requireClanMemberDoc(req.params.id, req.user!.id);
+  if (!canInviteMembers(role)) throw new HttpError(403, "You don't have permission to view clan invitations", ErrorCode.FORBIDDEN);
+  const now = new Date();
+  await ClanInvite.updateMany({ clanId: clan._id, status: "PENDING", expiresAt: { $lte: now } }, { $set: { status: "EXPIRED" } });
+  const invitations = await ClanInvite.find({ clanId: clan._id, status: "PENDING", expiresAt: { $gt: now } })
+    .populate("inviteeId", "name username avatar")
+    .populate("inviterId", "name username avatar")
+    .sort({ createdAt: -1 })
+    .limit(50)
+    .lean();
+  sendOk(res, { invitations });
+}));
+
 clansRouter.post("/:id/invitations", validateBody(clanInviteSchema), asyncHandler(async (req: AuthRequest, res) => {
-  if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid clan ID", ErrorCode.VALIDATION);
-  const clan = await Clan.findById(req.params.id);
-  if (!clan) throw new HttpError(404, "Clan not found", ErrorCode.NOT_FOUND);
-  if (clan.ownerId.toString() !== req.user!.id) throw new HttpError(403, "Only the clan owner can invite members", ErrorCode.FORBIDDEN);
+  const { clan, role } = await requireClanMemberDoc(req.params.id, req.user!.id);
+  if (!canInviteMembers(role)) throw new HttpError(403, "You don't have permission to invite members", ErrorCode.FORBIDDEN);
   if (req.body.userId === req.user!.id) throw new HttpError(400, "You are already in this clan", ErrorCode.VALIDATION);
   const invitee = await User.findById(req.body.userId).select("name").lean();
   if (!invitee) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
-  if (await Clan.exists({ memberIds: req.body.userId })) throw new HttpError(409, "This user already belongs to a clan", ErrorCode.CONFLICT);
+  const inviteeCurrentClan = await Clan.findOne({ memberIds: req.body.userId }).select("_id").lean();
+  if (inviteeCurrentClan) {
+    if (idOf(inviteeCurrentClan._id) === clan.id) throw new HttpError(409, "This user is already in your clan", ErrorCode.CONFLICT);
+    throw new HttpError(409, "This user already belongs to a clan", ErrorCode.CONFLICT);
+  }
   await ClanInvite.updateMany({ clanId: clan._id, inviteeId: req.body.userId, status: "PENDING", expiresAt: { $lte: new Date() } }, { $set: { status: "EXPIRED" } });
   let invitation = await ClanInvite.findOne({ clanId: clan._id, inviteeId: req.body.userId, status: "PENDING" });
   if (!invitation) invitation = await ClanInvite.create({ clanId: clan._id, inviterId: req.user!._id, inviteeId: req.body.userId, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
   await createNotification(req.body.userId, "ROOM_INVITE", "Clan invitation", `${req.user!.name} invited you to join ${clan.name}`, { clanId: clan.id, clanInviteId: invitation.id });
   sendOk(res, { invitation }, 201);
+}));
+
+clansRouter.delete("/:id/invitations/:inviteId", asyncHandler(async (req: AuthRequest, res) => {
+  const { clan, role } = await requireClanMemberDoc(req.params.id, req.user!.id);
+  if (!canInviteMembers(role)) throw new HttpError(403, "You don't have permission to manage clan invitations", ErrorCode.FORBIDDEN);
+  if (!isValidObjectId(req.params.inviteId)) throw new HttpError(400, "Invalid invitation ID", ErrorCode.VALIDATION);
+  const invite = await ClanInvite.findOne({ _id: req.params.inviteId, clanId: clan._id, status: "PENDING" });
+  if (!invite) throw new HttpError(404, "Invitation not found", ErrorCode.NOT_FOUND);
+  invite.status = "CANCELLED";
+  await invite.save();
+  sendOk(res, { invitation: invite });
 }));
 
 clansRouter.post("/invitations/:inviteId/:action(accept|decline)", asyncHandler(async (req: AuthRequest, res) => {
@@ -212,38 +299,45 @@ clansRouter.post("/invitations/:inviteId/:action(accept|decline)", asyncHandler(
     await invite.save();
     return sendOk(res, { invitation: invite });
   }
-  if (await Clan.exists({ memberIds: req.user!.id })) throw new HttpError(409, "Leave your current clan before accepting another invitation", ErrorCode.CONFLICT);
   const clan = await Clan.findById(invite.clanId);
   if (!clan) throw new HttpError(404, "Clan no longer exists", ErrorCode.NOT_FOUND);
-  if (!clan.memberIds.some((memberId) => memberId.toString() === req.user!.id)) {
+  const userId = req.user!.id;
+  const alreadyMemberThisClan = clan.memberIds.some((memberId) => idOf(memberId) === userId);
+  if (!alreadyMemberThisClan) {
+    const otherClan = await Clan.exists({ memberIds: userId, _id: { $ne: clan._id } });
+    if (otherClan) throw new HttpError(409, "Leave your current clan before accepting another invitation", ErrorCode.CONFLICT);
     clan.memberIds = [...clan.memberIds, req.user!._id];
     clan.memberCount = clan.memberIds.length;
     applyMemberRoles(clan);
     await clan.save();
   }
-  await User.findByIdAndUpdate(req.user!.id, { $set: { clanId: clan._id } });
+  await User.findByIdAndUpdate(userId, { $set: { clanId: clan._id } });
   invite.status = "ACCEPTED";
   await invite.save();
   await populateClanMembers(clan);
-  sendOk(res, { invitation: invite, clan: publicClan(clan, req.user!.id) });
+  const mapped = publicClan(clan, userId);
+  if (!alreadyMemberThisClan) {
+    emitClanMembers(clan.memberIds, socketEvents.clanMemberJoined, { clanId: clan.id, userId, clan: mapped }, userId);
+  }
+  sendOk(res, { invitation: invite, clan: mapped });
 }));
 
 clansRouter.post("/:id/transfer-ownership", validateBody(ownershipSchema), asyncHandler(async (req: AuthRequest, res) => {
-  if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid clan ID", ErrorCode.VALIDATION);
-  const clan = await Clan.findById(req.params.id);
-  if (!clan) throw new HttpError(404, "Clan not found", ErrorCode.NOT_FOUND);
-  if (clan.ownerId.toString() !== req.user!.id) throw new HttpError(403, "Only the owner can transfer ownership", ErrorCode.FORBIDDEN);
-  if (!clan.memberIds.some((memberId) => memberId.toString() === req.body.userId)) throw new HttpError(400, "Ownership can only be transferred to a clan member", ErrorCode.VALIDATION);
+  const clan = await requireClanLeader(req.params.id, req.user!.id);
+  if (!clan.memberIds.some((memberId) => idOf(memberId) === req.body.userId)) throw new HttpError(400, "Ownership can only be transferred to a clan member", ErrorCode.VALIDATION);
   const previousOwnerId = idOf(clan.ownerId);
   clan.ownerId = req.body.userId;
   applyMemberRoles(clan, { [previousOwnerId]: "CO_LEADER" });
   await clan.save();
   await populateClanMembers(clan);
-  sendOk(res, { clan: publicClan(clan, req.user!.id) });
+  const mapped = publicClan(clan, req.user!.id);
+  emitClanMembers(clan.memberIds, socketEvents.clanOwnershipTransferred, { clanId: clan.id, fromUserId: previousOwnerId, toUserId: req.body.userId, clan: mapped });
+  sendOk(res, { clan: mapped });
 }));
 
 clansRouter.patch("/:id", validateBody(clanUpdateSchema), asyncHandler(async (req: AuthRequest, res) => {
-  const clan = await requireClanLeader(req.params.id, req.user!.id);
+  const { clan, role } = await requireClanMemberDoc(req.params.id, req.user!.id);
+  if (!canManageClan(role)) throw new HttpError(403, "You don't have permission to update clan settings", ErrorCode.FORBIDDEN);
   if (req.body.name !== undefined) clan.name = sanitizeText(req.body.name);
   if (req.body.description !== undefined) {
     clan.description = req.body.description === null ? undefined : sanitizeText(req.body.description);
@@ -253,28 +347,36 @@ clansRouter.patch("/:id", validateBody(clanUpdateSchema), asyncHandler(async (re
   if (req.body.familyLabel !== undefined) clan.familyLabel = sanitizeText(req.body.familyLabel);
   await clan.save();
   await populateClanMembers(clan);
-  sendOk(res, { clan: publicClan(clan, req.user!.id) });
+  const mapped = publicClan(clan, req.user!.id);
+  emitClanMembers(clan.memberIds, socketEvents.clanUpdated, { clanId: clan.id, clan: mapped }, req.user!.id);
+  sendOk(res, { clan: mapped });
 }));
 
 clansRouter.patch("/:id/members/:userId/role", validateBody(clanMemberRoleSchema), asyncHandler(async (req: AuthRequest, res) => {
+  const { clan, role: actorRole } = await requireClanMemberDoc(req.params.id, req.user!.id);
   if (!isValidObjectId(req.params.userId)) throw new HttpError(400, "Invalid member ID", ErrorCode.VALIDATION);
-  const clan = await requireClanLeader(req.params.id, req.user!.id);
   const targetId = req.params.userId;
   if (idOf(clan.ownerId) === targetId) throw new HttpError(400, "Transfer ownership to change the leader role", ErrorCode.VALIDATION);
   if (!clan.memberIds.some((memberId) => idOf(memberId) === targetId)) throw new HttpError(404, "This user is not a clan member", ErrorCode.NOT_FOUND);
+  const targetRole = clanRoleFor(clan, targetId);
+  if (!canAssignRole(actorRole, targetRole, req.body.role)) throw new HttpError(403, "You don't have permission to assign this role", ErrorCode.FORBIDDEN);
   applyMemberRoles(clan, { [targetId]: req.body.role });
   await clan.save();
   await populateClanMembers(clan);
-  sendOk(res, { clan: publicClan(clan, req.user!.id) });
+  const mapped = publicClan(clan, req.user!.id);
+  emitClanMembers(clan.memberIds, socketEvents.clanMemberRoleUpdated, { clanId: clan.id, userId: targetId, role: req.body.role, clan: mapped });
+  sendOk(res, { clan: mapped });
 }));
 
 clansRouter.delete("/:id/members/:userId", asyncHandler(async (req: AuthRequest, res) => {
+  const { clan, role: actorRole } = await requireClanMemberDoc(req.params.id, req.user!.id);
   if (!isValidObjectId(req.params.userId)) throw new HttpError(400, "Invalid member ID", ErrorCode.VALIDATION);
-  const clan = await requireClanLeader(req.params.id, req.user!.id);
   const targetId = req.params.userId;
   if (targetId === req.user!.id) throw new HttpError(400, "Use leave to exit your clan", ErrorCode.VALIDATION);
   if (idOf(clan.ownerId) === targetId) throw new HttpError(400, "The clan leader cannot be removed", ErrorCode.VALIDATION);
   if (!clan.memberIds.some((memberId) => idOf(memberId) === targetId)) throw new HttpError(404, "This user is not a clan member", ErrorCode.NOT_FOUND);
+  const targetRole = clanRoleFor(clan, targetId);
+  if (!canRemoveMember(actorRole, targetRole)) throw new HttpError(403, "You don't have permission to remove this member", ErrorCode.FORBIDDEN);
   clan.memberIds = clan.memberIds.filter((memberId) => idOf(memberId) !== targetId);
   clan.memberCount = clan.memberIds.length;
   applyMemberRoles(clan);
@@ -284,18 +386,23 @@ clansRouter.delete("/:id/members/:userId", asyncHandler(async (req: AuthRequest,
     ClanInvite.updateMany({ clanId: clan._id, inviteeId: targetId, status: "PENDING" }, { $set: { status: "CANCELLED" } })
   ]);
   await populateClanMembers(clan);
-  sendOk(res, { clan: publicClan(clan, req.user!.id) });
+  const mapped = publicClan(clan, req.user!.id);
+  emitUser(targetId, socketEvents.clanMemberRemoved, { clanId: clan.id, userId: targetId, clan: null });
+  emitClanMembers(clan.memberIds, socketEvents.clanMemberRemoved, { clanId: clan.id, userId: targetId, clan: mapped }, req.user!.id);
+  sendOk(res, { clan: mapped });
 }));
 
 clansRouter.delete("/:id", asyncHandler(async (req: AuthRequest, res) => {
   const clan = await requireClanLeader(req.params.id, req.user!.id);
   const memberIds = clan.memberIds.map(idOf).filter(Boolean);
+  const clanId = clan.id;
   await Promise.all([
     User.updateMany({ _id: { $in: memberIds } }, { $unset: { clanId: "" } }),
     ClanInvite.deleteMany({ clanId: clan._id }),
     ClanMessage.deleteMany({ clanId: clan._id })
   ]);
   await clan.deleteOne();
+  emitClanMembers(memberIds, socketEvents.clanDeleted, { clanId }, req.user!.id);
   sendOk(res, { clan: null });
 }));
 
@@ -325,9 +432,7 @@ clansRouter.post("/:id/messages", requireNotMuted, chatLimiter, validateBody(cla
   const message = await ClanMessage.findById(created._id)
     .populate("senderId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .lean();
-  members.forEach((memberId) => {
-    if (memberId !== req.user!.id) emitUser(memberId, socketEvents.clanMessageNew, { clanId: req.params.id, message });
-  });
+  emitClanMembers(members, socketEvents.clanMessageNew, { clanId: req.params.id, message }, req.user!.id);
   await Promise.all(members
     .filter((memberId) => memberId !== req.user!.id)
     .slice(0, 50)
@@ -336,7 +441,7 @@ clansRouter.post("/:id/messages", requireNotMuted, chatLimiter, validateBody(cla
 }));
 
 clansRouter.post("/:id/messages/:messageId/reactions", chatLimiter, validateBody(reactionSchema), asyncHandler(async (req: AuthRequest, res) => {
-  await requireClanMember(req.params.id, req.user!.id);
+  const { members } = await requireClanMember(req.params.id, req.user!.id);
   if (!isValidObjectId(req.params.messageId)) throw new HttpError(400, "Invalid message ID", ErrorCode.VALIDATION);
   const message = await ClanMessage.findOne({ _id: req.params.messageId, clanId: req.params.id }).select("_id").lean();
   if (!message) throw new HttpError(404, "Message not found", ErrorCode.NOT_FOUND);
@@ -353,28 +458,27 @@ clansRouter.post("/:id/messages/:messageId/reactions", chatLimiter, validateBody
   if (senderId && senderId !== req.user!.id) {
     await createNotification(senderId, "MESSAGE", "New family reaction", `${req.user!.name} reacted to your family message`, { clanId: req.params.id, messageId: req.params.messageId });
   }
+  emitClanMembers(members, socketEvents.clanMessageUpdated, { clanId: req.params.id, message: updated });
   sendOk(res, { message: updated });
 }));
 
 clansRouter.delete("/:id/messages/:messageId", asyncHandler(async (req: AuthRequest, res) => {
-  const { clan } = await requireClanMember(req.params.id, req.user!.id);
+  const { clan, members, role } = await requireClanMember(req.params.id, req.user!.id);
   if (!isValidObjectId(req.params.messageId)) throw new HttpError(400, "Invalid message ID", ErrorCode.VALIDATION);
   const message = await ClanMessage.findOne({ _id: req.params.messageId, clanId: req.params.id }).select("senderId").lean();
   if (!message) throw new HttpError(404, "Message not found", ErrorCode.NOT_FOUND);
-  const isOwner = clan.ownerId?.toString?.() === req.user!.id;
-  if (message.senderId.toString() !== req.user!.id && !isOwner) throw new HttpError(403, "You can only delete your own messages", ErrorCode.FORBIDDEN);
+  const isOwn = idOf(message.senderId) === req.user!.id;
+  if (!isOwn && !canModerateChat(role)) throw new HttpError(403, "You don't have permission to delete this message", ErrorCode.FORBIDDEN);
   await ClanMessage.deleteOne({ _id: req.params.messageId, clanId: req.params.id });
+  emitClanMembers(members, socketEvents.clanMessageDeleted, { clanId: req.params.id, messageId: req.params.messageId });
   sendOk(res, { deleted: true });
 }));
 
 clansRouter.post("/:id/messages/clean", asyncHandler(async (req: AuthRequest, res) => {
-  const { clan, members } = await requireClanMember(req.params.id, req.user!.id);
-  const isOwner = clan.ownerId?.toString?.() === req.user!.id;
-  if (!isOwner) throw new HttpError(403, "Only the clan owner can clean the chat", ErrorCode.FORBIDDEN);
+  const { members, role } = await requireClanMember(req.params.id, req.user!.id);
+  if (!canModerateChat(role)) throw new HttpError(403, "You don't have permission to clean the chat", ErrorCode.FORBIDDEN);
   const result = await ClanMessage.deleteMany({ clanId: req.params.id });
-  members.forEach((memberId: string) => {
-    if (memberId !== req.user!.id) emitUser(memberId, socketEvents.clanChatCleaned, { clanId: req.params.id });
-  });
+  emitClanMembers(members, socketEvents.clanChatCleaned, { clanId: req.params.id });
   sendOk(res, { deletedCount: result.deletedCount });
 }));
 
@@ -438,34 +542,49 @@ clansRouter.post("/:id/join", asyncHandler(async (req: AuthRequest, res) => {
   const clan = await Clan.findById(req.params.id);
   if (!clan) throw new HttpError(404, "Clan not found", ErrorCode.NOT_FOUND);
   if (clan.privacy === "PRIVATE") throw new HttpError(403, "This clan is invite-only", ErrorCode.FORBIDDEN);
-  const members = clan.memberIds.map((memberId: any) => memberId.toString());
-  if (!members.includes(req.user!.id)) clan.memberIds = [...clan.memberIds, req.user!._id ?? req.user!.id];
-  clan.memberCount = clan.memberIds.length;
-  applyMemberRoles(clan);
-  await clan.save();
+  const members = clan.memberIds.map((memberId: any) => idOf(memberId));
+  const alreadyMember = members.includes(req.user!.id);
+  if (!alreadyMember) {
+    clan.memberIds = [...clan.memberIds, req.user!._id ?? req.user!.id];
+    clan.memberCount = clan.memberIds.length;
+    applyMemberRoles(clan);
+    await clan.save();
+  }
   await User.findByIdAndUpdate(req.user!.id, { $set: { clanId: clan._id } });
   await populateClanMembers(clan);
-  sendOk(res, { clan: publicClan(clan, req.user!.id) });
+  const mapped = publicClan(clan, req.user!.id);
+  if (!alreadyMember) {
+    emitClanMembers(clan.memberIds, socketEvents.clanMemberJoined, { clanId: clan.id, userId: req.user!.id, clan: mapped }, req.user!.id);
+  }
+  sendOk(res, { clan: mapped });
 }));
 
 clansRouter.post("/:id/leave", asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid clan ID", ErrorCode.VALIDATION);
   const clan = await Clan.findById(req.params.id);
   if (!clan) throw new HttpError(404, "Clan not found", ErrorCode.NOT_FOUND);
-  if (clan.ownerId.toString() === req.user!.id && clan.memberIds.length > 1) {
+  const userId = req.user!.id;
+  const isMember = clan.memberIds.some((memberId: any) => idOf(memberId) === userId);
+  if (!isMember) throw new HttpError(400, "You are not a member of this clan", ErrorCode.VALIDATION);
+  if (idOf(clan.ownerId) === userId && clan.memberIds.length > 1) {
     throw new HttpError(400, "Transfer ownership before leaving this clan", ErrorCode.VALIDATION);
   }
-  clan.memberIds = clan.memberIds.filter((memberId: any) => memberId.toString() !== req.user!.id);
+  clan.memberIds = clan.memberIds.filter((memberId: any) => idOf(memberId) !== userId);
   clan.memberCount = clan.memberIds.length;
   applyMemberRoles(clan);
   await clan.save();
-  await User.findByIdAndUpdate(req.user!.id, { $unset: { clanId: "" } });
+  await User.findByIdAndUpdate(userId, { $unset: { clanId: "" } });
   if (clan.memberIds.length === 0) {
+    const clanId = clan.id;
     await ClanInvite.deleteMany({ clanId: clan._id });
     await ClanMessage.deleteMany({ clanId: clan._id });
     await clan.deleteOne();
+    emitUser(userId, socketEvents.clanMemberLeft, { clanId, userId, clan: null });
     return sendOk(res, { clan: null });
   }
   await populateClanMembers(clan);
-  sendOk(res, { clan: publicClan(clan, req.user!.id) });
+  const mapped = publicClan(clan, req.user!.id);
+  emitClanMembers(clan.memberIds, socketEvents.clanMemberLeft, { clanId: clan.id, userId, clan: mapped });
+  emitUser(userId, socketEvents.clanMemberLeft, { clanId: clan.id, userId, clan: null });
+  sendOk(res, { clan: null });
 }));

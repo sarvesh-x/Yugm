@@ -9,6 +9,8 @@ const giftSchema = new Schema(
     isActive: { type: Boolean, default: true },
     effect3d: { type: String, default: "" },
     interactive: { type: Boolean, default: false },
+  animationKey: { type: String, default: "" },
+  expiresAt: { type: Date, default: null },
     comboMultiplier: { type: Number, default: 1 },
     category: { type: String, default: "normal", enum: ["normal", "premium", "limited", "seasonal", "mythology", "space", "dragon", "luxury"] },
     theme: { type: String, default: "" },

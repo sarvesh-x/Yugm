@@ -41,7 +41,10 @@ fun JSONObject.toClan(): Clan = Clan(
     memberRoles = optJSONArray("memberRoles")?.toClanMemberRoles() ?: emptyList(),
     myRole = optString("myRole", ""),
     canManage = optBoolean("canManage", false),
-    isMember = optBoolean("isMember", false)
+    canModerate = optBoolean("canModerate", false),
+    canInvite = optBoolean("canInvite", false),
+    isMember = optBoolean("isMember", false),
+    isOwner = optBoolean("isOwner", false)
 )
 
 fun JSONArray.toClanMemberRoles(): List<ClanMemberRole> = buildList {

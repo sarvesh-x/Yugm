@@ -3,6 +3,7 @@ package com.yugm.app.core.api
 import com.yugm.app.core.api.parsers.*
 import com.yugm.app.core.model.Clan
 import com.yugm.app.core.model.ClanMessage
+import com.yugm.app.core.model.ClanSentInvitation
 import com.yugm.app.core.model.ClanSummary
 import com.yugm.app.core.model.ClanInvitation
 import com.yugm.app.core.model.ClanRankingEntry
@@ -37,6 +38,34 @@ object ClanApi {
 
     suspend fun inviteMember(token: String, clanId: String, userId: String) {
         YugmHttpClient.post("/clans/$clanId/invitations", token, JSONObject().put("userId", userId))
+    }
+
+    suspend fun clanInvitations(token: String, clanId: String): List<ClanSentInvitation> {
+        val data = YugmHttpClient.get("/clans/$clanId/invitations", token).getJSONObject("data")
+        val invites = data.optJSONArray("invitations") ?: JSONArray()
+        return buildList {
+            for (index in 0 until invites.length()) {
+                val item = invites.optJSONObject(index) ?: continue
+                val invitee = item.optJSONObject("inviteeId")
+                val inviter = item.optJSONObject("inviterId")
+                add(
+                    ClanSentInvitation(
+                        id = item.optString("_id", item.optString("id")),
+                        inviteeId = invitee?.optString("_id", invitee.optString("id")).orEmpty(),
+                        inviteeName = invitee?.optString("name").orEmpty().ifBlank { "User" },
+                        inviteeUsername = invitee?.optString("username").orEmpty(),
+                        inviteeAvatar = invitee?.optString("avatar")?.takeIf(String::isNotBlank),
+                        inviterName = inviter?.optString("name").orEmpty(),
+                        createdAt = item.optString("createdAt"),
+                        expiresAt = item.optString("expiresAt")
+                    )
+                )
+            }
+        }
+    }
+
+    suspend fun cancelClanInvitation(token: String, clanId: String, inviteId: String) {
+        YugmHttpClient.delete("/clans/$clanId/invitations/$inviteId", token)
     }
 
     suspend fun transferOwnership(token: String, clanId: String, userId: String) {

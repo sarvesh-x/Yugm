@@ -84,9 +84,12 @@ fun ClanDetailScreen(
     var settingsAvatar by remember { mutableStateOf("") }
     var settingsPrivate by remember { mutableStateOf(false) }
 
-    LaunchedEffect(clanId) {
+    LaunchedEffect(clanId, token) {
         viewModel.loadDetail(token, clanId)
         if (currentUserId.isNotBlank()) viewModel.loadInviteCandidates(token, currentUserId)
+    }
+    LaunchedEffect(clanId, token, viewModel.clanDetail?.canInvite) {
+        if (viewModel.clanDetail?.canInvite == true) viewModel.loadSentInvitations(token, clanId)
     }
     LaunchedEffect(viewModel.error) {
         if (!viewModel.error.isNullOrBlank()) status = viewModel.error.orEmpty()
@@ -246,18 +249,43 @@ fun ClanDetailScreen(
                             if (member.isOnline) {
                                 Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF00C853)))
                             }
-                            if (currentClan.canManage && member.id != currentUserId) {
+                            if ((currentClan.canManage || currentClan.isOwner) && member.id != currentUserId) {
                                 TextButton(onClick = { manageTarget = member }) { Text("Manage", color = Pink, fontSize = 10.sp) }
                             }
                         }
                     }
                 }
-                if (currentClan.canManage) {
+                if (currentClan.canInvite) {
+                    item {
+                        Text("Pending invitations", color = TextMuted, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp))
+                    }
+                    if (viewModel.sentInvitations.isEmpty()) {
+                        item { Text("No pending invitations.", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp)) }
+                    } else {
+                        items(viewModel.sentInvitations, key = { "sent-invite-${it.id}" }) { invite ->
+                            Row(Modifier.padding(horizontal = 20.dp).fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Avatar(invite.inviteeName.firstOrNull()?.toString() ?: "?", 36, invite.inviteeAvatar)
+                                Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                                    Text(invite.inviteeName, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                    val sub = when {
+                                        invite.inviteeUsername.isNotBlank() -> "@${invite.inviteeUsername}"
+                                        invite.expiresAt.isNotBlank() -> "Expires ${invite.expiresAt.take(10)}"
+                                        else -> "Pending"
+                                    }
+                                    Text(sub, color = TextMuted, fontSize = 10.sp)
+                                }
+                                TextButton(onClick = { viewModel.cancelSentInvitation(token, clanId, invite.id) }) {
+                                    Text("Cancel", color = Pink, fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
                     item {
                         Text("Invite people you follow", color = TextMuted, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp))
                     }
                     val existingIds = currentClan.members.map { it.id }.toSet()
-                    val candidates = viewModel.inviteCandidates.filter { it.id !in existingIds }
+                    val pendingIds = viewModel.sentInvitations.map { it.inviteeId }.filter { it.isNotBlank() }.toSet()
+                    val candidates = viewModel.inviteCandidates.filter { it.id !in existingIds && it.id !in pendingIds }
                     if (candidates.isEmpty()) {
                         item { Text("No available people to invite right now.", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp)) }
                     } else {
