@@ -12,9 +12,17 @@ import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** Decodes a picked audio document into a bounded, real-time PCM queue. */
-internal class RoomMusicPcmDecoder(private val context: Context, uri: Uri) : AudioBufferCallback {
+internal class RoomMusicPcmDecoder(
+    private val context: Context,
+    uri: Uri,
+    private val onCompleted: () -> Unit,
+    private val onError: (String) -> Unit
+) : AudioBufferCallback {
     private val stopped = AtomicBoolean(false)
     private val paused = AtomicBoolean(false)
+    private val decoderFinished = AtomicBoolean(false)
+    private val callbackSent = AtomicBoolean(false)
+    @Volatile private var failureMessage: String? = null
     @Volatile private var volume = 1f
     private val pcm = ArrayBlockingQueue<ShortArray>(64)
     private var current = ShortArray(0)
@@ -46,6 +54,10 @@ internal class RoomMusicPcmDecoder(private val context: Context, uri: Uri) : Aud
             if (currentOffset >= current.size) {
                 current = pcm.poll() ?: ShortArray(0)
                 currentOffset = 0
+                if (current.isEmpty() && decoderFinished.get() && callbackSent.compareAndSet(false, true)) {
+                    val failure = failureMessage
+                    if (failure == null) onCompleted() else onError(failure)
+                }
             }
             val rawSample = if (currentOffset < current.size) current[currentOffset++] else 0
             val sample = (rawSample * volume).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
@@ -69,7 +81,7 @@ internal class RoomMusicPcmDecoder(private val context: Context, uri: Uri) : Aud
                     break
                 }
             }
-            val format = audioFormat ?: return
+            val format = audioFormat ?: throw IllegalArgumentException("This file has no playable audio track")
             val sourceRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
             val sourceChannels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
             codec = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!).apply {
@@ -151,14 +163,18 @@ internal class RoomMusicPcmDecoder(private val context: Context, uri: Uri) : Aud
                 }
             }
             if (accumulatorSize > 0 && !stopped.get()) pcm.put(frameAccumulator.copyOf(accumulatorSize))
+            if (!stopped.get()) decoderFinished.set(true)
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
-        } catch (_: Exception) {
-            stopped.set(true)
+        } catch (error: Exception) {
+            if (!stopped.get()) {
+                failureMessage = error.message ?: "This audio file could not be decoded"
+                decoderFinished.set(true)
+            }
         } finally {
             runCatching { codec?.stop() }
-            codec?.release()
-            extractor?.release()
+            runCatching { codec?.release() }
+            runCatching { extractor?.release() }
         }
     }
 }

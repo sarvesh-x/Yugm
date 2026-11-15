@@ -240,3 +240,25 @@ export async function invalidateCache(pattern: string) {
     } while (cursor !== "0");
   });
 }
+
+const roomDisconnectGraceKey = (roomId: string, userId: string) => `room:disconnect-grace:${roomId}:${userId}`;
+
+export async function markRoomSocketDisconnected(roomId: string, userId: string) {
+  await runRedisCommand("room disconnect grace", undefined, async (client) => {
+    await client.set(roomDisconnectGraceKey(roomId, userId), "1", "EX", 30);
+  });
+}
+
+export async function clearRoomSocketDisconnect(roomId: string, userId: string) {
+  await runRedisCommand("room reconnect grace clear", undefined, async (client) => {
+    await client.del(roomDisconnectGraceKey(roomId, userId));
+  });
+}
+
+export async function hasRoomSocketDisconnectGrace(roomId: string, userIds: string[]) {
+  if (userIds.length === 0) return false;
+  return runRedisCommand("room disconnect grace check", false, async (client) => {
+    const values = await client.mget(userIds.map((userId) => roomDisconnectGraceKey(roomId, userId)));
+    return values.some(Boolean);
+  });
+}

@@ -31,6 +31,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Home
@@ -122,7 +123,7 @@ fun YugmPageHeader(
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         if (onBack != null) {
-            RoundAction("‹", onClick = onBack)
+            YugmBackButton(onClick = onBack)
         } else {
             BrandHeader(compact = true)
         }
@@ -132,6 +133,21 @@ fun YugmPageHeader(
         }
         trailing?.invoke()
     }
+}
+
+@Composable
+fun YugmBackButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    accessibilityLabel: String = "Back"
+) {
+    RoundAction(
+        glyph = "",
+        modifier = modifier,
+        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+        accessibilityLabel = accessibilityLabel,
+        onClick = onClick
+    )
 }
 
 @Composable

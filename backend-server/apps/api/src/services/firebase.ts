@@ -16,6 +16,10 @@ interface VerifiedFirebaseIdToken extends jwt.JwtPayload {
   picture?: string;
   phone_number?: string;
   email_verified?: boolean;
+  firebase?: {
+    sign_in_provider?: string;
+    [key: string]: unknown;
+  };
 }
 const firebaseCertsUrl = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
 let signingCertCache: { certs: Record<string, string>; expiresAt: number } | undefined;

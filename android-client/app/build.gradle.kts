@@ -213,6 +213,7 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
     implementation(libs.firebase.auth)
+    implementation(libs.facebook.login)
     implementation("com.google.firebase:firebase-appcheck-playintegrity")
     implementation(libs.play.services.auth)
     implementation(libs.livekit.android)

@@ -88,6 +88,7 @@ fun ChatListScreen(
     onDiscover: () -> Unit = {},
     onCreateRoom: () -> Unit = {},
     onLive: () -> Unit = {},
+    onGames: () -> Unit = {},
     onWallet: () -> Unit = {},
     onProfile: () -> Unit = {}
 ) {
@@ -154,31 +155,55 @@ fun ChatListScreen(
                 }
             }
             if (mainTab == 0) {
+                item {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 18.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        listOf("🎙  Voice Party" to onLive, "🎮  Games" to onGames, "✨  Find people" to onDiscover).forEach { (label, action) ->
+                            item {
+                                Text(
+                                    label,
+                                    color = ChatInk,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.clip(RoundedCornerShape(16.dp))
+                                        .background(ChatPanel)
+                                        .border(1.dp, ChatLine, RoundedCornerShape(16.dp))
+                                        .clickable(role = Role.Button, onClick = action)
+                                        .padding(horizontal = 15.dp, vertical = 13.dp)
+                                )
+                            }
+                        }
+                    }
+                }
                 // Recommended users to chat with - real data, online dot indicator
-                if (viewModel.recommendedChatUsers.isNotEmpty() || viewModel.isLoading) {
-                    item {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Row(
                                 Modifier.fillMaxWidth().padding(horizontal = 22.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Say Hi 👋", color = ChatInk, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                                Text("Recommended users", color = ChatInk, fontSize = 19.sp, fontWeight = FontWeight.Bold)
                                 Spacer(Modifier.weight(1f))
                                 if (viewModel.isLoading && viewModel.recommendedChatUsers.isEmpty()) {
                                     CircularProgressIndicator(modifier = Modifier.size(16.dp), color = ChatPurple, strokeWidth = 2.dp)
                                 }
                             }
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 20.dp),
-                                horizontalArrangement = Arrangement.spacedBy(14.dp)
-                            ) {
-                                items(viewModel.recommendedChatUsers.take(25), key = { "rec-${it.id}" }) { user ->
-                                    RecommendedUserChip(user = user, onClick = { onOpenChat(user.id) })
+                            if (viewModel.recommendedChatUsers.isNotEmpty()) {
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 20.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                ) {
+                                    items(viewModel.recommendedChatUsers.take(25), key = { "rec-${it.id}" }) { user ->
+                                        RecommendedUserChip(user = user, onClick = { onOpenChat(user.id) })
+                                    }
                                 }
+                            } else if (!viewModel.isLoading) {
+                                Text("New people to chat with will show up here.", color = ChatMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp))
                             }
                         }
                     }
-                }
                 if (viewModel.matches.isNotEmpty()) item {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("People you may know", color = ChatInk, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 22.dp))
@@ -525,7 +550,7 @@ private fun LightChatRow(item: ConversationItem, unread: Boolean, onClick: () ->
 private fun RecommendedUserChip(user: Host, onClick: () -> Unit) {
     Column(
         modifier = Modifier
-            .width(66.dp)
+            .width(76.dp)
             .clickable(role = Role.Button, onClickLabel = "Chat with ${user.name}", onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(5.dp)
@@ -534,7 +559,7 @@ private fun RecommendedUserChip(user: Host, onClick: () -> Unit) {
             // Avatar with frame cosmetics
             Box(
                 modifier = Modifier
-                    .size(58.dp)
+                    .size(66.dp)
                     .clip(CircleShape)
                     .background(ChatPanel)
                     .border(2.dp, if (user.isOnline) Color(0xFF39C891).copy(alpha = 0.6f) else Color(0xFF2E3050), CircleShape),
@@ -542,7 +567,7 @@ private fun RecommendedUserChip(user: Host, onClick: () -> Unit) {
             ) {
                 Avatar(
                     initial = user.name.take(1),
-                    size = 54,
+                    size = 62,
                     imageUrl = user.avatar,
                     cosmetics = user.activeCosmetics
                 )

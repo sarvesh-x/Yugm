@@ -59,6 +59,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
     @Inject lateinit var sessionManager: SessionManager
     private val pendingPushRoute = mutableStateOf<String?>(null)
 
+
     override fun onResume() {
         super.onResume()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)

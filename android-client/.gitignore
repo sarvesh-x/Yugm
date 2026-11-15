@@ -5,6 +5,9 @@ build/
 # IDE.gradle/.idea/
 local.properties
 
+# Local environment
+.env
+
 # KSP/KAPT generated
 build/tmp/kapt3/
 build/generated/

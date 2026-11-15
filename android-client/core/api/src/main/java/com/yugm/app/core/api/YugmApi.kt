@@ -154,6 +154,7 @@ object YugmApi : IYugmApi {
 
     // Auth
     override suspend fun googleAuth(idToken: String, acceptTerms: Boolean, provider: String): Session = AuthApi.googleAuth(idToken, acceptTerms, provider)
+    override suspend fun facebookAuth(idToken: String, acceptTerms: Boolean): Session = AuthApi.facebookAuth(idToken, acceptTerms)
     override suspend fun phoneAuth(idToken: String, acceptTerms: Boolean): Session = AuthApi.phoneAuth(idToken, acceptTerms)
     override suspend fun refreshAuth(refreshToken: String): RefreshedSession = AuthApi.refresh(refreshToken)
     override suspend fun logoutAuth(token: String, refreshToken: String) = AuthApi.logout(token, refreshToken)

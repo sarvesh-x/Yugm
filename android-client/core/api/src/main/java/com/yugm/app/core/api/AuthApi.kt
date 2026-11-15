@@ -13,6 +13,12 @@ object AuthApi {
         return parseSession(response)
     }
 
+    suspend fun facebookAuth(idToken: String, acceptTerms: Boolean): Session {
+        val response = YugmHttpClient.post("/auth/facebook", auth = null,
+            JSONObject().put("idToken", idToken).put("acceptTerms", acceptTerms))
+        return parseSession(response)
+    }
+
     suspend fun phoneAuth(idToken: String, acceptTerms: Boolean): Session {
         val response = YugmHttpClient.post("/auth/phone", auth = null,
             JSONObject().put("idToken", idToken).put("acceptTerms", acceptTerms))

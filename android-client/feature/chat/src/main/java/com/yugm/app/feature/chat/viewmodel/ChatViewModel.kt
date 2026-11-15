@@ -11,6 +11,8 @@ import com.yugm.app.core.model.ActiveCosmetics
 import com.yugm.app.core.model.DirectMessage
 import com.yugm.app.core.model.Host
 import com.yugm.app.core.model.RelationshipStatus
+import com.yugm.app.core.model.Room
+import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.api.SocketEvent
 import com.yugm.app.core.api.SocketManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -157,6 +159,24 @@ class ChatViewModel @Inject constructor(
     fun sendTypingStatus(isTyping: Boolean) {
         if (partnerUserId.isBlank()) return
         socketManager.sendTypingStatus(partnerUserId, isTyping)
+    }
+
+    fun startPrivateCall(
+        type: RoomType,
+        onSuccess: (Room) -> Unit,
+        onFailure: (String) -> Unit
+    ) {
+        if (authToken.isBlank() || partnerUserId.isBlank()) {
+            onFailure("Open a conversation before starting a call")
+            return
+        }
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { yugmApi.startPrivateCall(authToken, partnerUserId, type) }
+            }.onSuccess(onSuccess).onFailure {
+                onFailure(it.message ?: "Could not start the call")
+            }
+        }
     }
 
     private fun mergeMessages(history: List<DirectMessage>) {

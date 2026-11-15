@@ -46,6 +46,7 @@ import com.yugm.app.core.ui.theme.*
 @Composable
 fun LoginScreen(
     onGoogleSignIn: (Boolean) -> Unit,
+    onFacebookSignIn: (Boolean) -> Unit,
     onPhoneSignIn: () -> Unit,
     onEmailAuth: (String, String, Boolean, Boolean) -> Unit,
     onForgotPassword: (String) -> Unit,
@@ -53,7 +54,8 @@ fun LoginScreen(
     loading: Boolean,
     error: String?,
     notice: String? = null,
-    googleLoading: Boolean = false
+    googleLoading: Boolean = false,
+    facebookLoading: Boolean = false
 ) {
     val context = LocalContext.current
     var email by rememberSaveable { mutableStateOf("") }
@@ -67,7 +69,7 @@ fun LoginScreen(
     var localError by rememberSaveable { mutableStateOf<String?>(null) }
     val emailValid = Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()
     val passwordStrong = password.length >= 8 && password.any(Char::isLetter) && password.any(Char::isDigit)
-    val canSubmit = !loading && !googleLoading && acceptTerms && emailValid && password.isNotEmpty() &&
+    val canSubmit = !loading && !googleLoading && !facebookLoading && acceptTerms && emailValid && password.isNotEmpty() &&
         (!createAccount || (passwordStrong && confirmPassword == password))
 
     fun clearErrors() {
@@ -92,13 +94,13 @@ fun LoginScreen(
                 contentPadding = PaddingValues(20.dp)
             ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AuthModeButton("Sign in", selected = !createAccount, Modifier.weight(1f), enabled = !loading && !googleLoading) {
+                    AuthModeButton("Sign in", selected = !createAccount, Modifier.weight(1f), enabled = !loading && !googleLoading && !facebookLoading) {
                         createAccount = false
                         manualLogin = false
                         confirmPassword = ""
                         clearErrors()
                     }
-                    AuthModeButton("Create account", selected = createAccount, Modifier.weight(1f), enabled = !loading && !googleLoading) {
+                    AuthModeButton("Create account", selected = createAccount, Modifier.weight(1f), enabled = !loading && !googleLoading && !facebookLoading) {
                         createAccount = true
                         manualLogin = true
                         clearErrors()
@@ -159,7 +161,17 @@ fun LoginScreen(
                         icon = Icons.Filled.Public,
                         onClick = { if (acceptTerms) onGoogleSignIn(acceptTerms) else localError = "Accept the terms to continue." },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !loading && !googleLoading && acceptTerms
+                        enabled = !loading && !googleLoading && !facebookLoading && acceptTerms
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    LoginMethodButton(
+                        text = if (facebookLoading) "Connecting…" else " Facebook",
+                        icon = null,
+                        brandMark = "f",
+                        onClick = { if (acceptTerms) onFacebookSignIn(acceptTerms) else localError = "Accept the terms to continue." },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !loading && !googleLoading && !facebookLoading && acceptTerms,
+                        loading = facebookLoading
                     )
                     Spacer(Modifier.height(10.dp))
                     LoginMethodButton(
@@ -167,9 +179,9 @@ fun LoginScreen(
                         icon = Icons.Filled.Phone,
                         onClick = onPhoneSignIn,
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !loading && !googleLoading && acceptTerms
+                        enabled = !loading && !googleLoading && !facebookLoading && acceptTerms
                     )
-                    TextButton(onClick = { manualLogin = true; clearErrors() }, enabled = !loading && !googleLoading, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    TextButton(onClick = { manualLogin = true; clearErrors() }, enabled = !loading && !googleLoading && !facebookLoading, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                         Text("Login manually instead", color = Gold, fontWeight = FontWeight.SemiBold)
                     }
                 }
@@ -198,7 +210,7 @@ fun LoginScreen(
                         loading = loading
                     )
                     if (!createAccount) {
-                        TextButton(onClick = { manualLogin = false; clearErrors() }, enabled = !loading && !googleLoading, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                        TextButton(onClick = { manualLogin = false; clearErrors() }, enabled = !loading && !googleLoading && !facebookLoading, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
                             Text("Use Google or phone instead", color = TextMuted)
                         }
                     }
@@ -211,7 +223,7 @@ fun LoginScreen(
                 Checkbox(
                     checked = acceptTerms,
                     onCheckedChange = { acceptTerms = it; clearErrors() },
-                    enabled = !loading && !googleLoading,
+                    enabled = !loading && !googleLoading && !facebookLoading,
                     modifier = Modifier.semantics { contentDescription = "I am 18 or older and accept Yugm's terms and privacy policy" }
                 )
                 Column(Modifier.weight(1f).padding(top = 10.dp)) {
@@ -249,7 +261,8 @@ fun LoginScreen(
 @Composable
 private fun LoginMethodButton(
     text: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: androidx.compose.ui.graphics.vector.ImageVector?,
+    brandMark: String? = null,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
@@ -301,12 +314,16 @@ private fun LoginMethodButton(
                 horizontalArrangement = Arrangement.Center,
                 modifier = Modifier.padding(horizontal = 16.dp)
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = if (isPrimary) Color.White else Gold,
-                    modifier = Modifier.size(20.dp)
-                )
+                if (brandMark != null) {
+                    Text(brandMark, color = Color(0xFF68A7FF), fontWeight = FontWeight.Black, fontSize = 22.sp)
+                } else if (icon != null) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (isPrimary) Color.White else Gold,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
                 Spacer(Modifier.width(10.dp))
                 Text(
                     text = text,

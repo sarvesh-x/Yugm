@@ -42,6 +42,26 @@ async function handlePublicProfile(identifier: string, isUsername: boolean, req:
   }
   if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
 
+  // A friend is a mutual follow. Calculate this from the relationship records
+  // so profiles do not depend on the separate friend-request collection.
+  const friendCountRows = await Follow.aggregate([
+    { $match: { followingId: user._id } },
+    {
+      $lookup: {
+        from: Follow.collection.name,
+        let: { follower: "$followerId" },
+        pipeline: [
+          { $match: { $expr: { $and: [{ $eq: ["$followerId", user._id] }, { $eq: ["$followingId", "$$follower"] }] } } },
+          { $limit: 1 }
+        ],
+        as: "mutualFollow"
+      }
+    },
+    { $match: { "mutualFollow.0": { $exists: true } } },
+    { $count: "count" }
+  ]);
+  const friendsCount = friendCountRows[0]?.count ?? 0;
+
   let isFollowing = false;
   let isCloseFriend = false;
   if (req.user) {
@@ -74,6 +94,7 @@ async function handlePublicProfile(identifier: string, isUsername: boolean, req:
       ...user,
       isFollowing,
       isCloseFriend,
+      friendsCount,
       isOnline: isUserOnline(user._id.toString()),
       verificationLevel,
       ...(!isSelf ? { walletBalance: undefined } : {})
@@ -293,6 +314,7 @@ function publicUser(user: any) {
     age: user.age,
     followersCount: user.followersCount,
     followingCount: user.followingCount,
+    friendsCount: user.friendsCount ?? 0,
     interestedIn: user.interestedIn,
     lookingFor: user.lookingFor,
     datingAgeMin: user.datingAgeMin,

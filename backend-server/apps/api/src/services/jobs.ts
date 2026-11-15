@@ -14,6 +14,7 @@ import { DirectMessage } from "../models/DirectMessage.js";
 import { ChatMessage } from "../models/ChatMessage.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
 import { ALWAYS_ON_OFFICIAL_VOICE_ROOM } from "./officialRooms.js";
+import { endRoom } from "./roomLifecycle.js";
 
 type PushPayload = {
   userId: string;
@@ -100,15 +101,16 @@ async function runMaintenanceTasks() {
   }
 
   try {
-    const staleRooms = await Room.updateMany(
-      {
-        status: "LIVE",
-        livekitRoomName: { $ne: ALWAYS_ON_OFFICIAL_VOICE_ROOM },
-        createdAt: { $lte: new Date(Date.now() - 48 * 60 * 60 * 1000) }
-      },
-      { $set: { status: "ENDED", endedAt: new Date() } }
-    );
-    if (staleRooms.modifiedCount > 0) results.push(`Ended ${staleRooms.modifiedCount} stale rooms`);
+    const staleRooms = await Room.find({
+      status: "LIVE",
+      livekitRoomName: { $ne: ALWAYS_ON_OFFICIAL_VOICE_ROOM },
+      createdAt: { $lte: new Date(Date.now() - 48 * 60 * 60 * 1000) }
+    }).select("_id").lean();
+    let endedStaleRooms = 0;
+    for (const room of staleRooms) {
+      if (await endRoom(room._id.toString(), "stale room safety cleanup")) endedStaleRooms++;
+    }
+    if (endedStaleRooms > 0) results.push(`Ended ${endedStaleRooms} stale rooms`);
   } catch (error) {
     results.push(`Room cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
   }

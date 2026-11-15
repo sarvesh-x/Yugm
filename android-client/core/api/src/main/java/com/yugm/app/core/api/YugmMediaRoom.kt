@@ -27,6 +27,14 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
 
+enum class RoomMusicPlaybackState { IDLE, PLAYING, PAUSED, COMPLETED, ERROR }
+
+data class RoomMusicPlaybackStatus(
+    val generation: Long = 0,
+    val state: RoomMusicPlaybackState = RoomMusicPlaybackState.IDLE,
+    val error: String = ""
+)
+
 @SuppressLint("StaticFieldLeak")
 object YugmMediaRoom {
     private const val TAG = "YugmMediaRoom"
@@ -38,6 +46,9 @@ object YugmMediaRoom {
     private var roomMusicDecoder: RoomMusicPcmDecoder? = null
     private var roomMusicPreview: MediaPlayer? = null
     @Volatile private var roomMusicVolume = 0.8f
+    private var roomMusicGeneration = 0L
+    private val mutableRoomMusicStatus = MutableStateFlow(RoomMusicPlaybackStatus())
+    val roomMusicStatus = mutableRoomMusicStatus.asStateFlow()
     private var opponentRoom: Room? = null
     private var speakingObserver: Job? = null
     @Volatile private var connected = false
@@ -159,7 +170,26 @@ object YugmMediaRoom {
         stopRoomMusicLocked(activeRoom)
         val context = appContext ?: return@withLock false
         try {
-            val decoder = RoomMusicPcmDecoder(context, uri)
+            val generation = ++roomMusicGeneration
+            mutableRoomMusicStatus.value = RoomMusicPlaybackStatus(generation, RoomMusicPlaybackState.PLAYING)
+            val decoder = RoomMusicPcmDecoder(
+                context,
+                uri,
+                onCompleted = {
+                    scope.launch {
+                        if (mutableRoomMusicStatus.value.generation == generation && mutableRoomMusicStatus.value.state == RoomMusicPlaybackState.PLAYING) {
+                            mutableRoomMusicStatus.value = RoomMusicPlaybackStatus(generation, RoomMusicPlaybackState.COMPLETED)
+                        }
+                    }
+                },
+                onError = { message ->
+                    scope.launch {
+                        if (mutableRoomMusicStatus.value.generation == generation) {
+                            mutableRoomMusicStatus.value = RoomMusicPlaybackStatus(generation, RoomMusicPlaybackState.ERROR, message)
+                        }
+                    }
+                }
+            )
             val track = activeRoom.localParticipant.createAudioTrack(
                 "room-music",
                 LocalAudioTrackOptions(
@@ -201,6 +231,12 @@ object YugmMediaRoom {
 
     fun pauseRoomMusic(paused: Boolean) {
         roomMusicDecoder?.pause(paused)
+        val currentStatus = mutableRoomMusicStatus.value
+        if (currentStatus.state == RoomMusicPlaybackState.PLAYING || currentStatus.state == RoomMusicPlaybackState.PAUSED) {
+            mutableRoomMusicStatus.value = currentStatus.copy(
+                state = if (paused) RoomMusicPlaybackState.PAUSED else RoomMusicPlaybackState.PLAYING
+            )
+        }
         runCatching {
             roomMusicPreview?.let { preview ->
                 if (paused && preview.isPlaying) preview.pause()
@@ -217,19 +253,28 @@ object YugmMediaRoom {
 
     suspend fun stopRoomMusic() = roomMutex.withLock {
         room?.let { stopRoomMusicLocked(it) } ?: run {
+            roomMusicGeneration++
+            mutableRoomMusicStatus.value = RoomMusicPlaybackStatus(roomMusicGeneration, RoomMusicPlaybackState.IDLE)
             roomMusicDecoder?.stop()
             roomMusicDecoder = null
+            roomMusicPreview?.let { player -> runCatching { player.release() } }
+            roomMusicPreview = null
             roomMusicTrack = null
         }
     }
 
     private fun stopRoomMusicLocked(activeRoom: Room) {
+        roomMusicGeneration++
+        mutableRoomMusicStatus.value = RoomMusicPlaybackStatus(roomMusicGeneration, RoomMusicPlaybackState.IDLE)
         roomMusicDecoder?.stop()
-        roomMusicPreview?.let { runCatching { it.stop() }; it.release() }
+        roomMusicPreview?.let { player ->
+            runCatching { if (player.isPlaying) player.stop() }
+            runCatching { player.release() }
+        }
         roomMusicPreview = null
         roomMusicTrack?.let { track ->
-            track.setAudioBufferCallback(null)
-            activeRoom.localParticipant.unpublishTrack(track)
+            runCatching { track.setAudioBufferCallback(null) }
+            runCatching { activeRoom.localParticipant.unpublishTrack(track) }
         }
         roomMusicDecoder = null
         roomMusicTrack = null

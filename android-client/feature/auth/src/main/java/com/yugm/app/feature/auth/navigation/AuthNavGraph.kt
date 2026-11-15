@@ -14,6 +14,7 @@ import com.yugm.app.core.model.YugmUser
 import com.yugm.app.core.navigation.Screen
 import com.yugm.app.feature.auth.screens.*
 import com.yugm.app.feature.auth.viewmodel.AuthViewModel
+import com.yugm.app.feature.auth.rememberFacebookSignIn
 import kotlinx.coroutines.launch
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
@@ -61,6 +62,17 @@ fun NavGraphBuilder.authNavGraph(
         val authViewModel: AuthViewModel = hiltViewModel()
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
+        val facebookSignIn = rememberFacebookSignIn(
+            onToken = { token, acceptTerms ->
+                authViewModel.setFacebookCredentialBusy(true)
+                authViewModel.facebookAuth(token, acceptTerms)
+            },
+            onError = { message ->
+                authViewModel.setFacebookCredentialBusy(false)
+                authViewModel.reportError(message)
+            },
+            onFinished = { authViewModel.setFacebookCredentialBusy(false) },
+        )
 
         LoginScreen(
             onGoogleSignIn = { acceptTerms ->
@@ -94,6 +106,10 @@ fun NavGraphBuilder.authNavGraph(
                     }
                 }
             },
+            onFacebookSignIn = { acceptTerms ->
+                authViewModel.setFacebookCredentialBusy(true)
+                facebookSignIn(acceptTerms)
+            },
             onPhoneSignIn = {
                 navController.navigate(Screen.PhoneLogin.route)
             },
@@ -105,7 +121,8 @@ fun NavGraphBuilder.authNavGraph(
             loading = authViewModel.isLoading,
             error = authViewModel.error,
             notice = authViewModel.notice,
-            googleLoading = authViewModel.googleCredentialLoading
+            googleLoading = authViewModel.googleCredentialLoading,
+            facebookLoading = authViewModel.facebookCredentialLoading
         )
         LaunchedEffect(authViewModel.session) {
             authViewModel.session?.let(navigateAfterLogin)

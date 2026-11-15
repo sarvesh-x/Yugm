@@ -13,6 +13,7 @@ import com.google.android.gms.tasks.Tasks
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.FacebookAuthProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import com.yugm.app.feature.auth.AppCheckReadiness
@@ -39,8 +40,11 @@ class AuthViewModel @Inject constructor(
         private set
     var googleCredentialLoading by mutableStateOf(false)
         private set
+    var facebookCredentialLoading by mutableStateOf(false)
+        private set
 
     fun setGoogleCredentialBusy(value: Boolean) { googleCredentialLoading = value }
+    fun setFacebookCredentialBusy(value: Boolean) { facebookCredentialLoading = value }
 
     fun clearError() { error = null; notice = null }
 
@@ -91,6 +95,18 @@ class AuthViewModel @Inject constructor(
             val user = Tasks.await(FirebaseAuth.getInstance().signInWithCredential(credential)).user ?: error("Google sign-in returned no user")
             val firebaseToken = Tasks.await(user.getIdToken(false)).token ?: error("Firebase did not return an ID token")
             yugmApi.googleAuth(firebaseToken, acceptTerms, provider = "google")
+        }
+    }
+
+    fun facebookAuth(facebookAccessToken: String, acceptTerms: Boolean) {
+        if (!acceptTerms) { error = "Confirm that you are 18+ and accept the Terms and Privacy Policy."; return }
+        if (facebookAccessToken.isBlank()) { error = "Facebook did not return an access token. Try again."; return }
+        launchAuth {
+            val credential = FacebookAuthProvider.getCredential(facebookAccessToken)
+            val user = Tasks.await(FirebaseAuth.getInstance().signInWithCredential(credential)).user
+                ?: error("Facebook sign-in returned no user")
+            val firebaseToken = Tasks.await(user.getIdToken(false)).token ?: error("Firebase did not return an ID token")
+            yugmApi.facebookAuth(firebaseToken, acceptTerms)
         }
     }
 
@@ -145,6 +161,7 @@ class AuthViewModel @Inject constructor(
     private fun launchAuth(block: suspend () -> Session) {
         if (isLoading) {
             googleCredentialLoading = false
+            facebookCredentialLoading = false
             return
         }
         viewModelScope.launch {
@@ -160,6 +177,7 @@ class AuthViewModel @Inject constructor(
             } finally {
                 isLoading = false
                 googleCredentialLoading = false
+                facebookCredentialLoading = false
             }
         }
     }
@@ -177,6 +195,8 @@ class AuthViewModel @Inject constructor(
                 "ERROR_OPERATION_NOT_ALLOWED" -> return "This sign-in method is not enabled for the app."
                 "ERROR_EMAIL_ALREADY_IN_USE", "ERROR_ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL" ->
                     return "An account already uses this email. Sign in with its original method."
+                "ERROR_INVALID_CREDENTIAL", "ERROR_INVALID_PROVIDER_ID" ->
+                    return "Facebook could not verify that sign-in. Try again or use another method."
                 "ERROR_INVALID_VERIFICATION_CODE" -> return "That verification code is incorrect or expired. Request a new code."
                 "ERROR_INVALID_PHONE_NUMBER" -> return "Enter a valid phone number with its country code."
             }

@@ -987,7 +987,7 @@ private fun ProfileHero(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xCC0E0F18)).border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(16.dp)).padding(vertical = 10.dp, horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            ProfileHeroStat("Friends", profile.closeFriendsCount.toString(), Modifier.weight(1f), null)
+            ProfileHeroStat("Friends", profile.friendsCount.toString(), Modifier.weight(1f), null)
             Box(Modifier.width(1.dp).height(28.dp).background(Color(0x44FFFFFF)))
             ProfileHeroStat("Following", profile.followingCount.toString(), Modifier.weight(1f)) { onOpenSocialList?.invoke("following") }
             Box(Modifier.width(1.dp).height(28.dp).background(Color(0x44FFFFFF)))

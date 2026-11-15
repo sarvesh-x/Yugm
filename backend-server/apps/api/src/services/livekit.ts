@@ -1,4 +1,4 @@
-import { AccessToken, TrackSource } from "livekit-server-sdk";
+import { AccessToken, RoomServiceClient, TrackSource } from "livekit-server-sdk";
 import { env } from "../config/env.js";
 import { HttpError } from "../utils/http.js";
 
@@ -41,3 +41,14 @@ export class LiveKitMediaProvider implements MediaProvider {
 }
 
 export const mediaProvider = new LiveKitMediaProvider();
+
+export async function terminateLiveKitRoom(roomName: string) {
+  if (!roomName || !env.LIVEKIT_API_KEY || !env.LIVEKIT_API_SECRET || !env.LIVEKIT_URL.trim()) return;
+  const host = env.LIVEKIT_URL.trim().replace(/^wss:\/\//, "https://").replace(/^ws:\/\//, "http://");
+  try {
+    await new RoomServiceClient(host, env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET).deleteRoom(roomName);
+  } catch (error) {
+    // LiveKit may already have removed an empty room; room state in Mongo remains authoritative.
+    console.warn("LiveKit room termination failed:", error instanceof Error ? error.message : String(error));
+  }
+}

@@ -281,7 +281,7 @@ private fun PartyEmptyState(title: String, message: String, action: String, onAc
 @Composable
 private fun VideoPartyCard(room: Room, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(
-        modifier.height(224.dp).clip(RoundedCornerShape(20.dp))
+        modifier.height(264.dp).clip(RoundedCornerShape(20.dp))
             .background(Brush.linearGradient(room.gradient.takeIf { it.size >= 2 } ?: listOf(Color(0xFF302054), Color(0xFF9B4CD0))))
             .border(1.dp, PartyBorder, RoundedCornerShape(20.dp))
             .semantics { contentDescription = "Join video party ${room.title} hosted by ${room.host?.name.orEmpty()}" }
@@ -296,7 +296,7 @@ private fun VideoPartyCard(room: Room, modifier: Modifier = Modifier, onClick: (
             }
         }
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC050610)))))
-        Box(Modifier.align(Alignment.TopStart).padding(9.dp).clip(CircleShape).background(Color(0xFFE54866)).padding(horizontal = 9.dp, vertical = 5.dp)) {
+        Box(Modifier.align(Alignment.TopStart).padding(10.dp).clip(CircleShape).background(Color(0xFFE54866)).padding(horizontal = 9.dp, vertical = 5.dp)) {
             Text("● LIVE", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Black)
         }
         Row(
@@ -305,8 +305,11 @@ private fun VideoPartyCard(room: Room, modifier: Modifier = Modifier, onClick: (
         ) {
             Text("◉ ${room.participants}", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
         }
-        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(11.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(room.title.ifBlank { "Video party" }, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            if (room.category.isNotBlank() || room.language.isNotBlank()) {
+                Text(room.category.ifBlank { room.language }, color = Color.White.copy(alpha = 0.86f), fontSize = 10.sp, maxLines = 1)
+            }
+            Text(room.title.ifBlank { "Video party" }, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(room.host?.name?.let { "Hosted by $it" } ?: "Join the party", color = Color.White.copy(alpha = 0.82f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }

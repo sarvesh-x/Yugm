@@ -7,7 +7,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.content.pm.PackageManager
-import android.provider.OpenableColumns
 import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.activity.compose.BackHandler
@@ -376,6 +375,7 @@ fun ActiveVoiceRoomScreen(
     var showExitPrompt by rememberSaveable { mutableStateOf(false) }
     var showToolsSheet by rememberSaveable { mutableStateOf(false) }
     var showMusicSheet by rememberSaveable { mutableStateOf(false) }
+    var showMusicLibrary by rememberSaveable { mutableStateOf(false) }
     var showMusicQueue by rememberSaveable { mutableStateOf(false) }
     var roomMusicQueue by remember(room.id) { mutableStateOf(emptyList<RoomMusicItem>()) }
     var roomMusicIndex by rememberSaveable(room.id) { mutableStateOf(-1) }
@@ -392,6 +392,7 @@ fun ActiveVoiceRoomScreen(
     val seatReactions = remember { mutableStateMapOf<Int, String>() }
     var activeGiftBanner by remember { mutableStateOf<Pair<String, GiftItem>?>(null) }
     val scope = rememberCoroutineScope()
+    val roomMusicPlaybackStatus by YugmMediaRoom.roomMusicStatus.collectAsState()
     val musicPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         val uri = pendingMusicUri
         val index = pendingMusicIndex
@@ -411,21 +412,6 @@ fun ActiveVoiceRoomScreen(
             onToast("Microphone access is needed to stream music to the room")
         }
     }
-    val musicPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-            val title = runCatching {
-                context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-                    if (cursor.moveToFirst()) cursor.getString(0) else null
-                }
-            }.getOrNull()?.substringBeforeLast('.')?.ifBlank { null }
-                ?: uri.lastPathSegment?.substringAfterLast('/')?.substringAfterLast(':')?.ifBlank { null }
-                ?: "Selected track"
-            roomMusicQueue = roomMusicQueue + RoomMusicItem(uri, title)
-            if (roomMusicIndex < 0) roomMusicIndex = roomMusicQueue.lastIndex
-        }
-    }
-
     fun playRoomMusic(index: Int) {
         val item = roomMusicQueue.getOrNull(index) ?: return
         if (micMutedByRoomAdmin) {
@@ -445,6 +431,52 @@ fun ActiveVoiceRoomScreen(
                 roomMusicPlaying = true
                 roomMusicLoaded = true
             } else onToast("Could not share this track. Try another audio file or reconnect to the room.")
+        }
+    }
+
+    fun playNextRoomMusic() {
+        if (roomMusicQueue.isNotEmpty()) playRoomMusic((roomMusicIndex + 1).mod(roomMusicQueue.size))
+    }
+
+    fun playPreviousRoomMusic() {
+        if (roomMusicQueue.isNotEmpty()) playRoomMusic(if (roomMusicIndex <= 0) roomMusicQueue.lastIndex else roomMusicIndex - 1)
+    }
+
+    fun removeRoomMusic(index: Int) {
+        if (index !in roomMusicQueue.indices) return
+        val wasCurrent = index == roomMusicIndex
+        val updatedQueue = roomMusicQueue.toMutableList().apply { removeAt(index) }
+        roomMusicQueue = updatedQueue
+        when {
+            updatedQueue.isEmpty() -> {
+                scope.launch { YugmMediaRoom.stopRoomMusic() }
+                roomMusicIndex = -1
+                roomMusicPlaying = false
+                roomMusicLoaded = false
+            }
+            wasCurrent -> {
+                scope.launch { YugmMediaRoom.stopRoomMusic() }
+                roomMusicPlaying = false
+                roomMusicLoaded = false
+                roomMusicIndex = index.coerceAtMost(updatedQueue.lastIndex)
+            }
+            index < roomMusicIndex -> roomMusicIndex--
+        }
+    }
+
+    LaunchedEffect(roomMusicPlaybackStatus) {
+        when (roomMusicPlaybackStatus.state) {
+            com.yugm.app.core.api.RoomMusicPlaybackState.COMPLETED -> {
+                if (roomMusicIndex in 0 until roomMusicQueue.lastIndex) playRoomMusic(roomMusicIndex + 1)
+                else roomMusicPlaying = false
+            }
+            com.yugm.app.core.api.RoomMusicPlaybackState.ERROR -> {
+                roomMusicPlaying = false
+                roomMusicLoaded = false
+                scope.launch { YugmMediaRoom.stopRoomMusic() }
+                onToast(roomMusicPlaybackStatus.error.ifBlank { "This audio file could not be played. Try another track." })
+            }
+            else -> Unit
         }
     }
 
@@ -988,17 +1020,18 @@ fun ActiveVoiceRoomScreen(
                 shadowElevation = 12.dp
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp)) {
-                    IconButton(onClick = { if (roomMusicQueue.isNotEmpty()) playRoomMusic((roomMusicIndex - 1).coerceAtLeast(0)) }) {
+                    IconButton(onClick = ::playPreviousRoomMusic) {
                         Icon(Icons.Filled.SkipPrevious, "Previous track", tint = Color.White)
                     }
                     IconButton(onClick = {
                         if (roomMusicPlaying) { roomMusicPlaying = false; YugmMediaRoom.pauseRoomMusic(true) }
+                        else if (roomMusicPlaybackStatus.state == com.yugm.app.core.api.RoomMusicPlaybackState.COMPLETED && roomMusicIndex >= 0) playRoomMusic(roomMusicIndex)
                         else if (roomMusicLoaded) { YugmMediaRoom.pauseRoomMusic(false); roomMusicPlaying = true }
                         else if (roomMusicIndex >= 0) playRoomMusic(roomMusicIndex)
                     }) {
                         Icon(if (roomMusicPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (roomMusicPlaying) "Pause room music" else "Play room music", tint = Color.White)
                     }
-                    IconButton(onClick = { if (roomMusicQueue.isNotEmpty()) playRoomMusic((roomMusicIndex + 1).coerceAtMost(roomMusicQueue.lastIndex)) }) {
+                    IconButton(onClick = ::playNextRoomMusic) {
                         Icon(Icons.Filled.SkipNext, "Next track", tint = Color.White)
                     }
                     IconButton(onClick = {
@@ -1047,7 +1080,7 @@ fun ActiveVoiceRoomScreen(
                             Text(if (roomMusicPlaying) "Streaming to everyone in the room" else "Pick a track and let the room listen", color = Color(0xFFAAA6B8), fontSize = 11.sp, maxLines = 1)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { if (roomMusicQueue.isNotEmpty()) playRoomMusic((roomMusicIndex - 1).coerceAtLeast(0)) }) {
+                        IconButton(onClick = ::playPreviousRoomMusic) {
                             Icon(Icons.Filled.SkipPrevious, "Previous track", tint = Color(0xFFD4CDDE), modifier = Modifier.size(24.dp))
                         }
                         IconButton(
@@ -1056,17 +1089,19 @@ fun ActiveVoiceRoomScreen(
                                     roomMusicPlaying = false
                                     YugmMediaRoom.pauseRoomMusic(true)
                                 } else if (roomMusicIndex >= 0) {
-                                    if (roomMusicLoaded) {
+                                    if (roomMusicPlaybackStatus.state == com.yugm.app.core.api.RoomMusicPlaybackState.COMPLETED) {
+                                        playRoomMusic(roomMusicIndex)
+                                    } else if (roomMusicLoaded) {
                                         YugmMediaRoom.pauseRoomMusic(false)
                                         roomMusicPlaying = true
                                     } else playRoomMusic(roomMusicIndex)
-                                } else musicPicker.launch(arrayOf("audio/*"))
+                                } else showMusicLibrary = true
                             },
                             modifier = Modifier.size(44.dp).clip(CircleShape).background(Color(0xFFE83E91))
                         ) {
                             Icon(if (roomMusicPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = if (roomMusicPlaying) "Pause room music" else "Play room music", tint = Color.White)
                         }
-                        IconButton(onClick = { if (roomMusicQueue.isNotEmpty()) playRoomMusic((roomMusicIndex + 1).coerceAtMost(roomMusicQueue.lastIndex)) }) {
+                        IconButton(onClick = ::playNextRoomMusic) {
                             Icon(Icons.Filled.SkipNext, "Next track", tint = Color(0xFFD4CDDE), modifier = Modifier.size(24.dp))
                         }
                         }
@@ -1101,7 +1136,7 @@ fun ActiveVoiceRoomScreen(
                         icon = Icons.Filled.Add,
                         label = "Add music",
                         modifier = Modifier.weight(1f),
-                        onClick = { musicPicker.launch(arrayOf("audio/*")) }
+                        onClick = { showMusicLibrary = true }
                     )
                     OutlinedButtonRoomMusic(
                         icon = Icons.Filled.QueueMusic,
@@ -1113,7 +1148,7 @@ fun ActiveVoiceRoomScreen(
 
                 if (showMusicQueue) {
                     if (roomMusicQueue.isEmpty()) {
-                        Text("Your queue is empty. Add an audio file to get started.", color = Color(0xFFAAA6B8), fontSize = 13.sp, modifier = Modifier.padding(vertical = 4.dp))
+                        Text("Your queue is empty. Add tracks from your device to get started.", color = Color(0xFFAAA6B8), fontSize = 13.sp, modifier = Modifier.padding(vertical = 4.dp))
                     } else {
                         LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                             itemsIndexed(roomMusicQueue) { index, track ->
@@ -1126,6 +1161,9 @@ fun ActiveVoiceRoomScreen(
                                         Icon(if (index == roomMusicIndex && roomMusicPlaying) Icons.Filled.Pause else Icons.Filled.MusicNote, null, tint = Color(0xFFFF8DC3), modifier = Modifier.size(18.dp))
                                         Text(track.title, color = Color.White, fontSize = 13.sp, maxLines = 1, modifier = Modifier.weight(1f))
                                         Text("${index + 1}", color = Color(0xFFAAA6B8), fontSize = 11.sp)
+                                        IconButton(onClick = { removeRoomMusic(index) }, modifier = Modifier.size(32.dp)) {
+                                            Icon(Icons.Filled.Close, contentDescription = "Remove ${track.title} from queue", tint = Color(0xFFAAA6B8), modifier = Modifier.size(16.dp))
+                                        }
                                     }
                                 }
                             }
@@ -1137,6 +1175,26 @@ fun ActiveVoiceRoomScreen(
 
             }
         }
+    }
+
+    if (showMusicLibrary) {
+        RoomMusicLibraryDialog(
+            onDismiss = { showMusicLibrary = false },
+            onAddToQueue = { tracks ->
+                val existingUris = roomMusicQueue.mapTo(mutableSetOf()) { it.uri.toString() }
+                val additions = tracks.filter { existingUris.add(it.uri.toString()) }
+                if (additions.isEmpty()) {
+                    onToast("Those tracks are already in the queue")
+                } else {
+                    val oldSize = roomMusicQueue.size
+                    roomMusicQueue = roomMusicQueue + additions.map { RoomMusicItem(it.uri, it.title) }
+                    if (roomMusicIndex < 0) roomMusicIndex = oldSize
+                    onToast("Added ${additions.size} ${if (additions.size == 1) "track" else "tracks"} to the queue")
+                }
+                showMusicLibrary = false
+                showMusicSheet = true
+            }
+        )
     }
 
     // 3. Reaction Picker Sheet
@@ -1248,6 +1306,13 @@ fun ActiveVoiceRoomScreen(
                     .navigationBarsPadding()
             ) {
                 Text("People in this room (${participants.size})", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                Text(
+                    "The host owns this room. Admins help manage mics and members; only the host can appoint admins or end it. A room closes when its host leaves or everyone is gone.",
+                    color = TextMuted,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                    modifier = Modifier.padding(top = 5.dp, bottom = 10.dp)
+                )
                 Spacer(modifier = Modifier.height(12.dp))
                 LazyColumn(
                     modifier = Modifier
@@ -1270,16 +1335,12 @@ fun ActiveVoiceRoomScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(p.user.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                Text(
-                                    when {
-                                        p.user.id == room.host?.id -> "Host 👑"
-                                        p.isRoomAdmin -> "Admin 🛡️"
-                                        p.role in listOf("SPEAKER", "MODERATOR") -> "Speaker 🎙️"
-                                        else -> "Listener"
-                                    },
-                                    color = TextMuted,
-                                    fontSize = 11.sp
-                                )
+                                when {
+                                    p.user.id == room.host?.id -> RoomRoleBadge("HOST", Color(0xFFFFC857), "♛")
+                                    p.isRoomAdmin -> RoomRoleBadge("ROOM ADMIN", Color(0xFFC8A2FF), "🛡")
+                                    p.role in listOf("SPEAKER", "MODERATOR") -> Text("Speaker · Mic on stage", color = TextMuted, fontSize = 11.sp)
+                                    else -> Text("Listener", color = TextMuted, fontSize = 11.sp)
+                                }
                             }
                             if (p.user.id != currentUserId) {
                                 TextButton(onClick = {
@@ -1376,7 +1437,8 @@ fun ActiveVoiceRoomScreen(
                 Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     ProfileInfoChip("Lv.${target.user.level}", Color(0xFF547BB8))
                     if (target.user.isVip) ProfileInfoChip(target.user.vipTier.ifBlank { "VIP" }, Gold.copy(alpha = .85f))
-                    ProfileInfoChip(if (targetIsHost) "Host" else if (target.isRoomAdmin) "Room Admin" else target.role.lowercase().replaceFirstChar { it.uppercase() }, PrimaryPurple.copy(alpha = .8f))
+                    if (target.isRoomAdmin && !targetIsHost) RoomRoleBadge("ROOM ADMIN", Color(0xFFC8A2FF), "🛡")
+                    else ProfileInfoChip(if (targetIsHost) "Host" else target.role.lowercase().replaceFirstChar { it.uppercase() }, PrimaryPurple.copy(alpha = .8f))
                     target.seatIndex?.let { ProfileInfoChip("Mic ${it + 1}", Pink.copy(alpha = .75f)) }
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -1416,6 +1478,13 @@ fun ActiveVoiceRoomScreen(
                     Column(Modifier.fillMaxWidth().padding(top = 18.dp).clip(RoundedCornerShape(18.dp))
                         .background(Color.White.copy(alpha = .045f)).border(1.dp, Color.White.copy(alpha = .08f), RoundedCornerShape(18.dp)).padding(12.dp)) {
                         Text("ROOM CONTROLS", color = TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(bottom = 8.dp))
+                        Text(
+                            "Admins can manage microphones and members. Only the host can appoint admins or end the room; when the host leaves, the room closes.",
+                            color = TextMuted,
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp,
+                            modifier = Modifier.padding(bottom = 10.dp)
+                        )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (target.role == "AUDIENCE") ProfileActionButton("Invite to mic", listOf(Color(0xFF29243A), Color(0xFF29243A)), Modifier.weight(1f), compact = true) { onInviteSpeaker(target.user.id); selectedParticipant = null }
                             if (target.role in listOf("SPEAKER", "MODERATOR")) ProfileActionButton("Remove from mic", listOf(Color(0xFF422638), Color(0xFF422638)), Modifier.weight(1f), compact = true) { onRemoveSpeaker(target.user.id); selectedParticipant = null }
@@ -1538,6 +1607,21 @@ fun ActiveVoiceRoomScreen(
 private fun ProfileInfoChip(label: String, tint: Color) {
     Box(Modifier.clip(CircleShape).background(tint.copy(alpha = .2f)).border(1.dp, tint.copy(alpha = .35f), CircleShape).padding(horizontal = 11.dp, vertical = 6.dp)) {
         Text(label, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+    }
+}
+
+@Composable
+private fun RoomRoleBadge(label: String, tint: Color, icon: String) {
+    Row(
+        Modifier.padding(top = 3.dp).clip(CircleShape)
+            .background(tint.copy(alpha = 0.14f))
+            .border(1.dp, tint.copy(alpha = 0.42f), CircleShape)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(icon, color = tint, fontSize = 9.sp, fontWeight = FontWeight.Black)
+        Text(label, color = tint, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.35.sp)
     }
 }
 
@@ -1670,6 +1754,17 @@ private fun VoiceSeatItem(
                     isSpeaking = isSpeaking,
                     isMuted = isCurrentMuted
                 )
+
+                if (participant.isRoomAdmin || participant.role == "HOST") {
+                    Box(
+                        Modifier.align(Alignment.TopEnd).size(18.dp).clip(CircleShape)
+                            .background(if (participant.role == "HOST") Color(0xFF8B6418) else Color(0xFF6941A5))
+                            .border(1.dp, if (participant.role == "HOST") Color(0xFFFFD66B) else Color(0xFFD5B8FF), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(if (participant.role == "HOST") "♛" else "A", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                    }
+                }
 
                 // Animated live reaction centered directly over the avatar!
                 if (!reactionEmoji.isNullOrBlank()) {

@@ -118,6 +118,7 @@ fun VideoLivestreamScreen(
     pkOpponentMedia: PkMediaSession?,
     onBack: () -> Unit,
     onMinimize: () -> Unit,
+    requestError: String = "",
     onJoin: (cameraGranted: Boolean, microphoneGranted: Boolean) -> Unit,
     onSendMessage: (String) -> Unit,
     onGift: (GiftItem, String) -> Unit,
@@ -244,6 +245,9 @@ fun VideoLivestreamScreen(
         if (isHost || ownRole in setOf("SPEAKER", "MODERATOR")) micOn = true
     }
     LaunchedEffect(hasPendingRequest) { if (hasPendingRequest) localRequestSent = true }
+    LaunchedEffect(requestError) {
+        if (requestError.isNotBlank()) localRequestSent = false
+    }
     DisposableEffect(room.id) {
         // Room navigation can temporarily remove this screen when it is minimized.
         // Keep the LiveKit and socket sessions alive; explicit Leave/End actions

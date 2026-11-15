@@ -311,6 +311,12 @@ fun NavGraphBuilder.roomNavGraph(
         LaunchedEffect(roomId) {
             roomViewModel.connect(authTokenProvider(), roomId, currentUserIdProvider(), video = true)
         }
+        LaunchedEffect(roomViewModel.actionError) {
+            roomViewModel.actionError?.let { message ->
+                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+                roomViewModel.clearActionError()
+            }
+        }
 
         roomViewModel.roomDetail?.let { detail ->
             val room = detail.room
@@ -333,6 +339,7 @@ fun NavGraphBuilder.roomNavGraph(
                 pkOpponentMedia = roomViewModel.pkOpponentMedia,
                 onBack = { roomViewModel.leaveAndDisconnect { navController.returnFromRoom() } },
                 onMinimize = { onMinimizeRoom(room, com.yugm.app.core.model.RoomType.Video) },
+                requestError = roomViewModel.actionError.orEmpty(),
                 onJoin = roomViewModel::joinVideo,
                 onSendMessage = roomViewModel::sendMessage,
                 onGift = { gift, currency -> roomViewModel.sendGift(gift, room.host?.id ?: "", currency) },

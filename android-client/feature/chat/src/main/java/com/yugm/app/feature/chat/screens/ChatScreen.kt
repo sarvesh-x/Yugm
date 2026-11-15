@@ -45,8 +45,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -184,7 +186,7 @@ fun ChatScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
                 ) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        LightChatAction(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.a11y_back), onBack)
+                        YugmBackButton(onBack, accessibilityLabel = stringResource(R.string.a11y_back))
                         Spacer(Modifier.width(10.dp))
                         Box(
                             Modifier.clip(CircleShape).clickable(enabled = !partner?.id.isNullOrBlank(), role = Role.Button) {
@@ -204,6 +206,10 @@ fun ChatScreen(
                                 fontSize = 12.sp
                             )
                         }
+                        LightChatAction(Icons.Filled.Call, "Start voice call", onAudioCall)
+                        Spacer(Modifier.width(6.dp))
+                        LightChatAction(Icons.Filled.Videocam, "Start video call", onVideoCall)
+                        Spacer(Modifier.width(6.dp))
                         LightChatAction(Icons.Filled.MoreVert, stringResource(R.string.a11y_conversation_options)) { showMore = !showMore }
                     }
                 }
@@ -239,8 +245,13 @@ fun ChatScreen(
                             }
                             if (messages.isEmpty() && !loading && error.isBlank()) {
                                 item {
-                                    Box(Modifier.fillParentMaxHeight(0.62f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                    Column(Modifier.fillParentMaxHeight(0.62f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                                         EmptyConversationState(partner?.name ?: "your match")
+                                        Row(Modifier.padding(top = 18.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            listOf("Hello!", "Hi~", "Good day!").forEach { greeting ->
+                                                Text(greeting, color = TextPrimary, fontSize = 14.sp, modifier = Modifier.clip(CircleShape).background(SurfaceElevated).border(1.dp, BorderColor, CircleShape).clickable(role = Role.Button, onClickLabel = "Send $greeting") { onSend(greeting) }.padding(horizontal = 18.dp, vertical = 11.dp))
+                                            }
+                                        }
                                     }
                                 }
                             }

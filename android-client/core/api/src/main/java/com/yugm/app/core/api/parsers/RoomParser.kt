@@ -34,6 +34,7 @@ fun JSONObject.toHost(): Host = Host(
     vibeLine = optString("vibeLine", ""),
     followers = optInt("followersCount", 0),
     followingCount = optInt("followingCount", 0),
+    friendsCount = optInt("friendsCount", 0),
     closeFriendsCount = optInt("closeFriendsCount", 0),
     walletBalance = optInt("walletBalance", 0),
     diamondBalance = optInt("diamondBalance", 0),

@@ -23,6 +23,19 @@ async function generateUniqueUsername(): Promise<string> {
   return `vibe_${Date.now()}`;
 }
 
+function normalizePhoneNumber(value?: string): string | undefined {
+  if (!value) return undefined;
+  const digits = value.replace(/[^\d]/g, "");
+  return digits ? `+${digits}` : undefined;
+}
+
+function phoneLookupValues(value?: string): string[] {
+  const normalized = normalizePhoneNumber(value);
+  if (!normalized) return [];
+  const digits = normalized.slice(1);
+  return Array.from(new Set([normalized, digits, `+${digits}`]));
+}
+
 async function findOrCreateFirebaseUser(input: {
   firebaseUid: string;
   name?: string;
@@ -33,14 +46,17 @@ async function findOrCreateFirebaseUser(input: {
   emailVerified?: boolean;
 }): Promise<{ user: any; isNewUser: boolean }> {
   const normalizedEmail = input.email?.trim().toLowerCase();
+  const normalizedPhone = normalizePhoneNumber(input.phone);
 
   for (let attempt = 0; attempt < 5; attempt++) {
-    const byUid = await User.findOne({ firebaseUid: input.firebaseUid }).select("-__v");
+    const byUid = await User.findOne({ firebaseUid: input.firebaseUid }).select("+email +phone -__v");
     if (byUid) {
       let changed = false;
       if (input.acceptTerms && !byUid.termsAcceptedAt) { byUid.termsAcceptedAt = new Date(); changed = true; }
       if (input.emailVerified && !byUid.emailVerified) { byUid.emailVerified = true; changed = true; }
       if (byUid.deletionRequestedAt) { byUid.deletionRequestedAt = undefined; changed = true; }
+      if (!byUid.email && normalizedEmail) { byUid.email = normalizedEmail; changed = true; }
+      if (!byUid.phone && normalizedPhone) { byUid.phone = normalizedPhone; changed = true; }
       if (changed) await byUid.save();
       return { user: byUid, isNewUser: false };
     }
@@ -51,22 +67,30 @@ async function findOrCreateFirebaseUser(input: {
     const byEmail = normalizedEmail
       ? await User.findOne({ email: normalizedEmail }).select("+email -__v")
       : null;
-    if (byEmail) {
-      if (!input.emailVerified) {
+    // Firebase phone credentials represent a verified phone number. Link that
+    // identity to legacy phone accounts instead of trying to create a duplicate
+    // record and failing against the unique phone index.
+    const byPhone = !byEmail && normalizedPhone
+      ? await User.findOne({ phone: { $in: phoneLookupValues(input.phone) } }).select("+phone -__v")
+      : null;
+    const existingIdentity = byEmail ?? byPhone;
+    if (existingIdentity) {
+      if (byEmail && !input.emailVerified) {
         throw new HttpError(409, "Verify this email address before linking it to an existing account.", ErrorCode.CONFLICT);
       }
-      if (byEmail.firebaseUid && byEmail.firebaseUid !== input.firebaseUid) {
-        throw new HttpError(409, "This email is already linked to another sign-in. Contact support to recover the account.", ErrorCode.CONFLICT);
+      if (existingIdentity.firebaseUid && existingIdentity.firebaseUid !== input.firebaseUid) {
+        throw new HttpError(409, "This account is already linked to another sign-in method. Contact support to recover the account.", ErrorCode.CONFLICT);
       }
-      if (input.acceptTerms && !byEmail.termsAcceptedAt) byEmail.termsAcceptedAt = new Date();
-      if (input.emailVerified) byEmail.emailVerified = true;
-      if (byEmail.deletionRequestedAt) byEmail.deletionRequestedAt = undefined;
-      byEmail.firebaseUid = input.firebaseUid;
-      if (!byEmail.email && normalizedEmail) byEmail.email = normalizedEmail;
-      if (!byEmail.name && input.name) byEmail.name = input.name;
-      if (!byEmail.avatar && input.avatar) byEmail.avatar = input.avatar;
+      if (input.acceptTerms && !existingIdentity.termsAcceptedAt) existingIdentity.termsAcceptedAt = new Date();
+      if (input.emailVerified) existingIdentity.emailVerified = true;
+      if (existingIdentity.deletionRequestedAt) existingIdentity.deletionRequestedAt = undefined;
+      existingIdentity.firebaseUid = input.firebaseUid;
+      if (!existingIdentity.email && normalizedEmail) existingIdentity.email = normalizedEmail;
+      if (!existingIdentity.phone && normalizedPhone) existingIdentity.phone = normalizedPhone;
+      if (!existingIdentity.name && input.name) existingIdentity.name = input.name;
+      if (!existingIdentity.avatar && input.avatar) existingIdentity.avatar = input.avatar;
       try {
-        return { user: await byEmail.save(), isNewUser: false };
+        return { user: await existingIdentity.save(), isNewUser: false };
       } catch (error: any) {
         // Concurrent sign-in may have linked the same Firebase user already.
         if (error?.code === 11000) continue;
@@ -79,7 +103,7 @@ async function findOrCreateFirebaseUser(input: {
         name: input.name || "Yugm User",
         username: await generateUniqueUsername(),
         email: normalizedEmail || undefined,
-        phone: input.phone || undefined,
+        phone: normalizedPhone || undefined,
         firebaseUid: input.firebaseUid,
         avatar: input.avatar || undefined,
         interests: ["Music", "Chill"],
@@ -136,7 +160,8 @@ function publicUser(user: any) {
   };
 }
 
-const authSchema = z.object({ idToken: z.string().min(20), acceptTerms: z.literal(true), provider: z.enum(["google", "email"]).optional() });
+const authSchema = z.object({ idToken: z.string().min(20), acceptTerms: z.literal(true), provider: z.enum(["google", "facebook", "email"]).optional() });
+const facebookAuthSchema = z.object({ idToken: z.string().min(20), acceptTerms: z.literal(true) });
 const phoneAuthSchema = z.object({ idToken: z.string().min(20), acceptTerms: z.literal(true) });
 
 authRouter.post("/google", authLimiter, authIdentifierLimiter, validateBody(authSchema), asyncHandler(async (req, res) => {
@@ -151,6 +176,22 @@ authRouter.post("/google", authLimiter, authIdentifierLimiter, validateBody(auth
   sendOk(res, { ...tokens, user: publicUser(user), isNewUser: isNewUser || !isProfileCompleted(user) });
 }));
 
+authRouter.post("/facebook", authLimiter, authIdentifierLimiter, validateBody(facebookAuthSchema), asyncHandler(async (req, res) => {
+  const { idToken, acceptTerms } = req.body;
+  if (!idToken) throw new HttpError(400, "idToken is required", ErrorCode.VALIDATION);
+
+  const payload = await verifyIdToken(idToken);
+  const { sub: firebaseUid, name, email, picture, email_verified } = payload;
+  if (!firebaseUid) throw new HttpError(401, "Invalid Firebase identity token", ErrorCode.UNAUTHORIZED);
+  const signInProvider = payload.firebase?.sign_in_provider;
+  if (signInProvider && signInProvider !== "facebook.com") {
+    throw new HttpError(401, "This token was not issued for Facebook sign-in", ErrorCode.UNAUTHORIZED);
+  }
+  const { user, isNewUser } = await findOrCreateFirebaseUser({ firebaseUid, name, email, avatar: picture, acceptTerms, emailVerified: email_verified });
+  const tokens = await issueSession(user, req);
+  sendOk(res, { ...tokens, user: publicUser(user), isNewUser: isNewUser || !isProfileCompleted(user) });
+}));
+
 authRouter.post("/phone", authLimiter, authIdentifierLimiter, validateBody(phoneAuthSchema), asyncHandler(async (req, res) => {
   const { idToken, acceptTerms } = req.body;
   if (!idToken) throw new HttpError(400, "idToken is required", ErrorCode.VALIDATION);
@@ -158,6 +199,11 @@ authRouter.post("/phone", authLimiter, authIdentifierLimiter, validateBody(phone
   const payload = await verifyIdToken(idToken);
   const { sub: firebaseUid, phone_number } = payload;
   if (!firebaseUid) throw new HttpError(401, "Invalid Firebase identity token", ErrorCode.UNAUTHORIZED);
+  if (!phone_number) throw new HttpError(401, "Phone sign-in token is missing a phone number", ErrorCode.UNAUTHORIZED);
+  const signInProvider = payload.firebase?.sign_in_provider;
+  if (signInProvider && signInProvider !== "phone") {
+    throw new HttpError(401, "This token was not issued for phone sign-in", ErrorCode.UNAUTHORIZED);
+  }
   const { user, isNewUser } = await findOrCreateFirebaseUser({ firebaseUid, phone: phone_number, acceptTerms });
   const tokens = await issueSession(user, req);
   sendOk(res, { ...tokens, user: publicUser(user), isNewUser: isNewUser || !isProfileCompleted(user) });

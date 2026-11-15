@@ -46,6 +46,7 @@ import { WithdrawalRequest } from "../models/WithdrawalRequest.js";
 import { verifyIdToken } from "../services/firebase.js";
 import { createNotification } from "../services/notifications.js";
 import { emitRoom } from "../services/socket.js";
+import { endRoom } from "../services/roomLifecycle.js";
 import { creditWallet, debitWallet } from "../services/wallet.js";
 import { auditLog } from "../services/adminAudit.js";
 import { createRazorpayRefund, fetchRazorpayPayment, refundGooglePlayOrder, verifyGooglePlayProduct } from "../services/payments.js";
@@ -907,9 +908,10 @@ adminRouter.get("/rooms/:roomId", requirePermission("rooms.read"), asyncHandler(
   adminOk(res, { room, participants, messages, gifts, reports });
 }));
 adminRouter.post("/rooms/:roomId/end", requirePermission("rooms.end"), validateBody(z.object({ reason: z.string().min(3).max(500).optional() })), asyncHandler(async (req: AdminAuthRequest, res) => {
-  const room = await Room.findByIdAndUpdate(req.params.roomId, { status: "ENDED", endedAt: new Date() }, { new: true }).lean();
+  const room = await Room.findById(req.params.roomId).lean();
   if (!room) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
-  emitRoom(req.params.roomId, "room:ended", { roomId: req.params.roomId, reason: req.body.reason });
+  const ended = await endRoom(req.params.roomId, req.body.reason ?? "ended by platform admin");
+  if (ended) emitRoom(req.params.roomId, "room:ended", { roomId: req.params.roomId, reason: req.body.reason });
   await createModerationAction(req, "ROOM_ENDED", { targetType: "ROOM", targetId: req.params.roomId, targetUserId: room.hostId?.toString(), reason: req.body.reason });
   adminOk(res, { room });
 }));
@@ -1021,7 +1023,11 @@ adminRouter.post("/reports/:reportId/action", requirePermission("reports.resolve
   if (req.body.action === "WARNING" && report.targetUserId) await createNotification(report.targetUserId.toString(), "SYSTEM", "Community warning", req.body.reason, { reportId: req.params.reportId });
   if (req.body.action === "SUSPEND_USER" && report.targetUserId) await User.findByIdAndUpdate(report.targetUserId, { suspendedUntil: new Date(Date.now() + (req.body.durationHours ?? 24) * 60 * 60 * 1000), moderationReason: req.body.reason, $inc: { moderationStrikes: 1 } });
   if (req.body.action === "BAN_USER" && report.targetUserId) await User.findByIdAndUpdate(report.targetUserId, { isBlocked: true, moderationReason: req.body.reason, $inc: { moderationStrikes: 1, tokenVersion: 1 } });
-  if (req.body.action === "END_ROOM" && report.roomId) await Room.findByIdAndUpdate(report.roomId, { status: "ENDED", endedAt: new Date() });
+  if (req.body.action === "END_ROOM" && report.roomId) {
+    const roomId = report.roomId.toString();
+    const ended = await endRoom(roomId, req.body.reason);
+    if (ended) emitRoom(roomId, "room:ended", { roomId, reason: req.body.reason });
+  }
   await Report.findByIdAndUpdate(req.params.reportId, { status: req.body.action === "NO_ACTION" ? "DISMISSED" : "ACTION_TAKEN", reviewedBy: req.admin!.id, reviewedAt: new Date(), moderatorNote: req.body.reason });
   await ModerationQueue.findByIdAndUpdate(queue?.id, { status: req.body.action === "NO_ACTION" ? "DISMISSED" : "ACTION_TAKEN", resolvedAt: new Date(), resolvedBy: req.admin!.id });
   const action = await createModerationAction(req, req.body.action === "NO_ACTION" ? "NO_ACTION" : req.body.action === "WARNING" ? "WARNING_SENT" : req.body.action === "SUSPEND_USER" ? "USER_SUSPENDED" : req.body.action === "BAN_USER" ? "USER_BANNED" : req.body.action === "END_ROOM" ? "ROOM_ENDED" : "ESCALATED", { reportId: req.params.reportId, queueId: queue?.id, targetType: report.roomId ? "ROOM" : "USER", targetId: report.roomId ?? report.targetUserId, targetUserId: report.targetUserId, reason: req.body.reason, durationHours: req.body.durationHours });

@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
@@ -16,6 +18,10 @@
     <uses-feature
         android:name="android.hardware.microphone"
         android:required="false" />
+
+    <queries>
+        <package android:name="com.facebook.katana" />
+    </queries>
 
     <application
         android:name=".YugmApplication"
@@ -28,6 +34,22 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Yugm">
+        <meta-data android:name="com.facebook.sdk.ApplicationId" android:value="@string/facebook_app_id" />
+        <meta-data android:name="com.facebook.sdk.ClientToken" android:value="@string/facebook_client_token" />
+        <meta-data android:name="com.facebook.sdk.AutoInitEnabled" android:value="false" />
+        <activity
+            android:name="com.facebook.FacebookActivity"
+            android:configChanges="keyboard|keyboardHidden|screenLayout|screenSize|orientation"
+            android:exported="false"
+            android:label="@string/app_name" />
+        <activity android:name="com.facebook.CustomTabActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="@string/fb_login_protocol_scheme" />
+            </intent-filter>
+        </activity>
         <activity
             android:name=".MainActivity"
             android:exported="true"

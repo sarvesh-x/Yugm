@@ -31,6 +31,7 @@ import { assertUsersCanInteract } from "../services/safety.js";
 import { autoModerate } from "../middleware/autoModerate.js";
 import { applyAutoModeration } from "../services/autoModeration.js";
 import { isAlwaysOnOfficialVoiceRoom } from "../services/officialRooms.js";
+import { endRoom, recordRoomParticipantExit } from "../services/roomLifecycle.js";
 
 const patchSchema = z.object({
   title: z.string().min(1).max(100).optional(),
@@ -409,31 +410,10 @@ roomsRouter.post("/:id/leave", requireAuth, asyncHandler(async (req: AuthRequest
     sendOk(res, { left: true, hostRemains: true });
     return;
   }
-  const result = await RoomParticipant.findOneAndUpdate({ roomId: req.params.id, userId: req.user!.id, leftAt: null }, { leftAt: new Date() });
-  if (result) {
-    await decrementRoomParticipantCount(req.params.id);
-    await invalidateCache("rooms:*");
-  }
+  const exit = await recordRoomParticipantExit(req.params.id, req.user!.id, "explicit leave");
   emitRoom(req.params.id, socketEvents.roomParticipantUpdate, { userId: req.user!.id, action: "leave" });
   await addActivity(req.params.id, "LEAVE", `${req.user!.name} left`, req.user!.id);
-
-  // If host leaves and there is no admin user in the room then the room gets closed; if admin is available the room can stay active
-  if (room && room.status === "LIVE" && room.hostId.toString() === req.user!.id) {
-    const activeAdmin = await RoomParticipant.findOne({
-      roomId: req.params.id,
-      userId: { $ne: req.user!.id },
-      leftAt: null,
-      isRoomAdmin: true
-    });
-    if (!activeAdmin) {
-      await Room.findByIdAndUpdate(req.params.id, { $set: { status: "ENDED", endedAt: new Date() } });
-      await invalidateCache("rooms:*");
-      emitRoom(req.params.id, socketEvents.roomEnded, { roomId: req.params.id });
-      await addActivity(req.params.id, "MISSION", "Room closed (host left without admin)");
-    } else {
-      await addActivity(req.params.id, "MISSION", "Host left. Room kept open by admin");
-    }
-  }
+  if (exit.ended) emitRoom(req.params.id, socketEvents.roomEnded, { roomId: req.params.id, reason: "room owner or last participant left" });
 
   sendOk(res, { left: true });
 }));
@@ -443,9 +423,8 @@ roomsRouter.post("/:id/end", requireAuth, asyncHandler(async (req: AuthRequest, 
   if (isAlwaysOnOfficialVoiceRoom(room)) {
     throw new HttpError(409, "The Yugm Official voice room is always open", ErrorCode.CONFLICT);
   }
-  await Room.findByIdAndUpdate(req.params.id, { $set: { status: "ENDED", endedAt: new Date() } });
-  await invalidateCache("rooms:*");
-  emitRoom(req.params.id, socketEvents.roomEnded, { roomId: req.params.id });
+  const ended = await endRoom(req.params.id, "host ended room");
+  if (ended) emitRoom(req.params.id, socketEvents.roomEnded, { roomId: req.params.id, reason: "host ended room" });
   await addActivity(req.params.id, "MISSION", "Room ended");
   sendOk(res, { room });
 }));

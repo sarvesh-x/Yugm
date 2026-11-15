@@ -14,6 +14,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material3.Checkbox
 import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,13 +35,16 @@ import com.yugm.app.core.ui.components.AuthShell
 import com.yugm.app.core.ui.components.PrimaryButton
 import com.yugm.app.core.ui.components.YugmTextField
 import com.yugm.app.core.ui.theme.TextMuted
+import com.yugm.app.feature.auth.AppCheckReadiness
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.FirebaseException
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.PhoneAuthOptions
 import com.google.firebase.auth.PhoneAuthProvider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
@@ -56,11 +60,20 @@ fun PhoneAuthScreen(
     var phone by rememberSaveable { mutableStateOf("+91") }
     var otp by rememberSaveable { mutableStateOf("") }
     var verificationId by rememberSaveable { mutableStateOf<String?>(null) }
+    var resendToken by remember { mutableStateOf<PhoneAuthProvider.ForceResendingToken?>(null) }
     var step by rememberSaveable { mutableStateOf("phone") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var acceptTerms by rememberSaveable { mutableStateOf(false) }
     var submittingCredential by remember { mutableStateOf(false) }
+    var resendCooldown by remember { mutableStateOf(0) }
+
+    LaunchedEffect(resendCooldown) {
+        if (resendCooldown > 0) {
+            delay(1_000)
+            resendCooldown -= 1
+        }
+    }
 
     fun verifyCredential(credential: com.google.firebase.auth.PhoneAuthCredential) {
         if (submittingCredential) return
@@ -79,13 +92,14 @@ fun PhoneAuthScreen(
                         result.user?.getIdToken(false)
                             ?: throw IllegalStateException("Firebase did not return a user")
                     ).token ?: throw IllegalStateException("Firebase did not return an ID token")
+                    AppCheckReadiness.requireReady(context)
                     YugmApi.phoneAuth(token, acceptTerms)
                 }
                     .let(onAuthSuccess)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
-                error = failure.message ?: "Phone verification failed"
+                error = phoneAuthError(failure)
             } finally {
                 loading = false
                 submittingCredential = false
@@ -93,7 +107,7 @@ fun PhoneAuthScreen(
         }
     }
 
-    fun sendCode() {
+    fun sendCode(forceResend: Boolean = false) {
         if (activity == null) {
             error = "Phone sign-in is unavailable in this screen."
             return
@@ -112,21 +126,27 @@ fun PhoneAuthScreen(
 
             override fun onVerificationFailed(exception: FirebaseException) {
                 loading = false
-                error = exception.localizedMessage ?: "Could not send the verification code"
+                error = phoneAuthError(exception)
             }
 
             override fun onCodeSent(id: String, token: PhoneAuthProvider.ForceResendingToken) {
                 verificationId = id
+                resendToken = token
+                otp = ""
                 step = "otp"
+                resendCooldown = 30
                 loading = false
             }
         }
-        val options = PhoneAuthOptions.newBuilder(FirebaseAuth.getInstance())
+        val builder = PhoneAuthOptions.newBuilder(FirebaseAuth.getInstance())
             .setPhoneNumber(normalizedPhone)
             .setTimeout(60L, TimeUnit.SECONDS)
             .setActivity(activity)
             .setCallbacks(callbacks)
-            .build()
+        if (forceResend) {
+            resendToken?.let { builder.setForceResendingToken(it) }
+        }
+        val options = builder.build()
         scope.launch {
             try {
                 PhoneAuthProvider.verifyPhoneNumber(options)
@@ -134,13 +154,17 @@ fun PhoneAuthScreen(
                 throw cancelled
             } catch (failure: Exception) {
                 loading = false
-                error = failure.message ?: "Phone sign-in could not be verified."
+                error = phoneAuthError(failure)
             }
         }
     }
 
     fun verifyCode() {
-        val id = verificationId ?: return
+        val id = verificationId
+        if (id == null) {
+            error = "Request a new verification code."
+            return
+        }
         if (otp.length < 6) {
             error = "Enter the 6-digit code."
             return
@@ -176,12 +200,24 @@ fun PhoneAuthScreen(
             }
             Spacer(Modifier.height(12.dp))
             PrimaryButton(text = if (loading) "Verifying..." else "Verify and continue", onClick = { verifyCode() }, enabled = !loading && otp.length == 6 && acceptTerms)
+            TextButton(
+                onClick = { sendCode(forceResend = true) },
+                enabled = !loading && resendCooldown == 0
+            ) {
+                Text(
+                    if (resendCooldown > 0) "Resend code in ${resendCooldown}s" else "Resend code",
+                    color = TextMuted
+                )
+            }
         }
         Spacer(Modifier.height(10.dp))
         TextButton(onClick = {
             if (step == "otp") {
                 step = "phone"
                 verificationId = null
+                resendToken = null
+                resendCooldown = 0
+                otp = ""
                 error = null
             } else {
                 onBack()
@@ -200,4 +236,23 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 
 private fun openPhoneLegal(context: Context, path: String) {
     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://yugm.onrender.com/legal/$path"))) }
+}
+
+private fun phoneAuthError(error: Throwable): String {
+    val firebaseError = generateSequence(error) { it.cause }.filterIsInstance<FirebaseAuthException>().firstOrNull()
+    val firebaseException = generateSequence(error) { it.cause }.filterIsInstance<FirebaseException>().firstOrNull()
+    return when (firebaseError?.errorCode) {
+        "ERROR_INVALID_PHONE_NUMBER" -> "Enter a valid phone number with its country code, for example +919876543210."
+        "ERROR_MISSING_PHONE_NUMBER" -> "Enter the full phone number with its country code."
+        "ERROR_TOO_MANY_REQUESTS", "ERROR_QUOTA_EXCEEDED" -> "Too many SMS attempts. Wait a while, then try again."
+        "ERROR_OPERATION_NOT_ALLOWED" -> "Phone sign-in is disabled for this Firebase project. Enable the Phone provider in Firebase Authentication."
+        "ERROR_APP_NOT_AUTHORIZED", "ERROR_INVALID_APP_CREDENTIAL" -> "Firebase could not verify this app. Check the Android package name and SHA-1/SHA-256 certificates in Firebase, then retry."
+        "ERROR_CAPTCHA_CHECK_FAILED" -> "The security check failed. Check your connection and try again."
+        "ERROR_INVALID_VERIFICATION_CODE" -> "That code is incorrect or expired. Check it or request a new one."
+        "ERROR_SESSION_EXPIRED" -> "That code has expired. Go back and request a new one."
+        "ERROR_NETWORK_REQUEST_FAILED" -> "Check your connection and try again."
+        else -> firebaseException?.localizedMessage?.takeIf(String::isNotBlank)
+            ?: error.localizedMessage?.takeIf(String::isNotBlank)
+            ?: "Phone sign-in failed. Check your connection and try again."
+    }
 }

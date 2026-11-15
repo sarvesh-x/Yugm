@@ -10,6 +10,7 @@ data class Host(
     val vibeLine: String = "",
     val followers: Int = 0,
     val followingCount: Int = 0,
+    val friendsCount: Int = 0,
     val closeFriendsCount: Int = 0,
     val walletBalance: Int = 0,
     val diamondBalance: Int = 0,

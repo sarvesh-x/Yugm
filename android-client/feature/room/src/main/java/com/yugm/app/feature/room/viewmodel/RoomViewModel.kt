@@ -133,6 +133,7 @@ class RoomViewModel @Inject constructor(
     private var currentUserId: String = ""
     private var isVideo: Boolean = false
     private var realtimeRefreshJob: Job? = null
+    private var videoParticipantRefreshJob: Job? = null
 
     fun connect(token: String, roomId: String, userId: String, video: Boolean = false) {
         this.authToken = token
@@ -140,6 +141,19 @@ class RoomViewModel @Inject constructor(
         this.currentUserId = userId
         this.isVideo = video
         refresh()
+        videoParticipantRefreshJob?.cancel()
+        if (video) {
+            videoParticipantRefreshJob = viewModelScope.launch {
+                while (true) {
+                    delay(5_000)
+                    withContext(Dispatchers.IO) { runCatching { yugmApi.roomDetail(authToken, roomId) } }
+                        .onSuccess { detail ->
+                            roomDetail = detail
+                            roomState = UiState.Success(detail)
+                        }
+                }
+            }
+        }
     }
 
     fun disconnect() {
@@ -165,6 +179,8 @@ class RoomViewModel @Inject constructor(
     }
 
     private suspend fun closeMediaConnections() {
+        videoParticipantRefreshJob?.cancel()
+        videoParticipantRefreshJob = null
         withContext(Dispatchers.IO) {
             runCatching { YugmSocket.disconnect() }
             runCatching { YugmMediaRoom.disconnect() }
@@ -391,7 +407,12 @@ class RoomViewModel @Inject constructor(
     fun requestSpeaker() {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                runCatching { yugmApi.requestSpeaker(authToken, roomId) }.onSuccess { scheduleRealtimeRefresh("room:speaker:request") }
+                runCatching { yugmApi.requestSpeaker(authToken, roomId) }
+                    .onSuccess {
+                        actionError = null
+                        scheduleRealtimeRefresh("room:speaker:request")
+                    }
+                    .onFailure { actionError = it.message ?: "Could not send the request to join the call" }
             }
         }
     }
@@ -551,7 +572,12 @@ class RoomViewModel @Inject constructor(
     fun approveSpeaker(userId: String) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                runCatching { yugmApi.approveSpeaker(authToken, roomId, userId) }.onSuccess { scheduleRealtimeRefresh("room:speaker:approve") }
+                runCatching { yugmApi.approveSpeaker(authToken, roomId, userId) }
+                    .onSuccess {
+                        actionError = null
+                        scheduleRealtimeRefresh("room:speaker:approve")
+                    }
+                    .onFailure { actionError = it.message ?: "Could not approve the voice request" }
             }
         }
     }
@@ -559,7 +585,12 @@ class RoomViewModel @Inject constructor(
     fun rejectSpeaker(userId: String) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                runCatching { yugmApi.rejectSpeaker(authToken, roomId, userId) }.onSuccess { scheduleRealtimeRefresh("room:speaker:reject") }
+                runCatching { yugmApi.rejectSpeaker(authToken, roomId, userId) }
+                    .onSuccess {
+                        actionError = null
+                        scheduleRealtimeRefresh("room:speaker:reject")
+                    }
+                    .onFailure { actionError = it.message ?: "Could not decline the voice request" }
             }
         }
     }
