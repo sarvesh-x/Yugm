@@ -277,7 +277,7 @@ fun ChatScreen(
 
     fun seekVoicePlayback(messageId: String, positionMs: Int) {
         if (playingVoiceMessageId != messageId) return
-        val clamped = positionMs.coerceIn(0, max(voiceDurationMs, 0))
+        val clamped = positionMs.coerceIn(0, voiceDurationMs.coerceAtLeast(0))
         runCatching { voicePlayer.seekTo(clamped) }
         voiceProgressMs = clamped
     }
@@ -602,7 +602,7 @@ fun ChatScreen(
 
     LaunchedEffect(highlightedMessageId) {
         if (highlightedMessageId != null) {
-            delay(2200)
+            kotlinx.coroutines.delay(2200)
             highlightedMessageId = null
         }
     }
@@ -1318,7 +1318,7 @@ private fun MessageBubble(
     val context = androidx.compose.ui.platform.LocalContext.current
     val bubble = if (mine) chatBubbleVisual(bubbleId) else null
     val isVoiceActive = playingVoiceMessageId == message.id
-    val effectiveDuration = max(voiceDurationMs, 1)
+    val effectiveDuration = voiceDurationMs.coerceAtLeast(1)
     val safeProgress = if (isVoiceActive) voiceProgressMs.coerceIn(0, effectiveDuration) else 0
     Row(
         Modifier.fillMaxWidth(),
