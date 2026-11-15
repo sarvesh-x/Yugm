@@ -59,6 +59,9 @@ class ChatViewModel @Inject constructor(
     var isMuted by mutableStateOf(false)
         private set
 
+    var isBlockedByMe by mutableStateOf(false)
+        private set
+
     var gifts by mutableStateOf<List<GiftItem>>(emptyList())
         private set
 
@@ -195,6 +198,8 @@ class ChatViewModel @Inject constructor(
                     myProfileRequest.await().onSuccess { myActiveCosmetics = it.activeCosmetics }
                     giftsRequest.await().onSuccess { gifts = it }
                     walletRequest.await().onSuccess { walletBalance = it.balance }
+                    runCatching { yugmApi.getBlockedUsers(authToken) }
+                        .onSuccess { blocked -> isBlockedByMe = blocked.any { it.id == partnerUserId } }
                     val recentTargets = runCatching { yugmApi.getRecentMessages(authToken) }.getOrDefault(emptyList())
                     val followedTargets = runCatching { yugmApi.getFollowing(currentUserId, authToken) }.getOrDefault(emptyList())
                     forwardTargets = (recentTargets.flatMap { listOfNotNull(it.sender, it.receiver) } + followedTargets)
@@ -358,6 +363,24 @@ class ChatViewModel @Inject constructor(
             runCatching { withContext(Dispatchers.IO) { yugmApi.muteConversation(authToken, partnerUserId, muted) } }
                 .onSuccess { isMuted = muted }
                 .onFailure { error = it.message ?: "Mute setting could not be changed" }
+        }
+    }
+
+    fun toggleBlock() {
+        if (authToken.isBlank() || partnerUserId.isBlank()) return
+        val targetBlocked = !isBlockedByMe
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    if (targetBlocked) yugmApi.blockUser(partnerUserId, authToken)
+                    else yugmApi.unblockUser(partnerUserId, authToken)
+                }
+            }.onSuccess {
+                isBlockedByMe = targetBlocked
+                error = if (targetBlocked) "User blocked. You can unblock them anytime." else "User unblocked."
+            }.onFailure {
+                error = it.message ?: "Could not update block setting"
+            }
         }
     }
 

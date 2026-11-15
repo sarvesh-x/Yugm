@@ -134,10 +134,11 @@ fun ChatScreen(
     onVideoCall: () -> Unit = {},
     onAttachmentSelected: (ByteArray, String, String) -> Unit = { _, _, _ -> },
     onReport: () -> Unit = {},
-    onBlock: () -> Unit = {},
+    onToggleBlock: () -> Unit = {},
     onDeleteConversation: () -> Unit = {},
     onDeleteSelected: (List<String>, String) -> Unit = { _, _ -> },
     isMuted: Boolean = false,
+    isBlockedByMe: Boolean = false,
     forwardTargets: List<Host> = emptyList(),
     searchResults: List<DirectMessage>? = null,
     hasMoreHistory: Boolean = false,
@@ -364,18 +365,106 @@ fun ChatScreen(
             dismissButton = { TextButton(onClick = { showDeleteSelected = false }) { Text("Cancel") } }
         )
     }
-    val attachmentPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val mediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             scope.launch {
                 val payload = withContext(Dispatchers.IO) {
-                    val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+                    val mime = context.contentResolver.getType(uri).orEmpty().ifBlank { "application/octet-stream" }
+                    val name = runCatching {
+                        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                            val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                            if (cursor.moveToFirst() && nameIndex >= 0) cursor.getString(nameIndex) else null
+                        }
+                    }.getOrNull() ?: uri.lastPathSegment ?: "message-media"
                     val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    Triple(bytes, mime, uri.lastPathSegment ?: "message-media")
+                    Triple(bytes, mime, name)
                 }
                 val bytes = payload.first
-                if (bytes != null && bytes.size <= 25 * 1024 * 1024) onAttachmentSelected(bytes, payload.second, payload.third)
+                if (bytes != null && bytes.size <= 25 * 1024 * 1024) {
+                    onAttachmentSelected(bytes, payload.second, payload.third)
+                } else if (bytes != null) {
+                    android.widget.Toast.makeText(context, "File is too large (max 25 MB)", android.widget.Toast.LENGTH_SHORT).show()
+                }
             }
         }
+    }
+
+    var isRecordingVoice by remember { mutableStateOf(false) }
+    var voiceRecorder by remember { mutableStateOf<android.media.MediaRecorder?>(null) }
+    var voiceOutputFile by remember { mutableStateOf<java.io.File?>(null) }
+
+    fun stopVoiceRecording(send: Boolean) {
+        val recorder = voiceRecorder
+        val file = voiceOutputFile
+        voiceRecorder = null
+        voiceOutputFile = null
+        isRecordingVoice = false
+        val recorded = runCatching {
+            recorder?.apply {
+                runCatching { stop() }
+                runCatching { reset() }
+                runCatching { release() }
+            }
+            file?.takeIf { it.exists() }
+        }.getOrNull()
+        if (send && recorded != null) {
+            scope.launch {
+                val bytes = withContext(Dispatchers.IO) { runCatching { recorded.readBytes() }.getOrNull() }
+                if (bytes != null && bytes.isNotEmpty()) {
+                    onAttachmentSelected(bytes, "audio/mp4", recorded.name.ifBlank { "voice-note.m4a" })
+                } else {
+                    android.widget.Toast.makeText(context, "Couldn't send voice note", android.widget.Toast.LENGTH_SHORT).show()
+                }
+                withContext(Dispatchers.IO) { runCatching { recorded.delete() } }
+            }
+        } else {
+            scope.launch(Dispatchers.IO) { runCatching { recorded?.delete() } }
+        }
+    }
+
+    fun startVoiceRecording() {
+        if (isBlockedByMe || isSending) return
+        val output = runCatching {
+            java.io.File.createTempFile("voice_note_", ".m4a", context.cacheDir)
+        }.getOrNull()
+        if (output == null) {
+            android.widget.Toast.makeText(context, "Couldn't start recording", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val recorder = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            android.media.MediaRecorder(context)
+        } else {
+            @Suppress("DEPRECATION")
+            android.media.MediaRecorder()
+        }
+        val started = runCatching {
+            recorder.setAudioSource(android.media.MediaRecorder.AudioSource.MIC)
+            recorder.setOutputFormat(android.media.MediaRecorder.OutputFormat.MPEG_4)
+            recorder.setAudioEncoder(android.media.MediaRecorder.AudioEncoder.AAC)
+            recorder.setAudioEncodingBitRate(128000)
+            recorder.setAudioSamplingRate(44100)
+            recorder.setOutputFile(output.absolutePath)
+            recorder.prepare()
+            recorder.start()
+            true
+        }.getOrDefault(false)
+        if (!started) {
+            runCatching { recorder.release() }
+            runCatching { output.delete() }
+            android.widget.Toast.makeText(context, "Couldn't start recording", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        voiceRecorder = recorder
+        voiceOutputFile = output
+        isRecordingVoice = true
+    }
+
+    val audioPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) startVoiceRecording() else android.widget.Toast.makeText(context, "Microphone permission is required for voice notes", android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { stopVoiceRecording(send = false) }
     }
 
     LaunchedEffect(draft) {
@@ -466,6 +555,10 @@ fun ChatScreen(
                                     Text("·", color = TextMuted, fontSize = 12.sp)
                                     Text("🔕 Muted", color = TextMuted, fontSize = 11.sp, maxLines = 1)
                                 }
+                                if (isBlockedByMe) {
+                                    Text("·", color = TextMuted, fontSize = 12.sp)
+                                    Text("Blocked", color = Danger, fontSize = 11.sp, maxLines = 1, fontWeight = FontWeight.SemiBold)
+                                }
                             }
                         }
                         LightChatAction(Icons.Filled.Call, "Start voice call", onAudioCall)
@@ -485,7 +578,7 @@ fun ChatScreen(
                         }.padding(10.dp))
                         Text(if (isMuted) "Unmute" else "Mute", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable { showMore = false; onMute(!isMuted) }.padding(10.dp))
                         Text("Report", color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable(role = Role.Button, onClickLabel = stringResource(R.string.a11y_report_conversation)) { showMore = false; onReport() }.padding(10.dp))
-                        Text("Block", color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable(role = Role.Button, onClickLabel = stringResource(R.string.a11y_block_person)) { showMore = false; onBlock() }.padding(10.dp))
+                        Text(if (isBlockedByMe) "Unblock" else "Block", color = if (isBlockedByMe) TextPrimary else Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable(role = Role.Button, onClickLabel = if (isBlockedByMe) "Unblock user" else stringResource(R.string.a11y_block_person)) { showMore = false; onToggleBlock() }.padding(10.dp))
                         Text("Delete chat for me", color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable { showMore = false; confirmDeleteChat = true }.padding(10.dp))
                     }
                 }
@@ -533,6 +626,21 @@ fun ChatScreen(
                                         .padding(horizontal = 8.dp, vertical = 4.dp)
                                 )
                             }
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                "Close",
+                                color = Pink,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .clickable(role = Role.Button, onClickLabel = "Close search") {
+                                        searchVisible = false
+                                        searchQuery = ""
+                                        onSearch("")
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
                         }
                     }
                 }
@@ -552,6 +660,24 @@ fun ChatScreen(
                             contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 20.dp),
                             verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
+                            if (isBlockedByMe) item {
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(Color(0xFF2A1020))
+                                        .border(1.dp, Danger.copy(alpha = 0.45f), RoundedCornerShape(16.dp))
+                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("🚫", fontSize = 18.sp)
+                                    Column(Modifier.padding(start = 10.dp).weight(1f)) {
+                                        Text("You blocked this user", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                        Text("Unblock to send messages and calls again.", color = TextMuted, fontSize = 11.sp, lineHeight = 15.sp)
+                                    }
+                                    Text("Unblock", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clip(CircleShape).background(Danger.copy(alpha = 0.85f)).clickable(role = Role.Button, onClickLabel = "Unblock user") { onToggleBlock() }.padding(horizontal = 12.dp, vertical = 8.dp))
+                                }
+                            }
                             if (messages.isEmpty()) item { MatchedBanner(partner?.name ?: "your match") }
                             if (showSafety) item { SafetyTip(onDismiss = { showSafety = false }) }
                             relationship?.let { bond -> item { BondStrip(bond) } }
@@ -680,15 +806,23 @@ fun ChatScreen(
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        listOf("😊", "😂", "❤️", "✨", "🔥", "👋", "🎧", "🌙").forEach { emoji ->
-                            val insertEmojiLabel = stringResource(R.string.a11y_insert_emoji, emoji)
+                        listOf("😊", "😂", "❤️", "✨", "🔥", "👋", "🎧", "🌙", "😍", "🥳").forEach { emoji ->
+                            val stickerLabel = "Send sticker $emoji"
                             Box(
                                 Modifier
                                     .sizeIn(minWidth = 42.dp, minHeight = 42.dp)
                                     .clip(CircleShape)
                                     .background(ChatSurface.copy(alpha = 0.55f))
-                                    .semantics { contentDescription = insertEmojiLabel }
-                                    .clickable(role = Role.Button, onClickLabel = insertEmojiLabel) { draft += emoji },
+                                    .border(1.dp, BorderColor.copy(alpha = 0.6f), CircleShape)
+                                    .semantics { contentDescription = stickerLabel }
+                                    .clickable(
+                                        enabled = !isBlockedByMe && !isSending,
+                                        role = Role.Button,
+                                        onClickLabel = stickerLabel
+                                    ) {
+                                        showEmojiBar = false
+                                        onSend(emoji)
+                                    },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(emoji, fontSize = 22.sp)
@@ -758,12 +892,31 @@ fun ChatScreen(
                                 }
                             )
                             Spacer(Modifier.width(6.dp))
-                            Box(Modifier.sizeIn(minWidth = 36.dp, minHeight = 36.dp).semantics { contentDescription = attachPhotoLabel }.clickable(role = Role.Button, onClickLabel = attachPhotoLabel) { attachmentPicker.launch("image/*") }, contentAlignment = Alignment.Center) {
+                            Box(
+                                Modifier
+                                    .sizeIn(minWidth = 36.dp, minHeight = 36.dp)
+                                    .semantics { contentDescription = "Attach media" }
+                                    .clickable(role = Role.Button, onClickLabel = "Attach media") { mediaPicker.launch(arrayOf("image/*", "video/*")) },
+                                contentAlignment = Alignment.Center
+                            ) {
                                 Icon(Icons.Filled.AttachFile, contentDescription = null, tint = TextMuted, modifier = Modifier.size(19.dp))
                             }
                             Spacer(Modifier.width(4.dp))
-                            Box(Modifier.sizeIn(minWidth = 36.dp, minHeight = 36.dp).semantics { contentDescription = "Select photo" }.clickable(role = Role.Button, onClickLabel = "Select photo") { attachmentPicker.launch("image/*") }, contentAlignment = Alignment.Center) {
-                                Text("🖼️", fontSize = 16.sp)
+                            Box(
+                                Modifier
+                                    .sizeIn(minWidth = 36.dp, minHeight = 36.dp)
+                                    .semantics { contentDescription = if (isRecordingVoice) "Stop and send voice note" else "Record voice note" }
+                                    .clickable(role = Role.Button, onClickLabel = if (isRecordingVoice) "Stop and send voice note" else "Record voice note") {
+                                        if (isRecordingVoice) {
+                                            stopVoiceRecording(send = true)
+                                        } else {
+                                            val granted = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                            if (granted) startVoiceRecording() else audioPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(if (isRecordingVoice) "⏹️" else "🎤", fontSize = 16.sp)
                             }
                             Spacer(Modifier.width(4.dp))
                             Box(
@@ -953,47 +1106,46 @@ private fun MessageBubble(
     ) {
         if (!mine) {
             if (showIncomingAvatar) {
-                Box(Modifier.size(30.dp).clip(CircleShape).background(SurfaceElevated)) {
+                Box(Modifier.size(28.dp).clip(CircleShape).background(SurfaceElevated)) {
                     Avatar(
                         initial = partner?.name?.firstOrNull()?.toString() ?: "?",
-                        size = 30,
+                        size = 28,
                         imageUrl = partner?.avatar,
                         cosmetics = partner?.activeCosmetics ?: ActiveCosmetics(),
                         accessibilityLabel = null
                     )
                 }
             } else {
-                Spacer(Modifier.width(30.dp))
+                Spacer(Modifier.width(28.dp))
             }
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(10.dp))
         }
 
         Column(horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
+            val bubbleShape = RoundedCornerShape(
+                topStart = 22.dp,
+                topEnd = 22.dp,
+                bottomStart = if (mine) 22.dp else 8.dp,
+                bottomEnd = if (mine) 8.dp else 22.dp
+            )
             Box(
                 Modifier
-                    .widthIn(max = 280.dp)
-                    .clip(
-                        RoundedCornerShape(
-                            topStart = 20.dp,
-                            topEnd = 20.dp,
-                            bottomStart = if (mine) 20.dp else 6.dp,
-                            bottomEnd = if (mine) 6.dp else 20.dp
-                        )
-                    )
+                    .widthIn(max = 300.dp)
+                    .clip(bubbleShape)
                     .background(
                         bubble?.fill ?: if (mine) {
-                            Brush.horizontalGradient(listOf(Color(0xFF6B2FD9), Color(0xFF9E37F9)))
+                            Brush.horizontalGradient(listOf(Color(0xFF6F35E8), Color(0xFFA24CFF)))
                         } else {
-                            Brush.linearGradient(listOf(Color(0xFF1E1736), Color(0xFF15122B)))
+                            Brush.linearGradient(listOf(Color(0xFF1C1833), Color(0xFF141127)))
                         }
                     )
                     .border(
                         if (selected) 2.dp else 1.dp,
-                        if (selected) Pink else bubble?.border ?: Color(0x33FFFFFF),
-                        RoundedCornerShape(20.dp)
+                        if (selected) Pink else bubble?.border ?: if (mine) Color.White.copy(alpha = 0.14f) else Color(0x2EFFFFFF),
+                        bubbleShape
                     )
                     .combinedClickable(onClick = onReact, onLongClick = onLongPress)
-                    .padding(horizontal = 14.dp, vertical = if (compact) 10.dp else 12.dp)
+                    .padding(horizontal = 16.dp, vertical = if (compact) 10.dp else 13.dp)
             ) {
                 Column {
                     if (message.forwarded) {
@@ -1144,7 +1296,7 @@ private fun MessageBubble(
                             Text(message.message, color = bubble?.text ?: TextPrimary, fontSize = 14.sp, lineHeight = 20.sp)
                         }
                     }
-                    Row(Modifier.align(Alignment.End).padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.align(Alignment.End).padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (message.isEdited) {
                             Text("edited", color = (bubble?.text ?: TextMuted).copy(alpha = 0.7f), fontSize = 10.sp)
                             Text(" · ", color = (bubble?.text ?: TextMuted).copy(alpha = 0.6f), fontSize = 10.sp)
@@ -1177,19 +1329,19 @@ private fun MessageBubble(
         }
 
         if (mine) {
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(10.dp))
             if (showOutgoingAvatar) {
-                Box(Modifier.size(30.dp).clip(CircleShape).background(SurfaceElevated)) {
+                Box(Modifier.size(28.dp).clip(CircleShape).background(SurfaceElevated)) {
                     Avatar(
                         initial = "You".first().toString(),
-                        size = 30,
+                        size = 28,
                         imageUrl = null,
                         cosmetics = myActiveCosmetics,
                         accessibilityLabel = null
                     )
                 }
             } else {
-                Spacer(Modifier.width(30.dp))
+                Spacer(Modifier.width(28.dp))
             }
         }
     }
