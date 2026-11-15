@@ -864,6 +864,15 @@ fun ChatScreen(
                             if (error.isNotBlank()) item {
                                 Text("$error · Retry", color = Pink, fontSize = 12.sp, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.clickable(role = Role.Button, onClickLabel = stringResource(R.string.a11y_retry_messages), onClick = onRetry).padding(vertical = 12.dp))
                             }
+                            if (searchQuery.length >= 2 && visibleMessages.isNotEmpty()) item {
+                                Text(
+                                    "Tap a result to jump to it in the conversation",
+                                    color = TextMuted,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
                             if (searchQuery.length >= 2 && hasMoreSearchResults) item {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                                     Text(
