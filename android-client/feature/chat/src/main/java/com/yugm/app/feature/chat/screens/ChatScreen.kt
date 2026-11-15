@@ -8,6 +8,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import android.content.Intent
+import android.media.MediaPlayer
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -15,6 +16,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,21 +49,29 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
 import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -72,6 +82,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -84,6 +96,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.yugm.app.core.model.ActiveCosmetics
 import com.yugm.app.core.model.DirectMessage
 import com.yugm.app.core.model.GiftItem
@@ -170,6 +184,13 @@ fun ChatScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var showSafety by rememberSaveable { mutableStateOf(true) }
     var typingSent by remember { mutableStateOf(false) }
+    var highlightedMessageId by remember(partner?.id) { mutableStateOf<String?>(null) }
+    var imageViewerUrl by remember(partner?.id) { mutableStateOf<String?>(null) }
+    var playingVoiceMessageId by remember(partner?.id) { mutableStateOf<String?>(null) }
+    var isVoicePlaying by remember(partner?.id) { mutableStateOf(false) }
+    var voiceProgressMs by remember(partner?.id) { mutableIntStateOf(0) }
+    var voiceDurationMs by remember(partner?.id) { mutableIntStateOf(0) }
+    val voicePlayer = remember(partner?.id) { MediaPlayer() }
     val listState = rememberLazyListState()
     val context = LocalContext.current
     val messageFieldLabel = stringResource(R.string.a11y_message_field)
@@ -207,6 +228,98 @@ fun ChatScreen(
             editing != null -> onEdit(editing, value)
             replying != null -> onReply(value, replying)
             else -> onSend(value)
+        }
+    }
+
+    fun toggleVoicePlayback(message: DirectMessage) {
+        val messageId = message.id.ifBlank { return }
+        val resolvedUrl = resolveMediaUrl(message.mediaUrl) ?: message.mediaUrl
+        if (resolvedUrl.isBlank()) {
+            openChatMedia(context, message.mediaUrl)
+            return
+        }
+        if (playingVoiceMessageId == messageId) {
+            if (runCatching { voicePlayer.isPlaying }.getOrDefault(false)) {
+                runCatching { voicePlayer.pause() }
+                isVoicePlaying = false
+            } else {
+                runCatching { voicePlayer.start() }
+                isVoicePlaying = true
+            }
+            return
+        }
+        runCatching {
+            voicePlayer.reset()
+            voicePlayer.setDataSource(resolvedUrl)
+            voicePlayer.setOnPreparedListener { player ->
+                voiceDurationMs = player.duration.coerceAtLeast(0)
+                voiceProgressMs = 0
+                player.start()
+                playingVoiceMessageId = messageId
+                isVoicePlaying = true
+            }
+            voicePlayer.setOnCompletionListener {
+                isVoicePlaying = false
+                voiceProgressMs = runCatching { voicePlayer.duration }.getOrDefault(voiceProgressMs)
+            }
+            voicePlayer.setOnErrorListener { _, _, _ ->
+                isVoicePlaying = false
+                playingVoiceMessageId = null
+                android.widget.Toast.makeText(context, "Couldn't play voice note", android.widget.Toast.LENGTH_SHORT).show()
+                true
+            }
+            voicePlayer.prepareAsync()
+        }.onFailure {
+            android.widget.Toast.makeText(context, "Couldn't play voice note", android.widget.Toast.LENGTH_SHORT).show()
+            openChatMedia(context, resolvedUrl)
+        }
+    }
+
+    fun seekVoicePlayback(messageId: String, positionMs: Int) {
+        if (playingVoiceMessageId != messageId) return
+        val clamped = positionMs.coerceIn(0, max(voiceDurationMs, 0))
+        runCatching { voicePlayer.seekTo(clamped) }
+        voiceProgressMs = clamped
+    }
+
+    fun computeTimelineItemIndex(targetMessageId: String): Int? {
+        if (targetMessageId.isBlank()) return null
+        var index = 0
+        if (isBlockedByMe) index += 1
+        if (messages.isEmpty()) index += 1
+        if (showSafety) index += 1
+        if (relationship != null) index += 1
+        if (searchQuery.isBlank() && messages.isNotEmpty() && hasMoreHistory) index += 1
+        if (error.isNotBlank()) index += 1
+        var previousDate = ""
+        messages.forEach { msg ->
+            val currentDate = messageDateLabel(msg.createdAt)
+            if (currentDate.isNotBlank() && currentDate != previousDate) {
+                index += 1
+            }
+            if (msg.id == targetMessageId) return index
+            index += 1
+            previousDate = currentDate
+        }
+        return null
+    }
+
+    fun jumpToMessage(target: DirectMessage) {
+        val targetId = target.id
+        if (targetId.isBlank()) return
+        scope.launch {
+            searchVisible = false
+            searchQuery = ""
+            onSearch("")
+            kotlinx.coroutines.delay(50)
+            val itemIndex = computeTimelineItemIndex(targetId)
+            if (itemIndex != null) {
+                highlightedMessageId = targetId
+                val bounded = itemIndex.coerceIn(0, (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
+                listState.animateScrollToItem(bounded)
+            } else {
+                android.widget.Toast.makeText(context, "Message not in loaded history yet. Load earlier messages to jump to it.", android.widget.Toast.LENGTH_SHORT).show()
+            }
         }
     }
     LaunchedEffect(searchQuery, searchVisible) {
@@ -465,6 +578,33 @@ fun ChatScreen(
 
     DisposableEffect(Unit) {
         onDispose { stopVoiceRecording(send = false) }
+    }
+
+    DisposableEffect(partner?.id) {
+        onDispose {
+            runCatching { if (voicePlayer.isPlaying) voicePlayer.stop() }
+            runCatching { voicePlayer.reset() }
+            runCatching { voicePlayer.release() }
+        }
+    }
+
+    LaunchedEffect(playingVoiceMessageId, isVoicePlaying) {
+        while (isVoicePlaying && playingVoiceMessageId != null) {
+            voiceProgressMs = runCatching { voicePlayer.currentPosition }.getOrDefault(voiceProgressMs)
+            voiceDurationMs = runCatching { voicePlayer.duration.takeIf { it > 0 } ?: voiceDurationMs }.getOrDefault(voiceDurationMs)
+            if (voiceDurationMs > 0 && voiceProgressMs >= voiceDurationMs - 150) {
+                isVoicePlaying = false
+                voiceProgressMs = voiceDurationMs
+            }
+            kotlinx.coroutines.delay(250)
+        }
+    }
+
+    LaunchedEffect(highlightedMessageId) {
+        if (highlightedMessageId != null) {
+            delay(2200)
+            highlightedMessageId = null
+        }
     }
 
     LaunchedEffect(draft) {
@@ -742,11 +882,13 @@ fun ChatScreen(
                                 val mine = message.senderId == currentUserId
                                 val groupedWithPrev = prev != null && prev.senderId == message.senderId && previousDate == currentDate
                                 val groupedWithNext = next != null && next.senderId == message.senderId && messageDateLabel(next.createdAt) == currentDate
+                                val inSearchResults = searchQuery.length >= 2
                                 Box(Modifier.padding(top = if (groupedWithPrev) 0.dp else 3.dp, bottom = if (groupedWithNext) 0.dp else 3.dp)) {
                                     MessageBubble(
                                         message = message,
                                         mine = mine,
                                         selected = message.id in selectedMessageIds,
+                                        highlighted = highlightedMessageId == message.id,
                                         bubbleId = myActiveCosmetics.chatBubble,
                                         reactionCount = message.reactionCount,
                                         partner = partner,
@@ -755,11 +897,21 @@ fun ChatScreen(
                                         showIncomingAvatar = !mine && !groupedWithNext,
                                         showOutgoingAvatar = mine && !groupedWithNext,
                                         compact = groupedWithPrev,
+                                        playingVoiceMessageId = playingVoiceMessageId,
+                                        isVoicePlaying = isVoicePlaying,
+                                        voiceProgressMs = voiceProgressMs,
+                                        voiceDurationMs = voiceDurationMs,
                                         onReact = {
-                                            if (selectionMode) toggleSelection(message.id)
-                                            else if (message.id.isNotBlank()) onReactMessage(message)
+                                            when {
+                                                selectionMode -> toggleSelection(message.id)
+                                                inSearchResults -> jumpToMessage(message)
+                                                message.id.isNotBlank() -> onReactMessage(message)
+                                            }
                                         },
-                                        onLongPress = { toggleSelection(message.id) }
+                                        onLongPress = { toggleSelection(message.id) },
+                                        onOpenImage = { url -> imageViewerUrl = url },
+                                        onToggleVoice = { toggleVoicePlayback(message) },
+                                        onSeekVoice = { pos -> seekVoicePlayback(message.id, pos) }
                                     )
                                 }
                             }
@@ -956,6 +1108,64 @@ fun ChatScreen(
                     }
                 }
             }
+        imageViewerUrl?.let { url ->
+            Dialog(
+                onDismissRequest = { imageViewerUrl = null },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                var scale by remember(url) { mutableFloatStateOf(1f) }
+                var offsetX by remember(url) { mutableFloatStateOf(0f) }
+                var offsetY by remember(url) { mutableFloatStateOf(0f) }
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.96f))
+                ) {
+                    AsyncImage(
+                        model = url,
+                        contentDescription = "Photo",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInput(url) {
+                                detectTransformGestures { _, pan, zoom, _ ->
+                                    scale = (scale * zoom).coerceIn(1f, 4f)
+                                    if (scale > 1f) {
+                                        offsetX += pan.x
+                                        offsetY += pan.y
+                                    } else {
+                                        offsetX = 0f
+                                        offsetY = 0f
+                                    }
+                                }
+                            }
+                            .graphicsLayer(
+                                scaleX = scale,
+                                scaleY = scale,
+                                translationX = offsetX,
+                                translationY = offsetY
+                            )
+                    )
+                    Row(
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            Modifier
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.14f))
+                                .clickable(role = Role.Button, onClickLabel = "Close image viewer") { imageViewerUrl = null }
+                                .padding(10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Filled.Close, contentDescription = null, tint = Color.White)
+                        }
+                    }
+                }
+            }
+        }
         if (showGiftSheet) {
             ModalBottomSheet(onDismissRequest = { showGiftSheet = false }, containerColor = ChatSurface) {
                 Column(Modifier.fillMaxWidth().padding(20.dp)) {
@@ -1086,6 +1296,7 @@ private fun MessageBubble(
     message: DirectMessage,
     mine: Boolean,
     selected: Boolean,
+    highlighted: Boolean,
     bubbleId: String,
     reactionCount: Int,
     partner: Host?,
@@ -1094,11 +1305,21 @@ private fun MessageBubble(
     showIncomingAvatar: Boolean = !mine,
     showOutgoingAvatar: Boolean = mine,
     compact: Boolean = false,
+    playingVoiceMessageId: String?,
+    isVoicePlaying: Boolean,
+    voiceProgressMs: Int,
+    voiceDurationMs: Int,
     onReact: () -> Unit,
-    onLongPress: () -> Unit
+    onLongPress: () -> Unit,
+    onOpenImage: (String) -> Unit,
+    onToggleVoice: () -> Unit,
+    onSeekVoice: (Int) -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val bubble = if (mine) chatBubbleVisual(bubbleId) else null
+    val isVoiceActive = playingVoiceMessageId == message.id
+    val effectiveDuration = max(voiceDurationMs, 1)
+    val safeProgress = if (isVoiceActive) voiceProgressMs.coerceIn(0, effectiveDuration) else 0
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
@@ -1140,9 +1361,15 @@ private fun MessageBubble(
                         }
                     )
                     .border(
-                        if (selected) 2.dp else 1.dp,
-                        if (selected) Pink else bubble?.border ?: if (mine) Color.White.copy(alpha = 0.14f) else Color(0x2EFFFFFF),
-                        bubbleShape
+                        width = if (selected || highlighted) 2.dp else 1.dp,
+                        color = when {
+                            highlighted -> Color(0xFFFFC107)
+                            selected -> Pink
+                            bubble?.border != null -> bubble.border
+                            mine -> Color.White.copy(alpha = 0.14f)
+                            else -> Color(0x2EFFFFFF)
+                        },
+                        shape = bubbleShape
                     )
                     .combinedClickable(onClick = onReact, onLongClick = onLongPress)
                     .padding(horizontal = 16.dp, vertical = if (compact) 10.dp else 13.dp)
@@ -1162,46 +1389,68 @@ private fun MessageBubble(
                         val isAudio = message.mediaType.equals("AUDIO", true)
                         val isVideo = message.mediaType.equals("VIDEO", true)
                         if (isAudio) {
-                            Row(
+                            Column(
                                 Modifier
-                                    .widthIn(min = 180.dp, max = 240.dp)
+                                    .widthIn(min = 190.dp, max = 250.dp)
                                     .clip(RoundedCornerShape(14.dp))
                                     .background(Color.White.copy(alpha = 0.12f))
-                                    .clickable(role = Role.Button, onClickLabel = "Open voice note") {
-                                        openChatMedia(context, message.mediaUrl)
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    .padding(horizontal = 10.dp, vertical = 10.dp)
                             ) {
-                                Box(
-                                    Modifier.size(34.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.22f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text("▶", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                }
-                                Column(Modifier.weight(1f)) {
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        Modifier
+                                            .size(34.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.White.copy(alpha = 0.22f))
+                                            .clickable(role = Role.Button, onClickLabel = if (isVoiceActive && isVoicePlaying) "Pause voice note" else "Play voice note") {
+                                                onToggleVoice()
+                                            },
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        repeat(16) { i ->
-                                            val h = (8 + (i * 5) % 16).dp
-                                            Box(Modifier.width(3.dp).height(h).clip(CircleShape).background(Color.White.copy(alpha = 0.85f)))
-                                        }
+                                        Icon(
+                                            imageVector = if (isVoiceActive && isVoicePlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(18.dp)
+                                        )
                                     }
-                                    Text("Voice note · Tap to play", color = (bubble?.text ?: TextMuted).copy(alpha = 0.8f), fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text("Voice note", color = (bubble?.text ?: TextPrimary), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            if (isVoiceActive) "${formatPlaybackTime(safeProgress)} / ${formatPlaybackTime(voiceDurationMs)}" else "Tap to play",
+                                            color = (bubble?.text ?: TextMuted).copy(alpha = 0.8f),
+                                            fontSize = 10.sp
+                                        )
+                                    }
+                                }
+                                if (isVoiceActive && voiceDurationMs > 0) {
+                                    Slider(
+                                        value = safeProgress.toFloat(),
+                                        onValueChange = { onSeekVoice(it.toInt()) },
+                                        valueRange = 0f..voiceDurationMs.toFloat(),
+                                        modifier = Modifier.padding(top = 2.dp),
+                                        colors = SliderDefaults.colors(
+                                            thumbColor = Color.White,
+                                            activeTrackColor = Color.White.copy(alpha = 0.9f),
+                                            inactiveTrackColor = Color.White.copy(alpha = 0.25f)
+                                        )
+                                    )
                                 }
                             }
                         } else {
                             Box(
                                 Modifier
                                     .widthIn(max = 240.dp)
-                                    .height(if (isVideo) 160.dp else 170.dp)
+                                    .height(if (isVideo) 160.dp else 180.dp)
                                     .clip(RoundedCornerShape(14.dp))
                                     .background(Color.Black.copy(alpha = 0.18f))
-                                    .clickable(role = Role.Button, onClickLabel = if (isVideo) "Open video" else "Open photo") {
-                                        openChatMedia(context, message.mediaUrl)
+                                    .clickable(
+                                        role = Role.Button,
+                                        onClickLabel = if (isVideo) "Open video" else "Open photo"
+                                    ) {
+                                        val resolved = resolveMediaUrl(message.mediaUrl) ?: message.mediaUrl
+                                        if (isVideo) openChatMedia(context, resolved) else onOpenImage(resolved)
                                     }
                             ) {
                                 AsyncImage(
@@ -1221,7 +1470,7 @@ private fun MessageBubble(
                                             .border(1.dp, Color.White.copy(alpha = 0.35f), CircleShape),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Text("▶", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                        Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Color.White)
                                     }
                                 }
                                 Box(
@@ -1232,7 +1481,12 @@ private fun MessageBubble(
                                         .background(Color.Black.copy(alpha = 0.45f))
                                         .padding(horizontal = 7.dp, vertical = 3.dp)
                                 ) {
-                                    Text(if (isVideo) "VIDEO · Tap to open" else "PHOTO · Tap to open", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        if (isVideo) "VIDEO" else "PHOTO",
+                                        color = Color.White,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
                                 }
                             }
                         }
@@ -1293,7 +1547,7 @@ private fun MessageBubble(
                                 }
                             }
                         } else {
-                            Text(message.message, color = bubble?.text ?: TextPrimary, fontSize = 14.sp, lineHeight = 20.sp)
+                            Text(message.message, color = bubble?.text ?: TextPrimary, fontSize = 14.sp, lineHeight = 21.sp)
                         }
                     }
                     Row(Modifier.align(Alignment.End).padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1369,6 +1623,13 @@ private fun messageTime(value: String) = runCatching {
     val local = instant.atZone(java.time.ZoneId.systemDefault())
     java.time.format.DateTimeFormatter.ofPattern("HH:mm").format(local)
 }.getOrElse { if (value.length >= 16) value.substring(11, 16) else "now" }
+
+private fun formatPlaybackTime(ms: Int): String {
+    val totalSeconds = (ms.coerceAtLeast(0) / 1000)
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return "%d:%02d".format(minutes, seconds)
+}
 
 private fun messageDateLabel(value: String): String = runCatching {
     val instant = java.time.Instant.parse(value)
