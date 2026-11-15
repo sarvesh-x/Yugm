@@ -51,6 +51,7 @@ const adapterClients: NonNullable<ReturnType<typeof createRedisConnection>>[] = 
 let presenceSnapshotTimer: NodeJS.Timeout | undefined;
 let inactiveRoomTimer: NodeJS.Timeout | undefined;
 const roomExitTimers = new Map<string, NodeJS.Timeout>();
+const presenceRefreshTimers = new Map<string, NodeJS.Timeout>();
 let isSweepingRooms = false;
 
 const roomExitKey = (roomId: string, userId: string) => `${roomId}:${userId}`;
@@ -232,7 +233,7 @@ export async function initSocket(server: HttpServer) {
         setUserConnectionPresence(userId, socket.id, true).catch((err) => console.error("Presence refresh error:", err));
       }, 120_000);
       presenceRefresh.unref?.();
-      socket.data.presenceRefresh = presenceRefresh;
+      presenceRefreshTimers.set(socket.id, presenceRefresh);
       socket.broadcast.emit(socketEvents.userOnline, { userId });
     }
 
@@ -301,12 +302,15 @@ export async function initSocket(server: HttpServer) {
     });
 
     socket.on("disconnect", async () => {
+      const presenceRefresh = presenceRefreshTimers.get(socket.id);
+      if (presenceRefresh) {
+        clearInterval(presenceRefresh);
+        presenceRefreshTimers.delete(socket.id);
+      }
       if (userId) {
         const state = onlineUsers.get(userId);
         if (!state || state.count <= 1) onlineUsers.delete(userId);
         else onlineUsers.set(userId, { count: state.count - 1, lastSeen: Date.now() });
-        const presenceRefresh = socket.data.presenceRefresh as NodeJS.Timeout | undefined;
-        if (presenceRefresh) clearInterval(presenceRefresh);
         await setUserConnectionPresence(userId, socket.id, false).catch((err) => console.error("Presence error:", err));
         const stillPresent = onlineUsers.has(userId) || await isUserPresent(userId);
         if (!stillPresent) {
@@ -345,9 +349,19 @@ export async function initSocket(server: HttpServer) {
 function toSocketPayload(payload: unknown) {
   if (payload == null) return payload;
   try {
-    return JSON.parse(JSON.stringify(payload));
+    const seen = new WeakSet<object>();
+    return JSON.parse(
+      JSON.stringify(payload, (_key, value) => {
+        if (typeof value === "bigint") return value.toString();
+        if (value && typeof value === "object") {
+          if (seen.has(value as object)) return undefined;
+          seen.add(value as object);
+        }
+        return value;
+      })
+    );
   } catch {
-    return payload;
+    return undefined;
   }
 }
 
@@ -387,5 +401,7 @@ export async function closeSocketInfrastructure() {
   if (inactiveRoomTimer) clearInterval(inactiveRoomTimer);
   roomExitTimers.forEach(clearTimeout);
   roomExitTimers.clear();
+  presenceRefreshTimers.forEach(clearInterval);
+  presenceRefreshTimers.clear();
   await Promise.all(adapterClients.splice(0).map((client) => client.quit().catch(() => client.disconnect())));
 }
