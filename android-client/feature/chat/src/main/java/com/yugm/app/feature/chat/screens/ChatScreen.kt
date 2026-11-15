@@ -99,6 +99,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.yugm.app.core.model.ActiveCosmetics
+import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.model.DirectMessage
 import com.yugm.app.core.model.GiftItem
 import com.yugm.app.core.model.Host
@@ -137,7 +138,7 @@ fun ChatScreen(
     loading: Boolean = false,
     isSending: Boolean = false,
     isPartnerTyping: Boolean = false,
-    isStartingCall: Boolean = false,
+    startingCallType: RoomType? = null,
     error: String = "",
     onBack: () -> Unit = {},
     onRetry: () -> Unit = {},
@@ -744,18 +745,18 @@ fun ChatScreen(
                         }
                         LightChatAction(
                             Icons.Filled.Call,
-                            if (isStartingCall) "Starting call" else "Start voice call",
+                            if (startingCallType == RoomType.Voice) "Starting voice call" else "Start voice call",
                             onAudioCall,
-                            enabled = !isBlockedByMe && !isStartingCall,
-                            loading = isStartingCall
+                            enabled = !isBlockedByMe && startingCallType == null,
+                            loading = startingCallType == RoomType.Voice
                         )
                         Spacer(Modifier.width(6.dp))
                         LightChatAction(
                             Icons.Filled.Videocam,
-                            if (isStartingCall) "Starting call" else "Start video call",
+                            if (startingCallType == RoomType.Video) "Starting video call" else "Start video call",
                             onVideoCall,
-                            enabled = !isBlockedByMe && !isStartingCall,
-                            loading = isStartingCall
+                            enabled = !isBlockedByMe && startingCallType == null,
+                            loading = startingCallType == RoomType.Video
                         )
                         Spacer(Modifier.width(6.dp))
                         LightChatAction(Icons.Filled.MoreVert, stringResource(R.string.a11y_conversation_options), onClick = { showMore = !showMore })
@@ -974,7 +975,7 @@ fun ChatScreen(
                                         isVoicePreparing = isVoicePreparing,
                                         voiceProgressMs = voiceProgressMs,
                                         voiceDurationMs = voiceDurationMs,
-                                        isStartingCall = isStartingCall,
+                                        startingCallType = startingCallType,
                                         onReact = {
                                             when {
                                                 selectionMode -> toggleSelection(message.id)
@@ -1411,7 +1412,7 @@ private fun MessageBubble(
     isVoicePreparing: Boolean,
     voiceProgressMs: Int,
     voiceDurationMs: Int,
-    isStartingCall: Boolean = false,
+    startingCallType: RoomType? = null,
     onReact: () -> Unit,
     onLongPress: () -> Unit,
     onOpenImage: (String) -> Unit,
@@ -1623,6 +1624,9 @@ private fun MessageBubble(
                         }
                         if (callType != null) {
                             val isVideoCall = callType == "Video call"
+                            val cardCallType = if (isVideoCall) RoomType.Video else RoomType.Voice
+                            val isCardStarting = startingCallType == cardCallType
+                            val anyCallStarting = startingCallType != null
                             Column(
                                 Modifier
                                     .clip(RoundedCornerShape(16.dp))
@@ -1661,7 +1665,7 @@ private fun MessageBubble(
                                     Modifier
                                         .clip(CircleShape)
                                         .then(
-                                            if (isStartingCall) {
+                                            if (anyCallStarting) {
                                                 Modifier.background(Color.White.copy(alpha = 0.12f))
                                             } else {
                                                 Modifier.background(
@@ -1672,7 +1676,7 @@ private fun MessageBubble(
                                             }
                                         )
                                         .clickable(
-                                            enabled = !isStartingCall,
+                                            enabled = !anyCallStarting,
                                             role = Role.Button,
                                             onClickLabel = if (isVideoCall) "Start video call again" else "Start voice call again"
                                         ) {
@@ -1681,16 +1685,17 @@ private fun MessageBubble(
                                         .padding(horizontal = 12.dp, vertical = 8.dp)
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        if (isStartingCall) {
+                                        if (isCardStarting) {
                                             androidx.compose.material3.CircularProgressIndicator(
                                                 modifier = Modifier.size(12.dp),
-                                                color = bubble?.text ?: TextPrimary,
+                                                color = Color.White,
                                                 strokeWidth = 2.dp
                                             )
                                         }
                                         Text(
                                             when {
-                                                isStartingCall -> "Starting…"
+                                                isCardStarting -> "Starting…"
+                                                anyCallStarting -> "Please wait…"
                                                 mine -> "Start again"
                                                 else -> "Call back"
                                             },

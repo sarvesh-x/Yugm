@@ -50,8 +50,11 @@ class ChatViewModel @Inject constructor(
     var isSending by mutableStateOf(false)
         private set
 
-    var isStartingCall by mutableStateOf(false)
+    var startingCallType by mutableStateOf<RoomType?>(null)
         private set
+
+    val isStartingCall: Boolean
+        get() = startingCallType != null
 
     var error by mutableStateOf("")
         private set
@@ -472,7 +475,7 @@ class ChatViewModel @Inject constructor(
         onSuccess: (Room) -> Unit = {},
         onFailure: (String) -> Unit = {}
     ) {
-        if (isStartingCall) return
+        if (startingCallType != null) return
         if (authToken.isBlank() || partnerUserId.isBlank()) {
             onFailure("Open a conversation before starting a call")
             return
@@ -484,7 +487,7 @@ class ChatViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            isStartingCall = true
+            startingCallType = type
             error = ""
             runCatching {
                 withContext(Dispatchers.IO) { yugmApi.startPrivateCall(authToken, partnerUserId, type) }
@@ -495,7 +498,7 @@ class ChatViewModel @Inject constructor(
                 error = message
                 onFailure(message)
             }
-            isStartingCall = false
+            startingCallType = null
         }
     }
 
