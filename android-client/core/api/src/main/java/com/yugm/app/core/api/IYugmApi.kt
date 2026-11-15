@@ -1,6 +1,7 @@
 ﻿package com.yugm.app.core.api
 
 import com.yugm.app.core.model.Achievement
+import com.yugm.app.core.model.PagedDirectMessages
 import com.yugm.app.core.model.ChatMessage
 import com.yugm.app.core.model.ClaimAchievementResult
 import com.yugm.app.core.model.Clan
@@ -331,7 +332,8 @@ suspend fun leaderboard(): RoomLeaderboard
     suspend fun editDirectMessage(token: String, userId: String, messageId: String, message: String): DirectMessage
     suspend fun forwardDirectMessage(token: String, userId: String, messageId: String): DirectMessage
     suspend fun replyDirectMessage(token: String, userId: String, message: String, replyToId: String): DirectMessage
-    suspend fun searchConversation(token: String, userId: String, query: String): List<DirectMessage>
+    suspend fun searchConversation(token: String, userId: String, query: String, before: String? = null, limit: Int? = null): List<DirectMessage>
+    suspend fun searchConversationPage(token: String, userId: String, query: String, before: String? = null, limit: Int? = null): PagedDirectMessages
     suspend fun muteConversation(token: String, userId: String, muted: Boolean)
     suspend fun unreadCounts(token: String): Map<String, Int>
     suspend fun mutedConversations(token: String): Set<String>
@@ -343,7 +345,8 @@ suspend fun leaderboard(): RoomLeaderboard
     suspend fun cancelRandomFriendSearch(token: String)
     suspend fun reactToDirectMessage(token: String, userId: String, messageId: String, type: String = "heart"): DirectMessage
     suspend fun markAllMessagesRead(token: String)
-    suspend fun getRecentMessages(token: String): List<DirectMessage>
+    suspend fun getRecentMessages(token: String, before: String? = null, limit: Int? = null): List<DirectMessage>
+    suspend fun getRecentMessagesPage(token: String, before: String? = null, limit: Int? = null): PagedDirectMessages
 
     suspend fun experienceHome(token: String): ExperienceHome
     suspend fun creatorDashboard(token: String): CreatorDashboard

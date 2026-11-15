@@ -1,6 +1,7 @@
 ﻿package com.yugm.app.core.api
 
 import com.yugm.app.core.model.ClaimAchievementResult
+import com.yugm.app.core.model.PagedDirectMessages
 import com.yugm.app.core.model.GiftLeaderboardResponse
 import com.yugm.app.core.model.GiftPurchaseResult
 import com.yugm.app.core.model.WishlistItem
@@ -336,7 +337,8 @@ object YugmApi : IYugmApi {
     override suspend fun editDirectMessage(token: String, userId: String, messageId: String, message: String) = UserApi.editDirectMessage(token, userId, messageId, message)
     override suspend fun forwardDirectMessage(token: String, userId: String, messageId: String) = UserApi.forwardDirectMessage(token, userId, messageId)
     override suspend fun replyDirectMessage(token: String, userId: String, message: String, replyToId: String) = UserApi.replyDirectMessage(token, userId, message, replyToId)
-    override suspend fun searchConversation(token: String, userId: String, query: String) = UserApi.searchConversation(token, userId, query)
+    override suspend fun searchConversation(token: String, userId: String, query: String, before: String?, limit: Int?) = UserApi.searchConversation(token, userId, query, before, limit)
+    override suspend fun searchConversationPage(token: String, userId: String, query: String, before: String?, limit: Int?) = UserApi.searchConversationPage(token, userId, query, before, limit)
     override suspend fun muteConversation(token: String, userId: String, muted: Boolean) = UserApi.muteConversation(token, userId, muted)
     override suspend fun unreadCounts(token: String) = UserApi.unreadCounts(token)
     override suspend fun mutedConversations(token: String) = UserApi.mutedConversations(token)
@@ -348,7 +350,8 @@ object YugmApi : IYugmApi {
     override suspend fun cancelRandomFriendSearch(token: String) = UserApi.cancelRandomFriendSearch(token)
     override suspend fun reactToDirectMessage(token: String, userId: String, messageId: String, type: String): DirectMessage = UserApi.reactToDirectMessage(token, userId, messageId, type)
     override suspend fun markAllMessagesRead(token: String) = UserApi.markAllMessagesRead(token)
-    override suspend fun getRecentMessages(token: String): List<DirectMessage> = UserApi.getRecentMessages(token)
+    override suspend fun getRecentMessages(token: String, before: String?, limit: Int?): List<DirectMessage> = UserApi.getRecentMessages(token, before, limit)
+    override suspend fun getRecentMessagesPage(token: String, before: String?, limit: Int?) = UserApi.getRecentMessagesPage(token, before, limit)
 
     // Creator / Trust / Payout / Withdrawal / Experience
     override suspend fun experienceHome(token: String): com.yugm.app.core.model.ExperienceHome = CreatorApi.experienceHome(token)

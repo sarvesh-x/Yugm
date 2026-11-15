@@ -342,20 +342,30 @@ export async function initSocket(server: HttpServer) {
   return io;
 }
 
+function toSocketPayload(payload: unknown) {
+  if (payload == null) return payload;
+  try {
+    return JSON.parse(JSON.stringify(payload));
+  } catch {
+    return payload;
+  }
+}
+
 export function emitRoom(roomId: string, event: string, payload: unknown) {
-  io?.to(`room:${roomId}`).emit(event, payload);
+  io?.to(`room:${roomId}`).emit(event, toSocketPayload(payload));
 }
 
 export function emitUser(userId: string, event: string, payload: unknown) {
-  io?.to(`user:${userId}`).emit(event, payload);
+  io?.to(`user:${userId}`).emit(event, toSocketPayload(payload));
 }
 
 export function emitClanMembers(memberIds: Array<string | { toString(): string }>, event: string, payload: unknown, excludeUserId?: string) {
   const excluded = excludeUserId?.toString();
+  const safePayload = toSocketPayload(payload);
   for (const memberId of memberIds) {
     const target = memberId.toString();
     if (!target || target === excluded) continue;
-    emitUser(target, event, payload);
+    emitUser(target, event, safePayload);
   }
 }
 

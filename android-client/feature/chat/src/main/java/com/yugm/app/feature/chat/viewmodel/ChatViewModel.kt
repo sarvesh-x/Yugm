@@ -67,6 +67,11 @@ class ChatViewModel @Inject constructor(
 
     var searchResults by mutableStateOf<List<DirectMessage>?>(null)
         private set
+    var hasMoreSearchResults by mutableStateOf(false)
+        private set
+    var isLoadingMoreSearch by mutableStateOf(false)
+        private set
+    private var searchNextBefore: String? = null
 
     var forwardTargets by mutableStateOf<List<Host>>(emptyList())
         private set
@@ -98,6 +103,8 @@ class ChatViewModel @Inject constructor(
                         if (event.partnerId == partnerUserId) {
                             messages.clear()
                             searchResults = null
+                            hasMoreSearchResults = false
+                            searchNextBefore = null
                         }
                     }
                     is SocketEvent.DirectMessagesRead -> {
@@ -257,17 +264,26 @@ class ChatViewModel @Inject constructor(
 
     fun replyMessage(text: String, replyTo: DirectMessage) {
         val normalized = text.trim()
-        if (normalized.isBlank() || replyTo.id.isBlank()) return
+        if (normalized.isBlank() || replyTo.id.isBlank() || isSending || authToken.isBlank() || partnerUserId.isBlank()) return
         viewModelScope.launch {
+            isSending = true
+            error = ""
             runCatching { withContext(Dispatchers.IO) { yugmApi.replyDirectMessage(authToken, partnerUserId, normalized, replyTo.id) } }
-                .onSuccess(::appendMessage).onFailure { error = it.message ?: "Reply could not be sent" }
+                .onSuccess(::appendMessage)
+                .onFailure { error = it.message ?: "Reply could not be sent" }
+            isSending = false
         }
     }
 
     fun editMessage(message: DirectMessage, text: String) {
+        if (message.id.isBlank() || isSending || authToken.isBlank() || partnerUserId.isBlank()) return
         viewModelScope.launch {
+            isSending = true
+            error = ""
             runCatching { withContext(Dispatchers.IO) { yugmApi.editDirectMessage(authToken, partnerUserId, message.id, text) } }
-                .onSuccess(::replaceOrAppendMessage).onFailure { error = it.message ?: "Message could not be edited" }
+                .onSuccess(::replaceOrAppendMessage)
+                .onFailure { error = it.message ?: "Message could not be edited" }
+            isSending = false
         }
     }
 
@@ -289,11 +305,45 @@ class ChatViewModel @Inject constructor(
 
     fun search(query: String) {
         activeSearchQuery = query
-        if (query.length < 2) { searchResults = null; return }
+        if (query.length < 2) {
+            searchResults = null
+            hasMoreSearchResults = false
+            searchNextBefore = null
+            return
+        }
         viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { yugmApi.searchConversation(authToken, partnerUserId, query) } }
-                .onSuccess { if (activeSearchQuery == query) searchResults = it }
+            runCatching { withContext(Dispatchers.IO) { yugmApi.searchConversationPage(authToken, partnerUserId, query) } }
+                .onSuccess { page ->
+                    if (activeSearchQuery == query) {
+                        searchResults = page.messages
+                        hasMoreSearchResults = page.hasMore
+                        searchNextBefore = page.nextBefore ?: page.messages.firstOrNull()?.createdAt
+                    }
+                }
                 .onFailure { error = it.message ?: "Search failed" }
+        }
+    }
+
+    fun loadMoreSearchResults() {
+        val query = activeSearchQuery
+        val before = searchNextBefore ?: searchResults?.firstOrNull()?.createdAt
+        if (query.length < 2 || before.isNullOrBlank() || isLoadingMoreSearch || !hasMoreSearchResults) return
+        viewModelScope.launch {
+            isLoadingMoreSearch = true
+            runCatching {
+                withContext(Dispatchers.IO) { yugmApi.searchConversationPage(authToken, partnerUserId, query, before = before) }
+            }.onSuccess { page ->
+                if (activeSearchQuery == query) {
+                    val current = searchResults.orEmpty()
+                    val merged = (page.messages + current)
+                        .distinctBy { it.id.ifBlank { "${it.senderId}|${it.receiverId}|${it.createdAt}|${it.message}" } }
+                        .sortedBy { it.createdAt }
+                    searchResults = merged
+                    hasMoreSearchResults = page.hasMore
+                    searchNextBefore = page.nextBefore ?: page.messages.firstOrNull()?.createdAt ?: searchNextBefore
+                }
+            }.onFailure { error = it.message ?: "Couldn't load more results" }
+            isLoadingMoreSearch = false
         }
     }
 
@@ -376,7 +426,28 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    private fun syncPartnerFromMessage(message: DirectMessage) {
+        val candidate = when (partnerUserId) {
+            message.senderId -> message.sender
+            message.receiverId -> message.receiver
+            else -> null
+        } ?: return
+        val current = partner
+        partner = if (current == null) {
+            candidate
+        } else {
+            current.copy(
+                name = if (candidate.name.isNotBlank()) candidate.name else current.name,
+                username = if (candidate.username.isNotBlank()) candidate.username else current.username,
+                avatar = candidate.avatar ?: current.avatar,
+                activeCosmetics = if (candidate.activeCosmetics != com.yugm.app.core.model.ActiveCosmetics()) candidate.activeCosmetics else current.activeCosmetics,
+                isOnline = candidate.isOnline || current.isOnline
+            )
+        }
+    }
+
     private fun mergeMessages(history: List<DirectMessage>) {
+        history.forEach(::syncPartnerFromMessage)
         val merged = (history + messages)
             .distinctBy { it.stableKey() }
             .sortedBy { it.createdAt }
@@ -385,12 +456,14 @@ class ChatViewModel @Inject constructor(
     }
 
     private fun appendMessage(message: DirectMessage) {
+        syncPartnerFromMessage(message)
         if (messages.none { it.stableKey() == message.stableKey() }) {
             messages.add(message)
         }
     }
 
     private fun replaceOrAppendMessage(message: DirectMessage) {
+        syncPartnerFromMessage(message)
         val index = messages.indexOfFirst { it.id == message.id }
         if (index >= 0) messages[index] = message else appendMessage(message)
     }

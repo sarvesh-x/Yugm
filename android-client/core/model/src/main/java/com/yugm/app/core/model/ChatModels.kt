@@ -90,3 +90,9 @@ data class NotificationItem(
 data class NotificationPreferences(
     val values: Map<String, Boolean> = emptyMap()
 )
+
+data class PagedDirectMessages(
+    val messages: List<DirectMessage> = emptyList(),
+    val hasMore: Boolean = false,
+    val nextBefore: String? = null
+)

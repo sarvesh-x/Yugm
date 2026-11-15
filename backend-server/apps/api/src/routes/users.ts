@@ -853,9 +853,10 @@ usersRouter.put("/messages/:userId/:messageId", requireNotMuted, requireNotChatR
   message.editedAt = new Date();
   await message.save();
   await message.populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle");
-  emitUser(req.params.userId, socketEvents.directMessageNew, { message, partnerId: req.user!.id, updated: true });
-  emitUser(req.user!.id, socketEvents.directMessageNew, { message, partnerId: req.params.userId, updated: true });
-  sendOk(res, { message });
+  const safeMessage = message.toObject ? message.toObject() : message;
+  emitUser(req.params.userId, socketEvents.directMessageNew, { message: safeMessage, partnerId: req.user!.id, updated: true });
+  emitUser(req.user!.id, socketEvents.directMessageNew, { message: safeMessage, partnerId: req.params.userId, updated: true });
+  sendOk(res, { message: safeMessage });
 }));
 
 usersRouter.post("/messages/:userId/forward", requireNotMuted, requireNotChatRestricted, chatLimiter, asyncHandler(async (req: AuthRequest, res) => {
@@ -1057,7 +1058,7 @@ usersRouter.post("/messages/:userId/call", requireAuth, requireNotMuted, validat
       { roomId: room[0]._id, userId: receiverId, role: "SPEAKER", micEnabled: true, cameraEnabled: type === "VIDEO" }
     ], { session });
 
-    const message = await DirectMessage.create([{
+    const createdMessage = await DirectMessage.create([{
       senderId: req.user!.id,
       receiverId,
       roomId: room[0]._id,
@@ -1067,6 +1068,10 @@ usersRouter.post("/messages/:userId/call", requireAuth, requireNotMuted, validat
     await session.commitTransaction();
     session.endSession();
 
+    const safeMessage = await DirectMessage.findById(createdMessage[0]._id)
+      .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+      .lean();
+
     await createNotification(
       receiverId,
       "MESSAGE",
@@ -1074,10 +1079,12 @@ usersRouter.post("/messages/:userId/call", requireAuth, requireNotMuted, validat
       `${req.user!.name} started a private ${type.toLowerCase()} call`,
       { roomId: room[0]._id.toString(), partnerId: req.user!.id, callType: type }
     );
-    emitUser(receiverId, socketEvents.directMessageNew, { message: message[0], partnerId: req.user!.id });
-    emitUser(req.user!.id, socketEvents.directMessageNew, { message: message[0], partnerId: receiverId });
+    if (safeMessage) {
+      emitUser(receiverId, socketEvents.directMessageNew, { message: safeMessage, partnerId: req.user!.id });
+      emitUser(req.user!.id, socketEvents.directMessageNew, { message: safeMessage, partnerId: receiverId });
+    }
 
-    sendOk(res, { room: room[0], message: message[0] }, 201);
+    sendOk(res, { room: room[0], message: safeMessage ?? createdMessage[0] }, 201);
   } catch (err) {
     await session.abortTransaction();
     session.endSession();

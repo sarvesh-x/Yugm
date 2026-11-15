@@ -123,10 +123,22 @@ fun ChatListScreen(
             .mapNotNull { (partnerId, messages) ->
                 val last = messages.maxByOrNull { it.createdAt } ?: return@mapNotNull null
                 val messagePartner = if (last.senderId == currentUserId) last.receiver else last.sender
-                val partner = viewModel.matches.find { it.id == partnerId }
-                    ?: messagePartner?.takeIf { it.id == partnerId }
-                    ?: Host(id = partnerId, name = "Yugm User")
-                ConversationItem(partner, last)
+                val matched = viewModel.matches.find { it.id == partnerId }
+                val resolvedPartner = when {
+                    messagePartner != null && messagePartner.id == partnerId -> {
+                        if (matched != null) {
+                            matched.copy(
+                                name = matched.name.ifBlank { messagePartner.name },
+                                username = matched.username.ifBlank { messagePartner.username },
+                                avatar = matched.avatar ?: messagePartner.avatar,
+                                activeCosmetics = if (matched.activeCosmetics != com.yugm.app.core.model.ActiveCosmetics()) matched.activeCosmetics else messagePartner.activeCosmetics
+                            )
+                        } else messagePartner
+                    }
+                    matched != null -> matched
+                    else -> Host(id = partnerId, name = "Yugm User")
+                }
+                ConversationItem(resolvedPartner, last)
             }
             .sortedByDescending { it.lastMessage.createdAt }
     }
@@ -140,14 +152,25 @@ fun ChatListScreen(
 
     Box(Modifier.fillMaxSize().background(ChatBg)) {
         Column(Modifier.fillMaxSize()) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 18.dp, end = 16.dp, top = 14.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 ChatTopTab("Chats", selected = mainTab == 0) { mainTab = 0 }
-                Spacer(Modifier.width(18.dp))
+                Spacer(Modifier.width(16.dp))
                 ChatTopTab("Clan", selected = mainTab == 1) { mainTab = 1 }
-                Spacer(Modifier.width(18.dp))
+                Spacer(Modifier.width(16.dp))
                 ChatTopTab("Contacts", selected = mainTab == 2) { mainTab = 2 }
                 Spacer(Modifier.weight(1f))
-                Box(Modifier.size(42.dp).clip(CircleShape).background(ChatPanel).border(1.dp, ChatLine, CircleShape).clickable(role = Role.Button, onClickLabel = "Find people by username", onClick = { showFindPeople = true }), contentAlignment = Alignment.Center) {
+                Box(
+                    Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(ChatPanel)
+                        .border(1.dp, ChatLine, CircleShape)
+                        .clickable(role = Role.Button, onClickLabel = "Find people by username", onClick = { showFindPeople = true }),
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(Icons.Filled.PersonAdd, contentDescription = null, tint = ChatInk, modifier = Modifier.size(20.dp))
                 }
             }
@@ -170,13 +193,13 @@ fun ChatListScreen(
                         ) {
                             LazyColumn(
                                 modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(top = 8.dp, bottom = 110.dp),
-                                verticalArrangement = Arrangement.spacedBy(18.dp)
+                                contentPadding = PaddingValues(top = 10.dp, bottom = 120.dp),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
                                 item {
                                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                         Row(
-                                            Modifier.fillMaxWidth().padding(horizontal = 22.dp),
+                                            Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text("People online", color = ChatInk, fontSize = 19.sp, fontWeight = FontWeight.Bold)
@@ -201,7 +224,7 @@ fun ChatListScreen(
                                 }
                                 if (viewModel.matches.isNotEmpty()) item {
                                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        Text("People you may know", color = ChatInk, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 22.dp))
+                                        Text("People you may know", color = ChatInk, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp))
                                         LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                                             items(viewModel.matches.take(20), key = { "match-${it.id}" }) { user ->
                                                 Column(Modifier.width(70.dp).clickable(role = Role.Button, onClickLabel = "Chat with ${user.name}") { onOpenChat(user.id) }, horizontalAlignment = Alignment.CenterHorizontally) {
@@ -213,22 +236,39 @@ fun ChatListScreen(
                                     }
                                 }
                                 item {
-                                    Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                                         Text("Chatlist", color = ChatInk, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                                         Spacer(Modifier.weight(1f))
-                                        if (unread > 0) Text("Mark read", color = ChatPurple, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Mark all messages as read") { viewModel.markAllRead(token, currentUserId) }.padding(end = 10.dp))
+                                        if (unread > 0) Text("Mark read", color = ChatPurple, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Mark all messages as read") { viewModel.markAllRead(token, currentUserId) }.padding(horizontal = 8.dp, vertical = 4.dp))
                                         Text("${conversations.size} chats", color = ChatMuted, fontSize = 12.sp)
                                     }
                                 }
                                 if (viewModel.isLoading && conversations.isEmpty()) item {
                                     Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ChatPurple) }
                                 } else if (conversations.isEmpty()) item {
-                                    Column(Modifier.fillMaxWidth().padding(horizontal = 26.dp, vertical = 55.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text("▰", color = Color(0xFFC9B9FF), fontSize = 62.sp)
-                                        Text("No conversations yet", color = ChatInk, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                                        Text("Find interesting people and say hello.", color = ChatMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 5.dp))
-                                        TextButton(onClick = onDiscover) { Text("Find friends", color = ChatPurple, fontWeight = FontWeight.Bold) }
+                                    Column(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 24.dp, vertical = 48.dp)
+                                            .clip(RoundedCornerShape(22.dp))
+                                            .background(ChatCard.copy(alpha = 0.55f))
+                                            .border(1.dp, ChatLine.copy(alpha = 0.7f), RoundedCornerShape(22.dp))
+                                            .padding(horizontal = 22.dp, vertical = 30.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text("▰", color = Color(0xFFC9B9FF), fontSize = 56.sp)
+                                        Text("No conversations yet", color = ChatInk, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
+                                        Text(
+                                            "Find interesting people and say hello.",
+                                            color = ChatMuted,
+                                            fontSize = 13.sp,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.padding(top = 8.dp)
+                                        )
+                                        TextButton(onClick = onDiscover, modifier = Modifier.padding(top = 6.dp)) {
+                                            Text("Find friends", color = ChatPurple, fontWeight = FontWeight.Bold)
+                                        }
                                     }
                                 } else {
                                     itemsIndexed(conversations, key = { _, item -> "conversation-${item.partner.id}" }) { index, item ->
@@ -240,9 +280,35 @@ fun ChatListScreen(
                                             if (index > 0) Box(Modifier.fillMaxWidth().padding(start = 82.dp).height(1.dp).background(ChatLine))
                                             LightChatRow(
                                                 item,
+                                                currentUserId = currentUserId,
                                                 unreadCount = viewModel.unreadCounts[item.partner.id] ?: if (!item.lastMessage.read && item.lastMessage.receiverId == currentUserId) 1 else 0,
                                                 muted = item.partner.id in viewModel.mutedPartnerIds
                                             ) { onOpenChat(item.partner.id) }
+                                        }
+                                    }
+                                    if (viewModel.hasMoreRecent) {
+                                        item {
+                                            Row(
+                                                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+                                                horizontalArrangement = Arrangement.Center
+                                            ) {
+                                                Text(
+                                                    text = if (viewModel.isLoadingMoreRecent) "Loading more chats…" else "Load more chats",
+                                                    color = if (viewModel.isLoadingMoreRecent) ChatMuted else ChatInk,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    modifier = Modifier
+                                                        .clip(CircleShape)
+                                                        .background(ChatPanel)
+                                                        .border(1.dp, ChatLine, CircleShape)
+                                                        .clickable(
+                                                            enabled = !viewModel.isLoadingMoreRecent,
+                                                            role = Role.Button,
+                                                            onClickLabel = "Load more chats"
+                                                        ) { viewModel.loadMoreRecentMessages(token) }
+                                                        .padding(horizontal = 18.dp, vertical = 10.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -259,19 +325,25 @@ fun ChatListScreen(
                             }
                             clan == null -> {
                                 Column(
-                                    Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 42.dp),
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 24.dp, vertical = 48.dp)
+                                        .clip(RoundedCornerShape(22.dp))
+                                        .background(ChatCard.copy(alpha = 0.55f))
+                                        .border(1.dp, ChatLine.copy(alpha = 0.7f), RoundedCornerShape(22.dp))
+                                        .padding(horizontal = 22.dp, vertical = 30.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    Text("▰", color = Color(0xFFC9B9FF), fontSize = 62.sp)
-                                    Text("No clan joined yet", color = ChatInk, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                    Text("▰", color = Color(0xFFC9B9FF), fontSize = 56.sp)
+                                    Text("No clan joined yet", color = ChatInk, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
                                     Text(
                                         "Join a clan to unlock a shared family chat.",
                                         color = ChatMuted,
                                         fontSize = 13.sp,
                                         textAlign = TextAlign.Center,
-                                        modifier = Modifier.padding(top = 6.dp)
+                                        modifier = Modifier.padding(top = 8.dp)
                                     )
-                                    TextButton(onClick = onJoinClan) {
+                                    TextButton(onClick = onJoinClan, modifier = Modifier.padding(top = 6.dp)) {
                                         Text("Join Clan", color = ChatPurple, fontWeight = FontWeight.Bold)
                                     }
                                 }
@@ -296,8 +368,8 @@ fun ChatListScreen(
                         ) {
                             LazyColumn(
                                 modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(top = 8.dp, bottom = 110.dp),
-                                verticalArrangement = Arrangement.spacedBy(18.dp)
+                                contentPadding = PaddingValues(top = 10.dp, bottom = 120.dp),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
                                 item {
                                     Column(Modifier.padding(horizontal = 18.dp).clip(RoundedCornerShape(20.dp)).background(ChatCard).padding(5.dp)) {
@@ -313,10 +385,30 @@ fun ChatListScreen(
                                     }
                                 }
                                 item {
-                                    Text("${contactList.size} ${listOf("friends", "followers", "following")[contactTab]}", color = ChatMuted, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 22.dp))
+                                    Text("${contactList.size} ${listOf("friends", "followers", "following")[contactTab]}", color = ChatMuted, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp))
                                 }
                                 if (viewModel.isLoading && contactList.isEmpty()) item { Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ChatPurple) } }
-                                else if (contactList.isEmpty()) item { Text("No people to show yet.", color = ChatMuted, modifier = Modifier.padding(horizontal = 22.dp, vertical = 35.dp)) }
+                                else if (contactList.isEmpty()) item {
+                                    Column(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 24.dp, vertical = 42.dp)
+                                            .clip(RoundedCornerShape(20.dp))
+                                            .background(ChatCard.copy(alpha = 0.55f))
+                                            .border(1.dp, ChatLine.copy(alpha = 0.7f), RoundedCornerShape(20.dp))
+                                            .padding(horizontal = 20.dp, vertical = 28.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text("No people to show yet", color = ChatInk, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+                                        Text(
+                                            "When you connect with more people, they’ll appear here.",
+                                            color = ChatMuted,
+                                            fontSize = 12.sp,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.padding(top = 6.dp)
+                                        )
+                                    }
+                                }
                                 else {
                                     itemsIndexed(contactList, key = { _, person -> "contact-${person.id}" }) { index, person ->
                                         Column(
@@ -574,8 +666,8 @@ private fun ChatTopTab(label: String, selected: Boolean, onClick: () -> Unit) {
 
 
 @Composable
-private fun LightChatRow(item: ConversationItem, unreadCount: Int, muted: Boolean, onClick: () -> Unit) {
-    val preview = buildConversationPreview(item.lastMessage)
+private fun LightChatRow(item: ConversationItem, currentUserId: String, unreadCount: Int, muted: Boolean, onClick: () -> Unit) {
+    val preview = buildConversationPreview(item.lastMessage, currentUserId)
     val time = conversationTimeLabel(item.lastMessage.createdAt)
     val hasUnread = unreadCount > 0
     Row(
@@ -629,7 +721,8 @@ private fun LightChatRow(item: ConversationItem, unreadCount: Int, muted: Boolea
                     Box(
                         Modifier
                             .clip(CircleShape)
-                            .background(Brush.horizontalGradient(listOf(ChatPurple, Color(0xFF9F5CFF))))
+                            .background(ChatPurple)
+                            .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
                             .padding(horizontal = 7.dp, vertical = 3.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -641,16 +734,19 @@ private fun LightChatRow(item: ConversationItem, unreadCount: Int, muted: Boolea
     }
 }
 
-private fun buildConversationPreview(message: DirectMessage): String {
-    val prefix = if (message.forwarded) "Forwarded · " else ""
-    return prefix + when {
+private fun buildConversationPreview(message: DirectMessage, currentUserId: String): String {
+    val minePrefix = if (currentUserId.isNotBlank() && message.senderId == currentUserId) "You: " else ""
+    val forwardedPrefix = if (message.forwarded) "Forwarded · " else ""
+    val body = when {
         message.mediaType.equals("AUDIO", true) -> "🎤 Voice note"
         message.mediaType.equals("IMAGE", true) -> "📷 Photo"
         message.mediaType.equals("VIDEO", true) -> "🎬 Video"
-        message.message.contains("call started", ignoreCase = true) || message.message.contains("call", ignoreCase = true) && message.message.contains("private", ignoreCase = true) -> "📞 Call"
-        message.message.isNotBlank() -> message.message
+        message.message.contains("video call", ignoreCase = true) -> "📹 Video call"
+        message.message.contains("voice call", ignoreCase = true) || message.message.contains("audio call", ignoreCase = true) || message.message.contains("call", ignoreCase = true) -> "📞 Call"
+        message.message.isNotBlank() -> if (message.isEdited) "${message.message} (edited)" else message.message
         else -> "New message"
     }
+    return minePrefix + forwardedPrefix + body
 }
 
 private fun conversationTimeLabel(createdAt: String): String {

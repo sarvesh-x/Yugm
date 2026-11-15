@@ -48,8 +48,15 @@ class ChatListViewModel @Inject constructor(
         private set
     var isLoading by mutableStateOf(false)
         private set
+    var isLoadingMoreRecent by mutableStateOf(false)
+        private set
+    var hasMoreRecent by mutableStateOf(false)
+        private set
+    private var recentNextBefore: String? = null
     var error by mutableStateOf<String?>(null)
         private set
+
+    private var currentUserId: String = ""
 
     init {
         viewModelScope.launch {
@@ -66,7 +73,19 @@ class ChatListViewModel @Inject constructor(
                     }
                     is SocketEvent.DirectMessageReceived -> {
                         val msg = event.message
+                        val isNew = msg.id.isBlank() || recentMessages.none { it.id == msg.id }
                         recentMessages = (listOf(msg) + recentMessages.filterNot { it.id == msg.id }).sortedByDescending { it.createdAt }
+                        val me = currentUserId
+                        if (isNew && me.isNotBlank()) {
+                            val partnerId = when (me) {
+                                msg.senderId -> msg.receiverId
+                                msg.receiverId -> msg.senderId
+                                else -> ""
+                            }
+                            if (partnerId.isNotBlank() && msg.receiverId == me && !msg.read) {
+                                unreadCounts = unreadCounts + (partnerId to ((unreadCounts[partnerId] ?: 0) + 1))
+                            }
+                        }
                     }
                     is SocketEvent.DirectMessagesRead -> {
                         unreadCounts = unreadCounts - event.partnerId
@@ -84,6 +103,11 @@ class ChatListViewModel @Inject constructor(
         followers = followers.map { if (it.id == userId) it.copy(isOnline = online) else it }
         following = following.map { if (it.id == userId) it.copy(isOnline = online) else it }
         recommendedChatUsers = recommendedChatUsers.map { if (it.id == userId) it.copy(isOnline = online) else it }
+        recentMessages = recentMessages.map { msg ->
+            val sender = msg.sender?.let { if (it.id == userId) it.copy(isOnline = online) else it }
+            val receiver = msg.receiver?.let { if (it.id == userId) it.copy(isOnline = online) else it }
+            if (sender === msg.sender && receiver === msg.receiver) msg else msg.copy(sender = sender, receiver = receiver)
+        }
     }
 
     fun clearError() {
@@ -91,6 +115,7 @@ class ChatListViewModel @Inject constructor(
     }
 
     fun load(token: String, currentUserId: String = "") {
+        if (currentUserId.isNotBlank()) this.currentUserId = currentUserId
         if (isLoading) return
         viewModelScope.launch {
             isLoading = true
@@ -98,7 +123,7 @@ class ChatListViewModel @Inject constructor(
             runCatching {
                 coroutineScope {
                     val matchesRequest = async(Dispatchers.IO) { yugmApi.datingMatches(token) }
-                    val messagesRequest = async(Dispatchers.IO) { yugmApi.getRecentMessages(token) }
+                    val messagesRequest = async(Dispatchers.IO) { yugmApi.getRecentMessagesPage(token) }
                     val followersRequest = async(Dispatchers.IO) {
                         if (currentUserId.isBlank()) emptyList() else runCatching {
                             yugmApi.getFollowers(currentUserId, token)
@@ -114,7 +139,10 @@ class ChatListViewModel @Inject constructor(
                     }
 
                     matches = matchesRequest.await()
-                    recentMessages = messagesRequest.await()
+                    val recentPage = messagesRequest.await()
+                    recentMessages = recentPage.messages
+                    hasMoreRecent = recentPage.hasMore
+                    recentNextBefore = recentPage.nextBefore ?: recentPage.messages.lastOrNull()?.createdAt
                     unreadCounts = async(Dispatchers.IO) { runCatching { yugmApi.unreadCounts(token) }.getOrDefault(emptyMap()) }.await()
                     mutedPartnerIds = async(Dispatchers.IO) { runCatching { yugmApi.mutedConversations(token) }.getOrDefault(emptySet()) }.await()
                     followers = followersRequest.await()
@@ -143,6 +171,27 @@ class ChatListViewModel @Inject constructor(
                 }
             }
             load(token, currentUserId)
+        }
+    }
+
+    fun loadMoreRecentMessages(token: String) {
+        val before = recentNextBefore ?: recentMessages.lastOrNull()?.createdAt
+        if (isLoading || isLoadingMoreRecent || !hasMoreRecent || before.isNullOrBlank()) return
+        viewModelScope.launch {
+            isLoadingMoreRecent = true
+            runCatching {
+                withContext(Dispatchers.IO) { yugmApi.getRecentMessagesPage(token, before = before, limit = 100) }
+            }.onSuccess { page ->
+                val merged = (recentMessages + page.messages)
+                    .distinctBy { it.id.ifBlank { "${it.senderId}|${it.receiverId}|${it.createdAt}|${it.message}" } }
+                    .sortedByDescending { it.createdAt }
+                recentMessages = merged
+                hasMoreRecent = page.hasMore
+                recentNextBefore = page.nextBefore ?: page.messages.lastOrNull()?.createdAt ?: recentNextBefore
+            }.onFailure {
+                if (error == null) error = it.message ?: "Couldn't load more conversations"
+            }
+            isLoadingMoreRecent = false
         }
     }
 

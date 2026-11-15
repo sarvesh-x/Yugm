@@ -8,6 +8,7 @@ import com.yugm.app.core.model.Host
 import com.yugm.app.core.model.LevelStatus
 import com.yugm.app.core.model.NotificationItem
 import com.yugm.app.core.model.NotificationPreferences
+import com.yugm.app.core.model.PagedDirectMessages
 import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.model.YugmUser
@@ -251,9 +252,32 @@ object UserApi {
         return data.getJSONObject("message").toDirectMessage()
     }
 
-    suspend fun searchConversation(token: String, userId: String, query: String): List<DirectMessage> {
-        val data = YugmHttpClient.get("/users/messages/$userId/search?q=${java.net.URLEncoder.encode(query, "UTF-8")}", token).getJSONObject("data")
-        return data.optJSONArray("messages")?.toDirectMessages() ?: emptyList()
+    suspend fun searchConversation(
+        token: String,
+        userId: String,
+        query: String,
+        before: String? = null,
+        limit: Int? = null
+    ): List<DirectMessage> = searchConversationPage(token, userId, query, before, limit).messages
+
+    suspend fun searchConversationPage(
+        token: String,
+        userId: String,
+        query: String,
+        before: String? = null,
+        limit: Int? = null
+    ): PagedDirectMessages {
+        val params = buildList {
+            add("q=${java.net.URLEncoder.encode(query, "UTF-8")}")
+            if (!before.isNullOrBlank()) add("before=${java.net.URLEncoder.encode(before, "UTF-8")}")
+            if (limit != null) add("limit=$limit")
+        }.joinToString("&")
+        val data = YugmHttpClient.get("/users/messages/$userId/search?$params", token).getJSONObject("data")
+        return PagedDirectMessages(
+            messages = data.optJSONArray("messages")?.toDirectMessages() ?: emptyList(),
+            hasMore = data.optBoolean("hasMore", false),
+            nextBefore = data.optString("nextBefore").takeIf { it.isNotBlank() && it != "null" }
+        )
     }
 
     suspend fun muteConversation(token: String, userId: String, muted: Boolean) {
@@ -330,9 +354,21 @@ object UserApi {
         YugmHttpClient.post("/users/messages/read-all", token, JSONObject())
     }
 
-    suspend fun getRecentMessages(token: String): List<DirectMessage> {
-        val data = YugmHttpClient.get("/users/messages", token).getJSONObject("data")
-        return data.getJSONArray("messages").toDirectMessages()
+    suspend fun getRecentMessages(token: String, before: String? = null, limit: Int? = null): List<DirectMessage> =
+        getRecentMessagesPage(token, before, limit).messages
+
+    suspend fun getRecentMessagesPage(token: String, before: String? = null, limit: Int? = null): PagedDirectMessages {
+        val query = buildList {
+            if (!before.isNullOrBlank()) add("before=${java.net.URLEncoder.encode(before, "UTF-8")}")
+            if (limit != null) add("limit=$limit")
+        }.joinToString("&")
+        val path = if (query.isBlank()) "/users/messages" else "/users/messages?$query"
+        val data = YugmHttpClient.get(path, token).getJSONObject("data")
+        return PagedDirectMessages(
+            messages = data.optJSONArray("messages")?.toDirectMessages() ?: emptyList(),
+            hasMore = data.optBoolean("hasMore", false),
+            nextBefore = data.optString("nextBefore").takeIf { it.isNotBlank() && it != "null" }
+        )
     }
 
     suspend fun addCloseFriend(token: String, userId: String) {

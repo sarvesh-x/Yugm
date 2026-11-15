@@ -627,13 +627,17 @@ walletRouter.post("/direct-send-gift", requireWalletNotFrozen, validateBody(send
     const relationship = await runWalletSideEffect("direct gift relationship XP", () => grantRelationshipXp(req.user!.id, receiverId, "GIFT_SENT", { giftId: gift._id.toString(), direct: true }));
 
     // Create a direct message indicating the gift was sent
-    const message = await runWalletSideEffect("direct gift message", () => DirectMessage.create({
+    const createdMessage = await runWalletSideEffect("direct gift message", () => DirectMessage.create({
       senderId: req.user!.id,
       receiverId,
       message: `🎁 Sent you a ${gift.name}!`,
       mediaUrl: /^https?:\/\//i.test(gift.icon) || gift.icon.startsWith("/") ? gift.icon : "",
       mediaType: /^https?:\/\//i.test(gift.icon) || gift.icon.startsWith("/") ? "IMAGE" : ""
     }));
+
+    const message = createdMessage ? await DirectMessage.findById(createdMessage._id)
+      .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+      .lean() : null;
 
     if (message) {
       emitUser(receiverId, socketEvents.directMessageNew, { message, partnerId: req.user!.id });
