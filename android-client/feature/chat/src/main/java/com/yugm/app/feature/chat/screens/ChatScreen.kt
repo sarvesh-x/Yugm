@@ -1615,13 +1615,14 @@ private fun MessageBubble(
                     }
                     if (message.message.isNotBlank()) {
                         val lower = message.message.lowercase()
+                        val isCallInvite = lower.contains("call started") || (lower.contains("private") && lower.contains("call"))
                         val callType = when {
-                            lower.contains("video") || message.message.contains("📹") -> "Video call"
-                            lower.contains("voice") || lower.contains("audio") || message.message.contains("📞") -> "Voice call"
+                            isCallInvite && lower.contains("video") -> "Video call"
+                            isCallInvite && (lower.contains("voice") || lower.contains("audio")) -> "Voice call"
                             else -> null
                         }
                         if (callType != null) {
-                            val isVideo = callType == "Video call"
+                            val isVideoCall = callType == "Video call"
                             Column(
                                 Modifier
                                     .clip(RoundedCornerShape(16.dp))
@@ -1641,7 +1642,7 @@ private fun MessageBubble(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            if (isVideo) Icons.Filled.Videocam else Icons.Filled.Call,
+                                            if (isVideoCall) Icons.Filled.Videocam else Icons.Filled.Call,
                                             contentDescription = null,
                                             tint = Color.White,
                                             modifier = Modifier.size(18.dp)
@@ -1673,9 +1674,9 @@ private fun MessageBubble(
                                         .clickable(
                                             enabled = !isStartingCall,
                                             role = Role.Button,
-                                            onClickLabel = if (isVideo) "Start video call again" else "Start voice call again"
+                                            onClickLabel = if (isVideoCall) "Start video call again" else "Start voice call again"
                                         ) {
-                                            if (isVideo) onVideoCall() else onAudioCall()
+                                            if (isVideoCall) onVideoCall() else onAudioCall()
                                         }
                                         .padding(horizontal = 12.dp, vertical = 8.dp)
                                 ) {
