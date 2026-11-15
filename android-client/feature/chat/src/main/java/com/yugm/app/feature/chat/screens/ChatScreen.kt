@@ -682,7 +682,7 @@ fun ChatScreen(
                             TextButton(onClick = { selectedMessageIds = emptySet() }) { Text("Cancel", color = TextMuted) }
                         }
                     } else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        LightChatAction(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.a11y_back), onBack)
+                        LightChatAction(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.a11y_back), onClick = onBack)
                         Spacer(Modifier.width(10.dp))
                         Box(
                             Modifier.size(44.dp).clip(CircleShape).clickable(enabled = !partner?.id.isNullOrBlank(), role = Role.Button) {
@@ -758,7 +758,7 @@ fun ChatScreen(
                             loading = isStartingCall
                         )
                         Spacer(Modifier.width(6.dp))
-                        LightChatAction(Icons.Filled.MoreVert, stringResource(R.string.a11y_conversation_options)) { showMore = !showMore }
+                        LightChatAction(Icons.Filled.MoreVert, stringResource(R.string.a11y_conversation_options), onClick = { showMore = !showMore })
                     }
                 }
 
@@ -1098,7 +1098,7 @@ fun ChatScreen(
                         }
                     }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        LightChatAction(Icons.Filled.SentimentSatisfiedAlt, stringResource(R.string.a11y_toggle_emoji_picker)) { showEmojiBar = !showEmojiBar }
+                        LightChatAction(Icons.Filled.SentimentSatisfiedAlt, stringResource(R.string.a11y_toggle_emoji_picker), onClick = { showEmojiBar = !showEmojiBar })
                         Row(
                             Modifier.weight(1f).height(52.dp).clip(RoundedCornerShape(26.dp))
                                 .background(Color(0xFF131629))
@@ -1659,7 +1659,17 @@ private fun MessageBubble(
                                 Box(
                                     Modifier
                                         .clip(CircleShape)
-                                        .background(if (isStartingCall) Color.White.copy(alpha = 0.12f) else Brush.linearGradient(listOf(PrimaryPurple.copy(alpha = 0.95f), Pink.copy(alpha = 0.9f))))
+                                        .then(
+                                            if (isStartingCall) {
+                                                Modifier.background(Color.White.copy(alpha = 0.12f))
+                                            } else {
+                                                Modifier.background(
+                                                    Brush.linearGradient(
+                                                        listOf(PrimaryPurple.copy(alpha = 0.95f), Pink.copy(alpha = 0.9f))
+                                                    )
+                                                )
+                                            }
+                                        )
                                         .clickable(
                                             enabled = !isStartingCall,
                                             role = Role.Button,
