@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.yugm.app.core.api.YugmApi
 import com.yugm.app.core.model.GiftCollection
 import com.yugm.app.core.model.GiftV2
+import com.yugm.app.core.model.GiftPurchaseResult
 import com.yugm.app.core.model.InventoryItem
 import com.yugm.app.core.model.SurpriseBoxResult
 import com.yugm.app.core.model.UpgradeResult
@@ -26,7 +27,8 @@ data class GiftUiState(
     val selectedRarity: String? = null,
     val currentPage: Int = 1,
     val surpriseResult: SurpriseBoxResult? = null,
-    val upgradeResult: UpgradeResult? = null
+    val upgradeResult: UpgradeResult? = null,
+    val purchaseResult: GiftPurchaseResult? = null
 )
 
 @HiltViewModel
@@ -68,7 +70,22 @@ class GiftViewModel @Inject constructor() : ViewModel() {
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true, error = null)
             runCatching { YugmApi.surpriseBox(token, tier) }
-                .onSuccess { _state.value = _state.value.copy(surpriseResult = it, isLoading = false) }
+                .onSuccess {
+                    val inventory = runCatching { YugmApi.inventory(token) }.getOrNull()
+                    _state.value = _state.value.copy(surpriseResult = it, inventory = inventory?.items ?: _state.value.inventory, isLoading = false)
+                }
+                .onFailure { _state.value = _state.value.copy(isLoading = false, error = it.message) }
+        }
+    }
+
+    fun purchaseGift(token: String, giftId: String) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isLoading = true, error = null)
+            runCatching { YugmApi.purchaseGift(token, giftId) }
+                .onSuccess {
+                    val inventory = runCatching { YugmApi.inventory(token) }.getOrNull()
+                    _state.value = _state.value.copy(purchaseResult = it, inventory = inventory?.items ?: _state.value.inventory, isLoading = false)
+                }
                 .onFailure { _state.value = _state.value.copy(isLoading = false, error = it.message) }
         }
     }
@@ -77,7 +94,10 @@ class GiftViewModel @Inject constructor() : ViewModel() {
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true, error = null)
             runCatching { YugmApi.upgradeGift(token, inventoryId) }
-                .onSuccess { _state.value = _state.value.copy(upgradeResult = it, isLoading = false) }
+                .onSuccess {
+                    val inventory = runCatching { YugmApi.inventory(token) }.getOrNull()
+                    _state.value = _state.value.copy(upgradeResult = it, inventory = inventory?.items ?: _state.value.inventory, isLoading = false)
+                }
                 .onFailure { _state.value = _state.value.copy(isLoading = false, error = it.message) }
         }
     }
@@ -89,6 +109,8 @@ class GiftViewModel @Inject constructor() : ViewModel() {
     fun clearUpgradeResult() {
         _state.value = _state.value.copy(upgradeResult = null)
     }
+
+    fun clearPurchaseResult() { _state.value = _state.value.copy(purchaseResult = null) }
 
     fun clearError() {
         _state.value = _state.value.copy(error = null)

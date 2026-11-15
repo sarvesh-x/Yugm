@@ -7,7 +7,14 @@ function requireRazorpay() {
   if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
     throw new HttpError(503, "Razorpay is not configured", ErrorCode.VALIDATION);
   }
+  if (env.NODE_ENV !== "production" && env.RAZORPAY_KEY_ID.startsWith("rzp_live_")) {
+    throw new HttpError(503, "Development checkout only accepts Razorpay test keys", ErrorCode.VALIDATION);
+  }
   return { keyId: env.RAZORPAY_KEY_ID, keySecret: env.RAZORPAY_KEY_SECRET };
+}
+
+export function assertRazorpayConfigured() {
+  requireRazorpay();
 }
 
 function razorpayAuthHeader() {
@@ -132,6 +139,8 @@ export async function consumeGooglePlayProduct(input: { productId: string; purch
   if (!env.GOOGLE_PLAY_PACKAGE_NAME) {
     throw new HttpError(503, "Google Play package name is not configured", ErrorCode.VALIDATION);
   }
+  const verified = await verifyGooglePlayProduct(input);
+  if (verified.consumptionState === 1) return;
   const accessToken = await getGoogleAccessToken();
   const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(env.GOOGLE_PLAY_PACKAGE_NAME)}/purchases/products/${encodeURIComponent(input.productId)}/tokens/${encodeURIComponent(input.purchaseToken)}:consume`;
   const response = await fetch(url, {

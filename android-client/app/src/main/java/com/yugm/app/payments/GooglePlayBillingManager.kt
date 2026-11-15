@@ -3,7 +3,6 @@ package com.yugm.app.payments
 import android.app.Activity
 import android.content.Context
 import android.os.SystemClock
-import com.android.billingclient.api.AcknowledgePurchaseParams
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClientStateListener
 import com.android.billingclient.api.BillingFlowParams
@@ -192,8 +191,9 @@ object GooglePlayBillingManager {
         }
     }
 
-    fun launchBillingFlow(activity: Activity, productDetails: ProductDetails) {
-        val client = billingClient ?: return
+    fun launchBillingFlow(activity: Activity, productDetails: ProductDetails): BillingResult? {
+        val client = billingClient ?: return null
+        if (!isReady) return null
         val productParams = BillingFlowParams.ProductDetailsParams.newBuilder()
             .setProductDetails(productDetails)
             .build()
@@ -202,8 +202,9 @@ object GooglePlayBillingManager {
             .build()
         val result = client.launchBillingFlow(activity, billingParams)
         if (result.responseCode != BillingClient.BillingResponseCode.OK) {
-            Timber.tag(TAG).e("Launch billing flow failed: ${result.responseCode}")
+            Timber.tag(TAG).e("Launch billing flow failed: ${result.responseCode} (${result.debugMessage})")
         }
+        return result
     }
 
     private fun onPurchasesUpdated(billingResult: BillingResult, purchases: MutableList<Purchase>?) {
@@ -234,23 +235,10 @@ object GooglePlayBillingManager {
                 PurchaseHandleResult.RETRY
             }
             if (result == PurchaseHandleResult.VERIFIED) {
-                val acked = acknowledgePurchase(purchase)
-                if (acked) processedTokens.add(token)
-            }
-        }
-    }
-
-    private suspend fun acknowledgePurchase(purchase: Purchase): Boolean {
-        if (purchase.isAcknowledged) return true
-        val client = billingClient ?: return false
-        val params = AcknowledgePurchaseParams.newBuilder()
-            .setPurchaseToken(purchase.purchaseToken)
-            .build()
-        return suspendCoroutine { continuation ->
-            client.acknowledgePurchase(params) { billingResult ->
-                val ok = billingResult.responseCode == BillingClient.BillingResponseCode.OK
-                if (!ok) Timber.tag(TAG).e("Acknowledge failed: ${billingResult.responseCode}")
-                continuation.resume(ok)
+                // The server verifies and consumes coin products. Consumption
+                // acknowledges a Google Play one-time product, so a second
+                // client-side acknowledgement is unnecessary.
+                processedTokens.add(token)
             }
         }
     }

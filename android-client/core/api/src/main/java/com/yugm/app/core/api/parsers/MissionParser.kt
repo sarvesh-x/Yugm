@@ -6,6 +6,7 @@ import com.yugm.app.core.model.BattlePassLevelUpResult
 import com.yugm.app.core.model.BattlePassPurchaseResult
 import com.yugm.app.core.model.BattlePassResponse
 import com.yugm.app.core.model.BattlePassRewardState
+import com.yugm.app.core.model.BattlePassTrackReward
 import com.yugm.app.core.model.BattlePassSeason
 import com.yugm.app.core.model.Mission
 import com.yugm.app.core.model.MissionClaimResult
@@ -83,13 +84,16 @@ fun JSONObject.toMissionClaimResult(): MissionClaimResult {
 fun JSONObject.toSeasonReward(): SeasonReward {
     return SeasonReward(
         level = optInt("level", 0),
-        type = optString("type", ""),
-        itemId = if (has("itemId") && !isNull("itemId")) optString("itemId") else null,
-        amount = optInt("amount", 0),
-        premium = optBoolean("premium", false),
-        description = optString("description", "")
+        freeReward = optJSONObject("freeReward")?.toBattlePassTrackReward(),
+        premiumReward = optJSONObject("premiumReward")?.toBattlePassTrackReward()
     )
 }
+
+fun JSONObject.toBattlePassTrackReward() = BattlePassTrackReward(
+    type = optString("type", ""),
+    itemId = if (has("id") && !isNull("id")) optString("id") else null,
+    amount = optInt("amount", 0)
+)
 
 fun JSONArray.toSeasonRewards(): List<SeasonReward> {
     val list = mutableListOf<SeasonReward>()
@@ -102,6 +106,7 @@ fun JSONObject.toSeason(): Season {
     return Season(
         id = optString("_id", ""),
         name = optString("name", ""),
+        description = optString("description", ""),
         active = optBoolean("active", true),
         startDate = optString("startDate", ""),
         endDate = optString("endDate", ""),
@@ -115,7 +120,9 @@ fun JSONObject.toSeason(): Season {
 fun JSONObject.toBattlePassRewardState(): BattlePassRewardState {
     return BattlePassRewardState(
         level = optInt("level", 0),
-        claimed = optBoolean("claimed", false)
+        claimed = optBoolean("claimed", false),
+        freeClaimed = optBoolean("freeClaimed", false),
+        premiumClaimed = optBoolean("premiumClaimed", false)
     )
 }
 

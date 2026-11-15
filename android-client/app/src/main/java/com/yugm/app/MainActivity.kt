@@ -25,6 +25,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import com.yugm.app.core.api.YugmApi
+import com.yugm.app.core.api.YugmMediaRoom
 import com.yugm.app.core.api.ApiHttpException
 import com.yugm.app.core.model.CoinPack
 import com.yugm.app.core.model.RazorpayCheckoutData
@@ -61,6 +62,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
     override fun onResume() {
         super.onResume()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        YugmMediaRoom.syncForegroundAudioType()
     }
 
     override fun onPause() {
@@ -84,16 +86,15 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                 val mainViewModel: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
                 val scope = rememberCoroutineScope()
                 val context = this@MainActivity
+                var notificationPromptAttempted by remember { mutableStateOf(false) }
                 val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
                 LaunchedEffect(mainViewModel.authToken) {
                     if (Build.VERSION.SDK_INT >= 33 && mainViewModel.authToken.isNotBlank() &&
+                        !notificationPromptAttempted &&
                         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
                     ) {
-                        val prefs = context.getSharedPreferences("yugm_permissions", MODE_PRIVATE)
-                        if (!prefs.getBoolean("notification_prompted", false)) {
-                            prefs.edit().putBoolean("notification_prompted", true).apply()
-                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        }
+                        notificationPromptAttempted = true
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                     }
                 }
 
@@ -185,23 +186,6 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                     onDispose { cm.unregisterNetworkCallback(callback) }
                 }
 
-                val startRazorpayFallback: (CoinPack) -> Unit = { pack ->
-                    val token = mainViewModel.authToken
-                    if (token.isBlank()) {
-                        Toast.makeText(context, "Sign in again to finish your purchase.", Toast.LENGTH_LONG).show()
-                    } else {
-                        scope.launch {
-                            runCatching {
-                                withContext(Dispatchers.IO) { YugmApi.createRazorpayOrder(token, pack.id) }
-                            }.onSuccess { checkout: RazorpayCheckoutData ->
-                                RazorpayCoordinator.start(this@MainActivity, checkout)
-                            }.onFailure {
-                                Toast.makeText(context, it.message ?: "Checkout could not start", Toast.LENGTH_LONG).show()
-                            }
-                        }
-                    }
-                }
-
                 Box(Modifier.fillMaxSize().background(Background)) {
                     NavGraph(
                         navController = navController,
@@ -213,7 +197,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                         onStartGooglePlayPurchase = { pack ->
                             scope.launch {
                                 if (GooglePlayBillingManager.isBillingUnavailable()) {
-                                    startRazorpayFallback(pack)
+                                    Toast.makeText(context, "Google Play Billing is unavailable. Choose Razorpay to continue.", Toast.LENGTH_LONG).show()
                                     return@launch
                                 }
                                 runCatching {
@@ -228,13 +212,15 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                                     GooglePlayBillingManager.queryRawProductDetails(listOf(pack.googleProductId))
                                         .firstOrNull() ?: error("This coin pack isn't available in Google Play for this app yet. Check Play Console product IDs and app version.")
                                 }.onSuccess { details ->
-                                    GooglePlayBillingManager.launchBillingFlow(this@MainActivity, details)
-                                }.onFailure {
-                                    if (GooglePlayBillingManager.isBillingUnavailable()) {
-                                        startRazorpayFallback(pack)
-                                    } else {
-                                        Toast.makeText(context, it.message ?: "Purchase could not start", Toast.LENGTH_LONG).show()
+                                    val result = GooglePlayBillingManager.launchBillingFlow(this@MainActivity, details)
+                                    if (result == null || result.responseCode != com.android.billingclient.api.BillingClient.BillingResponseCode.OK) {
+                                        val cancelled = result?.responseCode == com.android.billingclient.api.BillingClient.BillingResponseCode.USER_CANCELED
+                                        if (!cancelled) {
+                                            Toast.makeText(context, result?.debugMessage ?: "Purchase flow could not start", Toast.LENGTH_LONG).show()
+                                        }
                                     }
+                                }.onFailure {
+                                    Toast.makeText(context, it.message ?: "Google Play purchase could not start. Choose Razorpay to continue.", Toast.LENGTH_LONG).show()
                                 }
                             }
                         },
@@ -280,7 +266,10 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
     private fun routeFromPushIntent(intent: Intent?): String? {
         val roomId = intent?.getStringExtra("roomId")
+        // The API sends partnerId in direct-message notification data. Accept the
+        // older chatPartnerId key too so notifications from either client version work.
         val chatPartnerId = intent?.getStringExtra("chatPartnerId")
+            ?: intent?.getStringExtra("partnerId")
         return when {
             !roomId.isNullOrBlank() -> Screen.RoomLobby.createRoute(roomId)
             !chatPartnerId.isNullOrBlank() -> Screen.Chat.createRoute(chatPartnerId)

@@ -21,10 +21,13 @@ class RoomAudioForegroundService : Service() {
             }
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
-        startForeground(NOTIFICATION_ID, buildNotification())
+        startForegroundForAudio(microphoneEnabled = false)
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_NOT_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        startForegroundForAudio(intent?.getBooleanExtra(EXTRA_MICROPHONE_ENABLED, false) == true)
+        return START_NOT_STICKY
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -46,18 +49,46 @@ class RoomAudioForegroundService : Service() {
             .build()
     }
 
+    private fun startForegroundForAudio(microphoneEnabled: Boolean) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val serviceTypes = android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK or
+                if (microphoneEnabled) android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0
+            try {
+                startForeground(NOTIFICATION_ID, buildNotification(), serviceTypes)
+            } catch (error: SecurityException) {
+                if (!microphoneEnabled) throw error
+                Timber.tag("RoomAudioService").w(error, "Microphone foreground mode is not currently allowed; keeping playback active")
+                startForeground(NOTIFICATION_ID, buildNotification(), android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            }
+        } else {
+            startForeground(NOTIFICATION_ID, buildNotification())
+        }
+    }
+
     companion object {
         private const val CHANNEL_ID = "yugm_active_room"
         private const val NOTIFICATION_ID = 4102
+        private const val EXTRA_MICROPHONE_ENABLED = "microphone_enabled"
 
-        fun start(context: Context) {
+        fun start(context: Context, microphoneEnabled: Boolean = false) {
             val intent = Intent(context, RoomAudioForegroundService::class.java)
+                .putExtra(EXTRA_MICROPHONE_ENABLED, microphoneEnabled)
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
                 else context.startService(intent)
             } catch (error: RuntimeException) {
                 // Android may reject background starts; the LiveKit connection should still proceed.
                 Timber.tag("RoomAudioService").w(error, "Could not start the room audio foreground service")
+            }
+        }
+
+        fun setMicrophoneEnabled(context: Context, enabled: Boolean) {
+            val intent = Intent(context, RoomAudioForegroundService::class.java)
+                .putExtra(EXTRA_MICROPHONE_ENABLED, enabled)
+            try {
+                context.startService(intent)
+            } catch (error: RuntimeException) {
+                Timber.tag("RoomAudioService").w(error, "Could not update room audio foreground type")
             }
         }
 

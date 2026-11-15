@@ -47,6 +47,55 @@ fun NavGraphBuilder.socialNavGraph(
         )
     }
 
+    composable(Screen.ClanList.route) {
+        ClanListScreen(
+            token = authTokenProvider(),
+            onBack = { navController.popBackStack() },
+            onCreateClan = { navController.navigate(Screen.ClanCreate.route) },
+            onClanClick = { navController.navigate(Screen.ClanDetail.createRoute(it)) },
+            onMyClanClick = { navController.navigate(Screen.ClanDetail.createRoute(it)) }
+        )
+    }
+    composable(Screen.ClanCreate.route) {
+        ClanCreateScreen(
+            token = authTokenProvider(),
+            onBack = { navController.popBackStack() },
+            onClanCreated = { clanId ->
+                navController.popBackStack()
+                navController.navigate(Screen.ClanDetail.createRoute(clanId))
+            }
+        )
+    }
+    composable(
+        route = Screen.ClanDetail.route,
+        arguments = listOf(navArgument("clanId") { type = NavType.StringType })
+    ) { entry ->
+        val clanId = entry.arguments?.getString("clanId").orEmpty()
+        ClanDetailScreen(
+            token = authTokenProvider(),
+            clanId = clanId,
+            currentUserId = currentUserIdProvider(),
+            onBack = { navController.popBackStack() },
+            onChat = { id -> navController.navigate(Screen.ClanChat.createRoute(id)) },
+            onMemberClick = { id -> navController.navigate(Screen.ProfileDetail.createRoute(id)) }
+        )
+    }
+    composable(
+        route = Screen.ClanChat.route,
+        arguments = listOf(
+            navArgument("clanId") { type = NavType.StringType },
+            navArgument("clanName") { type = NavType.StringType; defaultValue = ""; nullable = true }
+        )
+    ) { entry ->
+        ClanChatScreen(
+            token = authTokenProvider(),
+            clanId = entry.arguments?.getString("clanId").orEmpty(),
+            currentUserId = currentUserIdProvider(),
+            clanName = entry.arguments?.getString("clanName").orEmpty(),
+            onBack = { navController.popBackStack() }
+        )
+    }
+
     composable(Screen.Wishlist.route) {
         WishlistScreen(
             token = authTokenProvider(),

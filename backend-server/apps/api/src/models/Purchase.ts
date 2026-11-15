@@ -42,7 +42,7 @@ const purchaseSchema = new Schema<IPurchase>(
     providerPaymentId: { type: String, index: true },
     providerSignature: String,
     productId: { type: String, index: true },
-    purchaseToken: { type: String, index: true },
+    purchaseToken: { type: String },
     googleOrderId: String,
     creditedTransactionId: { type: Schema.Types.ObjectId, ref: "WalletTransaction" },
     creditedDiamondTransactionId: { type: Schema.Types.ObjectId, ref: "DiamondTransaction" },
@@ -56,6 +56,9 @@ const purchaseSchema = new Schema<IPurchase>(
 );
 
 purchaseSchema.index({ provider: 1, providerOrderId: 1 }, { sparse: true });
-purchaseSchema.index({ provider: 1, purchaseToken: 1 }, { unique: true, sparse: true });
+purchaseSchema.index(
+  { provider: 1, purchaseToken: 1 },
+  { unique: true, partialFilterExpression: { purchaseToken: { $type: "string" } }, name: "uniq_provider_purchase_token" }
+);
 
 export const Purchase = mongoose.model<IPurchase>("Purchase", purchaseSchema);

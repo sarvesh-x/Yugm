@@ -169,15 +169,18 @@ class ClanViewModel @Inject constructor(
         }
     }
 
-    fun join(token: String, clanId: String) {
+    fun join(token: String, clanId: String, onComplete: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             isLoading = true
             error = null
-            runCatching {
-                myClan = withContext(Dispatchers.IO) { yugmApi.joinClan(token, clanId) }
-            }.onFailure {
-                error = it.message ?: "Failed to join clan"
-            }
+            runCatching { withContext(Dispatchers.IO) { yugmApi.joinClan(token, clanId) } }
+                .onSuccess {
+                    myClan = it
+                    onComplete(true)
+                }.onFailure {
+                    error = it.message ?: "Failed to join clan"
+                    onComplete(false)
+                }
             isLoading = false
         }
     }

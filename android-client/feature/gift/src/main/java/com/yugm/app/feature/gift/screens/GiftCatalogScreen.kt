@@ -3,6 +3,7 @@ package com.yugm.app.feature.gift.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -37,6 +38,9 @@ fun GiftCatalogScreen(
 
     var showCategoryDropdown by remember { mutableStateOf(false) }
     var showRarityDropdown by remember { mutableStateOf(false) }
+    var pendingBoxTier by remember { mutableStateOf<String?>(null) }
+    var pendingGift by remember { mutableStateOf<com.yugm.app.core.model.GiftV2?>(null) }
+    val boxPrices = mapOf("basic" to 500, "premium" to 2000, "luxury" to 10000)
 
     Scaffold(
         topBar = {
@@ -112,6 +116,42 @@ fun GiftCatalogScreen(
 
             Spacer(Modifier.height(8.dp))
 
+            if (state.collections.isNotEmpty()) {
+                Text("Gift collections", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth().height(72.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(vertical = 6.dp)
+                ) {
+                    items(state.collections) { collection ->
+                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF2C1B3E))) {
+                            Column(Modifier.widthIn(min = 132.dp).padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                Text(collection.name, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                Text("${collection.gifts.size} gifts · ${collection.bonus.description.ifBlank { "Complete the set" }}", fontSize = 10.sp, color = Color(0xFFBEB3CC), maxLines = 1)
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+            }
+
+            Text("Surprise boxes", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                boxPrices.forEach { (tier, price) ->
+                    OutlinedButton(
+                        onClick = { pendingBoxTier = tier },
+                        enabled = !state.isLoading,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(tier.replaceFirstChar { it.uppercase() }, fontSize = 11.sp, maxLines = 1)
+                            Text("$price coins", fontSize = 9.sp, maxLines = 1)
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+
             if (state.isLoading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
@@ -123,6 +163,7 @@ fun GiftCatalogScreen(
                 Spacer(Modifier.height(8.dp))
 
                 LazyVerticalGrid(
+                    modifier = Modifier.weight(1f),
                     columns = GridCells.Fixed(2),
                     contentPadding = PaddingValues(4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -153,11 +194,67 @@ fun GiftCatalogScreen(
                                 Text(gift.rarity.uppercase(), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 if (gift.interactive) Text("✨ Interactive", fontSize = 10.sp, color = Color(0xFF76FF03))
                                 if (gift.comboMultiplier > 1) Text("x${gift.comboMultiplier} combo", fontSize = 10.sp, color = Color(0xFF40C4FF))
+                                Spacer(Modifier.height(8.dp))
+                                Button(
+                                    onClick = { pendingGift = gift },
+                                    enabled = !state.isLoading && gift.coinPrice > 0,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                                ) { Text("Get for ${gift.coinPrice} coins", fontSize = 11.sp, maxLines = 1) }
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    pendingBoxTier?.let { tier ->
+        val price = boxPrices[tier] ?: 0
+        AlertDialog(
+            onDismissRequest = { pendingBoxTier = null },
+            title = { Text("Open ${tier.replaceFirstChar { it.uppercase() }} box?") },
+            text = { Text("${price} coins will be deducted and one gift from this tier will be added to your inventory.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.surpriseBox(token, tier)
+                    pendingBoxTier = null
+                }) { Text("Open box") }
+            },
+            dismissButton = { TextButton(onClick = { pendingBoxTier = null }) { Text("Cancel") } }
+        )
+    }
+
+    pendingGift?.let { gift ->
+        AlertDialog(
+            onDismissRequest = { pendingGift = null },
+            title = { Text("Add ${gift.name} to your collection?") },
+            text = { Text("${gift.coinPrice} coins will be spent. You can send this gift from your inventory.") },
+            confirmButton = {
+                TextButton(enabled = !state.isLoading, onClick = {
+                    viewModel.purchaseGift(token, gift.id)
+                    pendingGift = null
+                }) { Text("Buy gift") }
+            },
+            dismissButton = { TextButton(onClick = { pendingGift = null }) { Text("Cancel") } }
+        )
+    }
+
+    state.surpriseResult?.let { result ->
+        AlertDialog(
+            onDismissRequest = viewModel::clearSurpriseResult,
+            title = { Text("You got a gift!") },
+            text = { Text("${result.revealedGift?.icon.orEmpty()} ${result.revealedGift?.name ?: "A new gift"} was added to your inventory.") },
+            confirmButton = { TextButton(onClick = viewModel::clearSurpriseResult) { Text("View catalog") } }
+        )
+    }
+
+    state.purchaseResult?.let { result ->
+        AlertDialog(
+            onDismissRequest = viewModel::clearPurchaseResult,
+            title = { Text("Added to your collection") },
+            text = { Text("${result.gift?.icon.orEmpty()} ${result.gift?.name ?: "Gift"} is ready in your inventory.") },
+            confirmButton = { TextButton(onClick = viewModel::clearPurchaseResult) { Text("Done") } }
+        )
     }
 }

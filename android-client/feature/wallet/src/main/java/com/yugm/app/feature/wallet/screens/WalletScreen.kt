@@ -23,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,7 +33,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -40,8 +40,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import android.widget.Toast
 import com.yugm.app.core.model.CoinPack
 import com.yugm.app.core.model.CreatorDashboardSummary
 import com.yugm.app.core.model.GiftItem
@@ -76,12 +76,19 @@ fun WalletScreen(
     var selectedTab by remember { mutableStateOf(0) }
     var earnings by remember { mutableStateOf(CreatorDashboardSummary()) }
     var status by remember { mutableStateOf("") }
-    val context = LocalContext.current
+    var paymentChoiceFor by remember { mutableStateOf<CoinPack?>(null) }
     val viewModel: WalletViewModel = hiltViewModel()
+
+    fun requestRecharge(pack: CoinPack) {
+        paymentChoiceFor = pack
+    }
 
     LaunchedEffect(token) { viewModel.loadWallet(token) }
     LaunchedEffect(viewModel.razorpayCheckoutData) {
         viewModel.razorpayCheckoutData?.let(onRechargeOrderReady)
+    }
+    LaunchedEffect(viewModel.error) {
+        viewModel.error?.let { status = it }
     }
 
     YugmAmbientBackground {
@@ -94,7 +101,7 @@ fun WalletScreen(
             ) {
             item {
                 YugmPageHeader("Yugm", "Wallet & Gifts", onBack = onBack) {
-                    RoundAction("♢", onClick = { Toast.makeText(context, "Coming soon", Toast.LENGTH_SHORT).show() })
+                    RoundAction("♢", onClick = { selectedTab = 1 })
                 }
             }
             item {
@@ -121,14 +128,7 @@ fun WalletScreen(
                                     viewModel.claimDailyReward(token) { msg -> status = msg }
                                 },
                                 onRecharge = {
-                                    viewModel.coinPacks.getOrNull(2)?.let { pack ->
-                                        if (pack.googleProductId.isNotBlank() && onStartGooglePlayPurchase != null) {
-                                            onStartGooglePlayPurchase(pack)
-                                        } else {
-                                            viewModel.createRazorpayOrder(token, pack.id)
-                                            status = "Secure checkout created"
-                                        }
-                                    }
+                                    viewModel.coinPacks.getOrNull(2)?.let(::requestRecharge)
                                 }
                             )
                         }
@@ -143,14 +143,7 @@ fun WalletScreen(
                                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
                                     viewModel.coinPacks.forEachIndexed { index, pack ->
-                                        CoinPackCard(pack, popular = index == 2) {
-                                            if (pack.googleProductId.isNotBlank() && onStartGooglePlayPurchase != null) {
-                                                onStartGooglePlayPurchase(pack)
-                                            } else {
-                                                viewModel.createRazorpayOrder(token, pack.id)
-                                                status = "Secure checkout created for ${pack.coinAmount} coins"
-                                            }
-                                        }
+                                        CoinPackCard(pack, popular = index == 2) { requestRecharge(pack) }
                                     }
                                 }
                             }
@@ -181,7 +174,83 @@ fun WalletScreen(
                 }
             }
         }
+        paymentChoiceFor?.let { pack ->
+            PaymentMethodDialog(
+                pack = pack,
+                onDismiss = { paymentChoiceFor = null },
+                onGooglePlay = {
+                    paymentChoiceFor = null
+                    val startPurchase = onStartGooglePlayPurchase
+                    if (startPurchase == null || pack.googleProductId.isBlank()) {
+                        status = "Google Play purchases are not configured for this coin pack."
+                    } else {
+                        startPurchase(pack)
+                    }
+                },
+                onRazorpay = {
+                    paymentChoiceFor = null
+                    status = "Creating secure Razorpay checkout…"
+                    viewModel.createRazorpayOrder(token, pack.id)
+                }
+            )
+        }
     }
+    }
+}
+
+@Composable
+private fun PaymentMethodDialog(
+    pack: CoinPack,
+    onDismiss: () -> Unit,
+    onGooglePlay: () -> Unit,
+    onRazorpay: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
+                .background(Brush.linearGradient(listOf(Color(0xFF28143B), Color(0xFF171827))))
+                .border(1.dp, Pink.copy(alpha = .35f), RoundedCornerShape(24.dp))
+                .padding(20.dp)
+        ) {
+            Text("Choose payment method", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Black)
+            Text(
+                "${String.format(Locale.US, "%,d", pack.coinAmount)} coins · ₹${pack.priceInr}.00",
+                color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 5.dp, bottom = 16.dp)
+            )
+            PaymentMethodOption("Google Play", "Pay with Google Play", "▶", Gold, onGooglePlay)
+            Spacer(Modifier.height(10.dp))
+            PaymentMethodOption("Razorpay", "Cards, UPI and other methods", "R", Pink, onRazorpay)
+            TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End).padding(top = 4.dp)) {
+                Text("Cancel", color = TextMuted, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PaymentMethodOption(
+    title: String,
+    subtitle: String,
+    icon: String,
+    accent: Color,
+    onClick: () -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = .055f))
+            .border(1.dp, accent.copy(alpha = .3f), RoundedCornerShape(16.dp))
+            .clickable(role = Role.Button, onClickLabel = "Pay with $title", onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(38.dp).clip(CircleShape).background(accent.copy(alpha = .18f)), contentAlignment = Alignment.Center) {
+            Text(icon, color = accent, fontWeight = FontWeight.Black, fontSize = 17.sp)
+        }
+        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+            Text(title, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text(subtitle, color = TextMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
+        }
+        Text("›", color = accent, fontSize = 24.sp, fontWeight = FontWeight.Bold)
     }
 }
 

@@ -97,7 +97,7 @@ class RoomViewModel @Inject constructor(
         private set
     var roomEndedVersion by mutableStateOf(0)
         private set
-    var roomReactionEvent by mutableStateOf(0 to "")
+    var roomReactionEvent by mutableStateOf(Triple(0, "", ""))
         private set
 
     var roomState by mutableStateOf<UiState<RoomDetail>>(UiState.Idle)
@@ -237,14 +237,25 @@ class RoomViewModel @Inject constructor(
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     yugmApi.joinRoom(authToken, roomId)
-                    val mediaSession = yugmApi.liveKitToken(authToken, roomId)
-                    val isHostVideoRoom = isVideo && roomDetail?.room?.host?.id == currentUserId
-                    YugmMediaRoom.connect(
-                        mediaSession.token,
-                        mediaSession.url,
-                        publishCamera = cameraPermissionGranted ?: isHostVideoRoom,
-                        publishMicrophone = microphonePermissionGranted ?: isHostVideoRoom
-                    )
+                    // Keep chat/reaction delivery available even if LiveKit is
+                    // temporarily unreachable or microphone publishing fails.
+                    viewModelScope.launch(Dispatchers.IO) {
+                        runCatching {
+                            val mediaSession = yugmApi.liveKitToken(authToken, roomId)
+                            val isHostVideoRoom = isVideo && roomDetail?.room?.host?.id == currentUserId
+                            YugmMediaRoom.connect(
+                                mediaSession.token,
+                                mediaSession.url,
+                                publishCamera = cameraPermissionGranted ?: isHostVideoRoom,
+                                publishMicrophone = microphonePermissionGranted ?: isHostVideoRoom,
+                                canPublishMicrophone = mediaSession.canPublishMicrophone
+                            )
+                        }.onFailure { error ->
+                            withContext(Dispatchers.Main) {
+                                actionError = error.message ?: "Could not connect room audio"
+                            }
+                        }
+                    }
                     YugmSocket.connect(
                         // API calls above may have rotated an expired access token.
                         // Read the session source of truth for Socket.IO too; the
@@ -294,8 +305,8 @@ class RoomViewModel @Inject constructor(
                             }
                         },
                         onPkRematchRequested = { refresh() },
-                        onRoomReaction = { type, _, _ ->
-                            viewModelScope.launch { roomReactionEvent = (roomReactionEvent.first + 1) to type }
+                        onRoomReaction = { type, userId, _ ->
+                            viewModelScope.launch { roomReactionEvent = Triple(roomReactionEvent.first + 1, type, userId) }
                         },
                         onSpeakerApproved = { approvedUserId ->
                             if (approvedUserId == currentUserId) {
@@ -322,7 +333,8 @@ class RoomViewModel @Inject constructor(
                                 viewModelScope.launch { forcedRemoveVersion++ }
                             }
                         },
-                        onRoomDataChanged = { event -> scheduleRealtimeRefresh(event) }
+                        onRoomDataChanged = { event -> scheduleRealtimeRefresh(event) },
+                        onRoomJoined = { refreshRoomMessages() }
                     )
                 }
             }
@@ -391,6 +403,20 @@ class RoomViewModel @Inject constructor(
                 runCatching { yugmApi.takeRoomSeat(authToken, roomId, seatIndex) }
                     .onSuccess { scheduleRealtimeRefresh("room:speaker:approve") }
                     .onFailure { actionError = it.message ?: "Could not take the seat" }
+            }
+        }
+    }
+
+    fun leaveOwnSeat() {
+        viewModelScope.launch {
+            actionError = null
+            // Stop publishing immediately; the server call updates the seat
+            // role and broadcasts the change to everyone else in the room.
+            YugmMediaRoom.setMicEnabled(false)
+            withContext(Dispatchers.IO) {
+                runCatching { yugmApi.leaveRoomSeat(authToken, roomId) }
+                    .onSuccess { scheduleRealtimeRefresh("room:participant:update") }
+                    .onFailure { actionError = it.message ?: "Could not leave your mic seat" }
             }
         }
     }
@@ -470,6 +496,13 @@ class RoomViewModel @Inject constructor(
         chat.addAll(merged)
     }
 
+    private fun refreshRoomMessages() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { runCatching { yugmApi.roomMessages(roomId, authToken) } }
+                .onSuccess(::mergeChat)
+        }
+    }
+
     private fun scheduleRealtimeRefresh(event: String) {
         viewModelScope.launch {
             if (event == "room:ended") {
@@ -507,7 +540,8 @@ class RoomViewModel @Inject constructor(
                     it.token,
                     it.url,
                     publishCamera = isHostVideoRoom,
-                    publishMicrophone = enableMicrophone || YugmMediaRoom.isMicEnabled()
+                    publishMicrophone = enableMicrophone || YugmMediaRoom.isMicEnabled(),
+                    canPublishMicrophone = it.canPublishMicrophone
                 )
             }
                 .onFailure { actionError = it.message ?: "Could not enable room audio" }
@@ -715,7 +749,9 @@ class RoomViewModel @Inject constructor(
                     .onSuccess {
                         scheduleRealtimeRefresh("room:participant:update")
                         YugmMediaRoom.setMicEnabled(enabled)
-                        if (enabled) refreshMediaSession(enableMicrophone = true)
+                        if (enabled && !YugmMediaRoom.canPublishMicrophone()) {
+                            refreshMediaSession(enableMicrophone = true)
+                        }
                     }
                     .onFailure { actionError = it.message ?: "Could not update microphone state" }
             }

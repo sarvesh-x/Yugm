@@ -115,7 +115,7 @@ fun ActiveVideoRoomScreen(
         onJoin()
         onDispose {
             YugmSocket.disconnect()
-            YugmMediaRoom.disconnect()
+            YugmMediaRoom.disconnectAsync()
         }
     }
     var mic by rememberSaveable { mutableStateOf(true) }

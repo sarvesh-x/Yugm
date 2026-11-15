@@ -145,6 +145,8 @@ fun DiscoverScreen(
     onOpenMatchedCall: (Room) -> Unit = onJoinParty,
     onVibeGraph: () -> Unit = {},
     onCreatorDashboard: () -> Unit = {},
+    onLeaderboards: () -> Unit = {},
+    onClans: () -> Unit = {},
     viewModel: DiscoverViewModel = hiltViewModel(),
 ) {
     LaunchedEffect(token) {
@@ -252,9 +254,10 @@ fun DiscoverScreen(
                         Modifier.fillMaxWidth().padding(horizontal = 18.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        HomeShortcut("Ranking", Icons.Filled.EmojiEvents, Modifier.weight(1f), onGrowth)
+                        HomeShortcut("Ranking", Icons.Filled.EmojiEvents, Modifier.weight(1f), onLeaderboards)
                         HomeShortcut("Blind Date", Icons.Filled.Favorite, Modifier.weight(1f), onDating)
                         HomeShortcut("Game", Icons.Filled.SportsEsports, Modifier.weight(1f), onGames)
+                        HomeShortcut("Clans", Icons.Filled.Groups, Modifier.weight(1f), onClans)
                     }
                 }
                 item {

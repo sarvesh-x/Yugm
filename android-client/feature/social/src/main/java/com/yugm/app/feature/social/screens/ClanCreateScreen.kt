@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +45,11 @@ fun ClanCreateScreen(
     var familyLabel by remember { mutableStateOf("Family") }
     var isPrivate by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
+
+    LaunchedEffect(viewModel.myClan?.id) {
+        viewModel.myClan?.id?.takeIf { it.isNotBlank() }?.let(onClanCreated)
+    }
+    LaunchedEffect(viewModel.error) { error = viewModel.error.orEmpty() }
 
     YugmAmbientBackground {
         Column(

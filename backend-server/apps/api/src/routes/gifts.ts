@@ -2,9 +2,11 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
+import { requireWalletNotFrozen } from "../middleware/requireSafety.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId } from "../utils/http.js";
 import {
   getGiftsV2,
+  purchaseGift,
   getCollections,
   comboGift,
   roomWideGift,
@@ -37,6 +39,7 @@ const surpriseBoxSchema = z.object({
 const upgradeGiftSchema = z.object({
   inventoryId: z.string().min(1)
 });
+const purchaseGiftSchema = z.object({ giftId: z.string().min(1) });
 
 const tradeGiftSchema = z.object({
   targetUserId: z.string().min(1),
@@ -56,6 +59,12 @@ giftsRouter.get("/gifts/v2", asyncHandler(async (req: AuthRequest, res) => {
 giftsRouter.get("/gifts/collections", asyncHandler(async (_req: AuthRequest, res) => {
   const result = await getCollections();
   sendOk(res, result);
+}));
+
+giftsRouter.post("/gifts/purchase", requireWalletNotFrozen, validateBody(purchaseGiftSchema), asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.body.giftId)) throw new HttpError(400, "Invalid giftId", ErrorCode.VALIDATION);
+  const result = await purchaseGift(req.user!.id, req.body.giftId);
+  sendOk(res, result, 201);
 }));
 
 giftsRouter.post("/gifts/combo", validateBody(comboGiftSchema), asyncHandler(async (req: AuthRequest, res) => {

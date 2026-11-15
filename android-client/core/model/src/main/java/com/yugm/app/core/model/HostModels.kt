@@ -90,4 +90,10 @@ data class Session(
 
 data class RefreshedSession(val accessToken: String, val refreshToken: String, val sessionId: String, val expiresIn: Long)
 
-data class MediaSession(val token: String, val url: String, val roomName: String, val role: String)
+data class MediaSession(
+    val token: String,
+    val url: String,
+    val roomName: String,
+    val role: String,
+    val canPublishMicrophone: Boolean = false
+)

@@ -107,7 +107,7 @@ object WalletApi {
                 val item = data.getJSONObject(index)
                 val gid = item.optString("_id", "")
                 val gname = item.optString("name", "Gift")
-                if (gid.isNotBlank()) add(GiftItem(gid, gname, item.optInt("coinPrice"), item.optInt("diamondPrice")))
+                if (gid.isNotBlank()) add(GiftItem(gid, gname, item.optInt("coinPrice"), item.optInt("diamondPrice"), item.optString("icon", "")))
             }
         }
     }

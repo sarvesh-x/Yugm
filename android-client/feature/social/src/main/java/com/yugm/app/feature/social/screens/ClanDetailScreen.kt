@@ -124,10 +124,13 @@ fun ClanDetailScreen(
                         } else {
                             GradientAction("Join Clan", modifier = Modifier.weight(1f), enabled = !actionLoading, onClick = {
                                 actionLoading = true
-                                viewModel.join(token, clanId)
-                                status = "Joined!"
-                                viewModel.loadDetail(token, clanId)
-                                actionLoading = false
+                                viewModel.join(token, clanId) { joined ->
+                                    if (joined) {
+                                        status = "You joined ${currentClan.name}"
+                                        viewModel.loadDetail(token, clanId)
+                                    }
+                                    actionLoading = false
+                                }
                             })
                         }
                     }

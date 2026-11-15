@@ -75,6 +75,12 @@ fun NavGraphBuilder.discoverNavGraph(
             },
             onCreatorDashboard = {
                 navController.navigate(Screen.CreatorDashboard.route)
+            },
+            onLeaderboards = {
+                navController.navigate(Screen.GiftLeaderboard.route)
+            },
+            onClans = {
+                navController.navigate(Screen.ClanList.route)
             }
         )
     }

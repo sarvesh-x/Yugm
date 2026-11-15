@@ -22,5 +22,9 @@ giftTransactionSchema.index({ roomId: 1, createdAt: -1 });
 giftTransactionSchema.index({ senderId: 1, createdAt: -1 });
 giftTransactionSchema.index({ receiverId: 1, createdAt: -1 });
 giftTransactionSchema.index({ type: 1, createdAt: -1 });
+giftTransactionSchema.index(
+  { senderId: 1, "metadata.idempotencyKey": 1 },
+  { unique: true, partialFilterExpression: { "metadata.idempotencyKey": { $type: "string" } } }
+);
 
 export const GiftTransaction = mongoose.model("GiftTransaction", giftTransactionSchema);

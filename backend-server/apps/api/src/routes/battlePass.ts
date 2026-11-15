@@ -1,21 +1,16 @@
 import { Router } from "express";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode } from "../utils/http.js";
-import { Season } from "../models/Season.js";
-import { getBattlePass, purchaseBattlePass, levelUpBattlePass } from "../services/battlePass.js";
+import { getBattlePass, purchaseBattlePass, claimBattlePassReward } from "../services/battlePass.js";
+import { validateBody } from "../middleware/validate.js";
+import { z } from "zod";
 
 export const battlePassRouter = Router();
 battlePassRouter.use(requireAuth);
 
 battlePassRouter.get("/battle-pass", asyncHandler(async (req: AuthRequest, res) => {
-  let season = await Season.findOne({ active: true }).lean();
-  if (!season) {
-    const { defaultSeason } = await import("../models/Season.js");
-    const created = await Season.create(defaultSeason);
-    season = JSON.parse(JSON.stringify(created));
-  }
   const bp = await getBattlePass(req.user!.id);
-  sendOk(res, { battlePass: bp?.battlePass ?? null, season });
+  sendOk(res, { battlePass: bp.battlePass, season: bp.season });
 }));
 
 battlePassRouter.post("/battle-pass/purchase", asyncHandler(async (req: AuthRequest, res) => {
@@ -23,8 +18,8 @@ battlePassRouter.post("/battle-pass/purchase", asyncHandler(async (req: AuthRequ
   sendOk(res, result);
 }));
 
-battlePassRouter.post("/battle-pass/level-up", asyncHandler(async (req: AuthRequest, res) => {
-  const xp = typeof req.body.xp === "number" ? req.body.xp : 100;
-  const result = await levelUpBattlePass(req.user!.id, xp);
+const claimRewardSchema = z.object({ level: z.number().int().min(1).max(100), track: z.enum(["free", "premium"]) });
+battlePassRouter.post("/battle-pass/claim", validateBody(claimRewardSchema), asyncHandler(async (req: AuthRequest, res) => {
+  const result = await claimBattlePassReward(req.user!.id, req.body.level, req.body.track);
   sendOk(res, result);
 }));

@@ -394,6 +394,15 @@ export async function getActivePk(roomId: string) {
 export async function sendPkGift(input: { userId: string; battleId: string; giftId: string; side: PkSide; idempotencyKey?: string }) {
   objectId(input.battleId, "battleId");
   objectId(input.giftId, "giftId");
+  if (input.idempotencyKey) {
+    const previous = await GiftTransaction.findOne({ senderId: input.userId, "metadata.idempotencyKey": input.idempotencyKey }).lean();
+    if (previous) {
+      if (previous.metadata?.pkBattleId?.toString?.() !== input.battleId) {
+        throw new HttpError(409, "Gift request key was already used", ErrorCode.CONFLICT);
+      }
+      return { battle: await pkState(input.battleId), giftTransaction: previous };
+    }
+  }
   const battle = await PkBattle.findById(input.battleId);
   const gift = await Gift.findOne({ _id: input.giftId, isActive: true }).lean();
   if (!battle || battle.status !== "ACTIVE") throw new HttpError(404, "Active PK not found", ErrorCode.NOT_FOUND);
@@ -415,7 +424,8 @@ export async function sendPkGift(input: { userId: string; battleId: string; gift
       senderId: input.userId,
       receiverId,
       giftId: gift._id,
-      coinAmount: gift.coinPrice
+      coinAmount: gift.coinPrice,
+      metadata: { pkBattleId: battle.id, side: input.side, idempotencyKey: input.idempotencyKey }
     }], { session });
     const comboMultiplier = Math.min(combo, 5);
     const effectivePoints = gift.coinPrice * comboMultiplier;
@@ -457,6 +467,12 @@ export async function sendPkGift(input: { userId: string; battleId: string; gift
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
+    if (input.idempotencyKey && (err as { code?: number })?.code === 11000) {
+      const previous = await GiftTransaction.findOne({ senderId: input.userId, "metadata.idempotencyKey": input.idempotencyKey }).lean();
+      if (previous?.metadata?.pkBattleId?.toString?.() === input.battleId) {
+        return { battle: await pkState(input.battleId), giftTransaction: previous };
+      }
+    }
     throw err;
   }
 }

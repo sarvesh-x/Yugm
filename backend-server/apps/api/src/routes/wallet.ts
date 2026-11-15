@@ -16,7 +16,7 @@ import { WalletTransaction } from "../models/WalletTransaction.js";
 import { creditWallet, debitWallet, creatorShare, platformFee } from "../services/wallet.js";
 import { emitRoom, emitUser } from "../services/socket.js";
 import { createNotification } from "../services/notifications.js";
-import { consumeGooglePlayProduct, createRazorpayOrder, fetchRazorpayPayment, verifyGooglePlayProduct, verifyRazorpaySignature } from "../services/payments.js";
+import { assertRazorpayConfigured, consumeGooglePlayProduct, createRazorpayOrder, fetchRazorpayPayment, verifyGooglePlayProduct, verifyRazorpaySignature } from "../services/payments.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId } from "../utils/http.js";
 import { env } from "../config/env.js";
 import { getCachedJson, setCachedJson } from "../services/redis.js";
@@ -308,6 +308,7 @@ walletRouter.get("/wallet/purchases", asyncHandler(async (req: AuthRequest, res)
 
 walletRouter.post("/wallet/purchases/razorpay/order", requireWalletNotFrozen, validateBody(createPurchaseOrderSchema), asyncHandler(async (req: AuthRequest, res) => {
   if (req.body.provider !== "RAZORPAY") throw new HttpError(400, "Invalid provider", ErrorCode.VALIDATION);
+  assertRazorpayConfigured();
   const pack = findCoinPack(req.body.packId);
   const purchase = await Purchase.create({
     userId: req.user!.id,
@@ -388,27 +389,43 @@ walletRouter.post("/wallet/purchases/google-play/verify", requireWalletNotFrozen
 
   let purchase = existing;
   if (!purchase) {
-    purchase = await Purchase.create({
-      userId: req.user!.id,
-      provider: "GOOGLE_PLAY",
-      status: "PAID",
-      packId: pack.id,
-      assetCurrency: "COINS",
-      coinAmount: pack.coinAmount,
-      diamondAmount: 0,
-      amountInr: pack.priceInr,
-      currency: "INR",
-      productId: req.body.productId,
-      purchaseToken: req.body.purchaseToken,
-      googleOrderId: req.body.orderId ?? product.orderId,
-      metadata: { product }
-    });
-  } else {
-    if (purchase.packId !== pack.id || purchase.productId && purchase.productId !== req.body.productId) {
-      throw new HttpError(400, "Purchase token does not match requested product", ErrorCode.VALIDATION);
+    try {
+      purchase = await Purchase.findOneAndUpdate(
+        { provider: "GOOGLE_PLAY", purchaseToken: req.body.purchaseToken },
+        { $setOnInsert: {
+          userId: req.user!._id,
+          provider: "GOOGLE_PLAY",
+          status: "PAID",
+          packId: pack.id,
+          assetCurrency: "COINS",
+          coinAmount: pack.coinAmount,
+          diamondAmount: 0,
+          amountInr: pack.priceInr,
+          currency: "INR",
+          productId: req.body.productId,
+          purchaseToken: req.body.purchaseToken,
+          googleOrderId: req.body.orderId ?? product.orderId,
+          metadata: { product }
+        } },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+    } catch (error) {
+      // Two verification callbacks can race after both observed no record.
+      // The unique token index elects one writer; reuse its record on retry.
+      if ((error as { code?: number })?.code !== 11000) throw error;
+      purchase = await Purchase.findOne({ provider: "GOOGLE_PLAY", purchaseToken: req.body.purchaseToken });
     }
-    purchase.status = purchase.status === "CREDITED" ? "CREDITED" : "PAID";
-    purchase.packId = pack.id;
+  }
+  if (!purchase) throw new HttpError(503, "Purchase receipt could not be saved. Retry verification.", ErrorCode.VALIDATION);
+  if (purchase.userId.toString() !== req.user!.id) throw new HttpError(409, "Purchase token already used", ErrorCode.CONFLICT);
+  if (purchase.packId !== pack.id || purchase.productId && purchase.productId !== req.body.productId) {
+    throw new HttpError(400, "Purchase token does not match requested product", ErrorCode.VALIDATION);
+  }
+  if (["REFUND_PENDING", "REFUNDED"].includes(purchase.status)) {
+    throw new HttpError(409, "This purchase has already been refunded", ErrorCode.CONFLICT);
+  }
+  if (purchase.status !== "CREDITED") {
+    purchase.status = "PAID";
     purchase.assetCurrency = purchase.assetCurrency || "COINS";
     purchase.coinAmount = purchase.coinAmount || pack.coinAmount;
     purchase.diamondAmount = purchase.diamondAmount ?? 0;
@@ -430,7 +447,7 @@ walletRouter.post("/wallet/purchases/google-play/verify", requireWalletNotFrozen
 walletRouter.post("/wallet/dev-recharge", requireWalletNotFrozen, asyncHandler(async (req: AuthRequest, res) => {
   if (env.NODE_ENV !== "development") throw new HttpError(404, "Not found");
   const raw = Number(req.body.amount);
-  const amount = Number.isFinite(raw) && raw > 0 ? Math.min(raw, 5000) : 500;
+  const amount = Number.isFinite(raw) && raw > 0 ? Math.min(Math.floor(raw), 25000) : 500;
   await creditWallet(req.user!.id, amount, "RECHARGE", { dev: true });
   const user = await User.findById(req.user!.id).select("walletBalance").lean();
   sendOk(res, { balance: user?.walletBalance ?? 0 });

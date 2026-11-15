@@ -3,10 +3,17 @@ import { RoomParticipant } from "../models/RoomParticipant.js";
 import { User } from "../models/User.js";
 import { invalidateCache } from "./redis.js";
 
+export const ALWAYS_ON_OFFICIAL_VOICE_ROOM = "official-yugm-trending";
+
+export function isAlwaysOnOfficialVoiceRoom(room: { type?: string; livekitRoomName?: string } | null | undefined) {
+  return room?.type === "VOICE" && room.livekitRoomName === ALWAYS_ON_OFFICIAL_VOICE_ROOM;
+}
+
 const officialHost = {
   name: "Yugm Official",
   username: "yugm.official",
   email: "official@yugm.local",
+  avatar: "/assets/yugm-official-avatar.png",
   firebaseUid: "official-yugm-system",
   city: "India",
   bio: "Always-on official rooms from Yugm.",
@@ -19,9 +26,9 @@ const officialHost = {
 
 const officialRooms = [
   {
-    livekitRoomName: "official-yugm-trending",
-    title: "Yugm Official: Trending Now",
-    description: "Always open for new people, live topics, and quick vibe checks.",
+    livekitRoomName: ALWAYS_ON_OFFICIAL_VOICE_ROOM,
+    title: "Yugm Official",
+    description: "Yugm's always-open official voice room. Drop in, meet the community, and join the conversation.",
     type: "VOICE",
     coverImage: "https://images.unsplash.com/photo-1517457373958-b7bdd4587205",
     category: "Trending",

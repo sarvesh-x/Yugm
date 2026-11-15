@@ -136,7 +136,8 @@ object RoomApi {
             token = data.optString("token"),
             url = data.optString("url"),
             roomName = data.optString("roomName"),
-            role = data.optString("role", "AUDIENCE")
+            role = data.optString("role", "AUDIENCE"),
+            canPublishMicrophone = data.optBoolean("canPublishMicrophone", false)
         )
     }
 
@@ -159,6 +160,10 @@ object RoomApi {
 
     suspend fun takeRoomSeat(token: String, roomId: String, seatIndex: Int) {
         YugmHttpClient.post("/rooms/$roomId/take-seat", token, JSONObject().put("seatIndex", seatIndex))
+    }
+
+    suspend fun leaveRoomSeat(token: String, roomId: String) {
+        YugmHttpClient.post("/rooms/$roomId/leave-seat", token, JSONObject())
     }
 
     suspend fun inviteSpeaker(token: String, roomId: String, userId: String) {

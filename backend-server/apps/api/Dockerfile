@@ -5,6 +5,7 @@ COPY apps/api/package.json apps/api/tsconfig.json ./apps/api/
 COPY packages/shared/ packages/shared/
 RUN npm ci --include=dev --workspace apps/api
 COPY apps/api/src/ ./apps/api/src/
+COPY apps/api/public/ ./apps/api/public/
 RUN npm run build --workspace apps/api
 RUN npm ci --omit=dev --workspace apps/api
 
@@ -17,6 +18,7 @@ ENV NODE_ENV=production \
     PORT=4000
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps/api/dist ./apps/api/dist
+COPY --from=build /app/apps/api/public ./apps/api/public
 COPY --from=build /app/apps/api/package.json ./apps/api/
 COPY --from=build /app/packages/shared ./packages/shared
 COPY --from=build /app/package.json ./package.json

@@ -72,7 +72,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.viewinterop.AndroidView
 import com.yugm.app.core.api.YugmMediaRoom
-import com.yugm.app.core.api.YugmSocket
 import com.yugm.app.core.model.ChatMessage
 import com.yugm.app.core.model.GiftItem
 import com.yugm.app.core.model.Host
@@ -168,6 +167,7 @@ fun VideoLivestreamScreen(
     var opponentFeeds by remember { mutableStateOf<List<YugmMediaRoom.VideoFeed>>(emptyList()) }
     var joined by rememberSaveable(room.id) { mutableStateOf(false) }
     var requestVoiceAfterPermission by rememberSaveable(room.id) { mutableStateOf(false) }
+    var blockedPermission by remember(room.id) { mutableStateOf<String?>(null) }
     val ownCameraGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
     val ownMicGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
@@ -177,22 +177,45 @@ fun VideoLivestreamScreen(
         cameraOn = isHost && cameraAllowed
         micOn = isHost && micAllowed
         onJoin(cameraAllowed && isHost, micAllowed && isHost)
-        if (isHost && (!cameraAllowed || !micAllowed)) onToast("Allow camera and microphone to start your livestream with video and sound.")
+        if (isHost && (!cameraAllowed || !micAllowed)) {
+            blockedPermission = when {
+                !cameraAllowed && !micAllowed -> "camera and microphone"
+                !cameraAllowed -> "camera"
+                else -> "microphone"
+            }
+            onToast("Allow camera and microphone to start your livestream with video and sound.")
+        } else blockedPermission = null
     }
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         cameraOn = granted
-        if (granted) YugmMediaRoom.setCameraEnabled(true) else onToast("Camera permission is needed to stream video.")
+        if (granted) {
+            blockedPermission = null
+            YugmMediaRoom.setCameraEnabled(true)
+        } else {
+            blockedPermission = "camera"
+            onToast("Camera permission is needed to stream video.")
+        }
     }
     val microphonePermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (requestVoiceAfterPermission) {
             requestVoiceAfterPermission = false
             if (granted) { localRequestSent = true; onRequestSpeaker() }
-            else onToast("Microphone access is needed before you can request to speak.")
+            else {
+                blockedPermission = "microphone"
+                onToast("Microphone access is needed before you can request to speak.")
+            }
         } else {
             micOn = granted
-            if (granted) YugmMediaRoom.setMicEnabled(true) else onToast("Microphone permission is needed to speak.")
+            if (granted) {
+                blockedPermission = null
+                YugmMediaRoom.setMicEnabled(true)
+            } else {
+                blockedPermission = "microphone"
+                onToast("Microphone permission is needed to speak.")
+            }
         }
     }
+    RoomPermissionDialog(blockedPermission) { blockedPermission = null }
 
     LaunchedEffect(room.id, isHost) {
         if (!joined) {
@@ -222,10 +245,10 @@ fun VideoLivestreamScreen(
     }
     LaunchedEffect(hasPendingRequest) { if (hasPendingRequest) localRequestSent = true }
     DisposableEffect(room.id) {
-        onDispose {
-            YugmSocket.disconnect()
-            YugmMediaRoom.disconnect()
-        }
+        // Room navigation can temporarily remove this screen when it is minimized.
+        // Keep the LiveKit and socket sessions alive; explicit Leave/End actions
+        // already disconnect through RoomViewModel before removing the route.
+        onDispose { }
     }
 
     val hostFeed = feeds.firstOrNull()

@@ -300,7 +300,7 @@ export const profileCosmeticTypes = [
 ] as const;
 export const moderationActionTypes = ["WARN", "MUTE", "SUSPEND", "BAN", "UNBAN"] as const;
 
-export const levelMilestones = [
+const starterLevelMilestones = [
   { level: 1, requiredXp: 0, title: "New Vibe", coinReward: 0 },
   { level: 2, requiredXp: 100, title: "Rising Vibe", coinReward: 25 },
   { level: 3, requiredXp: 250, title: "Room Regular", coinReward: 50 },
@@ -313,6 +313,17 @@ export const levelMilestones = [
   { level: 10, requiredXp: 6000, title: "Yugm Legend", coinReward: 500 }
 ] as const;
 
+const extendedLevelTitles = ["Vibe Captain", "Stage Icon", "Crowd Favorite", "Star Maker", "Culture Shaper", "Yugm Elite", "Legendary Host", "Yugm Vanguard"] as const;
+export const levelMilestones = [
+  ...starterLevelMilestones,
+  ...Array.from({ length: 40 }, (_, index) => {
+    const level = index + 11;
+    const stepsAfterTen = level - 10;
+    const requiredXp = 6000 + (1200 * stepsAfterTen) + (100 * stepsAfterTen * (stepsAfterTen + 1));
+    return { level, requiredXp, title: extendedLevelTitles[Math.min(Math.floor((level - 11) / 5), extendedLevelTitles.length - 1)], coinReward: 200 + (level - 11) * 10 };
+  })
+];
+
 export const xpEvents = {
   PROFILE_COMPLETE: 80,
   DAILY_CHECKIN: 25,
@@ -324,7 +335,8 @@ export const xpEvents = {
   VIP_PURCHASE: 100,
   COSMETIC_PURCHASE: 60,
   FOLLOW_USER: 10,
-  MINI_GAME_PLAY: 8
+  MINI_GAME_PLAY: 8,
+  BATTLE_PASS_REWARD: 0
 } as const;
 
 export type XpEvent = keyof typeof xpEvents;
@@ -385,7 +397,8 @@ export const walletSources = [
   "RECHARGE", "GIFT_SENT", "GIFT_RECEIVED", "GIFT_SENT_DM", "GIFT_RECEIVED_DM", "VIP_PURCHASE",
   "PROFILE_COSMETIC_PURCHASE", "COSMETIC_BUNDLE_PURCHASE", "COSMETIC_GIFT_SENT", "COSMETIC_GIFT_RECEIVED",
   "LEVEL_REWARD", "STREAK_BONUS", "DAILY_REWARD", "ADMIN_ADJUSTMENT", "RAZORPAY_PURCHASE",
-  "GOOGLE_PLAY_PURCHASE", "PAYMENT_REFUND", "REFERRAL_BONUS", "STORY_REWARD", "SUBSCRIPTION"
+  "GOOGLE_PLAY_PURCHASE", "PAYMENT_REFUND", "REFERRAL_BONUS", "STORY_REWARD", "SUBSCRIPTION",
+  "SURPRISE_BOX", "GIFT_UPGRADE", "GIFT_PURCHASE", "BATTLE_PASS_PURCHASE", "BATTLE_PASS_REWARD"
 ] as const;
 
 export const dailyRewardConfig = {
@@ -414,6 +427,11 @@ export const walletSourceLabels = {
   ,PAYMENT_REFUND: "Payment refund"
   ,REFERRAL_BONUS: "Referral bonus"
   ,STORY_REWARD: "Story reward"
+  ,SURPRISE_BOX: "Surprise box"
+  ,GIFT_UPGRADE: "Gift upgrade"
+  ,GIFT_PURCHASE: "Gift purchase"
+  ,BATTLE_PASS_PURCHASE: "Battle Pass premium"
+  ,BATTLE_PASS_REWARD: "Battle Pass reward"
 } as const;
 
 export const vipPlans = [

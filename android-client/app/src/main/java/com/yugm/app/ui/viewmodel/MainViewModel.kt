@@ -102,7 +102,7 @@ class MainViewModel @Inject constructor(
         // Firebase token retrieval. Revoke the server session as best effort.
         runCatching { FirebaseAuth.getInstance().signOut() }
         runCatching { YugmSocket.disconnect() }
-        runCatching { YugmMediaRoom.disconnect() }
+        YugmMediaRoom.disconnectAsync()
         sessionManager.logout()
         authToken = ""
         currentUserId = ""

@@ -71,6 +71,11 @@ data class SurpriseBoxResult(
     val source: String = ""
 )
 
+data class GiftPurchaseResult(
+    val gift: GiftV2? = null,
+    val price: Int = 0
+)
+
 data class UpgradeResult(
     val upgradeCost: Int = 0,
     val fromGift: GiftV2? = null,

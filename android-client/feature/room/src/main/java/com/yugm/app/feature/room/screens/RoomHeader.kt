@@ -3,43 +3,44 @@ package com.yugm.app.feature.room.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.runtime.withFrameNanos
 import com.yugm.app.core.model.ActiveCosmetics
 import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomParticipant
@@ -47,7 +48,7 @@ import com.yugm.app.core.ui.components.Avatar
 
 private val HeaderText = Color.White
 private val HeaderMuted = Color(0xFFCBC5D5)
-private val HeaderSurface = Color(0x663C2A48)
+private val HeaderSurface = Color(0xFF3A1E3E)
 
 @Composable
 internal fun SharedRoomHeader(
@@ -66,12 +67,12 @@ internal fun SharedRoomHeader(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color(0x42201831))
-            .padding(start = 12.dp, end = 10.dp, top = 5.dp, bottom = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(3.dp)
+            .background(HeaderSurface.copy(alpha = 0.58f))
+            .padding(top = 5.dp, bottom = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (!room.coverImage.isNullOrBlank()) {
@@ -113,71 +114,62 @@ internal fun SharedRoomHeader(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier
+                    .clip(RoundedCornerShape(topStart = 0.dp, bottomStart = 0.dp, topEnd = 50.dp, bottomEnd = 50.dp))
+                    .background(Color(0xFF7A6368).copy(alpha = 0.45f))
+                    .clickable(onClick = onRankClick)
+                    .padding(start = 9.dp, end = 12.dp, top = 6.dp, bottom = 6.dp)
+                    .semantics { contentDescription = "Room rank 1" },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                Row(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(Color(0x664A3515))
-                        .border(1.dp, Color(0x99FFC247), CircleShape)
-                        .clickable(onClick = onRankClick)
-                        .padding(horizontal = 9.dp, vertical = 5.dp)
-                        .semantics { contentDescription = "Room rank 1" },
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("🏆", fontSize = 11.sp)
-                    Text(" 1 ›", color = Color(0xFFFFC247), fontSize = 11.sp, fontWeight = FontWeight.Black)
-                }
+                Icon(Icons.Filled.EmojiEvents, contentDescription = null, tint = Color(0xFFFFB82E), modifier = Modifier.size(20.dp))
+                Text("1", color = Color(0xFFFFB82E), fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text("›", color = Color(0xFFFFC75B), fontSize = 20.sp, fontWeight = FontWeight.Medium)
             }
-            val membersScrollState = androidx.compose.foundation.rememberScrollState()
-            val memberIds = participants.map { it.user.id.ifBlank { it.id } }
-            LaunchedEffect(memberIds) {
-                withFrameNanos { }
-                membersScrollState.scrollTo(membersScrollState.maxValue)
-            }
-            BoxWithConstraints(
+            Box(
                 modifier = Modifier
                     .weight(1f)
-                    .semantics { contentDescription = "Room members, $memberCount total" }
+                    .padding(start = 8.dp, end = 12.dp)
+                    .height(42.dp)
+                    .semantics { contentDescription = "Room members, $memberCount total" },
+                contentAlignment = Alignment.CenterEnd
             ) {
-                Row(
-                    modifier = Modifier.horizontalScroll(membersScrollState).widthIn(min = maxWidth),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End)
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(end = 40.dp),
+                    // Avatar includes a transparent frame inset; keep row spacing compact
+                    // while leaving a small visible gap before the listener count.
+                    horizontalArrangement = Arrangement.spacedBy(0.dp, Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    participants.asReversed().forEach { participant ->
-                        key(participant.user.id.ifBlank { participant.id }) {
-                            Avatar(
-                                participant.user.name.firstOrNull()?.toString() ?: "?",
-                                18,
-                                participant.user.avatar,
-                                participant.user.activeCosmetics
-                            )
-                        }
+                    items(participants.asReversed(), key = { it.user.id.ifBlank { it.id } }) { participant ->
+                        Avatar(
+                            participant.user.name.firstOrNull()?.toString() ?: "?",
+                            28,
+                            participant.user.avatar,
+                            participant.user.activeCosmetics
+                        )
                     }
                 }
-            }
-            Row(
-                modifier = Modifier
-                    .padding(start = 9.dp)
-                    .clip(CircleShape)
-                    .background(HeaderSurface)
-                    .border(1.dp, Color(0x33FFFFFF), CircleShape)
-                    .padding(horizontal = 7.dp, vertical = 5.dp)
-                    .semantics { contentDescription = "$memberCount people in room" },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text("•", color = Color(0xFF64E69A), fontSize = 13.sp)
-                Text("$memberCount", color = HeaderText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF7D6B82).copy(alpha = 0.55f))
+                        .semantics { contentDescription = "$memberCount people in room" },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Filled.Person, contentDescription = null, tint = Color.White.copy(alpha = 0.16f), modifier = Modifier.size(30.dp))
+                    Text("$memberCount", color = HeaderText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun HeaderAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+private fun HeaderAction(icon: ImageVector, label: String, onClick: () -> Unit) {
     IconButton(
         onClick = onClick,
         modifier = Modifier.size(34.dp).semantics { contentDescription = label }

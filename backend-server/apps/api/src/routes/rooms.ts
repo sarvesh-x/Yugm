@@ -30,6 +30,7 @@ import { createReportWithEvidence } from "../services/moderation.js";
 import { assertUsersCanInteract } from "../services/safety.js";
 import { autoModerate } from "../middleware/autoModerate.js";
 import { applyAutoModeration } from "../services/autoModeration.js";
+import { isAlwaysOnOfficialVoiceRoom } from "../services/officialRooms.js";
 
 const patchSchema = z.object({
   title: z.string().min(1).max(100).optional(),
@@ -403,6 +404,11 @@ roomsRouter.post("/:id/join", requireAuth, requireNotRoomRestricted, requireNotS
 
 roomsRouter.post("/:id/leave", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
+  const room = await Room.findById(req.params.id);
+  if (room && isAlwaysOnOfficialVoiceRoom(room) && room.hostId.toString() === req.user!.id) {
+    sendOk(res, { left: true, hostRemains: true });
+    return;
+  }
   const result = await RoomParticipant.findOneAndUpdate({ roomId: req.params.id, userId: req.user!.id, leftAt: null }, { leftAt: new Date() });
   if (result) {
     await decrementRoomParticipantCount(req.params.id);
@@ -412,7 +418,6 @@ roomsRouter.post("/:id/leave", requireAuth, asyncHandler(async (req: AuthRequest
   await addActivity(req.params.id, "LEAVE", `${req.user!.name} left`, req.user!.id);
 
   // If host leaves and there is no admin user in the room then the room gets closed; if admin is available the room can stay active
-  const room = await Room.findById(req.params.id);
   if (room && room.status === "LIVE" && room.hostId.toString() === req.user!.id) {
     const activeAdmin = await RoomParticipant.findOne({
       roomId: req.params.id,
@@ -435,6 +440,9 @@ roomsRouter.post("/:id/leave", requireAuth, asyncHandler(async (req: AuthRequest
 
 roomsRouter.post("/:id/end", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   const room = await assertHost(req, req.params.id);
+  if (isAlwaysOnOfficialVoiceRoom(room)) {
+    throw new HttpError(409, "The Yugm Official voice room is always open", ErrorCode.CONFLICT);
+  }
   await Room.findByIdAndUpdate(req.params.id, { $set: { status: "ENDED", endedAt: new Date() } });
   await invalidateCache("rooms:*");
   emitRoom(req.params.id, socketEvents.roomEnded, { roomId: req.params.id });
@@ -528,6 +536,28 @@ roomsRouter.post("/:id/take-seat", requireAuth, requireNotMuted, validateBody(z.
   }
   emitRoom(room._id.toString(), socketEvents.roomParticipantUpdate, { roomId: room.id, action: wasAudience ? "seat_taken" : "seat_changed", userId, seatIndex });
   sendOk(res, { seated: true, seatIndex, moved: !wasAudience });
+}));
+
+roomsRouter.post("/:id/leave-seat", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
+  const room = await getRoomOrThrow(req.params.id);
+  if (room.status !== "LIVE" || room.type !== "VOICE") throw new HttpError(400, "This room has no live mic seats", ErrorCode.VALIDATION);
+  const userId = req.user!.id;
+  await requireActiveParticipant(room._id, userId);
+  const participant = await RoomParticipant.findOneAndUpdate(
+    { roomId: room._id, userId, leftAt: null, role: { $in: ["HOST", "SPEAKER", "MODERATOR"] } },
+    { $set: { role: "AUDIENCE", micEnabled: false, moderatorMuted: false }, $unset: { seatIndex: 1 } },
+    { new: true }
+  );
+  if (!participant) throw new HttpError(409, "You are not currently on a mic seat", ErrorCode.CONFLICT);
+  // Leaving a mic seat is a speaking-state change, not a loss of room
+  // moderation privileges. Keep moderator/admin membership intact.
+  await Room.findByIdAndUpdate(room._id, { $pull: { speakerIds: userId } });
+  emitRoom(room._id.toString(), socketEvents.roomParticipantUpdate, {
+    roomId: room.id,
+    action: "speaker_removed",
+    userId
+  });
+  sendOk(res, { leftSeat: true });
 }));
 
 roomsRouter.post("/:id/invite-speaker", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
@@ -815,6 +845,8 @@ roomsRouter.post("/:id/messages", requireAuth, requireNotMuted, requireNotChatRe
   const populatedMessage = await message.populate("senderId", "name username avatar");
   // NOTE: emitRoom is called after the socket room join for consistent ordering
   emitRoom(req.params.id, socketEvents.roomChatMessage, { message: populatedMessage });
-  await grantRoomXp(req.user!.id, "CHAT_MESSAGE", { roomId: req.params.id });
+  void grantRoomXp(req.user!.id, "CHAT_MESSAGE", { roomId: req.params.id }).catch((error) => {
+    console.error("Room chat XP grant failed:", error);
+  });
   sendOk(res, { message: populatedMessage }, 201);
 }));

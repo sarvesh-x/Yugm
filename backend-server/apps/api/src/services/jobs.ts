@@ -13,6 +13,7 @@ import { Notification } from "../models/Notification.js";
 import { DirectMessage } from "../models/DirectMessage.js";
 import { ChatMessage } from "../models/ChatMessage.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
+import { ALWAYS_ON_OFFICIAL_VOICE_ROOM } from "./officialRooms.js";
 
 type PushPayload = {
   userId: string;
@@ -100,7 +101,11 @@ async function runMaintenanceTasks() {
 
   try {
     const staleRooms = await Room.updateMany(
-      { status: "LIVE", createdAt: { $lte: new Date(Date.now() - 48 * 60 * 60 * 1000) } },
+      {
+        status: "LIVE",
+        livekitRoomName: { $ne: ALWAYS_ON_OFFICIAL_VOICE_ROOM },
+        createdAt: { $lte: new Date(Date.now() - 48 * 60 * 60 * 1000) }
+      },
       { $set: { status: "ENDED", endedAt: new Date() } }
     );
     if (staleRooms.modifiedCount > 0) results.push(`Ended ${staleRooms.modifiedCount} stale rooms`);

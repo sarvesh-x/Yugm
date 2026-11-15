@@ -15,6 +15,8 @@ import { MiniGameChallenge } from "../models/MiniGameChallenge.js";
 import { MiniGameScore } from "../models/MiniGameScore.js";
 import { Notification } from "../models/Notification.js";
 import { Purchase } from "../models/Purchase.js";
+import { BattlePass } from "../models/BattlePass.js";
+import { Season } from "../models/Season.js";
 import { PayoutReview } from "../models/PayoutReview.js";
 import { Relationship } from "../models/Relationship.js";
 import { Report } from "../models/Report.js";
@@ -51,6 +53,8 @@ const indexedModels = [
   GiftTransaction,
   WalletTransaction,
   Purchase,
+  BattlePass,
+  Season,
   Report,
   MiniGameScore,
   MiniGameChallenge,
@@ -63,6 +67,14 @@ const indexedModels = [
 ];
 
 export async function ensureProductionIndexes() {
+  // Replace the old sparse compound index. Because `provider` is always set,
+  // MongoDB indexed token-less Razorpay rows as null, blocking later orders.
+  try {
+    await Purchase.collection.dropIndex("provider_1_purchaseToken_1");
+  } catch (error) {
+    const code = (error as { code?: number })?.code;
+    if (code !== 26 && code !== 27) throw error;
+  }
   await Promise.all(indexedModels.map((model) => model.createIndexes()));
   console.log(`Mongo indexes ensured for ${indexedModels.length} collections`);
 }

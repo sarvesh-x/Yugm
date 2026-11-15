@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.yugm.app.feature.gift.viewmodel.GiftViewModel
+import com.yugm.app.core.model.InventoryItem
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -22,6 +23,7 @@ fun InventoryScreen(
     viewModel: GiftViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+    var upgradeTarget by remember { mutableStateOf<InventoryItem?>(null) }
 
     LaunchedEffect(token) {
         viewModel.loadInventory(token)
@@ -69,15 +71,16 @@ fun InventoryScreen(
                                         Text("Tradable", fontSize = 11.sp, color = Color(0xFF76FF03))
                                     }
                                     if (itemGift?.upgradeable == true) {
-                                        Text("Upgradeable", fontSize = 11.sp, color = Color(0xFF40C4FF))
+                                        Text("Upgradeable · ${itemGift.coinPrice * 3 / 2} coins", fontSize = 11.sp, color = Color(0xFF40C4FF))
                                     }
                                 }
                                 if (itemGift != null) {
-                                    Text(
-                                        "${itemGift.coinPrice} coins",
-                                        fontSize = 13.sp,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text("${itemGift.coinPrice} coins", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                                        if (itemGift.upgradeable) {
+                                            TextButton(enabled = !state.isLoading, onClick = { upgradeTarget = item }) { Text("Upgrade") }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -85,5 +88,30 @@ fun InventoryScreen(
                 }
             }
         }
+    }
+
+    upgradeTarget?.let { item ->
+        val gift = item.gift
+        AlertDialog(
+            onDismissRequest = { upgradeTarget = null },
+            title = { Text("Upgrade ${gift?.name ?: "gift"}?") },
+            text = { Text("This spends ${gift?.coinPrice?.times(3)?.div(2) ?: 0} coins and upgrades one copy in your inventory.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.upgradeGift(token, item.id)
+                    upgradeTarget = null
+                }) { Text("Upgrade") }
+            },
+            dismissButton = { TextButton(onClick = { upgradeTarget = null }) { Text("Cancel") } }
+        )
+    }
+
+    state.upgradeResult?.let { result ->
+        AlertDialog(
+            onDismissRequest = viewModel::clearUpgradeResult,
+            title = { Text("Gift upgraded") },
+            text = { Text("${result.fromGift?.name ?: "Gift"} became ${result.upgradedGift?.name ?: "a new gift"}.") },
+            confirmButton = { TextButton(onClick = viewModel::clearUpgradeResult) { Text("Done") } }
+        )
     }
 }

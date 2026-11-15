@@ -20,6 +20,30 @@ export async function getGiftsV2(category?: string, rarity?: string, page = 1, l
   return { gifts, total, page, limit };
 }
 
+export async function purchaseGift(userId: string, giftId: string) {
+  const gift = await Gift.findOne({ _id: giftId, isActive: true }).lean();
+  if (!gift) throw new HttpError(404, "Gift not found", ErrorCode.NOT_FOUND);
+  if (gift.coinPrice <= 0) throw new HttpError(400, "This gift cannot be purchased", ErrorCode.VALIDATION);
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    await debitWallet(userId, gift.coinPrice, "GIFT_PURCHASE", { giftId: gift._id }, session);
+    await GiftInventory.findOneAndUpdate(
+      { userId, giftId: gift._id },
+      { $inc: { quantity: 1 }, $setOnInsert: { userId, giftId: gift._id, source: "purchased", tradable: gift.tradable ?? false } },
+      { upsert: true, session }
+    );
+    await session.commitTransaction();
+    return { gift, price: gift.coinPrice };
+  } catch (err) {
+    await session.abortTransaction();
+    throw err;
+  } finally {
+    await session.endSession();
+  }
+}
+
 export async function getCollections() {
   const collections = await GiftCollection.find({ isActive: true }).populate("gifts").lean();
   return { collections };
@@ -165,29 +189,46 @@ export async function surpriseBox(userId: string, tier: "basic" | "premium" | "l
 }
 
 export async function upgradeGift(userId: string, inventoryId: string) {
-  const invItem = await GiftInventory.findById(inventoryId).lean();
-  if (!invItem) throw new HttpError(404, "Inventory item not found", ErrorCode.NOT_FOUND);
-  if (invItem.userId.toString() !== userId) throw new HttpError(403, "Not your item", ErrorCode.FORBIDDEN);
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const invItem = await GiftInventory.findById(inventoryId).session(session).lean();
+    if (!invItem) throw new HttpError(404, "Inventory item not found", ErrorCode.NOT_FOUND);
+    if (invItem.userId.toString() !== userId) throw new HttpError(403, "Not your item", ErrorCode.FORBIDDEN);
 
-  const gift = await Gift.findById(invItem.giftId).lean();
-  if (!gift || !gift.upgradeable) throw new HttpError(400, "Gift is not upgradeable", ErrorCode.VALIDATION);
-  if (!gift.upgradePath || gift.upgradePath.length === 0) throw new HttpError(400, "No upgrade path", ErrorCode.VALIDATION);
+    const gift = await Gift.findById(invItem.giftId).session(session).lean();
+    if (!gift || !gift.upgradeable) throw new HttpError(400, "Gift is not upgradeable", ErrorCode.VALIDATION);
+    if (!gift.upgradePath || gift.upgradePath.length === 0) throw new HttpError(400, "No upgrade path", ErrorCode.VALIDATION);
+    const nextGiftId = gift.upgradePath[0];
+    const upgradedGift = await Gift.findById(nextGiftId).session(session).lean();
+    if (!upgradedGift || !upgradedGift.isActive) throw new HttpError(409, "The next gift in this upgrade path is unavailable", ErrorCode.CONFLICT);
 
-  const upgradeCost = Math.floor(gift.coinPrice * 1.5);
-  await debitWallet(userId, upgradeCost, "GIFT_UPGRADE", { inventoryId, fromGiftId: gift._id });
+    const upgradeCost = Math.floor(gift.coinPrice * 1.5);
+    await debitWallet(userId, upgradeCost, "GIFT_UPGRADE", { inventoryId, fromGiftId: gift._id }, session);
+    if (invItem.quantity > 1) {
+      const consumed = await GiftInventory.updateOne(
+        { _id: inventoryId, userId, quantity: { $gt: 0 } },
+        { $inc: { quantity: -1 } },
+        { session }
+      );
+      if (consumed.modifiedCount !== 1) throw new HttpError(409, "Gift inventory changed; try again", ErrorCode.CONFLICT);
+    } else {
+      await GiftInventory.deleteOne({ _id: inventoryId, userId }, { session });
+    }
+    await GiftInventory.findOneAndUpdate(
+      { userId, giftId: nextGiftId },
+      { $inc: { quantity: 1 }, $setOnInsert: { userId, giftId: nextGiftId, source: "upgrade", tradable: true } },
+      { upsert: true, new: true, session }
+    );
 
-  const nextGiftId = gift.upgradePath[0];
-  await GiftInventory.findByIdAndDelete(inventoryId);
-
-  await GiftInventory.findOneAndUpdate(
-    { userId, giftId: nextGiftId },
-    { $inc: { quantity: 1 }, $setOnInsert: { userId, giftId: nextGiftId, source: "upgrade", tradable: true } },
-    { upsert: true }
-  );
-
-  const upgradedGift = await Gift.findById(nextGiftId).lean();
-
-  return { upgradeCost, fromGift: gift, upgradedGift };
+    await session.commitTransaction();
+    return { upgradeCost, fromGift: gift, upgradedGift };
+  } catch (err) {
+    await session.abortTransaction();
+    throw err;
+  } finally {
+    session.endSession();
+  }
 }
 
 export async function getInventory(userId: string) {

@@ -149,8 +149,10 @@ export function createApp() {
 
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
-  // Serve the admin panel production build
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  app.use("/assets", express.static(path.resolve(__dirname, "../public")));
+
+  // Serve the admin panel production build
   const adminDist = path.resolve(__dirname, "../../admin/dist");
   app.use("/admin", express.static(adminDist, { index: false }));
   app.get("/admin/*", (_req, res) => {

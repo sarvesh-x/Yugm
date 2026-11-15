@@ -7,6 +7,11 @@ import org.json.JSONObject
 
 object GiftsApi {
 
+    suspend fun purchaseGift(token: String, giftId: String): GiftPurchaseResult {
+        val data = YugmHttpClient.post("/gifts/purchase", token, JSONObject().put("giftId", giftId)).getJSONObject("data")
+        return GiftPurchaseResult(gift = data.optJSONObject("gift")?.toGiftV2(), price = data.optInt("price", 0))
+    }
+
     suspend fun giftsV2(token: String, category: String? = null, rarity: String? = null, page: Int = 1, limit: Int = 20): Pair<List<GiftV2>, Int> {
         val params = buildString {
             append("?page=$page&limit=$limit")

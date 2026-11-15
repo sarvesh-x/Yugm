@@ -588,7 +588,9 @@ usersRouter.get("/search", asyncHandler(async (req: AuthRequest, res) => {
   );
   const users = await User.find({
     _id: { $nin: hiddenIds },
-    $or: [{ name: regex }, { username: regex }, { interests: regex }, { city: regex }],
+    $or: req.query.scope === "username"
+      ? [{ username: regex }]
+      : [{ name: regex }, { username: regex }, { interests: regex }, { city: regex }],
     isBlocked: { $ne: true }
   })
     .select("name username avatar city followersCount interests role activeCosmetics vipTier vipStartedAt vipExpiresAt xp level levelTitle lastDailyCheckInAt")

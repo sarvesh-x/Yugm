@@ -3,6 +3,8 @@ import mongoose, { Schema } from "mongoose";
 export interface IBattlePassReward {
   level: number;
   claimed: boolean;
+  freeClaimed: boolean;
+  premiumClaimed: boolean;
   rewardId?: mongoose.Types.ObjectId;
 }
 
@@ -20,6 +22,8 @@ export interface IBattlePass extends mongoose.Document {
 const battlePassRewardSchema = new Schema<IBattlePassReward>({
   level: { type: Number, required: true },
   claimed: { type: Boolean, default: false },
+  freeClaimed: { type: Boolean, default: false },
+  premiumClaimed: { type: Boolean, default: false },
   rewardId: { type: Schema.Types.ObjectId }
 }, { _id: false });
 

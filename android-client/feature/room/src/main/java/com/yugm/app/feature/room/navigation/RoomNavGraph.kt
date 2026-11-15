@@ -41,7 +41,7 @@ fun NavGraphBuilder.roomNavGraph(
     userNameProvider: () -> String,
     usernameProvider: () -> String,
     balanceProvider: () -> Int,
-    onMinimizeRoom: (String, com.yugm.app.core.model.RoomType) -> Unit = { _, _ -> },
+    onMinimizeRoom: (com.yugm.app.core.model.Room, com.yugm.app.core.model.RoomType) -> Unit = { _, _ -> },
 ) {
     composable(Screen.VoiceRooms.route) {
         VoiceRoomsScreen(
@@ -211,8 +211,8 @@ fun NavGraphBuilder.roomNavGraph(
                 forcedRemoveVersion = roomViewModel.forcedRemoveVersion,
                 roomEndedVersion = roomViewModel.roomEndedVersion,
                 roomReactionEvent = roomViewModel.roomReactionEvent,
-                canSpeak = room.host?.id == currentUserIdProvider() || detail.participants.any {
-                    it.user.id == currentUserIdProvider() && it.role in listOf("SPEAKER", "MODERATOR")
+                canSpeak = detail.participants.any {
+                    it.user.id == currentUserIdProvider() && it.role in listOf("HOST", "SPEAKER", "MODERATOR")
                 },
                 participants = detail.participants,
                 inviteCandidates = roomViewModel.inviteCandidates,
@@ -227,7 +227,7 @@ fun NavGraphBuilder.roomNavGraph(
                 activity = roomViewModel.activity,
                 onBack = { roomViewModel.leaveAndDisconnect { navController.returnFromRoom() } },
                 onSendMessage = roomViewModel::sendMessage,
-                onGift = { gift, currency -> roomViewModel.sendGift(gift, room.host?.id ?: "", currency) },
+                onGift = { gift, currency, receiverId -> roomViewModel.sendGift(gift, receiverId.ifBlank { room.host?.id.orEmpty() }, currency) },
                 onToast = { msg -> android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show() },
                 onRequestSpeaker = {
                     roomViewModel.requestSpeaker()
@@ -255,7 +255,7 @@ fun NavGraphBuilder.roomNavGraph(
                     if (!targetId.isNullOrBlank()) navController.navigate(Screen.Chat.createRoute(targetId))
                 },
                 onOpenProfile = { targetId -> navController.navigate(Screen.ProfileDetail.createRoute(targetId)) },
-                onMinimize = { onMinimizeRoom(roomId, com.yugm.app.core.model.RoomType.Voice) },
+                onMinimize = { onMinimizeRoom(room, com.yugm.app.core.model.RoomType.Voice) },
                 onReact = roomViewModel::reactToRoom,
                 onLoadPkOpponents = { search -> roomViewModel.loadPkOpponents(com.yugm.app.core.model.PkBattleType.VOICE, search) },
                 onInvitePk = { opponent, mode, duration, title ->
@@ -278,6 +278,7 @@ fun NavGraphBuilder.roomNavGraph(
                 onOwnMicStateChanged = roomViewModel::setOwnMicState,
                 onRemoveUser = roomViewModel::removeUser,
                 onRemoveSpeaker = roomViewModel::removeSpeaker,
+                onLeaveSeat = roomViewModel::leaveOwnSeat,
                 onSetRoomAdmin = roomViewModel::setRoomAdmin,
                 onFollowUser = roomViewModel::followRoomUser,
                 onUnfollowUser = roomViewModel::unfollowRoomUser,
@@ -331,7 +332,7 @@ fun NavGraphBuilder.roomNavGraph(
                 pkLiveEffect = roomViewModel.pkLiveEffect,
                 pkOpponentMedia = roomViewModel.pkOpponentMedia,
                 onBack = { roomViewModel.leaveAndDisconnect { navController.returnFromRoom() } },
-                onMinimize = { onMinimizeRoom(roomId, com.yugm.app.core.model.RoomType.Video) },
+                onMinimize = { onMinimizeRoom(room, com.yugm.app.core.model.RoomType.Video) },
                 onJoin = roomViewModel::joinVideo,
                 onSendMessage = roomViewModel::sendMessage,
                 onGift = { gift, currency -> roomViewModel.sendGift(gift, room.host?.id ?: "", currency) },

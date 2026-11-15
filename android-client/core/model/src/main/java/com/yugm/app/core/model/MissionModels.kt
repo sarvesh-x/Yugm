@@ -66,7 +66,9 @@ data class BattlePassSeason(
 
 data class BattlePassRewardState(
     val level: Int = 0,
-    val claimed: Boolean = false
+    val claimed: Boolean = false,
+    val freeClaimed: Boolean = false,
+    val premiumClaimed: Boolean = false
 )
 
 data class BattlePassResponse(
@@ -77,6 +79,7 @@ data class BattlePassResponse(
 data class Season(
     val id: String = "",
     val name: String = "",
+    val description: String = "",
     val active: Boolean = true,
     val startDate: String = "",
     val endDate: String = "",
@@ -88,11 +91,14 @@ data class Season(
 
 data class SeasonReward(
     val level: Int = 0,
+    val freeReward: BattlePassTrackReward? = null,
+    val premiumReward: BattlePassTrackReward? = null
+)
+
+data class BattlePassTrackReward(
     val type: String = "",
     val itemId: String? = null,
-    val amount: Int = 0,
-    val premium: Boolean = false,
-    val description: String = ""
+    val amount: Int = 0
 )
 
 data class BattlePassPurchaseResult(

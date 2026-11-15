@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,14 +24,24 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,9 +53,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.yugm.app.core.api.YugmApi
 import com.yugm.app.core.model.DirectMessage
 import com.yugm.app.core.model.Host
 import com.yugm.app.core.ui.components.Avatar
@@ -52,6 +66,11 @@ import com.yugm.app.core.ui.components.YugmBottomDock
 import com.yugm.app.core.ui.components.YugmPullToRefreshBox
 import com.yugm.app.core.ui.components.YugmDockTab
 import com.yugm.app.feature.chat.viewmodel.ChatListViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val ChatBg = Color(0xFF060714)
 private val ChatInk = Color(0xFFF8FAFC)
@@ -76,6 +95,7 @@ fun ChatListScreen(
     var query by remember { mutableStateOf("") }
     var mainTab by remember { mutableIntStateOf(0) }
     var contactTab by remember { mutableIntStateOf(0) }
+    var showFindPeople by remember { mutableStateOf(false) }
 
     LaunchedEffect(token, currentUserId) { viewModel.load(token, currentUserId) }
 
@@ -119,8 +139,8 @@ fun ChatListScreen(
                     Spacer(Modifier.weight(1f))
                     ChatSearch(query = query, onQuery = { query = it }, hint = "Search")
                     Spacer(Modifier.width(8.dp))
-                    Box(Modifier.size(42.dp).clip(CircleShape).background(ChatPanel).clickable(role = Role.Button, onClickLabel = "Find people", onClick = onDiscover), contentAlignment = Alignment.Center) {
-                        Text("＋", color = ChatInk, fontSize = 23.sp, fontWeight = FontWeight.Medium)
+                    Box(Modifier.size(42.dp).clip(CircleShape).background(ChatPanel).border(1.dp, ChatLine, CircleShape).clickable(role = Role.Button, onClickLabel = "Find people by username", onClick = { showFindPeople = true }), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Filled.PersonAdd, contentDescription = null, tint = ChatInk, modifier = Modifier.size(20.dp))
                     }
                 }
             }
@@ -254,6 +274,214 @@ fun ChatListScreen(
             chatBadge = unread.coerceAtMost(9),
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+        if (showFindPeople) {
+            FindPeopleSheet(
+                token = token,
+                currentUserId = currentUserId,
+                onDismiss = { showFindPeople = false },
+                onOpenChat = { userId ->
+                    showFindPeople = false
+                    onOpenChat(userId)
+                },
+                onFollowChanged = { viewModel.load(token, currentUserId) }
+            )
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun FindPeopleSheet(
+    token: String,
+    currentUserId: String,
+    onDismiss: () -> Unit,
+    onOpenChat: (String) -> Unit,
+    onFollowChanged: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    var query by remember { mutableStateOf("") }
+    var results by remember { mutableStateOf<List<Host>>(emptyList()) }
+    var searching by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busyUserId by remember { mutableStateOf("") }
+    var retry by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(query, token, currentUserId, retry) {
+        val username = query.trim().removePrefix("@").trim()
+        if (username.length < 2) {
+            results = emptyList()
+            error = null
+            searching = false
+            return@LaunchedEffect
+        }
+        delay(320)
+        searching = true
+        error = null
+        try {
+            results = withContext(Dispatchers.IO) {
+                YugmApi.searchUsers(username, token, usernameOnly = true)
+                    .filter { it.id != currentUserId }
+                    .take(30)
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (exception: Exception) {
+            error = exception.message ?: "Search failed. Try again."
+            results = emptyList()
+        } finally {
+            searching = false
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = ChatBg,
+        contentColor = ChatInk,
+        dragHandle = null
+    ) {
+        Column(
+            Modifier.fillMaxWidth().fillMaxHeight(0.88f).padding(horizontal = 20.dp)
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    Modifier.size(44.dp).clip(RoundedCornerShape(15.dp)).background(ChatPurple.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Filled.PersonAdd, contentDescription = null, tint = Color(0xFFC9A5FF), modifier = Modifier.size(22.dp))
+                }
+                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                    Text("Find people", color = ChatInk, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                    Text("Search by username and start a conversation", color = ChatMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 3.dp))
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Filled.Close, contentDescription = "Close search", tint = ChatMuted)
+                }
+            }
+
+            Row(
+                Modifier.fillMaxWidth().padding(top = 20.dp).height(54.dp)
+                    .clip(RoundedCornerShape(17.dp)).background(ChatPanel)
+                    .border(1.dp, ChatLine, RoundedCornerShape(17.dp)).padding(horizontal = 15.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.Search, contentDescription = null, tint = ChatMuted, modifier = Modifier.size(21.dp))
+                BasicTextField(
+                    value = query,
+                    onValueChange = { query = it.take(32) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    textStyle = TextStyle(color = ChatInk, fontSize = 15.sp),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(ChatPurple),
+                    modifier = Modifier.weight(1f).padding(start = 11.dp),
+                    decorationBox = { inner ->
+                        Box {
+                            if (query.isBlank()) Text("Enter a username", color = ChatMuted, fontSize = 14.sp)
+                            inner()
+                        }
+                    }
+                )
+                if (query.isNotBlank()) {
+                    Text("Clear", color = Color(0xFFC9A5FF), fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Clear username search") { query = "" }.padding(start = 10.dp))
+                }
+            }
+            Text("Use at least 2 characters", color = ChatMuted, fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 12.dp))
+
+            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                when {
+                    query.trim().removePrefix("@").trim().length < 2 -> {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Filled.PersonAdd, contentDescription = null, tint = ChatPurple.copy(alpha = 0.75f), modifier = Modifier.size(38.dp))
+                            Text("Find someone by their @username", color = ChatMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp))
+                        }
+                    }
+                    searching -> CircularProgressIndicator(color = ChatPurple, strokeWidth = 2.5.dp)
+                    error != null -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(error.orEmpty(), color = ChatMuted, fontSize = 13.sp)
+                        TextButton(onClick = { retry++ }) { Text("Try again", color = Color(0xFFC9A5FF)) }
+                    }
+                    results.isEmpty() -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("No users found", color = ChatInk, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Check the spelling or try another username.", color = ChatMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
+                    }
+                    else -> LazyColumn(
+                        Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(9.dp),
+                        contentPadding = PaddingValues(bottom = 24.dp)
+                    ) {
+                        items(results, key = { "find-${it.id}" }) { user ->
+                            FindPeopleResultRow(
+                                user = user,
+                                followBusy = busyUserId == user.id,
+                                onOpenChat = { onOpenChat(user.id) },
+                                onFollow = {
+                                    if (busyUserId.isNotBlank()) return@FindPeopleResultRow
+                                    busyUserId = user.id
+                                    scope.launch {
+                                        val result = withContext(Dispatchers.IO) {
+                                            runCatching {
+                                                if (user.isFollowing) YugmApi.unfollowUser(token, user.id)
+                                                else YugmApi.followUser(token, user.id)
+                                            }
+                                        }
+                                        result.onSuccess {
+                                            results = results.map { person ->
+                                                if (person.id == user.id) person.copy(isFollowing = !user.isFollowing) else person
+                                            }
+                                            onFollowChanged()
+                                        }.onFailure { exception ->
+                                            error = exception.message ?: "Couldn't update this connection."
+                                        }
+                                        busyUserId = ""
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FindPeopleResultRow(
+    user: Host,
+    followBusy: Boolean,
+    onOpenChat: () -> Unit,
+    onFollow: () -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(19.dp)).background(ChatCard)
+            .border(1.dp, ChatLine, RoundedCornerShape(19.dp)).padding(horizontal = 13.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Avatar(user.name.take(1), 48, user.avatar, user.activeCosmetics)
+        Column(
+            Modifier.weight(1f).padding(start = 11.dp).clickable(role = Role.Button, onClickLabel = "Start a chat with ${user.name}", onClick = onOpenChat),
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(user.name.ifBlank { user.username }, color = ChatInk, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("@${user.username}", color = ChatMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Box(
+            Modifier.padding(start = 8.dp).clip(RoundedCornerShape(13.dp))
+                .background(if (user.isFollowing) ChatPanel else ChatPurple.copy(alpha = 0.88f))
+                .clickable(enabled = !followBusy, role = Role.Button, onClickLabel = if (user.isFollowing) "Unfollow ${user.name}" else "Follow ${user.name}", onClick = onFollow)
+                .padding(horizontal = 12.dp, vertical = 9.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            if (followBusy) CircularProgressIndicator(Modifier.size(15.dp), color = ChatInk, strokeWidth = 2.dp)
+            else Text(if (user.isFollowing) "Following" else "Follow", color = ChatInk, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
+        TextButton(onClick = onOpenChat, modifier = Modifier.padding(start = 3.dp)) {
+            Text("Message", color = Color(0xFFC9A5FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
     }
 }
 

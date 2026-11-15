@@ -52,9 +52,10 @@ object UserApi {
         return YugmHttpClient.patch("/users/me", token, body).getJSONObject("data").getJSONObject("user").toUser()
     }
 
-    suspend fun searchUsers(query: String, token: String? = null): List<Host> {
+    suspend fun searchUsers(query: String, token: String? = null, usernameOnly: Boolean = false): List<Host> {
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
-        val data = YugmHttpClient.get("/users/search?q=$encoded", auth = token).getJSONObject("data")
+        val scope = if (usernameOnly) "&scope=username" else ""
+        val data = YugmHttpClient.get("/users/search?q=$encoded$scope", auth = token).getJSONObject("data")
         return data.getJSONArray("users").toHosts()
     }
 

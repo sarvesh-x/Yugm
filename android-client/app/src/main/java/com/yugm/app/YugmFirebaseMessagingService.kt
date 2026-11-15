@@ -17,6 +17,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+import timber.log.Timber
 
 @AndroidEntryPoint
 class YugmFirebaseMessagingService : FirebaseMessagingService() {
@@ -34,7 +35,12 @@ class YugmFirebaseMessagingService : FirebaseMessagingService() {
         if (sessionManager.authToken.isNotBlank()) scope.launch {
             runCatching {
                 withContext(Dispatchers.IO) { YugmApi.registerFcmToken(sessionManager.authToken, token) }
-            }.onSuccess { sessionManager.pendingFcmToken = "" }
+            }.onSuccess {
+                sessionManager.pendingFcmToken = ""
+                Timber.tag("PushNotifications").d("Refreshed device push registration")
+            }.onFailure { error ->
+                Timber.tag("PushNotifications").e(error, "Could not refresh device push registration; it will retry after sign-in")
+            }
         }
     }
 

@@ -18,8 +18,8 @@ test("calculateLevel progresses through milestones", () => {
 
 test("calculateLevel returns last milestone for very high XP", () => {
   const result = calculateLevel(1_000_000);
-  assert.equal(result.level, 10);
-  assert.equal(result.title, "Yugm Legend");
+  assert.equal(result.level, 50);
+  assert.equal(result.title, "Yugm Vanguard");
 });
 
 test("calculateLevel handles negative XP gracefully", () => {

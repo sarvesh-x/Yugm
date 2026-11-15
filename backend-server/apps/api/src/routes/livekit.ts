@@ -20,10 +20,14 @@ livekitRouter.post("/token", validateBody(livekitTokenSchema), asyncHandler(asyn
   if (!participant) throw new HttpError(403, "Join the room before requesting a media token", ErrorCode.FORBIDDEN);
   const role = participant?.role ?? "AUDIENCE";
   const canSpeak = participant.micEnabled && !participant.moderatorMuted && (role === "HOST" || role === "SPEAKER" || role === "MODERATOR");
+  // Give every non-muted participant a separate screen-share-audio capability
+  // for room music. Audience members still cannot publish microphone or camera.
+  const canPublishRoomMusic = !participant.moderatorMuted;
   const canPublishVideo = room.type === "VIDEO" && role === "HOST";
   const publishSources = [
     ...(canPublishVideo ? [TrackSource.CAMERA] : []),
-    ...(canSpeak ? [TrackSource.MICROPHONE] : [])
+    ...(canSpeak ? [TrackSource.MICROPHONE] : []),
+    ...(canPublishRoomMusic ? [TrackSource.SCREEN_SHARE_AUDIO] : [])
   ];
   const token = await mediaProvider.createToken({
     identity: req.user!.id,
@@ -37,6 +41,7 @@ livekitRouter.post("/token", validateBody(livekitTokenSchema), asyncHandler(asyn
     ...token,
     identity: req.user!.id,
     roomName: room.livekitRoomName,
-    role
+    role,
+    canPublishMicrophone: canSpeak
   });
 }));

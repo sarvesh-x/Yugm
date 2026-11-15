@@ -116,7 +116,7 @@ object PkApi {
             JSONObject()
                 .put("giftId", giftId)
                 .put("side", side.name)
-                .put("idempotencyKey", java.util.UUID.nameUUIDFromBytes("$battleId:$giftId:$side".toByteArray()).toString())
+                .put("idempotencyKey", java.util.UUID.randomUUID().toString())
         ).getJSONObject("data").getJSONObject("battle").toPkBattle()
     }
 

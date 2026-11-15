@@ -29,7 +29,8 @@ object YugmSocket {
         onUserMuted: ((userId: String) -> Unit)? = null,
         onUserRemoved: ((userId: String) -> Unit)? = null,
         onRoomParticipantChanged: ((action: String, userId: String) -> Unit)? = null,
-        onRoomDataChanged: ((event: String) -> Unit)? = null
+        onRoomDataChanged: ((event: String) -> Unit)? = null,
+        onRoomJoined: () -> Unit = {}
     ) {
         synchronized(lock) {
         disconnect()
@@ -51,8 +52,12 @@ object YugmSocket {
                 Timber.tag(TAG).d("Socket connected; joining room %s", roomId)
                 socket?.emit("room:join", JSONObject().put("roomId", roomId), io.socket.client.Ack { ackArgs ->
                     val result = ackArgs.firstOrNull() as? JSONObject
-                    if (result?.optBoolean("joined") == true) Timber.tag(TAG).d("Joined room socket channel %s", roomId)
-                    else Timber.tag(TAG).w("Room socket join was rejected for %s: %s", roomId, result?.optString("reason", "unknown"))
+                    if (result?.optBoolean("joined") == true) {
+                        Timber.tag(TAG).d("Joined room socket channel %s", roomId)
+                        onRoomJoined()
+                    } else {
+                        Timber.tag(TAG).w("Room socket join was rejected for %s: %s", roomId, result?.optString("reason", "unknown"))
+                    }
                 })
             }
             socket?.on(io.socket.client.Socket.EVENT_CONNECT_ERROR) { args ->

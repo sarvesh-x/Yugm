@@ -2,6 +2,7 @@
 
 import com.yugm.app.core.model.ClaimAchievementResult
 import com.yugm.app.core.model.GiftLeaderboardResponse
+import com.yugm.app.core.model.GiftPurchaseResult
 import com.yugm.app.core.model.WishlistItem
 import com.yugm.app.core.model.ReferralStatsResponse
 import com.yugm.app.core.model.RoomRecording
@@ -36,7 +37,6 @@ import com.yugm.app.core.model.EquippedThemes
 import com.yugm.app.core.model.FeedResponse
 import com.yugm.app.core.model.Achievement
 import com.yugm.app.core.model.ActiveMissionsResponse
-import com.yugm.app.core.model.BattlePassLevelUpResult
 import com.yugm.app.core.model.BattlePassPurchaseResult
 import com.yugm.app.core.model.BattlePassResponse
 import com.yugm.app.core.model.MissionClaimResult
@@ -178,6 +178,7 @@ object YugmApi : IYugmApi {
     override suspend fun approveSpeaker(token: String, roomId: String, userId: String) = RoomApi.approveSpeaker(token, roomId, userId)
     override suspend fun rejectSpeaker(token: String, roomId: String, userId: String) = RoomApi.rejectSpeaker(token, roomId, userId)
     override suspend fun takeRoomSeat(token: String, roomId: String, seatIndex: Int) = RoomApi.takeRoomSeat(token, roomId, seatIndex)
+    override suspend fun leaveRoomSeat(token: String, roomId: String) = RoomApi.leaveRoomSeat(token, roomId)
     override suspend fun inviteSpeaker(token: String, roomId: String, userId: String) = RoomApi.inviteSpeaker(token, roomId, userId)
     override suspend fun removeSpeaker(token: String, roomId: String, userId: String) = RoomApi.removeSpeaker(token, roomId, userId)
     override suspend fun roomActivity(roomId: String): List<RoomActivityItem> = RoomApi.roomActivity(roomId)
@@ -278,7 +279,7 @@ object YugmApi : IYugmApi {
 
     // User profile, search, follow, block, notifications, messaging
     override suspend fun updateProfile(token: String, name: String, username: String, bio: String?, city: String?, interests: List<String>?, languages: List<String>?, gender: String?, age: Int?, lookingFor: String?, avatar: String?, acceptTerms: Boolean, vibeLine: String?, hobbies: List<String>?, state: String?): YugmUser = UserApi.updateProfile(token, name, username, bio, city, interests, languages, gender, age, lookingFor, avatar, acceptTerms, vibeLine, hobbies, state)
-    override suspend fun searchUsers(query: String, token: String?): List<Host> = UserApi.searchUsers(query, token)
+    override suspend fun searchUsers(query: String, token: String?, usernameOnly: Boolean): List<Host> = UserApi.searchUsers(query, token, usernameOnly)
     override suspend fun getUser(userId: String, token: String?): Host = UserApi.getUser(userId, token)
     override suspend fun getPublicProfile(userId: String, token: String?): Host = UserApi.getPublicProfile(userId, token)
     override suspend fun getPublicProfileByUsername(username: String, token: String?): Host = UserApi.getPublicProfileByUsername(username, token)
@@ -493,7 +494,7 @@ object YugmApi : IYugmApi {
     // Battle Pass
     override suspend fun battlePass(token: String): BattlePassResponse = BattlePassApi.get(token)
     override suspend fun purchaseBattlePass(token: String): BattlePassPurchaseResult = BattlePassApi.purchase(token)
-    override suspend fun battlePassLevelUp(token: String, xp: Int): BattlePassLevelUpResult = BattlePassApi.levelUp(token, xp)
+    override suspend fun claimBattlePassReward(token: String, level: Int, track: String): BattlePassResponse = BattlePassApi.claim(token, level, track)
 
     // Social features (Week 9)
     override suspend fun getMood(token: String): UserMood = SocialApi.getMood(token)
@@ -517,6 +518,7 @@ object YugmApi : IYugmApi {
     // Gifts v2
     override suspend fun giftsV2(token: String, category: String?, rarity: String?, page: Int, limit: Int): Pair<List<GiftV2>, Int> = GiftsApi.giftsV2(token, category, rarity, page, limit)
     override suspend fun giftCollections(token: String): List<GiftCollection> = GiftsApi.collections(token)
+    override suspend fun purchaseGift(token: String, giftId: String): GiftPurchaseResult = GiftsApi.purchaseGift(token, giftId)
     override suspend fun comboGift(token: String, roomId: String, giftId: String, participants: List<String>): ComboResult = GiftsApi.comboGift(token, roomId, giftId, participants)
     override suspend fun roomWideGift(token: String, roomId: String, giftId: String, receiverIds: List<String>): RoomWideGiftResult = GiftsApi.roomWideGift(token, roomId, giftId, receiverIds)
     override suspend fun surpriseBox(token: String, tier: String): SurpriseBoxResult = GiftsApi.surpriseBox(token, tier)

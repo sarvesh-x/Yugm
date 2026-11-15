@@ -5,6 +5,7 @@ import { User } from "../models/User.js";
 import { createNotification } from "./notifications.js";
 import { creditWallet } from "./wallet.js";
 import { XpDailyCap } from "../models/XpDailyCap.js";
+import { addBattlePassXp } from "./battlePass.js";
 
 type LevelUser = {
   _id?: unknown;
@@ -71,8 +72,9 @@ export function getLevelStatus(user?: LevelUser | null) {
   };
 }
 
-export async function grantXp(userId: string, event: XpEvent, metadata: Record<string, unknown> = {}) {
-  let xpAwarded: number = xpEvents[event];
+export async function grantXp(userId: string, event: XpEvent, metadata: Record<string, unknown> = {}, amountOverride?: number) {
+  let xpAwarded: number = Math.max(0, Math.floor(amountOverride ?? xpEvents[event]));
+  if (xpAwarded <= 0) return { xpAwarded: 0, levelUpReward: 0, levelsGained: [], level: getLevelStatus(null) };
   const cap = dailyXpCaps[event];
   if (cap !== undefined) {
     const day = startOfUtcDay();
@@ -126,6 +128,10 @@ export async function grantXp(userId: string, event: XpEvent, metadata: Record<s
     { new: true }
   ).select("xp level levelTitle lastDailyCheckInAt").lean();
   if (!updated) return undefined;
+
+  await addBattlePassXp(userId, xpAwarded).catch((error) => {
+    console.warn("Battle pass XP sync failed:", error instanceof Error ? error.message : String(error));
+  });
 
   const status = getLevelStatus(updated);
   const promoted = await User.findOneAndUpdate(

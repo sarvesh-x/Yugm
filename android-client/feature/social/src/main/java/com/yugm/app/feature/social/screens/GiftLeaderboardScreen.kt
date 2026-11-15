@@ -30,6 +30,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -77,6 +79,7 @@ fun GiftLeaderboardScreen(
             item {
                 YugmPageHeader("Yugm", "Leaderboards", onBack = onBack)
             }
+            item { LeaderboardIntroCard() }
             item {
                 SegmentedTabs(
                     items = listOf("✦" to "Gifts", "♛" to "Clans", "⚡" to "Hosts", "◈" to "Rooms"),
@@ -119,7 +122,10 @@ fun GiftLeaderboardScreen(
                 0 -> {
                     val entries = if (selectedTab == 0) viewModel.leaderboard?.topSenders else viewModel.leaderboard?.topReceivers
                     if (entries.isNullOrEmpty()) item { EmptyLeaderboard("No gift activity for this period yet.") }
-                    else itemsIndexed(entries) { index, entry -> LeaderboardRow(rank = index + 1, entry = entry) }
+                    else {
+                        item { GiftPodiumCard(if (selectedTab == 0) "Top Users" else "Top Hosts", entries.take(3)) }
+                        itemsIndexed(entries.drop(3)) { index, entry -> LeaderboardRow(rank = index + 4, entry = entry) }
+                    }
                 }
                 1 -> {
                     if (viewModel.clanRankings.isEmpty()) item { EmptyLeaderboard("Public clan rankings appear as members earn XP.") }
@@ -141,7 +147,10 @@ fun GiftLeaderboardScreen(
                 }
                 2 -> {
                     if (viewModel.levelRankings.isEmpty()) item { EmptyLeaderboard("No host level rankings are available yet.") }
-                    itemsIndexed(viewModel.levelRankings) { index, host -> HostRankingRow(index + 1, host) }
+                    else {
+                        item { HostPodiumCard(viewModel.levelRankings.take(3)) }
+                        itemsIndexed(viewModel.levelRankings.drop(3)) { index, host -> HostRankingRow(index + 4, host) }
+                    }
                 }
                 else -> {
                     val rooms = viewModel.roomRankings.topRooms
@@ -163,6 +172,104 @@ fun GiftLeaderboardScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun LeaderboardIntroCard() {
+    Row(
+        Modifier.padding(horizontal = 20.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp))
+            .background(Brush.horizontalGradient(listOf(Color(0xFF321827), Color(0xFF542239))))
+            .border(1.dp, Pink.copy(alpha = .24f), RoundedCornerShape(20.dp)).padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Top List", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Black)
+            Text("Celebrate this month’s standout users, hosts, rooms, and clans.", color = TextMuted, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 4.dp))
+        }
+        Text("🏆", fontSize = 38.sp, modifier = Modifier.padding(start = 8.dp))
+    }
+}
+
+@Composable
+private fun GiftPodiumCard(title: String, entries: List<LeaderboardEntry>) {
+    if (entries.isEmpty()) return
+    Column(
+        Modifier.padding(horizontal = 20.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp))
+            .background(Brush.verticalGradient(listOf(Color(0xFF54223B), Color(0xFF291A2C))))
+            .border(1.dp, Pink.copy(alpha = .28f), RoundedCornerShape(22.dp)).padding(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("🎁", fontSize = 20.sp)
+            Text(title, color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f).padding(start = 8.dp))
+            Text("TOP 3", color = Color(0xFFFFC857), fontSize = 9.sp, fontWeight = FontWeight.Black)
+        }
+        Spacer(Modifier.height(18.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
+            if (entries.size > 1) PodiumGiftEntry(entries[1], 2, Modifier.weight(1f), 56)
+            PodiumGiftEntry(entries[0], 1, Modifier.weight(1.15f), 74)
+            if (entries.size > 2) PodiumGiftEntry(entries[2], 3, Modifier.weight(1f), 56)
+        }
+    }
+}
+
+@Composable
+private fun PodiumGiftEntry(entry: LeaderboardEntry, rank: Int, modifier: Modifier, avatarSize: Int) {
+    val name = entry.user?.name ?: entry.user?.username ?: "User"
+    val accent = when (rank) { 1 -> Color(0xFFFFC857); 2 -> Color(0xFFC7CAD6); else -> Color(0xFFD89462) }
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(if (rank == 1) "👑" else "✦", fontSize = if (rank == 1) 18.sp else 14.sp, color = accent)
+        Box(Modifier.padding(top = 3.dp).border(2.dp, accent, CircleShape).padding(3.dp)) {
+            Avatar(name.firstOrNull()?.toString() ?: "?", avatarSize, entry.user?.avatar)
+        }
+        Text(name, color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
+        Text("${entry.totalCoins} coins", color = accent, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text("${entry.giftCount} gifts", color = TextMuted, fontSize = 9.sp)
+        Box(
+            Modifier.fillMaxWidth().padding(top = 7.dp).height(if (rank == 1) 38.dp else 28.dp)
+                .clip(RoundedCornerShape(topStart = 9.dp, topEnd = 9.dp))
+                .background(Brush.verticalGradient(listOf(accent.copy(alpha = .78f), accent.copy(alpha = .18f)))),
+            contentAlignment = Alignment.Center
+        ) { Text("$rank", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black) }
+    }
+}
+
+@Composable
+private fun HostPodiumCard(hosts: List<com.yugm.app.core.model.Host>) {
+    if (hosts.isEmpty()) return
+    Column(
+        Modifier.padding(horizontal = 20.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp))
+            .background(Brush.verticalGradient(listOf(Color(0xFF4A391B), Color(0xFF261E20))))
+            .border(1.dp, Gold.copy(alpha = .28f), RoundedCornerShape(22.dp)).padding(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("🎙️", fontSize = 20.sp)
+            Text("Top Hosts", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f).padding(start = 8.dp))
+            Text("TOP 3", color = Gold, fontSize = 9.sp, fontWeight = FontWeight.Black)
+        }
+        Spacer(Modifier.height(18.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
+            if (hosts.size > 1) PodiumHostEntry(hosts[1], 2, Modifier.weight(1f), 56)
+            PodiumHostEntry(hosts[0], 1, Modifier.weight(1.15f), 74)
+            if (hosts.size > 2) PodiumHostEntry(hosts[2], 3, Modifier.weight(1f), 56)
+        }
+    }
+}
+
+@Composable
+private fun PodiumHostEntry(host: com.yugm.app.core.model.Host, rank: Int, modifier: Modifier, avatarSize: Int) {
+    val accent = when (rank) { 1 -> Color(0xFFFFC857); 2 -> Color(0xFFC7CAD6); else -> Color(0xFFD89462) }
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(if (rank == 1) "👑" else "✦", fontSize = if (rank == 1) 18.sp else 14.sp)
+        Box(Modifier.padding(top = 3.dp).border(2.dp, accent, CircleShape).padding(3.dp)) {
+            Avatar(host.name.firstOrNull()?.toString() ?: "?", avatarSize, host.avatar, host.activeCosmetics)
+        }
+        Text(host.name, color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
+        Text("${host.xp} XP", color = accent, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(host.levelTitle.ifBlank { "Level ${host.level}" }, color = TextMuted, fontSize = 9.sp, maxLines = 1)
+        Box(Modifier.fillMaxWidth().padding(top = 7.dp).height(if (rank == 1) 38.dp else 28.dp).clip(RoundedCornerShape(topStart = 9.dp, topEnd = 9.dp)).background(Brush.verticalGradient(listOf(accent.copy(alpha = .78f), accent.copy(alpha = .18f)))), contentAlignment = Alignment.Center) {
+            Text("$rank", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
         }
     }
 }

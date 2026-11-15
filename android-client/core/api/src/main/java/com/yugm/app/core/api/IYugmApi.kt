@@ -28,6 +28,7 @@ import com.yugm.app.core.model.GameLeaderboard
 import com.yugm.app.core.model.GameMissions
 import com.yugm.app.core.model.EquippedThemes
 import com.yugm.app.core.model.GiftCollection
+import com.yugm.app.core.model.GiftPurchaseResult
 import com.yugm.app.core.model.GiftItem
 import com.yugm.app.core.model.GiftLeaderboardResponse
 import com.yugm.app.core.model.GiftV2
@@ -75,7 +76,6 @@ import com.yugm.app.core.model.RoomActivityItem
 import com.yugm.app.core.model.RoomDetail
 import com.yugm.app.core.model.RoomLeaderboard
 import com.yugm.app.core.model.ActiveMissionsResponse
-import com.yugm.app.core.model.BattlePassLevelUpResult
 import com.yugm.app.core.model.BattlePassPurchaseResult
 import com.yugm.app.core.model.BattlePassResponse
 import com.yugm.app.core.model.MissionClaimResult
@@ -167,6 +167,7 @@ interface IYugmApi {
     suspend fun approveSpeaker(token: String, roomId: String, userId: String)
     suspend fun rejectSpeaker(token: String, roomId: String, userId: String)
     suspend fun takeRoomSeat(token: String, roomId: String, seatIndex: Int)
+    suspend fun leaveRoomSeat(token: String, roomId: String)
     suspend fun inviteSpeaker(token: String, roomId: String, userId: String)
     suspend fun removeSpeaker(token: String, roomId: String, userId: String)
     suspend fun roomActivity(roomId: String): List<RoomActivityItem>
@@ -272,7 +273,7 @@ interface IYugmApi {
     suspend fun shareGameScore(token: String, scoreId: String, targetUserId: String)
 
     suspend fun updateProfile(token: String, name: String, username: String, bio: String? = null, city: String? = null, interests: List<String>? = null, languages: List<String>? = null, gender: String? = null, age: Int? = null, lookingFor: String? = null, avatar: String? = null, acceptTerms: Boolean = false, vibeLine: String? = null, hobbies: List<String>? = null, state: String? = null): YugmUser
-    suspend fun searchUsers(query: String, token: String? = null): List<Host>
+    suspend fun searchUsers(query: String, token: String? = null, usernameOnly: Boolean = false): List<Host>
     suspend fun getUser(userId: String, token: String? = null): Host
     suspend fun getPublicProfile(userId: String, token: String? = null): Host
     suspend fun getPublicProfileByUsername(username: String, token: String? = null): Host
@@ -459,7 +460,7 @@ interface IYugmApi {
     // Battle Pass
     suspend fun battlePass(token: String): BattlePassResponse
     suspend fun purchaseBattlePass(token: String): BattlePassPurchaseResult
-    suspend fun battlePassLevelUp(token: String, xp: Int = 100): BattlePassLevelUpResult
+    suspend fun claimBattlePassReward(token: String, level: Int, track: String): BattlePassResponse
 
     // Social features (Week 9)
     suspend fun getMood(token: String): UserMood
@@ -483,6 +484,7 @@ interface IYugmApi {
     // Gifts v2
     suspend fun giftsV2(token: String, category: String? = null, rarity: String? = null, page: Int = 1, limit: Int = 20): Pair<List<GiftV2>, Int>
     suspend fun giftCollections(token: String): List<GiftCollection>
+    suspend fun purchaseGift(token: String, giftId: String): GiftPurchaseResult
     suspend fun comboGift(token: String, roomId: String, giftId: String, participants: List<String>): ComboResult
     suspend fun roomWideGift(token: String, roomId: String, giftId: String, receiverIds: List<String>): RoomWideGiftResult
     suspend fun surpriseBox(token: String, tier: String): SurpriseBoxResult
