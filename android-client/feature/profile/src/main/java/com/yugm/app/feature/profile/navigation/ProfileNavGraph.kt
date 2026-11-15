@@ -33,6 +33,8 @@ fun NavGraphBuilder.profileNavGraph(
     onOpenLevel: () -> Unit = {},
     onOpenWallet: () -> Unit = {},
     onOpenInventory: () -> Unit = {},
+    onOpenClan: (String) -> Unit = { navController.navigate(Screen.ClanDetail.createRoute(it)) },
+    onOpenClanList: () -> Unit = { navController.navigate(Screen.ClanList.route) },
 ) {
     val onProfileBack: () -> Unit = {
         if (!navController.popBackStack()) {
@@ -82,7 +84,9 @@ fun NavGraphBuilder.profileNavGraph(
             onOpenTasks = onOpenTasks,
             onOpenLevel = onOpenLevel,
             onOpenWallet = onOpenWallet,
-            onOpenInventory = onOpenInventory
+            onOpenInventory = onOpenInventory,
+            onOpenClan = onOpenClan,
+            onOpenClanList = onOpenClanList
         )
     }
 

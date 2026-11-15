@@ -9,7 +9,9 @@ import { requireNotChatRestricted } from "../middleware/requireSafety.js";
 import { validateBody } from "../middleware/validate.js";
 import { Block } from "../models/Block.js";
 import { DirectMessage } from "../models/DirectMessage.js";
+import { ConversationMute } from "../models/ConversationMute.js";
 import { Follow } from "../models/Follow.js";
+import { Friendship } from "../models/Friendship.js";
 import { FriendMatchRequest } from "../models/FriendMatchRequest.js";
 import { PkBattle } from "../models/PkBattle.js";
 import { pkState } from "../services/pk.js";
@@ -20,7 +22,7 @@ import { User, type IUser } from "../models/User.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId, sanitizeText } from "../utils/http.js";
 import { TrustVerification } from "../models/TrustVerification.js";
 import { createNotification } from "../services/notifications.js";
-import { emitUser, isUserOnline } from "../services/socket.js";
+import { emitUser, getOnlineUserIds, isUserOnline } from "../services/socket.js";
 import { autoModerate } from "../middleware/autoModerate.js";
 import { getVipStatus } from "../services/vip.js";
 import { dailyCheckInStart, getLevelStatus, grantXp } from "../services/levels.js";
@@ -42,25 +44,16 @@ async function handlePublicProfile(identifier: string, isUsername: boolean, req:
   }
   if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
 
-  // A friend is a mutual follow. Calculate this from the relationship records
-  // so profiles do not depend on the separate friend-request collection.
-  const friendCountRows = await Follow.aggregate([
-    { $match: { followingId: user._id } },
-    {
-      $lookup: {
-        from: Follow.collection.name,
-        let: { follower: "$followerId" },
-        pipeline: [
-          { $match: { $expr: { $and: [{ $eq: ["$followerId", user._id] }, { $eq: ["$followingId", "$$follower"] }] } } },
-          { $limit: 1 }
-        ],
-        as: "mutualFollow"
-      }
-    },
-    { $match: { "mutualFollow.0": { $exists: true } } },
-    { $count: "count" }
+  // Relationship counters on User are denormalized and can be stale after
+  // legacy data imports or account cleanup. Read the actual relationship rows.
+  const [followersCount, followingCount, friendsCount] = await Promise.all([
+    Follow.countDocuments({ followingId: user._id }),
+    Follow.countDocuments({ followerId: user._id }),
+    Friendship.countDocuments({
+      status: "ACCEPTED",
+      $or: [{ userId: user._id }, { friendId: user._id }]
+    })
   ]);
-  const friendsCount = friendCountRows[0]?.count ?? 0;
 
   let isFollowing = false;
   let isCloseFriend = false;
@@ -92,6 +85,8 @@ async function handlePublicProfile(identifier: string, isUsername: boolean, req:
   sendOk(res, {
     user: publicUser({
       ...user,
+      followersCount,
+      followingCount,
       isFollowing,
       isCloseFriend,
       friendsCount,
@@ -328,15 +323,24 @@ function hasCompletedProfile(user: any) {
   return Boolean(user?.name && user?.username && user?.bio && user?.city && (user?.interests?.length ?? 0) > 0);
 }
 
-usersRouter.get("/me", (req: AuthRequest, res) => sendOk(res, { user: publicUser(req.user) }));
+usersRouter.get("/me", asyncHandler(async (req: AuthRequest, res) => {
+  await handlePublicProfile(req.user!._id.toString(), false, req, res);
+}));
 
 usersRouter.delete("/me", asyncHandler(async (req: AuthRequest, res) => {
   const requestedAt = new Date();
+  const [sentPartners, receivedPartners] = await Promise.all([
+    DirectMessage.distinct("receiverId", { senderId: req.user!._id }),
+    DirectMessage.distinct("senderId", { receiverId: req.user!._id })
+  ]);
   await User.updateOne({ _id: req.user!._id }, { $set: { deletionRequestedAt: requestedAt }, $inc: { tokenVersion: 1 } });
   await Promise.all([
     revokeAllForUser(req.user!.id),
     DeviceToken.deleteMany({ userId: req.user!._id })
   ]);
+  for (const partnerId of new Set([...sentPartners, ...receivedPartners].map((id: any) => id.toString()))) {
+    emitUser(partnerId, socketEvents.directConversationDeleted, { partnerId: req.user!.id });
+  }
   sendOk(res, { deletionScheduledAt: new Date(requestedAt.getTime() + 30 * 24 * 60 * 60 * 1000) });
 }));
 
@@ -640,47 +644,47 @@ usersRouter.get("/hosts/suggested", asyncHandler(async (req: AuthRequest, res) =
   sendOk(res, { users: users.map((user) => ({ ...user, ...getVipStatus(user), xp: getLevelStatus(user).xp, level: getLevelStatus(user).level, levelTitle: getLevelStatus(user).title, levelStatus: getLevelStatus(user), isFollowing: false })) });
 }));
 
-// Recommended users to chat with: people you follow + suggested, online users sorted first
+// Random currently online users for the chat discovery carousel
 usersRouter.get("/users/recommended-chat", asyncHandler(async (req: AuthRequest, res) => {
   const limit = Math.min(Number(req.query.limit) || 30, 60);
-  const followingRows = await Follow.find({ followerId: req.user!.id }).lean();
-  const followingIds = followingRows.map((row) => row.followingId);
+  const onlineIds = await getOnlineUserIds();
+  if (onlineIds.length === 0) return sendOk(res, { users: [] });
+  const blockedRows = await Block.find({
+    $or: [
+      { blockerId: req.user!._id, blockedUserId: { $in: onlineIds } },
+      { blockedUserId: req.user!._id, blockerId: { $in: onlineIds } }
+    ]
+  }).select("blockerId blockedUserId").lean();
+  const excludedIds = new Set<string>([req.user!.id, ...blockedRows.flatMap((row) => [row.blockerId.toString(), row.blockedUserId.toString()])]);
+  const candidates = onlineIds.filter((id) => !excludedIds.has(id));
+  if (candidates.length === 0) return sendOk(res, { users: [] });
 
-  const followingUsers = await User.find({
-    _id: { $in: followingIds, $ne: req.user!.id },
-    isBlocked: { $ne: true }
-  })
-    .select("name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
-    .limit(limit)
-    .lean();
-
-  let suggestedUsers: any[] = [];
-  if (followingUsers.length < limit) {
-    const existingIds = new Set([req.user!.id.toString(), ...followingUsers.map((u: any) => u._id.toString())]);
-    suggestedUsers = await User.find({
-      _id: { $nin: Array.from(existingIds) },
-      isBlocked: { $ne: true }
-    })
-      .select("name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
-      .sort({ level: -1 })
-      .limit(limit - followingUsers.length)
-      .lean();
-  }
-
-  const allUsers = [...followingUsers, ...suggestedUsers];
-  const withOnline = allUsers.map((user: any) => ({
+  const sampledUsers = await User.aggregate([
+    { $match: {
+      _id: { $in: candidates.map((id) => new mongoose.Types.ObjectId(id)) },
+      isBlocked: { $ne: true },
+      deletionRequestedAt: { $exists: false }
+    } },
+    { $sample: { size: limit } },
+    { $project: { name: 1, username: 1, avatar: 1, activeCosmetics: 1, vipTier: 1, vipExpiresAt: 1, xp: 1, level: 1, levelTitle: 1 } }
+  ]);
+  const users = sampledUsers.map((user: any) => ({
     ...user,
     ...getVipStatus(user),
     isOnline: isUserOnline(user._id.toString()),
-    isFollowing: followingIds.some((id: any) => id.toString() === user._id.toString())
+    isFollowing: false
   }));
-  withOnline.sort((a: any, b: any) => (b.isOnline ? 1 : 0) - (a.isOnline ? 1 : 0));
-  sendOk(res, { users: withOnline });
+  sendOk(res, { users });
 }));
 
 usersRouter.get("/messages", asyncHandler(async (req: AuthRequest, res) => {
+  const unavailableUsers = await User.distinct("_id", { deletionRequestedAt: { $type: "date" } });
   const messages = await DirectMessage.find({
-    $or: [{ senderId: req.user!.id }, { receiverId: req.user!.id }]
+    $or: [
+      { senderId: req.user!._id, receiverId: { $nin: unavailableUsers } },
+      { receiverId: req.user!._id, senderId: { $nin: unavailableUsers } }
+    ],
+    hiddenFor: { $ne: req.user!._id }
   })
     .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .sort({ createdAt: -1 })
@@ -690,15 +694,67 @@ usersRouter.get("/messages", asyncHandler(async (req: AuthRequest, res) => {
 }));
 
 usersRouter.post("/messages/read-all", asyncHandler(async (req: AuthRequest, res) => {
+  const unavailableUsers = await User.distinct("_id", { deletionRequestedAt: { $type: "date" } });
+  const senders = await DirectMessage.distinct("senderId", { receiverId: req.user!._id, senderId: { $nin: unavailableUsers }, read: false, hiddenFor: { $ne: req.user!._id } });
   const result = await DirectMessage.updateMany(
-    { receiverId: req.user!.id, read: false },
+    { receiverId: req.user!.id, senderId: { $nin: unavailableUsers }, read: false, hiddenFor: { $ne: req.user!._id } },
     { $set: { read: true } }
   );
+  const readThrough = new Date().toISOString();
+  senders.forEach((senderId: any) => emitUser(senderId.toString(), socketEvents.directMessageRead, { partnerId: req.user!.id, readThrough }));
   sendOk(res, { updated: result.modifiedCount });
+}));
+
+usersRouter.get("/messages/unread-counts", asyncHandler(async (req: AuthRequest, res) => {
+  const unavailableUsers = await User.distinct("_id", { deletionRequestedAt: { $type: "date" } });
+  const rows = await DirectMessage.aggregate([
+    { $match: { receiverId: req.user!._id, senderId: { $nin: unavailableUsers }, read: false, hiddenFor: { $ne: req.user!._id } } },
+    { $group: { _id: "$senderId", count: { $sum: 1 } } }
+  ]);
+  const unreadCounts = Object.fromEntries(rows.map((row: any) => [row._id.toString(), row.count]));
+  sendOk(res, { unreadCounts, total: rows.reduce((sum: number, row: any) => sum + row.count, 0) });
+}));
+
+usersRouter.get("/messages/mutes", asyncHandler(async (req: AuthRequest, res) => {
+  const rows: any[] = await ConversationMute.find({ ownerId: req.user!._id, muted: true }).select("partnerId").lean();
+  sendOk(res, { partnerIds: rows.map((row) => row.partnerId.toString()) });
+}));
+
+usersRouter.get("/messages/:userId/search", asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.userId)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
+  if (await User.exists({ _id: req.params.userId, deletionRequestedAt: { $type: "date" } })) throw new HttpError(404, "This account is no longer available", ErrorCode.NOT_FOUND);
+  const query = String(req.query.q || "").trim();
+  if (query.length < 2) throw new HttpError(400, "Search must be at least 2 characters", ErrorCode.VALIDATION);
+  const blocked = await Block.exists({ $or: [
+    { blockerId: req.user!._id, blockedUserId: req.params.userId },
+    { blockerId: req.params.userId, blockedUserId: req.user!._id }
+  ] });
+  if (blocked) throw new HttpError(403, "Cannot search this conversation", ErrorCode.FORBIDDEN);
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const messages = await DirectMessage.find({
+    $or: [
+      { senderId: req.user!._id, receiverId: req.params.userId },
+      { senderId: req.params.userId, receiverId: req.user!._id }
+    ],
+    hiddenFor: { $ne: req.user!._id },
+    message: { $regex: escaped, $options: "i" }
+  }).sort({ createdAt: -1 }).limit(100).lean();
+  sendOk(res, { messages: messages.reverse() });
+}));
+
+usersRouter.put("/messages/:userId/mute", asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.userId) || typeof req.body.muted !== "boolean") throw new HttpError(400, "Invalid mute setting", ErrorCode.VALIDATION);
+  const preference = await ConversationMute.findOneAndUpdate(
+    { ownerId: req.user!._id, partnerId: req.params.userId },
+    { $set: { muted: req.body.muted, updatedAt: new Date() } },
+    { upsert: true, new: true }
+  ).lean();
+  sendOk(res, { muted: preference?.muted ?? false });
 }));
 
 usersRouter.get("/messages/:userId", asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.userId)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
+  if (await User.exists({ _id: req.params.userId, deletionRequestedAt: { $type: "date" } })) throw new HttpError(404, "This account is no longer available", ErrorCode.NOT_FOUND);
   const blocked = await Block.exists({
     $or: [
       { blockerId: req.user!.id, blockedUserId: req.params.userId },
@@ -710,24 +766,137 @@ usersRouter.get("/messages/:userId", asyncHandler(async (req: AuthRequest, res) 
     $or: [
       { senderId: req.user!.id, receiverId: req.params.userId },
       { senderId: req.params.userId, receiverId: req.user!.id }
-    ]
+    ],
+    hiddenFor: { $ne: req.user!._id }
   })
     .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .sort({ createdAt: -1 })
     .limit(100)
     .lean();
   const relationship = await findRelationship(req.user!.id, req.params.userId);
-  await DirectMessage.updateMany(
-    { senderId: req.params.userId, receiverId: req.user!.id, read: false },
+  const mutePreference: any = await ConversationMute.findOne({ ownerId: req.user!._id, partnerId: req.params.userId }).lean();
+  const readResult = await DirectMessage.updateMany(
+    { senderId: req.params.userId, receiverId: req.user!.id, read: false, hiddenFor: { $ne: req.user!._id } },
     { $set: { read: true } }
   );
-  sendOk(res, { messages: messages.reverse(), relationship });
+  if (readResult.modifiedCount > 0) emitUser(req.params.userId, socketEvents.directMessageRead, { partnerId: req.user!.id, readThrough: new Date().toISOString() });
+  sendOk(res, { messages: messages.reverse(), relationship, muted: Boolean(mutePreference?.muted) });
+}));
+
+usersRouter.put("/messages/:userId/:messageId", requireNotMuted, requireNotChatRestricted, chatLimiter, autoModerate("message"), asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.userId) || !isValidObjectId(req.params.messageId)) throw new HttpError(400, "Invalid message or user ID", ErrorCode.VALIDATION);
+  const messageText = String(req.body.message || "").trim();
+  if (!messageText || messageText.length > 2000) throw new HttpError(400, "Message must be between 1 and 2000 characters", ErrorCode.VALIDATION);
+  const message: any = await DirectMessage.findOne({ _id: req.params.messageId, senderId: req.user!._id, receiverId: req.params.userId });
+  if (!message) throw new HttpError(404, "Message not found", ErrorCode.NOT_FOUND);
+  if (Date.now() - new Date(message.createdAt).getTime() > 15 * 60 * 1000) throw new HttpError(400, "Messages can only be edited for 15 minutes", ErrorCode.VALIDATION);
+  if (message.mediaUrl) throw new HttpError(400, "Media messages cannot be edited", ErrorCode.VALIDATION);
+  message.message = sanitizeText(messageText);
+  message.isEdited = true;
+  message.editedAt = new Date();
+  await message.save();
+  await message.populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle");
+  emitUser(req.params.userId, socketEvents.directMessageNew, { message, partnerId: req.user!.id, updated: true });
+  emitUser(req.user!.id, socketEvents.directMessageNew, { message, partnerId: req.params.userId, updated: true });
+  sendOk(res, { message });
+}));
+
+usersRouter.post("/messages/:userId/forward", requireNotMuted, requireNotChatRestricted, chatLimiter, asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.userId) || !isValidObjectId(req.body.messageId)) throw new HttpError(400, "Invalid user or message ID", ErrorCode.VALIDATION);
+  if (req.params.userId === req.user!.id) throw new HttpError(400, "Cannot forward a message to yourself", ErrorCode.VALIDATION);
+  const source: any = await DirectMessage.findOne({ _id: req.body.messageId, $or: [
+    { senderId: req.user!._id }, { receiverId: req.user!._id }
+  ] }).lean();
+  if (!source) throw new HttpError(404, "Message not found", ErrorCode.NOT_FOUND);
+  if (!await User.exists({ _id: req.params.userId })) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+  const blocked = await Block.exists({ $or: [
+    { blockerId: req.user!._id, blockedUserId: req.params.userId },
+    { blockerId: req.params.userId, blockedUserId: req.user!._id }
+  ] });
+  if (blocked) throw new HttpError(403, "Cannot message this user", ErrorCode.FORBIDDEN);
+  const created = await DirectMessage.create({
+    senderId: req.user!._id, receiverId: req.params.userId,
+    message: source.message, mediaUrl: source.mediaUrl, mediaType: source.mediaType,
+    duration: source.duration, forwarded: true
+  });
+  const message: any = await DirectMessage.findById(created._id).populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle").lean();
+  emitUser(req.params.userId, socketEvents.directMessageNew, { message, partnerId: req.user!.id });
+  emitUser(req.user!.id, socketEvents.directMessageNew, { message, partnerId: req.params.userId });
+  const targetMuted = await ConversationMute.exists({ ownerId: req.params.userId, partnerId: req.user!._id, muted: true });
+  if (!targetMuted) await createNotification(req.params.userId, "MESSAGE", "Forwarded message", `${req.user!.name} forwarded you a message`, { partnerId: req.user!.id, messageId: created._id.toString() });
+  sendOk(res, { message }, 201);
+}));
+
+// Deleting a conversation removes it for both participants because messages are shared records.
+usersRouter.delete("/messages/:userId", asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.userId)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
+  const result = await DirectMessage.deleteMany({
+    $or: [
+      { senderId: req.user!.id, receiverId: req.params.userId },
+      { senderId: req.params.userId, receiverId: req.user!.id }
+    ]
+  });
+  emitUser(req.user!.id, socketEvents.directConversationDeleted, { partnerId: req.params.userId });
+  emitUser(req.params.userId, socketEvents.directConversationDeleted, { partnerId: req.user!.id });
+  sendOk(res, { deletedCount: result.deletedCount ?? 0 });
+}));
+
+usersRouter.post("/messages/:userId/delete-selected", chatLimiter, asyncHandler(async (req: AuthRequest, res) => {
+  const messageIds = req.body.messageIds;
+  const scope = String(req.body.scope || "").toUpperCase();
+  if (!isValidObjectId(req.params.userId) || !Array.isArray(messageIds) || messageIds.length < 1 || messageIds.length > 100 || !messageIds.every(isValidObjectId) || !["ME", "EVERYONE"].includes(scope)) {
+    throw new HttpError(400, "Invalid message selection", ErrorCode.VALIDATION);
+  }
+  const conversationFilter = {
+    _id: { $in: messageIds },
+    $or: [
+      { senderId: req.user!._id, receiverId: req.params.userId },
+      { senderId: req.params.userId, receiverId: req.user!._id }
+    ]
+  };
+  if (scope === "ME") {
+    const visible = await DirectMessage.find({ ...conversationFilter, hiddenFor: { $ne: req.user!._id } }).select("_id").lean();
+    const deletedIds = visible.map((message: any) => message._id.toString());
+    if (deletedIds.length) {
+      await DirectMessage.updateMany({ _id: { $in: deletedIds } }, { $addToSet: { hiddenFor: req.user!._id } });
+    }
+    return sendOk(res, { deletedIds, deletedCount: deletedIds.length, scope });
+  }
+
+  const owned = await DirectMessage.find({
+    ...conversationFilter,
+    senderId: req.user!._id,
+    receiverId: req.params.userId
+  }).select("_id").lean();
+  const deletedIds = owned.map((message: any) => message._id.toString());
+  if (deletedIds.length) {
+    await DirectMessage.deleteMany({ _id: { $in: deletedIds }, senderId: req.user!._id });
+    deletedIds.forEach((messageId: string) => {
+      emitUser(req.user!.id, socketEvents.directMessageDeleted, { messageId, partnerId: req.params.userId });
+      emitUser(req.params.userId, socketEvents.directMessageDeleted, { messageId, partnerId: req.user!.id });
+    });
+  }
+  sendOk(res, { deletedIds, deletedCount: deletedIds.length, scope });
+}));
+
+usersRouter.delete("/messages/:userId/:messageId", asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.userId) || !isValidObjectId(req.params.messageId)) throw new HttpError(400, "Invalid message or user ID", ErrorCode.VALIDATION);
+  const result = await DirectMessage.deleteOne({
+    _id: req.params.messageId,
+    senderId: req.user!.id,
+    receiverId: req.params.userId
+  });
+  if (result.deletedCount === 0) throw new HttpError(404, "Message not found", ErrorCode.NOT_FOUND);
+  emitUser(req.user!.id, socketEvents.directMessageDeleted, { messageId: req.params.messageId, partnerId: req.params.userId });
+  emitUser(req.params.userId, socketEvents.directMessageDeleted, { messageId: req.params.messageId, partnerId: req.user!.id });
+  sendOk(res, { deleted: true });
 }));
 
 usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, requireNotChatRestricted, chatLimiter, autoModerate("message"), asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.userId)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
   const receiverId = req.params.userId;
   if (receiverId === req.user!.id) throw new HttpError(400, "Cannot message yourself", ErrorCode.VALIDATION);
+  if (await User.exists({ _id: receiverId, deletionRequestedAt: { $type: "date" } })) throw new HttpError(404, "This account is no longer available", ErrorCode.NOT_FOUND);
 
   const blocked = await Block.exists({
     $or: [
@@ -744,13 +913,30 @@ usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, requireNotCh
   if (!messageText && !mediaUrl) throw new HttpError(400, "Message cannot be empty", ErrorCode.VALIDATION);
   if (mediaUrl && !["IMAGE", "VIDEO", "AUDIO"].includes(mediaType)) throw new HttpError(400, "Invalid message media type", ErrorCode.VALIDATION);
 
+  let replyTo: Record<string, unknown> | undefined;
+  if (req.body.replyToId) {
+    if (!isValidObjectId(req.body.replyToId)) throw new HttpError(400, "Invalid reply target", ErrorCode.VALIDATION);
+    const replied: any = await DirectMessage.findOne({ _id: req.body.replyToId, $or: [
+      { senderId: req.user!._id, receiverId }, { senderId: receiverId, receiverId: req.user!._id }
+    ] }).populate("senderId", "name").lean();
+    if (!replied) throw new HttpError(404, "Reply target not found", ErrorCode.NOT_FOUND);
+    replyTo = {
+      messageId: replied._id,
+      author: replied.senderId?.name ?? "User",
+      authorId: replied.senderId?._id ?? replied.senderId,
+      text: replied.message,
+      mediaUrl: replied.mediaUrl
+    };
+  }
+
   const created = await DirectMessage.create({
     senderId: req.user!.id,
     receiverId,
     message: messageText ? sanitizeText(messageText) : mediaType === "VIDEO" ? "Shared a video" : mediaType === "AUDIO" ? "ðŸŽ¤ Voice note" : "Shared a photo",
     mediaUrl,
     mediaType,
-    duration: mediaType === "AUDIO" ? duration : 0
+    duration: mediaType === "AUDIO" ? duration : 0,
+    replyTo
   });
   const message = await DirectMessage.findById(created._id)
     .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
@@ -764,7 +950,8 @@ usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, requireNotCh
 
   emitUser(receiverId, socketEvents.directMessageNew, { message, partnerId: req.user!.id });
   emitUser(req.user!.id, socketEvents.directMessageNew, { message, partnerId: receiverId });
-  await createNotification(receiverId, "MESSAGE", "New message", `${req.user!.name}: ${message?.message ?? ""}`, { partnerId: req.user!.id, messageId: created._id.toString() });
+  const receiverMuted = await ConversationMute.exists({ ownerId: receiverId, partnerId: req.user!._id, muted: true });
+  if (!receiverMuted) await createNotification(receiverId, "MESSAGE", "New message", `${req.user!.name}: ${message?.message ?? ""}`, { partnerId: req.user!.id, messageId: created._id.toString() });
   await grantXp(req.user!.id, "CHAT_MESSAGE");
   const relationship = await grantRelationshipXp(req.user!.id, receiverId, "MESSAGE_SENT", { messageId: created._id.toString() });
   sendOk(res, { message, relationship: relationship?.relationship }, 201);
@@ -864,7 +1051,8 @@ usersRouter.post("/messages/:userId/:messageId/reactions", chatLimiter, validate
 
   const partnerId = message.senderId.toString() === req.user!.id ? message.receiverId.toString() : message.senderId.toString();
   emitUser(partnerId, "direct:reaction:new", { message: updated, partnerId: req.user!.id });
-  await createNotification(partnerId, "MESSAGE", "New reaction", `${req.user!.name} reacted to your message`, { partnerId: req.user!.id, messageId: req.params.messageId });
+  const conversationMuted = await ConversationMute.exists({ ownerId: partnerId, partnerId: req.user!._id, muted: true });
+  if (!conversationMuted) await createNotification(partnerId, "MESSAGE", "New reaction", `${req.user!.name} reacted to your message`, { partnerId: req.user!.id, messageId: req.params.messageId });
   sendOk(res, { message: updated });
 }));
 

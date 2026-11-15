@@ -14,7 +14,7 @@ import { getVipStatus } from "../services/vip.js";
 import { ensureRelationshipForMatch, grantRelationshipXp } from "../services/relationships.js";
 import { assertUsersCanInteract } from "../services/safety.js";
 import { calculateCompatibility } from "../services/datingCompatibility.js";
-import { isUserOnline } from "../services/socket.js";
+import { getOnlineUserIds, isUserOnline } from "../services/socket.js";
 import { validateBody } from "../middleware/validate.js";
 
 export const datingRouter = Router();
@@ -55,6 +55,7 @@ datingRouter.get("/explore", requireNotShadowBanned, asyncHandler(async (req: Au
   const queryMaxAge = req.query.maxAge ? Number(req.query.maxAge) : undefined;
   const onlineOnly = req.query.onlineOnly === "true";
   const sharedInterestsOnly = req.query.sharedInterests === "true";
+  const discoveryMode = String(req.query.mode ?? "FOR_YOU").toUpperCase();
 
   // Find users current user has swiped on
   const swiped = await Like.find({ likerId: currentUser.id }).select("likedId").lean();
@@ -84,13 +85,36 @@ datingRouter.get("/explore", requireNotShadowBanned, asyncHandler(async (req: Au
       ? { age: { $gte: currentUser.datingAgeMin ?? 18, $lte: currentUser.datingAgeMax ?? 80 } }
       : {};
 
-  const candidates = await User.find({
+  const candidateQuery: Record<string, unknown> = {
     _id: { $nin: excludeObjectIds },
     isBlocked: { $ne: true },
+    deletionRequestedAt: { $not: { $type: "date" } },
     ...genderFilter,
     ...ageFilter,
-    ...(currentUser.datingVerifiedOnly ? { isVerified: true } : {})
-  }).limit(40).lean();
+    ...(currentUser.datingVerifiedOnly || discoveryMode === "VERIFIED" ? { isVerified: true } : {})
+  };
+  if (discoveryMode === "NEARBY" && currentUser.city?.trim()) {
+    candidateQuery.city = currentUser.city.trim();
+  }
+  if (onlineOnly) {
+    const onlineIds = await getOnlineUserIds();
+    if (onlineIds.length === 0) return sendOk(res, { candidates: [] });
+    candidateQuery._id = {
+      $nin: excludeObjectIds,
+      $in: onlineIds.filter((id) => mongoose.isValidObjectId(id)).map((id) => new mongoose.Types.ObjectId(id))
+    };
+  }
+  if (sharedInterestsOnly) {
+    const userInterests = currentUser.interests ?? [];
+    if (userInterests.length === 0) return sendOk(res, { candidates: [] });
+    candidateQuery.interests = { $in: userInterests };
+  }
+
+  // Sample eligible profiles so a new session sees a genuinely fresh deck.
+  const candidates = await User.aggregate([
+    { $match: candidateQuery },
+    { $sample: { size: 40 } }
+  ]);
 
   // Calculate vibe score for each candidate
   const formattedCandidates = candidates.map(candidate => {
@@ -122,18 +146,10 @@ datingRouter.get("/explore", requireNotShadowBanned, asyncHandler(async (req: Au
   });
 
   // Apply post-query filters
-  let filtered = formattedCandidates;
-  if (onlineOnly) {
-    filtered = filtered.filter((c) => isUserOnline(c.id));
-  }
-  if (sharedInterestsOnly) {
-    filtered = filtered.filter((c) => (c.sharedInterests?.length ?? 0) > 0);
-  }
-
-  // Sort by vibeScore desc
-  filtered.sort((a, b) => Number(b.isVip) - Number(a.isVip) || b.vibeScore - a.vibeScore);
-
-  sendOk(res, { candidates: filtered });
+  sendOk(res, { candidates: formattedCandidates.map((candidate) => ({
+    ...candidate,
+    isOnline: isUserOnline(candidate.id)
+  })) });
 }));
 
 // 2. POST /dating/like - Swipe Like or Super Like a user

@@ -511,7 +511,9 @@ walletRouter.post("/rooms/:id/send-gift", requireWalletNotFrozen, validateBody(s
     // NOTE: emitRoom is called after the socket room join for consistent ordering
     emitRoom(room._id.toString(), socketEvents.roomGiftSend, {
       ...giftTransaction[0].toObject(),
-      gift: { name: gift.name, icon: gift.icon },
+      gift: { id: gift._id.toString(), name: gift.name, icon: gift.icon, coinPrice: gift.coinPrice, diamondPrice: gift.diamondPrice },
+      senderName: req.user!.name,
+      receiverName: receiver.name,
       animation: gift.name.toLowerCase()
     });
     const activity = await runWalletSideEffect("gift activity", () => RoomActivity.create({
@@ -565,7 +567,9 @@ walletRouter.post("/direct-send-gift", requireWalletNotFrozen, asyncHandler(asyn
     const message = await runWalletSideEffect("direct gift message", () => DirectMessage.create({
       senderId: req.user!.id,
       receiverId,
-      message: `🎁 Sent you a ${gift.name}!`
+      message: `🎁 Sent you a ${gift.name}!`,
+      mediaUrl: /^https?:\/\//i.test(gift.icon) || gift.icon.startsWith("/") ? gift.icon : "",
+      mediaType: /^https?:\/\//i.test(gift.icon) || gift.icon.startsWith("/") ? "IMAGE" : ""
     }));
 
     if (message) {

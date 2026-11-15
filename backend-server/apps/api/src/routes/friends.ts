@@ -1,8 +1,6 @@
 import { Router } from "express";
-import mongoose from "mongoose";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { Friendship } from "../models/Friendship.js";
-import { Follow } from "../models/Follow.js";
 import { Block } from "../models/Block.js";
 import { User } from "../models/User.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId } from "../utils/http.js";
@@ -132,23 +130,9 @@ friendsRouter.get("/friends/mutual/:userId", asyncHandler(async (req: AuthReques
 
 friendsRouter.get("/friends/count/:userId", asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.userId)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
-  const profileId = new mongoose.Types.ObjectId(req.params.userId);
-  const rows = await Follow.aggregate([
-    { $match: { followingId: profileId } },
-    {
-      $lookup: {
-        from: Follow.collection.name,
-        let: { follower: "$followerId" },
-        pipeline: [
-          { $match: { $expr: { $and: [{ $eq: ["$followerId", profileId] }, { $eq: ["$followingId", "$$follower"] }] } } },
-          { $limit: 1 }
-        ],
-        as: "mutualFollow"
-      }
-    },
-    { $match: { "mutualFollow.0": { $exists: true } } },
-    { $count: "count" }
-  ]);
-  const count = rows[0]?.count ?? 0;
+  const count = await Friendship.countDocuments({
+    status: "ACCEPTED",
+    $or: [{ userId: req.params.userId }, { friendId: req.params.userId }]
+  });
   sendOk(res, { count });
 }));

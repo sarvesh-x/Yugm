@@ -30,7 +30,6 @@ fun NavGraphBuilder.chatNavGraph(
             onDiscover = { navController.navigateTopLevel(Screen.Discover.route) },
             onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
             onLive = { navController.navigateTopLevel(Screen.VoiceRooms.route) },
-            onGames = { navController.navigate(Screen.Games.route) },
             onWallet = { navController.navigateTopLevel(Screen.Wallet.route) },
             onProfile = {
                 if (currentUserIdProvider().isNotBlank()) {
@@ -38,6 +37,13 @@ fun NavGraphBuilder.chatNavGraph(
                 } else {
                     navController.navigate(Screen.ProfileSetup.route)
                 }
+            },
+            onOpenClan = { clanId, clanName ->
+                navController.navigate(Screen.ClanChat.createRoute(clanId, clanName))
+            },
+            onJoinClan = { navController.navigate(Screen.ClanList.route) },
+            onOpenClanDetail = { clanId ->
+                navController.navigate(Screen.ClanDetail.createRoute(clanId))
             }
         )
     }
@@ -57,13 +63,28 @@ fun NavGraphBuilder.chatNavGraph(
             currentUserId = currentUserIdProvider(),
             myActiveCosmetics = chatViewModel.myActiveCosmetics,
             messages = chatViewModel.messages,
+            gifts = chatViewModel.gifts,
+            balance = chatViewModel.walletBalance,
             relationship = chatViewModel.relationship,
             loading = chatViewModel.isLoading,
             isPartnerTyping = chatViewModel.isPartnerTyping,
             error = chatViewModel.error,
+            isMuted = chatViewModel.isMuted,
+            forwardTargets = chatViewModel.forwardTargets,
+            searchResults = chatViewModel.searchResults,
             onBack = { navController.popBackStack() },
             onRetry = chatViewModel::refresh,
+            onDeleteConversation = { chatViewModel.deleteConversation(onDone = { navController.popBackStack() }) },
+            onDeleteSelected = chatViewModel::deleteSelectedMessages,
+            onReactMessage = chatViewModel::reactToMessage,
+            onReply = chatViewModel::replyMessage,
+            onEdit = chatViewModel::editMessage,
+            onForward = { message, targetId -> chatViewModel.forwardMessage(message, targetId) },
+            onSearch = chatViewModel::search,
+            onMute = chatViewModel::mute,
             onSend = chatViewModel::sendMessage,
+            onGift = chatViewModel::sendGift,
+            onAttachmentSelected = chatViewModel::sendAttachment,
             onTyping = chatViewModel::sendTypingStatus,
             onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) },
             onAudioCall = {

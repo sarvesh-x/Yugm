@@ -10,6 +10,7 @@ import com.yugm.app.core.model.CreatorDashboard
 import com.yugm.app.core.model.DailyCheckInResult
 import com.yugm.app.core.model.ExperienceHome
 import com.yugm.app.core.model.LevelOverview
+import com.yugm.app.core.model.ActiveMissionsResponse
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -29,6 +30,12 @@ class GrowthViewModel @Inject constructor(
         private set
     var checkInResult by mutableStateOf<DailyCheckInResult?>(null)
         private set
+    var missions by mutableStateOf<ActiveMissionsResponse?>(null)
+        private set
+    var missionClaimMessage by mutableStateOf<String?>(null)
+        private set
+    var missionClaimError by mutableStateOf<String?>(null)
+        private set
     var isLoading by mutableStateOf(false)
         private set
     var error by mutableStateOf<String?>(null)
@@ -45,8 +52,24 @@ class GrowthViewModel @Inject constructor(
                     .onSuccess { levelOverview = it }
                 runCatching { yugmApi.creatorDashboard(token) }
                     .onSuccess { creator = it }
+                runCatching { yugmApi.activeMissions(token) }
+                    .onSuccess { missions = it }
             }
             isLoading = false
+        }
+    }
+
+    fun claimMission(token: String, missionId: String, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { yugmApi.claimMission(token, missionId) } }
+                .onSuccess { result ->
+                    missionClaimMessage = "Reward claimed: +${result.rewards.xp} XP · +${result.rewards.coins} coins"
+                    missionClaimError = null
+                    runCatching { withContext(Dispatchers.IO) { yugmApi.activeMissions(token) } }
+                        .onSuccess { missions = it }
+                }
+                .onFailure { missionClaimError = it.message ?: "Could not claim this reward" }
+                .also { onComplete() }
         }
     }
 

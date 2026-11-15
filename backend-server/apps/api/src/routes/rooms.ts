@@ -387,9 +387,9 @@ roomsRouter.post("/:id/join", requireAuth, requireNotRoomRestricted, requireNotS
 
   const role = privateRoomRole(room, req.user!.id) ?? "AUDIENCE";
   const existingParticipant = await RoomParticipant.findOne({ roomId: room._id, userId: req.user!.id, leftAt: null });
+  const newlyJoined = !existingParticipant;
   if (existingParticipant) {
     existingParticipant.role = role;
-    existingParticipant.joinedAt = new Date();
     await existingParticipant.save();
   } else {
     await RoomParticipant.create({ roomId: room._id, userId: req.user!.id, role });
@@ -399,7 +399,7 @@ roomsRouter.post("/:id/join", requireAuth, requireNotRoomRestricted, requireNotS
   }
   // NOTE: emitRoom is called after the socket room join for consistent ordering
   emitRoom(room._id.toString(), socketEvents.roomParticipantUpdate, { userId: req.user!.id, action: "join" });
-  await addActivity(room._id.toString(), "JOIN", `${req.user!.name} joined`, req.user!.id);
+  if (newlyJoined) await addActivity(room._id.toString(), "JOIN", `${req.user!.name} joined`, req.user!.id);
   sendOk(res, { joined: true, role });
 }));
 
@@ -449,6 +449,24 @@ roomsRouter.post("/:id/mic-lock", requireAuth, validateBody(z.object({ locked: z
     micLocked: req.body.locked
   });
   sendOk(res, { micLocked: req.body.locked });
+}));
+
+roomsRouter.post("/:id/unmute-user", requireAuth, validateBody(z.object({ userId: z.string().regex(/^[0-9a-fA-F]{24}$/) })), asyncHandler(async (req: AuthRequest, res) => {
+  const { room, isHost } = await assertHostOrRoomAdmin(req, req.params.id);
+  const userId = req.body.userId;
+  assertNotHostTarget(room, userId, "unmute");
+  if (!isHost && roomObjectIdListIncludes(room.roomAdminIds, userId)) throw new HttpError(403, "Room admins cannot unmute each other", ErrorCode.FORBIDDEN);
+  const participant = await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { micEnabled: true, moderatorMuted: false }, { new: true });
+  if (!participant) throw new HttpError(404, "Active participant not found", ErrorCode.NOT_FOUND);
+  emitRoom(room._id.toString(), socketEvents.roomParticipantUpdate, { roomId: room.id, action: "user_unmuted", userId });
+  sendOk(res, { unmuted: true });
+}));
+
+roomsRouter.post("/:id/chat/clean", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
+  const { room } = await assertHostOrRoomAdmin(req, req.params.id);
+  await ChatMessage.deleteMany({ roomId: room._id });
+  emitRoom(room._id.toString(), socketEvents.roomParticipantUpdate, { roomId: room.id, action: "chat_cleared" });
+  sendOk(res, { cleared: true });
 }));
 
 roomsRouter.post("/:id/seat-lock", requireAuth, validateBody(z.object({ seatIndex: z.number().int().min(0), locked: z.boolean() })), asyncHandler(async (req: AuthRequest, res) => {
@@ -692,17 +710,25 @@ roomsRouter.post("/:id/report", requireAuth, reportLimiter, validateBody(reportB
   sendOk(res, { report }, 201);
 }));
 
-roomsRouter.get("/:id/messages", asyncHandler(async (req, res) => {
+roomsRouter.get("/:id/messages", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
+  const room = await getRoomOrThrow(req.params.id);
+  assertPrivateRoomAccess(room, req.user!.id);
+  const participant = await RoomParticipant.findOne({ roomId: req.params.id, userId: req.user!.id, leftAt: null }).lean();
+  if (!participant) throw new HttpError(403, "Join the room to view its chat", ErrorCode.FORBIDDEN);
   const limit = Math.min(Number(req.query.limit) || 80, 200);
-  const messages = await ChatMessage.find({ roomId: req.params.id }).populate("senderId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle").sort({ createdAt: -1 }).limit(limit).lean();
+  const messages = room.status === "LIVE" ? await ChatMessage.find({ roomId: req.params.id, createdAt: { $gte: participant.joinedAt } }).populate("senderId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle").sort({ createdAt: -1 }).limit(limit).lean() : [];
   sendOk(res, { messages: messages.reverse() });
 }));
 
-roomsRouter.get("/:id/activity", asyncHandler(async (req, res) => {
+roomsRouter.get("/:id/activity", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
+  const room = await getRoomOrThrow(req.params.id);
+  assertPrivateRoomAccess(room, req.user!.id);
+  const participant = await RoomParticipant.findOne({ roomId: req.params.id, userId: req.user!._id, leftAt: null }).lean();
+  if (!participant) throw new HttpError(403, "Join the room to view its activity", ErrorCode.FORBIDDEN);
   const limit = Math.min(Number(req.query.limit) || 40, 100);
-  const activity = await RoomActivity.find({ roomId: req.params.id }).sort({ createdAt: -1 }).limit(limit).lean();
+  const activity = room.status === "LIVE" ? await RoomActivity.find({ roomId: req.params.id, createdAt: { $gte: participant.joinedAt } }).sort({ createdAt: -1 }).limit(limit).lean() : [];
   sendOk(res, { activity: activity.reverse() });
 }));
 
@@ -813,6 +839,8 @@ roomsRouter.post("/:id/messages/direct", requireAuth, requireNotMuted, requireNo
 
 roomsRouter.post("/:id/messages", requireAuth, requireNotMuted, requireNotChatRestricted, chatLimiter, validateBody(chatMessageSchema), autoModerate("message"), asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
+  const room = await getRoomOrThrow(req.params.id);
+  if (room.status !== "LIVE") throw new HttpError(400, "Room is closed", ErrorCode.VALIDATION);
   const participant = await RoomParticipant.findOne({ roomId: req.params.id, userId: req.user!.id, leftAt: null }).lean();
   if (!participant) throw new HttpError(403, "You are not a participant in this room", ErrorCode.FORBIDDEN);
   const message = await ChatMessage.create({

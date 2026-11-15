@@ -37,7 +37,15 @@ data class Clan(
     val memberCount: Int = 0,
     val ownerId: String = "",
     val members: List<Host> = emptyList(),
+    val memberRoles: List<ClanMemberRole> = emptyList(),
+    val myRole: String = "",
+    val canManage: Boolean = false,
     val isMember: Boolean = false
+)
+
+data class ClanMemberRole(
+    val userId: String = "",
+    val role: String = "MEMBER"
 )
 
 data class ClanMessage(

@@ -211,6 +211,7 @@ fun NavGraphBuilder.roomNavGraph(
                 forcedRemoveVersion = roomViewModel.forcedRemoveVersion,
                 roomEndedVersion = roomViewModel.roomEndedVersion,
                 roomReactionEvent = roomViewModel.roomReactionEvent,
+                roomGiftEvent = roomViewModel.roomGiftEvent,
                 canSpeak = detail.participants.any {
                     it.user.id == currentUserIdProvider() && it.role in listOf("HOST", "SPEAKER", "MODERATOR")
                 },
@@ -237,6 +238,12 @@ fun NavGraphBuilder.roomNavGraph(
                 onRejectSpeaker = roomViewModel::rejectSpeaker,
                 onTakeSeat = roomViewModel::takeSeat,
                 onSetMicLocked = roomViewModel::setMicLocked,
+                onClearRoomChat = roomViewModel::clearChat,
+                onMuteAllRoom = roomViewModel::muteAll,
+                onUnmuteAllRoom = roomViewModel::unmuteAll,
+                onReportRoom = { roomViewModel.reportRoom() },
+                onBlockRoom = { roomViewModel.blockRoomHost() },
+                onRoomFeedback = { roomViewModel.sendRoomFeedback(room.title, "Feedback for ${room.title}") },
                 onSetSeatLocked = roomViewModel::setSeatLocked,
                 onInviteSpeaker = roomViewModel::inviteSpeaker,
                 onCreatePoll = { roomViewModel.createPoll("What should we do next?", listOf("Music", "Games", "Q&A", "Chill")) },

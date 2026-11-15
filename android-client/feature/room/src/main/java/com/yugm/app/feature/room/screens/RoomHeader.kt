@@ -25,10 +25,16 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,12 +61,23 @@ internal fun SharedRoomHeader(
     room: Room,
     participants: List<RoomParticipant>,
     isHost: Boolean,
+    isRoomAdmin: Boolean = false,
     onShare: () -> Unit,
-    onMore: () -> Unit,
+    onRoomInfo: () -> Unit = {},
+    onMore: () -> Unit = {},
+    onClearChat: () -> Unit = {},
+    onMuteAll: () -> Unit = {},
+    onUnmuteAll: () -> Unit = {},
+    onLockAllMics: () -> Unit = {},
+    onUnlockAllMics: () -> Unit = {},
+    onReportRoom: () -> Unit = {},
+    onBlockRoom: () -> Unit = {},
+    onFeedback: () -> Unit = {},
     onRankClick: () -> Unit,
     onLeave: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
     val host = room.host
     val memberCount = room.participants.coerceAtLeast(participants.size)
 
@@ -75,16 +92,18 @@ internal fun SharedRoomHeader(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (!room.coverImage.isNullOrBlank()) {
-                Avatar(room.title.firstOrNull()?.toString() ?: "?", 38, room.coverImage, ActiveCosmetics())
-            } else {
-                Box(
-                    Modifier.size(42.dp).clip(CircleShape)
-                        .background(Brush.linearGradient(listOf(Color(0xFF3A1761), Color(0xFF171326))))
-                        .border(1.dp, Color(0x77B98AFF), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Filled.Mic, contentDescription = "Room avatar", tint = Color(0xFFD9B8FF), modifier = Modifier.size(21.dp))
+            Box(Modifier.clickable(onClick = onRoomInfo)) {
+                if (!room.coverImage.isNullOrBlank()) {
+                    Avatar(room.title.firstOrNull()?.toString() ?: "?", 38, room.coverImage, ActiveCosmetics())
+                } else {
+                    Box(
+                        Modifier.size(42.dp).clip(CircleShape)
+                            .background(Brush.linearGradient(listOf(Color(0xFF3A1761), Color(0xFF171326))))
+                            .border(1.dp, Color(0x77B98AFF), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Filled.Mic, contentDescription = "Room avatar", tint = Color(0xFFD9B8FF), modifier = Modifier.size(21.dp))
+                    }
                 }
             }
             Column(
@@ -105,7 +124,22 @@ internal fun SharedRoomHeader(
             }
             Spacer(Modifier.width(6.dp))
             HeaderAction(Icons.Filled.Share, "Share room", onShare)
-            HeaderAction(Icons.Filled.MoreVert, "Room options", onMore)
+            Box {
+                HeaderAction(Icons.Filled.MoreVert, "Room options", { menuExpanded = true })
+                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                    if (isHost || isRoomAdmin) {
+                        DropdownMenuItem(text = { Text("Clear room chat") }, onClick = { menuExpanded = false; onClearChat() })
+                        DropdownMenuItem(text = { Text("Mute all") }, onClick = { menuExpanded = false; onMuteAll() })
+                        DropdownMenuItem(text = { Text("Unmute all") }, onClick = { menuExpanded = false; onUnmuteAll() })
+                        DropdownMenuItem(text = { Text("Lock all mics") }, onClick = { menuExpanded = false; onLockAllMics() })
+                        DropdownMenuItem(text = { Text("Unlock all mics") }, onClick = { menuExpanded = false; onUnlockAllMics() })
+                    } else {
+                        DropdownMenuItem(text = { Text("Report room") }, onClick = { menuExpanded = false; onReportRoom() })
+                        DropdownMenuItem(text = { Text("Block") }, onClick = { menuExpanded = false; onBlockRoom() })
+                        DropdownMenuItem(text = { Text("Feedback") }, onClick = { menuExpanded = false; onFeedback() })
+                    }
+                }
+            }
             HeaderAction(Icons.Filled.PowerSettingsNew, if (isHost) "End room" else "Leave room", onLeave)
         }
 

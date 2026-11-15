@@ -101,7 +101,9 @@ fun ProfileDetailScreen(
     onOpenTasks: () -> Unit = {},
     onOpenLevel: () -> Unit = {},
     onOpenWallet: () -> Unit = {},
-    onOpenInventory: () -> Unit = {}
+    onOpenInventory: () -> Unit = {},
+    onOpenClan: (String) -> Unit = {},
+    onOpenClanList: () -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -329,6 +331,35 @@ fun ProfileDetailScreen(
                             StatCard("Streak", "${pkStats.bestStreak}", Modifier.weight(1f))
                         }
                         Text("${pkStats.played} played / best battle ${pkStats.bestBattle} / total score ${pkStats.totalScore}", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                    }
+                }
+
+                if (isOwnProfile) {
+                    item {
+                        GlassCard(Modifier.fillMaxWidth()) {
+                            Text("Clan details", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                            Spacer(Modifier.height(10.dp))
+                            val clan = viewModel.ownClan
+                            if (clan == null) {
+                                Text("User has not joined clan yet", color = TextMuted, fontSize = 13.sp)
+                                Spacer(Modifier.height(10.dp))
+                                OutlinedButton(onClick = onOpenClanList) {
+                                    Text("Explore clans", color = TextPrimary)
+                                }
+                            } else {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Avatar(clan.name.take(1).uppercase(), 58, clan.avatar)
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Text(clan.name, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text("${clan.familyLabel.ifBlank { "Clan" }} · ${clan.memberCount} members", color = TextMuted, fontSize = 12.sp)
+                                    }
+                                }
+                                Spacer(Modifier.height(10.dp))
+                                Button(onClick = { onOpenClan(clan.id) }, modifier = Modifier.fillMaxWidth()) {
+                                    Text("See clan details")
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -1304,7 +1335,7 @@ private fun ProfileMenuCard(
     val actions = listOf(
         Triple("🎨", "Customize", onCustomize), Triple("🛍️", "Store", onStore),
         Triple("👑", "VIP", onVip), Triple("✦", "Level", onLevel),
-        Triple("✓", "Tasks", onTasks), Triple("◈", "Wallet", onWallet),
+        Triple("✓", "Tasks & rewards", onTasks), Triple("◈", "Wallet", onWallet),
         Triple("🎒", "Inventory", onInventory), Triple("⚙", "Settings", onSettings)
     )
     GlassCard(Modifier.fillMaxWidth()) {

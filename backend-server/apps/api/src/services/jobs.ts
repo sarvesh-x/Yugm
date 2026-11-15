@@ -2,6 +2,8 @@ import { Queue, Worker, type Job } from "bullmq";
 import { notifyUser } from "./firebase.js";
 import { getRedisUrl } from "./redis.js";
 import { ClanMessage } from "../models/ClanMessage.js";
+import { Clan } from "../models/Clan.js";
+import { ClanInvite } from "../models/ClanInvite.js";
 import { Story } from "../models/Story.js";
 import { Room } from "../models/Room.js";
 import { User } from "../models/User.js";
@@ -11,8 +13,10 @@ import { Follow } from "../models/Follow.js";
 import { Block } from "../models/Block.js";
 import { Notification } from "../models/Notification.js";
 import { DirectMessage } from "../models/DirectMessage.js";
+import { ConversationMute } from "../models/ConversationMute.js";
 import { ChatMessage } from "../models/ChatMessage.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
+import { RoomInvite } from "../models/RoomInvite.js";
 import { ALWAYS_ON_OFFICIAL_VOICE_ROOM } from "./officialRooms.js";
 import { endRoom } from "./roomLifecycle.js";
 
@@ -72,6 +76,8 @@ async function runMaintenanceTasks() {
     const deletedUsers = await User.find({ deletionRequestedAt: { $lte: expiredDeletionCutoff } }).select("_id").limit(100).lean();
     for (const user of deletedUsers) {
       const userId = user._id;
+      const ownedRoomIds = await Room.distinct("_id", { hostId: userId });
+      const ownedClans = await Clan.find({ ownerId: userId }).select("_id memberIds").lean();
       await Promise.all([
         AuthSession.deleteMany({ userId }),
         DeviceToken.deleteMany({ userId }),
@@ -79,9 +85,47 @@ async function runMaintenanceTasks() {
         Block.deleteMany({ $or: [{ blockerId: userId }, { blockedUserId: userId }] }),
         Notification.deleteMany({ userId }),
         DirectMessage.deleteMany({ $or: [{ senderId: userId }, { receiverId: userId }] }),
-        ChatMessage.deleteMany({ senderId: userId }),
-        RoomParticipant.deleteMany({ userId })
+        ConversationMute.deleteMany({ $or: [{ ownerId: userId }, { partnerId: userId }] }),
+        ClanMessage.deleteMany({ senderId: userId }),
+        ClanMessage.updateMany({ "reactions.userId": userId }, { $pull: { reactions: { userId } } }),
+        ClanInvite.deleteMany({ $or: [{ inviterId: userId }, { inviteeId: userId }] }),
+        Clan.updateMany(
+          { ownerId: { $ne: userId }, memberIds: userId },
+          { $pull: { memberIds: userId, memberRoles: { userId } }, $inc: { memberCount: -1 } }
+        ),
+        ChatMessage.deleteMany({ $or: [{ senderId: userId }, { roomId: { $in: ownedRoomIds } }] }),
+        RoomParticipant.deleteMany({ $or: [{ userId }, { roomId: { $in: ownedRoomIds } }] }),
+        RoomInvite.deleteMany({ $or: [{ inviterId: userId }, { inviteeId: userId }, { roomId: { $in: ownedRoomIds } }] }),
+        Room.updateMany(
+          { $or: [{ speakerIds: userId }, { moderatorIds: userId }, { roomAdminIds: userId }, { coHostIds: userId }] },
+          { $pull: { speakerIds: userId, moderatorIds: userId, roomAdminIds: userId, coHostIds: userId } }
+        )
       ]);
+
+      for (const clan of ownedClans) {
+        let successor: any = null;
+        for (const candidateId of clan.memberIds.filter((id: any) => id.toString() !== userId.toString())) {
+          const candidate = await User.findOne({ _id: candidateId, deletionRequestedAt: { $exists: false } }).select("_id").lean();
+          if (candidate) { successor = candidate._id; break; }
+        }
+        if (successor) {
+          await Clan.updateOne(
+            { _id: clan._id, ownerId: userId },
+            { $set: { ownerId: successor }, $pull: { memberIds: userId, memberRoles: { userId } }, $inc: { memberCount: -1 } }
+          );
+          await Clan.updateOne(
+            { _id: clan._id },
+            { $set: { "memberRoles.$[leader].role": "LEADER" } },
+            { arrayFilters: [{ "leader.userId": successor }] }
+          );
+        } else {
+          await Promise.all([
+            ClanInvite.deleteMany({ clanId: clan._id }),
+            ClanMessage.deleteMany({ clanId: clan._id }),
+            Clan.deleteOne({ _id: clan._id, ownerId: userId })
+          ]);
+        }
+      }
       await Room.deleteMany({ hostId: userId });
       await User.deleteOne({ _id: userId, deletionRequestedAt: { $lte: expiredDeletionCutoff } });
     }

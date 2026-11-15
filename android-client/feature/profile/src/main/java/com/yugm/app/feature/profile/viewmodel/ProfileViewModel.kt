@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yugm.app.core.api.IYugmApi
 import com.yugm.app.core.model.Host
+import com.yugm.app.core.model.Clan
 import com.yugm.app.core.model.PkBattle
 import com.yugm.app.core.model.PkStats
 import com.yugm.app.core.model.Room
@@ -35,6 +36,8 @@ class ProfileViewModel @Inject constructor(
     var pkStats by mutableStateOf<PkStats?>(null)
         private set
     var pkHistory by mutableStateOf<List<PkBattle>>(emptyList())
+        private set
+    var ownClan by mutableStateOf<Clan?>(null)
         private set
     var isFollowing by mutableStateOf(false)
         private set
@@ -92,6 +95,7 @@ class ProfileViewModel @Inject constructor(
                 following = emptyList()
                 pkStats = null
                 pkHistory = emptyList()
+                ownClan = null
             }
             isLoading = true
             profileLoadError = null
@@ -115,11 +119,13 @@ class ProfileViewModel @Inject constructor(
                     val followingRequest = async(Dispatchers.IO) { runCatching { yugmApi.getFollowing(userId, token.ifBlank { null }) } }
                     val statsRequest = async(Dispatchers.IO) { runCatching { yugmApi.pkStats(token, userId) } }
                     val historyRequest = async(Dispatchers.IO) { runCatching { yugmApi.pkHistory(token, userId) } }
+                    val clanRequest = if (token.isNotBlank()) async(Dispatchers.IO) { runCatching { yugmApi.myClan(token) } } else null
                     roomsRequest.await().onSuccess { rooms = it }
                     followersRequest.await().onSuccess { followers = it }
                     followingRequest.await().onSuccess { following = it }
                     statsRequest.await().onSuccess { pkStats = it }
                     historyRequest.await().onSuccess { pkHistory = it }
+                    if (clanRequest != null) clanRequest.await().onSuccess { ownClan = it }
                 }
             }
         }
@@ -132,8 +138,14 @@ class ProfileViewModel @Inject constructor(
             followError = null
             val result = withContext(Dispatchers.IO) { runCatching { yugmApi.followUser(token, userId) } }
             result.onSuccess {
-                isFollowing = true
-                profile = profile?.copy(isFollowing = true, followers = profile!!.followers + 1)
+                val refreshed = withContext(Dispatchers.IO) { runCatching { yugmApi.getUser(userId, token) }.getOrNull() }
+                if (refreshed != null) {
+                    profile = refreshed
+                    isFollowing = refreshed.isFollowing
+                } else {
+                    isFollowing = true
+                    profile = profile?.copy(isFollowing = true, followers = (profile?.followers ?: 0) + 1)
+                }
             }.onFailure { followError = it.message ?: "Couldn't follow this user" }
             followBusy = false
         }
@@ -146,8 +158,14 @@ class ProfileViewModel @Inject constructor(
             followError = null
             val result = withContext(Dispatchers.IO) { runCatching { yugmApi.unfollowUser(token, userId) } }
             result.onSuccess {
-                isFollowing = false
-                profile = profile?.copy(isFollowing = false, followers = (profile?.followers ?: 0).coerceAtLeast(1) - 1)
+                val refreshed = withContext(Dispatchers.IO) { runCatching { yugmApi.getUser(userId, token) }.getOrNull() }
+                if (refreshed != null) {
+                    profile = refreshed
+                    isFollowing = refreshed.isFollowing
+                } else {
+                    isFollowing = false
+                    profile = profile?.copy(isFollowing = false, followers = ((profile?.followers ?: 0) - 1).coerceAtLeast(0))
+                }
             }.onFailure { followError = it.message ?: "Couldn't unfollow this user" }
             followBusy = false
         }

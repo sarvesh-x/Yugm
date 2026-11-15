@@ -99,6 +99,8 @@ class RoomViewModel @Inject constructor(
         private set
     var roomReactionEvent by mutableStateOf(Triple(0, "", ""))
         private set
+    var roomGiftEvent by mutableStateOf(0 to (null as com.yugm.app.core.model.RoomGiftEvent?))
+        private set
 
     var roomState by mutableStateOf<UiState<RoomDetail>>(UiState.Idle)
         private set
@@ -136,6 +138,10 @@ class RoomViewModel @Inject constructor(
     private var videoParticipantRefreshJob: Job? = null
 
     fun connect(token: String, roomId: String, userId: String, video: Boolean = false) {
+        // This ViewModel can outlive a room destination. Never carry one session's
+        // cached chat into the next room entry (including rejoining the same room).
+        chat.clear()
+        activity = emptyList()
         this.authToken = token
         this.roomId = roomId
         this.currentUserId = userId
@@ -204,7 +210,7 @@ class RoomViewModel @Inject constructor(
             pollsResult.onSuccess { polls = it }
             val missionsResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomMissions(authToken, roomId) } }
             missionsResult.onSuccess { missions = it }
-            val activityResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomActivity(roomId) } }
+            val activityResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomActivity(roomId, authToken) } }
             activityResult.onSuccess { activity = it }
             val messagesResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomMessages(roomId, authToken) } }
             messagesResult.onSuccess {
@@ -253,6 +259,12 @@ class RoomViewModel @Inject constructor(
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     yugmApi.joinRoom(authToken, roomId)
+                    // This may be a second entry through a retained destination.
+                    // Treat every successful join as a fresh visible feed snapshot.
+                    withContext(Dispatchers.Main) {
+                        chat.clear()
+                        activity = emptyList()
+                    }
                     // Keep chat/reaction delivery available even if LiveKit is
                     // temporarily unreachable or microphone publishing fails.
                     viewModelScope.launch(Dispatchers.IO) {
@@ -350,6 +362,11 @@ class RoomViewModel @Inject constructor(
                             }
                         },
                         onRoomDataChanged = { event -> scheduleRealtimeRefresh(event) },
+                        onRoomGift = { giftEvent ->
+                            viewModelScope.launch {
+                                roomGiftEvent = (roomGiftEvent.first + 1) to giftEvent
+                            }
+                        },
                         onRoomJoined = { refreshRoomMessages() }
                     )
                 }
@@ -527,6 +544,8 @@ class RoomViewModel @Inject constructor(
     private fun scheduleRealtimeRefresh(event: String) {
         viewModelScope.launch {
             if (event == "room:ended") {
+                chat.clear()
+                activity = emptyList()
                 roomEndedVersion++
                 return@launch
             }
@@ -545,7 +564,7 @@ class RoomViewModel @Inject constructor(
                     withContext(Dispatchers.IO) { runCatching { yugmApi.roomPolls(roomId) } }.onSuccess { polls = it }
                 }
                 if (event == "room:activity:new" || event == "room:gift:send") {
-                    withContext(Dispatchers.IO) { runCatching { yugmApi.roomActivity(roomId) } }.onSuccess { activity = it }
+                    withContext(Dispatchers.IO) { runCatching { yugmApi.roomActivity(roomId, authToken) } }.onSuccess { activity = it }
                 }
             }
         }
@@ -769,6 +788,87 @@ class RoomViewModel @Inject constructor(
             withContext(Dispatchers.IO) {
                 runCatching { yugmApi.muteUser(roomId, userId, authToken) }.onSuccess { refresh() }
             }
+        }
+    }
+
+    fun unmuteUser(userId: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { yugmApi.unmuteUser(roomId, userId, authToken) }.onSuccess { refresh() }
+            }
+        }
+    }
+
+    fun muteAll() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                roomDetail?.participants?.forEach { participant ->
+                    if (participant.user.id != currentUserId && !participant.isRoomAdmin) {
+                        runCatching { yugmApi.muteUser(roomId, participant.user.id, authToken) }
+                    }
+                }
+            }
+            refresh()
+        }
+    }
+
+    fun unmuteAll() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                roomDetail?.participants?.forEach { participant ->
+                    if (participant.user.id != currentUserId && !participant.isRoomAdmin) {
+                        runCatching { yugmApi.unmuteUser(roomId, participant.user.id, authToken) }
+                    }
+                }
+            }
+            refresh()
+        }
+    }
+
+    fun clearChat() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { yugmApi.clearRoomChat(roomId, authToken) }
+            }
+            chat.clear()
+        }
+    }
+
+    fun reportRoom(reason: String = "Inappropriate room") {
+        viewModelScope.launch {
+            actionLoading = true
+            actionError = null
+            withContext(Dispatchers.IO) {
+                runCatching { yugmApi.reportUser(authToken, roomId, roomDetail?.room?.host?.id.orEmpty(), reason) }
+                    .onFailure { actionError = it.message ?: "Failed to report room" }
+            }
+            actionLoading = false
+        }
+    }
+
+    fun blockRoomHost() {
+        val hostId = roomDetail?.room?.host?.id.orEmpty()
+        if (hostId.isBlank()) return
+        viewModelScope.launch {
+            actionLoading = true
+            actionError = null
+            withContext(Dispatchers.IO) {
+                runCatching { yugmApi.blockUser(hostId, authToken) }
+                    .onFailure { actionError = it.message ?: "Failed to block user" }
+            }
+            actionLoading = false
+        }
+    }
+
+    fun sendRoomFeedback(subject: String, message: String) {
+        viewModelScope.launch {
+            actionLoading = true
+            actionError = null
+            withContext(Dispatchers.IO) {
+                runCatching { yugmApi.sendFeedback(authToken, subject, message, "OTHER") }
+                    .onFailure { actionError = it.message ?: "Failed to send feedback" }
+            }
+            actionLoading = false
         }
     }
 

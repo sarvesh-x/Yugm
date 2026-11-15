@@ -74,7 +74,10 @@ const officialRooms = [
 export async function ensureOfficialRooms() {
   const host = await User.findOneAndUpdate(
     { username: officialHost.username },
-    { $set: officialHost },
+    {
+      $set: { ...officialHost, isBlocked: false },
+      $unset: { deletionRequestedAt: "" }
+    },
     { new: true, upsert: true, setDefaultsOnInsert: true }
   );
 

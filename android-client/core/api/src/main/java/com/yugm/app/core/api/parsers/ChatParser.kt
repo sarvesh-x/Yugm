@@ -15,7 +15,18 @@ fun JSONObject.toDirectMessage(): DirectMessage = DirectMessage(
     read = optBoolean("read", false),
     reactionCount = optJSONArray("reactions")?.length() ?: 0,
     mediaUrl = optString("mediaUrl", ""),
-    mediaType = optString("mediaType", "")
+    mediaType = optString("mediaType", ""),
+    replyTo = optJSONObject("replyTo")?.takeIf { it.optString("messageId").isNotBlank() }?.let { reply ->
+        com.yugm.app.core.model.ChatReplyTo(
+            messageId = reply.optString("messageId", ""),
+            author = reply.optString("author", ""),
+            authorId = reply.optJSONObject("authorId")?.entityId() ?: reply.optString("authorId", ""),
+            text = reply.optString("text", ""),
+            mediaUrl = reply.optString("mediaUrl", "").takeIf { it.isNotBlank() }
+        )
+    },
+    forwarded = optBoolean("forwarded", false),
+    isEdited = optBoolean("isEdited", false)
 )
 
 fun JSONArray.toDirectMessages(): List<DirectMessage> = buildList {

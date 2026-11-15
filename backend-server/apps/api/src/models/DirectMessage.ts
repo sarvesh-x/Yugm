@@ -1,5 +1,16 @@
 import mongoose, { Schema } from "mongoose";
 
+const replyToSchema = new Schema(
+  {
+    messageId: { type: Schema.Types.ObjectId, required: true },
+    author: { type: String, default: "" },
+    authorId: { type: Schema.Types.ObjectId, ref: "User" },
+    text: { type: String, default: "" },
+    mediaUrl: { type: String, default: "" }
+  },
+  { _id: false }
+);
+
 const directMessageSchema = new Schema(
   {
     senderId: { type: Schema.Types.ObjectId, ref: "User", required: true },
@@ -9,6 +20,11 @@ const directMessageSchema = new Schema(
     mediaUrl: { type: String, default: "" },
     mediaType: { type: String, enum: ["", "IMAGE", "VIDEO", "AUDIO"], default: "" },
     duration: { type: Number, default: 0 },
+    replyTo: { type: replyToSchema, default: undefined },
+    forwarded: { type: Boolean, default: false },
+    hiddenFor: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    isEdited: { type: Boolean, default: false },
+    editedAt: Date,
     reactions: [{
       userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
       type: { type: String, enum: ["heart", "fire", "laugh", "clap", "wow"], required: true },

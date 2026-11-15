@@ -6,13 +6,13 @@ import { ensureAuthIndexes } from "./services/authIndexes.js";
 import { initFirebase } from "./services/firebase.js";
 import { closeJobWorkers, startJobWorkers } from "./services/jobs.js";
 import { seedAchievements } from "./services/achievementSeeder.js";
-import { ensureOfficialRooms } from "./services/officialRooms.js";
 import { ensureDefaultCosmetics } from "./services/cosmetics.js";
 import { ensureProductionIndexes } from "./services/productionIndexes.js";
 import { runMigrations } from "./config/migration.js";
 import { resumePkTimers } from "./services/pk.js";
 import { connectRedis } from "./services/redis.js";
 import { closeSocketInfrastructure, initSocket } from "./services/socket.js";
+import { ensureOfficialRooms } from "./services/officialRooms.js";
 
 process.on("unhandledRejection", (err) => {
   console.error("Unhandled rejection:", err);

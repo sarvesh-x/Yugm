@@ -63,7 +63,10 @@ fun JSONObject.toHost(): Host = Host(
 
 fun JSONArray.toHosts(): List<Host> = buildList {
     for (index in 0 until length()) {
-        add(getJSONObject(index).toHost())
+        when (val value = opt(index)) {
+            is JSONObject -> add(value.toHost())
+            is String -> if (value.isNotBlank()) add(Host(id = value))
+        }
     }
 }
 
@@ -189,7 +192,8 @@ fun JSONObject.toRoomActivityItem(): RoomActivityItem = RoomActivityItem(
     id = optString("_id", optString("id", "")),
     label = optString("label", ""),
     type = optString("type", ""),
-    createdAt = optString("createdAt", "")
+    createdAt = optString("createdAt", ""),
+    userId = optJSONObject("userId")?.entityId() ?: optString("userId", "")
 )
 
 fun JSONArray.toRoomActivityItems(): List<RoomActivityItem> = buildList {

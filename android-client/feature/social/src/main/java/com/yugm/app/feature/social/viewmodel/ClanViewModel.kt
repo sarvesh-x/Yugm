@@ -156,14 +156,81 @@ class ClanViewModel @Inject constructor(
         }
     }
 
-    fun create(token: String, name: String, description: String, privacy: String, familyLabel: String) {
+    fun create(token: String, name: String, description: String, privacy: String, familyLabel: String, avatar: String? = null) {
         viewModelScope.launch {
             isLoading = true
             error = null
             runCatching {
-                myClan = withContext(Dispatchers.IO) { yugmApi.createClan(token, name, description, privacy, familyLabel) }
+                myClan = withContext(Dispatchers.IO) { yugmApi.createClan(token, name, description, privacy, familyLabel, avatar) }
             }.onFailure {
                 error = it.message ?: "Failed to create clan"
+            }
+            isLoading = false
+        }
+    }
+
+    fun updateClan(
+        token: String,
+        clanId: String,
+        name: String,
+        description: String,
+        privacy: String,
+        familyLabel: String,
+        avatar: String?
+    ) {
+        viewModelScope.launch {
+            isLoading = true
+            error = null
+            runCatching {
+                val updated = withContext(Dispatchers.IO) {
+                    yugmApi.updateClan(token, clanId, name, description, privacy, familyLabel, avatar)
+                }
+                clanDetail = updated
+                if (myClan?.id == updated.id) myClan = updated
+            }.onFailure {
+                error = it.message ?: "Failed to update clan"
+            }
+            isLoading = false
+        }
+    }
+
+    fun setMemberRole(token: String, clanId: String, userId: String, role: String) {
+        viewModelScope.launch {
+            isLoading = true
+            error = null
+            runCatching {
+                clanDetail = withContext(Dispatchers.IO) { yugmApi.setClanMemberRole(token, clanId, userId, role) }
+            }.onFailure {
+                error = it.message ?: "Failed to update member role"
+            }
+            isLoading = false
+        }
+    }
+
+    fun kickMember(token: String, clanId: String, userId: String) {
+        viewModelScope.launch {
+            isLoading = true
+            error = null
+            runCatching {
+                clanDetail = withContext(Dispatchers.IO) { yugmApi.kickClanMember(token, clanId, userId) }
+            }.onFailure {
+                error = it.message ?: "Failed to remove member"
+            }
+            isLoading = false
+        }
+    }
+
+    fun deleteClan(token: String, clanId: String, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            isLoading = true
+            error = null
+            runCatching {
+                withContext(Dispatchers.IO) { yugmApi.deleteClan(token, clanId) }
+                myClan = null
+                clanDetail = null
+                onComplete()
+            }.onFailure {
+                error = it.message ?: "Failed to delete clan"
             }
             isLoading = false
         }

@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -36,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.yugm.app.core.model.ClanMessage
 import com.yugm.app.core.ui.components.LoadingState
+import com.yugm.app.core.ui.components.Avatar
 import com.yugm.app.core.ui.components.YugmAmbientBackground
 import com.yugm.app.core.ui.components.YugmPageHeader
 import com.yugm.app.core.ui.theme.Pink
@@ -66,11 +69,30 @@ fun ClanChatScreen(
         input = ""
     }
 
-    LaunchedEffect(clanId) { viewModel.loadMessages(token, clanId) }
+    LaunchedEffect(clanId) {
+        viewModel.loadMessages(token, clanId)
+        viewModel.loadDetail(token, clanId)
+    }
+    LaunchedEffect(viewModel.messages.size) {
+        if (viewModel.messages.isNotEmpty()) listState.animateScrollToItem(viewModel.messages.lastIndex)
+    }
 
     YugmAmbientBackground {
         Column(Modifier.fillMaxSize()) {
-            YugmPageHeader("Yugm", clanName.ifBlank { "Clan Chat" }, onBack = onBack)
+            YugmPageHeader("Clan", clanName.ifBlank { viewModel.clanDetail?.name ?: "Clan Chat" }, onBack = onBack)
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                    .background(Color(0x1AFFFFFF), RoundedCornerShape(16.dp)).padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Avatar((clanName.ifBlank { viewModel.clanDetail?.name ?: "C" }).take(1).uppercase(), 42, viewModel.clanDetail?.avatar)
+                Column(Modifier.weight(1f)) {
+                    Text("${viewModel.clanDetail?.memberCount ?: 0} members", color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Text("Messages are shared with your clan", color = TextMuted, fontSize = 11.sp)
+                }
+                Text("●  Live", color = Color(0xFF65D69A), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
             if (status.isNotBlank()) {
                 Text(status, color = Pink, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp))
             }
@@ -91,21 +113,26 @@ fun ClanChatScreen(
                         }
                     } else {
                         items(viewModel.messages) { msg ->
-                            val isMine = msg.senderId?.id == currentUserId
+                            val sender = msg.senderId
+                            val isMine = sender?.id == currentUserId
                             Column(
                                 Modifier.fillMaxWidth().padding(vertical = 2.dp),
                                 horizontalAlignment = if (isMine) Alignment.End else Alignment.Start
                             ) {
-                                if (!isMine && msg.senderId != null) {
-                                    Text(msg.senderId!!.name, color = TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(bottom = 2.dp))
+                                if (!isMine && sender != null) {
+                                    Text(sender.name, color = TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(start = 38.dp, bottom = 3.dp))
                                 }
                                 Row(verticalAlignment = Alignment.Bottom) {
                                     if (isMine) Spacer(Modifier.weight(1f))
+                                    if (!isMine && sender != null) {
+                                        Avatar(sender.name.take(1).uppercase(), 30, sender.avatar)
+                                        Spacer(Modifier.width(7.dp))
+                                    }
                                     Column(
                                         Modifier.background(
-                                            if (isMine) Pink else Color(0x2AFFFFFF),
-                                            RoundedCornerShape(12.dp)
-                                        ).padding(horizontal = 14.dp, vertical = 8.dp)
+                                            if (isMine) Pink else Color(0xFF292536),
+                                            RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = if (isMine) 18.dp else 5.dp, bottomEnd = if (isMine) 5.dp else 18.dp)
+                                        ).padding(horizontal = 14.dp, vertical = 10.dp).widthIn(max = 290.dp)
                                     ) {
                                         Text(msg.message, color = TextPrimary, fontSize = 14.sp)
                                         if (msg.reactions.isNotEmpty()) {
@@ -136,11 +163,12 @@ fun ClanChatScreen(
                 }
             }
             Row(
-                Modifier.fillMaxWidth().padding(12.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)
+                    .background(Color(0xFF201C2B), RoundedCornerShape(24.dp)).padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
-                    Modifier.weight(1f).background(Color(0x1AFFFFFF), RoundedCornerShape(20.dp)).padding(horizontal = 16.dp, vertical = 2.dp)
+                    Modifier.weight(1f).heightIn(min = 42.dp).padding(horizontal = 8.dp, vertical = 2.dp)
                 ) {
                     androidx.compose.foundation.text.BasicTextField(
                         value = input,

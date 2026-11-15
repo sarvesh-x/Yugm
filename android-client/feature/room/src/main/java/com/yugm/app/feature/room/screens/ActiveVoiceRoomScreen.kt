@@ -243,6 +243,12 @@ fun ActiveVoiceRoomScreen(
     onRejectSpeaker: (String) -> Unit = {},
     onTakeSeat: (Int) -> Unit = {},
     onSetMicLocked: (Boolean) -> Unit = {},
+    onClearRoomChat: () -> Unit = {},
+    onMuteAllRoom: () -> Unit = {},
+    onUnmuteAllRoom: () -> Unit = {},
+    onReportRoom: () -> Unit = {},
+    onBlockRoom: () -> Unit = {},
+    onRoomFeedback: () -> Unit = {},
     onSetSeatLocked: (Int, Boolean) -> Unit = { _, _ -> },
     onInviteSpeaker: (String) -> Unit = {},
     onCreatePoll: () -> Unit = {},
@@ -278,6 +284,7 @@ fun ActiveVoiceRoomScreen(
     forcedRemoveVersion: Int = 0,
     roomEndedVersion: Int = 0,
     roomReactionEvent: Triple<Int, String, String> = Triple(0, "", ""),
+    roomGiftEvent: Pair<Int, com.yugm.app.core.model.RoomGiftEvent?> = 0 to null,
     onOpenModes: (() -> Unit)? = null,
     onOpenThemes: (() -> Unit)? = null,
     onEditRoom: (() -> Unit)? = null,
@@ -482,16 +489,14 @@ fun ActiveVoiceRoomScreen(
 
     BackHandler { showExitPrompt = true }
 
-    // Listen to gift activities across the room
-    LaunchedEffect(activity.size) {
-        val latest = activity.lastOrNull()
-        if (latest != null && latest.type.uppercase() == "GIFT") {
-            val sender = latest.label.substringBefore(" sent").ifBlank { "Someone" }
-            val giftName = latest.label.substringAfter("sent ").ifBlank { "Gift" }
-            val gift = gifts.firstOrNull { it.name.equals(giftName, ignoreCase = true) }
-                ?: GiftItem(id = "", name = giftName, price = 0, icon = "🎁")
-            activeGiftBanner = sender to gift
-        }
+    // Live gift payloads carry the image URL; activity labels are intentionally
+    // not used to reconstruct artwork because they only contain text.
+    LaunchedEffect(roomGiftEvent.first) {
+        val event = roomGiftEvent.second ?: return@LaunchedEffect
+        val catalogGift = gifts.firstOrNull { it.id == event.giftId || it.name.equals(event.giftName, ignoreCase = true) }
+        val gift = catalogGift?.copy(icon = event.giftIcon.ifBlank { catalogGift.icon })
+            ?: GiftItem(id = event.giftId, name = event.giftName, price = event.price, icon = event.giftIcon.ifBlank { "🎁" })
+        activeGiftBanner = event.senderName.ifBlank { "Someone" } to gift
     }
 
     LaunchedEffect(activeGiftBanner) {
@@ -540,12 +545,10 @@ fun ActiveVoiceRoomScreen(
         onDismiss = { giftOpen = false },
         onSend = { gift ->
             onGift(gift, "COINS", giftRecipientId)
-            activeGiftBanner = "You" to gift
             giftRecipientId = room.host?.id.orEmpty()
         },
         onSendWithCurrency = { gift, currency ->
             onGift(gift, currency, giftRecipientId)
-            activeGiftBanner = "You" to gift
             giftRecipientId = room.host?.id.orEmpty()
         }
     )
@@ -587,6 +590,7 @@ fun ActiveVoiceRoomScreen(
                 room = room,
                 participants = participants,
                 isHost = isHost,
+                isRoomAdmin = isRoomAdmin,
                 onShare = {
                     val shareIntent = Intent(Intent.ACTION_SEND).apply {
                         type = "text/plain"
@@ -594,7 +598,15 @@ fun ActiveVoiceRoomScreen(
                     }
                     context.startActivity(Intent.createChooser(shareIntent, "Share room"))
                 },
-                onMore = { showRoomInfoSheet = true },
+                onRoomInfo = { showRoomInfoSheet = true },
+                onClearChat = onClearRoomChat,
+                onMuteAll = onMuteAllRoom,
+                onUnmuteAll = onUnmuteAllRoom,
+                onLockAllMics = { onSetMicLocked(true) },
+                onUnlockAllMics = { onSetMicLocked(false) },
+                onReportRoom = onReportRoom,
+                onBlockRoom = onBlockRoom,
+                onFeedback = onRoomFeedback,
                 onRankClick = { onToast("Room Ranking #1 in Live Audio") },
                 onLeave = { showExitPrompt = true }
             )
@@ -676,7 +688,11 @@ fun ActiveVoiceRoomScreen(
                     contentPadding = PaddingValues(bottom = 8.dp)
                 ) {
                     // System entrance cards (matching reference screenshot with purple clap pill button!)
-                    val recentEntrances = activity.filter { it.type.uppercase() == "JOIN" }.takeLast(4)
+                    val recentEntrances = activity.asReversed()
+                        .filter { it.type.uppercase() == "JOIN" }
+                        .distinctBy { it.userId.ifBlank { it.label } }
+                        .take(4)
+                        .reversed()
                     items(recentEntrances, key = { "join-${it.id}" }) { item ->
                         EntranceAnnouncementCard(
                             label = item.label,

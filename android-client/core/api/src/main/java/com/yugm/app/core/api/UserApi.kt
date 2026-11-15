@@ -209,8 +209,59 @@ object UserApi {
         val data = YugmHttpClient.get("/users/messages/$userId", token).getJSONObject("data")
         return Conversation(
             messages = data.optJSONArray("messages")?.toDirectMessages() ?: emptyList(),
-            relationship = data.optJSONObject("relationship")?.toRelationshipStatus()
+            relationship = data.optJSONObject("relationship")?.toRelationshipStatus(),
+            muted = data.optBoolean("muted", false)
         )
+    }
+
+    suspend fun deleteConversation(token: String, userId: String) {
+        YugmHttpClient.delete("/users/messages/$userId", token)
+    }
+
+    suspend fun deleteSelectedDirectMessages(token: String, userId: String, messageIds: List<String>, scope: String): List<String> {
+        val ids = JSONArray().apply { messageIds.forEach { put(it) } }
+        val data = YugmHttpClient.post(
+            "/users/messages/$userId/delete-selected",
+            token,
+            JSONObject().put("messageIds", ids).put("scope", scope)
+        ).getJSONObject("data")
+        val deletedIds = data.optJSONArray("deletedIds") ?: JSONArray()
+        return buildList { for (index in 0 until deletedIds.length()) add(deletedIds.optString(index)) }
+    }
+
+    suspend fun editDirectMessage(token: String, userId: String, messageId: String, message: String): DirectMessage {
+        val data = YugmHttpClient.put("/users/messages/$userId/$messageId", token, JSONObject().put("message", message)).getJSONObject("data")
+        return data.getJSONObject("message").toDirectMessage()
+    }
+
+    suspend fun forwardDirectMessage(token: String, userId: String, messageId: String): DirectMessage {
+        val data = YugmHttpClient.post("/users/messages/$userId/forward", token, JSONObject().put("messageId", messageId)).getJSONObject("data")
+        return data.getJSONObject("message").toDirectMessage()
+    }
+
+    suspend fun replyDirectMessage(token: String, userId: String, message: String, replyToId: String): DirectMessage {
+        val data = YugmHttpClient.post("/users/messages/$userId", token, JSONObject().put("message", message).put("replyToId", replyToId)).getJSONObject("data")
+        return data.getJSONObject("message").toDirectMessage()
+    }
+
+    suspend fun searchConversation(token: String, userId: String, query: String): List<DirectMessage> {
+        val data = YugmHttpClient.get("/users/messages/$userId/search?q=${java.net.URLEncoder.encode(query, "UTF-8")}", token).getJSONObject("data")
+        return data.optJSONArray("messages")?.toDirectMessages() ?: emptyList()
+    }
+
+    suspend fun muteConversation(token: String, userId: String, muted: Boolean) {
+        YugmHttpClient.put("/users/messages/$userId/mute", token, JSONObject().put("muted", muted))
+    }
+
+    suspend fun unreadCounts(token: String): Map<String, Int> {
+        val obj = YugmHttpClient.get("/users/messages/unread-counts", token).getJSONObject("data").optJSONObject("unreadCounts") ?: JSONObject()
+        return buildMap { obj.keys().forEach { key -> put(key, obj.optInt(key)) } }
+    }
+
+    suspend fun mutedConversations(token: String): Set<String> {
+        val data = YugmHttpClient.get("/users/messages/mutes", token).getJSONObject("data")
+        val arr = data.optJSONArray("partnerIds") ?: JSONArray()
+        return buildSet { for (index in 0 until arr.length()) add(arr.optString(index)) }
     }
 
     suspend fun sendDirectMessage(token: String, userId: String, message: String): Conversation {

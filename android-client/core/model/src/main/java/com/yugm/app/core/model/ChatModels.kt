@@ -62,12 +62,15 @@ data class DirectMessage(
     val mediaUrl: String = "",
     val mediaType: String = "",
     val replyTo: ChatReplyTo? = null,
-    val mentions: List<String> = emptyList()
+    val mentions: List<String> = emptyList(),
+    val forwarded: Boolean = false,
+    val isEdited: Boolean = false
 )
 
 data class Conversation(
     val messages: List<DirectMessage> = emptyList(),
-    val relationship: RelationshipStatus? = null
+    val relationship: RelationshipStatus? = null,
+    val muted: Boolean = false
 )
 
 data class NotificationItem(

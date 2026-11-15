@@ -51,13 +51,19 @@ class DatingViewModel @Inject constructor(
         }
     }
 
-    fun loadCandidates(token: String) {
+    fun loadCandidates(token: String, discoveryMode: Int = 1) {
         viewModelScope.launch {
             isLoading = true
             datingState = UiState.Loading
             error = null
             runCatching {
-                withContext(Dispatchers.IO) { yugmApi.datingExplore(token, activeFilters) }
+                val modeFilter = when (discoveryMode) {
+                    0 -> "nearby"
+                    2 -> "verified"
+                    else -> null
+                }
+                val filters = activeFilters + listOfNotNull(modeFilter)
+                withContext(Dispatchers.IO) { yugmApi.datingExplore(token, filters) }
             }.onSuccess {
                 candidates = it
                 datingState = UiState.Success(it)
@@ -71,25 +77,34 @@ class DatingViewModel @Inject constructor(
 
     fun like(token: String, candidate: Host, type: String = "LIKE") {
         viewModelScope.launch {
+            if (candidate.id.isBlank()) return@launch
             candidates = candidates.filter { it.id != candidate.id }
             runCatching {
                 withContext(Dispatchers.IO) { yugmApi.datingLike(token, candidate.id, type) }
             }.onSuccess { (isMatch, matchId) ->
+                error = null
                 if (isMatch) {
                     _matchEvent.emit(candidate)
                 }
             }.onFailure {
+                error = it.message ?: "Like could not be sent. Restoring this profile."
+                if (candidates.none { current -> current.id == candidate.id }) candidates = listOf(candidate) + candidates
                 Timber.tag("DatingViewModel").e(it, "Failed to like user")
             }
         }
     }
 
-    fun pass(token: String, likedId: String) {
+    fun pass(token: String, candidate: Host) {
         viewModelScope.launch {
-            candidates = candidates.filter { it.id != likedId }
+            if (candidate.id.isBlank()) return@launch
+            candidates = candidates.filter { it.id != candidate.id }
             runCatching {
-                withContext(Dispatchers.IO) { yugmApi.datingPass(token, likedId) }
+                withContext(Dispatchers.IO) { yugmApi.datingPass(token, candidate.id) }
+            }.onSuccess {
+                error = null
             }.onFailure {
+                error = it.message ?: "Pass could not be saved. Restoring this profile."
+                if (candidates.none { current -> current.id == candidate.id }) candidates = listOf(candidate) + candidates
                 Timber.tag("DatingViewModel").e(it, "Failed to pass user")
             }
         }

@@ -2,7 +2,6 @@ import { pathToFileURL } from "url";
 import { connectDatabase, disconnectDatabase } from "../config/db.js";
 import { ensureAuthIndexes } from "../services/authIndexes.js";
 import { ensureDefaultCosmetics } from "../services/cosmetics.js";
-import { ensureOfficialRooms } from "../services/officialRooms.js";
 import { ChatMessage } from "../models/ChatMessage.js";
 import { DirectMessage } from "../models/DirectMessage.js";
 import { Follow } from "../models/Follow.js";
@@ -19,6 +18,7 @@ import { RoomParticipant } from "../models/RoomParticipant.js";
 import { SpeakerRequest } from "../models/SpeakerRequest.js";
 import { User } from "../models/User.js";
 import { WalletTransaction } from "../models/WalletTransaction.js";
+import { ensureOfficialRooms } from "../services/officialRooms.js";
 
 /** Remove only the synthetic records created by the old demo seed. */
 export async function removeSeededDemoData() {

@@ -28,9 +28,6 @@ fun NavGraphBuilder.discoverNavGraph(
             onNotifications = {
                 navController.navigate(Screen.Notifications.route)
             },
-            onGrowth = {
-                navController.navigate(Screen.Growth.route)
-            },
             onSearch = {
                 navController.navigate(Screen.Search.route)
             },

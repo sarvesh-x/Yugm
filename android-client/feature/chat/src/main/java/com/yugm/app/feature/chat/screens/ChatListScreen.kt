@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -52,13 +53,19 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.yugm.app.core.api.YugmApi
+import com.yugm.app.core.model.Clan
+import com.yugm.app.core.model.ClanMessage
 import com.yugm.app.core.model.DirectMessage
 import com.yugm.app.core.model.Host
 import com.yugm.app.core.ui.components.Avatar
@@ -88,19 +95,28 @@ fun ChatListScreen(
     onDiscover: () -> Unit = {},
     onCreateRoom: () -> Unit = {},
     onLive: () -> Unit = {},
-    onGames: () -> Unit = {},
     onWallet: () -> Unit = {},
-    onProfile: () -> Unit = {}
+    onProfile: () -> Unit = {},
+    onOpenClan: (String, String) -> Unit = { _, _ -> },
+    onJoinClan: () -> Unit = {},
+    onOpenClanDetail: (String) -> Unit = {}
 ) {
     val viewModel: ChatListViewModel = hiltViewModel()
-    var query by remember { mutableStateOf("") }
     var mainTab by remember { mutableIntStateOf(0) }
     var contactTab by remember { mutableIntStateOf(0) }
     var showFindPeople by remember { mutableStateOf(false) }
 
     LaunchedEffect(token, currentUserId) { viewModel.load(token, currentUserId) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, token, currentUserId) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.load(token, currentUserId)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
-    val conversations = remember(viewModel.recentMessages, viewModel.matches, query, currentUserId) {
+    val conversations = remember(viewModel.recentMessages, viewModel.matches, currentUserId) {
         viewModel.recentMessages.groupBy { if (it.senderId == currentUserId) it.receiverId else it.senderId }
             .mapNotNull { (partnerId, messages) ->
                 val last = messages.maxByOrNull { it.createdAt } ?: return@mapNotNull null
@@ -110,16 +126,15 @@ fun ChatListScreen(
                     ?: Host(id = partnerId, name = "Yugm User")
                 ConversationItem(partner, last)
             }
-            .filter { query.isBlank() || it.partner.name.contains(query, true) || it.lastMessage.message.contains(query, true) }
             .sortedByDescending { it.lastMessage.createdAt }
     }
-    val unread = conversations.count { !it.lastMessage.read && it.lastMessage.receiverId == currentUserId }
+    val unread = viewModel.unreadCounts.values.sum()
     val friendIds = remember(viewModel.followers, viewModel.following) { viewModel.followers.map { it.id }.intersect(viewModel.following.map { it.id }.toSet()) }
     val contactList = when (contactTab) {
         0 -> viewModel.following.filter { it.id in friendIds }
         1 -> viewModel.followers
         else -> viewModel.following
-    }.filter { query.isBlank() || it.name.contains(query, true) || it.username.contains(query, true) }
+    }
 
     Box(Modifier.fillMaxSize().background(ChatBg)) {
         YugmPullToRefreshBox(
@@ -133,13 +148,13 @@ fun ChatListScreen(
                 verticalArrangement = Arrangement.spacedBy(18.dp)
             ) {
             item {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
                     ChatTopTab("Chats", selected = mainTab == 0) { mainTab = 0 }
-                    Spacer(Modifier.width(28.dp))
-                    ChatTopTab("Contacts", selected = mainTab == 1) { mainTab = 1 }
+                    Spacer(Modifier.width(18.dp))
+                    ChatTopTab("Clan", selected = mainTab == 1) { mainTab = 1 }
+                    Spacer(Modifier.width(18.dp))
+                    ChatTopTab("Contacts", selected = mainTab == 2) { mainTab = 2 }
                     Spacer(Modifier.weight(1f))
-                    ChatSearch(query = query, onQuery = { query = it }, hint = "Search")
-                    Spacer(Modifier.width(8.dp))
                     Box(Modifier.size(42.dp).clip(CircleShape).background(ChatPanel).border(1.dp, ChatLine, CircleShape).clickable(role = Role.Button, onClickLabel = "Find people by username", onClick = { showFindPeople = true }), contentAlignment = Alignment.Center) {
                         Icon(Icons.Filled.PersonAdd, contentDescription = null, tint = ChatInk, modifier = Modifier.size(20.dp))
                     }
@@ -155,28 +170,6 @@ fun ChatListScreen(
                 }
             }
             if (mainTab == 0) {
-                item {
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 18.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        listOf("🎙  Voice Party" to onLive, "🎮  Games" to onGames, "✨  Find people" to onDiscover).forEach { (label, action) ->
-                            item {
-                                Text(
-                                    label,
-                                    color = ChatInk,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.clip(RoundedCornerShape(16.dp))
-                                        .background(ChatPanel)
-                                        .border(1.dp, ChatLine, RoundedCornerShape(16.dp))
-                                        .clickable(role = Role.Button, onClick = action)
-                                        .padding(horizontal = 15.dp, vertical = 13.dp)
-                                )
-                            }
-                        }
-                    }
-                }
                 // Recommended users to chat with - real data, online dot indicator
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -243,7 +236,57 @@ fun ChatListScreen(
                                 .background(ChatCard)
                         ) {
                             if (index > 0) Box(Modifier.fillMaxWidth().padding(start = 82.dp).height(1.dp).background(ChatLine))
-                            LightChatRow(item, unread = !item.lastMessage.read && item.lastMessage.receiverId == currentUserId) { onOpenChat(item.partner.id) }
+                            LightChatRow(
+                                item,
+                                unreadCount = viewModel.unreadCounts[item.partner.id] ?: if (!item.lastMessage.read && item.lastMessage.receiverId == currentUserId) 1 else 0,
+                                muted = item.partner.id in viewModel.mutedPartnerIds
+                            ) { onOpenChat(item.partner.id) }
+                        }
+                    }
+                }
+            } else if (mainTab == 1) {
+                val clan = viewModel.myClan
+                when {
+                    viewModel.isLoading && clan == null -> item {
+                        Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = ChatPurple)
+                        }
+                    }
+                    clan == null -> item {
+                        Column(
+                            Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 42.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("▰", color = Color(0xFFC9B9FF), fontSize = 62.sp)
+                            Text("No clan joined yet", color = ChatInk, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                "Join a clan to unlock a shared family chat.",
+                                color = ChatMuted,
+                                fontSize = 13.sp,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(top = 6.dp)
+                            )
+                            TextButton(onClick = onJoinClan) {
+                                Text("Join Clan", color = ChatPurple, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                    else -> {
+                        item {
+                            ClanChatCard(
+                                clan = clan,
+                                lastMessage = viewModel.clanLastMessage,
+                                onOpen = { onOpenClan(clan.id, clan.name) },
+                                onManage = { onOpenClanDetail(clan.id) }
+                            )
+                        }
+                        item {
+                            Text(
+                                "You can belong to one clan at a time.",
+                                color = ChatMuted,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 22.dp)
+                            )
                         }
                     }
                 }
@@ -511,28 +554,93 @@ private fun FindPeopleResultRow(
 }
 
 @Composable
+private fun ClanChatCard(
+    clan: Clan,
+    lastMessage: ClanMessage?,
+    onOpen: () -> Unit,
+    onManage: () -> Unit
+) {
+    Column(
+        Modifier.padding(horizontal = 16.dp).fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(ChatCard)
+            .border(1.dp, ChatLine, RoundedCornerShape(20.dp))
+            .padding(16.dp)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = "Open clan chat", onClick = onOpen),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Avatar(clan.name.take(1).uppercase(), 56, clan.avatar)
+            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        clan.name,
+                        color = ChatInk,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        clan.myRole.ifBlank { "MEMBER" }
+                            .replace("_", " ")
+                            .lowercase()
+                            .replaceFirstChar { it.uppercase() },
+                        color = ChatPurple,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Text("#${clan.slug} | ${clan.memberCount} members", color = ChatMuted, fontSize = 11.sp)
+                Text(
+                    lastMessage?.message?.takeIf { it.isNotBlank() } ?: "No messages yet. Say hi!",
+                    color = ChatMuted,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 5.dp)
+                )
+            }
+            Text("›", color = ChatPurple, fontSize = 26.sp)
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(
+                Modifier.weight(1f).clip(RoundedCornerShape(12.dp))
+                    .background(ChatPurple.copy(alpha = 0.9f))
+                    .clickable(role = Role.Button, onClickLabel = "Open clan chat", onClick = onOpen)
+                    .padding(vertical = 11.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Open clan chat", color = ChatInk, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+            Box(
+                Modifier.weight(1f).clip(RoundedCornerShape(12.dp))
+                    .background(ChatPanel)
+                    .border(1.dp, ChatLine, RoundedCornerShape(12.dp))
+                    .clickable(role = Role.Button, onClickLabel = "Manage clan", onClick = onManage)
+                    .padding(vertical = 11.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(if (clan.canManage) "Manage clan" else "View clan", color = ChatInk, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
 private fun ChatTopTab(label: String, selected: Boolean, onClick: () -> Unit) {
     Column(Modifier.height(48.dp).clickable(role = Role.Tab, onClickLabel = label, onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Text(label, color = if (selected) ChatInk else ChatMuted, fontSize = 20.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+        Text(label, color = if (selected) ChatInk else ChatMuted, fontSize = 17.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
         Box(Modifier.padding(top = 2.dp).size(width = if (selected) 30.dp else 0.dp, height = 4.dp).clip(CircleShape).background(ChatPurple))
     }
 }
 
-@Composable
-private fun ChatSearch(query: String, onQuery: (String) -> Unit, hint: String) {
-    Row(Modifier.width(126.dp).height(42.dp).clip(CircleShape).background(ChatPanel).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("⌕", color = ChatMuted, fontSize = 20.sp)
-        BasicTextField(query, onQuery, singleLine = true, textStyle = TextStyle(color = ChatInk, fontSize = 13.sp), cursorBrush = androidx.compose.ui.graphics.SolidColor(ChatPurple), modifier = Modifier.weight(1f).padding(start = 5.dp), decorationBox = { inner ->
-            Box {
-                if (query.isBlank()) Text(hint, color = Color(0xFFB6B8C5), fontSize = 13.sp)
-                inner()
-            }
-        })
-    }
-}
 
 @Composable
-private fun LightChatRow(item: ConversationItem, unread: Boolean, onClick: () -> Unit) {
+private fun LightChatRow(item: ConversationItem, unreadCount: Int, muted: Boolean, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().height(78.dp).clickable(role = Role.Button, onClickLabel = "Open conversation with ${item.partner.name}", onClick = onClick).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
         Box {
             Avatar(item.partner.name.take(1), 50, item.partner.avatar, item.partner.activeCosmetics)
@@ -540,9 +648,10 @@ private fun LightChatRow(item: ConversationItem, unread: Boolean, onClick: () ->
         }
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
             Text(item.partner.name, color = ChatInk, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(item.lastMessage.message, color = ChatMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+            Text((if (item.lastMessage.forwarded) "Forwarded · " else "") + item.lastMessage.message, color = ChatMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
         }
-        if (unread) Box(Modifier.size(9.dp).clip(CircleShape).background(ChatPurple))
+        if (muted) Text("🔕", fontSize = 12.sp, modifier = Modifier.padding(end = 6.dp))
+        if (unreadCount > 0) Text(unreadCount.coerceAtMost(99).toString(), color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clip(CircleShape).background(ChatPurple).padding(horizontal = 7.dp, vertical = 4.dp))
     }
 }
 

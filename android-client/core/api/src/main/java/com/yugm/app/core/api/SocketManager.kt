@@ -13,6 +13,9 @@ import javax.inject.Singleton
 
 sealed class SocketEvent {
     data class DirectMessageReceived(val message: DirectMessage) : SocketEvent()
+    data class DirectMessageDeleted(val messageId: String, val partnerId: String) : SocketEvent()
+    data class DirectConversationDeleted(val partnerId: String) : SocketEvent()
+    data class DirectMessagesRead(val partnerId: String, val readThrough: String) : SocketEvent()
     data class TypingUpdate(val userId: String, val typing: Boolean) : SocketEvent()
     data class UserOnline(val userId: String) : SocketEvent()
     data class UserOffline(val userId: String) : SocketEvent()
@@ -49,20 +52,41 @@ class SocketManager @Inject constructor() {
                 Timber.tag("SocketManager").d("Connected to $targetUrl")
                 _events.tryEmit(SocketEvent.Connected)
             }
-            socket?.on("direct_message") { args ->
+            socket?.on("direct:message:new") { args ->
                 if (args.isNotEmpty() && args[0] is JSONObject) {
                     val json = args[0] as JSONObject
                     try {
                         val message = json.toDirectMessage()
                         _events.tryEmit(SocketEvent.DirectMessageReceived(message))
                     } catch (e: Exception) {
-                        Timber.tag("SocketManager").e(e, "Failed to parse direct_message")
+                        Timber.tag("SocketManager").e(e, "Failed to parse direct message")
                     }
                 }
             }
-            socket?.on("user_typing") { args ->
-                if (args.size >= 2) {
-                    _events.tryEmit(SocketEvent.TypingUpdate(args[0].toString(), args[1].toString().toBooleanStrictOrNull() ?: false))
+            socket?.on("direct:reaction:new") { args ->
+                (args.firstOrNull() as? JSONObject)?.optJSONObject("message")?.let { message ->
+                    runCatching { _events.tryEmit(SocketEvent.DirectMessageReceived(message.toDirectMessage())) }
+                        .onFailure { Timber.tag("SocketManager").e(it, "Failed to parse direct message reaction") }
+                }
+            }
+            socket?.on("direct:message:deleted") { args ->
+                (args.firstOrNull() as? JSONObject)?.let { payload ->
+                    _events.tryEmit(SocketEvent.DirectMessageDeleted(payload.optString("messageId"), payload.optString("partnerId")))
+                }
+            }
+            socket?.on("direct:conversation:deleted") { args ->
+                (args.firstOrNull() as? JSONObject)?.let { payload ->
+                    _events.tryEmit(SocketEvent.DirectConversationDeleted(payload.optString("partnerId")))
+                }
+            }
+            socket?.on("direct:message:read") { args ->
+                (args.firstOrNull() as? JSONObject)?.let { payload ->
+                    _events.tryEmit(SocketEvent.DirectMessagesRead(payload.optString("partnerId"), payload.optString("readThrough")))
+                }
+            }
+            socket?.on("direct:typing:update") { args ->
+                (args.firstOrNull() as? JSONObject)?.let { payload ->
+                    _events.tryEmit(SocketEvent.TypingUpdate(payload.optString("userId"), payload.optBoolean("typing")))
                 }
             }
             socket?.on("user_online") { args ->
@@ -82,7 +106,7 @@ class SocketManager @Inject constructor() {
     }
 
     fun sendTypingStatus(userId: String, isTyping: Boolean) {
-        socket?.emit("typing", userId, isTyping)
+        socket?.emit(if (isTyping) "direct:typing:start" else "direct:typing:stop", mapOf("userId" to userId))
     }
 
     fun disconnect() {

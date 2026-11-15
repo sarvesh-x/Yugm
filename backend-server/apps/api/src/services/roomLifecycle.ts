@@ -1,4 +1,5 @@
 import { Room } from "../models/Room.js";
+import { ChatMessage } from "../models/ChatMessage.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
 import { SpeakerRequest } from "../models/SpeakerRequest.js";
 import { invalidateCache } from "./redis.js";
@@ -19,6 +20,8 @@ export async function endRoom(roomId: string, reason: string): Promise<boolean> 
   if (result.modifiedCount === 0) return false;
 
   await Promise.all([
+    // Room chat is session-only data. Remove it as soon as the room is closed.
+    ChatMessage.deleteMany({ roomId }),
     RoomParticipant.updateMany(
       { roomId, leftAt: null },
       { $set: { leftAt: now, micEnabled: false, cameraEnabled: false }, $unset: { seatIndex: 1 } }

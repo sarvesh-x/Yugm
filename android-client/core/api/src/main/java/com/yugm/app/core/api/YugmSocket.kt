@@ -5,6 +5,7 @@ import com.yugm.app.core.model.PkBattle
 import com.yugm.app.core.model.PkInvite
 import com.yugm.app.core.model.PkLiveEffect
 import com.yugm.app.core.model.ChatMessage
+import com.yugm.app.core.model.RoomGiftEvent
 import com.yugm.app.core.model.PkSideType
 import org.json.JSONObject
 import timber.log.Timber
@@ -30,6 +31,7 @@ object YugmSocket {
         onUserRemoved: ((userId: String) -> Unit)? = null,
         onRoomParticipantChanged: ((action: String, userId: String) -> Unit)? = null,
         onRoomDataChanged: ((event: String) -> Unit)? = null,
+        onRoomGift: ((RoomGiftEvent) -> Unit)? = null,
         onRoomJoined: () -> Unit = {}
     ) {
         synchronized(lock) {
@@ -177,7 +179,24 @@ object YugmSocket {
                 "room:mode:set", "room:mode:state", "room:mode:answer", "room:mode:dare",
                 "room:mode:scores", "room:mode:ended"
             ).forEach { event ->
-                socket?.on(event) { onRoomDataChanged?.invoke(event) }
+                socket?.on(event) { args ->
+                    if (event == "room:gift:send" && args.isNotEmpty() && onRoomGift != null) {
+                        runCatching {
+                            val data = args[0] as JSONObject
+                            val gift = data.optJSONObject("gift") ?: JSONObject()
+                            onRoomGift(RoomGiftEvent(
+                                id = data.optString("_id", data.optString("id")),
+                                giftName = gift.optString("name", "Gift"),
+                                giftIcon = gift.optString("icon", "🎁"),
+                                senderName = data.optString("senderName", "Someone"),
+                                receiverName = data.optString("receiverName", ""),
+                                giftId = gift.optString("id", data.optString("giftId", "")),
+                                price = data.optInt("totalValue", gift.optInt("coinPrice", 0))
+                            ))
+                        }
+                    }
+                    onRoomDataChanged?.invoke(event)
+                }
             }
             socket?.connect()
         } catch (e: Exception) {

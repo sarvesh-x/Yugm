@@ -171,7 +171,7 @@ interface IYugmApi {
     suspend fun leaveRoomSeat(token: String, roomId: String)
     suspend fun inviteSpeaker(token: String, roomId: String, userId: String)
     suspend fun removeSpeaker(token: String, roomId: String, userId: String)
-    suspend fun roomActivity(roomId: String): List<RoomActivityItem>
+    suspend fun roomActivity(roomId: String, token: String? = null): List<RoomActivityItem>
     suspend fun roomPolls(roomId: String): List<RoomPoll>
     suspend fun createPoll(token: String, roomId: String, question: String, options: List<String>)
     suspend fun votePoll(token: String, roomId: String, pollId: String, optionIndex: Int)
@@ -181,6 +181,8 @@ interface IYugmApi {
     suspend fun roomDirectMessage(token: String, roomId: String, message: String, receiverId: String? = null)
     suspend fun endRoom(roomId: String, token: String)
     suspend fun muteUser(roomId: String, userId: String, token: String)
+    suspend fun unmuteUser(roomId: String, userId: String, token: String)
+    suspend fun clearRoomChat(roomId: String, token: String)
     suspend fun setOwnRoomMicState(roomId: String, enabled: Boolean, token: String)
     suspend fun removeUser(roomId: String, userId: String, token: String)
     suspend fun setRoomAdmin(roomId: String, userId: String, isAdmin: Boolean, token: String)
@@ -251,7 +253,11 @@ interface IYugmApi {
     suspend fun myClan(token: String): Clan?
     suspend fun listClans(token: String, query: String = ""): List<ClanSummary>
     suspend fun getClanDetail(token: String, clanId: String): Clan
-    suspend fun createClan(token: String, name: String, description: String = "", privacy: String = "PUBLIC", familyLabel: String = "Family"): Clan
+    suspend fun createClan(token: String, name: String, description: String = "", privacy: String = "PUBLIC", familyLabel: String = "Family", avatar: String? = null): Clan
+    suspend fun updateClan(token: String, clanId: String, name: String, description: String, privacy: String, familyLabel: String, avatar: String?): Clan
+    suspend fun setClanMemberRole(token: String, clanId: String, userId: String, role: String): Clan
+    suspend fun kickClanMember(token: String, clanId: String, userId: String): Clan
+    suspend fun deleteClan(token: String, clanId: String)
     suspend fun joinClan(token: String, clanId: String): Clan
     suspend fun leaveClan(token: String, clanId: String)
     suspend fun getClanMessages(token: String, clanId: String): List<ClanMessage>
@@ -312,6 +318,15 @@ interface IYugmApi {
     suspend fun notificationPreferences(token: String): NotificationPreferences
     suspend fun updateNotificationPreferences(token: String, preferences: Map<String, Boolean>): NotificationPreferences
     suspend fun conversation(token: String, userId: String): Conversation
+    suspend fun deleteConversation(token: String, userId: String)
+    suspend fun deleteSelectedDirectMessages(token: String, userId: String, messageIds: List<String>, scope: String): List<String>
+    suspend fun editDirectMessage(token: String, userId: String, messageId: String, message: String): DirectMessage
+    suspend fun forwardDirectMessage(token: String, userId: String, messageId: String): DirectMessage
+    suspend fun replyDirectMessage(token: String, userId: String, message: String, replyToId: String): DirectMessage
+    suspend fun searchConversation(token: String, userId: String, query: String): List<DirectMessage>
+    suspend fun muteConversation(token: String, userId: String, muted: Boolean)
+    suspend fun unreadCounts(token: String): Map<String, Int>
+    suspend fun mutedConversations(token: String): Set<String>
     suspend fun sendDirectMessage(token: String, userId: String, message: String): Conversation
     suspend fun sendDirectMediaMessage(token: String, userId: String, mediaUrl: String, mediaType: String, caption: String = ""): Conversation
     suspend fun startPrivateCall(token: String, userId: String, type: RoomType): Room

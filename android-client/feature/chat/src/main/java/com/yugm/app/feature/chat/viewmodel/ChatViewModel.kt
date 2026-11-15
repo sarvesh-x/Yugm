@@ -10,6 +10,7 @@ import com.yugm.app.core.api.IYugmApi
 import com.yugm.app.core.model.ActiveCosmetics
 import com.yugm.app.core.model.DirectMessage
 import com.yugm.app.core.model.Host
+import com.yugm.app.core.model.GiftItem
 import com.yugm.app.core.model.RelationshipStatus
 import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomType
@@ -54,9 +55,25 @@ class ChatViewModel @Inject constructor(
     var isPartnerTyping by mutableStateOf(false)
         private set
 
+    var isMuted by mutableStateOf(false)
+        private set
+
+    var gifts by mutableStateOf<List<GiftItem>>(emptyList())
+        private set
+
+    var walletBalance by mutableStateOf(0)
+        private set
+
+    var searchResults by mutableStateOf<List<DirectMessage>?>(null)
+        private set
+
+    var forwardTargets by mutableStateOf<List<Host>>(emptyList())
+        private set
+
     private var authToken = ""
     private var currentUserId = ""
     private var partnerUserId = ""
+    private var activeSearchQuery = ""
 
     init {
         viewModelScope.launch {
@@ -64,7 +81,26 @@ class ChatViewModel @Inject constructor(
                 when (event) {
                     is SocketEvent.DirectMessageReceived -> {
                         if (event.message.belongsToConversation(currentUserId, partnerUserId)) {
-                            appendMessage(event.message)
+                            replaceOrAppendMessage(event.message)
+                        }
+                    }
+                    is SocketEvent.DirectMessageDeleted -> {
+                        if (event.partnerId == partnerUserId) removeMessages(setOf(event.messageId))
+                    }
+                    is SocketEvent.DirectConversationDeleted -> {
+                        if (event.partnerId == partnerUserId) {
+                            messages.clear()
+                            searchResults = null
+                        }
+                    }
+                    is SocketEvent.DirectMessagesRead -> {
+                        if (event.partnerId == partnerUserId) {
+                            messages.indices.forEach { index ->
+                                val message = messages[index]
+                                if (message.senderId == currentUserId && message.receiverId == partnerUserId && message.createdAt <= event.readThrough) {
+                                    messages[index] = message.copy(read = true)
+                                }
+                            }
                         }
                     }
                     is SocketEvent.TypingUpdate -> {
@@ -80,6 +116,9 @@ class ChatViewModel @Inject constructor(
     }
 
     fun connect(token: String, userId: String, partnerId: String) {
+        if (partnerUserId != partnerId || currentUserId != userId) messages.clear()
+        activeSearchQuery = ""
+        searchResults = null
         authToken = token
         currentUserId = userId
         partnerUserId = partnerId
@@ -111,10 +150,13 @@ class ChatViewModel @Inject constructor(
                     val myProfileRequest = async(Dispatchers.IO) {
                         runCatching { yugmApi.authMe(authToken) }
                     }
+                    val giftsRequest = async(Dispatchers.IO) { runCatching { yugmApi.gifts(authToken) } }
+                    val walletRequest = async(Dispatchers.IO) { runCatching { yugmApi.walletOverview(authToken) } }
                     historyRequest.await()
                         .onSuccess { conversation ->
                             mergeMessages(conversation.messages)
                             relationship = conversation.relationship
+                            isMuted = conversation.muted
                         }
                         .onFailure { failure ->
                             if (failure is CancellationException) throw failure
@@ -127,6 +169,13 @@ class ChatViewModel @Inject constructor(
                             if (loadError == null) loadError = failure
                         }
                     myProfileRequest.await().onSuccess { myActiveCosmetics = it.activeCosmetics }
+                    giftsRequest.await().onSuccess { gifts = it }
+                    walletRequest.await().onSuccess { walletBalance = it.balance }
+                    val recentTargets = runCatching { yugmApi.getRecentMessages(authToken) }.getOrDefault(emptyList())
+                    val followedTargets = runCatching { yugmApi.getFollowing(currentUserId, authToken) }.getOrDefault(emptyList())
+                    forwardTargets = (recentTargets.flatMap { listOfNotNull(it.sender, it.receiver) } + followedTargets)
+                            .filter { it.id != currentUserId && it.id != partnerUserId }
+                            .distinctBy { it.id }
                 }
             } finally {
                 isLoading = false
@@ -153,6 +202,120 @@ class ChatViewModel @Inject constructor(
             } finally {
                 isSending = false
             }
+        }
+    }
+
+    fun sendGift(gift: GiftItem) {
+        if (gift.id.isBlank() || walletBalance < gift.price || authToken.isBlank() || partnerUserId.isBlank()) return
+        viewModelScope.launch {
+            error = ""
+            runCatching { withContext(Dispatchers.IO) { yugmApi.sendDirectGift(authToken, gift.id, partnerUserId) } }
+                .onSuccess { conversation ->
+                    conversation.messages.forEach(::replaceOrAppendMessage)
+                    conversation.relationship?.let { relationship = it }
+                    runCatching { withContext(Dispatchers.IO) { yugmApi.walletOverview(authToken) } }
+                        .onSuccess { walletBalance = it.balance }
+                }
+                .onFailure { error = it.message ?: "Gift could not be sent" }
+        }
+    }
+
+    fun sendAttachment(bytes: ByteArray, mimeType: String, fileName: String) {
+        if (bytes.isEmpty() || isSending || authToken.isBlank() || partnerUserId.isBlank()) return
+        viewModelScope.launch {
+            isSending = true
+            error = ""
+            try {
+                val (mediaUrl, mediaType) = withContext(Dispatchers.IO) {
+                    yugmApi.uploadMessageMedia(authToken, bytes, mimeType, fileName)
+                }
+                val conversation = withContext(Dispatchers.IO) {
+                    yugmApi.sendDirectMediaMessage(authToken, partnerUserId, mediaUrl, mediaType)
+                }
+                conversation.messages.forEach(::replaceOrAppendMessage)
+                conversation.relationship?.let { relationship = it }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Throwable) {
+                error = failure.message ?: "Photo could not be sent"
+            } finally {
+                isSending = false
+            }
+        }
+    }
+
+    fun replyMessage(text: String, replyTo: DirectMessage) {
+        val normalized = text.trim()
+        if (normalized.isBlank() || replyTo.id.isBlank()) return
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { yugmApi.replyDirectMessage(authToken, partnerUserId, normalized, replyTo.id) } }
+                .onSuccess(::appendMessage).onFailure { error = it.message ?: "Reply could not be sent" }
+        }
+    }
+
+    fun editMessage(message: DirectMessage, text: String) {
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { yugmApi.editDirectMessage(authToken, partnerUserId, message.id, text) } }
+                .onSuccess(::replaceOrAppendMessage).onFailure { error = it.message ?: "Message could not be edited" }
+        }
+    }
+
+    fun forwardMessage(message: DirectMessage, targetUserId: String) {
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { yugmApi.forwardDirectMessage(authToken, targetUserId, message.id) } }
+                .onFailure { error = it.message ?: "Message could not be forwarded" }
+        }
+    }
+
+    fun reactToMessage(message: DirectMessage) {
+        if (message.id.isBlank()) return
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { yugmApi.reactToDirectMessage(authToken, partnerUserId, message.id) } }
+                .onSuccess(::replaceOrAppendMessage)
+                .onFailure { error = it.message ?: "Reaction could not be sent" }
+        }
+    }
+
+    fun search(query: String) {
+        activeSearchQuery = query
+        if (query.length < 2) { searchResults = null; return }
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { yugmApi.searchConversation(authToken, partnerUserId, query) } }
+                .onSuccess { if (activeSearchQuery == query) searchResults = it }
+                .onFailure { error = it.message ?: "Search failed" }
+        }
+    }
+
+    fun mute(muted: Boolean) {
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { yugmApi.muteConversation(authToken, partnerUserId, muted) } }
+                .onSuccess { isMuted = muted }
+                .onFailure { error = it.message ?: "Mute setting could not be changed" }
+        }
+    }
+
+    fun deleteConversation(onDone: () -> Unit = {}, onFailure: (String) -> Unit = {}) {
+        if (authToken.isBlank() || partnerUserId.isBlank()) return
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { yugmApi.deleteConversation(authToken, partnerUserId) } }
+                .onSuccess { messages.clear(); onDone() }
+                .onFailure {
+                    val message = it.message ?: "Could not delete conversation"
+                    error = message
+                    onFailure(message)
+                }
+        }
+    }
+
+    fun deleteSelectedMessages(messageIds: List<String>, scope: String) {
+        if (messageIds.isEmpty() || authToken.isBlank() || partnerUserId.isBlank()) return
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { yugmApi.deleteSelectedDirectMessages(authToken, partnerUserId, messageIds, scope) } }
+                .onSuccess { deletedIds ->
+                    val deletedIdSet = deletedIds.toSet()
+                    removeMessages(deletedIdSet)
+                }
+                .onFailure { error = it.message ?: "Selected messages could not be deleted" }
         }
     }
 
@@ -191,6 +354,16 @@ class ChatViewModel @Inject constructor(
         if (messages.none { it.stableKey() == message.stableKey() }) {
             messages.add(message)
         }
+    }
+
+    private fun replaceOrAppendMessage(message: DirectMessage) {
+        val index = messages.indexOfFirst { it.id == message.id }
+        if (index >= 0) messages[index] = message else appendMessage(message)
+    }
+
+    private fun removeMessages(ids: Set<String>) {
+        messages.removeAll { it.id in ids }
+        searchResults = searchResults?.filterNot { it.id in ids }
     }
 
     override fun onCleared() {

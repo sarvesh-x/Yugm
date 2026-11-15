@@ -1,6 +1,7 @@
 package com.yugm.app.core.api.parsers
 
 import com.yugm.app.core.model.Clan
+import com.yugm.app.core.model.ClanMemberRole
 import com.yugm.app.core.model.ClanMessage
 import com.yugm.app.core.model.ClanReaction
 import com.yugm.app.core.model.ClanSummary
@@ -37,8 +38,21 @@ fun JSONObject.toClan(): Clan = Clan(
     memberCount = optInt("memberCount", 0),
     ownerId = optString("ownerId", ""),
     members = optJSONArray("members")?.toHosts() ?: emptyList(),
+    memberRoles = optJSONArray("memberRoles")?.toClanMemberRoles() ?: emptyList(),
+    myRole = optString("myRole", ""),
+    canManage = optBoolean("canManage", false),
     isMember = optBoolean("isMember", false)
 )
+
+fun JSONArray.toClanMemberRoles(): List<ClanMemberRole> = buildList {
+    for (index in 0 until length()) {
+        val item = optJSONObject(index) ?: continue
+        add(ClanMemberRole(
+            userId = item.optString("userId", ""),
+            role = item.optString("role", "MEMBER")
+        ))
+    }
+}
 
 fun JSONObject.toClanMessage(): ClanMessage = ClanMessage(
     id = optString("_id", optString("id", "")),

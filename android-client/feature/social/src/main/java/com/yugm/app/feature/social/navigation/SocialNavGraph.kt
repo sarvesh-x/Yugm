@@ -76,7 +76,7 @@ fun NavGraphBuilder.socialNavGraph(
             clanId = clanId,
             currentUserId = currentUserIdProvider(),
             onBack = { navController.popBackStack() },
-            onChat = { id -> navController.navigate(Screen.ClanChat.createRoute(id)) },
+            onChat = { id, name -> navController.navigate(Screen.ClanChat.createRoute(id, name)) },
             onMemberClick = { id -> navController.navigate(Screen.ProfileDetail.createRoute(id)) }
         )
     }

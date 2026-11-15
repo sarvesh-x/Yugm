@@ -14,6 +14,8 @@ object DatingApi {
                     "online" -> add("onlineOnly=true")
                     "distance" -> add("maxDistance=25")
                     "interests" -> add("sharedInterests=true")
+                    "nearby" -> add("mode=NEARBY")
+                    "verified" -> add("mode=VERIFIED")
                 }
             }
         }

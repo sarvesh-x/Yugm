@@ -77,7 +77,8 @@ data class RoomActivityItem(
     val id: String = "",
     val label: String = "",
     val type: String = "",
-    val createdAt: String = ""
+    val createdAt: String = "",
+    val userId: String = ""
 )
 
 data class RoomGiftEvent(
@@ -85,7 +86,9 @@ data class RoomGiftEvent(
     val giftName: String = "",
     val giftIcon: String = "",
     val senderName: String = "",
-    val receiverName: String = ""
+    val receiverName: String = "",
+    val giftId: String = "",
+    val price: Int = 0
 )
 
 data class RoomLeaderboard(

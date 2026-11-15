@@ -65,7 +65,6 @@ fun DatingDiscoveryScreen(
     onSelfProfile: () -> Unit = {},
     viewModel: DatingViewModel = hiltViewModel()
 ) {
-    val coroutineScope = rememberCoroutineScope()
     var matchedCandidate by remember { mutableStateOf<Host?>(null) }
     val dragOffset = remember { Animatable(0f) }
     var discoveryMode by rememberSaveable { mutableIntStateOf(1) }
@@ -73,7 +72,7 @@ fun DatingDiscoveryScreen(
 
     LaunchedEffect(token) {
         if (token.isNotBlank()) {
-            viewModel.loadCandidates(token)
+            viewModel.loadCandidates(token, discoveryMode)
         }
     }
 
@@ -104,7 +103,7 @@ fun DatingDiscoveryScreen(
             SegmentedTabs(
                 items = listOf("⌖" to "Nearby", "✦" to "For You", "◇" to "Verified"),
                 selectedIndex = discoveryMode,
-                onSelected = { discoveryMode = it; viewModel.loadCandidates(token) },
+                onSelected = { discoveryMode = it; viewModel.loadCandidates(token, it) },
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
             )
             AnimatedVisibility(showFilters) {
@@ -115,13 +114,12 @@ fun DatingDiscoveryScreen(
                     val filterChips = listOf(
                         "age" to "18–25",
                         "online" to "Online now",
-                        "distance" to "Within 25 km",
                         "interests" to "Shared interests"
                     )
                     filterChips.forEach { (key, label) ->
                         val isSelected = viewModel.activeFilters.contains(key)
-                        Surface(
-                            onClick = { viewModel.toggleFilter(key); viewModel.loadCandidates(token) },
+                            Surface(
+                            onClick = { viewModel.toggleFilter(key); viewModel.loadCandidates(token, discoveryMode) },
                             color = if (isSelected) PrimaryPink else SurfaceElevated,
                             shape = RoundedCornerShape(13.dp),
                             border = BorderStroke(1.dp, if (isSelected) PrimaryPink else BorderColor)
@@ -145,7 +143,7 @@ fun DatingDiscoveryScreen(
                 ) {
                     GlassCard(modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            text = "No more vibes nearby!",
+                            text = if (viewModel.error != null) "Couldn't load profiles" else "No more profiles for now",
                             color = Color.White,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
@@ -154,7 +152,7 @@ fun DatingDiscoveryScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Try changing your settings or check back in a bit for new faces.",
+                            text = viewModel.error ?: "Try another discovery mode or check back for fresh faces.",
                             color = TextMuted,
                             fontSize = 14.sp,
                             textAlign = TextAlign.Center,
@@ -162,7 +160,7 @@ fun DatingDiscoveryScreen(
                         )
                         Spacer(modifier = Modifier.height(18.dp))
                         Button(
-                            onClick = { viewModel.loadCandidates(token) },
+                            onClick = { viewModel.loadCandidates(token, discoveryMode) },
                             colors = ButtonDefaults.buttonColors(containerColor = PrimaryPink),
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
@@ -202,9 +200,6 @@ fun DatingDiscoveryScreen(
 
                     // Display top candidate card with gestures
                     val topCandidate = viewModel.candidates[0]
-                    var swipedRight by remember { mutableStateOf(false) }
-                    var swipedLeft by remember { mutableStateOf(false) }
-
                     // Reset dragOffset on new candidate
                     LaunchedEffect(topCandidate.id) {
                         dragOffset.snapTo(0f)
@@ -215,19 +210,13 @@ fun DatingDiscoveryScreen(
                         isTopCard = true,
                         dragOffset = dragOffset,
                         onSwipeRight = {
-                            swipedRight = true
                             viewModel.like(token, topCandidate, "LIKE")
                         },
                         onSwipeLeft = {
-                            swipedLeft = true
-                            viewModel.pass(token, topCandidate.id)
+                            viewModel.pass(token, topCandidate)
                         },
                         onSuperLike = {
-                            swipedRight = true
                             viewModel.like(token, topCandidate, "SUPER_LIKE")
-                            coroutineScope.launch {
-                                dragOffset.animateTo(width * 1.5f * density, animationSpec = tween(300))
-                            }
                         },
                         onProfileClick = {
                             onNavigateToProfile(topCandidate.id)
@@ -263,6 +252,17 @@ fun DatingDiscoveryScreen(
             onWallet = onWallet,
             onProfile = onSelfProfile
         )
+        viewModel.error?.takeIf { it.isNotBlank() && viewModel.candidates.isNotEmpty() }?.let { message ->
+            Text(
+                text = message,
+                color = Color.White,
+                fontSize = 12.sp,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(start = 20.dp, end = 20.dp, bottom = 88.dp)
+                    .clip(RoundedCornerShape(14.dp)).background(Color(0xEE7B294D)).clickable {
+                        viewModel.loadCandidates(token, discoveryMode)
+                    }.padding(horizontal = 14.dp, vertical = 10.dp)
+            )
+        }
     }
 }
 
@@ -282,9 +282,9 @@ fun DiscoveryCard(
     val density = LocalDensity.current.density
     val swipeThreshold = width * 0.4f * density
 
-    val localOffsetX = remember { Animatable(0f) }
+    val localOffsetX = remember(candidate.id) { Animatable(0f) }
     val offsetX = dragOffset ?: localOffsetX
-    val offsetY = remember { Animatable(0f) }
+    val offsetY = remember(candidate.id) { Animatable(0f) }
 
     val dragModifier = if (isTopCard) {
         Modifier.pointerInput(Unit) {
@@ -333,13 +333,21 @@ fun DiscoveryCard(
             .clickable { onProfileClick() }
     ) {
         // Large Profile Photo Placeholder or URL
-        val imageFallbackUrl = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=80"
-        AsyncImage(
-            model = candidate.avatar ?: imageFallbackUrl,
-            contentDescription = "Profile Photo",
-            modifier = Modifier.fillMaxSize(),
-            contentScale = androidx.compose.ui.layout.ContentScale.Crop
-        )
+        if (!candidate.avatar.isNullOrBlank()) {
+            AsyncImage(
+                model = candidate.avatar,
+                contentDescription = "${candidate.name}'s profile photo",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+            )
+        } else {
+            Box(
+                Modifier.fillMaxSize().background(Brush.linearGradient(listOf(PrimaryPurple, Surface, PrimaryPink.copy(alpha = 0.65f)))),
+                contentAlignment = Alignment.Center
+            ) {
+                Avatar(candidate.name.take(1).ifBlank { "?" }, 156, cosmetics = candidate.activeCosmetics)
+            }
+        }
 
         // PASS indicator badge (fades in as user drags left)
         val passAlpha = ((-offsetX.value) / swipeThreshold).coerceIn(0f, 1f)
@@ -480,7 +488,12 @@ fun DiscoveryCard(
                 ) {
                     // Pass (Cross) Button
                     IconButton(
-                        onClick = onSwipeLeft,
+                        onClick = {
+                            coroutineScope.launch {
+                                offsetX.animateTo(-width * 1.5f * density, animationSpec = tween(300))
+                                onSwipeLeft()
+                            }
+                        },
                         modifier = Modifier
                             .size(54.dp)
                             .clip(CircleShape)
@@ -491,7 +504,12 @@ fun DiscoveryCard(
 
                     // Super Like (Star) Button
                     IconButton(
-                        onClick = onSuperLike,
+                        onClick = {
+                            coroutineScope.launch {
+                                offsetX.animateTo(width * 1.5f * density, animationSpec = tween(300))
+                                onSuperLike()
+                            }
+                        },
                         modifier = Modifier
                             .size(62.dp)
                             .clip(CircleShape)
@@ -502,7 +520,12 @@ fun DiscoveryCard(
 
                     // Like (Heart) Button
                     IconButton(
-                        onClick = onSwipeRight,
+                        onClick = {
+                            coroutineScope.launch {
+                                offsetX.animateTo(width * 1.5f * density, animationSpec = tween(300))
+                                onSwipeRight()
+                            }
+                        },
                         modifier = Modifier
                             .size(54.dp)
                             .clip(CircleShape)

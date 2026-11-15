@@ -174,8 +174,8 @@ object RoomApi {
         YugmHttpClient.post("/rooms/$roomId/remove-speaker", token, JSONObject().put("userId", userId))
     }
 
-    suspend fun roomActivity(roomId: String): List<RoomActivityItem> {
-        val data = YugmHttpClient.get("/rooms/$roomId/activity", auth = null).getJSONObject("data")
+    suspend fun roomActivity(roomId: String, token: String? = null): List<RoomActivityItem> {
+        val data = YugmHttpClient.get("/rooms/$roomId/activity", auth = token).getJSONObject("data")
         return data.optJSONArray("activity")?.toRoomActivityItems() ?: emptyList()
     }
 
@@ -217,6 +217,14 @@ object RoomApi {
 
     suspend fun muteUser(roomId: String, userId: String, token: String) {
         YugmHttpClient.post("/rooms/$roomId/mute-user", token, JSONObject().put("userId", userId))
+    }
+
+    suspend fun unmuteUser(roomId: String, userId: String, token: String) {
+        YugmHttpClient.post("/rooms/$roomId/unmute-user", token, JSONObject().put("userId", userId))
+    }
+
+    suspend fun clearRoomChat(roomId: String, token: String) {
+        YugmHttpClient.post("/rooms/$roomId/chat/clean", token, JSONObject())
     }
 
     suspend fun setOwnRoomMicState(roomId: String, enabled: Boolean, token: String) {

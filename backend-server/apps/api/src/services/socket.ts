@@ -319,6 +319,11 @@ export function isUserOnline(userId: string) {
   return onlineUsers.has(userId) || redisPresenceUsers.has(userId);
 }
 
+export async function getOnlineUserIds() {
+  const sharedIds = await getOnlinePresenceIds();
+  return [...new Set([...onlineUsers.keys(), ...redisPresenceUsers, ...sharedIds])];
+}
+
 export async function closeSocketInfrastructure() {
   if (presenceSnapshotTimer) clearInterval(presenceSnapshotTimer);
   if (inactiveRoomTimer) clearInterval(inactiveRoomTimer);

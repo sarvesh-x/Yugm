@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.yugm.app.core.model.DailyCheckInResult
+import com.yugm.app.core.model.Mission
 import com.yugm.app.core.ui.components.GlassCard
 import com.yugm.app.feature.social.viewmodel.GrowthViewModel
 import com.yugm.app.core.ui.components.LoadingState
@@ -81,8 +82,8 @@ fun GrowthScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 TextButton(onClick = onBack) { Text("Back", color = TextMuted) }
                 Column(Modifier.weight(1f)) {
-                    Text("Grow", color = TextPrimary, fontSize = 32.sp, fontWeight = FontWeight.Black)
-                    Text("Missions, scheduled rooms, and creator momentum.", color = TextMuted)
+                    Text("Tasks & rewards", color = TextPrimary, fontSize = 27.sp, fontWeight = FontWeight.Black)
+                    Text("Daily missions, scheduled rooms, and creator momentum.", color = TextMuted)
                 }
                 TextButton(onClick = onCreateRoom) { Text("Create", color = Gold, fontWeight = FontWeight.Black) }
             }
@@ -94,6 +95,33 @@ fun GrowthScreen(
                 val payload = home!!
                 val scheduledRooms = if (payload.userRole in setOf("HOST", "MODERATOR", "ADMIN")) creator?.scheduledRooms.orEmpty() else payload.scheduledRooms
                 val creatorSteps = creator?.nextSteps.orEmpty()
+
+                item {
+                    SectionTitle("Daily missions")
+                    Text("Complete today’s goals to earn XP and coins.", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                }
+                val dailyMissions = viewModel.missions?.daily.orEmpty()
+                if (dailyMissions.isEmpty()) {
+                    item {
+                        GlassCard(Modifier.fillMaxWidth()) {
+                            Text("No daily missions available", color = TextPrimary, fontWeight = FontWeight.Bold)
+                            Text("Check back soon for new goals and rewards.", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                        }
+                    }
+                } else {
+                    items(dailyMissions, key = { "daily-${it.id}" }) { mission ->
+                        GrowthMissionCard(
+                            mission = mission,
+                            onClaim = { complete -> viewModel.claimMission(token, mission.id, complete) }
+                        )
+                    }
+                }
+                viewModel.missionClaimMessage?.let { message ->
+                    item { Text(message, color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                }
+                viewModel.missionClaimError?.let { message ->
+                    item { Text(message, color = Pink, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                }
 
                 item {
                     val level = payload.level
@@ -291,6 +319,41 @@ fun GrowthScreen(
                         Text(item.type.replace("_", " ").lowercase(), color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 3.dp))
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GrowthMissionCard(mission: Mission, onClaim: (() -> Unit) -> Unit) {
+    var claiming by remember(mission.id) { mutableStateOf(false) }
+    val progress = if (mission.requirements.target > 0) {
+        (mission.progress.toFloat() / mission.requirements.target).coerceIn(0f, 1f)
+    } else 0f
+    GlassCard(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(mission.title, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                if (mission.description.isNotBlank()) Text(mission.description, color = TextMuted, fontSize = 12.sp)
+            }
+            when {
+                mission.claimed -> Text("✓ Claimed", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                mission.completed -> Button(onClick = { claiming = true; onClaim { claiming = false } }, enabled = !claiming) {
+                    Text(if (claiming) "Claiming…" else "Claim")
+                }
+            }
+        }
+        LinearProgressIndicator(
+            progress = { progress },
+            modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(6.dp),
+            color = if (mission.completed) Gold else Pink,
+            trackColor = TextMuted.copy(alpha = 0.24f)
+        )
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("${mission.progress}/${mission.requirements.target}", color = TextMuted, fontSize = 11.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (mission.rewards.xp > 0) Text("+${mission.rewards.xp} XP", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                if (mission.rewards.coins > 0) Text("+${mission.rewards.coins} coins", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

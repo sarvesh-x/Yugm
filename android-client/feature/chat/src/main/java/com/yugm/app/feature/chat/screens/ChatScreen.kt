@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,12 +51,13 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -82,6 +84,7 @@ import com.yugm.app.core.model.ActiveCosmetics
 import com.yugm.app.core.model.DirectMessage
 import com.yugm.app.core.model.GiftItem
 import com.yugm.app.core.model.Host
+import com.yugm.app.core.api.resolveMediaUrl
 import com.yugm.app.feature.chat.R
 import com.yugm.app.core.model.RelationshipStatus
 import com.yugm.app.core.ui.components.*
@@ -127,15 +130,33 @@ fun ChatScreen(
     onAttachmentSelected: (ByteArray, String, String) -> Unit = { _, _, _ -> },
     onReport: () -> Unit = {},
     onBlock: () -> Unit = {},
+    onDeleteConversation: () -> Unit = {},
+    onDeleteSelected: (List<String>, String) -> Unit = { _, _ -> },
+    isMuted: Boolean = false,
+    forwardTargets: List<Host> = emptyList(),
+    searchResults: List<DirectMessage>? = null,
+    onReply: (String, DirectMessage) -> Unit = { _, _ -> },
+    onEdit: (DirectMessage, String) -> Unit = { _, _ -> },
+    onForward: (DirectMessage, String) -> Unit = { _, _ -> },
+    onSearch: (String) -> Unit = {},
+    onMute: (Boolean) -> Unit = {},
     onOpenProfile: (String) -> Unit = {}
 ) {
-    var draft by rememberSaveable { mutableStateOf("") }
+    var draft by rememberSaveable(partner?.id) { mutableStateOf("") }
     var showGiftSheet by rememberSaveable { mutableStateOf(false) }
     var showEmojiBar by rememberSaveable { mutableStateOf(false) }
     var showMore by rememberSaveable { mutableStateOf(false) }
+    var confirmDeleteChat by rememberSaveable { mutableStateOf(false) }
+    var showDeleteSelected by remember { mutableStateOf(false) }
+    var selectedMessageIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var messageActionTarget by remember { mutableStateOf<DirectMessage?>(null) }
+    var forwardMessage by remember { mutableStateOf<DirectMessage?>(null) }
+    var replyTarget by remember(partner?.id) { mutableStateOf<DirectMessage?>(null) }
+    var editingTarget by remember(partner?.id) { mutableStateOf<DirectMessage?>(null) }
+    var searchVisible by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
     var showSafety by rememberSaveable { mutableStateOf(true) }
     var typingSent by remember { mutableStateOf(false) }
-    val reactions = remember { mutableStateMapOf<String, Int>() }
     val listState = rememberLazyListState()
     val context = LocalContext.current
     val messageFieldLabel = stringResource(R.string.a11y_message_field)
@@ -144,6 +165,103 @@ fun ChatScreen(
     val sendMessageLabel = stringResource(R.string.a11y_send_message)
     val defaultMatchName = stringResource(R.string.a11y_default_match)
     val scope = rememberCoroutineScope()
+    val visibleMessages = when {
+        searchQuery.length >= 2 -> searchResults.orEmpty()
+        searchQuery.isNotBlank() -> messages.filter { it.message.contains(searchQuery, ignoreCase = true) }
+        else -> messages
+    }
+    val selectionMode = selectedMessageIds.isNotEmpty()
+    val selectedMessages = visibleMessages.filter { it.id in selectedMessageIds }
+    val selectedOwnIds = selectedMessages.filter { it.senderId == currentUserId }.map { it.id }
+    fun toggleSelection(messageId: String) {
+        if (messageId.isBlank()) return
+        showMore = false
+        selectedMessageIds = if (messageId in selectedMessageIds) selectedMessageIds - messageId else selectedMessageIds + messageId
+    }
+    fun submitDraft() {
+        val value = draft.trim()
+        if (value.isBlank()) return
+        val editing = editingTarget
+        val replying = replyTarget
+        draft = ""
+        editingTarget = null
+        replyTarget = null
+        when {
+            editing != null -> onEdit(editing, value)
+            replying != null -> onReply(value, replying)
+            else -> onSend(value)
+        }
+    }
+    LaunchedEffect(searchQuery, searchVisible) {
+        if (searchVisible) {
+            kotlinx.coroutines.delay(300)
+            onSearch(searchQuery)
+        }
+    }
+    if (confirmDeleteChat) {
+        AlertDialog(
+            onDismissRequest = { confirmDeleteChat = false },
+            title = { Text("Delete this chat?") },
+            text = { Text("This permanently deletes the conversation for both people.") },
+            confirmButton = { Text("Delete", modifier = Modifier.clickable { confirmDeleteChat = false; onDeleteConversation() }.padding(16.dp), color = Danger) },
+            dismissButton = { Text("Cancel", modifier = Modifier.clickable { confirmDeleteChat = false }.padding(16.dp)) }
+        )
+    }
+    messageActionTarget?.let { selected ->
+        AlertDialog(
+            onDismissRequest = { messageActionTarget = null },
+            title = { Text("Message options") },
+            text = {
+                Column {
+                    TextButton(onClick = { replyTarget = selected; editingTarget = null; draft = ""; selectedMessageIds = emptySet(); messageActionTarget = null }) { Text("Reply") }
+                    if (selected.senderId == currentUserId) {
+                        if (selected.canStillEdit()) TextButton(onClick = { editingTarget = selected; replyTarget = null; draft = selected.message; selectedMessageIds = emptySet(); messageActionTarget = null }) { Text("Edit") }
+                    }
+                    TextButton(onClick = { forwardMessage = selected; selectedMessageIds = emptySet(); messageActionTarget = null }) { Text("Forward") }
+                    TextButton(onClick = { selectedMessageIds = setOf(selected.id); showDeleteSelected = true; messageActionTarget = null }) { Text("Delete for me", color = Danger) }
+                    if (selected.senderId == currentUserId) TextButton(onClick = { selectedMessageIds = setOf(selected.id); showDeleteSelected = true; messageActionTarget = null }) { Text("Delete for everyone", color = Danger) }
+                }
+            },
+            confirmButton = {}
+        )
+    }
+    forwardMessage?.let { selected ->
+        AlertDialog(
+            onDismissRequest = { forwardMessage = null },
+            title = { Text("Forward message") },
+            text = {
+                if (forwardTargets.isEmpty()) Text("Start a chat with someone before forwarding.")
+                else Column {
+                    forwardTargets.take(8).forEach { target ->
+                        TextButton(onClick = { onForward(selected, target.id); forwardMessage = null }) { Text(target.name) }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { forwardMessage = null }) { Text("Cancel") } }
+        )
+    }
+    if (showDeleteSelected) {
+        AlertDialog(
+            onDismissRequest = { showDeleteSelected = false },
+            title = { Text("Delete selected messages?") },
+            text = { Text("Delete ${selectedMessageIds.size} selected message${if (selectedMessageIds.size == 1) "" else "s"} for you. This cannot be undone.") },
+            confirmButton = {
+                Column(horizontalAlignment = Alignment.End) {
+                    TextButton(onClick = {
+                        onDeleteSelected(selectedMessageIds.toList(), "ME")
+                        selectedMessageIds = emptySet()
+                        showDeleteSelected = false
+                    }) { Text("Delete for me", color = Danger) }
+                    if (selectedOwnIds.isNotEmpty()) TextButton(onClick = {
+                        onDeleteSelected(selectedOwnIds, "EVERYONE")
+                        selectedMessageIds = emptySet()
+                        showDeleteSelected = false
+                    }) { Text("Delete ${selectedOwnIds.size} for everyone", color = Danger) }
+                }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteSelected = false }) { Text("Cancel") } }
+        )
+    }
     val attachmentPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             scope.launch {
@@ -185,7 +303,14 @@ fun ChatScreen(
                     cornerRadius = 0.dp,
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
                 ) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    if (selectionMode) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text("${selectedMessageIds.size} selected", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                            if (selectedMessageIds.size == 1) TextButton(onClick = { messageActionTarget = selectedMessages.firstOrNull() }) { Text("More") }
+                            TextButton(onClick = { showDeleteSelected = true }) { Text("Delete", color = Danger) }
+                            TextButton(onClick = { selectedMessageIds = emptySet() }) { Text("Cancel") }
+                        }
+                    } else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         YugmBackButton(onBack, accessibilityLabel = stringResource(R.string.a11y_back))
                         Spacer(Modifier.width(10.dp))
                         Box(
@@ -216,13 +341,29 @@ fun ChatScreen(
 
                 if (showMore) {
                     Row(Modifier.fillMaxWidth().background(SurfaceElevated).padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) {
+                        Text("Search", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable {
+                            showMore = false
+                            if (searchVisible) { searchVisible = false; searchQuery = "" } else searchVisible = true
+                        }.padding(10.dp))
+                        Text(if (isMuted) "Unmute" else "Mute", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable { showMore = false; onMute(!isMuted) }.padding(10.dp))
                         Text("Report", color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable(role = Role.Button, onClickLabel = stringResource(R.string.a11y_report_conversation)) { showMore = false; onReport() }.padding(10.dp))
                         Text("Block", color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable(role = Role.Button, onClickLabel = stringResource(R.string.a11y_block_person)) { showMore = false; onBlock() }.padding(10.dp))
+                        Text("Delete chat", color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable { showMore = false; confirmDeleteChat = true }.padding(10.dp))
                     }
+                }
+                if (searchVisible) {
+                    BasicTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it.take(100) },
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 14.sp),
+                        modifier = Modifier.fillMaxWidth().background(SurfaceElevated).padding(horizontal = 18.dp, vertical = 12.dp),
+                        decorationBox = { inner -> Box { if (searchQuery.isBlank()) Text("Search messages…", color = TextMuted); inner() } }
+                    )
                 }
 
                 Box(Modifier.weight(1f).fillMaxWidth()) {
-                    if (loading && messages.isEmpty()) {
+                    if (loading && visibleMessages.isEmpty()) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 androidx.compose.material3.CircularProgressIndicator(color = PrimaryPurple)
@@ -243,7 +384,10 @@ fun ChatScreen(
                             if (error.isNotBlank()) item {
                                 Text("$error · Retry", color = Pink, fontSize = 12.sp, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.clickable(role = Role.Button, onClickLabel = stringResource(R.string.a11y_retry_messages), onClick = onRetry).padding(vertical = 12.dp))
                             }
-                            if (messages.isEmpty() && !loading && error.isBlank()) {
+                            if (searchQuery.isNotBlank() && visibleMessages.isEmpty()) item {
+                                Text("No matching messages", color = TextMuted, fontSize = 13.sp, modifier = Modifier.fillMaxWidth().padding(28.dp))
+                            }
+                            if (visibleMessages.isEmpty() && !loading && error.isBlank() && searchQuery.isBlank()) {
                                 item {
                                     Column(Modifier.fillParentMaxHeight(0.62f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                                         EmptyConversationState(partner?.name ?: "your match")
@@ -255,18 +399,19 @@ fun ChatScreen(
                                     }
                                 }
                             }
-                            itemsIndexed(messages, key = { index, message -> message.id.ifBlank { "$index-${message.createdAt}-${message.message}" } }) { index, message ->
-                                if (messages.size > 2 && index == messages.size - 2) ConversationDivider("New Messages", highlight = true)
+                            itemsIndexed(visibleMessages, key = { index, message -> message.id.ifBlank { "$index-${message.createdAt}-${message.message}" } }) { index, message ->
+                                if (visibleMessages.size > 2 && index == visibleMessages.size - 2) ConversationDivider("New Messages", highlight = true)
                                 MessageBubble(
                                     message = message,
                                     mine = message.senderId == currentUserId,
+                                    selected = message.id in selectedMessageIds,
                                     bubbleId = myActiveCosmetics.chatBubble,
-                                    reactionCount = message.reactionCount + (reactions[message.id.ifBlank { index.toString() }] ?: 0),
+                                    reactionCount = message.reactionCount,
                                     onReact = {
-                                        val key = message.id.ifBlank { index.toString() }
-                                        reactions[key] = (reactions[key] ?: 0) + 1
-                                        if (message.id.isNotBlank()) onReactMessage(message)
-                                    }
+                                        if (selectionMode) toggleSelection(message.id)
+                                        else if (message.id.isNotBlank()) onReactMessage(message)
+                                    },
+                                    onLongPress = { toggleSelection(message.id) }
                                 )
                             }
                             if (isPartnerTyping) item {
@@ -301,6 +446,13 @@ fun ChatScreen(
                     cornerRadius = 0.dp,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
                 ) {
+                    if (replyTarget != null || editingTarget != null) {
+                        val contextMessage = editingTarget ?: replyTarget!!
+                        Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(if (editingTarget != null) "Editing message" else "Replying to ${contextMessage.sender?.name ?: "message"}: ${contextMessage.message}", color = TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            Text("Cancel", color = Pink, fontSize = 11.sp, modifier = Modifier.clickable { replyTarget = null; editingTarget = null; draft = "" }.padding(8.dp))
+                        }
+                    }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         LightChatAction(Icons.Filled.SentimentSatisfiedAlt, stringResource(R.string.a11y_toggle_emoji_picker)) { showEmojiBar = !showEmojiBar }
                         Row(
@@ -315,7 +467,7 @@ fun ChatScreen(
                                 modifier = Modifier.weight(1f).semantics { contentDescription = messageFieldLabel },
                                 decorationBox = { inner ->
                                     Box {
-                                        if (draft.isBlank()) Text("Message…", color = TextMuted, fontSize = 14.sp)
+                                if (draft.isBlank()) Text(if (editingTarget != null) "Edit message…" else if (replyTarget != null) "Write a reply…" else "Message…", color = TextMuted, fontSize = 14.sp)
                                         inner()
                                     }
                                 }
@@ -329,8 +481,7 @@ fun ChatScreen(
                         }
                         Box(
                             Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).clip(CircleShape).background(Brush.linearGradient(listOf(PrimaryPurple, Pink))).semantics { contentDescription = sendMessageLabel }.clickable(role = Role.Button, onClickLabel = sendMessageLabel) {
-                                val text = draft.trim()
-                                if (text.isNotBlank()) { draft = ""; onSend(text) }
+                                submitDraft()
                             },
                             contentAlignment = Alignment.Center
                         ) { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp)) }
@@ -351,7 +502,16 @@ fun ChatScreen(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center
                             ) {
-                                Text(chatGiftEmoji(gift.name), fontSize = 36.sp)
+                                if (gift.icon.startsWith("http", ignoreCase = true) || gift.icon.startsWith("/")) {
+                                    AsyncImage(
+                                        model = resolveMediaUrl(gift.icon),
+                                        contentDescription = gift.name,
+                                        contentScale = ContentScale.Fit,
+                                        modifier = Modifier.size(44.dp)
+                                    )
+                                } else {
+                                    Text(gift.icon.ifBlank { chatGiftEmoji(gift.name) }, fontSize = 36.sp)
+                                }
                                 Text(gift.name, color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text("● ${gift.price}", color = if (balance >= gift.price) Color(0xFFFFC52F) else Danger, fontSize = 10.sp)
                             }
@@ -438,20 +598,28 @@ private fun ConversationDivider(label: String, highlight: Boolean = false) {
 }
 
 @Composable
-private fun MessageBubble(message: DirectMessage, mine: Boolean, bubbleId: String, reactionCount: Int, onReact: () -> Unit) {
+private fun MessageBubble(message: DirectMessage, mine: Boolean, selected: Boolean, bubbleId: String, reactionCount: Int, onReact: () -> Unit, onLongPress: () -> Unit) {
     val bubble = if (mine) chatBubbleVisual(bubbleId) else null
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
         Column(horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
             Box(
                 Modifier.widthIn(max = 290.dp).clip(RoundedCornerShape(topStart = 19.dp, topEnd = 19.dp, bottomStart = if (mine) 19.dp else 5.dp, bottomEnd = if (mine) 5.dp else 19.dp))
                     .background(bubble?.fill ?: Brush.horizontalGradient(listOf(SurfaceElevated, Color(0xFF1A1D31))))
-                    .border(1.dp, bubble?.border ?: BorderColor, RoundedCornerShape(19.dp))
-                    .clickable(onClick = onReact).padding(horizontal = 14.dp, vertical = 11.dp)
+                    .border(if (selected) 2.dp else 1.dp, if (selected) Pink else bubble?.border ?: BorderColor, RoundedCornerShape(19.dp))
+                    .combinedClickable(onClick = onReact, onLongClick = onLongPress).padding(horizontal = 14.dp, vertical = 11.dp)
             ) {
                 Column {
+                    if (message.forwarded) Text("Forwarded", color = Pink, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 4.dp))
+                    message.replyTo?.let { reply ->
+                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).background(Color.Black.copy(alpha = 0.16f)).padding(7.dp)) {
+                            Text(reply.author.ifBlank { "Replied message" }, color = Pink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text(reply.text.ifBlank { "Media" }, color = TextMuted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Spacer(Modifier.height(5.dp))
+                    }
                     if (message.mediaUrl.isNotBlank()) {
                         AsyncImage(
-                            model = message.mediaUrl,
+                            model = resolveMediaUrl(message.mediaUrl),
                             contentDescription = "Shared media",
                             modifier = Modifier.width(230.dp).height(150.dp).clip(RoundedCornerShape(13.dp)),
                             contentScale = ContentScale.Crop
@@ -460,6 +628,7 @@ private fun MessageBubble(message: DirectMessage, mine: Boolean, bubbleId: Strin
                     }
                     Text(message.message, color = bubble?.text ?: TextPrimary, fontSize = 14.sp, lineHeight = 19.sp)
                     Row(Modifier.align(Alignment.End).padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (message.isEdited) Text("edited · ", color = TextMuted, fontSize = 9.sp)
                         Text(messageTime(message.createdAt), color = (bubble?.text ?: TextMuted).copy(alpha = 0.76f), fontSize = 9.sp)
                         if (mine) Text(
                             if (message.read) "  ✓✓" else "  ✓",
@@ -494,6 +663,9 @@ fun TypingBubble() {
 }
 
 private fun messageTime(value: String) = if (value.length >= 16) value.substring(11, 16) else "now"
+private fun DirectMessage.canStillEdit(): Boolean = runCatching {
+    java.time.Instant.parse(createdAt).isAfter(java.time.Instant.now().minusSeconds(15 * 60))
+}.getOrDefault(false)
 private fun chatGiftEmoji(name: String) = when {
     name.contains("rose", true) -> "🌹"
     name.contains("crown", true) -> "👑"

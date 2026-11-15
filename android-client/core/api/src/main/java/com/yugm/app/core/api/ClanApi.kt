@@ -80,14 +80,49 @@ object ClanApi {
         return data.optJSONObject("clan")?.toClan() ?: Clan()
     }
 
-    suspend fun createClan(token: String, name: String, description: String = "", privacy: String = "PUBLIC", familyLabel: String = "Family"): Clan {
-        val data = YugmHttpClient.post("/clans", token, JSONObject()
+    suspend fun createClan(token: String, name: String, description: String = "", privacy: String = "PUBLIC", familyLabel: String = "Family", avatar: String? = null): Clan {
+        val body = JSONObject()
             .put("name", name)
             .put("description", description)
             .put("privacy", privacy)
             .put("familyLabel", familyLabel)
-        ).getJSONObject("data")
+        if (!avatar.isNullOrBlank()) body.put("avatar", avatar)
+        val data = YugmHttpClient.post("/clans", token, body).getJSONObject("data")
         return data.optJSONObject("clan")?.toClan() ?: Clan()
+    }
+
+    suspend fun updateClan(
+        token: String,
+        clanId: String,
+        name: String,
+        description: String,
+        privacy: String,
+        familyLabel: String,
+        avatar: String?
+    ): Clan {
+        val body = JSONObject()
+            .put("name", name)
+            .put("description", description)
+            .put("privacy", privacy)
+            .put("familyLabel", familyLabel)
+            .put("avatar", if (avatar.isNullOrBlank()) JSONObject.NULL else avatar)
+        val data = YugmHttpClient.patch("/clans/$clanId", token, body).getJSONObject("data")
+        return data.optJSONObject("clan")?.toClan() ?: Clan()
+    }
+
+    suspend fun setMemberRole(token: String, clanId: String, userId: String, role: String): Clan {
+        val data = YugmHttpClient.patch("/clans/$clanId/members/$userId/role", token, JSONObject().put("role", role))
+            .getJSONObject("data")
+        return data.optJSONObject("clan")?.toClan() ?: Clan()
+    }
+
+    suspend fun kickMember(token: String, clanId: String, userId: String): Clan {
+        val data = YugmHttpClient.delete("/clans/$clanId/members/$userId", token).getJSONObject("data")
+        return data.optJSONObject("clan")?.toClan() ?: Clan()
+    }
+
+    suspend fun deleteClan(token: String, clanId: String) {
+        YugmHttpClient.delete("/clans/$clanId", token)
     }
 
     suspend fun joinClan(token: String, clanId: String): Clan {

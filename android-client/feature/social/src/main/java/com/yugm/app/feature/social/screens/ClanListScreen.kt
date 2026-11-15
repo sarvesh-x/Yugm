@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.yugm.app.core.model.Clan
 import com.yugm.app.core.model.ClanSummary
+import com.yugm.app.core.ui.components.Avatar
 import com.yugm.app.core.ui.components.LoadingState
 import com.yugm.app.core.ui.components.RoundAction
 import com.yugm.app.core.ui.components.SegmentedTabs
@@ -201,16 +202,16 @@ private fun MyClanCard(clan: Clan, onClick: () -> Unit) {
                 .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                Modifier.size(48.dp).clip(CircleShape).background(Pink),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(clan.name.take(2).uppercase(), color = androidx.compose.ui.graphics.Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            }
+            Avatar(
+                initial = clan.name.take(1).uppercase(),
+                size = 48,
+                imageUrl = clan.avatar
+            )
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(clan.name, color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 Text("${clan.familyLabel} · ${clan.memberCount} members", color = TextMuted, fontSize = 12.sp)
+                if (clan.slug.isNotBlank()) Text("#${clan.slug}", color = Pink, fontSize = 10.sp, fontWeight = FontWeight.Medium)
             }
             Text("Open", color = Pink, fontSize = 12.sp, fontWeight = FontWeight.Medium)
         }
@@ -223,19 +224,18 @@ private fun ClanCard(clan: ClanSummary, onClick: () -> Unit) {
         Modifier.padding(horizontal = 20.dp).fillMaxWidth().clickable(onClick = onClick).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            Modifier.size(44.dp).clip(CircleShape).background(Pink),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(clan.name.take(2).uppercase(), color = androidx.compose.ui.graphics.Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        }
+        Avatar(
+            initial = clan.name.take(1).uppercase(),
+            size = 44,
+            imageUrl = clan.avatar
+        )
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(clan.name, color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
             Text("${clan.familyLabel} · ${clan.memberCount} members", color = TextMuted, fontSize = 11.sp)
         }
         if (clan.slug.isNotBlank()) {
-            Text(clan.slug, color = TextMuted, fontSize = 11.sp)
+            Text("#${clan.slug}", color = Pink, fontSize = 10.sp, fontWeight = FontWeight.Medium)
         }
         Spacer(Modifier.width(8.dp))
         Text("View ›", color = Pink, fontSize = 12.sp, fontWeight = FontWeight.Bold)

@@ -168,7 +168,7 @@ fun NavGraph(
             onSettings = { navController.navigate(Screen.Settings.route) },
             onOpenStore = { navController.navigate(Screen.Cosmetics.route) },
             onOpenVip = { navController.navigate(Screen.Vip.route) },
-            onOpenTasks = { navController.navigate(Screen.Missions.route) },
+            onOpenTasks = { navController.navigate(Screen.Growth.route) },
             onOpenLevel = { navController.navigate(Screen.BattlePass.route) },
             onOpenWallet = { navController.navigate(Screen.Wallet.route) },
             onOpenInventory = { navController.navigate(Screen.Inventory.route) }

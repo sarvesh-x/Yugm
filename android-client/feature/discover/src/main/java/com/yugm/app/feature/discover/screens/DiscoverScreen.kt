@@ -74,7 +74,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GridView
@@ -132,7 +131,6 @@ fun DiscoverScreen(
     onOpenProfile: (String) -> Unit,
     onCreateRoom: () -> Unit,
     onNotifications: () -> Unit,
-    onGrowth: () -> Unit,
     onSearch: () -> Unit,
     onGames: () -> Unit = {},
     onEvents: () -> Unit = {},
@@ -206,8 +204,7 @@ fun DiscoverScreen(
                     HomeTopBar(
                         unreadCount = viewModel.home?.unreadNotifications ?: 0,
                         onSearch = onSearch,
-                        onNotifications = onNotifications,
-                        onTasks = onGrowth
+                        onNotifications = onNotifications
                     )
                 }
                 item {
@@ -354,8 +351,7 @@ fun DiscoverScreen(
 private fun HomeTopBar(
     unreadCount: Int,
     onSearch: () -> Unit,
-    onNotifications: () -> Unit,
-    onTasks: () -> Unit
+    onNotifications: () -> Unit
 ) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 20.dp),
@@ -366,8 +362,6 @@ private fun HomeTopBar(
         HeaderAction(Icons.Filled.Search, "Search", onClick = onSearch)
         Spacer(Modifier.width(8.dp))
         HeaderAction(Icons.Filled.Notifications, "Notifications", badge = unreadCount, onClick = onNotifications)
-        Spacer(Modifier.width(8.dp))
-        HeaderAction(Icons.Filled.EventNote, "Tasks and events", gradient = true, onClick = onTasks)
     }
 }
 
