@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yugm.app.core.data.SessionManager
 import com.yugm.app.core.api.IYugmApi
+import com.yugm.app.core.api.SocketManager
 import com.yugm.app.core.api.YugmSocket
 import com.yugm.app.core.api.YugmMediaRoom
 import com.yugm.app.core.model.RefreshedSession
@@ -22,7 +23,8 @@ import kotlinx.coroutines.withContext
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val sessionManager: SessionManager,
-    private val yugmApi: IYugmApi
+    private val yugmApi: IYugmApi,
+    private val socketManager: SocketManager
 ) : ViewModel() {
 
     var authToken by mutableStateOf(sessionManager.authToken)
@@ -46,6 +48,12 @@ class MainViewModel @Inject constructor(
     var profileCompleted by mutableStateOf(sessionManager.profileCompleted)
         private set
 
+    init {
+        if (sessionManager.authToken.isNotBlank()) {
+            socketManager.connect(sessionManager.authToken)
+        }
+    }
+
     fun updateSession(token: String, userId: String, name: String, username: String, balance: Int, refreshToken: String, sessionId: String, expiresIn: Long, emailVerified: Boolean, profileCompleted: Boolean) {
         this.authToken = token
         this.currentUserId = userId
@@ -56,6 +64,7 @@ class MainViewModel @Inject constructor(
         this.profileCompleted = profileCompleted
 
         sessionManager.saveSession(token, refreshToken, sessionId, expiresIn, userId, name, username, balance, emailVerified, profileCompleted)
+        socketManager.connect(token)
         syncPushToken()
     }
 
@@ -80,6 +89,7 @@ class MainViewModel @Inject constructor(
 
     fun updateTokens(tokens: RefreshedSession) {
         authToken = tokens.accessToken
+        socketManager.connect(tokens.accessToken)
         sessionManager.saveSession(
             token = tokens.accessToken,
             refresh = tokens.refreshToken,
@@ -102,6 +112,7 @@ class MainViewModel @Inject constructor(
         // Firebase token retrieval. Revoke the server session as best effort.
         runCatching { FirebaseAuth.getInstance().signOut() }
         runCatching { YugmSocket.disconnect() }
+        runCatching { socketManager.disconnect() }
         YugmMediaRoom.disconnectAsync()
         sessionManager.logout()
         authToken = ""

@@ -10,6 +10,8 @@ import com.yugm.app.core.model.ExperienceHome
 import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.util.UiState
+import com.yugm.app.core.api.SocketManager
+import com.yugm.app.core.api.SocketEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
@@ -20,7 +22,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class DiscoverViewModel @Inject constructor(
-    private val yugmApi: IYugmApi
+    private val yugmApi: IYugmApi,
+    private val socketManager: SocketManager
 ) : ViewModel() {
 
     var rooms by mutableStateOf<List<Room>>(emptyList())
@@ -34,6 +37,38 @@ class DiscoverViewModel @Inject constructor(
 
     var home by mutableStateOf<ExperienceHome?>(null)
         private set
+
+    var totalOnlineCount by mutableStateOf(0)
+        private set
+
+    private var currentPresenceToken: String = ""
+
+    init {
+        viewModelScope.launch {
+            socketManager.events.collect { event ->
+                when (event) {
+                    is SocketEvent.Connected,
+                    is SocketEvent.UserOnline,
+                    is SocketEvent.UserOffline -> {
+                        if (currentPresenceToken.isNotBlank()) {
+                            refreshPresenceCount(currentPresenceToken)
+                        }
+                    }
+                    else -> {}
+                }
+            }
+        }
+    }
+
+    fun refreshPresenceCount(token: String) {
+        if (token.isNotBlank()) currentPresenceToken = token
+        if (token.isBlank()) return
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { yugmApi.presenceCount(token) }
+            }.onSuccess { totalOnlineCount = it }
+        }
+    }
 
     var discoverState by mutableStateOf<UiState<List<Room>>>(UiState.Idle)
         private set
@@ -74,6 +109,7 @@ class DiscoverViewModel @Inject constructor(
 
     fun refreshHome(token: String) {
         if (token.isBlank()) return
+        refreshPresenceCount(token)
         if (isLoading && activeHomeToken == token) return
         activeHomeToken = token
         homeLoadJob?.cancel()

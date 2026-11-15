@@ -64,11 +64,11 @@ import com.yugm.app.feature.settings.viewmodel.SettingsViewModel
 
 private enum class SettingsPane { Home, Blocked, Notifications, Feedback, About, Terms, Privacy, Guidelines }
 
-private val SettingsBg = Color(0xFFF7F7FB)
-private val SettingsInk = Color(0xFF211D2C)
-private val SettingsMuted = Color(0xFF777889)
-private val SettingsCard = Color.White
-private val SettingsLine = Color(0xFFECEBF2)
+private val SettingsBg = Color(0xFF060714)
+private val SettingsInk = Color.White
+private val SettingsMuted = Color(0xFF9EA3B9)
+private val SettingsCard = Color(0xFF151629)
+private val SettingsLine = Color(0x24FFFFFF)
 private val SettingsAccent = Color(0xFF7546F5)
 
 private val docs = mapOf(
@@ -276,7 +276,6 @@ private fun SettingsHome(
         item {
             AnimatedEntrance(delay = 200) {
                 SettingsGroup("Account") {
-                    SettingsNavRow("Detailed profile", "Edit your public profile and interests.", onProfile)
                     SettingsNavRow("Yugm Trust Verification", "Verify your face and voice to show people you're real.", onTrustVerification)
                     SettingsNavRow("Yugm Arcade", "Play mini games and manage challenges.", onGames)
                     SettingsNavRow("Yugm Clans", "Create or join a clan and chat with your family.", onClans)

@@ -151,6 +151,14 @@ fun DiscoverScreen(
         if (token.isNotBlank()) viewModel.refreshHome(token)
     }
 
+    LaunchedEffect(token) {
+        if (token.isBlank()) return@LaunchedEffect
+        while (true) {
+            viewModel.refreshPresenceCount(token)
+            kotlinx.coroutines.delay(15_000)
+        }
+    }
+
     val rooms = remember(viewModel.recommendedRooms, viewModel.rooms) {
         (viewModel.recommendedRooms + viewModel.rooms).distinctBy { it.id }
     }
@@ -259,11 +267,11 @@ fun DiscoverScreen(
                 }
                 item {
                     Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                        Modifier.fillMaxWidth().padding(start = 20.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("Recommend", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
-                        HomeCreateButton(onClick = onCreateRoom)
+                        OnlineCountLabel(count = viewModel.totalOnlineCount)
                     }
                 }
                 item {
@@ -441,18 +449,20 @@ private fun HomeShortcut(label: String, icon: ImageVector, modifier: Modifier = 
 }
 
 @Composable
-private fun HomeCreateButton(onClick: () -> Unit) {
+private fun OnlineCountLabel(count: Int) {
+    // Rank-style chip (mirrors RoomHeader rank label) — purely informational.
     Row(
-        Modifier.clip(CircleShape)
-            .background(Brush.horizontalGradient(listOf(PrimaryPurple.copy(alpha = 0.65f), Pink.copy(alpha = 0.72f))))
-            .border(1.dp, Color.White.copy(alpha = 0.24f), CircleShape)
-            .clickable(role = Role.Button, onClickLabel = "Create room", onClick = onClick)
-            .padding(horizontal = 15.dp, vertical = 9.dp),
+        modifier = Modifier
+            .clip(RoundedCornerShape(topStart = 50.dp, bottomStart = 50.dp, topEnd = 0.dp, bottomEnd = 0.dp))
+            .background(Color(0xFF7A6368).copy(alpha = 0.45f))
+            .padding(start = 14.dp, end = 20.dp, top = 6.dp, bottom = 6.dp)
+            .semantics { contentDescription = "$count users online" },
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp)
+        horizontalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.White)
-        Text("Create", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Icon(Icons.Filled.Groups, contentDescription = null, tint = Color(0xFF69F0AE), modifier = Modifier.size(20.dp))
+        Text(if (count > 0) count.toString() else "—", color = Color(0xFF69F0AE), fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Text("online", color = Color(0xFF69F0AE).copy(alpha = 0.85f), fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }
 

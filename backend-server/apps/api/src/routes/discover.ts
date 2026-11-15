@@ -3,9 +3,15 @@ import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { asyncHandler, sendOk } from "../utils/http.js";
 import { Room } from "../models/Room.js";
 import { User } from "../models/User.js";
+import { getPresenceCount } from "../services/socket.js";
 
 export const discoverRouter = Router();
 discoverRouter.use(requireAuth);
+
+// GET /api/discover/presence-count — total users online across the whole app
+discoverRouter.get("/discover/presence-count", asyncHandler(async (_req: AuthRequest, res) => {
+  sendOk(res, { count: getPresenceCount() });
+}));
 
 // GET /api/discover/trending — top rooms by live participant count
 discoverRouter.get("/discover/trending", asyncHandler(async (req: AuthRequest, res) => {

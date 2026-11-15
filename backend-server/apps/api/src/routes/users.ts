@@ -646,7 +646,7 @@ usersRouter.get("/hosts/suggested", asyncHandler(async (req: AuthRequest, res) =
 
 // Random users from live presence for the chat discovery carousel. This is
 // intentionally independent of follows, friends, and dating matches.
-usersRouter.get("/users/recommended-chat", asyncHandler(async (req: AuthRequest, res) => {
+usersRouter.get("/recommended-chat", asyncHandler(async (req: AuthRequest, res) => {
   const limit = Math.min(Number(req.query.limit) || 30, 60);
   const onlineIds = await getOnlineUserIds();
   if (onlineIds.length === 0) return sendOk(res, { users: [] });

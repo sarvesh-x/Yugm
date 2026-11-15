@@ -109,6 +109,8 @@ class ChatViewModel @Inject constructor(
                         }
                     }
                     is SocketEvent.Disconnected -> isPartnerTyping = false
+                    is SocketEvent.UserOnline -> if (event.userId == partnerUserId) partner = partner?.copy(isOnline = true)
+                    is SocketEvent.UserOffline -> if (event.userId == partnerUserId) partner = partner?.copy(isOnline = false)
                     else -> Unit
                 }
             }
@@ -367,7 +369,7 @@ class ChatViewModel @Inject constructor(
     }
 
     override fun onCleared() {
-        socketManager.disconnect()
+        // Keep the socket connected for global presence; MainViewModel owns lifecycle.
         super.onCleared()
     }
 }

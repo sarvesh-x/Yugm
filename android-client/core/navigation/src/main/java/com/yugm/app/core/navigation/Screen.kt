@@ -16,8 +16,8 @@ sealed class Screen(val route: String) {
     object Discover : Screen("discover")
     object Search : Screen("search")
     object DatingDiscovery : Screen("dating_discovery")
-    object ProfileDetail : Screen("profile_detail/{userId}") {
-        fun createRoute(userId: String) = "profile_detail/$userId"
+    object ProfileDetail : Screen("profile_detail/{userId}?edit={edit}") {
+        fun createRoute(userId: String, edit: Boolean = false) = if (edit) "profile_detail/$userId?edit=true" else "profile_detail/$userId"
     }
     object ProfileSocial : Screen("profile_social/{userId}/{list}") {
         fun createRoute(userId: String, list: String) = "profile_social/$userId/${Uri.encode(list)}"

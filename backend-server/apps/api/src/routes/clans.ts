@@ -302,12 +302,17 @@ clansRouter.delete("/:id", asyncHandler(async (req: AuthRequest, res) => {
 clansRouter.get("/:id/messages", asyncHandler(async (req: AuthRequest, res) => {
   await requireClanMember(req.params.id, req.user!.id);
   const limit = Math.min(Number(req.query.limit) || 80, 120);
-  const messages = await ClanMessage.find({ clanId: req.params.id })
+  const query: Record<string, unknown> = { clanId: req.params.id };
+  if (req.query.before) {
+    const beforeDate = new Date(String(req.query.before));
+    if (!Number.isNaN(beforeDate.getTime())) query.createdAt = { $lt: beforeDate };
+  }
+  const messages = await ClanMessage.find(query)
     .populate("senderId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean();
-  sendOk(res, { messages: messages.reverse() });
+  sendOk(res, { messages: messages.reverse(), hasMore: messages.length === limit });
 }));
 
 clansRouter.post("/:id/messages", requireNotMuted, chatLimiter, validateBody(clanMessageSchema), asyncHandler(async (req: AuthRequest, res) => {

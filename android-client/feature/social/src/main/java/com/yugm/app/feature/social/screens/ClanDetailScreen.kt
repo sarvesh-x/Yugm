@@ -275,14 +275,6 @@ fun ClanDetailScreen(
                             }
                         }
                     }
-                    item {
-                        TextButton(
-                            onClick = { confirmDelete = true },
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
-                        ) {
-                            Text("Delete clan", color = DangerRed, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
                 }
             }
         }
@@ -355,6 +347,20 @@ fun ClanDetailScreen(
                         )
                     }
                     Text("Clan ID  ·  #${currentClan.slug}", color = TextMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
+                    if (currentClan.ownerId == currentUserId) {
+                        Spacer(Modifier.height(8.dp))
+                        Text("DANGER ZONE", color = DangerRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        TextButton(
+                            onClick = {
+                                showSettings = false
+                                confirmDelete = true
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Delete clan", color = DangerRed, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                        Text("Permanently deletes the clan, its chat, and all memberships.", color = TextMuted, fontSize = 10.sp)
+                    }
                 }
             },
             confirmButton = {

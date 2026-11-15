@@ -1,6 +1,8 @@
 package com.yugm.app.core.api
 
+import com.yugm.app.core.api.parsers.toClanMessage
 import com.yugm.app.core.api.parsers.toDirectMessage
+import com.yugm.app.core.model.ClanMessage
 import com.yugm.app.core.model.DirectMessage
 import io.socket.client.IO
 import io.socket.client.Socket
@@ -19,6 +21,9 @@ sealed class SocketEvent {
     data class TypingUpdate(val userId: String, val typing: Boolean) : SocketEvent()
     data class UserOnline(val userId: String) : SocketEvent()
     data class UserOffline(val userId: String) : SocketEvent()
+    data class ClanMessageReceived(val clanId: String, val message: ClanMessage) : SocketEvent()
+    data class ClanChatCleaned(val clanId: String) : SocketEvent()
+    data class ClanTypingUpdate(val clanId: String, val userId: String, val typing: Boolean) : SocketEvent()
     object Connected : SocketEvent()
     object Disconnected : SocketEvent()
 }
@@ -35,7 +40,7 @@ class SocketManager @Inject constructor() {
         baseUrl = url.trim().trimEnd('/')
     }
 
-    private fun getBaseUrl(): String = baseUrl
+    private fun getBaseUrl(): String = baseUrl.ifBlank { ApiConfig.socketBaseUrl }.trim().trimEnd('/')
 
     fun connect(token: String) {
         disconnect()
@@ -89,6 +94,25 @@ class SocketManager @Inject constructor() {
                     _events.tryEmit(SocketEvent.TypingUpdate(payload.optString("userId"), payload.optBoolean("typing")))
                 }
             }
+            socket?.on("clan:message:new") { args ->
+                (args.firstOrNull() as? JSONObject)?.let { payload ->
+                    val clanId = payload.optString("clanId")
+                    payload.optJSONObject("message")?.let { messageJson ->
+                        runCatching { _events.tryEmit(SocketEvent.ClanMessageReceived(clanId, messageJson.toClanMessage())) }
+                            .onFailure { Timber.tag("SocketManager").e(it, "Failed to parse clan message") }
+                    }
+                }
+            }
+            socket?.on("clan:chat:cleaned") { args ->
+                (args.firstOrNull() as? JSONObject)?.let { payload ->
+                    _events.tryEmit(SocketEvent.ClanChatCleaned(payload.optString("clanId")))
+                }
+            }
+            socket?.on("clan:typing:update") { args ->
+                (args.firstOrNull() as? JSONObject)?.let { payload ->
+                    _events.tryEmit(SocketEvent.ClanTypingUpdate(payload.optString("clanId"), payload.optString("userId"), payload.optBoolean("typing")))
+                }
+            }
             socket?.on("user_online") { args ->
                 if (args.isNotEmpty()) _events.tryEmit(SocketEvent.UserOnline(args[0].toString()))
             }
@@ -107,6 +131,11 @@ class SocketManager @Inject constructor() {
 
     fun sendTypingStatus(userId: String, isTyping: Boolean) {
         socket?.emit(if (isTyping) "direct:typing:start" else "direct:typing:stop", mapOf("userId" to userId))
+    }
+
+    fun sendClanTypingStatus(clanId: String, isTyping: Boolean) {
+        if (clanId.isBlank()) return
+        socket?.emit(if (isTyping) "clan:typing:start" else "clan:typing:stop", mapOf("clanId" to clanId))
     }
 
     fun disconnect() {

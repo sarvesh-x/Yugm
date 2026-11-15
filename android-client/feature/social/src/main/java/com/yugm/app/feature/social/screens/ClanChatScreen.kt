@@ -1,10 +1,5 @@
 package com.yugm.app.feature.social.screens
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -121,6 +116,7 @@ fun ClanChatScreen(
     var actionMessage by remember { mutableStateOf<ClanMessage?>(null) }
     var deleteMessage by remember { mutableStateOf<ClanMessage?>(null) }
     var cleanConfirm by remember { mutableStateOf(false) }
+    var replyTo by remember { mutableStateOf<ClanMessage?>(null) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
@@ -160,22 +156,36 @@ fun ClanChatScreen(
     fun send() {
         val text = input.trim()
         if (text.isBlank() || viewModel.isSendingMessage) return
-        viewModel.sendMessage(token, clanId, text) {
+        val quoted = replyTo?.let { "↪️ ${it.senderId?.name ?: "Someone"}: ${it.message.take(80)}\n\n" } ?: ""
+        viewModel.sendMessage(token, clanId, quoted + text) {
             if (input.trim() == text) input = ""
+            replyTo = null
         }
     }
 
     LaunchedEffect(clanId) {
+        viewModel.connect(token, clanId, currentUserId)
         viewModel.loadMessages(token, clanId)
         viewModel.loadDetail(token, clanId)
     }
 
-    // Gentle auto-refresh so the chat feels live without sockets.
+    // Fallback refresh in case the socket drops.
     LaunchedEffect(clanId, searchOpen) {
         if (searchOpen) return@LaunchedEffect
         while (true) {
-            delay(20_000)
+            delay(60_000)
             viewModel.loadMessages(token, clanId)
+        }
+    }
+
+    // Emit typing status while the user is composing.
+    LaunchedEffect(input) {
+        if (input.isNotBlank()) {
+            viewModel.sendTypingStatus(true)
+            delay(2_000)
+            if (input.isBlank()) viewModel.sendTypingStatus(false)
+        } else {
+            viewModel.sendTypingStatus(false)
         }
     }
 
@@ -241,6 +251,13 @@ fun ClanChatScreen(
                     }) {
                         Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = ClanChatMuted)
                         Text("  Copy message", color = ClanChatMuted)
+                    }
+                    TextButton(onClick = {
+                        replyTo = target
+                        actionMessage = null
+                    }) {
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = ClanChatMuted)
+                        Text("  Reply", color = ClanChatMuted)
                     }
                     if (target.senderId?.id == currentUserId || clan?.ownerId == currentUserId) {
                         TextButton(onClick = { deleteMessage = target; actionMessage = null }) {
@@ -341,6 +358,17 @@ fun ClanChatScreen(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 16.dp)
                 ) {
+                    if (viewModel.hasMoreOlder && search.isBlank()) item {
+                        Box(Modifier.fillMaxWidth().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
+                            if (viewModel.isLoadingOlder) {
+                                CircularProgressIndicator(color = ClanChatPurple, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            } else {
+                                TextButton(onClick = { viewModel.loadOlderMessages(token, clanId) }) {
+                                    Text("Load older messages", color = ClanChatPurple, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
                     if (chatItems.isEmpty()) item {
                         Column(Modifier.fillMaxWidth().padding(vertical = 55.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Avatar((clanName.ifBlank { "C" }).take(1).uppercase(), 58, clan?.avatar)
@@ -362,7 +390,8 @@ fun ClanChatScreen(
                                 showAvatar = item.showAvatar,
                                 showName = item.showName,
                                 grouped = item.grouped,
-                                onOpenActions = { actionMessage = item.message }
+                                onOpenActions = { actionMessage = item.message },
+                                onReact = { type -> viewModel.reactToMessage(token, clanId, item.message.id, type) }
                             )
                         }
                     }
@@ -381,6 +410,35 @@ fun ClanChatScreen(
                     Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
                         Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Scroll to bottom", tint = Color.White)
                     }
+                }
+            }
+        }
+
+        // Typing indicator
+        val typingNames = viewModel.typingUserIds.mapNotNull { id -> clan?.members?.firstOrNull { it.id == id }?.name }.ifEmpty { viewModel.typingUserIds.map { "Someone" } }
+        if (typingNames.isNotEmpty()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (typingNames.size == 1) "${typingNames.first()} is typing…" else "${typingNames.size} people are typing…",
+                    color = ClanChatMuted, fontSize = 11.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                )
+            }
+        }
+
+        // Reply preview
+        replyTo?.let { target ->
+            Row(
+                Modifier.fillMaxWidth().background(Color(0xF3111222)).padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(Modifier.width(3.dp).height(32.dp).background(ClanChatPurple, RoundedCornerShape(2.dp)))
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(target.senderId?.name ?: "Message", color = ClanChatPurple, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text(target.message, color = ClanChatMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                IconButton(onClick = { replyTo = null }, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Filled.Close, contentDescription = "Cancel reply", tint = ClanChatMuted)
                 }
             }
         }
@@ -431,7 +489,8 @@ private fun ClanChatMessageRow(
     showAvatar: Boolean,
     showName: Boolean,
     grouped: Boolean,
-    onOpenActions: () -> Unit
+    onOpenActions: () -> Unit,
+    onReact: (String) -> Unit = {}
 ) {
     val sender = message.senderId
     Row(
@@ -458,7 +517,23 @@ private fun ClanChatMessageRow(
                     .combinedClickable(onClick = onOpenActions, onLongClick = onOpenActions)
                     .padding(horizontal = 14.dp, vertical = 11.dp)
             ) {
-                Text(message.message, color = Color.White, fontSize = 14.sp, lineHeight = 20.sp)
+                val quoteEnd = message.message.indexOf("\n\n")
+                val hasQuote = message.message.startsWith("↪️ ") && quoteEnd > 0
+                if (hasQuote) {
+                    val quote = message.message.substring(0, quoteEnd)
+                    val body = message.message.substring(quoteEnd + 2)
+                    Box(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                            .background(Color.White.copy(alpha = 0.08f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(quote, color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp, lineHeight = 16.sp)
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(body, color = Color.White, fontSize = 14.sp, lineHeight = 20.sp)
+                } else {
+                    Text(message.message, color = Color.White, fontSize = 14.sp, lineHeight = 20.sp)
+                }
                 Row(Modifier.align(Alignment.End).padding(top = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(clanMessageTime(message.createdAt), color = Color.White.copy(alpha = 0.62f), fontSize = 9.sp)
                     if (mine) {
@@ -472,7 +547,7 @@ private fun ClanChatMessageRow(
                     message.reactions.groupBy { it.type }.forEach { (type, reactions) ->
                         Text("${reactionEmoji(type)} ${reactions.size}", color = Color.White, fontSize = 10.sp,
                             modifier = Modifier.clip(CircleShape).background(ClanChatCard).border(1.dp, ClanChatLine, CircleShape).padding(horizontal = 8.dp, vertical = 4.dp)
-                                .clickable { })
+                                .clickable { onReact(type) })
                     }
                 }
             }

@@ -134,8 +134,11 @@ object ClanApi {
         YugmHttpClient.post("/clans/$clanId/leave", token, JSONObject())
     }
 
-    suspend fun getClanMessages(token: String, clanId: String): List<ClanMessage> {
-        val data = YugmHttpClient.get("/clans/$clanId/messages", token).getJSONObject("data")
+    suspend fun getClanMessages(token: String, clanId: String, limit: Int = 80, before: String? = null): List<ClanMessage> {
+        val params = mutableListOf("limit=$limit")
+        if (!before.isNullOrBlank()) params.add("before=${java.net.URLEncoder.encode(before, "UTF-8")}")
+        val query = "?" + params.joinToString("&")
+        val data = YugmHttpClient.get("/clans/$clanId/messages$query", token).getJSONObject("data")
         return data.optJSONArray("messages")?.toClanMessages() ?: emptyList()
     }
 
@@ -157,5 +160,10 @@ object ClanApi {
             .put("reason", reason)
             .put("description", description)
         )
+    }
+
+    suspend fun cleanClanChat(token: String, clanId: String): Int {
+        val data = YugmHttpClient.post("/clans/$clanId/messages/clean", token, JSONObject()).getJSONObject("data")
+        return data.optInt("deletedCount", 0)
     }
 }

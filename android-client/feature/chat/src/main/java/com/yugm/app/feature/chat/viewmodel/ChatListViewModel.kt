@@ -54,17 +54,29 @@ class ChatListViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             socketManager.events.collectLatest { event ->
-                if (event is SocketEvent.DirectConversationDeleted) {
-                    val partnerId = event.partnerId
-                    recentMessages = recentMessages.filterNot { it.senderId == partnerId || it.receiverId == partnerId }
-                    unreadCounts = unreadCounts - partnerId
-                    matches = matches.filterNot { it.id == partnerId }
-                    followers = followers.filterNot { it.id == partnerId }
-                    following = following.filterNot { it.id == partnerId }
-                    recommendedChatUsers = recommendedChatUsers.filterNot { it.id == partnerId }
+                when (event) {
+                    is SocketEvent.DirectConversationDeleted -> {
+                        val partnerId = event.partnerId
+                        recentMessages = recentMessages.filterNot { it.senderId == partnerId || it.receiverId == partnerId }
+                        unreadCounts = unreadCounts - partnerId
+                        matches = matches.filterNot { it.id == partnerId }
+                        followers = followers.filterNot { it.id == partnerId }
+                        following = following.filterNot { it.id == partnerId }
+                        recommendedChatUsers = recommendedChatUsers.filterNot { it.id == partnerId }
+                    }
+                    is SocketEvent.UserOnline -> updateHostOnline(event.userId, true)
+                    is SocketEvent.UserOffline -> updateHostOnline(event.userId, false)
+                    else -> Unit
                 }
             }
         }
+    }
+
+    private fun updateHostOnline(userId: String, online: Boolean) {
+        matches = matches.map { if (it.id == userId) it.copy(isOnline = online) else it }
+        followers = followers.map { if (it.id == userId) it.copy(isOnline = online) else it }
+        following = following.map { if (it.id == userId) it.copy(isOnline = online) else it }
+        recommendedChatUsers = recommendedChatUsers.map { if (it.id == userId) it.copy(isOnline = online) else it }
     }
 
     fun clearError() {

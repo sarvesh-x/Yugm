@@ -6,6 +6,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yugm.app.core.api.IYugmApi
+import com.yugm.app.core.api.SocketEvent
+import com.yugm.app.core.api.SocketManager
 import com.yugm.app.core.model.Clan
 import com.yugm.app.core.model.ClanMessage
 import com.yugm.app.core.model.ClanSummary
@@ -14,13 +16,15 @@ import com.yugm.app.core.model.ClanRankingEntry
 import com.yugm.app.core.model.Host
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
 class ClanViewModel @Inject constructor(
-    private val yugmApi: IYugmApi
+    private val yugmApi: IYugmApi,
+    private val socketManager: SocketManager
 ) : ViewModel() {
 
     var myClan by mutableStateOf<Clan?>(null)
@@ -50,6 +54,56 @@ class ClanViewModel @Inject constructor(
         private set
     var error by mutableStateOf<String?>(null)
         private set
+    var typingUserIds by mutableStateOf<Set<String>>(emptySet())
+        private set
+    var hasMoreOlder by mutableStateOf(true)
+        private set
+    var isLoadingOlder by mutableStateOf(false)
+        private set
+
+    private var authToken: String = ""
+    private var currentClanId: String = ""
+    private var currentUserId: String = ""
+
+    init {
+        viewModelScope.launch {
+            socketManager.events.collectLatest { event ->
+                when (event) {
+                    is SocketEvent.ClanMessageReceived -> {
+                        if (event.clanId == currentClanId && currentClanId.isNotBlank()) {
+                            if (messages.none { it.id == event.message.id }) {
+                                messages = (messages + event.message).sortedBy { it.createdAt }
+                            }
+                        }
+                    }
+                    is SocketEvent.ClanChatCleaned -> {
+                        if (event.clanId == currentClanId) messages = emptyList()
+                    }
+                    is SocketEvent.ClanTypingUpdate -> {
+                        if (event.clanId == currentClanId && event.userId != currentUserId) {
+                            typingUserIds = if (event.typing) typingUserIds + event.userId else typingUserIds - event.userId
+                        }
+                    }
+                    is SocketEvent.Disconnected -> typingUserIds = emptySet()
+                    else -> Unit
+                }
+            }
+        }
+    }
+
+    fun connect(token: String, clanId: String, userId: String) {
+        if (token.isBlank() || clanId.isBlank()) return
+        authToken = token
+        currentClanId = clanId
+        currentUserId = userId
+        typingUserIds = emptySet()
+        socketManager.connect(token)
+    }
+
+    fun sendTypingStatus(isTyping: Boolean) {
+        if (currentClanId.isBlank()) return
+        socketManager.sendClanTypingStatus(currentClanId, isTyping)
+    }
 
     fun clearError() {
         error = null
@@ -150,11 +204,31 @@ class ClanViewModel @Inject constructor(
             isLoading = true
             error = null
             runCatching {
-                messages = withContext(Dispatchers.IO) { yugmApi.getClanMessages(token, clanId) }
+                val loaded = withContext(Dispatchers.IO) { yugmApi.getClanMessages(token, clanId) }
+                messages = loaded
+                hasMoreOlder = loaded.size >= 80
             }.onFailure {
                 error = it.message ?: "Failed to load messages"
             }
             isLoading = false
+        }
+    }
+
+    fun loadOlderMessages(token: String, clanId: String) {
+        if (isLoadingOlder || !hasMoreOlder) return
+        val oldest = messages.firstOrNull()?.createdAt ?: return
+        viewModelScope.launch {
+            isLoadingOlder = true
+            runCatching {
+                val older = withContext(Dispatchers.IO) { yugmApi.getClanMessages(token, clanId, 80, oldest) }
+                if (older.isNotEmpty()) {
+                    messages = (older + messages).distinctBy { it.id }
+                }
+                hasMoreOlder = older.size >= 80
+            }.onFailure {
+                error = it.message ?: "Failed to load older messages"
+            }
+            isLoadingOlder = false
         }
     }
 
@@ -325,11 +399,17 @@ class ClanViewModel @Inject constructor(
             runCatching {
                 withContext(Dispatchers.IO) { yugmApi.cleanClanChat(token, clanId) }
                 messages = emptyList()
+                hasMoreOlder = false
                 onComplete()
             }.onFailure {
                 error = it.message ?: "Failed to clean chat"
             }
             isLoading = false
         }
+    }
+
+    override fun onCleared() {
+        // Keep the socket connected for global presence; MainViewModel owns lifecycle.
+        super.onCleared()
     }
 }

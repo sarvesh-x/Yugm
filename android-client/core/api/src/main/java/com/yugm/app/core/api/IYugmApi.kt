@@ -159,7 +159,9 @@ interface IYugmApi {
     suspend fun trendingRooms(): List<Room>
     suspend fun recommendedRooms(token: String): List<Room>
     suspend fun scheduledRooms(): List<Room>
-    suspend fun leaderboard(): RoomLeaderboard
+    suspend fun presenceCount(token: String): Int
+
+suspend fun leaderboard(): RoomLeaderboard
     suspend fun joinRoom(token: String, roomId: String)
     suspend fun leaveRoom(token: String, roomId: String)
     suspend fun liveKitToken(token: String, roomId: String): MediaSession
@@ -261,7 +263,7 @@ interface IYugmApi {
     suspend fun deleteClan(token: String, clanId: String)
     suspend fun joinClan(token: String, clanId: String): Clan
     suspend fun leaveClan(token: String, clanId: String)
-    suspend fun getClanMessages(token: String, clanId: String): List<ClanMessage>
+    suspend fun getClanMessages(token: String, clanId: String, limit: Int = 80, before: String? = null): List<ClanMessage>
     suspend fun sendClanMessage(token: String, clanId: String, message: String): ClanMessage
     suspend fun reactToClanMessage(token: String, clanId: String, messageId: String, type: String): JSONObject
     suspend fun deleteClanMessage(token: String, clanId: String, messageId: String)

@@ -53,7 +53,7 @@ fun NavGraphBuilder.settingsNavGraph(
             onBack = { navController.popBackStack() },
             onNavigateToSafety = { navController.navigate(Screen.Safety.route) },
             onNavigateToSupport = { navController.navigate(Screen.Support.route) },
-            onNavigateToProfileSetup = { navController.navigate(Screen.ProfileDetail.createRoute(currentUserIdProvider())) },
+            onNavigateToProfileSetup = { navController.navigate(Screen.ProfileDetail.createRoute(currentUserIdProvider(), edit = true)) },
             onNavigateToGames = { navController.navigate(Screen.Games.route) },
             onNavigateToClans = { Toast.makeText(context, "Coming soon", Toast.LENGTH_SHORT).show() },
             onNavigateToTrustVerification = { Toast.makeText(context, "Coming soon", Toast.LENGTH_SHORT).show() }

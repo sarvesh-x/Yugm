@@ -88,6 +88,7 @@ fun ProfileDetailScreen(
     onInviteToRoom: (String) -> Unit,
     onOpenRoom: (Room) -> Unit = {},
     isOwnProfile: Boolean = false,
+    autoEdit: Boolean = false,
     onOpenSocialList: (String) -> Unit = {},
     onProfileUpdated: (com.yugm.app.core.model.YugmUser) -> Unit = {},
     onSettings: () -> Unit = {},
@@ -139,6 +140,13 @@ fun ProfileDetailScreen(
             hobbiesDraft = it.hobbies
         }
         showEditProfileScreen = true
+    }
+    var autoEditTriggered by remember { mutableStateOf(false) }
+    LaunchedEffect(autoEdit, viewModel.profile) {
+        if (autoEdit && !autoEditTriggered && viewModel.profile != null && isOwnProfile) {
+            autoEditTriggered = true
+            openProfileEditor()
+        }
     }
     var showPasswordDialog by remember { mutableStateOf(false) }
     var currentPassword by remember { mutableStateOf("") }
@@ -960,20 +968,7 @@ private fun ProfileHero(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(Modifier.fillMaxWidth()) {
-            if (isOwnProfile && onEditProfile != null) {
-                OutlinedButton(
-                    onClick = onEditProfile,
-                    shape = RoundedCornerShape(50),
-                    border = BorderStroke(1.dp, Color(0x55FFFFFF)),
-                    colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0x22FFFFFF), contentColor = Color.White),
-                    contentPadding = PaddingValues(horizontal = 11.dp, vertical = 6.dp),
-                    modifier = Modifier.align(Alignment.TopEnd).height(34.dp)
-                ) {
-                    Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.White)
-                    Spacer(Modifier.width(5.dp))
-                    Text("Edit", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-            } else if (compatibilityScore != null) {
+            if (compatibilityScore != null) {
                 Text("$compatibilityScore% match", color = Gold, fontSize = 12.sp, modifier = Modifier.align(Alignment.TopEnd))
             }
             Box(
@@ -1137,36 +1132,8 @@ private fun ProfileHeroLegacy(
                         )
                     }
 
-                    // Action button aligned to right: Edit Profile button for own profile
-                    if (isOwnProfile && onEditProfile != null) {
-                        OutlinedButton(
-                            onClick = onEditProfile,
-                            shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(1.2.dp, Color(0x55FFFFFF)),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = Color(0x1AFFFFFF),
-                                contentColor = Color.White
-                            ),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                            modifier = Modifier
-                                .height(36.dp)
-                                .offset(y = 30.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Edit,
-                                contentDescription = null,
-                                modifier = Modifier.size(15.dp),
-                                tint = Color.White
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                "Edit Profile",
-                                color = Color.White,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    } else if (compatibilityScore != null) {
+                    // Edit Profile button removed from header card per request.
+                    if (compatibilityScore != null) {
                         Box(
                             modifier = Modifier
                                 .offset(y = 36.dp)

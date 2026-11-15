@@ -170,6 +170,8 @@ object YugmApi : IYugmApi {
     override suspend fun trendingRooms(): List<Room> = RoomApi.trendingRooms()
     override suspend fun recommendedRooms(token: String): List<Room> = RoomApi.recommendedRooms(token)
     override suspend fun scheduledRooms(): List<Room> = RoomApi.scheduledRooms()
+
+  override suspend fun presenceCount(token: String): Int = DiscoverApi.presenceCount(token)
     override suspend fun leaderboard(): RoomLeaderboard = RoomApi.leaderboard()
     override suspend fun joinRoom(token: String, roomId: String) = RoomApi.joinRoom(token, roomId)
     override suspend fun leaveRoom(token: String, roomId: String) = RoomApi.leaveRoom(token, roomId)
@@ -265,7 +267,7 @@ object YugmApi : IYugmApi {
     override suspend fun deleteClan(token: String, clanId: String) = ClanApi.deleteClan(token, clanId)
     override suspend fun joinClan(token: String, clanId: String): Clan = ClanApi.joinClan(token, clanId)
     override suspend fun leaveClan(token: String, clanId: String) = ClanApi.leaveClan(token, clanId)
-    override suspend fun getClanMessages(token: String, clanId: String): List<ClanMessage> = ClanApi.getClanMessages(token, clanId)
+    override suspend fun getClanMessages(token: String, clanId: String, limit: Int, before: String?): List<ClanMessage> = ClanApi.getClanMessages(token, clanId, limit, before)
     override suspend fun sendClanMessage(token: String, clanId: String, message: String): ClanMessage = ClanApi.sendClanMessage(token, clanId, message)
     override suspend fun reactToClanMessage(token: String, clanId: String, messageId: String, type: String): JSONObject = ClanApi.reactToClanMessage(token, clanId, messageId, type)
     override suspend fun deleteClanMessage(token: String, clanId: String, messageId: String) = ClanApi.deleteClanMessage(token, clanId, messageId)

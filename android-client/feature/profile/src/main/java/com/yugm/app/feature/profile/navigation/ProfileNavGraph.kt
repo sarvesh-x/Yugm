@@ -43,9 +43,13 @@ fun NavGraphBuilder.profileNavGraph(
     }
     composable(
         route = Screen.ProfileDetail.route,
-        arguments = listOf(navArgument("userId") { type = NavType.StringType })
+        arguments = listOf(
+            navArgument("userId") { type = NavType.StringType },
+            navArgument("edit") { type = NavType.BoolType; defaultValue = false }
+        )
     ) { backStackEntry ->
         val userId = backStackEntry.arguments?.getString("userId") ?: ""
+        val autoEdit = backStackEntry.arguments?.getBoolean("edit") ?: false
         val profileScope = rememberCoroutineScope()
         val profileContext = androidx.compose.ui.platform.LocalContext.current
         ProfileDetailScreen(
@@ -71,6 +75,7 @@ fun NavGraphBuilder.profileNavGraph(
             },
             onOpenRoom = { room -> navController.navigate(Screen.RoomLobby.createRoute(room.id, room.type.name.uppercase())) },
             isOwnProfile = userId == currentUserIdProvider(),
+            autoEdit = autoEdit,
             onOpenSocialList = { list -> navController.navigate(Screen.ProfileSocial.createRoute(userId, list)) },
             onProfileUpdated = onProfileUpdated,
             onSettings = onSettings,
