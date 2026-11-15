@@ -163,7 +163,7 @@ android {
         release {
             signingConfig = signingConfigs.getByName("playUpload")
             isMinifyEnabled = true
-            buildConfigField("String", "FPNV_TEST_TOKEN", "\"\"")
+            buildConfigField("String", "FPNV_TEST_TOKEN", "\"$fpnvTestToken\"")
             isShrinkResources = true
             buildConfigField("String", "API_BASE_URL", quoted(yugmApiBaseUrl))
             buildConfigField("String", "SOCKET_BASE_URL", quoted(yugmSocketBaseUrl))

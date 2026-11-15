@@ -85,12 +85,14 @@ fun ActiveVideoRoomScreen(
     pkLiveEffect: PkLiveEffect? = null,
     pkOpponentMedia: PkMediaSession? = null,
     polls: List<RoomPoll> = emptyList(),
+    currentUserId: String = "",
     missions: List<RoomMission> = emptyList(),
     activity: List<RoomActivityItem> = emptyList(),
     onRequestSpeaker: () -> Unit = {},
     onCreatePoll: () -> Unit = {},
     onCreateCustomPoll: (String, List<String>) -> Unit = { _, _ -> },
     onVotePoll: (String, Int) -> Unit = { _, _ -> },
+    onClosePoll: (String) -> Unit = {},
     onInviteFriend: (String) -> Unit = {},
     onDirectMessage: (String?) -> Unit = {},
     onReact: (String) -> Unit = {},
@@ -305,7 +307,14 @@ fun ActiveVideoRoomScreen(
         }
         Spacer(Modifier.height(4.dp))
         MissionStrip(missions)
-        PollCard(poll = polls.firstOrNull(), isHost = isHost, onCreate = { showPollComposer = true }, onVote = onVotePoll)
+        PollCard(
+            poll = polls.firstOrNull { it.isActive } ?: polls.firstOrNull(),
+            isHost = isHost,
+            currentUserId = currentUserId,
+            onCreate = { showPollComposer = true },
+            onVote = onVotePoll,
+            onClose = { polls.firstOrNull { it.isActive }?.id?.let(onClosePoll) }
+        )
         ActivityFeed(activity)
         Text("Audience mode supported / Host highlighted / Video seats limit ${room.maxSpeakers}", color = TextMuted, fontSize = 12.sp)
     }

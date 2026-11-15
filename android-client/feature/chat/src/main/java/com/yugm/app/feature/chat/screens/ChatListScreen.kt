@@ -151,7 +151,10 @@ fun ChatListScreen(
                 Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
                     ChatTopTab("Chats", selected = mainTab == 0) { mainTab = 0 }
                     Spacer(Modifier.width(18.dp))
-                    ChatTopTab("Clan", selected = mainTab == 1) { mainTab = 1 }
+                    ChatTopTab("Clan", selected = mainTab == 1) {
+                        val joinedClan = viewModel.myClan
+                        if (joinedClan != null) onOpenClan(joinedClan.id, joinedClan.name) else mainTab = 1
+                    }
                     Spacer(Modifier.width(18.dp))
                     ChatTopTab("Contacts", selected = mainTab == 2) { mainTab = 2 }
                     Spacer(Modifier.weight(1f))
@@ -177,7 +180,7 @@ fun ChatListScreen(
                                 Modifier.fillMaxWidth().padding(horizontal = 22.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Recommended users", color = ChatInk, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                                Text("People online", color = ChatInk, fontSize = 19.sp, fontWeight = FontWeight.Bold)
                                 Spacer(Modifier.weight(1f))
                                 if (viewModel.isLoading && viewModel.recommendedChatUsers.isEmpty()) {
                                     CircularProgressIndicator(modifier = Modifier.size(16.dp), color = ChatPurple, strokeWidth = 2.dp)
@@ -193,7 +196,7 @@ fun ChatListScreen(
                                     }
                                 }
                             } else if (!viewModel.isLoading) {
-                                Text("New people to chat with will show up here.", color = ChatMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp))
+                                Text("Random people online will show up here.", color = ChatMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp))
                             }
                         }
                     }

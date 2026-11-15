@@ -251,9 +251,10 @@ fun ActiveVoiceRoomScreen(
     onRoomFeedback: () -> Unit = {},
     onSetSeatLocked: (Int, Boolean) -> Unit = { _, _ -> },
     onInviteSpeaker: (String) -> Unit = {},
-    onCreatePoll: () -> Unit = {},
+    onCreatePoll: (() -> Unit)? = null,
     onCreateCustomPoll: (String, List<String>) -> Unit = { _, _ -> },
     onVotePoll: (String, Int) -> Unit = { _, _ -> },
+    onClosePoll: (String) -> Unit = {},
     onInviteFriend: (String) -> Unit = {},
     onDirectMessage: (String?) -> Unit = {},
     onOpenProfile: (String) -> Unit = {},
@@ -398,6 +399,8 @@ fun ActiveVoiceRoomScreen(
     var chatMessageDraft by rememberSaveable { mutableStateOf("") }
     val seatReactions = remember { mutableStateMapOf<Int, String>() }
     var activeGiftBanner by remember { mutableStateOf<Pair<String, GiftItem>?>(null) }
+    var seenJoinActivityIds by remember(room.id) { mutableStateOf<Set<String>?>(null) }
+    var activeEntranceActivity by remember(room.id) { mutableStateOf<com.yugm.app.core.model.RoomActivityItem?>(null) }
     val scope = rememberCoroutineScope()
     val roomMusicPlaybackStatus by YugmMediaRoom.roomMusicStatus.collectAsState()
     val musicPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -503,6 +506,20 @@ fun ActiveVoiceRoomScreen(
         if (activeGiftBanner != null) {
             delay(3200)
             activeGiftBanner = null
+        }
+    }
+
+    LaunchedEffect(activity) {
+        val joins = activity.filter { it.type.equals("JOIN", ignoreCase = true) }
+        val known = seenJoinActivityIds
+        if (known == null) {
+            seenJoinActivityIds = joins.map { it.id }.toSet()
+        } else {
+            val newJoin = joins.lastOrNull { it.id.isNotBlank() && it.id !in known }
+            seenJoinActivityIds = known + joins.map { it.id }
+            if (newJoin != null && (newJoin.roomEntry.isNotBlank() || newJoin.entranceEffect.isNotBlank())) {
+                activeEntranceActivity = newJoin
+            }
         }
     }
 
@@ -673,6 +690,34 @@ fun ActiveVoiceRoomScreen(
                         PkBattleScoreBar(pkBattle)
                         PkTeamSelector(pkBattle, selectedSide = pkGiftSide, onSelect = { pkGiftSide = it })
                         PkLiveEffectBurst(pkLiveEffect)
+                    }
+                } else if (pkBattle != null && pkBattle.status == PkStatus.INVITED && isHost && pkBattle.right.roomId == room.id && !pkInviteId.isNullOrBlank()) {
+                    PkInviteCard(
+                        battle = pkBattle,
+                        inviterName = pkBattle.left.hostName,
+                        onAccept = { onAcceptPk(pkInviteId) },
+                        onReject = { onRejectPk(pkInviteId) }
+                    )
+                } else if (pkBattle != null && pkBattle.status in listOf(PkStatus.INVITED, PkStatus.WAITING)) {
+                    PkWaitingState(pkBattle)
+                }
+
+                val visiblePoll = polls.firstOrNull { it.isActive } ?: polls.firstOrNull()
+                if (visiblePoll != null || isHost) {
+                    Box(
+                        Modifier.align(Alignment.TopEnd).padding(
+                            top = if (pkBattle?.status == PkStatus.ACTIVE) 210.dp else 8.dp,
+                            end = 12.dp
+                        ).widthIn(max = 300.dp)
+                    ) {
+                        PollCard(
+                            poll = visiblePoll,
+                            isHost = isHost,
+                            currentUserId = currentUserId,
+                            onCreate = onCreatePoll ?: { showPollComposer = true },
+                            onVote = onVotePoll,
+                            onClose = { visiblePoll?.id?.let(onClosePoll) }
+                        )
                     }
                 }
 
@@ -869,6 +914,8 @@ fun ActiveVoiceRoomScreen(
                 }
             }
         }
+
+        RoomEntryCosmeticOverlay(activeEntranceActivity)
 
     }
 
@@ -1656,7 +1703,9 @@ private fun ProfileStat(label: String, value: String, modifier: Modifier = Modif
 @Composable
 private fun GiftCelebrationArtwork(gift: GiftItem, modifier: Modifier = Modifier) {
     val icon = gift.icon.trim()
-    if (icon.startsWith("http", ignoreCase = true) || icon.startsWith("/")) {
+    val isArtworkPath = icon.startsWith("http", ignoreCase = true) || icon.startsWith("/") ||
+        icon.contains('/') || Regex("\\.(png|jpe?g|webp|gif|svg)(?:\\?.*)?$", RegexOption.IGNORE_CASE).containsMatchIn(icon)
+    if (isArtworkPath) {
         AsyncImage(
             model = resolveMediaUrl(icon),
             contentDescription = gift.name,
@@ -1664,8 +1713,33 @@ private fun GiftCelebrationArtwork(gift: GiftItem, modifier: Modifier = Modifier
             modifier = modifier
         )
     } else {
+        val displayEmoji = getGiftEmoji(gift.name, icon)
         Box(modifier, contentAlignment = Alignment.Center) {
-            Text(icon.ifBlank { "🎁" }, fontSize = 58.sp)
+            Text(displayEmoji, fontSize = 58.sp)
+        }
+    }
+}
+
+private fun getGiftEmoji(name: String, icon: String): String {
+    val query = "$name $icon".lowercase()
+    return when {
+        query.contains("diya", true) -> "🪔"
+        query.contains("rose", true) -> "🌹"
+        query.contains("crown", true) -> "👑"
+        query.contains("lotus", true) -> "🪷"
+        query.contains("heart", true) -> "❤️"
+        query.contains("ring", true) -> "💍"
+        query.contains("car", true) -> "🏎️"
+        query.contains("diamond", true) -> "💎"
+        query.contains("fire", true) -> "🔥"
+        query.contains("rocket", true) -> "🚀"
+        query.contains("mic", true) -> "🎤"
+        query.contains("cake", true) -> "🎂"
+        query.contains("bear", true) -> "🧸"
+        query.contains("star", true) -> "⭐"
+        else -> {
+            if (icon.isNotBlank() && icon.length <= 4 && !icon.any { it.isLetterOrDigit() }) icon
+            else "🎁"
         }
     }
 }
@@ -2102,8 +2176,10 @@ fun MissionStrip(missions: List<RoomMission>) {
 fun PollCard(
     poll: RoomPoll?,
     isHost: Boolean,
+    currentUserId: String = "",
     onCreate: () -> Unit,
-    onVote: (String, Int) -> Unit
+    onVote: (String, Int) -> Unit,
+    onClose: () -> Unit = {}
 ) {
     if (poll == null) {
         if (isHost) {
@@ -2121,25 +2197,36 @@ fun PollCard(
         }
         return
     }
-    val total = poll.options.sumOf { it.votes }.coerceAtLeast(1)
+    val voteTotal = poll.options.sumOf { it.votes }
+    val total = voteTotal.coerceAtLeast(1)
+    val hasVoted = currentUserId.isNotBlank() && currentUserId in poll.voters
     GlassCard {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            Text(poll.question, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Black)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("LIVE POLL", color = Gold, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                Spacer(Modifier.weight(1f))
+                Text(if (!poll.isActive) "Ended" else "$voteTotal votes", color = TextMuted, fontSize = 10.sp)
+                if (isHost && poll.isActive) Text("  Close", color = Pink, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable(onClick = onClose))
+            }
+            Text(poll.question, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Black, lineHeight = 19.sp)
             poll.options.forEachIndexed { index, option ->
                 val pct = (option.votes * 100) / total
-                Row(
-                    modifier = Modifier
+                Box(
+                    Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0x33FFFFFF))
-                        .clickable { onVote(poll.id, index) }
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .background(Color(0x221FFFFFF))
+                        .clickable(enabled = poll.isActive && !hasVoted) { onVote(poll.id, index) }
                 ) {
-                    Text(option.text, color = TextPrimary, modifier = Modifier.weight(1f), fontSize = 13.sp)
-                    Text("$pct%", color = Gold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Box(Modifier.fillMaxWidth(pct / 100f).height(34.dp).background(Brush.horizontalGradient(listOf(PrimaryPurple.copy(alpha = 0.66f), Pink.copy(alpha = 0.48f)))))
+                    Row(Modifier.fillMaxWidth().height(34.dp).padding(horizontal = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(option.text, color = TextPrimary, modifier = Modifier.weight(1f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (!poll.isActive || hasVoted) Text("$pct%", color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        else Text("Vote", color = TextMuted, fontSize = 10.sp)
+                    }
                 }
             }
+            if (hasVoted) Text("Your vote is in", color = Color(0xFF73D8A1), fontSize = 10.sp)
         }
     }
 }

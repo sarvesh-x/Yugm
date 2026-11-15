@@ -249,6 +249,7 @@ fun NavGraphBuilder.roomNavGraph(
                 onCreatePoll = { roomViewModel.createPoll("What should we do next?", listOf("Music", "Games", "Q&A", "Chill")) },
                 onCreateCustomPoll = roomViewModel::createPoll,
                 onVotePoll = roomViewModel::votePoll,
+                onClosePoll = roomViewModel::closePoll,
                 onInviteFriend = { userId ->
                     roomViewModel.inviteToRoom(userId)
                     android.widget.Toast.makeText(context, "Invite sent", android.widget.Toast.LENGTH_SHORT).show()
@@ -344,6 +345,7 @@ fun NavGraphBuilder.roomNavGraph(
                 pkLeaderboard = roomViewModel.pkLeaderboard,
                 pkLiveEffect = roomViewModel.pkLiveEffect,
                 pkOpponentMedia = roomViewModel.pkOpponentMedia,
+                polls = roomViewModel.polls,
                 onBack = { roomViewModel.leaveAndDisconnect { navController.returnFromRoom() } },
                 onMinimize = { onMinimizeRoom(room, com.yugm.app.core.model.RoomType.Video) },
                 requestError = roomViewModel.actionError.orEmpty(),
@@ -368,6 +370,10 @@ fun NavGraphBuilder.roomNavGraph(
                 onAcceptPk = roomViewModel::acceptPk,
                 onRejectPk = roomViewModel::rejectPk,
                 onEndPk = roomViewModel::endPk,
+                onCreatePoll = { roomViewModel.createPoll("What should we do?", listOf("Music", "Games")) },
+                onCreateCustomPoll = roomViewModel::createPoll,
+                onVotePoll = roomViewModel::votePoll,
+                onClosePoll = roomViewModel::closePoll,
                 onEndRoom = {
                     roomViewModel.endRoomAndDisconnect { navController.returnFromRoom() }
                 }

@@ -644,7 +644,8 @@ usersRouter.get("/hosts/suggested", asyncHandler(async (req: AuthRequest, res) =
   sendOk(res, { users: users.map((user) => ({ ...user, ...getVipStatus(user), xp: getLevelStatus(user).xp, level: getLevelStatus(user).level, levelTitle: getLevelStatus(user).title, levelStatus: getLevelStatus(user), isFollowing: false })) });
 }));
 
-// Random currently online users for the chat discovery carousel
+// Random users from live presence for the chat discovery carousel. This is
+// intentionally independent of follows, friends, and dating matches.
 usersRouter.get("/users/recommended-chat", asyncHandler(async (req: AuthRequest, res) => {
   const limit = Math.min(Number(req.query.limit) || 30, 60);
   const onlineIds = await getOnlineUserIds();
@@ -671,7 +672,10 @@ usersRouter.get("/users/recommended-chat", asyncHandler(async (req: AuthRequest,
   const users = sampledUsers.map((user: any) => ({
     ...user,
     ...getVipStatus(user),
-    isOnline: isUserOnline(user._id.toString()),
+    // These ids came from the shared live-presence set. isUserOnline only
+    // checks this process's cached snapshot and can incorrectly mark users
+    // connected to another API instance as offline.
+    isOnline: true,
     isFollowing: false
   }));
   sendOk(res, { users });

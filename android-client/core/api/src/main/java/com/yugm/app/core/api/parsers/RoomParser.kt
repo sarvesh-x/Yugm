@@ -167,7 +167,9 @@ fun JSONObject.toRoomPoll(): RoomPoll {
                 add(PollOption(text = option.optString("text", ""), votes = option.optInt("votes", 0)))
             }
         },
-        isActive = optBoolean("isActive", true)
+        isActive = optBoolean("isActive", true),
+        createdBy = optString("createdBy", ""),
+        voters = optJSONArray("voters")?.let { voters -> List(voters.length()) { voters.optString(it) } } ?: emptyList()
     )
 }
 
@@ -193,7 +195,11 @@ fun JSONObject.toRoomActivityItem(): RoomActivityItem = RoomActivityItem(
     label = optString("label", ""),
     type = optString("type", ""),
     createdAt = optString("createdAt", ""),
-    userId = optJSONObject("userId")?.entityId() ?: optString("userId", "")
+    userId = optJSONObject("userId")?.entityId() ?: optString("userId", ""),
+    userName = optJSONObject("metadata")?.optString("userName", "") ?: "",
+    avatar = optJSONObject("metadata")?.optString("avatar", "")?.ifBlank { null },
+    roomEntry = optJSONObject("metadata")?.optString("roomEntry", "") ?: "",
+    entranceEffect = optJSONObject("metadata")?.optString("entranceEffect", "") ?: ""
 )
 
 fun JSONArray.toRoomActivityItems(): List<RoomActivityItem> = buildList {

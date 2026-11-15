@@ -46,6 +46,8 @@ class ClanViewModel @Inject constructor(
 
     var isLoading by mutableStateOf(false)
         private set
+    var isSendingMessage by mutableStateOf(false)
+        private set
     var error by mutableStateOf<String?>(null)
         private set
 
@@ -266,29 +268,66 @@ class ClanViewModel @Inject constructor(
         }
     }
 
-    fun sendMessage(token: String, clanId: String, text: String) {
+    fun sendMessage(token: String, clanId: String, text: String, onSent: () -> Unit = {}) {
         viewModelScope.launch {
-            isLoading = true
+            isSendingMessage = true
             error = null
             runCatching {
-                withContext(Dispatchers.IO) { yugmApi.sendClanMessage(token, clanId, text) }
-                messages = withContext(Dispatchers.IO) { yugmApi.getClanMessages(token, clanId) }
+                val sent = withContext(Dispatchers.IO) { yugmApi.sendClanMessage(token, clanId, text) }
+                messages = (messages.filterNot { it.id == sent.id } + sent).sortedBy { it.createdAt }
+                onSent()
             }.onFailure {
                 error = it.message ?: "Failed to send message"
             }
-            isLoading = false
+            isSendingMessage = false
         }
     }
 
     fun reactToMessage(token: String, clanId: String, messageId: String, type: String) {
         viewModelScope.launch {
-            isLoading = true
             error = null
             runCatching {
                 withContext(Dispatchers.IO) { yugmApi.reactToClanMessage(token, clanId, messageId, type) }
                 messages = withContext(Dispatchers.IO) { yugmApi.getClanMessages(token, clanId) }
             }.onFailure {
                 error = it.message ?: "Failed to react to message"
+            }
+        }
+    }
+
+    fun deleteMessage(token: String, clanId: String, messageId: String) {
+        viewModelScope.launch {
+            error = null
+            runCatching {
+                withContext(Dispatchers.IO) { yugmApi.deleteClanMessage(token, clanId, messageId) }
+                messages = messages.filterNot { it.id == messageId }
+            }.onFailure {
+                error = it.message ?: "Failed to delete message"
+            }
+        }
+    }
+
+    fun reportMessage(token: String, clanId: String, messageId: String) {
+        viewModelScope.launch {
+            error = null
+            runCatching {
+                withContext(Dispatchers.IO) { yugmApi.reportClanMessage(token, clanId, messageId, "INAPPROPRIATE") }
+            }.onFailure {
+                error = it.message ?: "Failed to report message"
+            }
+        }
+    }
+
+    fun cleanChat(token: String, clanId: String, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            isLoading = true
+            error = null
+            runCatching {
+                withContext(Dispatchers.IO) { yugmApi.cleanClanChat(token, clanId) }
+                messages = emptyList()
+                onComplete()
+            }.onFailure {
+                error = it.message ?: "Failed to clean chat"
             }
             isLoading = false
         }

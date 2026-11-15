@@ -301,7 +301,7 @@ fun ChatScreen(
                     gradient = Brush.linearGradient(listOf(SurfaceElevated, ChatSurface)),
                     borderGradient = Brush.horizontalGradient(listOf(BorderColor, BorderColor)),
                     cornerRadius = 0.dp,
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
                 ) {
                     if (selectionMode) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -318,7 +318,9 @@ fun ChatScreen(
                                 partner?.id?.takeIf(String::isNotBlank)?.let(onOpenProfile)
                             }
                         ) {
-                            Avatar(partner?.name?.take(1) ?: "?", 44, partner?.avatar, partner?.activeCosmetics ?: ActiveCosmetics(), accessibilityLabel = stringResource(R.string.a11y_profile_picture, partner?.name ?: defaultMatchName))
+                            Box(Modifier.border(1.dp, Brush.linearGradient(listOf(Pink, PrimaryPurple)), CircleShape).padding(2.dp)) {
+                                Avatar(partner?.name?.take(1) ?: "?", 42, partner?.avatar, partner?.activeCosmetics ?: ActiveCosmetics(), accessibilityLabel = stringResource(R.string.a11y_profile_picture, partner?.name ?: defaultMatchName))
+                            }
                         }
                         Column(Modifier.weight(1f).padding(start = 10.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -340,7 +342,7 @@ fun ChatScreen(
                 }
 
                 if (showMore) {
-                    Row(Modifier.fillMaxWidth().background(SurfaceElevated).padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) {
+                    Row(Modifier.fillMaxWidth().background(SurfaceElevated.copy(alpha = 0.97f)).padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) {
                         Text("Search", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable {
                             showMore = false
                             if (searchVisible) { searchVisible = false; searchQuery = "" } else searchVisible = true
@@ -374,10 +376,10 @@ fun ChatScreen(
                         LazyColumn(
                             state = listState,
                             modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            item { MatchedBanner(partner?.name ?: "your match") }
+                            if (messages.isEmpty()) item { MatchedBanner(partner?.name ?: "your match") }
                             if (showSafety) item { SafetyTip(onDismiss = { showSafety = false }) }
                             relationship?.let { bond -> item { BondStrip(bond) } }
                             item { ConversationDivider("Today") }
@@ -456,7 +458,10 @@ fun ChatScreen(
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         LightChatAction(Icons.Filled.SentimentSatisfiedAlt, stringResource(R.string.a11y_toggle_emoji_picker)) { showEmojiBar = !showEmojiBar }
                         Row(
-                            Modifier.weight(1f).height(50.dp).clip(RoundedCornerShape(18.dp)).background(SurfaceElevated).border(1.dp, BorderColor, RoundedCornerShape(18.dp)).padding(horizontal = 14.dp),
+                            Modifier.weight(1f).height(50.dp).clip(RoundedCornerShape(25.dp))
+                                .background(Color(0xFF111426))
+                                .border(1.dp, Color(0x30FFFFFF), RoundedCornerShape(25.dp))
+                                .padding(horizontal = 14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             BasicTextField(
@@ -510,7 +515,8 @@ fun ChatScreen(
                                         modifier = Modifier.size(44.dp)
                                     )
                                 } else {
-                                    Text(gift.icon.ifBlank { chatGiftEmoji(gift.name) }, fontSize = 36.sp)
+                                    val emoji = getGiftEmoji(gift.name, gift.icon)
+                                    Text(emoji, fontSize = 36.sp)
                                 }
                                 Text(gift.name, color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text("● ${gift.price}", color = if (balance >= gift.price) Color(0xFFFFC52F) else Danger, fontSize = 10.sp)
@@ -604,9 +610,9 @@ private fun MessageBubble(message: DirectMessage, mine: Boolean, selected: Boole
         Column(horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
             Box(
                 Modifier.widthIn(max = 290.dp).clip(RoundedCornerShape(topStart = 19.dp, topEnd = 19.dp, bottomStart = if (mine) 19.dp else 5.dp, bottomEnd = if (mine) 5.dp else 19.dp))
-                    .background(bubble?.fill ?: Brush.horizontalGradient(listOf(SurfaceElevated, Color(0xFF1A1D31))))
-                    .border(if (selected) 2.dp else 1.dp, if (selected) Pink else bubble?.border ?: BorderColor, RoundedCornerShape(19.dp))
-                    .combinedClickable(onClick = onReact, onLongClick = onLongPress).padding(horizontal = 14.dp, vertical = 11.dp)
+                    .background(bubble?.fill ?: Brush.horizontalGradient(if (mine) listOf(Color(0xFF5426A8), Color(0xFF8D35F6)) else listOf(Color(0xFF191C30), Color(0xFF20243A))))
+                    .border(if (selected) 2.dp else 1.dp, if (selected) Pink else bubble?.border ?: Color(0x20FFFFFF), RoundedCornerShape(19.dp))
+                    .combinedClickable(onClick = onReact, onLongClick = onLongPress).padding(horizontal = 15.dp, vertical = 12.dp)
             ) {
                 Column {
                     if (message.forwarded) Text("Forwarded", color = Pink, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 4.dp))
@@ -666,10 +672,26 @@ private fun messageTime(value: String) = if (value.length >= 16) value.substring
 private fun DirectMessage.canStillEdit(): Boolean = runCatching {
     java.time.Instant.parse(createdAt).isAfter(java.time.Instant.now().minusSeconds(15 * 60))
 }.getOrDefault(false)
-private fun chatGiftEmoji(name: String) = when {
-    name.contains("rose", true) -> "🌹"
-    name.contains("crown", true) -> "👑"
-    name.contains("lotus", true) -> "🪷"
-    name.contains("diya", true) -> "🪔"
-    else -> "🎁"
+private fun getGiftEmoji(name: String, icon: String): String {
+    val query = "$name $icon".lowercase()
+    return when {
+        query.contains("diya", true) -> "🪔"
+        query.contains("rose", true) -> "🌹"
+        query.contains("crown", true) -> "👑"
+        query.contains("lotus", true) -> "🪷"
+        query.contains("heart", true) -> "❤️"
+        query.contains("ring", true) -> "💍"
+        query.contains("car", true) -> "🏎️"
+        query.contains("diamond", true) -> "💎"
+        query.contains("fire", true) -> "🔥"
+        query.contains("rocket", true) -> "🚀"
+        query.contains("mic", true) -> "🎤"
+        query.contains("cake", true) -> "🎂"
+        query.contains("bear", true) -> "🧸"
+        query.contains("star", true) -> "⭐"
+        else -> {
+            if (icon.isNotBlank() && icon.length <= 4 && !icon.any { it.isLetterOrDigit() }) icon
+            else "🎁"
+        }
+    }
 }

@@ -399,7 +399,15 @@ roomsRouter.post("/:id/join", requireAuth, requireNotRoomRestricted, requireNotS
   }
   // NOTE: emitRoom is called after the socket room join for consistent ordering
   emitRoom(room._id.toString(), socketEvents.roomParticipantUpdate, { userId: req.user!.id, action: "join" });
-  if (newlyJoined) await addActivity(room._id.toString(), "JOIN", `${req.user!.name} joined`, req.user!.id);
+  if (newlyJoined) await addActivity(
+    room._id.toString(), "JOIN", `${req.user!.name} joined`, req.user!.id,
+    {
+      userName: req.user!.name,
+      avatar: req.user!.avatar ?? "",
+      roomEntry: req.user!.activeCosmetics?.roomEntry ?? "",
+      entranceEffect: req.user!.activeCosmetics?.entranceEffect ?? ""
+    }
+  );
   sendOk(res, { joined: true, role });
 }));
 
@@ -742,8 +750,9 @@ roomsRouter.post("/:id/reactions", requireAuth, requireNotChatRestricted, valida
   sendOk(res, { reaction: payload }, 201);
 }));
 
-roomsRouter.get("/:id/polls", asyncHandler(async (req, res) => {
+roomsRouter.get("/:id/polls", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
+  await requireActiveParticipant(req.params.id, req.user!.id);
   const polls = await Poll.find({ roomId: req.params.id }).sort({ createdAt: -1 }).limit(10).lean();
   sendOk(res, { polls });
 }));
@@ -767,13 +776,29 @@ roomsRouter.post("/:id/polls/:pollId/vote", requireAuth, validateBody(votePollSc
   if (!isValidObjectId(req.params.pollId)) throw new HttpError(400, "Invalid poll ID", ErrorCode.VALIDATION);
   await requireActiveParticipant(req.params.id, req.user!.id);
   const poll = await Poll.findOne({ _id: req.params.pollId, roomId: req.params.id, isActive: true });
-  if (!poll) throw new HttpError(404, "Poll not found", ErrorCode.NOT_FOUND);
-  if (poll.voters.some((id) => id.toString() === req.user!.id)) throw new HttpError(409, "You already voted", ErrorCode.CONFLICT);
+  if (!poll) throw new HttpError(404, "Active poll not found", ErrorCode.NOT_FOUND);
   if (!poll.options[req.body.optionIndex]) throw new HttpError(400, "Invalid option", ErrorCode.VALIDATION);
-  poll.options[req.body.optionIndex].votes += 1;
-  poll.voters.push(req.user!.id);
-  await poll.save();
-  emitRoom(req.params.id, socketEvents.roomPollVote, { poll });
+  const result = await Poll.updateOne(
+    { _id: poll._id, roomId: req.params.id, isActive: true, voters: { $ne: req.user!._id } },
+    { $inc: { [`options.${req.body.optionIndex}.votes`]: 1 }, $addToSet: { voters: req.user!._id } }
+  );
+  if (result.modifiedCount === 0) throw new HttpError(409, "You already voted", ErrorCode.CONFLICT);
+  const updated = await Poll.findById(poll._id).lean();
+  emitRoom(req.params.id, socketEvents.roomPollVote, { poll: updated });
+  sendOk(res, { poll: updated });
+}));
+
+roomsRouter.post("/:id/polls/:pollId/close", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
+  const room = await assertHost(req, req.params.id);
+  if (room.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
+  if (!isValidObjectId(req.params.pollId)) throw new HttpError(400, "Invalid poll ID", ErrorCode.VALIDATION);
+  const poll = await Poll.findOneAndUpdate(
+    { _id: req.params.pollId, roomId: req.params.id, isActive: true },
+    { $set: { isActive: false } },
+    { new: true }
+  ).lean();
+  if (!poll) throw new HttpError(404, "Active poll not found", ErrorCode.NOT_FOUND);
+  emitRoom(req.params.id, "room:poll:closed", { poll });
   sendOk(res, { poll });
 }));
 

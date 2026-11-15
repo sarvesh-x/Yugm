@@ -179,8 +179,8 @@ object RoomApi {
         return data.optJSONArray("activity")?.toRoomActivityItems() ?: emptyList()
     }
 
-    suspend fun roomPolls(roomId: String): List<RoomPoll> {
-        val data = YugmHttpClient.get("/rooms/$roomId/polls", auth = null).getJSONObject("data")
+    suspend fun roomPolls(token: String, roomId: String): List<RoomPoll> {
+        val data = YugmHttpClient.get("/rooms/$roomId/polls", token).getJSONObject("data")
         return data.optJSONArray("polls")?.toRoomPolls() ?: emptyList()
     }
 
@@ -190,6 +190,10 @@ object RoomApi {
 
     suspend fun votePoll(token: String, roomId: String, pollId: String, optionIndex: Int) {
         YugmHttpClient.post("/rooms/$roomId/polls/$pollId/vote", token, JSONObject().put("optionIndex", optionIndex))
+    }
+
+    suspend fun closePoll(token: String, roomId: String, pollId: String) {
+        YugmHttpClient.post("/rooms/$roomId/polls/$pollId/close", token, JSONObject())
     }
 
     suspend fun roomMissions(token: String, roomId: String): List<RoomMission> {

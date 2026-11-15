@@ -61,7 +61,9 @@ data class RoomPoll(
     val id: String = "",
     val question: String = "",
     val options: List<PollOption> = emptyList(),
-    val isActive: Boolean = true
+    val isActive: Boolean = true,
+    val createdBy: String = "",
+    val voters: List<String> = emptyList()
 )
 
 data class RoomMission(
@@ -78,7 +80,11 @@ data class RoomActivityItem(
     val label: String = "",
     val type: String = "",
     val createdAt: String = "",
-    val userId: String = ""
+    val userId: String = "",
+    val userName: String = "",
+    val avatar: String? = null,
+    val roomEntry: String = "",
+    val entranceEffect: String = ""
 )
 
 data class RoomGiftEvent(

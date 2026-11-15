@@ -206,7 +206,7 @@ class RoomViewModel @Inject constructor(
                 roomError = error.message ?: "Couldn't open this room."
                 roomState = UiState.Error(roomError!!, error)
             }
-            val pollsResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomPolls(roomId) } }
+            val pollsResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomPolls(authToken, roomId) } }
             pollsResult.onSuccess { polls = it }
             val missionsResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomMissions(authToken, roomId) } }
             missionsResult.onSuccess { missions = it }
@@ -561,7 +561,7 @@ class RoomViewModel @Inject constructor(
                         .onSuccess { roomDetail = it; roomState = UiState.Success(it) }
                 }
                 if (event.startsWith("room:poll:")) {
-                    withContext(Dispatchers.IO) { runCatching { yugmApi.roomPolls(roomId) } }.onSuccess { polls = it }
+                    withContext(Dispatchers.IO) { runCatching { yugmApi.roomPolls(authToken, roomId) } }.onSuccess { polls = it }
                 }
                 if (event == "room:activity:new" || event == "room:gift:send") {
                     withContext(Dispatchers.IO) { runCatching { yugmApi.roomActivity(roomId, authToken) } }.onSuccess { activity = it }
@@ -617,7 +617,9 @@ class RoomViewModel @Inject constructor(
     fun createPoll(question: String, options: List<String>) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                runCatching { yugmApi.createPoll(authToken, roomId, question, options) }.onSuccess { scheduleRealtimeRefresh("room:poll:new") }
+                runCatching { yugmApi.createPoll(authToken, roomId, question, options) }
+                    .onSuccess { actionError = null; scheduleRealtimeRefresh("room:poll:new") }
+                    .onFailure { actionError = it.message ?: "Failed to create poll" }
             }
         }
     }
@@ -625,7 +627,19 @@ class RoomViewModel @Inject constructor(
     fun votePoll(pollId: String, optionIndex: Int) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                runCatching { yugmApi.votePoll(authToken, roomId, pollId, optionIndex) }.onSuccess { scheduleRealtimeRefresh("room:poll:vote") }
+                runCatching { yugmApi.votePoll(authToken, roomId, pollId, optionIndex) }
+                    .onSuccess { actionError = null; scheduleRealtimeRefresh("room:poll:vote") }
+                    .onFailure { actionError = it.message ?: "Failed to submit your vote" }
+            }
+        }
+    }
+
+    fun closePoll(pollId: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { yugmApi.closePoll(authToken, roomId, pollId) }
+                    .onSuccess { actionError = null; scheduleRealtimeRefresh("room:poll:closed") }
+                    .onFailure { actionError = it.message ?: "Failed to close poll" }
             }
         }
     }

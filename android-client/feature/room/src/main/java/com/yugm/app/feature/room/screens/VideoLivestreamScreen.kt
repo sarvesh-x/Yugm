@@ -86,6 +86,7 @@ import com.yugm.app.core.model.PkMode
 import com.yugm.app.core.model.PkOpponent
 import com.yugm.app.core.model.PkSideType
 import com.yugm.app.core.model.PkStatus
+import com.yugm.app.core.model.RoomPoll
 import com.yugm.app.core.ui.components.Avatar
 import com.yugm.app.core.ui.components.GiftPanel
 import com.yugm.app.core.ui.components.*
@@ -116,6 +117,7 @@ fun VideoLivestreamScreen(
     pkLeaderboard: List<PkLeaderboardEntry>,
     pkLiveEffect: PkLiveEffect?,
     pkOpponentMedia: PkMediaSession?,
+    polls: List<RoomPoll> = emptyList(),
     onBack: () -> Unit,
     onMinimize: () -> Unit,
     requestError: String = "",
@@ -137,6 +139,10 @@ fun VideoLivestreamScreen(
     onAcceptPk: (String) -> Unit,
     onRejectPk: (String) -> Unit,
     onEndPk: () -> Unit,
+    onCreatePoll: () -> Unit = {},
+    onCreateCustomPoll: (String, List<String>) -> Unit = { _, _ -> },
+    onVotePoll: (String, Int) -> Unit = { _, _ -> },
+    onClosePoll: (String) -> Unit = {},
     onEndRoom: () -> Unit
 ) {
     val context = LocalContext.current
@@ -157,6 +163,7 @@ fun VideoLivestreamScreen(
     var showLeavePrompt by rememberSaveable(room.id) { mutableStateOf(false) }
     var showPkSetup by rememberSaveable(room.id) { mutableStateOf(false) }
     var showPkOpponents by rememberSaveable(room.id) { mutableStateOf(false) }
+    var showPollComposer by rememberSaveable(room.id) { mutableStateOf(false) }
     var pkSearch by rememberSaveable(room.id) { mutableStateOf("") }
     var pkMode by rememberSaveable(room.id) { mutableStateOf(PkMode.GIFT) }
     var pkDuration by rememberSaveable(room.id) { mutableStateOf(180) }
@@ -324,6 +331,18 @@ fun VideoLivestreamScreen(
                 PkWaitingState(pkBattle)
             }
 
+            val visiblePoll = polls.firstOrNull { it.isActive } ?: polls.firstOrNull()
+            if (visiblePoll != null || isHost) {
+                PollCard(
+                    poll = visiblePoll,
+                    isHost = isHost,
+                    currentUserId = currentUserId,
+                    onCreate = { showPollComposer = true },
+                    onVote = onVotePoll,
+                    onClose = { visiblePoll?.id?.let(onClosePoll) }
+                )
+            }
+
             Spacer(Modifier.weight(1f))
 
             Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -453,6 +472,7 @@ fun VideoLivestreamScreen(
                 TextButton(onClick = { moreActionsOpen = false; onReact("heart") }) { Text("♥  Send a like", color = StreamInk) }
                 if (!isHost) TextButton(onClick = { moreActionsOpen = false; onReportHost(room.host?.id.orEmpty()) }) { Text("⚑  Report host", color = StreamInk) }
                 if (isHost) TextButton(onClick = { moreActionsOpen = false; requestQueueOpen = true }) { Text("✋  Voice requests (${speakerRequests.size})", color = StreamInk) }
+                if (isHost) TextButton(onClick = { moreActionsOpen = false; showPollComposer = true }) { Text("📊  Create a room poll", color = StreamInk) }
                 Spacer(Modifier.height(12.dp))
             }
         }
@@ -472,6 +492,16 @@ fun VideoLivestreamScreen(
                 }
             }
         }
+    }
+
+    if (showPollComposer) {
+        PollComposerSheet(
+            onDismiss = { showPollComposer = false },
+            onCreate = { question, options ->
+                showPollComposer = false
+                onCreateCustomPoll(question, options)
+            }
+        )
     }
 
     GiftPanel(

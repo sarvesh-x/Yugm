@@ -1,6 +1,7 @@
 package com.yugm.app.feature.social.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -124,6 +125,7 @@ fun ClanDetailScreen(
                     Column(
                         Modifier.padding(horizontal = 16.dp).fillMaxWidth()
                             .clip(RoundedCornerShape(26.dp))
+                            .border(1.dp, Color(0x30FFFFFF), RoundedCornerShape(26.dp))
                             .background(Brush.linearGradient(listOf(Color(0xFF41264F), Color(0xFF211B35), Color(0xFF171522))))
                             .padding(20.dp),
                         horizontalAlignment = Alignment.Start
@@ -205,7 +207,11 @@ fun ClanDetailScreen(
                     item { Text(status, color = Pink, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp)) }
                 }
                 item {
-                    Text("Members", color = TextMuted, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
+                    Row(Modifier.padding(horizontal = 20.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Members", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Spacer(Modifier.width(8.dp))
+                        ClanInfoPill(currentClan.memberCount.toString())
+                    }
                 }
                 if (currentClan.members.isEmpty()) {
                     item { Text("No members yet", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp)) }
@@ -213,7 +219,12 @@ fun ClanDetailScreen(
                     items(currentClan.members, key = { "member-${it.id}" }) { member ->
                         val role = roleOf(currentClan, member.id)
                         Row(
-                            Modifier.padding(horizontal = 20.dp).fillMaxWidth().clickable { onMemberClick(member.id) }.padding(vertical = 6.dp),
+                            Modifier.padding(horizontal = 16.dp).fillMaxWidth()
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(Color(0xB3131424))
+                                .border(1.dp, Color(0x18FFFFFF), RoundedCornerShape(18.dp))
+                                .clickable { onMemberClick(member.id) }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Avatar(
@@ -280,19 +291,28 @@ fun ClanDetailScreen(
     if (showSettings && currentClan != null) {
         AlertDialog(
             onDismissRequest = { showSettings = false },
+            containerColor = Color(0xFF171827),
+            shape = RoundedCornerShape(26.dp),
             title = { Text("Clan settings", color = TextPrimary, fontWeight = FontWeight.Bold) },
             text = {
                 Column(
                     Modifier.heightIn(max = 430.dp).verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+                            .background(Brush.horizontalGradient(listOf(Color(0xFF302044), Color(0xFF222238))))
+                            .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(18.dp)).padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                         Avatar(settingsName.ifBlank { "C" }.take(1).uppercase(), 48, settingsAvatar.trim().ifBlank { null })
                         Column {
                             Text("Make your clan recognizable", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                             Text("Changes update the clan profile for all members.", color = TextMuted, fontSize = 10.sp)
                         }
                     }
+                    Text("IDENTITY", color = Pink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     OutlinedTextField(
                         value = settingsName,
                         onValueChange = { settingsName = it.take(48) },
@@ -305,6 +325,7 @@ fun ClanDetailScreen(
                         label = { Text("Description") },
                         maxLines = 3
                     )
+                    Text("DISCOVERY", color = Pink, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
                     OutlinedTextField(
                         value = settingsFamilyLabel,
                         onValueChange = { settingsFamilyLabel = it.take(32) },
@@ -319,7 +340,7 @@ fun ClanDetailScreen(
                         singleLine = true
                     )
                     Row(
-                        Modifier.fillMaxWidth(),
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFF202235)).padding(horizontal = 14.dp, vertical = 10.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -333,7 +354,7 @@ fun ClanDetailScreen(
                             colors = SwitchDefaults.colors(checkedTrackColor = Pink)
                         )
                     }
-                    Text("Clan ID: #${currentClan.slug}", color = TextMuted, fontSize = 11.sp)
+                    Text("Clan ID  ·  #${currentClan.slug}", color = TextMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
                 }
             },
             confirmButton = {

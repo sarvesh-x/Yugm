@@ -172,9 +172,10 @@ interface IYugmApi {
     suspend fun inviteSpeaker(token: String, roomId: String, userId: String)
     suspend fun removeSpeaker(token: String, roomId: String, userId: String)
     suspend fun roomActivity(roomId: String, token: String? = null): List<RoomActivityItem>
-    suspend fun roomPolls(roomId: String): List<RoomPoll>
+    suspend fun roomPolls(token: String, roomId: String): List<RoomPoll>
     suspend fun createPoll(token: String, roomId: String, question: String, options: List<String>)
     suspend fun votePoll(token: String, roomId: String, pollId: String, optionIndex: Int)
+    suspend fun closePoll(token: String, roomId: String, pollId: String)
     suspend fun roomMissions(token: String, roomId: String): List<RoomMission>
     suspend fun reactToRoom(token: String, roomId: String, type: String)
     suspend fun inviteToRoom(token: String, roomId: String, userId: String)
@@ -265,6 +266,8 @@ interface IYugmApi {
     suspend fun reactToClanMessage(token: String, clanId: String, messageId: String, type: String): JSONObject
     suspend fun deleteClanMessage(token: String, clanId: String, messageId: String)
     suspend fun reportClanMessage(token: String, clanId: String, messageId: String, reason: String = "", description: String = "")
+
+  suspend fun cleanClanChat(token: String, clanId: String): Int
     suspend fun clanInvitations(token: String): List<ClanInvitation>
     suspend fun respondToClanInvitation(token: String, invitationId: String, accept: Boolean)
     suspend fun inviteClanMember(token: String, clanId: String, userId: String)

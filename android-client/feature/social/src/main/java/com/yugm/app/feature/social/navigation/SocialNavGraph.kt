@@ -92,7 +92,8 @@ fun NavGraphBuilder.socialNavGraph(
             clanId = entry.arguments?.getString("clanId").orEmpty(),
             currentUserId = currentUserIdProvider(),
             clanName = entry.arguments?.getString("clanName").orEmpty(),
-            onBack = { navController.popBackStack() }
+            onBack = { navController.popBackStack() },
+            onClanDetails = { navController.navigate(Screen.ClanDetail.createRoute(entry.arguments?.getString("clanId").orEmpty())) }
         )
     }
 

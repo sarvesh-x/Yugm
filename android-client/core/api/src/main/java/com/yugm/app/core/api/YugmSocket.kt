@@ -174,7 +174,7 @@ object YugmSocket {
             }
             listOf(
                 "room:speaker:request", "room:speaker:approve", "room:speaker:reject",
-                "room:user:mute", "room:user:remove", "room:poll:new", "room:poll:vote",
+                "room:user:mute", "room:user:remove", "room:poll:new", "room:poll:vote", "room:poll:closed",
                 "room:activity:new", "room:gift:send", "room:ended",
                 "room:mode:set", "room:mode:state", "room:mode:answer", "room:mode:dare",
                 "room:mode:scores", "room:mode:ended"
