@@ -213,7 +213,7 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    fun sendMessage(text: String) {
+    fun sendMessage(text: String, onSuccess: () -> Unit = {}, onFailure: (String) -> Unit = {}) {
         val normalized = text.trim()
         if (normalized.isBlank() || isSending || authToken.isBlank() || partnerUserId.isBlank()) return
 
@@ -224,10 +224,13 @@ class ChatViewModel @Inject constructor(
                 val result = withContext(Dispatchers.IO) { yugmApi.sendDirectMessage(authToken, partnerUserId, normalized) }
                 result.messages.forEach(::appendMessage)
                 relationship = result.relationship ?: relationship
+                onSuccess()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Throwable) {
-                error = failure.message ?: "Message could not be sent"
+                val message = failure.message ?: "Message could not be sent"
+                error = message
+                onFailure(message)
             } finally {
                 isSending = false
             }
@@ -273,27 +276,51 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    fun replyMessage(text: String, replyTo: DirectMessage) {
+    fun replyMessage(
+        text: String,
+        replyTo: DirectMessage,
+        onSuccess: () -> Unit = {},
+        onFailure: (String) -> Unit = {}
+    ) {
         val normalized = text.trim()
         if (normalized.isBlank() || replyTo.id.isBlank() || isSending || authToken.isBlank() || partnerUserId.isBlank()) return
         viewModelScope.launch {
             isSending = true
             error = ""
             runCatching { withContext(Dispatchers.IO) { yugmApi.replyDirectMessage(authToken, partnerUserId, normalized, replyTo.id) } }
-                .onSuccess(::appendMessage)
-                .onFailure { error = it.message ?: "Reply could not be sent" }
+                .onSuccess {
+                    appendMessage(it)
+                    onSuccess()
+                }
+                .onFailure {
+                    val message = it.message ?: "Reply could not be sent"
+                    error = message
+                    onFailure(message)
+                }
             isSending = false
         }
     }
 
-    fun editMessage(message: DirectMessage, text: String) {
+    fun editMessage(
+        message: DirectMessage,
+        text: String,
+        onSuccess: () -> Unit = {},
+        onFailure: (String) -> Unit = {}
+    ) {
         if (message.id.isBlank() || isSending || authToken.isBlank() || partnerUserId.isBlank()) return
         viewModelScope.launch {
             isSending = true
             error = ""
             runCatching { withContext(Dispatchers.IO) { yugmApi.editDirectMessage(authToken, partnerUserId, message.id, text) } }
-                .onSuccess(::replaceOrAppendMessage)
-                .onFailure { error = it.message ?: "Message could not be edited" }
+                .onSuccess {
+                    replaceOrAppendMessage(it)
+                    onSuccess()
+                }
+                .onFailure {
+                    val msg = it.message ?: "Message could not be edited"
+                    error = msg
+                    onFailure(msg)
+                }
             isSending = false
         }
     }

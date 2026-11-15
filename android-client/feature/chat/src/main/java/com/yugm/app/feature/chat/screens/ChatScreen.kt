@@ -140,7 +140,7 @@ fun ChatScreen(
     error: String = "",
     onBack: () -> Unit = {},
     onRetry: () -> Unit = {},
-    onSend: (String) -> Unit = {},
+    onSend: (String, () -> Unit, (String) -> Unit) -> Unit = { _, _, _ -> },
     onGift: (GiftItem) -> Unit = {},
     onReactMessage: (DirectMessage) -> Unit = {},
     onTyping: (Boolean) -> Unit = {},
@@ -160,8 +160,8 @@ fun ChatScreen(
     hasMoreSearchResults: Boolean = false,
     isLoadingMoreSearch: Boolean = false,
     onLoadOlder: () -> Unit = {},
-    onReply: (String, DirectMessage) -> Unit = { _, _ -> },
-    onEdit: (DirectMessage, String) -> Unit = { _, _ -> },
+    onReply: (String, DirectMessage, () -> Unit, (String) -> Unit) -> Unit = { _, _, _, _ -> },
+    onEdit: (DirectMessage, String, () -> Unit, (String) -> Unit) -> Unit = { _, _, _, _ -> },
     onForward: (DirectMessage, String) -> Unit = { _, _ -> },
     onSearch: (String) -> Unit = {},
     onLoadMoreSearch: () -> Unit = {},
@@ -188,6 +188,7 @@ fun ChatScreen(
     var imageViewerUrl by remember(partner?.id) { mutableStateOf<String?>(null) }
     var playingVoiceMessageId by remember(partner?.id) { mutableStateOf<String?>(null) }
     var isVoicePlaying by remember(partner?.id) { mutableStateOf(false) }
+    var isVoicePreparing by remember(partner?.id) { mutableStateOf(false) }
     var voiceProgressMs by remember(partner?.id) { mutableIntStateOf(0) }
     var voiceDurationMs by remember(partner?.id) { mutableIntStateOf(0) }
     var pendingJumpMessageId by remember(partner?.id) { mutableStateOf<String?>(null) }
@@ -225,10 +226,15 @@ fun ChatScreen(
         editingTarget = null
         replyTarget = null
         forceScrollOnAppend = true
+        val restoreOnFailure: (String) -> Unit = {
+            if (draft.isBlank()) draft = value
+            if (editing != null) editingTarget = editing
+            if (replying != null) replyTarget = replying
+        }
         when {
-            editing != null -> onEdit(editing, value)
-            replying != null -> onReply(value, replying)
-            else -> onSend(value)
+            editing != null -> onEdit(editing, value, {}, restoreOnFailure)
+            replying != null -> onReply(value, replying, {}, restoreOnFailure)
+            else -> onSend(value, {}, restoreOnFailure)
         }
     }
 
@@ -240,23 +246,29 @@ fun ChatScreen(
             return
         }
         if (playingVoiceMessageId == messageId) {
+            if (isVoicePreparing) return
             if (runCatching { voicePlayer.isPlaying }.getOrDefault(false)) {
                 runCatching { voicePlayer.pause() }
                 isVoicePlaying = false
             } else {
                 runCatching { voicePlayer.start() }
-                isVoicePlaying = true
+                isVoicePlaying = runCatching { voicePlayer.isPlaying }.getOrDefault(true)
             }
             return
         }
         runCatching {
+            isVoicePreparing = true
+            isVoicePlaying = false
+            voiceProgressMs = 0
+            voiceDurationMs = 0
+            playingVoiceMessageId = messageId
             voicePlayer.reset()
             voicePlayer.setDataSource(resolvedUrl)
             voicePlayer.setOnPreparedListener { player ->
+                isVoicePreparing = false
                 voiceDurationMs = player.duration.coerceAtLeast(0)
                 voiceProgressMs = 0
                 player.start()
-                playingVoiceMessageId = messageId
                 isVoicePlaying = true
             }
             voicePlayer.setOnCompletionListener {
@@ -264,6 +276,7 @@ fun ChatScreen(
                 voiceProgressMs = runCatching { voicePlayer.duration }.getOrDefault(voiceProgressMs)
             }
             voicePlayer.setOnErrorListener { _, _, _ ->
+                isVoicePreparing = false
                 isVoicePlaying = false
                 playingVoiceMessageId = null
                 android.widget.Toast.makeText(context, "Couldn't play voice note", android.widget.Toast.LENGTH_SHORT).show()
@@ -271,13 +284,16 @@ fun ChatScreen(
             }
             voicePlayer.prepareAsync()
         }.onFailure {
+            isVoicePreparing = false
+            isVoicePlaying = false
+            playingVoiceMessageId = null
             android.widget.Toast.makeText(context, "Couldn't play voice note", android.widget.Toast.LENGTH_SHORT).show()
             openChatMedia(context, resolvedUrl)
         }
     }
 
     fun seekVoicePlayback(messageId: String, positionMs: Int) {
-        if (playingVoiceMessageId != messageId) return
+        if (playingVoiceMessageId != messageId || isVoicePreparing) return
         val clamped = positionMs.coerceIn(0, voiceDurationMs.coerceAtLeast(0))
         runCatching { voicePlayer.seekTo(clamped) }
         voiceProgressMs = clamped
@@ -898,7 +914,17 @@ fun ChatScreen(
                                         EmptyConversationState(partner?.name ?: "your match")
                                         Row(Modifier.padding(top = 18.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                             listOf("Hello!", "Hi~", "Good day!").forEach { greeting ->
-                                                Text(greeting, color = TextPrimary, fontSize = 14.sp, modifier = Modifier.clip(CircleShape).background(SurfaceElevated).border(1.dp, BorderColor, CircleShape).clickable(role = Role.Button, onClickLabel = "Send $greeting") { onSend(greeting) }.padding(horizontal = 18.dp, vertical = 11.dp))
+                                                Text(
+                                                    greeting,
+                                                    color = TextPrimary,
+                                                    fontSize = 14.sp,
+                                                    modifier = Modifier
+                                                        .clip(CircleShape)
+                                                        .background(SurfaceElevated)
+                                                        .border(1.dp, BorderColor, CircleShape)
+                                                        .clickable(role = Role.Button, onClickLabel = "Send $greeting") { onSend(greeting, {}, {}) }
+                                                        .padding(horizontal = 18.dp, vertical = 11.dp)
+                                                )
                                             }
                                         }
                                     }
@@ -932,6 +958,7 @@ fun ChatScreen(
                                         compact = groupedWithPrev,
                                         playingVoiceMessageId = playingVoiceMessageId,
                                         isVoicePlaying = isVoicePlaying,
+                                        isVoicePreparing = isVoicePreparing,
                                         voiceProgressMs = voiceProgressMs,
                                         voiceDurationMs = voiceDurationMs,
                                         onReact = {
@@ -1006,7 +1033,7 @@ fun ChatScreen(
                                         onClickLabel = stickerLabel
                                     ) {
                                         showEmojiBar = false
-                                        onSend(emoji)
+                                        onSend(emoji, {}, {})
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -1183,8 +1210,19 @@ fun ChatScreen(
                         Modifier
                             .align(Alignment.TopEnd)
                             .padding(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Box(
+                            Modifier
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.14f))
+                                .clickable(role = Role.Button, onClickLabel = "Open image externally") { openChatMedia(context, url) }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Open", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
                         Box(
                             Modifier
                                 .clip(CircleShape)
@@ -1340,6 +1378,7 @@ private fun MessageBubble(
     compact: Boolean = false,
     playingVoiceMessageId: String?,
     isVoicePlaying: Boolean,
+    isVoicePreparing: Boolean,
     voiceProgressMs: Int,
     voiceDurationMs: Int,
     onReact: () -> Unit,
@@ -1435,29 +1474,45 @@ private fun MessageBubble(
                                             .size(34.dp)
                                             .clip(CircleShape)
                                             .background(Color.White.copy(alpha = 0.22f))
-                                            .clickable(role = Role.Button, onClickLabel = if (isVoiceActive && isVoicePlaying) "Pause voice note" else "Play voice note") {
+                                            .clickable(
+                                                enabled = !(isVoiceActive && isVoicePreparing),
+                                                role = Role.Button,
+                                                onClickLabel = if (isVoiceActive && isVoicePlaying) "Pause voice note" else "Play voice note"
+                                            ) {
                                                 onToggleVoice()
                                             },
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(
-                                            imageVector = if (isVoiceActive && isVoicePlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                                            contentDescription = null,
-                                            tint = Color.White,
-                                            modifier = Modifier.size(18.dp)
-                                        )
+                                        if (isVoiceActive && isVoicePreparing) {
+                                            androidx.compose.material3.CircularProgressIndicator(
+                                                modifier = Modifier.size(16.dp),
+                                                color = Color.White,
+                                                strokeWidth = 2.dp
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = if (isVoiceActive && isVoicePlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                                contentDescription = null,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
                                     }
                                     Spacer(Modifier.width(10.dp))
                                     Column(Modifier.weight(1f)) {
                                         Text("Voice note", color = (bubble?.text ?: TextPrimary), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                         Text(
-                                            if (isVoiceActive) "${formatPlaybackTime(safeProgress)} / ${formatPlaybackTime(voiceDurationMs)}" else "Tap to play",
+                                            when {
+                                                isVoiceActive && isVoicePreparing -> "Loading…"
+                                                isVoiceActive -> "${formatPlaybackTime(safeProgress)} / ${formatPlaybackTime(voiceDurationMs)}"
+                                                else -> "Tap to play"
+                                            },
                                             color = (bubble?.text ?: TextMuted).copy(alpha = 0.8f),
                                             fontSize = 10.sp
                                         )
                                     }
                                 }
-                                if (isVoiceActive && voiceDurationMs > 0) {
+                                if (isVoiceActive && voiceDurationMs > 0 && !isVoicePreparing) {
                                     Slider(
                                         value = safeProgress.toFloat(),
                                         onValueChange = { onSeekVoice(it.toInt()) },
