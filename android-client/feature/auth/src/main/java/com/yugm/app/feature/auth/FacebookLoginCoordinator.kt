@@ -31,6 +31,17 @@ fun rememberFacebookSignIn(
     onFinished: () -> Unit,
 ): (Boolean) -> Unit {
     val context = LocalContext.current
+    if (!BuildConfig.FACEBOOK_AUTH_CONFIGURED) {
+        val currentOnError by rememberUpdatedState(onError)
+        return remember {
+            { _: Boolean ->
+                currentOnError(
+                    "Facebook sign-in is not configured yet. Add YUGM_FACEBOOK_APP_ID and " +
+                        "YUGM_FACEBOOK_CLIENT_TOKEN to android-client/.env."
+                )
+            }
+        }
+    }
     val callbackManager = remember { CallbackManager.Factory.create() }
     val handled = remember { mutableStateOf(false) }
     val inFlight = remember { mutableStateOf(false) }

@@ -13,6 +13,7 @@ import com.google.android.gms.tasks.Tasks
 import android.util.Log
 import timber.log.Timber
 import com.facebook.FacebookSdk
+import com.yugm.app.feature.auth.BuildConfig as AuthBuildConfig
 
 @HiltAndroidApp
 class YugmApplication : Application() {
@@ -20,9 +21,15 @@ class YugmApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         // FacebookLoginCoordinator creates its CallbackManager when the login
-        // screen enters composition. Initialize the SDK here, before any screen
-        // can be composed, rather than waiting for the Facebook button tap.
-        FacebookSdk.sdkInitialize(this)
+        // screen enters composition. Initialize the SDK before that only when
+        // this build has both required Facebook credentials. Release builds may
+        // intentionally omit Facebook sign-in configuration.
+        if (AuthBuildConfig.FACEBOOK_AUTH_CONFIGURED) {
+            FacebookSdk.setApplicationId(AuthBuildConfig.FACEBOOK_APP_ID)
+            FacebookSdk.setClientToken(AuthBuildConfig.FACEBOOK_CLIENT_TOKEN)
+            FacebookSdk.sdkInitialize(this)
+            FacebookSdk.fullyInitialize()
+        }
         FirebaseApp.initializeApp(this)
         ApiConfig.apiBaseUrl = BuildConfig.API_BASE_URL
         ApiConfig.socketBaseUrl = BuildConfig.SOCKET_BASE_URL
