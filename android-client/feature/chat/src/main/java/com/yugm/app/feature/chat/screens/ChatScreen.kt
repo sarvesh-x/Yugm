@@ -7,6 +7,8 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -942,6 +944,7 @@ private fun MessageBubble(
     onReact: () -> Unit,
     onLongPress: () -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val bubble = if (mine) chatBubbleVisual(bubbleId) else null
     Row(
         Modifier.fillMaxWidth(),
@@ -1012,6 +1015,9 @@ private fun MessageBubble(
                                     .widthIn(min = 180.dp, max = 240.dp)
                                     .clip(RoundedCornerShape(14.dp))
                                     .background(Color.White.copy(alpha = 0.12f))
+                                    .clickable(role = Role.Button, onClickLabel = "Open voice note") {
+                                        openChatMedia(context, message.mediaUrl)
+                                    }
                                     .padding(horizontal = 10.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1032,7 +1038,7 @@ private fun MessageBubble(
                                             Box(Modifier.width(3.dp).height(h).clip(CircleShape).background(Color.White.copy(alpha = 0.85f)))
                                         }
                                     }
-                                    Text("Voice note", color = (bubble?.text ?: TextMuted).copy(alpha = 0.8f), fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
+                                    Text("Voice note · Tap to play", color = (bubble?.text ?: TextMuted).copy(alpha = 0.8f), fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
                                 }
                             }
                         } else {
@@ -1042,6 +1048,9 @@ private fun MessageBubble(
                                     .height(if (isVideo) 160.dp else 170.dp)
                                     .clip(RoundedCornerShape(14.dp))
                                     .background(Color.Black.copy(alpha = 0.18f))
+                                    .clickable(role = Role.Button, onClickLabel = if (isVideo) "Open video" else "Open photo") {
+                                        openChatMedia(context, message.mediaUrl)
+                                    }
                             ) {
                                 AsyncImage(
                                     model = resolveMediaUrl(message.mediaUrl),
@@ -1071,7 +1080,7 @@ private fun MessageBubble(
                                         .background(Color.Black.copy(alpha = 0.45f))
                                         .padding(horizontal = 7.dp, vertical = 3.dp)
                                 ) {
-                                    Text(if (isVideo) "VIDEO" else "PHOTO", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
+                                    Text(if (isVideo) "VIDEO · Tap to open" else "PHOTO · Tap to open", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
                                 }
                             }
                         }
@@ -1248,5 +1257,16 @@ private fun getGiftEmoji(name: String, icon: String): String {
             if (icon.isNotBlank() && icon.length <= 4 && !icon.any { it.isLetterOrDigit() }) icon
             else "🎁"
         }
+    }
+}
+
+private fun openChatMedia(context: android.content.Context, rawUrl: String) {
+    val resolved = resolveMediaUrl(rawUrl) ?: rawUrl
+    if (resolved.isBlank()) return
+    runCatching {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(resolved)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+    }.onFailure {
+        android.widget.Toast.makeText(context, "Unable to open media", android.widget.Toast.LENGTH_SHORT).show()
     }
 }
