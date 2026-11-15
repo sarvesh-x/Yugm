@@ -8,6 +8,8 @@ import { Block } from "../models/Block.js";
 import { Clan } from "../models/Clan.js";
 import { Room } from "../models/Room.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
+import { AuthSession } from "../models/AuthSession.js";
+import { User } from "../models/User.js";
 import { endRoom, recordRoomParticipantExit } from "./roomLifecycle.js";
 import { isAlwaysOnOfficialVoiceRoom } from "./officialRooms.js";
 import {
@@ -22,6 +24,18 @@ import {
 } from "./redis.js";
 
 export let io: Server;
+
+export async function disconnectOtherUserSockets(userId: string, activeSessionId: string) {
+  if (!io) return;
+  try {
+    const sockets = await io.in(`user:${userId}`).fetchSockets();
+    sockets
+      .filter((socket) => socket.data.sessionId !== activeSessionId)
+      .forEach((socket) => socket.disconnect(true));
+  } catch (error) {
+    console.warn("Could not disconnect the user's previous device:", error instanceof Error ? error.message : String(error));
+  }
+}
 
 const onlineUsers = new Map<string, { count: number; lastSeen: number }>();
 const redisPresenceUsers = new Set<string>();
@@ -167,12 +181,30 @@ export async function initSocket(server: HttpServer) {
   }, 60_000);
   inactiveRoomTimer.unref?.();
 
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     const token = socket.handshake.auth?.token as string | undefined;
     if (!token) return next(new Error("Authentication required"));
     try {
-      const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] }) as { sub: string };
+      const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] }) as {
+        sub: string; sid?: string; typ?: string; tokenVersion?: number;
+      };
+      if (decoded.typ !== "access" || !decoded.sid || !decoded.sub) return next(new Error("Invalid token"));
+      const [user, session] = await Promise.all([
+        User.findById(decoded.sub).select("tokenVersion isBlocked").lean(),
+        AuthSession.findOne({
+          _id: decoded.sid,
+          userId: decoded.sub,
+          revokedAt: null,
+          expiresAt: { $gt: new Date() }
+        }).lean()
+      ]);
+      if (!user || user.isBlocked || !session ||
+          (decoded.tokenVersion !== undefined && user.tokenVersion !== decoded.tokenVersion) ||
+          (session.tokenVersion ?? decoded.tokenVersion) !== decoded.tokenVersion) {
+        return next(new Error("This account was signed in on another device"));
+      }
       socket.data.userId = decoded.sub;
+      socket.data.sessionId = decoded.sid;
       next();
     } catch {
       next(new Error("Invalid token"));

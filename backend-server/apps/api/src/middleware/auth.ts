@@ -25,6 +25,9 @@ export async function requireAuth(req: AuthRequest, _res: Response, next: NextFu
     ]);
     if (!user || user.isBlocked) throw new HttpError(401, user?.moderationReason || "Invalid user");
     if (!session) throw new HttpError(401, "Session revoked", ErrorCode.UNAUTHORIZED);
+    if ((session.tokenVersion ?? decoded.tokenVersion) !== decoded.tokenVersion) {
+      throw new HttpError(401, "This account was signed in on another device", ErrorCode.UNAUTHORIZED);
+    }
     if (user.suspendedUntil && user.suspendedUntil.getTime() > Date.now()) {
       throw new HttpError(403, `Account suspended until ${user.suspendedUntil.toISOString()}`);
     }
@@ -57,6 +60,7 @@ export async function optionalAuth(req: AuthRequest, _res: Response, next: NextF
       user &&
       !user.isBlocked &&
       session &&
+      (session.tokenVersion ?? decoded.tokenVersion) === decoded.tokenVersion &&
       !(user.suspendedUntil && user.suspendedUntil.getTime() > Date.now()) &&
       (decoded.tokenVersion === undefined || user.tokenVersion === decoded.tokenVersion)
     ) {

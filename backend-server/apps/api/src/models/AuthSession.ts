@@ -4,6 +4,7 @@ const authSessionSchema = new Schema({
   userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
   familyId: { type: String, required: true, index: true },
   refreshHash: { type: String, required: true, unique: true, index: true },
+  tokenVersion: { type: Number, required: true, default: 0, index: true },
   expiresAt: { type: Date, required: true },
   revokedAt: Date,
   replacedByHash: String,

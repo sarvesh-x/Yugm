@@ -10,6 +10,7 @@ import { getLevelStatus } from "../services/levels.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode } from "../utils/http.js";
 import { issueSession, revokeAllForUser, revokeSession, rotateRefresh } from "../services/tokens.js";
 import { z } from "zod";
+import { disconnectOtherUserSockets } from "../services/socket.js";
 
 export const authRouter = Router();
 
@@ -127,6 +128,12 @@ async function findOrCreateFirebaseUser(input: {
   throw new HttpError(409, "Could not finish creating your account. Please retry.", ErrorCode.CONFLICT);
 }
 
+async function issueSingleDeviceSession(user: any, req: AuthRequest) {
+  const tokens = await issueSession(user, req);
+  await disconnectOtherUserSockets(user.id, tokens.sessionId);
+  return tokens;
+}
+
 function isProfileCompleted(user: any): boolean {
   return Boolean(user.profileCompletedAt || (user.bio && user.city && user.interests?.length));
 }
@@ -172,7 +179,7 @@ authRouter.post("/google", authLimiter, authIdentifierLimiter, validateBody(auth
   const { sub: firebaseUid, name, email, picture, email_verified } = payload;
   if (!firebaseUid) throw new HttpError(401, "Invalid Firebase identity token", ErrorCode.UNAUTHORIZED);
   const { user, isNewUser } = await findOrCreateFirebaseUser({ firebaseUid, name, email, avatar: picture, acceptTerms, emailVerified: email_verified });
-  const tokens = await issueSession(user, req);
+  const tokens = await issueSingleDeviceSession(user, req);
   sendOk(res, { ...tokens, user: publicUser(user), isNewUser: isNewUser || !isProfileCompleted(user) });
 }));
 
@@ -188,7 +195,7 @@ authRouter.post("/facebook", authLimiter, authIdentifierLimiter, validateBody(fa
     throw new HttpError(401, "This token was not issued for Facebook sign-in", ErrorCode.UNAUTHORIZED);
   }
   const { user, isNewUser } = await findOrCreateFirebaseUser({ firebaseUid, name, email, avatar: picture, acceptTerms, emailVerified: email_verified });
-  const tokens = await issueSession(user, req);
+  const tokens = await issueSingleDeviceSession(user, req);
   sendOk(res, { ...tokens, user: publicUser(user), isNewUser: isNewUser || !isProfileCompleted(user) });
 }));
 
@@ -205,7 +212,7 @@ authRouter.post("/phone", authLimiter, authIdentifierLimiter, validateBody(phone
     throw new HttpError(401, "This token was not issued for phone sign-in", ErrorCode.UNAUTHORIZED);
   }
   const { user, isNewUser } = await findOrCreateFirebaseUser({ firebaseUid, phone: phone_number, acceptTerms });
-  const tokens = await issueSession(user, req);
+  const tokens = await issueSingleDeviceSession(user, req);
   sendOk(res, { ...tokens, user: publicUser(user), isNewUser: isNewUser || !isProfileCompleted(user) });
 }));
 

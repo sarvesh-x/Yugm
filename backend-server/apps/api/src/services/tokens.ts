@@ -36,12 +36,33 @@ function requestMetadata(req: Request) {
 }
 
 export async function issueSession(user: IUser, req: Request) {
+  // Every successful sign-in advances the account's session generation. Access
+  // tokens and refresh sessions from any earlier device become invalid.
+  const currentUser = await User.findByIdAndUpdate(
+    user._id,
+    { $inc: { tokenVersion: 1 } },
+    { new: true }
+  ).select("tokenVersion");
+  if (!currentUser) throw new HttpError(401, "Account session is no longer valid", ErrorCode.UNAUTHORIZED);
+  user.tokenVersion = currentUser.tokenVersion;
+  const tokenVersion = currentUser.tokenVersion;
+  const now = new Date();
+  await AuthSession.updateMany(
+    {
+      userId: user._id,
+      revokedAt: null,
+      $or: [{ tokenVersion: { $lt: tokenVersion } }, { tokenVersion: { $exists: false } }]
+    },
+    { $set: { revokedAt: now } }
+  );
+
   const raw = crypto.randomBytes(32).toString("base64url");
   const refreshHash = hashRefresh(raw);
   const session = await AuthSession.create({
     userId: user._id,
     familyId: crypto.randomUUID(),
     refreshHash,
+    tokenVersion,
     expiresAt: refreshExpiry(),
     ...requestMetadata(req)
   });
@@ -58,6 +79,18 @@ export async function issueSession(user: IUser, req: Request) {
 export async function rotateRefresh(raw: string, req: Request) {
   const old = await AuthSession.findOne({ refreshHash: hashRefresh(raw) });
   if (!old) throw new HttpError(401, "Refresh session is invalid", ErrorCode.UNAUTHORIZED);
+  const user = await User.findById(old.userId).select("-__v");
+  if (!user || user.isBlocked || user.tokenVersion === undefined) {
+    throw new HttpError(401, "Account session is no longer valid", ErrorCode.UNAUTHORIZED);
+  }
+  // Sessions created before tokenVersion was added remain valid for the
+  // currently signed-in generation. A fresh login revokes all such legacy
+  // sessions before issuing its own generation.
+  const sessionTokenVersion = old.tokenVersion ?? user.tokenVersion;
+  if (sessionTokenVersion !== user.tokenVersion) {
+    await AuthSession.updateOne({ _id: old._id, revokedAt: null }, { $set: { revokedAt: new Date() } });
+    throw new HttpError(401, "This account was signed in on another device", ErrorCode.UNAUTHORIZED);
+  }
   if (old.revokedAt || old.replacedByHash) {
     await AuthSession.updateMany({ familyId: old.familyId, revokedAt: null }, { $set: { revokedAt: new Date() } });
     throw new HttpError(401, "Refresh token reuse detected", ErrorCode.UNAUTHORIZED);
@@ -81,15 +114,16 @@ export async function rotateRefresh(raw: string, req: Request) {
     userId: old.userId,
     familyId: old.familyId,
     refreshHash: nextHash,
+    tokenVersion: sessionTokenVersion,
     expiresAt: refreshExpiry(),
     ...requestMetadata(req)
   });
-  const user = await User.findById(old.userId).select("-__v");
-  if (!user || user.isBlocked || user.tokenVersion === undefined) {
+  const latestUser = await User.findById(old.userId).select("-__v");
+  if (!latestUser || latestUser.isBlocked || latestUser.tokenVersion !== sessionTokenVersion) {
     await AuthSession.updateMany({ familyId: old.familyId, revokedAt: null }, { $set: { revokedAt: new Date() } });
-    throw new HttpError(401, "Account session is no longer valid", ErrorCode.UNAUTHORIZED);
+    throw new HttpError(401, "This account was signed in on another device", ErrorCode.UNAUTHORIZED);
   }
-  const accessToken = signAccessToken(user, nextSession.id);
+  const accessToken = signAccessToken(latestUser, nextSession.id);
   return {
     token: accessToken,
     accessToken,
