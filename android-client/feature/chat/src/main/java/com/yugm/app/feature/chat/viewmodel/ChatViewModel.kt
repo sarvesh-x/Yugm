@@ -109,11 +109,17 @@ class ChatViewModel @Inject constructor(
                     }
                     is SocketEvent.DirectMessagesRead -> {
                         if (event.partnerId == partnerUserId) {
+                            val readThroughAt = runCatching { java.time.Instant.parse(event.readThrough) }.getOrNull()
                             messages.indices.forEach { index ->
                                 val message = messages[index]
-                                if (message.senderId == currentUserId && message.receiverId == partnerUserId && message.createdAt <= event.readThrough) {
-                                    messages[index] = message.copy(read = true)
+                                if (message.senderId != currentUserId || message.receiverId != partnerUserId || message.read) return@forEach
+                                val createdAt = runCatching { java.time.Instant.parse(message.createdAt) }.getOrNull()
+                                val isRead = when {
+                                    readThroughAt != null && createdAt != null -> !createdAt.isAfter(readThroughAt)
+                                    event.readThrough.isNotBlank() -> message.createdAt <= event.readThrough
+                                    else -> false
                                 }
+                                if (isRead) messages[index] = message.copy(read = true)
                             }
                         }
                     }
