@@ -42,6 +42,7 @@ class SocketManager @Inject constructor() {
     val events = _events.asSharedFlow()
 
     private var baseUrl: String = ""
+    private var connectedToken: String? = null
 
     fun configure(url: String) {
         baseUrl = url.trim().trimEnd('/')
@@ -50,36 +51,44 @@ class SocketManager @Inject constructor() {
     private fun getBaseUrl(): String = baseUrl.ifBlank { ApiConfig.socketBaseUrl }.trim().trimEnd('/')
 
     fun connect(token: String) {
+        if (token.isBlank()) return
+        val targetUrl = getBaseUrl().ifBlank { "http://10.0.2.2:4000" }
+        val existing = socket
+        if (existing != null && connectedToken == token) {
+            if (!existing.connected()) existing.connect()
+            return
+        }
         disconnect()
         try {
-            val targetUrl = getBaseUrl().ifBlank { "http://10.0.2.2:4000" }
-
             val options = IO.Options().apply {
                 this.auth = mapOf("token" to token)
                 transports = arrayOf("websocket")
             }
 
             socket = IO.socket(targetUrl, options)
+            connectedToken = token
             socket?.on(Socket.EVENT_CONNECT) {
                 Timber.tag("SocketManager").d("Connected to $targetUrl")
                 _events.tryEmit(SocketEvent.Connected)
             }
             socket?.on("direct:message:new") { args ->
-                if (args.isNotEmpty() && args[0] is JSONObject) {
-                    val json = args[0] as JSONObject
-                    try {
-                        val message = json.toDirectMessage()
+                val payload = args.firstOrNull() as? JSONObject ?: return@on
+                val messageJson = payload.optJSONObject("message") ?: payload
+                try {
+                    val message = messageJson.toDirectMessage()
+                    if (message.id.isNotBlank() || message.senderId.isNotBlank() || message.receiverId.isNotBlank()) {
                         _events.tryEmit(SocketEvent.DirectMessageReceived(message))
-                    } catch (e: Exception) {
-                        Timber.tag("SocketManager").e(e, "Failed to parse direct message")
                     }
+                } catch (e: Exception) {
+                    Timber.tag("SocketManager").e(e, "Failed to parse direct message")
                 }
             }
             socket?.on("direct:reaction:new") { args ->
-                (args.firstOrNull() as? JSONObject)?.optJSONObject("message")?.let { message ->
-                    runCatching { _events.tryEmit(SocketEvent.DirectMessageReceived(message.toDirectMessage())) }
-                        .onFailure { Timber.tag("SocketManager").e(it, "Failed to parse direct message reaction") }
-                }
+                val payload = args.firstOrNull() as? JSONObject ?: return@on
+                val messageJson = payload.optJSONObject("message") ?: payload
+                runCatching { messageJson.toDirectMessage() }
+                    .onSuccess { _events.tryEmit(SocketEvent.DirectMessageReceived(it)) }
+                    .onFailure { Timber.tag("SocketManager").e(it, "Failed to parse direct message reaction") }
             }
             socket?.on("direct:message:deleted") { args ->
                 (args.firstOrNull() as? JSONObject)?.let { payload ->
@@ -214,6 +223,7 @@ class SocketManager @Inject constructor() {
             socket?.off()
             socket?.disconnect()
             socket = null
+            connectedToken = null
         } catch (_: Exception) {
             Timber.tag("SocketManager").d("Error during disconnect (ignored)")
         }
