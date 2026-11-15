@@ -190,6 +190,7 @@ fun ChatScreen(
     var isVoicePlaying by remember(partner?.id) { mutableStateOf(false) }
     var voiceProgressMs by remember(partner?.id) { mutableIntStateOf(0) }
     var voiceDurationMs by remember(partner?.id) { mutableIntStateOf(0) }
+    var pendingJumpMessageId by remember(partner?.id) { mutableStateOf<String?>(null) }
     val voicePlayer = remember(partner?.id) { MediaPlayer() }
     val listState = rememberLazyListState()
     val context = LocalContext.current
@@ -311,14 +312,20 @@ fun ChatScreen(
             searchVisible = false
             searchQuery = ""
             onSearch("")
-            kotlinx.coroutines.delay(50)
+            kotlinx.coroutines.delay(60)
             val itemIndex = computeTimelineItemIndex(targetId)
             if (itemIndex != null) {
+                pendingJumpMessageId = null
                 highlightedMessageId = targetId
                 val bounded = itemIndex.coerceIn(0, (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
                 listState.animateScrollToItem(bounded)
+            } else if (hasMoreHistory && !isLoadingMore) {
+                pendingJumpMessageId = targetId
+                android.widget.Toast.makeText(context, "Loading earlier messages to find this result…", android.widget.Toast.LENGTH_SHORT).show()
+                onLoadOlder()
             } else {
-                android.widget.Toast.makeText(context, "Message not in loaded history yet. Load earlier messages to jump to it.", android.widget.Toast.LENGTH_SHORT).show()
+                pendingJumpMessageId = null
+                android.widget.Toast.makeText(context, "Message not found in loaded history.", android.widget.Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -604,6 +611,23 @@ fun ChatScreen(
         if (highlightedMessageId != null) {
             kotlinx.coroutines.delay(2200)
             highlightedMessageId = null
+        }
+    }
+
+    LaunchedEffect(messages.size, isLoadingMore, hasMoreHistory, pendingJumpMessageId) {
+        val targetId = pendingJumpMessageId ?: return@LaunchedEffect
+        if (isLoadingMore) return@LaunchedEffect
+        val itemIndex = computeTimelineItemIndex(targetId)
+        if (itemIndex != null) {
+            pendingJumpMessageId = null
+            highlightedMessageId = targetId
+            val bounded = itemIndex.coerceIn(0, (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
+            listState.animateScrollToItem(bounded)
+        } else if (hasMoreHistory) {
+            onLoadOlder()
+        } else {
+            pendingJumpMessageId = null
+            android.widget.Toast.makeText(context, "Message not found in loaded history.", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 
