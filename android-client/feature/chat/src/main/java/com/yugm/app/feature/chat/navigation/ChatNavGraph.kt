@@ -69,6 +69,7 @@ fun NavGraphBuilder.chatNavGraph(
             loading = chatViewModel.isLoading,
             isSending = chatViewModel.isSending,
             isPartnerTyping = chatViewModel.isPartnerTyping,
+            isStartingCall = chatViewModel.isStartingCall,
             error = chatViewModel.error,
             isMuted = chatViewModel.isMuted,
             isBlockedByMe = chatViewModel.isBlockedByMe,

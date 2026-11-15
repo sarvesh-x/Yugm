@@ -50,6 +50,9 @@ class ChatViewModel @Inject constructor(
     var isSending by mutableStateOf(false)
         private set
 
+    var isStartingCall by mutableStateOf(false)
+        private set
+
     var error by mutableStateOf("")
         private set
 
@@ -466,19 +469,33 @@ class ChatViewModel @Inject constructor(
 
     fun startPrivateCall(
         type: RoomType,
-        onSuccess: (Room) -> Unit,
-        onFailure: (String) -> Unit
+        onSuccess: (Room) -> Unit = {},
+        onFailure: (String) -> Unit = {}
     ) {
+        if (isStartingCall) return
         if (authToken.isBlank() || partnerUserId.isBlank()) {
             onFailure("Open a conversation before starting a call")
             return
         }
+        if (isBlockedByMe) {
+            val message = "Unblock this user to start a call"
+            error = message
+            onFailure(message)
+            return
+        }
         viewModelScope.launch {
+            isStartingCall = true
+            error = ""
             runCatching {
                 withContext(Dispatchers.IO) { yugmApi.startPrivateCall(authToken, partnerUserId, type) }
-            }.onSuccess(onSuccess).onFailure {
-                onFailure(it.message ?: "Could not start the call")
+            }.onSuccess {
+                onSuccess(it)
+            }.onFailure {
+                val message = it.message ?: "Could not start the call"
+                error = message
+                onFailure(message)
             }
+            isStartingCall = false
         }
     }
 

@@ -137,6 +137,7 @@ fun ChatScreen(
     loading: Boolean = false,
     isSending: Boolean = false,
     isPartnerTyping: Boolean = false,
+    isStartingCall: Boolean = false,
     error: String = "",
     onBack: () -> Unit = {},
     onRetry: () -> Unit = {},
@@ -741,9 +742,21 @@ fun ChatScreen(
                                 }
                             }
                         }
-                        LightChatAction(Icons.Filled.Call, "Start voice call", onAudioCall)
+                        LightChatAction(
+                            Icons.Filled.Call,
+                            if (isStartingCall) "Starting call" else "Start voice call",
+                            onAudioCall,
+                            enabled = !isBlockedByMe && !isStartingCall,
+                            loading = isStartingCall
+                        )
                         Spacer(Modifier.width(6.dp))
-                        LightChatAction(Icons.Filled.Videocam, "Start video call", onVideoCall)
+                        LightChatAction(
+                            Icons.Filled.Videocam,
+                            if (isStartingCall) "Starting call" else "Start video call",
+                            onVideoCall,
+                            enabled = !isBlockedByMe && !isStartingCall,
+                            loading = isStartingCall
+                        )
                         Spacer(Modifier.width(6.dp))
                         LightChatAction(Icons.Filled.MoreVert, stringResource(R.string.a11y_conversation_options)) { showMore = !showMore }
                     }
@@ -759,7 +772,7 @@ fun ChatScreen(
                         Text(if (isMuted) "Unmute" else "Mute", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable { showMore = false; onMute(!isMuted) }.padding(10.dp))
                         Text("Report", color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable(role = Role.Button, onClickLabel = stringResource(R.string.a11y_report_conversation)) { showMore = false; onReport() }.padding(10.dp))
                         Text(if (isBlockedByMe) "Unblock" else "Block", color = if (isBlockedByMe) TextPrimary else Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable(role = Role.Button, onClickLabel = if (isBlockedByMe) "Unblock user" else stringResource(R.string.a11y_block_person)) { showMore = false; onToggleBlock() }.padding(10.dp))
-                        Text("Delete chat for me", color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable { showMore = false; confirmDeleteChat = true }.padding(10.dp))
+                        Text("Delete chat", color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable { showMore = false; confirmDeleteChat = true }.padding(10.dp))
                     }
                 }
                 if (searchVisible) {
@@ -961,6 +974,7 @@ fun ChatScreen(
                                         isVoicePreparing = isVoicePreparing,
                                         voiceProgressMs = voiceProgressMs,
                                         voiceDurationMs = voiceDurationMs,
+                                        isStartingCall = isStartingCall,
                                         onReact = {
                                             when {
                                                 selectionMode -> toggleSelection(message.id)
@@ -971,7 +985,9 @@ fun ChatScreen(
                                         onLongPress = { toggleSelection(message.id) },
                                         onOpenImage = { url -> imageViewerUrl = url },
                                         onToggleVoice = { toggleVoicePlayback(message) },
-                                        onSeekVoice = { pos -> seekVoicePlayback(message.id, pos) }
+                                        onSeekVoice = { pos -> seekVoicePlayback(message.id, pos) },
+                                        onAudioCall = onAudioCall,
+                                        onVideoCall = onVideoCall
                                     )
                                 }
                             }
@@ -1284,14 +1300,28 @@ fun ChatScreen(
 }
 
 @Composable
-private fun LightChatAction(icon: ImageVector, label: String, onClick: () -> Unit) {
+private fun LightChatAction(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    loading: Boolean = false
+) {
     Box(
-        Modifier.size(44.dp).clip(CircleShape).background(SurfaceElevated)
+        Modifier.size(44.dp).clip(CircleShape).background(if (enabled) SurfaceElevated else SurfaceElevated.copy(alpha = 0.55f))
             .semantics { contentDescription = label }
-            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
+            .clickable(enabled = enabled && !loading, role = Role.Button, onClickLabel = label, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Icon(icon, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(20.dp))
+        if (loading) {
+            androidx.compose.material3.CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                color = TextPrimary,
+                strokeWidth = 2.dp
+            )
+        } else {
+            Icon(icon, contentDescription = null, tint = if (enabled) TextPrimary else TextMuted, modifier = Modifier.size(20.dp))
+        }
     }
 }
 
@@ -1381,11 +1411,14 @@ private fun MessageBubble(
     isVoicePreparing: Boolean,
     voiceProgressMs: Int,
     voiceDurationMs: Int,
+    isStartingCall: Boolean = false,
     onReact: () -> Unit,
     onLongPress: () -> Unit,
     onOpenImage: (String) -> Unit,
     onToggleVoice: () -> Unit,
-    onSeekVoice: (Int) -> Unit
+    onSeekVoice: (Int) -> Unit,
+    onAudioCall: () -> Unit = {},
+    onVideoCall: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val bubble = if (mine) chatBubbleVisual(bubbleId) else null
@@ -1580,58 +1613,81 @@ private fun MessageBubble(
                         }
                         Spacer(Modifier.height(6.dp))
                     }
-                    val isCallMessage = message.message.contains("call started", ignoreCase = true)
-                    if (isCallMessage) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color.White.copy(alpha = 0.12f))
-                                .padding(horizontal = 10.dp, vertical = 8.dp)
-                        ) {
-                            Text("📞", fontSize = 16.sp)
-                            Spacer(Modifier.width(8.dp))
-                            Column {
-                                Text(
-                                    if (message.message.contains("video", true)) "Video call" else "Voice call",
-                                    color = bubble?.text ?: TextPrimary,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text("Tap call actions above to start a new one", color = (bubble?.text ?: TextMuted).copy(alpha = 0.8f), fontSize = 10.sp)
-                            }
-                        }
-                    } else if (message.message.isNotBlank()) {
+                    if (message.message.isNotBlank()) {
+                        val lower = message.message.lowercase()
                         val callType = when {
-                            message.message.contains("video call", ignoreCase = true) || message.message.contains("📹") -> "Video call"
-                            message.message.contains("voice call", ignoreCase = true) || message.message.contains("audio call", ignoreCase = true) || message.message.contains("📞") -> "Voice call"
+                            lower.contains("video") || message.message.contains("📹") -> "Video call"
+                            lower.contains("voice") || lower.contains("audio") || message.message.contains("📞") -> "Voice call"
                             else -> null
                         }
                         if (callType != null) {
-                            Row(
+                            val isVideo = callType == "Video call"
+                            Column(
                                 Modifier
-                                    .clip(RoundedCornerShape(14.dp))
+                                    .clip(RoundedCornerShape(16.dp))
                                     .background(Color.White.copy(alpha = 0.12f))
                                     .padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Box(
+                                        Modifier
+                                            .size(34.dp)
+                                            .clip(CircleShape)
+                                            .background(Brush.linearGradient(listOf(PrimaryPurple.copy(alpha = 0.95f), Pink.copy(alpha = 0.9f)))),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            if (isVideo) Icons.Filled.Videocam else Icons.Filled.Call,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    Column(Modifier.weight(1f)) {
+                                        Text(callType, color = bubble?.text ?: TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            if (mine) "You started a call" else "Call invitation",
+                                            color = (bubble?.text ?: TextMuted).copy(alpha = 0.8f),
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
                                 Box(
                                     Modifier
-                                        .size(34.dp)
                                         .clip(CircleShape)
-                                        .background(Brush.linearGradient(listOf(PrimaryPurple.copy(alpha = 0.95f), Pink.copy(alpha = 0.9f)))),
-                                    contentAlignment = Alignment.Center
+                                        .background(if (isStartingCall) Color.White.copy(alpha = 0.12f) else Brush.linearGradient(listOf(PrimaryPurple.copy(alpha = 0.95f), Pink.copy(alpha = 0.9f))))
+                                        .clickable(
+                                            enabled = !isStartingCall,
+                                            role = Role.Button,
+                                            onClickLabel = if (isVideo) "Start video call again" else "Start voice call again"
+                                        ) {
+                                            if (isVideo) onVideoCall() else onAudioCall()
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 8.dp)
                                 ) {
-                                    Text(if (callType == "Video call") "📹" else "📞", fontSize = 15.sp)
-                                }
-                                Column {
-                                    Text(callType, color = bubble?.text ?: TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                                    Text(
-                                        if (mine) "Tap call to start again" else "Call in chat",
-                                        color = (bubble?.text ?: TextMuted).copy(alpha = 0.78f),
-                                        fontSize = 11.sp
-                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        if (isStartingCall) {
+                                            androidx.compose.material3.CircularProgressIndicator(
+                                                modifier = Modifier.size(12.dp),
+                                                color = bubble?.text ?: TextPrimary,
+                                                strokeWidth = 2.dp
+                                            )
+                                        }
+                                        Text(
+                                            when {
+                                                isStartingCall -> "Starting…"
+                                                mine -> "Start again"
+                                                else -> "Call back"
+                                            },
+                                            color = Color.White,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
                                 }
                             }
                         } else {
