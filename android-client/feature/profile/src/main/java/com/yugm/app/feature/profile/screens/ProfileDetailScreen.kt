@@ -1027,7 +1027,7 @@ private fun ProfileHero(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            Text("ID: ${profile.id.takeLast(9)}", color = Color(0xFFB8BAC8), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Text("ID: ${profile.id.takeLast(9)}", color = colors.textSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
             Text("🇮🇳", fontSize = 14.sp)
             Box(Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFF9AD968)).padding(horizontal = 8.dp, vertical = 2.dp)) {
                 Text("Lv.${profile.level}", color = Color(0xFF18240E), fontSize = 10.sp, fontWeight = FontWeight.Black)
@@ -1035,20 +1035,20 @@ private fun ProfileHero(
         }
         val headline = profile.vibeLine.ifBlank { profile.bio }
         if (headline.isNotBlank()) {
-            Text(headline, color = Color(0xFFE7E5EE), fontSize = 15.sp, textAlign = TextAlign.Center, maxLines = 2, modifier = Modifier.padding(top = 12.dp))
+            Text(headline, color = colors.textPrimary, fontSize = 15.sp, textAlign = TextAlign.Center, maxLines = 2, modifier = Modifier.padding(top = 12.dp))
         }
         if (profile.city.isNotBlank()) {
-            Text(profile.city, color = Gold, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 3.dp))
+            Text(profile.city, color = colors.accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 3.dp))
         }
         Spacer(Modifier.height(16.dp))
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xCC0E0F18)).border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(16.dp)).padding(vertical = 10.dp, horizontal = 4.dp),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(colors.surfaceVariant).border(1.dp, colors.border, RoundedCornerShape(16.dp)).padding(vertical = 10.dp, horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             ProfileHeroStat("Friends", profile.friendsCount.toString(), Modifier.weight(1f), null)
-            Box(Modifier.width(1.dp).height(28.dp).background(Color(0x44FFFFFF)))
+            Box(Modifier.width(1.dp).height(28.dp).background(colors.border))
             ProfileHeroStat("Following", profile.followingCount.toString(), Modifier.weight(1f)) { onOpenSocialList?.invoke("following") }
-            Box(Modifier.width(1.dp).height(28.dp).background(Color(0x44FFFFFF)))
+            Box(Modifier.width(1.dp).height(28.dp).background(colors.border))
             ProfileHeroStat("Followers", profile.followers.toString(), Modifier.weight(1f)) { onOpenSocialList?.invoke("followers") }
         }
         if (isOwnProfile) {
@@ -1063,20 +1063,22 @@ private fun ProfileHero(
 
 @Composable
 private fun ProfileHeroStat(label: String, value: String, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
+    val colors = LocalYugmColors.current
     Column(
         modifier = modifier.then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier).padding(vertical = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(value, color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Black)
-        Text(label, color = Color(0xFFB0B2BF), fontSize = 12.sp, maxLines = 1)
+        Text(value, color = colors.textPrimary, fontSize = 23.sp, fontWeight = FontWeight.Black)
+        Text(label, color = colors.textSecondary, fontSize = 12.sp, maxLines = 1)
     }
 }
 
 @Composable
 private fun ProfileBalanceTile(icon: String, value: String, label: String, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
+    val colors = LocalYugmColors.current
     Row(
-        modifier = modifier.height(64.dp).clip(RoundedCornerShape(15.dp)).background(Color(0xD8171822))
-            .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(15.dp))
+        modifier = modifier.height(64.dp).clip(RoundedCornerShape(15.dp)).background(colors.surfaceVariant)
+            .border(1.dp, colors.border, RoundedCornerShape(15.dp))
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
@@ -1084,8 +1086,8 @@ private fun ProfileBalanceTile(icon: String, value: String, label: String, modif
         Text(icon, fontSize = 19.sp)
         Spacer(Modifier.width(6.dp))
         Column {
-            Text(value, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
-            Text(label, color = Color(0xFFB0B2BF), fontSize = 11.sp)
+            Text(value, color = colors.textPrimary, fontSize = 20.sp, fontWeight = FontWeight.Black)
+            Text(label, color = colors.textSecondary, fontSize = 11.sp)
         }
     }
 }

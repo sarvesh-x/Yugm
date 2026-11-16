@@ -541,6 +541,11 @@ class RoomViewModel @Inject constructor(
         }
     }
 
+    private suspend fun refreshPollList() {
+        withContext(Dispatchers.IO) { runCatching { yugmApi.roomPolls(authToken, roomId) } }
+            .onSuccess { polls = it }
+    }
+
     private fun scheduleRealtimeRefresh(event: String) {
         viewModelScope.launch {
             if (event == "room:ended") {
@@ -626,6 +631,7 @@ class RoomViewModel @Inject constructor(
                 runCatching { yugmApi.createPoll(authToken, roomId, question, options) }
             }
             result.onSuccess {
+                refreshPollList()
                 scheduleRealtimeRefresh("room:poll:new")
                 onSuccess()
             }.onFailure { e ->
@@ -648,6 +654,7 @@ class RoomViewModel @Inject constructor(
                 runCatching { yugmApi.votePoll(authToken, roomId, pollId, optionIndex) }
             }
             result.onSuccess {
+                refreshPollList()
                 scheduleRealtimeRefresh("room:poll:vote")
                 onSuccess()
             }.onFailure { e ->
@@ -669,6 +676,7 @@ class RoomViewModel @Inject constructor(
                 runCatching { yugmApi.closePoll(authToken, roomId, pollId) }
             }
             result.onSuccess {
+                refreshPollList()
                 scheduleRealtimeRefresh("room:poll:closed")
                 onSuccess()
             }.onFailure { e ->

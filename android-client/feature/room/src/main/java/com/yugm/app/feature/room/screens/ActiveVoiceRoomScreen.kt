@@ -702,7 +702,7 @@ fun ActiveVoiceRoomScreen(
                     PkWaitingState(pkBattle)
                 }
 
-                val visiblePoll = polls.firstOrNull { it.isActive } ?: polls.firstOrNull()
+                val visiblePoll = polls.firstOrNull { it.isActive }
                 if (visiblePoll != null || isHost) {
                     Box(
                         Modifier.align(Alignment.TopEnd).padding(
@@ -714,7 +714,7 @@ fun ActiveVoiceRoomScreen(
                             poll = visiblePoll,
                             isHost = isHost,
                             currentUserId = currentUserId,
-                            onCreate = onCreatePoll ?: { showPollComposer = true },
+                            onCreate = { showPollComposer = true },
                             onVote = onVotePoll,
                             onClose = { visiblePoll?.id?.let(onClosePoll) }
                         )
@@ -741,6 +741,8 @@ fun ActiveVoiceRoomScreen(
                     items(recentEntrances, key = { "join-${it.id}" }) { item ->
                         EntranceAnnouncementCard(
                             label = item.label,
+                            userName = item.userName,
+                            avatarUrl = item.avatar,
                             onWelcomeClick = {
                                 onReact("clap")
                                 onToast("Welcomed to the room! ??")
@@ -1969,9 +1971,11 @@ private fun VoiceSeatItem(
 @Composable
 private fun EntranceAnnouncementCard(
     label: String,
+    userName: String = "",
+    avatarUrl: String? = null,
     onWelcomeClick: () -> Unit
 ) {
-    val name = label.substringBefore(" joined").substringBefore(" entered").ifBlank { label }
+    val name = userName.ifBlank { label.substringBefore(" joined").substringBefore(" entered").ifBlank { label } }
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -1987,21 +1991,7 @@ private fun EntranceAnnouncementCard(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.weight(1f)
         ) {
-            // User Avatar
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(RoomPurplePrimary, Pink))),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    name.take(1).uppercase(),
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Black
-                )
-            }
+            Avatar(name.take(1).uppercase(), 28, avatarUrl)
 
             Spacer(modifier = Modifier.width(8.dp))
 

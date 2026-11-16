@@ -80,6 +80,16 @@ data class YugmColors(
     val isDark: Boolean
 )
 
+/** Shared message colors keep direct and clan conversations visually aligned. */
+fun YugmColors.chatBubbleBackground(isMine: Boolean): Color =
+    if (isMine) secondary else surfaceVariant
+
+fun YugmColors.chatBubbleForeground(isMine: Boolean): Color =
+    if (isMine) Color.White else textPrimary
+
+fun YugmColors.chatBubbleMetadata(isMine: Boolean): Color =
+    if (isMine) Color.White else textSecondary
+
 val DarkYugmColors = YugmColors(
     background = Color(0xFF060714),
     surface = Color(0xFF0E1121),

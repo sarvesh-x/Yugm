@@ -145,6 +145,7 @@ fun StyledName(
     fontSize: Int = 25,
     maxLines: Int = 2
 ) {
+    val colors = com.yugm.app.core.ui.theme.LocalYugmColors.current
     Text(
         text = text,
         modifier = modifier,
@@ -153,7 +154,7 @@ fun StyledName(
             fontWeight = FontWeight.Black,
             fontSize = fontSize.sp
         ),
-        color = Color.White,
+        color = colors.textPrimary,
         maxLines = maxLines,
         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
     )

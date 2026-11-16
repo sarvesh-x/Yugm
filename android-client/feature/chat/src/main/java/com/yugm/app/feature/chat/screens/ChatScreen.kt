@@ -50,6 +50,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -132,6 +134,9 @@ import com.yugm.app.core.ui.components.*
 import com.yugm.app.core.ui.cosmetics.chatBubbleVisual
 import com.yugm.app.core.ui.theme.LocalMotionEnabled
 import com.yugm.app.core.ui.theme.LocalYugmColors
+import com.yugm.app.core.ui.theme.chatBubbleBackground
+import com.yugm.app.core.ui.theme.chatBubbleForeground
+import com.yugm.app.core.ui.theme.chatBubbleMetadata
 import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -141,13 +146,6 @@ import kotlinx.coroutines.withContext
 
 private fun chatCanvas(dark: Boolean) = if (dark) Color(0xFF100D1D) else Color(0xFFFAF8FC)
 private fun chatHeaderSurface(dark: Boolean) = if (dark) Color(0xFF1C182D) else Color.White
-private fun incomingBubbleSurface(dark: Boolean) = if (dark) Color(0xFF252238) else Color.White
-private fun outgoingBubbleGradient(dark: Boolean) = if (dark) {
-    listOf(Color(0xFF7C21D8), Color(0xFFAA168D))
-} else {
-    listOf(Color(0xFFAD79E6), Color(0xFF5343A5))
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
@@ -775,13 +773,11 @@ fun ChatScreen(
                         LightChatAction(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.a11y_back), onClick = onBack)
                         Spacer(Modifier.width(10.dp))
                         Box(
-                            Modifier.size(44.dp).clip(CircleShape).clickable(enabled = !partner?.id.isNullOrBlank(), role = Role.Button) {
+                            Modifier.size(48.dp).clip(CircleShape).clickable(enabled = !partner?.id.isNullOrBlank(), role = Role.Button) {
                                 partner?.id?.takeIf(String::isNotBlank)?.let(onOpenProfile)
                             }
                         ) {
-                            Box(Modifier.fillMaxSize().border(2.dp, Brush.linearGradient(listOf(LocalYugmColors.current.primary, LocalYugmColors.current.secondary)), CircleShape).padding(2.dp)) {
-                                Avatar(partner?.name?.take(1) ?: "?", 38, partner?.avatar, partner?.activeCosmetics ?: ActiveCosmetics(), accessibilityLabel = stringResource(R.string.a11y_profile_picture, partner?.name ?: defaultMatchName))
-                            }
+                            Avatar(partner?.name?.take(1) ?: "?", 34, partner?.avatar, partner?.activeCosmetics ?: ActiveCosmetics(), accessibilityLabel = stringResource(R.string.a11y_profile_picture, partner?.name ?: defaultMatchName))
                             if (partner?.isOnline == true) {
                                 Box(
                                     Modifier
@@ -859,21 +855,43 @@ fun ChatScreen(
                             locked = callsLockedForVip
                         )
                         Spacer(Modifier.width(6.dp))
-                        LightChatAction(Icons.Filled.MoreVert, stringResource(R.string.a11y_conversation_options), onClick = { showMore = !showMore })
-                    }
-                }
-
-                if (showMore) {
-                    Row(Modifier.fillMaxWidth().background(LocalYugmColors.current.surfaceElevated.copy(alpha = 0.97f)).padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) {
-                        Text("Profile", color = LocalYugmColors.current.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable(enabled = !partner?.id.isNullOrBlank()) { showMore = false; partner?.id?.takeIf(String::isNotBlank)?.let(onOpenProfile) }.padding(10.dp))
-                        Text("Search", color = LocalYugmColors.current.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable {
-                            showMore = false
-                            if (searchVisible) { searchVisible = false; searchQuery = "" } else searchVisible = true
-                        }.padding(10.dp))
-                        Text(if (isMuted) "Unmute" else "Mute", color = LocalYugmColors.current.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable { showMore = false; onMute(!isMuted) }.padding(10.dp))
-                        Text("Report", color = LocalYugmColors.current.danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable(role = Role.Button, onClickLabel = stringResource(R.string.a11y_report_conversation)) { showMore = false; showReportDialog = true }.padding(10.dp))
-                        Text(if (isBlockedByMe) "Unblock" else "Block", color = if (isBlockedByMe) LocalYugmColors.current.textPrimary else LocalYugmColors.current.danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable(role = Role.Button, onClickLabel = if (isBlockedByMe) "Unblock user" else stringResource(R.string.a11y_block_person)) { showMore = false; onToggleBlock() }.padding(10.dp))
-                        Text("Delete chat", color = LocalYugmColors.current.danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable { showMore = false; confirmDeleteChat = true }.padding(10.dp))
+                        Box {
+                            LightChatAction(Icons.Filled.MoreVert, stringResource(R.string.a11y_conversation_options), onClick = { showMore = !showMore })
+                            DropdownMenu(
+                                expanded = showMore,
+                                onDismissRequest = { showMore = false },
+                                modifier = Modifier.widthIn(min = 190.dp, max = 220.dp)
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Profile", color = LocalYugmColors.current.textPrimary) },
+                                    enabled = !partner?.id.isNullOrBlank(),
+                                    onClick = { showMore = false; partner?.id?.takeIf(String::isNotBlank)?.let(onOpenProfile) }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Search in chat", color = LocalYugmColors.current.textPrimary) },
+                                    onClick = {
+                                        showMore = false
+                                        if (searchVisible) { searchVisible = false; searchQuery = "" } else searchVisible = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(if (isMuted) "Unmute" else "Mute", color = LocalYugmColors.current.textPrimary) },
+                                    onClick = { showMore = false; onMute(!isMuted) }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Report", color = LocalYugmColors.current.danger) },
+                                    onClick = { showMore = false; showReportDialog = true }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(if (isBlockedByMe) "Unblock" else "Block", color = if (isBlockedByMe) LocalYugmColors.current.textPrimary else LocalYugmColors.current.danger) },
+                                    onClick = { showMore = false; onToggleBlock() }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Delete chat", color = LocalYugmColors.current.danger) },
+                                    onClick = { showMore = false; confirmDeleteChat = true }
+                                )
+                            }
+                        }
                     }
                 }
                 if (searchVisible) {
@@ -1856,7 +1874,10 @@ private fun MessageBubble(
     onVideoCall: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val colors = LocalYugmColors.current
     val bubble = if (mine) chatBubbleVisual(bubbleId) else null
+    val bubbleText = colors.chatBubbleForeground(mine)
+    val bubbleMeta = colors.chatBubbleMetadata(mine)
     val isVoiceActive = playingVoiceMessageId == message.id
     val effectiveDuration = voiceDurationMs.coerceAtLeast(1)
     val safeProgress = if (isVoiceActive) voiceProgressMs.coerceIn(0, effectiveDuration) else 0
@@ -1868,17 +1889,15 @@ private fun MessageBubble(
     ) {
         if (!mine) {
             if (showIncomingAvatar) {
-                Box(Modifier.size(28.dp).clip(CircleShape).background(LocalYugmColors.current.surfaceElevated)) {
-                    Avatar(
-                        initial = partner?.name?.firstOrNull()?.toString() ?: "?",
-                        size = 28,
-                        imageUrl = partner?.avatar,
-                        cosmetics = partner?.activeCosmetics ?: ActiveCosmetics(),
-                        accessibilityLabel = null
-                    )
-                }
+                Avatar(
+                    initial = partner?.name?.firstOrNull()?.toString() ?: "?",
+                    size = 28,
+                    imageUrl = partner?.avatar,
+                    cosmetics = partner?.activeCosmetics ?: ActiveCosmetics(),
+                    accessibilityLabel = null
+                )
             } else {
-                Spacer(Modifier.width(28.dp))
+                Spacer(Modifier.width(42.dp))
             }
             Spacer(Modifier.width(8.dp))
         }
@@ -1894,13 +1913,7 @@ private fun MessageBubble(
                     .widthIn(max = (LocalConfiguration.current.screenWidthDp * 0.78f).dp)
                     .onGloballyPositioned { bubbleCoordinates = it }
                     .clip(bubbleShape)
-                    .background(
-                        bubble?.fill ?: if (mine) {
-                            Brush.horizontalGradient(outgoingBubbleGradient(LocalYugmColors.current.isDark))
-                        } else {
-                            Brush.linearGradient(listOf(incomingBubbleSurface(LocalYugmColors.current.isDark), incomingBubbleSurface(LocalYugmColors.current.isDark)))
-                        }
-                    )
+                    .background(colors.chatBubbleBackground(mine))
                     .border(
                         width = if (selected || highlighted) 2.dp else 1.dp,
                         color = when {
@@ -1932,9 +1945,9 @@ private fun MessageBubble(
                         Text("Forwarded", color = LocalYugmColors.current.primary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 3.dp))
                     }
                     message.replyTo?.let { reply ->
-                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.22f)).padding(horizontal = 8.dp, vertical = 6.dp)) {
+                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(bubbleText.copy(alpha = 0.08f)).padding(horizontal = 8.dp, vertical = 6.dp)) {
                             Text(reply.author.ifBlank { "Replied message" }, color = LocalYugmColors.current.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            Text(reply.text.ifBlank { "Media" }, color = LocalYugmColors.current.textSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(reply.text.ifBlank { "Media" }, color = bubbleMeta, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         Spacer(Modifier.height(4.dp))
                     }
@@ -1946,7 +1959,7 @@ private fun MessageBubble(
                                 Modifier
                                     .widthIn(min = 190.dp, max = 250.dp)
                                     .clip(RoundedCornerShape(14.dp))
-                                    .background(Color.White.copy(alpha = 0.12f))
+                                    .background(bubbleText.copy(alpha = 0.08f))
                                     .padding(horizontal = 10.dp, vertical = 10.dp)
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1954,7 +1967,7 @@ private fun MessageBubble(
                                         Modifier
                                             .size(34.dp)
                                             .clip(CircleShape)
-                                            .background(Color.White.copy(alpha = 0.22f))
+                                            .background(bubbleText.copy(alpha = 0.16f))
                                             .clickable(
                                                 enabled = !(isVoiceActive && isVoicePreparing),
                                                 role = Role.Button,
@@ -1967,28 +1980,28 @@ private fun MessageBubble(
                                         if (isVoiceActive && isVoicePreparing) {
                                             androidx.compose.material3.CircularProgressIndicator(
                                                 modifier = Modifier.size(16.dp),
-                                                color = Color.White,
+                                                color = bubbleText,
                                                 strokeWidth = 2.dp
                                             )
                                         } else {
                                             Icon(
                                                 imageVector = if (isVoiceActive && isVoicePlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                                                 contentDescription = null,
-                                                tint = Color.White,
+                                                tint = bubbleText,
                                                 modifier = Modifier.size(18.dp)
                                             )
                                         }
                                     }
                                     Spacer(Modifier.width(10.dp))
                                     Column(Modifier.weight(1f)) {
-                                        Text("Voice note", color = (bubble?.text ?: LocalYugmColors.current.textPrimary), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                        Text("Voice note", color = bubbleText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                         Text(
                                             when {
                                                 isVoiceActive && isVoicePreparing -> "Loading…"
                                                 isVoiceActive -> "${formatPlaybackTime(safeProgress)} / ${formatPlaybackTime(voiceDurationMs)}"
                                                 else -> "Tap to play"
                                             },
-                                            color = (bubble?.text ?: LocalYugmColors.current.textSecondary).copy(alpha = 0.8f),
+                                            color = bubbleMeta,
                                             fontSize = 10.sp
                                         )
                                     }
@@ -2000,9 +2013,9 @@ private fun MessageBubble(
                                         valueRange = 0f..voiceDurationMs.toFloat(),
                                         modifier = Modifier.padding(top = 2.dp),
                                         colors = SliderDefaults.colors(
-                                            thumbColor = Color.White,
-                                            activeTrackColor = Color.White.copy(alpha = 0.9f),
-                                            inactiveTrackColor = Color.White.copy(alpha = 0.25f)
+                                            thumbColor = bubbleText,
+                                            activeTrackColor = bubbleText.copy(alpha = 0.9f),
+                                            inactiveTrackColor = bubbleText.copy(alpha = 0.25f)
                                         )
                                     )
                                 }
@@ -2078,7 +2091,7 @@ private fun MessageBubble(
                             Column(
                                 Modifier
                                     .clip(RoundedCornerShape(16.dp))
-                                    .background(Color.White.copy(alpha = 0.12f))
+                                    .background(bubbleText.copy(alpha = 0.08f))
                                     .padding(horizontal = 12.dp, vertical = 10.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
@@ -2101,14 +2114,14 @@ private fun MessageBubble(
                                         )
                                     }
                                     Column(Modifier.weight(1f)) {
-                                        Text(callType, color = bubble?.text ?: LocalYugmColors.current.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                        Text(callType, color = bubbleText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                                         Text(
                                             when {
                                                 isBlockedByMe -> "Unblock to start a call"
                                                 mine -> "You started a call"
                                                 else -> "Call invitation"
                                             },
-                                            color = (bubble?.text ?: LocalYugmColors.current.textSecondary).copy(alpha = 0.8f),
+                                            color = bubbleMeta,
                                             fontSize = 11.sp
                                         )
                                     }
@@ -2124,7 +2137,7 @@ private fun MessageBubble(
                                                     )
                                                 )
                                             } else {
-                                                Modifier.background(Color.White.copy(alpha = 0.12f))
+                                                Modifier.background(bubbleText.copy(alpha = 0.08f))
                                             }
                                         )
                                         .clickable(
@@ -2160,7 +2173,7 @@ private fun MessageBubble(
                                 }
                             }
                         } else {
-                            Text(message.message, color = bubble?.text ?: LocalYugmColors.current.textPrimary, fontSize = 14.sp, lineHeight = 20.sp)
+                            Text(message.message, color = bubbleText, fontSize = 14.sp, lineHeight = 20.sp)
                         }
                     }
                     Row(
@@ -2170,15 +2183,15 @@ private fun MessageBubble(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (message.isEdited) {
-                            Text("edited", color = (bubble?.text ?: LocalYugmColors.current.textSecondary).copy(alpha = 0.7f), fontSize = 10.sp)
-                            Text(" · ", color = (bubble?.text ?: LocalYugmColors.current.textSecondary).copy(alpha = 0.6f), fontSize = 10.sp)
+                            Text("edited", color = bubbleMeta, fontSize = 10.sp)
+                            Text(" · ", color = bubbleMeta, fontSize = 10.sp)
                         }
-                        Text(messageTime(message.createdAt), color = (bubble?.text ?: LocalYugmColors.current.textSecondary).copy(alpha = 0.78f), fontSize = 10.sp)
+                        Text(messageTime(message.createdAt), color = bubbleMeta, fontSize = 10.sp)
                         if (mine) {
                             Spacer(Modifier.width(4.dp))
                             Text(
                                 if (message.read) "Seen" else "Sent",
-                                color = if (message.read) Color(0xFF69F0AE) else (bubble?.text ?: LocalYugmColors.current.textSecondary).copy(alpha = 0.82f),
+                                color = if (message.read) Color(0xFF69F0AE) else bubbleMeta,
                                 fontSize = 10.sp,
                                 fontWeight = if (message.read) FontWeight.SemiBold else FontWeight.Medium
                             )
@@ -2223,17 +2236,15 @@ private fun MessageBubble(
         if (mine) {
             Spacer(Modifier.width(8.dp))
             if (showOutgoingAvatar) {
-                Box(Modifier.size(28.dp).clip(CircleShape).background(LocalYugmColors.current.surfaceElevated)) {
-                    Avatar(
-                        initial = "You".first().toString(),
-                        size = 28,
-                        imageUrl = null,
-                        cosmetics = myActiveCosmetics,
-                        accessibilityLabel = null
-                    )
-                }
+                Avatar(
+                    initial = "You".first().toString(),
+                    size = 28,
+                    imageUrl = null,
+                    cosmetics = myActiveCosmetics,
+                    accessibilityLabel = null
+                )
             } else {
-                Spacer(Modifier.width(28.dp))
+                Spacer(Modifier.width(42.dp))
             }
         }
     }

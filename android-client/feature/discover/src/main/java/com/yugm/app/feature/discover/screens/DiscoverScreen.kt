@@ -29,10 +29,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.ChatBubble
-import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.Event
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.LocationOn
@@ -40,7 +36,6 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -101,8 +96,6 @@ private val discoveryFilters = listOf(
     DiscoveryFilter("Video", Icons.Filled.Videocam),
     DiscoveryFilter("Music", Icons.Filled.MusicNote)
 )
-
-private data class ExploreAction(val label: String, val icon: ImageVector, val onClick: () -> Unit)
 
 @Composable
 fun DiscoverScreen(
@@ -272,19 +265,6 @@ fun DiscoverScreen(
                         )
                     }
                 }
-                item {
-                    ExploreMoreRow(
-                        actions = listOf(
-                            ExploreAction("Events", Icons.Filled.Event, onEvents),
-                            ExploreAction("Blind Date", Icons.Filled.Favorite, onDating),
-                            ExploreAction("Arcade", Icons.Filled.SportsEsports, onGames),
-                            ExploreAction("Clans", Icons.Filled.Groups, onClans),
-                            ExploreAction("Rankings", Icons.Filled.EmojiEvents, onLeaderboards),
-                            ExploreAction("Vibes", Icons.Filled.ChatBubble, onVibeGraph),
-                            ExploreAction("Creator", Icons.Filled.Mic, onCreatorDashboard)
-                        )
-                    )
-                }
             }
         }
 
@@ -410,7 +390,7 @@ private fun DiscoverHero(
                 }
                 ConversationIllustration()
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
                 Row(
                     modifier = Modifier
                         .clip(CircleShape)
@@ -432,24 +412,30 @@ private fun DiscoverHero(
 
 @Composable
 private fun DiscoverHeaderAction(icon: ImageVector, label: String, onClick: () -> Unit, badge: Int = 0) {
-    Box {
+    Box(
+        Modifier
+            .semantics(mergeDescendants = true) {
+                contentDescription = if (badge > 0) "$label, $badge unread" else label
+            }
+            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
+    ) {
         Box(
             Modifier.size(48.dp).clip(RoundedCornerShape(16.dp))
                 .background(Color.White.copy(alpha = 0.18f))
-                .border(1.dp, Color.White.copy(alpha = 0.26f), RoundedCornerShape(16.dp))
-                .semantics { contentDescription = label }
-                .clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
+                .border(1.dp, Color.White.copy(alpha = 0.26f), RoundedCornerShape(16.dp)),
             contentAlignment = Alignment.Center
         ) {
             Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(23.dp))
         }
         if (badge > 0) {
             Box(
-                Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-3).dp).size(17.dp)
-                    .clip(CircleShape).background(Danger).border(1.5.dp, Color.White, CircleShape),
+                Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp)
+                    .widthIn(min = 19.dp).heightIn(min = 19.dp)
+                    .clip(CircleShape).background(Danger).border(1.5.dp, Color(0xFF7139E8), CircleShape)
+                    .padding(horizontal = 4.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(if (badge > 9) "9+" else badge.toString(), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                Text(if (badge > 99) "99+" else badge.toString(), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Black, maxLines = 1)
             }
         }
     }
@@ -707,28 +693,6 @@ private fun EmptyRecommendations(
                 error != null -> "Try again"
                 else -> "Create a room"
             }, color = PrimaryPurple, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
-private fun ExploreMoreRow(actions: List<ExploreAction>) {
-    Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
-        Text("Explore more", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 20.dp))
-        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(actions, key = { it.label }) { action ->
-                Column(
-                    modifier = Modifier.width(76.dp).heightIn(min = 76.dp)
-                        .clip(RoundedCornerShape(18.dp)).background(SurfaceElevated).border(1.dp, BorderColor, RoundedCornerShape(18.dp))
-                        .clickable(role = Role.Button, onClickLabel = action.label, onClick = action.onClick)
-                        .padding(horizontal = 8.dp, vertical = 10.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(7.dp)
-                ) {
-                    Icon(action.icon, contentDescription = null, tint = PrimaryPurple, modifier = Modifier.size(22.dp))
-                    Text(action.label, color = TextPrimary, fontSize = 10.sp, lineHeight = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
         }
     }
 }

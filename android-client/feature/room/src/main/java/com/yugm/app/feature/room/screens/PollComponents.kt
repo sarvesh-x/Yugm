@@ -1,6 +1,7 @@
 package com.yugm.app.feature.room.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,14 +37,12 @@ import androidx.compose.ui.unit.sp
 import com.yugm.app.core.model.RoomMission
 import com.yugm.app.core.model.RoomPoll
 import com.yugm.app.core.ui.components.GlassCard
-import com.yugm.app.core.ui.theme.Background
 import com.yugm.app.core.ui.theme.Gold
 import com.yugm.app.core.ui.theme.Pink
 import com.yugm.app.core.ui.theme.PrimaryPurple
+import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.core.ui.theme.TextMuted
 import com.yugm.app.core.ui.theme.TextPrimary
-
-private val RoomGoldAccent = Color(0xFFFFB300)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,9 +58,10 @@ fun PollComposerSheet(
     val trimmed = options.map { it.trim() }.filter { it.isNotBlank() }
     val canCreate = !isSubmitting && question.trim().isNotBlank() && trimmed.size in 2..6
 
+    val colors = LocalYugmColors.current
     ModalBottomSheet(
         onDismissRequest = { if (!isSubmitting) onDismiss() },
-        containerColor = Color(0xFF141224)
+        containerColor = colors.surfaceElevated
     ) {
         Column(
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -110,7 +110,7 @@ fun PollComposerSheet(
                     Button(
                         onClick = { if (!isSubmitting) options = options + "" },
                         enabled = !isSubmitting,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0x332F2A4A))
+                colors = ButtonDefaults.buttonColors(containerColor = colors.surfaceVariant)
                     ) { Text("+ Add option", color = TextPrimary) }
                 }
                 Text("${trimmed.size}/6 options", color = TextMuted, fontSize = 12.sp)
@@ -122,9 +122,9 @@ fun PollComposerSheet(
                 onClick = { if (canCreate) onCreate(question.trim(), trimmed) },
                 enabled = canCreate,
                 modifier = Modifier.fillMaxWidth().height(48.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = RoomGoldAccent)
+                colors = ButtonDefaults.buttonColors(containerColor = colors.secondary)
             ) {
-                Text(if (isSubmitting) "Creating..." else "Launch Poll", color = Background, fontWeight = FontWeight.Black)
+                Text(if (isSubmitting) "Creating..." else "Launch Poll", color = Color.White, fontWeight = FontWeight.Black)
             }
         }
     }
@@ -156,6 +156,7 @@ fun PollCard(
     onVote: (String, Int) -> Unit,
     onClose: () -> Unit = {}
 ) {
+    val colors = LocalYugmColors.current
     if (poll == null) {
         if (isHost) {
             GlassCard {
@@ -164,7 +165,7 @@ fun PollCard(
                 Button(
                     onClick = onCreate,
                     modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryPurple)
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.secondary)
                 ) {
                     Text("Create poll", color = Color.White)
                 }
@@ -199,13 +200,13 @@ fun PollCard(
     GlassCard {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (poll.isActive) "LIVE POLL" else "POLL", color = Gold, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                Text(if (poll.isActive) "LIVE POLL" else "POLL", color = colors.accent, fontSize = 9.sp, fontWeight = FontWeight.Black)
                 Spacer(Modifier.weight(1f))
-                Text(if (!poll.isActive) "Ended • $voteTotal votes" else "$voteTotal votes", color = TextMuted, fontSize = 10.sp)
+                Text(if (!poll.isActive) "Ended • $voteTotal votes" else "$voteTotal votes", color = colors.textSecondary, fontSize = 10.sp)
                 if (isHost && poll.isActive) {
                     Text(
                         if (closeRequested) "  Closing..." else "  Close",
-                        color = if (closeRequested) TextMuted else Pink,
+                        color = if (closeRequested) colors.textSecondary else colors.danger,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = if (closeRequested) Modifier else Modifier.clickable {
@@ -223,7 +224,8 @@ fun PollCard(
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0x221FFFFFF))
+                        .background(colors.surfaceVariant)
+                        .border(1.dp, colors.border, RoundedCornerShape(12.dp))
                         .clickable(enabled = canVote) {
                             pendingVoteIndex = index
                             onVote(poll.id, index)
@@ -236,17 +238,17 @@ fun PollCard(
                             .background(Brush.horizontalGradient(listOf(PrimaryPurple.copy(alpha = 0.66f), Pink.copy(alpha = 0.48f))))
                     )
                     Row(Modifier.fillMaxWidth().height(34.dp).padding(horizontal = 11.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(option.text, color = TextPrimary, modifier = Modifier.weight(1f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(option.text, color = colors.textPrimary, modifier = Modifier.weight(1f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         when {
-                            pendingVoteIndex == index -> Text("...", color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                            !poll.isActive || hasVoted -> Text("$pct%", color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                            else -> Text("Vote", color = TextMuted, fontSize = 10.sp)
+                            pendingVoteIndex == index -> Text("…", color = colors.secondary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            !poll.isActive || hasVoted -> Text("$pct%", color = colors.secondary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            else -> Text("Vote", color = colors.textSecondary, fontSize = 10.sp)
                         }
                     }
                 }
             }
-            if (hasVoted) Text("Your vote is in", color = Color(0xFF73D8A1), fontSize = 10.sp)
-            else if (!poll.isActive) Text("Poll ended", color = TextMuted, fontSize = 10.sp)
+            if (hasVoted) Text("Your vote is in", color = colors.success, fontSize = 10.sp)
+            else if (!poll.isActive) Text("Poll ended", color = colors.textSecondary, fontSize = 10.sp)
         }
     }
 }
