@@ -336,7 +336,7 @@ fun YugmBottomDock(
         )
     } else {
         listOf(
-            Triple(YugmDockTab.GAME_ZONE, Icons.Filled.SportsEsports, "Game Zone"),
+            Triple(YugmDockTab.GAME_ZONE, Icons.Filled.SportsEsports, "Yugm Arcade"),
             Triple(YugmDockTab.LIVE, Icons.Filled.Mic, "Party"),
             Triple(YugmDockTab.DISCOVER, Icons.Filled.Home, "Discover"),
             Triple(YugmDockTab.CHAT, Icons.Filled.ChatBubble, "Chat"),
