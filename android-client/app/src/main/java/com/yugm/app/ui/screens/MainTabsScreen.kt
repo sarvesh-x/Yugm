@@ -41,6 +41,8 @@ fun MainTabsScreen(
     token: String,
     currentUserId: String,
     initialTab: String = "discover",
+    requestedTab: String? = null,
+    onRequestedTabConsumed: () -> Unit = {},
     onProfileUpdated: (com.yugm.app.core.model.YugmUser) -> Unit = {},
 ) {
     val initialPage = when (initialTab.lowercase()) {
@@ -60,6 +62,21 @@ fun MainTabsScreen(
     LaunchedEffect(initialTab) {
         val target = initialPage
         if (pagerState.currentPage != target) pagerState.scrollToPage(target)
+    }
+
+    LaunchedEffect(requestedTab) {
+        val tab = requestedTab ?: return@LaunchedEffect
+        val target = when (tab.lowercase()) {
+            "game", "games", "game_zone", "gamezone" -> TAB_GAME_ZONE
+            "party", "live", "voice_rooms", "voicerooms" -> TAB_PARTY
+            "chat", "chats", "chat_list", "chatlist" -> TAB_CHAT
+            "profile", "mine" -> TAB_PROFILE
+            else -> TAB_DISCOVER
+        }
+        if (pagerState.currentPage != target) {
+            pagerState.animateScrollToPage(target)
+        }
+        onRequestedTabConsumed()
     }
 
     fun goTo(page: Int) {

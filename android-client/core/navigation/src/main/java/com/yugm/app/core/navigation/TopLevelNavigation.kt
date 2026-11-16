@@ -23,14 +23,26 @@ fun NavHostController.navigateTopLevel(route: String) {
 
     val currentEntry = currentBackStackEntry
     val destinationRoute = currentEntry?.destination?.route
-    val isMainTabs = destinationRoute == Screen.MainTabs.route && targetRoute.startsWith("main_tabs")
     val isProfileDestination = destinationRoute == Screen.ProfileDetail.route && targetRoute.startsWith("profile_detail/")
     val alreadySelected = when {
-        isMainTabs -> currentEntry?.arguments?.getString("tab") == targetRoute.substringAfter("tab=", "discover")
+        destinationRoute == Screen.MainTabs.route && targetRoute.startsWith("main_tabs") ->
+            currentEntry?.arguments?.getString("tab") == targetRoute.substringAfter("tab=", "discover")
         isProfileDestination -> currentEntry?.arguments?.getString("userId") == targetRoute.substringAfter("profile_detail/").substringBefore("?")
         else -> destinationRoute == targetRoute
     }
     if (alreadySelected) return
+
+    // If already in main tabs host, request tab switch on the existing entry instead of stacking routes.
+    if (targetRoute.startsWith("main_tabs")) {
+        val requestedTab = targetRoute.substringAfter("tab=", "discover")
+        val poppedToMainTabs = popBackStack(Screen.MainTabs.route, inclusive = false)
+        if (poppedToMainTabs) {
+            currentBackStackEntry?.savedStateHandle?.set("tab_request", requestedTab)
+            return
+        }
+        navigate(targetRoute) { launchSingleTop = true }
+        return
+    }
 
     // Return to an existing destination in the current history when possible; otherwise add it.
     if (popBackStack(targetRoute, inclusive = false)) return

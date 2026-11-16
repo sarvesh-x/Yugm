@@ -150,11 +150,16 @@ fun NavGraph(
             arguments = listOf(navArgument("tab") { type = NavType.StringType; defaultValue = "discover" })
         ) { backStackEntry ->
             val tab = backStackEntry.arguments?.getString("tab") ?: "discover"
+            val requestedTab by backStackEntry.savedStateHandle
+                .getStateFlow<String?>("tab_request", null)
+                .collectAsState()
             MainTabsScreen(
                 navController = navController,
                 token = mainViewModel.authToken,
                 currentUserId = mainViewModel.currentUserId,
                 initialTab = tab,
+                requestedTab = requestedTab,
+                onRequestedTabConsumed = { backStackEntry.savedStateHandle["tab_request"] = null },
                 onProfileUpdated = mainViewModel::validateAndUpdate
             )
         }
