@@ -1,6 +1,7 @@
 package com.yugm.app
 
 import android.app.Application
+import android.os.Build
 import dagger.hilt.android.HiltAndroidApp
 import com.yugm.app.core.api.YugmMediaRoom
 import com.yugm.app.core.api.ApiConfig
@@ -30,10 +31,17 @@ class YugmApplication : Application() {
             FacebookSdk.fullyInitialize()
         }
         FirebaseApp.initializeApp(this)
-        ApiConfig.apiBaseUrl = BuildConfig.API_BASE_URL
-        ApiConfig.socketBaseUrl = BuildConfig.SOCKET_BASE_URL
-        ApiConfig.lanApiBaseUrl = BuildConfig.LAN_API_BASE_URL
-        ApiConfig.lanSocketBaseUrl = BuildConfig.LAN_SOCKET_BASE_URL
+        val runningOnEmulator = isProbablyEmulator()
+        ApiConfig.apiBaseUrl = if (BuildConfig.DEBUG && runningOnEmulator) "http://10.0.2.2:4000/api" else BuildConfig.API_BASE_URL
+        ApiConfig.socketBaseUrl = if (BuildConfig.DEBUG && runningOnEmulator) "http://10.0.2.2:4000" else BuildConfig.SOCKET_BASE_URL
+        ApiConfig.lanApiBaseUrl = when {
+            BuildConfig.DEBUG && runningOnEmulator && BuildConfig.API_BASE_URL != "http://10.0.2.2:4000/api" -> BuildConfig.API_BASE_URL
+            else -> BuildConfig.LAN_API_BASE_URL
+        }
+        ApiConfig.lanSocketBaseUrl = when {
+            BuildConfig.DEBUG && runningOnEmulator && BuildConfig.SOCKET_BASE_URL != "http://10.0.2.2:4000" -> BuildConfig.SOCKET_BASE_URL
+            else -> BuildConfig.LAN_SOCKET_BASE_URL
+        }
         ApiConfig.isDebug = BuildConfig.DEBUG
         val appCheckFactory: AppCheckProviderFactory = YugmAppCheckProviderFactory.getInstance()
         val appCheck = FirebaseAppCheck.getInstance()
@@ -50,5 +58,20 @@ class YugmApplication : Application() {
         }
         if (BuildConfig.DEBUG) Timber.plant(Timber.DebugTree())
         YugmMediaRoom.initialize(this)
+    }
+
+    private fun isProbablyEmulator(): Boolean {
+        return (Build.FINGERPRINT.startsWith("generic")
+            || Build.FINGERPRINT.startsWith("unknown")
+            || Build.FINGERPRINT.contains("emulator")
+            || Build.MODEL.contains("google_sdk")
+            || Build.MODEL.contains("Emulator", ignoreCase = true)
+            || Build.MODEL.contains("Android SDK built for", ignoreCase = true)
+            || Build.MANUFACTURER.contains("Genymotion", ignoreCase = true)
+            || Build.BRAND.startsWith("generic") && Build.DEVICE.startsWith("generic")
+            || Build.PRODUCT.contains("sdk")
+            || Build.PRODUCT.contains("emulator")
+            || Build.HARDWARE.contains("goldfish")
+            || Build.HARDWARE.contains("ranchu"))
     }
 }
