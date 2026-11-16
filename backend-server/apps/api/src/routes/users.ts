@@ -1021,10 +1021,15 @@ usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, requireNotCh
     .lean();
 
   // Mark other messages from them as read
-  await DirectMessage.updateMany(
+  const readResult = await DirectMessage.updateMany(
     { senderId: receiverId, receiverId: req.user!.id, read: false },
     { $set: { read: true } }
   );
+  const readThrough = new Date().toISOString();
+  if (readResult.modifiedCount > 0) {
+    emitUser(receiverId, socketEvents.directMessageRead, { partnerId: req.user!.id, readThrough });
+    emitUser(req.user!.id, "direct:conversation:read", { partnerId: receiverId, readThrough });
+  }
 
   emitUser(receiverId, socketEvents.directMessageNew, { message, partnerId: req.user!.id });
   emitUser(req.user!.id, socketEvents.directMessageNew, { message, partnerId: receiverId });
