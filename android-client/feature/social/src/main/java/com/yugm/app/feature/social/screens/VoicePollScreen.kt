@@ -81,12 +81,20 @@ fun VoicePollScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Voice Polls", color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Black)
-                GlassButton(
-                    text = if (showCreate) "Cancel" else "Create",
-                    height = 40.dp,
-                    gradient = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Purple, Pink)),
-                    onClick = { showCreate = !showCreate }
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    GlassButton(
+                        text = "Refresh",
+                        height = 40.dp,
+                        gradient = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Panel, Panel)),
+                        onClick = { load() }
+                    )
+                    GlassButton(
+                        text = if (showCreate) "Cancel" else "Create",
+                        height = 40.dp,
+                        gradient = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Purple, Pink)),
+                        onClick = { showCreate = !showCreate }
+                    )
+                }
             }
             Spacer(Modifier.height(16.dp))
 
@@ -95,40 +103,42 @@ fun VoicePollScreen(
                 Spacer(Modifier.height(16.dp))
             }
 
-            when {
-                isLoading -> com.yugm.app.core.ui.components.LoadingState("Loading polls...")
-                loadError != null -> {
-                    GlassCard {
-                        Text("Couldn't load polls", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
-                        Text(loadError ?: "Unknown error", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
-                        Spacer(Modifier.height(12.dp))
-                        GlassButton(text = "Retry", onClick = { load() })
-                    }
-                }
-                else -> {
-                    val list = polls
-                    if (list == null || list.polls.isEmpty()) {
+            Column(modifier = Modifier.weight(1f)) {
+                when {
+                    isLoading -> com.yugm.app.core.ui.components.LoadingState("Loading polls...")
+                    loadError != null -> {
                         GlassCard {
-                            Text("No active polls", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
-                            Text("Create one to start the conversation", color = TextMuted, fontSize = 13.sp)
+                            Text("Couldn't load polls", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                            Text(loadError ?: "Unknown error", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
+                            Spacer(Modifier.height(12.dp))
+                            GlassButton(text = "Retry", onClick = { load() })
                         }
-                    } else {
-                        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
-                            items(list.polls, key = { it.id }) { poll ->
-                                val totalVotes = poll.options.sumOf { it.votes }
-                                GlassCard(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    onClick = { onPollDetail(poll.id) }
-                                ) {
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                        modifier = Modifier.fillMaxWidth()
+                    }
+                    else -> {
+                        val list = polls
+                        if (list == null || list.polls.isEmpty()) {
+                            GlassCard {
+                                Text("No active polls", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                                Text("Create one to start the conversation", color = TextMuted, fontSize = 13.sp)
+                            }
+                        } else {
+                            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
+                                items(list.polls, key = { it.id }) { poll ->
+                                    val totalVotes = poll.options.sumOf { it.votes }
+                                    GlassCard(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        onClick = { onPollDetail(poll.id) }
                                     ) {
-                                        Avatar(poll.userName.firstOrNull()?.toString() ?: "?", 36, imageUrl = poll.userAvatar)
-                                        Column(Modifier.weight(1f)) {
-                                            Text(if (poll.userName.isNotBlank()) poll.userName else "Someone", color = TextMuted, fontSize = 12.sp)
-                                            Text(poll.question, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 15.sp)
-                                            Text("${poll.options.size} options \u00B7 $totalVotes votes", color = TextMuted, fontSize = 12.sp)
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Avatar(poll.userName.firstOrNull()?.toString() ?: "?", 36, imageUrl = poll.userAvatar)
+                                            Column(Modifier.weight(1f)) {
+                                                Text(if (poll.userName.isNotBlank()) poll.userName else "Someone", color = TextMuted, fontSize = 12.sp)
+                                                Text(poll.question, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 15.sp)
+                                                Text("${poll.options.size} options \u00B7 $totalVotes votes", color = TextMuted, fontSize = 12.sp)
+                                            }
                                         }
                                     }
                                 }
@@ -138,7 +148,7 @@ fun VoicePollScreen(
                 }
             }
 
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(12.dp))
             GlassButton(text = "Back", gradient = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Purple, Pink)), onClick = onBack)
         }
     }
