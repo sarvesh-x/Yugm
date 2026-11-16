@@ -59,6 +59,11 @@ data class VoicePollOption(
     val votes: Int = 0
 )
 
+data class VoicePollBallot(
+    val userId: String = "",
+    val optionIndex: Int = -1
+)
+
 data class VoicePoll(
     val id: String = "",
     val userId: String = "",
@@ -69,10 +74,14 @@ data class VoicePoll(
     val duration: Int = 0,
     val options: List<VoicePollOption> = emptyList(),
     val voters: List<String> = emptyList(),
+    val ballots: List<VoicePollBallot> = emptyList(),
     val isActive: Boolean = true,
     val expiresAt: String = "",
     val createdAt: String = ""
-)
+) {
+    fun selectedOptionIndexFor(userId: String): Int? =
+        ballots.firstOrNull { it.userId == userId }?.optionIndex?.takeIf { it >= 0 }
+}
 
 data class VoicePollListResponse(
     val polls: List<VoicePoll> = emptyList(),

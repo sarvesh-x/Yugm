@@ -213,6 +213,15 @@ object SocialApi {
         }
         val votersArr = obj.optJSONArray("voters") ?: JSONArray()
         val voters = buildList { for (i in 0 until votersArr.length()) add(votersArr.optString(i, "")) }
+        val ballotsArr = obj.optJSONArray("ballots") ?: JSONArray()
+        val ballots = buildList {
+            for (i in 0 until ballotsArr.length()) {
+                val b = ballotsArr.optJSONObject(i) ?: continue
+                val ballotUserId = b.optJSONObject("userId")?.optString("_id", "")?.ifBlank { null }
+                    ?: b.optString("userId", "")
+                add(VoicePollBallot(userId = ballotUserId, optionIndex = b.optInt("optionIndex", -1)))
+            }
+        }
         return VoicePoll(
             id = obj.optString("_id", ""),
             userId = userObj?.optString("_id", "") ?: obj.optString("userId", ""),
@@ -223,6 +232,7 @@ object SocialApi {
             duration = obj.optInt("duration", 0),
             options = options,
             voters = voters,
+            ballots = ballots,
             isActive = obj.optBoolean("isActive", true),
             expiresAt = obj.optString("expiresAt", ""),
             createdAt = obj.optString("createdAt", "")

@@ -93,7 +93,8 @@ fun VoicePollDetailScreen(
                     val p = poll!!
                     val totalVotes = p.options.sumOf { it.votes }
                     val expired = isExpired(p)
-                    val hasVoted = p.voters.contains(userId)
+                    val selectedIndex = p.selectedOptionIndexFor(userId)
+                    val hasVoted = selectedIndex != null || p.voters.contains(userId)
                     val canVote = p.isActive && !expired && !hasVoted && votingIndex == null
 
                     GlassCard {
@@ -112,13 +113,18 @@ fun VoicePollDetailScreen(
 
                         p.options.forEachIndexed { idx, opt ->
                             val pct = if (totalVotes > 0) opt.votes * 100f / totalVotes else 0f
-                            val selectedByMe = hasVoted && p.voters.contains(userId) && false // unknown exact choice; keep neutral
+                            val selectedByMe = selectedIndex == idx
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 4.dp)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(if (votingIndex == idx) Purple.copy(alpha = 0.2f) else Panel)
+                                    .background(
+                                        when {
+                                            votingIndex == idx || selectedByMe -> Purple.copy(alpha = 0.22f)
+                                            else -> Panel
+                                        }
+                                    )
                                     .then(
                                         if (canVote) Modifier.clickable {
                                             votingIndex = idx
@@ -143,7 +149,13 @@ fun VoicePollDetailScreen(
                                         verticalAlignment = Alignment.CenterVertically,
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Text(opt.text, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                                        Text(
+                                            if (selectedByMe) "${opt.text}  ✓" else opt.text,
+                                            color = if (selectedByMe) Gold else TextPrimary,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            modifier = Modifier.weight(1f)
+                                        )
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                             if (votingIndex == idx) {
                                                 CircularProgressIndicator(modifier = Modifier.height(14.dp).padding(end = 0.dp), strokeWidth = 2.dp, color = Gold)

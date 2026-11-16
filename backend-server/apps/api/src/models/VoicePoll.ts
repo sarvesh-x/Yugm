@@ -7,6 +7,7 @@ export interface IVoicePoll extends mongoose.Document {
   duration: number;
   options: Array<{ text: string; audioUrl?: string; votes: number }>;
   voters: mongoose.Types.ObjectId[];
+  ballots: Array<{ userId: mongoose.Types.ObjectId; optionIndex: number }>;
   isActive: boolean;
   expiresAt: Date;
 }
@@ -23,6 +24,10 @@ const voicePollSchema = new Schema<IVoicePoll>(
       votes: { type: Number, default: 0 }
     }],
     voters: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    ballots: [{
+      userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+      optionIndex: { type: Number, required: true }
+    }],
     isActive: { type: Boolean, default: true },
     expiresAt: { type: Date }
   },

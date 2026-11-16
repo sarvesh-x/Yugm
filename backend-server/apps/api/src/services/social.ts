@@ -236,14 +236,15 @@ export async function voteVoicePoll(pollId: string, userId: string, optionIndex:
     },
     {
       $inc: { [`options.${optionIndex}.votes`]: 1 },
-      $addToSet: { voters: userId }
+      $addToSet: { voters: userId },
+      $push: { ballots: { userId, optionIndex } }
     },
     { new: true }
   ).populate("userId", "name username avatar");
 
   if (poll) return { poll };
 
-  const latest = await VoicePoll.findById(pollId).select("isActive expiresAt voters").lean();
+  const latest = await VoicePoll.findById(pollId).select("isActive expiresAt voters ballots").lean();
   if (!latest) throw new HttpError(404, "Poll not found", ErrorCode.NOT_FOUND);
   if (!latest.isActive) throw new HttpError(400, "Poll is closed", ErrorCode.VALIDATION);
   if (latest.expiresAt && new Date(latest.expiresAt) < new Date()) {
