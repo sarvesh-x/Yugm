@@ -20,6 +20,7 @@ sealed class SocketEvent {
     data class DirectMessageDeleted(val messageId: String, val partnerId: String) : SocketEvent()
     data class DirectConversationDeleted(val partnerId: String) : SocketEvent()
     data class DirectMessagesRead(val partnerId: String, val readThrough: String) : SocketEvent()
+    data class DirectConversationRead(val partnerId: String, val readThrough: String) : SocketEvent()
     data class TypingUpdate(val userId: String, val typing: Boolean) : SocketEvent()
     data class UserOnline(val userId: String) : SocketEvent()
     data class UserOffline(val userId: String) : SocketEvent()
@@ -103,6 +104,11 @@ class SocketManager @Inject constructor() {
             socket?.on("direct:message:read") { args ->
                 (args.firstOrNull() as? JSONObject)?.let { payload ->
                     _events.tryEmit(SocketEvent.DirectMessagesRead(payload.optString("partnerId"), payload.optString("readThrough")))
+                }
+            }
+            socket?.on("direct:conversation:read") { args ->
+                (args.firstOrNull() as? JSONObject)?.let { payload ->
+                    _events.tryEmit(SocketEvent.DirectConversationRead(payload.optString("partnerId"), payload.optString("readThrough")))
                 }
             }
             socket?.on("direct:typing:update") { args ->

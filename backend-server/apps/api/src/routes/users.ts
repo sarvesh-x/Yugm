@@ -721,6 +721,7 @@ usersRouter.post("/messages/read-all", asyncHandler(async (req: AuthRequest, res
   );
   const readThrough = new Date().toISOString();
   senders.forEach((senderId: any) => emitUser(senderId.toString(), socketEvents.directMessageRead, { partnerId: req.user!.id, readThrough }));
+  senders.forEach((senderId: any) => emitUser(req.user!.id, "direct:conversation:read", { partnerId: senderId.toString(), readThrough }));
   sendOk(res, { updated: result.modifiedCount });
 }));
 
@@ -735,6 +736,10 @@ usersRouter.post("/messages/:userId/read", asyncHandler(async (req: AuthRequest,
   const readThrough = new Date().toISOString();
   if (readResult.modifiedCount > 0) {
     emitUser(req.params.userId, socketEvents.directMessageRead, { partnerId: req.user!.id, readThrough });
+    emitUser(req.user!.id, "direct:conversation:read", { partnerId: req.params.userId, readThrough });
+  } else {
+    // Still notify self to reconcile unread badges across sessions/tabs when already read server-side.
+    emitUser(req.user!.id, "direct:conversation:read", { partnerId: req.params.userId, readThrough });
   }
   sendOk(res, { updated: readResult.modifiedCount, readThrough });
 }));

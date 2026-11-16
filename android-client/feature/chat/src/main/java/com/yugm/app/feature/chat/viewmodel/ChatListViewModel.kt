@@ -90,6 +90,9 @@ class ChatListViewModel @Inject constructor(
                     is SocketEvent.DirectMessagesRead -> {
                         unreadCounts = unreadCounts - event.partnerId
                     }
+                    is SocketEvent.DirectConversationRead -> {
+                        unreadCounts = unreadCounts - event.partnerId
+                    }
                     is SocketEvent.UserOnline -> updateHostOnline(event.userId, true)
                     is SocketEvent.UserOffline -> updateHostOnline(event.userId, false)
                     else -> Unit
