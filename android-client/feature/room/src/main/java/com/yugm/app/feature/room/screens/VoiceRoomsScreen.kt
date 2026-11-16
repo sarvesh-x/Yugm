@@ -25,7 +25,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Mic
@@ -33,6 +32,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -52,6 +52,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.api.YugmApi
@@ -81,15 +84,27 @@ fun VoiceRoomsScreen(
     onProfile: () -> Unit,
     onSearch: () -> Unit = {},
     onEvents: () -> Unit = {},
+    onFollowedRooms: () -> Unit = {},
     onGameZone: () -> Unit = {},
     showBottomDock: Boolean = true,
     viewModel: RoomViewModel = hiltViewModel()
 ) {
     var selectedSection by remember { mutableStateOf(PartySection.Voice) }
     var followedRooms by remember { mutableStateOf<List<Room>>(emptyList()) }
-    var showFollowedRooms by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(token) { if (token.isNotBlank()) runCatching { withContext(Dispatchers.IO) { YugmApi.followedRooms(token) } }.onSuccess { followedRooms = it } }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, token) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && token.isNotBlank()) {
+                scope.launch {
+                    runCatching { withContext(Dispatchers.IO) { YugmApi.followedRooms(token) } }
+                        .onSuccess { followedRooms = it }
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     fun toggleRoomFollow(room: Room) {
         if (token.isBlank()) return
         val following = followedRooms.any { it.id == room.id }
@@ -130,7 +145,7 @@ fun VoiceRoomsScreen(
                     }
                     PartyIcon(Icons.Filled.Event, "Room events", onEvents)
                     Spacer(Modifier.width(8.dp))
-                    PartyIcon(Icons.Filled.Bookmarks, "Followed rooms", onClick = { showFollowedRooms = true })
+                    PartyIcon(Icons.Filled.Bookmarks, "Followed rooms", onClick = onFollowedRooms)
                     Spacer(Modifier.width(8.dp))
                     PartyIcon(Icons.Filled.Search, "Search rooms", onSearch)
                     Spacer(Modifier.width(10.dp))
@@ -143,6 +158,7 @@ fun VoiceRoomsScreen(
                     PartyTab("Video Party", selectedSection == PartySection.Video, Modifier.weight(1f)) { selectedSection = PartySection.Video }
                 }
             }
+            item { RoomEventsCard(onEvents) }
             if (selectedSection == PartySection.Voice) {
             if (liveRooms.isNotEmpty()) {
                 item {
@@ -235,27 +251,6 @@ fun VoiceRoomsScreen(
             }
             }
         }
-        if (showFollowedRooms) AlertDialog(
-            onDismissRequest = { showFollowedRooms = false },
-            containerColor = LocalYugmColors.current.surface,
-            title = { Text("Followed rooms", color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Black) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (followedRooms.isEmpty()) Text("Follow a room to unlock joining and keep it in your list.", color = LocalYugmColors.current.textSecondary)
-                    followedRooms.forEach { room ->
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(room.title, color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Bold)
-                                Text(room.host?.name.orEmpty(), color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
-                            }
-                            TextButton(onClick = { toggleRoomFollow(room) }) { Text("Unfollow") }
-                            if (room.status == "LIVE") TextButton(onClick = { showFollowedRooms = false; onOpenRoom(room) }) { Text("Open") }
-                        }
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { showFollowedRooms = false }) { Text("Done") } }
-        )
         if (showBottomDock) {
             YugmBottomDock(
                 selected = YugmDockTab.LIVE,
@@ -268,6 +263,31 @@ fun VoiceRoomsScreen(
                 onGameZone = onGameZone,
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
+        }
+    }
+}
+
+@Composable
+private fun RoomEventsCard(onEvents: () -> Unit) {
+    val colors = LocalYugmColors.current
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        color = colors.surface,
+        shape = RoundedCornerShape(18.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 11.dp, bottom = 11.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(colors.primary.copy(alpha = .12f)), contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.Event, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp))
+            }
+            Column(Modifier.weight(1f).padding(horizontal = 11.dp)) {
+                Text("Room events", color = colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text("Plan a hangout or find one to join", color = colors.textSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            TextButton(onClick = onEvents) { Text("Explore", color = colors.primary, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
         }
     }
 }

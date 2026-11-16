@@ -31,6 +31,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Tab
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -252,30 +254,32 @@ fun ChatListScreen(
                 }
             }
 
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
+            val clan = viewModel.myClan
+            PrimaryTabRow(
+                selectedTabIndex = mainTab,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                containerColor = LocalYugmColors.current.background,
+                contentColor = LocalYugmColors.current.textPrimary
             ) {
-                listOf("Chats", "Clan", "Contacts").forEachIndexed { index, label ->
-                    val selected = mainTab == index
-                    Box(
-                        modifier = Modifier
-                            .height(40.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(if (selected) LocalYugmColors.current.secondary else LocalYugmColors.current.surfaceElevated)
-                            .border(1.dp, if (selected) Color.Transparent else LocalYugmColors.current.border, RoundedCornerShape(20.dp))
-                            .clickable(role = Role.Tab, onClickLabel = label, onClick = { mainTab = index })
-                            .padding(horizontal = 22.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            label,
-                            color = if (selected) Color.White else LocalYugmColors.current.textSecondary,
-                            fontSize = 14.sp,
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-                        )
-                    }
+                listOf("Chats", "Clan", "Contacts").forEachIndexed { index, fallback ->
+                    val clanTitle = clan?.name?.takeIf { it.isNotBlank() } ?: fallback
+                    Tab(
+                        selected = mainTab == index,
+                        onClick = { mainTab = index },
+                        selectedContentColor = LocalYugmColors.current.secondary,
+                        unselectedContentColor = LocalYugmColors.current.textSecondary,
+                        text = {
+                            if (index == 1 && clan != null) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(clanTitle, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                    val onlineCount = clan.members.count { it.isOnline }
+                                    Text("$onlineCount online", fontSize = 10.sp, maxLines = 1)
+                                }
+                            } else {
+                                Text(fallback, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    )
                 }
             }
 

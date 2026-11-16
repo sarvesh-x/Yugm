@@ -3,6 +3,7 @@ package com.yugm.app.feature.social.screens
 import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -112,7 +114,7 @@ fun AchievementsScreen(token: String, onBack: () -> Unit) {
                         Text("${showcasedIds.size}/5", color = colors.primary, fontWeight = FontWeight.Black, fontSize = 17.sp)
                     }
                 }
-                Row(Modifier.padding(top = 13.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                Row(Modifier.fillMaxWidth().padding(top = 13.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                     categories.forEach { category ->
                         Surface(
                             onClick = { selectedCategory = category },
@@ -169,15 +171,17 @@ fun AchievementsScreen(token: String, onBack: () -> Unit) {
                                     }
                                     val nextTier = achievement.tiers.firstOrNull { !it.claimed }
                                     nextTier?.let { tier ->
-                                        val reward = buildList {
+                                    val reward = buildList {
                                             if (tier.rewardCoins > 0) add("${tier.rewardCoins} coins")
-                                            if (tier.rewardCosmetic.isNotBlank()) add("cosmetic")
+                                        if (tier.rewardCosmetic.isNotBlank()) {
+                                            add(tier.rewardCosmetic.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() })
+                                        }
                                         }.joinToString(" + ")
                                         if (reward.isNotBlank()) Text("${tier.tier} reward: $reward", color = colors.textSecondary, fontSize = 10.sp, modifier = Modifier.padding(top = 7.dp))
                                     }
                                 }
                                 Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    if (achievement.canClaim && busyId != achievement.id) {
+                                    if (achievement.canClaim && busyId == null) {
                                         Button(onClick = {
                                             scope.launch {
                                                 busyId = achievement.id
@@ -190,7 +194,7 @@ fun AchievementsScreen(token: String, onBack: () -> Unit) {
                                                     .onFailure { error = it.message ?: "Claim failed" }
                                                 busyId = null
                                             }
-                                        }, colors = ButtonDefaults.buttonColors(containerColor = colors.primary)) { Text("Claim ${achievement.nextTier ?: "reward"}", fontSize = 11.sp) }
+                                        }, enabled = !loading, colors = ButtonDefaults.buttonColors(containerColor = colors.primary)) { Text("Claim ${achievement.nextTier ?: "reward"}", fontSize = 11.sp) }
                                     } else if (busyId == achievement.id) {
                                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = colors.primary)
                                     }

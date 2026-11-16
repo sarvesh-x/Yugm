@@ -43,6 +43,16 @@ fun NavGraphBuilder.roomNavGraph(
     balanceProvider: () -> Int,
     onMinimizeRoom: (com.yugm.app.core.model.Room, com.yugm.app.core.model.RoomType) -> Unit = { _, _ -> },
 ) {
+    composable(Screen.FollowedRooms.route) {
+        FollowedRoomsScreen(
+            token = authTokenProvider(),
+            onBack = { navController.popBackStack() },
+            onOpenRoom = { room ->
+                navController.navigate(Screen.RoomLobby.createRoute(room.id, room.type.name.uppercase()))
+            }
+        )
+    }
+
     composable(Screen.VoiceRooms.route) {
         LaunchedEffect(Unit) {
             navController.navigate(Screen.MainTabs.createRoute("party")) {
@@ -81,8 +91,7 @@ fun NavGraphBuilder.roomNavGraph(
             },
             onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) },
             onEdit = { id -> navController.navigate(Screen.EditRoom.createRoute(id)) },
-            onOpenModes = {
-                val isHost = true
+            onOpenModes = { isHost ->
                 navController.navigate(Screen.RoomMode.createRoute(roomId, isHost))
             }
         )

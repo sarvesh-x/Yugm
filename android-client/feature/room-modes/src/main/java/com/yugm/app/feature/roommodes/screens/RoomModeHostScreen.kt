@@ -30,16 +30,16 @@ fun RoomModeHostScreen(
     val modeState = viewModel.currentModeState
     val modeKey = modeState?.mode
 
-    if (modeKey == null || modeState?.status == "WAITING") {
+    if (modeKey == null) {
         ModePickerScreen(
             modes = viewModel.availableModes,
             isLoading = viewModel.isLoading,
+            error = viewModel.error,
             onSelectMode = { mode -> viewModel.setMode(token, roomId, mode) },
             onBack = onBack,
             onRandomMode = {
-                viewModel.joinRandomModeRoom(token)
-                viewModel.currentModeInfo?.let { m ->
-                    viewModel.setMode(token, roomId, m.key)
+                viewModel.availableModes.randomOrNull()?.let { mode ->
+                    viewModel.setMode(token, roomId, mode.key)
                 }
             }
         )

@@ -40,6 +40,7 @@ sealed class Screen(val route: String) {
     object RoomMode : Screen("room_mode/{roomId}/{isHost}") {
         fun createRoute(roomId: String, isHost: Boolean = false) = "room_mode/$roomId/$isHost"
     }
+    object FollowedRooms : Screen("followed_rooms")
     object CreateRoom : Screen("create_room")
     object EditRoom : Screen("edit_room/{roomId}") {
         fun createRoute(roomId: String) = "edit_room/$roomId"

@@ -22,6 +22,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -38,31 +40,35 @@ import androidx.compose.ui.unit.sp
 import com.yugm.app.core.model.RoomModeInfo
 import com.yugm.app.core.ui.components.AnimatedEntrance
 import com.yugm.app.core.ui.components.GlassButton
-import com.yugm.app.core.ui.theme.*
+import com.yugm.app.core.ui.theme.LocalYugmColors
 
 @Composable
 fun ModePickerScreen(
     modes: List<RoomModeInfo>,
     isLoading: Boolean,
+    error: String? = null,
     onSelectMode: (String) -> Unit,
     onBack: () -> Unit,
     onRandomMode: () -> Unit
 ) {
+    val colors = LocalYugmColors.current
     Column(
-        modifier = Modifier.fillMaxSize().background(Background).padding(16.dp)
+        modifier = Modifier.fillMaxSize().background(colors.background).padding(16.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("←", color = TextPrimary, fontSize = 24.sp, modifier = Modifier.size(48.dp).clickable(role = Role.Button, onClickLabel = "Go back", onClick = onBack))
-            Text("Room Modes", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Black)
+            Text("←", color = colors.textPrimary, fontSize = 24.sp, modifier = Modifier.size(48.dp).clickable(role = Role.Button, onClickLabel = "Go back", onClick = onBack))
+            Text("Room Modes", color = colors.textPrimary, fontSize = 22.sp, fontWeight = FontWeight.Black)
             Spacer(Modifier.size(24.dp))
         }
 
         Spacer(Modifier.height(8.dp))
-        Text("Choose a game mode for your room", color = TextMuted, fontSize = 14.sp)
+        Text("Choose a game mode for your room", color = colors.textSecondary, fontSize = 14.sp)
+        Text("Quick prompts and games make it easier for everyone to join the conversation.", color = colors.textSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
+        error?.let { Text(it, color = colors.danger, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp)) }
 
         Spacer(Modifier.height(16.dp))
 
@@ -74,7 +80,7 @@ fun ModePickerScreen(
                 GlassButton(
                     text = "🎲 Random Mode",
                     onClick = onRandomMode,
-                    gradient = Brush.horizontalGradient(listOf(Gold, Saffron)),
+                    gradient = Brush.horizontalGradient(listOf(colors.primary, colors.secondary)),
                     height = 56.dp
                 )
             }
@@ -95,36 +101,27 @@ private fun ModeCard(
     mode: RoomModeInfo,
     onClick: () -> Unit
 ) {
-    val cardColors = listOf(
-        listOf(Color(0xFF1A0533), Color(0xFF2D1B69)),
-        listOf(Color(0xFF1B0A2E), Color(0xFF3D1B40)),
-        listOf(Color(0xFF0F1B2D), Color(0xFF1A3A5C)),
-        listOf(Color(0xFF1A0F0A), Color(0xFF3C2415)),
-        listOf(Color(0xFF0D1B1A), Color(0xFF1A3C3A))
-    )
-    val gradientIndex = mode.key.hashCode().let { (it and Int.MAX_VALUE) % cardColors.size }
-    val gradient = cardColors[gradientIndex]
+    val colors = LocalYugmColors.current
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(Brush.verticalGradient(gradient))
-            .border(1.dp, Line.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
-            .clickable(role = Role.Button, onClickLabel = "Select ${mode.name} mode", onClick = onClick)
-            .padding(16.dp)
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = "Select ${mode.name} mode", onClick = onClick),
+        color = colors.surface,
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, colors.border)
     ) {
-        Column {
+        Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(mode.icon, fontSize = 32.sp)
+                Box(Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(colors.primary.copy(alpha = .12f)), contentAlignment = Alignment.Center) {
+                    Text(mode.icon, fontSize = 29.sp)
+                }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(mode.name, color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Black)
-                    Text("${mode.minParticipants}-${mode.maxParticipants} players · ${mode.durationSeconds / 60}min", color = TextMuted, fontSize = 12.sp)
+                    Text(mode.name, color = colors.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Text("${mode.minParticipants}–${mode.maxParticipants} players · ${mode.durationSeconds / 60} min", color = colors.textSecondary, fontSize = 12.sp)
                 }
             }
             Spacer(Modifier.height(8.dp))
-            Text(mode.description, color = TextMuted.copy(alpha = 0.8f), fontSize = 13.sp, lineHeight = 18.sp)
+            Text(mode.description, color = colors.textSecondary, fontSize = 13.sp, lineHeight = 18.sp)
         }
     }
 }

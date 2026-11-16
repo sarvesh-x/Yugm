@@ -10,7 +10,7 @@ import { ClanMessage } from "../models/ClanMessage.js";
 import { Report } from "../models/Report.js";
 import { User } from "../models/User.js";
 import { createNotification } from "../services/notifications.js";
-import { emitClanMembers, emitUser } from "../services/socket.js";
+import { emitClanMembers, emitUser, isUserOnline } from "../services/socket.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId, sanitizeText } from "../utils/http.js";
 
 export const clansRouter = Router();
@@ -155,7 +155,10 @@ function publicClan(clan: any, userId: string, includeRoles = true) {
     familyLabel: clan.familyLabel,
     ownerId,
     memberCount: clan.memberCount ?? members.length,
-    members: includeRoles ? clan.memberIds : [],
+    members: includeRoles ? clan.memberIds.map((member: any) => {
+      const memberData = member && typeof member === "object" ? (member.toObject?.() ?? member) : { id: idOf(member) };
+      return { ...memberData, isOnline: isUserOnline(idOf(member)) };
+    }) : [],
     memberRoles,
     myRole,
     canManage: canManageClan(myRole),

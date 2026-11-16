@@ -103,6 +103,7 @@ fun ProfileDetailScreen(
     onOpenPublicProfile: () -> Unit = {},
     onOpenVip: () -> Unit = {},
     onOpenTasks: () -> Unit = {},
+    onOpenAchievements: () -> Unit = {},
     onOpenLevel: () -> Unit = {},
     onOpenWallet: () -> Unit = {},
     onOpenInventory: () -> Unit = {},
@@ -144,8 +145,10 @@ fun ProfileDetailScreen(
             ageDraft = it.age.takeIf { age -> age > 0 }?.toString().orEmpty()
             interestsDraft = it.interests
             hobbiesDraft = it.hobbies
+            customInterestInput = ""
+            customHobbyInput = ""
+            showEditProfileScreen = true
         }
-        showEditProfileScreen = true
     }
     var autoEditTriggered by remember { mutableStateOf(false) }
     LaunchedEffect(autoEdit, viewModel.profile) {
@@ -342,6 +345,7 @@ fun ProfileDetailScreen(
                             onStore = onOpenStore,
                             onVip = onOpenVip,
                             onTasks = onOpenTasks,
+                            onAchievements = onOpenAchievements,
                             onLevel = onOpenLevel,
                             onWallet = onOpenWallet,
                             onInventory = onOpenInventory,
@@ -1329,21 +1333,21 @@ private fun ProfileMenuCard(
     onStore: () -> Unit,
     onVip: () -> Unit,
     onTasks: () -> Unit,
+    onAchievements: () -> Unit,
     onLevel: () -> Unit,
     onWallet: () -> Unit,
     onInventory: () -> Unit,
     onSettings: () -> Unit
 ) {
     val actions = listOf(
-        Triple("🎨", "Customize", onCustomize), Triple("🛍️", "Store", onStore),
-        Triple("👑", "VIP", onVip), Triple("✦", "Level", onLevel),
-        Triple("✓", "Tasks & rewards", onTasks), Triple("◈", "Wallet", onWallet),
-        Triple("🎒", "Inventory", onInventory), Triple("⚙", "Settings", onSettings)
+        Triple("🎨", "Customize", onCustomize), Triple("🛍️", "Store", onStore), Triple("👑", "VIP", onVip),
+        Triple("✦", "Level", onLevel), Triple("✓", "Tasks & rewards", onTasks), Triple("🏆", "Achievements", onAchievements),
+        Triple("◈", "Wallet", onWallet), Triple("🎒", "Inventory", onInventory), Triple("⚙", "Settings", onSettings)
     )
     GlassCard(Modifier.fillMaxWidth()) {
         Text("Your Yugm", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Black)
         Text("Profile shortcuts", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp, bottom = 10.dp))
-        actions.chunked(4).forEach { rowActions ->
+        actions.chunked(3).forEach { rowActions ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 rowActions.forEach { (glyph, label, action) ->
                     Column(
@@ -1359,7 +1363,7 @@ private fun ProfileMenuCard(
                         Text(label, color = TextPrimary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                     }
                 }
-                repeat(4 - rowActions.size) { Spacer(Modifier.weight(1f)) }
+                repeat(3 - rowActions.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
@@ -1574,14 +1578,15 @@ private fun ProfileCompletionCard(
                     }
                 }
 
-                Button(
-                    onClick = onCompleteClick,
-                    colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp)
-                ) {
-                    Text(if (isComplete) "Edit profile details" else "Complete profile details", color = colors.primaryOn, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                }
+            }
+
+            Button(
+                onClick = onCompleteClick,
+                colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp)
+            ) {
+                Text(if (isComplete) "Edit profile details" else "Complete profile details", color = colors.primaryOn, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

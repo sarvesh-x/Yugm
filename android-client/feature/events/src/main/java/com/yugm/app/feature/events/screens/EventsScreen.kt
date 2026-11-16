@@ -27,6 +27,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Tab
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -49,16 +51,7 @@ import com.yugm.app.core.model.YugmEvent
 import com.yugm.app.core.ui.components.Avatar
 import com.yugm.app.core.ui.components.GlassCard
 import com.yugm.app.core.ui.components.LoadingState
-import com.yugm.app.core.ui.components.SegmentedTabs
-import com.yugm.app.core.ui.theme.Background
-import com.yugm.app.core.ui.theme.Danger
-import com.yugm.app.core.ui.theme.Gold
-import com.yugm.app.core.ui.theme.Line
-import com.yugm.app.core.ui.theme.Panel
-import com.yugm.app.core.ui.theme.PrimaryPurple
-import com.yugm.app.core.ui.theme.Success
-import com.yugm.app.core.ui.theme.TextMuted
-import com.yugm.app.core.ui.theme.TextPrimary
+import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.feature.events.viewmodel.EventViewModel
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -74,6 +67,7 @@ fun EventsScreen(
     onEventDetail: (String) -> Unit
 ) {
     val viewModel: EventViewModel = hiltViewModel()
+    val colors = LocalYugmColors.current
     var selectedTab by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(selectedTab) {
@@ -86,16 +80,16 @@ fun EventsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Events", color = TextPrimary, fontWeight = FontWeight.Black) },
+                title = { Text("Events", color = colors.textPrimary, fontWeight = FontWeight.Black) },
                 navigationIcon = {
                     TextButton(onClick = onBack) {
-                        Text("Back", color = Gold, fontWeight = FontWeight.Bold)
+                        Text("Back", color = colors.primary, fontWeight = FontWeight.Bold)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.background)
             )
         },
-        containerColor = Background
+        containerColor = colors.background
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -111,12 +105,22 @@ fun EventsScreen(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
             )
 
-            SegmentedTabs(
-                items = listOf("" to "Upcoming", "" to "My Events"),
-                selectedIndex = selectedTab,
-                onSelected = { selectedTab = it },
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
-            )
+            PrimaryTabRow(
+                selectedTabIndex = selectedTab,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                containerColor = colors.background,
+                contentColor = colors.textPrimary
+            ) {
+                listOf("Upcoming", "My Events").forEachIndexed { index, title ->
+                    Tab(
+                        selected = selectedTab == index,
+                        onClick = { selectedTab = index },
+                        selectedContentColor = colors.primary,
+                        unselectedContentColor = colors.textSecondary,
+                        text = { Text(title, fontWeight = FontWeight.SemiBold) }
+                    )
+                }
+            }
 
             if (viewModel.isLoading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -124,7 +128,7 @@ fun EventsScreen(
                 }
             } else if (viewModel.error != null) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(viewModel.error!!, color = Danger, modifier = Modifier.padding(24.dp))
+                    Text(viewModel.error!!, color = colors.danger, modifier = Modifier.padding(24.dp))
                 }
             } else {
                 when (selectedTab) {
@@ -151,6 +155,7 @@ private fun FestivalFilterRow(
     onSelected: (String?) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val colors = LocalYugmColors.current
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -160,14 +165,14 @@ private fun FestivalFilterRow(
         ALL_FESTIVALS.forEach { festival ->
             val isSelected = selected == festival.key.ifBlank { null }
             Surface(
-                color = if (isSelected) Color(festival.accent).copy(alpha = 0.25f) else Panel,
-                border = if (isSelected) BorderStroke(1.dp, Color(festival.accent)) else BorderStroke(1.dp, Line),
+                color = if (isSelected) Color(festival.accent).copy(alpha = 0.16f) else colors.surface,
+                border = if (isSelected) BorderStroke(1.dp, Color(festival.accent)) else BorderStroke(1.dp, colors.border),
                 shape = RoundedCornerShape(20.dp),
                 modifier = Modifier.clickable { onSelected(festival.key.ifBlank { null }) }
             ) {
                 Text(
                     "${festival.emoji} ${festival.label}",
-                    color = if (isSelected) Color(festival.accent) else TextMuted,
+                    color = if (isSelected) Color(festival.accent) else colors.textSecondary,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
@@ -183,6 +188,7 @@ private fun UpcomingTab(
     onEventDetail: (String) -> Unit,
     onCreateEvent: () -> Unit
 ) {
+    val colors = LocalYugmColors.current
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
@@ -191,11 +197,11 @@ private fun UpcomingTab(
         if (events.isEmpty()) {
             item {
                 GlassCard {
-                    Text("No upcoming events.", color = TextMuted)
+                    Text("No upcoming events.", color = colors.textSecondary)
                     Spacer(Modifier.height(12.dp))
                     Button(
                         onClick = onCreateEvent,
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryPurple),
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.fillMaxWidth().height(48.dp)
                     ) {
@@ -210,7 +216,7 @@ private fun UpcomingTab(
             item {
                 Button(
                     onClick = onCreateEvent,
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryPurple),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth().height(48.dp)
                 ) {
@@ -228,6 +234,7 @@ private fun MyEventsTab(
     onEventDetail: (String) -> Unit,
     onCreateEvent: () -> Unit
 ) {
+    val colors = LocalYugmColors.current
     val hosting = myEvents?.hosting ?: emptyList()
     val joined = myEvents?.joined ?: emptyList()
 
@@ -239,11 +246,11 @@ private fun MyEventsTab(
         ) {
             item {
                 GlassCard {
-                    Text("No events yet. Create or join one!", color = TextMuted)
+                    Text("No events yet. Create or join one!", color = colors.textSecondary)
                     Spacer(Modifier.height(12.dp))
                     Button(
                         onClick = onCreateEvent,
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryPurple),
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.fillMaxWidth().height(48.dp)
                     ) {
@@ -260,7 +267,7 @@ private fun MyEventsTab(
         ) {
             if (hosting.isNotEmpty()) {
                 item {
-                    Text("Hosting", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp, modifier = Modifier.padding(bottom = 8.dp))
+                    Text("Hosting", color = colors.textPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp, modifier = Modifier.padding(bottom = 8.dp))
                 }
                 items(hosting, key = { it.id }) { event ->
                     EventCard(event = event, onClick = { onEventDetail(event.id) })
@@ -269,7 +276,7 @@ private fun MyEventsTab(
             if (joined.isNotEmpty()) {
                 item {
                     Spacer(Modifier.height(8.dp))
-                    Text("Joined", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp, modifier = Modifier.padding(bottom = 8.dp))
+                    Text("Joined", color = colors.textPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp, modifier = Modifier.padding(bottom = 8.dp))
                 }
                 items(joined, key = { it.id }) { event ->
                     EventCard(event = event, currentUserId = currentUserId, onClick = { onEventDetail(event.id) })
@@ -278,7 +285,7 @@ private fun MyEventsTab(
             item {
                 Button(
                     onClick = onCreateEvent,
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryPurple),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth().height(48.dp)
                 ) {
@@ -295,10 +302,11 @@ private fun EventCard(
     onClick: () -> Unit,
     currentUserId: String = ""
 ) {
+    val colors = LocalYugmColors.current
     Surface(
-        color = Panel,
-        border = BorderStroke(1.dp, Line),
-        shape = RoundedCornerShape(12.dp),
+        color = colors.surface,
+        border = BorderStroke(1.dp, colors.border),
+        shape = RoundedCornerShape(18.dp),
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
@@ -309,7 +317,7 @@ private fun EventCard(
             ) {
                 Text(
                     event.title,
-                    color = TextPrimary,
+                    color = colors.textPrimary,
                     fontWeight = FontWeight.Black,
                     fontSize = 16.sp,
                     maxLines = 1,
@@ -331,7 +339,7 @@ private fun EventCard(
                     size = 32,
                     imageUrl = event.hostAvatar
                 )
-                Text(event.hostName, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(event.hostName, color = colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (event.festival != "none") {
                     FestivalBadge(event.festival)
                 }
@@ -342,10 +350,10 @@ private fun EventCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(formatDate(event.eventDate), color = TextMuted, fontSize = 12.sp)
+                Text(formatDate(event.eventDate), color = colors.textSecondary, fontSize = 12.sp)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("${event.participantIds.size}", color = Gold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    Text("participants", color = TextMuted, fontSize = 12.sp)
+                    Text("${event.participantIds.size}", color = colors.accent, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("participants", color = colors.textSecondary, fontSize = 12.sp)
                 }
             }
             if (event.status.isNotBlank()) {
@@ -354,12 +362,12 @@ private fun EventCard(
                     StatusBadge(event.status)
                     if (currentUserId.isNotBlank() && event.participantIds.contains(currentUserId)) {
                         Surface(
-                            color = Success.copy(alpha = 0.15f),
+                            color = colors.success.copy(alpha = 0.15f),
                             shape = RoundedCornerShape(6.dp)
                         ) {
                             Text(
                                 "Joined",
-                                color = Success,
+                                color = colors.success,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.sp,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
@@ -374,13 +382,14 @@ private fun EventCard(
 
 @Composable
 private fun FeaturedBadge() {
+    val colors = LocalYugmColors.current
     Surface(
-        color = Gold.copy(alpha = 0.2f),
+        color = colors.accent.copy(alpha = 0.18f),
         shape = RoundedCornerShape(6.dp)
     ) {
         Text(
             "★ Featured",
-            color = Gold,
+            color = colors.accent,
             fontWeight = FontWeight.Black,
             fontSize = 11.sp,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
@@ -407,13 +416,14 @@ private fun FestivalBadge(festival: String) {
 
 @Composable
 private fun CategoryBadge(category: String) {
+    val colors = LocalYugmColors.current
     Surface(
-        color = PrimaryPurple.copy(alpha = 0.2f),
+        color = colors.primary.copy(alpha = 0.14f),
         shape = RoundedCornerShape(6.dp)
     ) {
         Text(
             category.ifBlank { "General" },
-            color = PrimaryPurple,
+            color = colors.primary,
             fontWeight = FontWeight.Bold,
             fontSize = 11.sp,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
@@ -423,13 +433,14 @@ private fun CategoryBadge(category: String) {
 
 @Composable
 private fun StatusBadge(status: String) {
+    val colors = LocalYugmColors.current
     val color = when (status.uppercase()) {
-        "UPCOMING" -> Gold
-        "LIVE" -> Success
-        "ONGOING" -> Success
-        "COMPLETED" -> TextMuted
-        "CANCELLED" -> Danger
-        else -> TextMuted
+        "UPCOMING" -> colors.accent
+        "LIVE" -> colors.success
+        "ONGOING" -> colors.success
+        "COMPLETED" -> colors.textSecondary
+        "CANCELLED" -> colors.danger
+        else -> colors.textSecondary
     }
     Surface(
         color = color.copy(alpha = 0.15f),

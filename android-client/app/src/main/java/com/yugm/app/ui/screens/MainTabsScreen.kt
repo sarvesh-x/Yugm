@@ -142,6 +142,7 @@ fun MainTabsScreen(
                     onProfile = { openOwnProfileOrSetup() },
                     onSearch = { navController.navigate(Screen.Search.route) },
                     onEvents = { navController.navigate(Screen.Events.route) },
+                    onFollowedRooms = { navController.navigate(Screen.FollowedRooms.route) },
                     onGameZone = { goTo(TAB_GAME_ZONE) },
                     showBottomDock = false
                 )
@@ -217,6 +218,7 @@ fun MainTabsScreen(
                             onOpenPublicProfile = { navController.navigate(Screen.PublicProfilePreview.createRoute(profileUserId)) },
                             onOpenVip = { navController.navigate(Screen.Vip.route) },
                             onOpenTasks = { navController.navigate(Screen.Growth.route) },
+                            onOpenAchievements = { navController.navigate(Screen.Achievements.route) },
                             onOpenLevel = { navController.navigate(Screen.BattlePass.route) },
                             onOpenWallet = { navController.navigate(Screen.Wallet.route) },
                             onOpenInventory = { navController.navigate(Screen.Inventory.route) },

@@ -109,7 +109,7 @@ fun RoomLobbyScreen(
     onJoin: (RoomType) -> Unit,
     onOpenProfile: (String) -> Unit,
     onEdit: ((String) -> Unit)? = null,
-    onOpenModes: (() -> Unit)? = null,
+    onOpenModes: ((Boolean) -> Unit)? = null,
     viewModel: RoomViewModel = hiltViewModel()
 ) {
     var detail by remember { mutableStateOf<RoomDetail?>(null) }
@@ -549,6 +549,20 @@ fun RoomLobbyScreen(
                             .navigationBarsPadding()
                             .padding(horizontal = 16.dp, vertical = 10.dp)
                     ) {
+                        if (room.type == RoomType.Voice && onOpenModes != null &&
+                            (host?.id == currentUserId || !room.mode.isNullOrBlank())
+                        ) {
+                            TextButton(
+                                onClick = { onOpenModes(host?.id == currentUserId) },
+                                modifier = Modifier.fillMaxWidth().height(42.dp)
+                            ) {
+                                Text(
+                                    if (room.mode.isNullOrBlank()) "🎮  Choose a room mode" else "🎮  Open room game",
+                                    color = Color(0xFFC084FC),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                         Button(
                             onClick = { onJoin(room.type.takeUnless { room.id.isBlank() } ?: fallbackType) },
                             modifier = Modifier
