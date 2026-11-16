@@ -239,12 +239,14 @@ fun VideoLivestreamScreen(
     }
     LaunchedEffect(room.id) {
         while (true) {
-            val allFeeds = YugmMediaRoom.videoFeeds()
-            feeds = allFeeds.filter { feed ->
-                if (isHost) feed.isLocal && feed.identity == currentUserId
-                else feed.identity == room.host?.id || feed.label == room.host?.name
-            }.take(1)
-            opponentFeeds = YugmMediaRoom.opponentVideoFeeds().filter { !it.isLocal }.take(1)
+            runCatching {
+                val allFeeds = YugmMediaRoom.videoFeeds()
+                feeds = allFeeds.filter { feed ->
+                    if (isHost) feed.isLocal && feed.identity == currentUserId
+                    else feed.identity == room.host?.id || feed.label == room.host?.name
+                }.take(1)
+                opponentFeeds = YugmMediaRoom.opponentVideoFeeds().filter { !it.isLocal }.take(1)
+            }
             delay(700)
         }
     }
@@ -648,17 +650,19 @@ private fun HostVideoStage(feed: YugmMediaRoom.VideoFeed, modifier: Modifier, mi
     var renderer by remember(feed.track) { mutableStateOf<SurfaceViewRenderer?>(null) }
     DisposableEffect(feed.track) {
         onDispose {
-            renderer?.let { feed.track.removeRenderer(it); it.release() }
+            runCatching { renderer?.let { feed.track.removeRenderer(it); it.release() } }
             renderer = null
         }
     }
     AndroidView(
         factory = { context ->
             SurfaceViewRenderer(context).also { view ->
-                YugmMediaRoom.initializeVideoRenderer(view)
-                view.setMirror(mirror)
-                feed.track.addRenderer(view)
-                renderer = view
+                runCatching {
+                    YugmMediaRoom.initializeVideoRenderer(view)
+                    view.setMirror(mirror)
+                    feed.track.addRenderer(view)
+                    renderer = view
+                }
             }
         },
         modifier = modifier.background(Color.Black).semantics {
@@ -672,17 +676,19 @@ private fun OpponentVideoStage(feed: YugmMediaRoom.VideoFeed, modifier: Modifier
     var renderer by remember(feed.track) { mutableStateOf<SurfaceViewRenderer?>(null) }
     DisposableEffect(feed.track) {
         onDispose {
-            renderer?.let { feed.track.removeRenderer(it); it.release() }
+            runCatching { renderer?.let { feed.track.removeRenderer(it); it.release() } }
             renderer = null
         }
     }
     AndroidView(
         factory = { context ->
             SurfaceViewRenderer(context).also { view ->
-                YugmMediaRoom.initializeOpponentVideoRenderer(view)
-                view.setMirror(false)
-                feed.track.addRenderer(view)
-                renderer = view
+                runCatching {
+                    YugmMediaRoom.initializeOpponentVideoRenderer(view)
+                    view.setMirror(false)
+                    feed.track.addRenderer(view)
+                    renderer = view
+                }
             }
         },
         modifier = modifier.background(Color.Black).semantics {
