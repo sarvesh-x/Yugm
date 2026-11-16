@@ -14,8 +14,10 @@ import com.yugm.app.core.model.DirectMessage
 import com.yugm.app.core.model.Host
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.withContext
@@ -56,7 +58,9 @@ class ChatListViewModel @Inject constructor(
     var error by mutableStateOf<String?>(null)
         private set
 
+    private var authToken: String = ""
     private var currentUserId: String = ""
+    private var refreshRecentJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -81,6 +85,7 @@ class ChatListViewModel @Inject constructor(
                                 val current = unreadCounts[partnerId] ?: 0
                                 unreadCounts = if (current <= 1) unreadCounts - partnerId else unreadCounts + (partnerId to (current - 1))
                             }
+                            scheduleRecentRefresh()
                         }
                     }
                     is SocketEvent.DirectMessageReceived -> {
@@ -158,6 +163,7 @@ class ChatListViewModel @Inject constructor(
     }
 
     fun load(token: String, currentUserId: String = "") {
+        if (token.isNotBlank()) authToken = token
         if (currentUserId.isNotBlank()) this.currentUserId = currentUserId
         if (isLoading) return
         viewModelScope.launch {
@@ -207,6 +213,8 @@ class ChatListViewModel @Inject constructor(
     }
 
     fun markAllRead(token: String, currentUserId: String = "") {
+        if (token.isNotBlank()) authToken = token
+        if (currentUserId.isNotBlank()) this.currentUserId = currentUserId
         viewModelScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
@@ -218,6 +226,7 @@ class ChatListViewModel @Inject constructor(
     }
 
     fun loadMoreRecentMessages(token: String) {
+        if (token.isNotBlank()) authToken = token
         val before = recentNextBefore ?: recentMessages.lastOrNull()?.createdAt
         if (isLoading || isLoadingMoreRecent || !hasMoreRecent || before.isNullOrBlank()) return
         viewModelScope.launch {
@@ -235,6 +244,22 @@ class ChatListViewModel @Inject constructor(
                 if (error == null) error = it.message ?: "Couldn't load more conversations"
             }
             isLoadingMoreRecent = false
+        }
+    }
+
+    private fun scheduleRecentRefresh() {
+        val token = authToken
+        if (token.isBlank() || isLoading) return
+        refreshRecentJob?.cancel()
+        refreshRecentJob = viewModelScope.launch {
+            delay(350)
+            runCatching {
+                withContext(Dispatchers.IO) { yugmApi.getRecentMessagesPage(token) }
+            }.onSuccess { page ->
+                recentMessages = page.messages
+                hasMoreRecent = page.hasMore
+                recentNextBefore = page.nextBefore ?: page.messages.lastOrNull()?.createdAt
+            }
         }
     }
 
