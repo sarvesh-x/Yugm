@@ -49,6 +49,12 @@ data class RelationshipStatus(
     val streakDays: Int = 0
 )
 
+data class DirectMessageReaction(
+    val userId: String = "",
+    val type: String = "",
+    val createdAt: String = ""
+)
+
 data class DirectMessage(
     val id: String = "",
     val senderId: String = "",
@@ -59,6 +65,7 @@ data class DirectMessage(
     val createdAt: String = "",
     val read: Boolean = false,
     val reactionCount: Int = 0,
+    val reactions: List<DirectMessageReaction> = emptyList(),
     val mediaUrl: String = "",
     val mediaType: String = "",
     val replyTo: ChatReplyTo? = null,

@@ -27,7 +27,7 @@ const directMessageSchema = new Schema(
     editedAt: Date,
     reactions: [{
       userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
-      type: { type: String, enum: ["heart", "fire", "laugh", "clap", "wow"], required: true },
+      type: { type: String, enum: ["heart", "fire", "laugh", "clap", "wow", "crown", "stars", "party"], required: true },
       createdAt: { type: Date, default: Date.now }
     }],
     read: { type: Boolean, default: false }

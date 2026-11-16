@@ -515,7 +515,16 @@ fun ChatScreen(
                     if (mine) Text(if (msg.read) "Status: Seen" else "Status: Sent", color = if (msg.read) Color(0xFF69F0AE) else TextMuted, fontSize = 13.sp, fontWeight = if (msg.read) FontWeight.SemiBold else FontWeight.Normal)
                     if (msg.isEdited) Text("Edited", color = TextMuted, fontSize = 13.sp)
                     if (msg.forwarded) Text("Forwarded message", color = TextMuted, fontSize = 13.sp)
-                    if (msg.reactionCount > 0) Text("Reactions: ${msg.reactionCount}", color = TextMuted, fontSize = 13.sp)
+                    if (msg.reactions.isNotEmpty()) {
+                        val summary = msg.reactions
+                            .groupBy { it.type }
+                            .entries
+                            .sortedByDescending { it.value.size }
+                            .joinToString("  ") { (type, items) -> "${reactionEmoji(type)} ${items.size}" }
+                        val mineReaction = currentUserId.takeIf { it.isNotBlank() }?.let { uid -> msg.reactions.firstOrNull { it.userId == uid }?.type }
+                        Text("Reactions: $summary", color = TextMuted, fontSize = 13.sp)
+                        if (!mineReaction.isNullOrBlank()) Text("Your reaction: ${reactionEmoji(mineReaction)}", color = TextPrimary, fontSize = 13.sp)
+                    }
                     msg.replyTo?.let { reply ->
                         Text("Reply to: ${reply.author.ifBlank { "message" }} — ${reply.text.ifBlank { "Media" }}", color = TextMuted, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
@@ -1008,7 +1017,6 @@ fun ChatScreen(
                                         selected = message.id in selectedMessageIds,
                                         highlighted = highlightedMessageId == message.id,
                                         bubbleId = myActiveCosmetics.chatBubble,
-                                        reactionCount = message.reactionCount,
                                         partner = partner,
                                         currentUserId = currentUserId,
                                         myActiveCosmetics = myActiveCosmetics,
@@ -1446,7 +1454,6 @@ private fun MessageBubble(
     selected: Boolean,
     highlighted: Boolean,
     bubbleId: String,
-    reactionCount: Int,
     partner: Host?,
     currentUserId: String,
     myActiveCosmetics: ActiveCosmetics,
@@ -1781,16 +1788,34 @@ private fun MessageBubble(
                     }
                 }
             }
-            if (reactionCount > 0) {
-                Box(
+            if (message.reactions.isNotEmpty()) {
+                val aggregates = message.reactions
+                    .groupBy { it.type }
+                    .map { (type, items) -> type to items.size }
+                    .sortedByDescending { it.second }
+                    .take(3)
+                val myReaction = currentUserId.takeIf { it.isNotBlank() }?.let { uid -> message.reactions.firstOrNull { it.userId == uid }?.type }
+                Row(
                     Modifier
                         .offset(y = (-6).dp)
                         .clip(CircleShape)
                         .background(SurfaceElevated)
-                        .border(1.dp, BorderColor, CircleShape)
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                        .border(1.dp, if (myReaction != null) PrimaryPurple.copy(alpha = 0.45f) else BorderColor, CircleShape)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("❤️ $reactionCount", color = TextPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    aggregates.forEach { (type, count) ->
+                        Text(
+                            "${reactionEmoji(type)}${if (count > 1) " $count" else ""}",
+                            color = if (type == myReaction) TextPrimary else TextMuted,
+                            fontSize = 10.sp,
+                            fontWeight = if (type == myReaction) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
+                    if (message.reactions.size > aggregates.sumOf { it.second }) {
+                        Text("+", color = TextMuted, fontSize = 10.sp)
+                    }
                 }
             }
         }
@@ -1895,4 +1920,15 @@ private fun openChatMedia(context: android.content.Context, rawUrl: String) {
     }.onFailure {
         android.widget.Toast.makeText(context, "Unable to open media", android.widget.Toast.LENGTH_SHORT).show()
     }
+}
+private fun reactionEmoji(type: String): String = when (type.lowercase()) {
+    "heart" -> "??"
+    "fire" -> "??"
+    "laugh" -> "??"
+    "clap" -> "??"
+    "wow" -> "??"
+    "crown" -> "??"
+    "stars" -> "?"
+    "party" -> "??"
+    else -> "??"
 }
