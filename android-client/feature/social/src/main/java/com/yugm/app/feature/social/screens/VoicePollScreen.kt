@@ -50,34 +50,46 @@ fun VoicePollScreen(
     onBack: () -> Unit,
     onPollDetail: (String) -> Unit
 ) {
-    var polls by remember { mutableStateOf<VoicePollListResponse?>(null) }
+    var polls by remember { mutableStateOf<List<com.yugm.app.core.model.VoicePoll>>(emptyList()) }
+    var activeTotal by remember { mutableStateOf(0) }
+    var activePage by remember { mutableStateOf(1) }
     var myPolls by remember { mutableStateOf<List<com.yugm.app.core.model.VoicePoll>>(emptyList()) }
     var showMine by remember { mutableStateOf(false) }
     var showCreate by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(true) }
+    var isLoadingMore by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     var loadError by remember { mutableStateOf<String?>(null) }
 
-    fun load() {
+    fun load(refresh: Boolean = true) {
         scope.launch {
-            isLoading = true
-            loadError = null
+            val targetPage = if (!showMine && !refresh) activePage + 1 else 1
+            if (refresh) {
+                isLoading = true
+                loadError = null
+            } else {
+                isLoadingMore = true
+            }
             try {
                 if (showMine) {
                     myPolls = SocialApi.getMyVoicePolls(token)
                 } else {
-                    polls = SocialApi.getActiveVoicePolls(token)
+                    val resp = SocialApi.getActiveVoicePolls(token, page = targetPage, limit = 20)
+                    activeTotal = resp.total
+                    activePage = resp.page
+                    polls = if (refresh) resp.polls else (polls + resp.polls).distinctBy { it.id }
                 }
             } catch (e: Exception) {
-                loadError = e.message ?: "Failed to load polls"
+                if (refresh) loadError = e.message ?: "Failed to load polls"
             } finally {
                 isLoading = false
+                isLoadingMore = false
             }
         }
     }
 
-    LaunchedEffect(token, showMine) { load() }
+    LaunchedEffect(token, showMine) { load(refresh = true) }
 
     YugmAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -98,7 +110,7 @@ fun VoicePollScreen(
                         text = "Refresh",
                         height = 40.dp,
                         gradient = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Panel, Panel)),
-                        onClick = { load() }
+                        onClick = { load(refresh = true) }
                     )
                     GlassButton(
                         text = if (showCreate) "Cancel" else "Create",
@@ -123,11 +135,12 @@ fun VoicePollScreen(
                             Text("Couldn't load polls", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
                             Text(loadError ?: "Unknown error", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
                             Spacer(Modifier.height(12.dp))
-                            GlassButton(text = "Retry", onClick = { load() })
+                            GlassButton(text = "Retry", onClick = { load(refresh = true) })
                         }
                     }
                     else -> {
-                        val displayPolls = if (showMine) myPolls else (polls?.polls ?: emptyList())
+                        val displayPolls = if (showMine) myPolls else polls
+                        val canLoadMore = !showMine && polls.isNotEmpty() && polls.size < activeTotal
                         if (displayPolls.isEmpty()) {
                             GlassCard {
                                 Text(if (showMine) "No polls yet" else "No active polls", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
@@ -166,6 +179,15 @@ fun VoicePollScreen(
                                                 Text("${poll.options.size} options \u00B7 $totalVotes votes", color = TextMuted, fontSize = 12.sp)
                                             }
                                         }
+                                    }
+                                }
+                                if (canLoadMore) {
+                                    item("load-more") {
+                                        GlassButton(
+                                            text = if (isLoadingMore) "Loading..." else "Load more",
+                                            enabled = !isLoadingMore,
+                                            onClick = { load(refresh = false) }
+                                        )
                                     }
                                 }
                             }
