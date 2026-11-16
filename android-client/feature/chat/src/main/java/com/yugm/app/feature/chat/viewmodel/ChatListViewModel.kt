@@ -197,14 +197,30 @@ class ChatListViewModel @Inject constructor(
 
                     matches = matchesRequest.await()
                     val recentPage = messagesRequest.await()
-                    recentMessages = recentPage.messages
+                    var mergedRecent = recentPage.messages
                     hasMoreRecent = recentPage.hasMore
                     recentNextBefore = recentPage.nextBefore ?: recentPage.messages.lastOrNull()?.createdAt
                     unreadCounts = async(Dispatchers.IO) { runCatching { yugmApi.unreadCounts(token) }.getOrDefault(emptyMap()) }.await()
-                    mutedPartnerIds = async(Dispatchers.IO) { runCatching { yugmApi.mutedConversations(token) }.getOrDefault(emptySet()) }.await()
+                    val mutedIds = async(Dispatchers.IO) { runCatching { yugmApi.mutedConversations(token) }.getOrDefault(emptySet()) }.await()
+                    mutedPartnerIds = mutedIds
                     followers = followersRequest.await()
                     following = followingRequest.await()
                     recommendedChatUsers = recommendedRequest.await()
+                    val knownPartnerIds = mergedRecent.map { if (it.senderId == currentUserId) it.receiverId else it.senderId }.toSet()
+                    val missingMuted = mutedIds.filter { it.isNotBlank() && it !in knownPartnerIds }
+                    if (missingMuted.isNotEmpty()) {
+                        val mutedPreviews = missingMuted.map { partnerId ->
+                            async(Dispatchers.IO) {
+                                runCatching { yugmApi.conversation(token, partnerId, limit = 1) }.getOrNull()?.messages?.lastOrNull()
+                            }
+                        }.mapNotNull { it.await() }
+                        if (mutedPreviews.isNotEmpty()) {
+                            mergedRecent = (mergedRecent + mutedPreviews)
+                                .distinctBy { it.id.ifBlank { "${it.senderId}|${it.receiverId}|${it.createdAt}|${it.message}" } }
+                                .sortedByDescending { it.createdAt }
+                        }
+                    }
+                    recentMessages = mergedRecent
                     val clan = runCatching { yugmApi.myClan(token) }.getOrNull()
                     myClan = clan
                     clanLastMessage = if (clan != null) {
