@@ -374,7 +374,7 @@ fun ChatScreen(
                 listState.animateScrollToItem(bounded)
             } else if (hasMoreHistory && !isLoadingMore) {
                 pendingJumpMessageId = targetId
-                android.widget.Toast.makeText(context, "Loading earlier messages to find this resultâ€¦", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(context, "Loading earlier messages to find this result…", android.widget.Toast.LENGTH_SHORT).show()
                 onLoadOlder()
             } else {
                 pendingJumpMessageId = null
@@ -503,7 +503,7 @@ fun ChatScreen(
                         if (!mineReaction.isNullOrBlank()) Text("Your reaction: ${reactionEmoji(mineReaction)}", color = TextPrimary, fontSize = 13.sp)
                     }
                     msg.replyTo?.let { reply ->
-                        Text("Reply to: ${reply.author.ifBlank { "message" }} â€” ${reply.text.ifBlank { "Media" }}", color = TextMuted, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text("Reply to: ${reply.author.ifBlank { "message" }} — ${reply.text.ifBlank { "Media" }}", color = TextMuted, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                     if (msg.mediaType.isNotBlank()) Text("Type: ${msg.mediaType.lowercase().replaceFirstChar { it.uppercase() }}", color = TextMuted, fontSize = 13.sp)
                 }
@@ -523,9 +523,9 @@ fun ChatScreen(
                         "Choose how to delete ${if (selectedCount == 1) "this message" else "$selectedCount messages"}.",
                         color = TextMuted
                     )
-                    Text("â€¢ Delete for me: removes it from your chat only.", color = TextMuted, fontSize = 12.sp)
+                    Text("• Delete for me: removes it from your chat only.", color = TextMuted, fontSize = 12.sp)
                     if (selectedOwnIds.isNotEmpty()) {
-                        Text("â€¢ Delete for everyone: removes ${if (selectedOwnIds.size == 1) "your selected message" else "${selectedOwnIds.size} of your selected messages"} for both people.", color = TextMuted, fontSize = 12.sp)
+                        Text("• Delete for everyone: removes ${if (selectedOwnIds.size == 1) "your selected message" else "${selectedOwnIds.size} of your selected messages"} for both people.", color = TextMuted, fontSize = 12.sp)
                     }
                 }
             },
@@ -779,7 +779,7 @@ fun ChatScreen(
                         }
                         Column(Modifier.weight(1f).padding(start = 10.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(partner?.name ?: "Loading matchâ€¦", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(partner?.name ?: "Loading match…", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Spacer(Modifier.width(4.dp))
                                 Box(
                                     Modifier
@@ -788,7 +788,7 @@ fun ChatScreen(
                                         .background(Brush.linearGradient(listOf(PrimaryPurple, Pink))),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text("âœ“", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Black)
+                                    Text("✓", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Black)
                                 }
                             }
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -807,11 +807,11 @@ fun ChatScreen(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 if (isMuted) {
-                                    Text("Â·", color = TextMuted, fontSize = 12.sp)
-                                    Text("ðŸ”• Muted", color = TextMuted, fontSize = 11.sp, maxLines = 1)
+                                    Text("·", color = TextMuted, fontSize = 12.sp)
+                                    Text("🔕 Muted", color = TextMuted, fontSize = 11.sp, maxLines = 1)
                                 }
                                 if (isBlockedByMe) {
-                                    Text("Â·", color = TextMuted, fontSize = 12.sp)
+                                    Text("·", color = TextMuted, fontSize = 12.sp)
                                     Text("Blocked", color = Danger, fontSize = 11.sp, maxLines = 1, fontWeight = FontWeight.SemiBold)
                                 }
                             }
@@ -886,7 +886,7 @@ fun ChatScreen(
                                 modifier = Modifier.weight(1f),
                                 decorationBox = { inner ->
                                     Box {
-                                        if (searchQuery.isBlank()) Text("Search in this chatâ€¦", color = TextMuted, fontSize = 14.sp)
+                                        if (searchQuery.isBlank()) Text("Search in this chat…", color = TextMuted, fontSize = 14.sp)
                                         inner()
                                     }
                                 }
@@ -928,7 +928,7 @@ fun ChatScreen(
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 androidx.compose.material3.CircularProgressIndicator(color = PrimaryPurple)
-                                Text("Loading conversationâ€¦", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp))
+                                Text("Loading conversation…", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp))
                             }
                         }
                     } else {
@@ -948,7 +948,7 @@ fun ChatScreen(
                                         .padding(horizontal = 14.dp, vertical = 12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("ðŸš«", fontSize = 18.sp)
+                                    Text("🚫", fontSize = 18.sp)
                                     Column(Modifier.padding(start = 10.dp).weight(1f)) {
                                         Text("You blocked this user", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                                         Text("Unblock to send messages and calls again.", color = TextMuted, fontSize = 11.sp, lineHeight = 15.sp)
@@ -967,7 +967,7 @@ fun ChatScreen(
                             if (searchQuery.isBlank() && visibleMessages.isNotEmpty() && hasMoreHistory) item {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                                     Text(
-                                        text = if (isLoadingMore) "Loading earlier messagesâ€¦" else "Load earlier messages",
+                                        text = if (isLoadingMore) "Loading earlier messages…" else "Load earlier messages",
                                         color = if (isLoadingMore) TextMuted else TextPrimary,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold,
@@ -981,7 +981,7 @@ fun ChatScreen(
                                 }
                             }
                             if (error.isNotBlank()) item {
-                                Text("$error Â· Retry", color = Pink, fontSize = 12.sp, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.clickable(role = Role.Button, onClickLabel = stringResource(R.string.a11y_retry_messages), onClick = onRetry).padding(vertical = 12.dp))
+                                Text("$error · Retry", color = Pink, fontSize = 12.sp, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.clickable(role = Role.Button, onClickLabel = stringResource(R.string.a11y_retry_messages), onClick = onRetry).padding(vertical = 12.dp))
                             }
                             if (searchQuery.length >= 2 && visibleMessages.isNotEmpty()) item {
                                 Text(
@@ -995,7 +995,7 @@ fun ChatScreen(
                             if (searchQuery.length >= 2 && hasMoreSearchResults) item {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                                     Text(
-                                        text = if (isLoadingMoreSearch) "Loading more resultsâ€¦" else "Load more results",
+                                        text = if (isLoadingMoreSearch) "Loading more results…" else "Load more results",
                                         color = if (isLoadingMoreSearch) TextMuted else TextPrimary,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold,
@@ -1049,7 +1049,12 @@ fun ChatScreen(
                                 var swipeReplyTriggered by remember(message.id) { mutableStateOf(false) }
                                 Box(
                                     Modifier
-                                        .padding(top = if (groupedWithPrev) 0.dp else 3.dp, bottom = if (groupedWithNext) 0.dp else 3.dp)
+                                        // Tight inside a sender group (2dp), roomier between
+                                        // different senders (8dp) like WhatsApp/Telegram.
+                                        .padding(
+                                            top = if (groupedWithPrev) 1.dp else 6.dp,
+                                            bottom = if (groupedWithNext) 1.dp else 2.dp
+                                        )
                                         .pointerInput(message.id, selectionMode, inSearchResults) {
                                             if (selectionMode || inSearchResults) return@pointerInput
                                             detectHorizontalDragGestures(
@@ -1099,7 +1104,8 @@ fun ChatScreen(
                                             myActiveCosmetics = myActiveCosmetics,
                                             showIncomingAvatar = !mine && !groupedWithNext,
                                             showOutgoingAvatar = mine && !groupedWithNext,
-                                            compact = groupedWithPrev,
+                                            groupedWithPrev = groupedWithPrev,
+                                            groupedWithNext = groupedWithNext,
                                             playingVoiceMessageId = playingVoiceMessageId,
                                             isVoicePlaying = isVoicePlaying,
                                             isVoicePreparing = isVoicePreparing,
@@ -1142,7 +1148,7 @@ fun ChatScreen(
                                     Avatar(partner?.name?.take(1) ?: "?", 30, partner?.avatar, partner?.activeCosmetics ?: com.yugm.app.core.model.ActiveCosmetics(), accessibilityLabel = stringResource(R.string.a11y_profile_picture, partner?.name ?: defaultMatchName))
                                     Column(Modifier.padding(start = 8.dp)) {
                                         TypingBubble()
-                                        Text("${partner?.name ?: "Your match"} is typingâ€¦", color = TextMuted, fontSize = 10.sp)
+                                        Text("${partner?.name ?: "Your match"} is typing…", color = TextMuted, fontSize = 10.sp)
                                     }
                                 }
                             }
@@ -1180,7 +1186,7 @@ fun ChatScreen(
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        listOf("ðŸ˜Š", "ðŸ˜‚", "â¤ï¸", "âœ¨", "ðŸ”¥", "ðŸ‘‹", "ðŸŽ§", "ðŸŒ™", "ðŸ˜", "ðŸ¥³").forEach { emoji ->
+                        listOf("😊", "😂", "❤️", "✨", "🔥", "👋", "🎧", "🌙", "😍", "🥳").forEach { emoji ->
                             val stickerLabel = "Send sticker $emoji"
                             Box(
                                 Modifier
@@ -1260,7 +1266,7 @@ fun ChatScreen(
                                 modifier = Modifier.weight(1f).semantics { contentDescription = messageFieldLabel },
                                 decorationBox = { inner ->
                                     Box {
-                                        if (draft.isBlank()) Text(if (editingTarget != null) "Edit messageâ€¦" else if (replyTarget != null) "Write a replyâ€¦" else "Type a message...", color = TextMuted, fontSize = 14.sp)
+                                        if (draft.isBlank()) Text(if (editingTarget != null) "Edit message…" else if (replyTarget != null) "Write a reply…" else "Type a message...", color = TextMuted, fontSize = 14.sp)
                                         inner()
                                     }
                                 }
@@ -1290,7 +1296,7 @@ fun ChatScreen(
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(if (isRecordingVoice) "â¹ï¸" else "ðŸŽ¤", fontSize = 16.sp)
+                                Text(if (isRecordingVoice) "⏹️" else "🎤", fontSize = 16.sp)
                             }
                             Spacer(Modifier.width(4.dp))
                             Box(
@@ -1404,7 +1410,7 @@ fun ChatScreen(
                 Column(Modifier.fillMaxWidth().padding(20.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Send a Gift", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
-                        Text("â— $balance", color = Color(0xFFFFC52F), fontWeight = FontWeight.Bold)
+                        Text("● $balance", color = Color(0xFFFFC52F), fontWeight = FontWeight.Bold)
                     }
                     if (gifts.isEmpty()) {
                         Text(
@@ -1433,7 +1439,7 @@ fun ChatScreen(
                                         Text(emoji, fontSize = 36.sp)
                                     }
                                     Text(gift.name, color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text("â— ${gift.price}", color = if (balance >= gift.price) Color(0xFFFFC52F) else Danger, fontSize = 10.sp)
+                                    Text("● ${gift.price}", color = if (balance >= gift.price) Color(0xFFFFC52F) else Danger, fontSize = 10.sp)
                                 }
                             }
                         }
@@ -1491,12 +1497,12 @@ fun ChatScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     listOf(
-                        "â¤ï¸" to "heart",
-                        "ðŸ”¥" to "fire",
-                        "ðŸ˜‚" to "laugh",
-                        "ðŸ‘" to "clap",
-                        "ðŸ˜®" to "wow",
-                        "ðŸ‘‘" to "crown"
+                        "❤️" to "heart",
+                        "🔥" to "fire",
+                        "😂" to "laugh",
+                        "👏" to "clap",
+                        "😮" to "wow",
+                        "👑" to "crown"
                     ).forEach { (emoji, type) ->
                         val myReaction = currentUserId.takeIf { it.isNotBlank() }?.let { uid -> target.reactions.firstOrNull { it.userId == uid }?.type }
                         val isSelected = myReaction == type
@@ -1667,10 +1673,10 @@ private fun MatchedBanner(name: String) {
         Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Brush.horizontalGradient(listOf(PrimaryPurple.copy(alpha = 0.4f), Pink.copy(alpha = 0.3f)))).border(1.dp, Pink.copy(alpha = 0.4f), RoundedCornerShape(18.dp)).padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(Brush.linearGradient(listOf(Pink, PrimaryPurple))), contentAlignment = Alignment.Center) { Text("â™¡", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Black) }
+        Box(Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(Brush.linearGradient(listOf(Pink, PrimaryPurple))), contentAlignment = Alignment.Center) { Text("♡", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Black) }
         Column(Modifier.padding(start = 12.dp)) {
             Text("You're Matched!", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Black)
-            Text("Say hello to $name and start your story âœ¨", color = TextMuted, fontSize = 11.sp)
+            Text("Say hello to $name and start your story ✨", color = TextMuted, fontSize = 11.sp)
         }
     }
 }
@@ -1685,7 +1691,7 @@ private fun EmptyConversationState(name: String) {
         Box(
             Modifier.size(56.dp).clip(CircleShape).background(Brush.linearGradient(listOf(PrimaryPurple.copy(alpha = 0.75f), Pink.copy(alpha = 0.75f)))),
             contentAlignment = Alignment.Center
-        ) { Text("ðŸ’¬", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold) }
+        ) { Text("💬", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold) }
         Text("Start the conversation", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         Text("Send ${name.substringBefore(' ')} a message and see where the conversation goes.", color = TextMuted, fontSize = 13.sp, lineHeight = 18.sp)
     }
@@ -1694,12 +1700,12 @@ private fun EmptyConversationState(name: String) {
 @Composable
 private fun SafetyTip(onDismiss: () -> Unit) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(SurfaceElevated).border(1.dp, BorderColor, RoundedCornerShape(18.dp)).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("ðŸ›¡ï¸", color = Pink, fontSize = 28.sp)
+        Text("🛡️", color = Pink, fontSize = 28.sp)
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text("Safety Tip", color = PrimaryPurple, fontWeight = FontWeight.Bold, fontSize = 13.sp)
             Text("Be kind, respectful and keep the conversation safe. Report or block anything that feels off.", color = TextMuted, fontSize = 10.sp, lineHeight = 14.sp)
         }
-        Text("Ã—", color = TextMuted, fontSize = 22.sp, modifier = Modifier.clickable(onClick = onDismiss))
+        Text("×", color = TextMuted, fontSize = 22.sp, modifier = Modifier.clickable(onClick = onDismiss))
     }
 }
 
@@ -1728,6 +1734,36 @@ private fun ConversationDivider(label: String, highlight: Boolean = false) {
     }
 }
 
+// Bubble geometry. WhatsApp/Telegram shapes are a rounded rectangle with one
+// nearly-square bottom corner on the sender's side, which reads as a tail without
+// needing a custom path. Consecutive messages from the same sender also share a
+// tight column of corners so a group looks like one continuous block.
+private val BubbleRadius = 20.dp
+private val BubbleTailRadius = 5.dp
+private val BubbleStackedRadius = 7.dp
+
+private fun messageBubbleShape(
+    mine: Boolean,
+    groupedWithPrev: Boolean,
+    groupedWithNext: Boolean
+): RoundedCornerShape {
+    val senderEdgeTop = if (groupedWithPrev) BubbleStackedRadius else BubbleRadius
+    return RoundedCornerShape(
+        topStart = if (mine) BubbleRadius else senderEdgeTop,
+        topEnd = if (mine) senderEdgeTop else BubbleRadius,
+        bottomStart = when {
+            mine -> BubbleRadius
+            groupedWithNext -> BubbleStackedRadius
+            else -> BubbleTailRadius
+        },
+        bottomEnd = when {
+            !mine -> BubbleRadius
+            groupedWithNext -> BubbleStackedRadius
+            else -> BubbleTailRadius
+        }
+    )
+}
+
 @Composable
 private fun MessageBubble(
     message: DirectMessage,
@@ -1740,7 +1776,8 @@ private fun MessageBubble(
     myActiveCosmetics: ActiveCosmetics,
     showIncomingAvatar: Boolean = !mine,
     showOutgoingAvatar: Boolean = mine,
-    compact: Boolean = false,
+    groupedWithPrev: Boolean = false,
+    groupedWithNext: Boolean = false,
     playingVoiceMessageId: String?,
     isVoicePlaying: Boolean,
     isVoicePreparing: Boolean,
@@ -1781,19 +1818,18 @@ private fun MessageBubble(
             } else {
                 Spacer(Modifier.width(28.dp))
             }
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(8.dp))
         }
 
         Column(horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
-            val bubbleShape = RoundedCornerShape(
-                topStart = 22.dp,
-                topEnd = 22.dp,
-                bottomStart = if (mine) 22.dp else 8.dp,
-                bottomEnd = if (mine) 8.dp else 22.dp
-            )
+            val hasMedia = message.mediaUrl.isNotBlank()
+            val mediaOnly = hasMedia && message.message.isBlank() && message.replyTo == null && !message.forwarded
+            val bubbleShape = messageBubbleShape(mine, groupedWithPrev, groupedWithNext)
             Box(
                 Modifier
-                    .widthIn(max = 280.dp)
+                    // Hug the content, capped so long messages still leave the
+                    // opposite side visible (WhatsApp/Telegram read at ~78%).
+                    .widthIn(max = 290.dp)
                     .onGloballyPositioned { bubbleCoordinates = it }
                     .clip(bubbleShape)
                     .background(
@@ -1824,18 +1860,21 @@ private fun MessageBubble(
                             onLongPress(rect)
                         }
                     )
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .padding(
+                        horizontal = if (mediaOnly) 4.dp else 10.dp,
+                        vertical = if (mediaOnly) 4.dp else 6.dp
+                    )
             ) {
                 Column {
                     if (message.forwarded) {
-                        Text("Forwarded", color = Pink, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 4.dp))
+                        Text("Forwarded", color = Pink, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 3.dp))
                     }
                     message.replyTo?.let { reply ->
-                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color.Black.copy(alpha = 0.22f)).padding(8.dp)) {
+                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.22f)).padding(horizontal = 8.dp, vertical = 6.dp)) {
                             Text(reply.author.ifBlank { "Replied message" }, color = Pink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             Text(reply.text.ifBlank { "Media" }, color = TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(4.dp))
                     }
                     if (message.mediaUrl.isNotBlank()) {
                         val isAudio = message.mediaType.equals("AUDIO", true)
@@ -1883,7 +1922,7 @@ private fun MessageBubble(
                                         Text("Voice note", color = (bubble?.text ?: TextPrimary), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                         Text(
                                             when {
-                                                isVoiceActive && isVoicePreparing -> "Loadingâ€¦"
+                                                isVoiceActive && isVoicePreparing -> "Loading…"
                                                 isVoiceActive -> "${formatPlaybackTime(safeProgress)} / ${formatPlaybackTime(voiceDurationMs)}"
                                                 else -> "Tap to play"
                                             },
@@ -1958,7 +1997,7 @@ private fun MessageBubble(
                                 }
                             }
                         }
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(4.dp))
                     }
                     if (message.message.isNotBlank()) {
                         val lower = message.message.lowercase()
@@ -2045,9 +2084,9 @@ private fun MessageBubble(
                                         }
                                         Text(
                                             when {
-                                                isCardStarting -> "Startingâ€¦"
+                                                isCardStarting -> "Starting…"
                                                 isBlockedByMe -> "Unblock to call"
-                                                anyCallStarting -> "Please waitâ€¦"
+                                                anyCallStarting -> "Please wait…"
                                                 mine -> "Start again"
                                                 else -> "Call back"
                                             },
@@ -2062,10 +2101,15 @@ private fun MessageBubble(
                             Text(message.message, color = bubble?.text ?: TextPrimary, fontSize = 14.sp, lineHeight = 20.sp)
                         }
                     }
-                    Row(Modifier.align(Alignment.End).padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier
+                            .align(Alignment.End)
+                            .padding(top = if (message.message.isNotBlank()) 2.dp else 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         if (message.isEdited) {
                             Text("edited", color = (bubble?.text ?: TextMuted).copy(alpha = 0.7f), fontSize = 10.sp)
-                            Text(" Â· ", color = (bubble?.text ?: TextMuted).copy(alpha = 0.6f), fontSize = 10.sp)
+                            Text(" · ", color = (bubble?.text ?: TextMuted).copy(alpha = 0.6f), fontSize = 10.sp)
                         }
                         Text(messageTime(message.createdAt), color = (bubble?.text ?: TextMuted).copy(alpha = 0.78f), fontSize = 10.sp)
                         if (mine) {
@@ -2115,7 +2159,7 @@ private fun MessageBubble(
         }
 
         if (mine) {
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(8.dp))
             if (showOutgoingAvatar) {
                 Box(Modifier.size(28.dp).clip(CircleShape).background(SurfaceElevated)) {
                     Avatar(

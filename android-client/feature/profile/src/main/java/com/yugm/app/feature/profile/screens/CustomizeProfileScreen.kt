@@ -206,7 +206,7 @@ fun CustomizeProfileScreen(
                                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryPurple),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
-                                Text("ðŸ›ï¸ Browse Store", color = Color.White, fontWeight = FontWeight.Bold)
+                                Text("🛍️ Browse Store", color = Color.White, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
