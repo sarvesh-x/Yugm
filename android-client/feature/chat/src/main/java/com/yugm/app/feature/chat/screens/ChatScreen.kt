@@ -547,11 +547,23 @@ fun ChatScreen(
         )
     }
     if (showDeleteSelected) {
+        val selectedCount = selectedMessageIds.size
         AlertDialog(
             onDismissRequest = { showDeleteSelected = false },
             containerColor = SurfaceElevated,
-            title = { Text("Delete selected messages?", color = TextPrimary) },
-            text = { Text("Delete ${selectedMessageIds.size} selected message${if (selectedMessageIds.size == 1) "" else "s"} for you. This cannot be undone.", color = TextMuted) },
+            title = { Text(if (selectedCount == 1) "Delete message?" else "Delete selected messages?", color = TextPrimary) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "Choose how to delete ${if (selectedCount == 1) "this message" else "$selectedCount messages"}.",
+                        color = TextMuted
+                    )
+                    Text("• Delete for me: removes it from your chat only.", color = TextMuted, fontSize = 12.sp)
+                    if (selectedOwnIds.isNotEmpty()) {
+                        Text("• Delete for everyone: removes ${if (selectedOwnIds.size == 1) "your selected message" else "${selectedOwnIds.size} of your selected messages"} for both people.", color = TextMuted, fontSize = 12.sp)
+                    }
+                }
+            },
             confirmButton = {
                 Column(horizontalAlignment = Alignment.End) {
                     TextButton(onClick = {
@@ -563,7 +575,7 @@ fun ChatScreen(
                         onDeleteSelected(selectedOwnIds, "EVERYONE")
                         selectedMessageIds = emptySet()
                         showDeleteSelected = false
-                    }) { Text("Delete ${selectedOwnIds.size} for everyone", color = Danger) }
+                    }) { Text(if (selectedOwnIds.size == 1) "Delete for everyone" else "Delete ${selectedOwnIds.size} for everyone", color = Danger) }
                 }
             },
             dismissButton = { TextButton(onClick = { showDeleteSelected = false }) { Text("Cancel") } }
