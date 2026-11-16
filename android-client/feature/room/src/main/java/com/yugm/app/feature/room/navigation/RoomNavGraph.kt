@@ -241,7 +241,9 @@ fun NavGraphBuilder.roomNavGraph(
                 onSetSeatLocked = roomViewModel::setSeatLocked,
                 onInviteSpeaker = roomViewModel::inviteSpeaker,
                 onCreatePoll = { roomViewModel.createPoll("What should we do next?", listOf("Music", "Games", "Q&A", "Chill")) },
-                onCreateCustomPoll = roomViewModel::createPoll,
+                onCreateCustomPoll = { question, options, onSuccess, onFailure ->
+                    roomViewModel.createPoll(question, options, onSuccess, onFailure)
+                },
                 onVotePoll = roomViewModel::votePoll,
                 onClosePoll = roomViewModel::closePoll,
                 onInviteFriend = { userId ->
@@ -365,7 +367,9 @@ fun NavGraphBuilder.roomNavGraph(
                 onRejectPk = roomViewModel::rejectPk,
                 onEndPk = roomViewModel::endPk,
                 onCreatePoll = { roomViewModel.createPoll("What should we do?", listOf("Music", "Games")) },
-                onCreateCustomPoll = roomViewModel::createPoll,
+                onCreateCustomPoll = { question, options, onSuccess, onFailure ->
+                    roomViewModel.createPoll(question, options, onSuccess, onFailure)
+                },
                 onVotePoll = roomViewModel::votePoll,
                 onClosePoll = roomViewModel::closePoll,
                 onEndRoom = {

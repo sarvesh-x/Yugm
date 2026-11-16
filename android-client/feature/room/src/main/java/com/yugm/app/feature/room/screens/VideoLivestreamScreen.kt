@@ -140,7 +140,7 @@ fun VideoLivestreamScreen(
     onRejectPk: (String) -> Unit,
     onEndPk: () -> Unit,
     onCreatePoll: () -> Unit = {},
-    onCreateCustomPoll: (String, List<String>) -> Unit = { _, _ -> },
+    onCreateCustomPoll: (String, List<String>, () -> Unit, (String) -> Unit) -> Unit = { _, _, _, _ -> },
     onVotePoll: (String, Int) -> Unit = { _, _ -> },
     onClosePoll: (String) -> Unit = {},
     onEndRoom: () -> Unit
@@ -497,11 +497,22 @@ fun VideoLivestreamScreen(
     }
 
     if (showPollComposer) {
+        var isCreatingPoll by remember { mutableStateOf(false) }
         PollComposerSheet(
-            onDismiss = { showPollComposer = false },
+            isSubmitting = isCreatingPoll,
+            onDismiss = { if (!isCreatingPoll) showPollComposer = false },
             onCreate = { question, options ->
-                showPollComposer = false
-                onCreateCustomPoll(question, options)
+                if (isCreatingPoll) return@PollComposerSheet
+                isCreatingPoll = true
+                onCreateCustomPoll(
+                    question,
+                    options,
+                    {
+                        isCreatingPoll = false
+                        showPollComposer = false
+                    },
+                    { isCreatingPoll = false }
+                )
             }
         )
     }

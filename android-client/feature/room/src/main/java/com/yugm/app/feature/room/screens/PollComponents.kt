@@ -49,15 +49,19 @@ private val RoomGoldAccent = Color(0xFFFFB300)
 @Composable
 fun PollComposerSheet(
     onDismiss: () -> Unit,
-    onCreate: (String, List<String>) -> Unit
+    onCreate: (String, List<String>) -> Unit,
+    isSubmitting: Boolean = false
 ) {
     var question by rememberSaveable { mutableStateOf("") }
     var options by rememberSaveable { mutableStateOf(listOf("", "")) }
 
     val trimmed = options.map { it.trim() }.filter { it.isNotBlank() }
-    val canCreate = question.trim().isNotBlank() && trimmed.size in 2..6
+    val canCreate = !isSubmitting && question.trim().isNotBlank() && trimmed.size in 2..6
 
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF141224)) {
+    ModalBottomSheet(
+        onDismissRequest = { if (!isSubmitting) onDismiss() },
+        containerColor = Color(0xFF141224)
+    ) {
         Column(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier
@@ -68,30 +72,34 @@ fun PollComposerSheet(
             Text("Create Room Poll", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Black)
             OutlinedTextField(
                 value = question,
-                onValueChange = { question = it.take(120) },
+                onValueChange = { if (!isSubmitting) question = it.take(120) },
                 label = { Text("Poll Question") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                enabled = !isSubmitting
             )
             options.forEachIndexed { index, value ->
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(
                         value = value,
                         onValueChange = { v ->
-                            if (v.length <= 60) {
+                            if (!isSubmitting && v.length <= 60) {
                                 options = options.toMutableList().also { it[index] = v }
                             }
                         },
                         label = { Text("Option ${index + 1}") },
                         modifier = Modifier.weight(1f),
-                        singleLine = true
+                        singleLine = true,
+                        enabled = !isSubmitting
                     )
                     if (options.size > 2) {
                         Text(
                             "Remove",
-                            color = TextMuted,
+                            color = if (isSubmitting) TextMuted.copy(alpha = 0.5f) else TextMuted,
                             fontSize = 12.sp,
-                            modifier = Modifier.clickable { options = options.toMutableList().also { it.removeAt(index) } }
+                            modifier = if (isSubmitting) Modifier else Modifier.clickable {
+                                options = options.toMutableList().also { it.removeAt(index) }
+                            }
                         )
                     }
                 }
@@ -99,7 +107,8 @@ fun PollComposerSheet(
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (options.size < 6) {
                     Button(
-                        onClick = { options = options + "" },
+                        onClick = { if (!isSubmitting) options = options + "" },
+                        enabled = !isSubmitting,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0x332F2A4A))
                     ) { Text("+ Add option", color = TextPrimary) }
                 }
@@ -111,7 +120,7 @@ fun PollComposerSheet(
                 modifier = Modifier.fillMaxWidth().height(48.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = RoomGoldAccent)
             ) {
-                Text("Launch Poll", color = Background, fontWeight = FontWeight.Black)
+                Text(if (isSubmitting) "Creating..." else "Launch Poll", color = Background, fontWeight = FontWeight.Black)
             }
         }
     }
