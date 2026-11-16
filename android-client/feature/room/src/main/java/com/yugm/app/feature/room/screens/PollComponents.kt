@@ -50,7 +50,8 @@ private val RoomGoldAccent = Color(0xFFFFB300)
 fun PollComposerSheet(
     onDismiss: () -> Unit,
     onCreate: (String, List<String>) -> Unit,
-    isSubmitting: Boolean = false
+    isSubmitting: Boolean = false,
+    errorMessage: String? = null
 ) {
     var question by rememberSaveable { mutableStateOf("") }
     var options by rememberSaveable { mutableStateOf(listOf("", "")) }
@@ -113,6 +114,9 @@ fun PollComposerSheet(
                     ) { Text("+ Add option", color = TextPrimary) }
                 }
                 Text("${trimmed.size}/6 options", color = TextMuted, fontSize = 12.sp)
+            }
+            if (!errorMessage.isNullOrBlank()) {
+                Text(errorMessage, color = Pink, fontSize = 12.sp)
             }
             Button(
                 onClick = { if (canCreate) onCreate(question.trim(), trimmed) },

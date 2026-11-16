@@ -1583,12 +1583,15 @@ fun ActiveVoiceRoomScreen(
     // 10. Poll Composer Sheet
     if (showPollComposer) {
         var isCreatingPoll by remember { mutableStateOf(false) }
+        var createPollError by remember { mutableStateOf<String?>(null) }
         PollComposerSheet(
             isSubmitting = isCreatingPoll,
+            errorMessage = createPollError,
             onDismiss = { if (!isCreatingPoll) showPollComposer = false },
             onCreate = { question, options ->
                 if (isCreatingPoll) return@PollComposerSheet
                 isCreatingPoll = true
+                createPollError = null
                 onCreateCustomPoll(
                     question,
                     options,
@@ -1596,8 +1599,9 @@ fun ActiveVoiceRoomScreen(
                         isCreatingPoll = false
                         showPollComposer = false
                     },
-                    {
+                    { msg ->
                         isCreatingPoll = false
+                        createPollError = msg
                     }
                 )
             }
