@@ -855,43 +855,21 @@ fun ChatScreen(
                             locked = callsLockedForVip
                         )
                         Spacer(Modifier.width(6.dp))
-                        Box {
-                            LightChatAction(Icons.Filled.MoreVert, stringResource(R.string.a11y_conversation_options), onClick = { showMore = !showMore })
-                            DropdownMenu(
-                                expanded = showMore,
-                                onDismissRequest = { showMore = false },
-                                modifier = Modifier.widthIn(min = 190.dp, max = 220.dp)
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Profile", color = LocalYugmColors.current.textPrimary) },
-                                    enabled = !partner?.id.isNullOrBlank(),
-                                    onClick = { showMore = false; partner?.id?.takeIf(String::isNotBlank)?.let(onOpenProfile) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Search in chat", color = LocalYugmColors.current.textPrimary) },
-                                    onClick = {
-                                        showMore = false
-                                        if (searchVisible) { searchVisible = false; searchQuery = "" } else searchVisible = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(if (isMuted) "Unmute" else "Mute", color = LocalYugmColors.current.textPrimary) },
-                                    onClick = { showMore = false; onMute(!isMuted) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Report", color = LocalYugmColors.current.danger) },
-                                    onClick = { showMore = false; showReportDialog = true }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(if (isBlockedByMe) "Unblock" else "Block", color = if (isBlockedByMe) LocalYugmColors.current.textPrimary else LocalYugmColors.current.danger) },
-                                    onClick = { showMore = false; onToggleBlock() }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Delete chat", color = LocalYugmColors.current.danger) },
-                                    onClick = { showMore = false; confirmDeleteChat = true }
-                                )
-                            }
-                        }
+                        ConversationOptionsMenu(
+                            expanded = showMore,
+                            isProfileEnabled = !partner?.id.isNullOrBlank(),
+                            isMuted = isMuted,
+                            isBlockedByMe = isBlockedByMe,
+                            onExpandedChange = { showMore = it },
+                            onProfile = { partner?.id?.takeIf(String::isNotBlank)?.let(onOpenProfile) },
+                            onSearch = {
+                                if (searchVisible) { searchVisible = false; searchQuery = "" } else searchVisible = true
+                            },
+                            onMute = { onMute(!isMuted) },
+                            onReport = { showReportDialog = true },
+                            onToggleBlock = onToggleBlock,
+                            onDelete = { confirmDeleteChat = true }
+                        )
                     }
                 }
                 if (searchVisible) {
@@ -1698,6 +1676,61 @@ private fun LightChatAction(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ConversationOptionsMenu(
+    expanded: Boolean,
+    isProfileEnabled: Boolean,
+    isMuted: Boolean,
+    isBlockedByMe: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onProfile: () -> Unit,
+    onSearch: () -> Unit,
+    onMute: () -> Unit,
+    onReport: () -> Unit,
+    onToggleBlock: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val colors = LocalYugmColors.current
+    Box {
+        LightChatAction(
+            Icons.Filled.MoreVert,
+            stringResource(R.string.a11y_conversation_options),
+            onClick = { onExpandedChange(!expanded) }
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onExpandedChange(false) },
+            modifier = Modifier.widthIn(min = 190.dp, max = 220.dp)
+        ) {
+            DropdownMenuItem(
+                text = { Text("Profile", color = colors.textPrimary) },
+                enabled = isProfileEnabled,
+                onClick = { onExpandedChange(false); onProfile() }
+            )
+            DropdownMenuItem(
+                text = { Text("Search in chat", color = colors.textPrimary) },
+                onClick = { onExpandedChange(false); onSearch() }
+            )
+            DropdownMenuItem(
+                text = { Text(if (isMuted) "Unmute" else "Mute", color = colors.textPrimary) },
+                onClick = { onExpandedChange(false); onMute() }
+            )
+            DropdownMenuItem(
+                text = { Text("Report", color = colors.danger) },
+                onClick = { onExpandedChange(false); onReport() }
+            )
+            DropdownMenuItem(
+                text = { Text(if (isBlockedByMe) "Unblock" else "Block", color = if (isBlockedByMe) colors.textPrimary else colors.danger) },
+                onClick = { onExpandedChange(false); onToggleBlock() }
+            )
+            DropdownMenuItem(
+                text = { Text("Delete chat", color = colors.danger) },
+                onClick = { onExpandedChange(false); onDelete() }
+            )
         }
     }
 }
