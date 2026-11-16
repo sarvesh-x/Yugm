@@ -1,4 +1,4 @@
-﻿import { Router } from "express";
+import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
 import { levelMilestones, profileSchema, reactionSchema, socketEvents, streakCosmeticRewards, xpEvents } from "@yugm/shared";
@@ -161,13 +161,13 @@ async function createRandomFriendCall(user: IUser, matchedUserId: mongoose.Types
         livekitRoomName: `yugm-friend-match-${new mongoose.Types.ObjectId().toString()}`,
         allowAudienceMicRequests: false,
         startedAt: new Date()
-      }], { session });
+      }], { session, ordered: true });
       createdRoom = rooms[0];
 
       await RoomParticipant.create([
         { roomId: createdRoom._id, userId: user._id, role: "HOST", micEnabled: true, cameraEnabled: false },
         { roomId: createdRoom._id, userId: matchedUserId, role: "SPEAKER", micEnabled: true, cameraEnabled: false }
-      ], { session });
+      ], { session, ordered: true });
 
       const expiresAt = new Date(Date.now() + FRIEND_MATCHED_TTL_MS);
       const first = await FriendMatchRequest.updateOne(
@@ -460,14 +460,14 @@ usersRouter.get("/me/level-overview", asyncHandler(async (req: AuthRequest, res)
     },
     milestones: levelMilestones,
     xpEvents: {
-      DAILY_CHECKIN: { name: "Daily Check-In", xp: xpEvents.DAILY_CHECKIN, icon: "ðŸ“…" },
-      PROFILE_COMPLETE: { name: "Complete Profile", xp: xpEvents.PROFILE_COMPLETE, icon: "â­" },
-      ROOM_CREATE: { name: "Host Live Room", xp: xpEvents.ROOM_CREATE, icon: "ðŸŽ™ï¸" },
-      ROOM_JOIN: { name: "Join Room", xp: xpEvents.ROOM_JOIN, icon: "ðŸŽ§" },
-      CHAT_MESSAGE: { name: "Send Chat Message", xp: xpEvents.CHAT_MESSAGE, icon: "ðŸ’¬" },
-      GIFT_SENT: { name: "Send Gift", xp: xpEvents.GIFT_SENT, icon: "ðŸŽ" },
-      VIP_PURCHASE: { name: "VIP Subscription", xp: xpEvents.VIP_PURCHASE, icon: "ðŸ‘‘" },
-      COSMETIC_PURCHASE: { name: "Cosmetic Purchase", xp: xpEvents.COSMETIC_PURCHASE, icon: "ðŸŽ¨" }
+      DAILY_CHECKIN: { name: "Daily Check-In", xp: xpEvents.DAILY_CHECKIN, icon: "📅" },
+      PROFILE_COMPLETE: { name: "Complete Profile", xp: xpEvents.PROFILE_COMPLETE, icon: "⭐" },
+      ROOM_CREATE: { name: "Host Live Room", xp: xpEvents.ROOM_CREATE, icon: "🎙️" },
+      ROOM_JOIN: { name: "Join Room", xp: xpEvents.ROOM_JOIN, icon: "🎧" },
+      CHAT_MESSAGE: { name: "Send Chat Message", xp: xpEvents.CHAT_MESSAGE, icon: "💬" },
+      GIFT_SENT: { name: "Send Gift", xp: xpEvents.GIFT_SENT, icon: "🎁" },
+      VIP_PURCHASE: { name: "VIP Subscription", xp: xpEvents.VIP_PURCHASE, icon: "👑" },
+      COSMETIC_PURCHASE: { name: "Cosmetic Purchase", xp: xpEvents.COSMETIC_PURCHASE, icon: "🎨" }
     },
     leaderboard: topUsers.map((u, i) => ({
       rank: i + 1,
@@ -510,7 +510,7 @@ usersRouter.get("/me/inventory", asyncHandler(async (req: AuthRequest, res) => {
     id: item._id.toString(),
     giftId: item.giftId?._id?.toString() ?? item.giftId,
     name: item.giftId?.name ?? "Gift",
-    icon: item.giftId?.icon ?? "ðŸŽ",
+    icon: item.giftId?.icon ?? "🎁",
     coinPrice: item.giftId?.coinPrice ?? 0,
     quantity: item.quantity,
     source: item.source,
@@ -533,7 +533,7 @@ usersRouter.get("/me/inventory", asyncHandler(async (req: AuthRequest, res) => {
       claimedAt: ct.claimedAt,
       title: ach?.title ?? ct.achievementId,
       description: ach?.description ?? "",
-      icon: ach?.icon ?? "ðŸ…"
+      icon: ach?.icon ?? "🏅"
     };
   });
 
@@ -1010,7 +1010,7 @@ usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, requireNotCh
   const created = await DirectMessage.create({
     senderId: req.user!.id,
     receiverId,
-    message: messageText ? sanitizeText(messageText) : mediaType === "VIDEO" ? "Shared a video" : mediaType === "AUDIO" ? "ðŸŽ¤ Voice note" : "Shared a photo",
+    message: messageText ? sanitizeText(messageText) : mediaType === "VIDEO" ? "Shared a video" : mediaType === "AUDIO" ? "🎤 Voice note" : "Shared a photo",
     mediaUrl,
     mediaType,
     duration: mediaType === "AUDIO" ? duration : 0,
@@ -1076,19 +1076,19 @@ usersRouter.post("/messages/:userId/call", requireAuth, requireNotMuted, validat
       livekitRoomName: `yugm-private-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       allowAudienceMicRequests: false,
       startedAt: new Date()
-    }], { session });
+    }], { session, ordered: true });
 
     await RoomParticipant.create([
       { roomId: room[0]._id, userId: req.user!.id, role: "HOST", micEnabled: true, cameraEnabled: type === "VIDEO" },
       { roomId: room[0]._id, userId: receiverId, role: "SPEAKER", micEnabled: true, cameraEnabled: type === "VIDEO" }
-    ], { session });
+    ], { session, ordered: true });
 
     const createdMessage = await DirectMessage.create([{
       senderId: req.user!.id,
       receiverId,
       roomId: room[0]._id,
       message: `Private ${type.toLowerCase()} call started`
-    }], { session });
+    }], { session, ordered: true });
 
     await session.commitTransaction();
     session.endSession();
@@ -1242,7 +1242,7 @@ usersRouter.post("/:id/follow", asyncHandler(async (req: AuthRequest, res) => {
   try {
     const existing = await Follow.findOne({ followerId: req.user!.id, followingId: req.params.id }).session(session);
     if (!existing) {
-      await Follow.create([{ followerId: req.user!.id, followingId: req.params.id }], { session });
+      await Follow.create([{ followerId: req.user!.id, followingId: req.params.id }], { session, ordered: true });
       await User.findByIdAndUpdate(req.user!.id, { $inc: { followingCount: 1 } }, { session });
       await User.findByIdAndUpdate(req.params.id, { $inc: { followersCount: 1 } }, { session });
       await createNotification(req.params.id, "FOLLOW", "New Follower", `${req.user!.name} started following you`, { userId: req.user!.id });

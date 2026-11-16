@@ -426,7 +426,7 @@ export async function sendPkGift(input: { userId: string; battleId: string; gift
       giftId: gift._id,
       coinAmount: gift.coinPrice,
       metadata: { pkBattleId: battle.id, side: input.side, idempotencyKey: input.idempotencyKey }
-    }], { session });
+    }], { session, ordered: true });
     const comboMultiplier = Math.min(combo, 5);
     const effectivePoints = gift.coinPrice * comboMultiplier;
     const oldLeader = leader(battle.leftScore, battle.rightScore);

@@ -99,7 +99,7 @@ export async function comboGift(roomId: string, giftId: string, participants: st
       comboCount,
       totalValue,
       effect: "combo_bonus"
-    }], { session });
+    }], { session, ordered: true });
 
     await session.commitTransaction();
     return { comboCount, totalValue, perPersonCost, multiplier: multi, transaction: transaction[0] };
@@ -142,7 +142,7 @@ export async function roomWideGift(roomId: string, giftId: string, senderId: str
         type: "room_wide",
         totalValue: gift.coinPrice,
         effect: "room_wide"
-      }], { session });
+      }], { session, ordered: true });
       txns.push(txn[0]);
     }
 
@@ -279,7 +279,7 @@ export async function tradeGift(userId: string, targetUserId: string, offerItems
         coinAmount: 0,
         type: "trade",
         metadata: { tradeType: "offer" }
-      }], { session });
+      }], { session, ordered: true });
     }
 
     for (const inv of requestInvs) {
@@ -300,7 +300,7 @@ export async function tradeGift(userId: string, targetUserId: string, offerItems
         coinAmount: 0,
         type: "trade",
         metadata: { tradeType: "request" }
-      }], { session });
+      }], { session, ordered: true });
     }
 
     await session.commitTransaction();

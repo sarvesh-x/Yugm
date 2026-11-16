@@ -80,7 +80,7 @@ wishlistRouter.post("/wishlist/:itemId/send", requireAuth, asyncHandler(async (r
       receiverId: item.userId,
       giftId: gift._id,
       coinAmount,
-    }], { session });
+    }], { session, ordered: true });
 
     await session.commitTransaction();
     session.endSession();

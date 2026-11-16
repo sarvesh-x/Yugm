@@ -544,7 +544,7 @@ walletRouter.post("/rooms/:id/send-gift", giftLimiter, requireWalletNotFrozen, v
       currency,
       totalValue: giftAmount,
       metadata: idempotencyKey ? { idempotencyKey } : {}
-    }], { session });
+    }], { session, ordered: true });
 
     await session.commitTransaction();
     createdGiftTransaction = giftTransaction;
@@ -619,7 +619,7 @@ walletRouter.post("/direct-send-gift", requireWalletNotFrozen, validateBody(send
       diamondAmount: currency === "DIAMONDS" ? giftAmount : 0,
       currency,
       totalValue: giftAmount
-    }], { session });
+    }], { session, ordered: true });
     await session.commitTransaction();
     session.endSession();
     await runWalletSideEffect("direct sender gift XP", () => grantXp(req.user!.id, "GIFT_SENT", { giftId: gift._id.toString(), direct: true }));
