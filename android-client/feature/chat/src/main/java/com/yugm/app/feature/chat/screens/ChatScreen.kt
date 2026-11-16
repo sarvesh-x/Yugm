@@ -469,25 +469,33 @@ fun ChatScreen(
             "✨" to "stars",
             "🎉" to "party"
         )
+        val myReactionType = currentUserId.takeIf { it.isNotBlank() }?.let { uid ->
+            target.reactions.firstOrNull { it.userId == uid }?.type
+        }
         AlertDialog(
             onDismissRequest = { reactPickerTarget = null },
             containerColor = SurfaceElevated,
             title = { Text("React to message", color = TextPrimary) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Choose a reaction", color = TextMuted, fontSize = 13.sp)
+                    Text(
+                        if (myReactionType.isNullOrBlank()) "Choose a reaction" else "Tap the same reaction to remove it",
+                        color = TextMuted,
+                        fontSize = 13.sp
+                    )
                     Row(
                         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         reactions.forEach { (emoji, type) ->
+                            val selected = myReactionType == type
                             Box(
                                 modifier = Modifier
                                     .size(44.dp)
                                     .clip(CircleShape)
-                                    .background(ChatSurface)
-                                    .border(1.dp, BorderColor, CircleShape)
-                                    .clickable(role = Role.Button, onClickLabel = "React with $emoji") {
+                                    .background(if (selected) PrimaryPurple.copy(alpha = 0.22f) else ChatSurface)
+                                    .border(1.dp, if (selected) PrimaryPurple else BorderColor, CircleShape)
+                                    .clickable(role = Role.Button, onClickLabel = if (selected) "Remove $emoji reaction" else "React with $emoji") {
                                         onReactMessage(target, type)
                                         reactPickerTarget = null
                                     },

@@ -1101,22 +1101,39 @@ usersRouter.post("/messages/:userId/:messageId/reactions", chatLimiter, validate
       { senderId: req.params.userId, receiverId: req.user!.id }
     ]
   };
-  const message = await DirectMessage.findOne(belongsToConversation).select("_id senderId receiverId").lean();
+  const message = await DirectMessage.findOne(belongsToConversation).select("_id senderId receiverId reactions").lean();
   if (!message) throw new HttpError(404, "Message not found", ErrorCode.NOT_FOUND);
 
-  await DirectMessage.updateOne({ _id: req.params.messageId }, { $pull: { reactions: { userId: req.user!.id } } });
-  const updated = await DirectMessage.findByIdAndUpdate(
-    req.params.messageId,
-    { $push: { reactions: { userId: req.user!.id, type: req.body.type, createdAt: new Date() } } },
-    { new: true }
-  )
-    .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
-    .lean();
+  const requestedType = String(req.body.type || "");
+  const existingReaction = (message.reactions || []).find((reaction: any) => reaction?.userId?.toString?.() === req.user!.id);
+  const isRemoving = existingReaction?.type === requestedType;
+
+  let updated;
+  if (isRemoving) {
+    updated = await DirectMessage.findByIdAndUpdate(
+      req.params.messageId,
+      { $pull: { reactions: { userId: req.user!.id } } },
+      { new: true }
+    )
+      .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+      .lean();
+  } else {
+    await DirectMessage.updateOne({ _id: req.params.messageId }, { $pull: { reactions: { userId: req.user!.id } } });
+    updated = await DirectMessage.findByIdAndUpdate(
+      req.params.messageId,
+      { $push: { reactions: { userId: req.user!.id, type: requestedType, createdAt: new Date() } } },
+      { new: true }
+    )
+      .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+      .lean();
+  }
 
   const partnerId = message.senderId.toString() === req.user!.id ? message.receiverId.toString() : message.senderId.toString();
   emitUser(partnerId, "direct:reaction:new", { message: updated, partnerId: req.user!.id });
-  const conversationMuted = await ConversationMute.exists({ ownerId: partnerId, partnerId: req.user!._id, muted: true });
-  if (!conversationMuted) await createNotification(partnerId, "MESSAGE", "New reaction", `${req.user!.name} reacted to your message`, { partnerId: req.user!.id, messageId: req.params.messageId });
+  if (!isRemoving) {
+    const conversationMuted = await ConversationMute.exists({ ownerId: partnerId, partnerId: req.user!._id, muted: true });
+    if (!conversationMuted) await createNotification(partnerId, "MESSAGE", "New reaction", `${req.user!.name} reacted to your message`, { partnerId: req.user!.id, messageId: req.params.messageId });
+  }
   sendOk(res, { message: updated });
 }));
 
