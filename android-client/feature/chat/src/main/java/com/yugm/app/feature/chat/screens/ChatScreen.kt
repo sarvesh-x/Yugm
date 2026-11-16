@@ -11,6 +11,8 @@ import androidx.compose.animation.core.tween
 import android.content.Intent
 import android.media.MediaPlayer
 import android.net.Uri
+import androidx.core.net.toUri
+import kotlin.math.roundToInt
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -62,6 +64,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -178,13 +181,16 @@ fun ChatScreen(
     onSearch: (String) -> Unit = {},
     onLoadMoreSearch: () -> Unit = {},
     onMute: (Boolean) -> Unit = {},
-    onOpenProfile: (String) -> Unit = {}
+    onOpenProfile: (String) -> Unit = {},
+    isCurrentUserVip: Boolean = false,
+    onOpenVip: () -> Unit = {}
 ) {
     var draft by rememberSaveable(partner?.id) { mutableStateOf("") }
     var showGiftSheet by rememberSaveable { mutableStateOf(false) }
     var showEmojiBar by rememberSaveable { mutableStateOf(false) }
     var showMore by rememberSaveable { mutableStateOf(false) }
     var confirmDeleteChat by rememberSaveable { mutableStateOf(false) }
+    var showVipCallDialog by rememberSaveable(partner?.id) { mutableStateOf(false) }
     var showDeleteSelected by remember { mutableStateOf(false) }
     var selectedMessageIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var forwardMessage by remember { mutableStateOf<DirectMessage?>(null) }
@@ -214,7 +220,7 @@ fun ChatScreen(
     val scope = rememberCoroutineScope()
     val showScrollToBottom by remember { derivedStateOf { listState.canScrollForward } }
     var didInitialScroll by remember(partner?.id) { mutableStateOf(false) }
-    var lastMessageCount by remember(partner?.id) { mutableStateOf(0) }
+    var lastMessageCount by remember(partner?.id) { mutableIntStateOf(0) }
     var forceScrollOnAppend by remember(partner?.id) { mutableStateOf(false) }
     val visibleMessages = when {
         searchQuery.length >= 2 -> searchResults.orEmpty()
@@ -397,6 +403,25 @@ fun ChatScreen(
             if (target >= 0) listState.animateScrollToItem(target)
         }
     }
+    if (showVipCallDialog) {
+        AlertDialog(
+            onDismissRequest = { showVipCallDialog = false },
+            containerColor = SurfaceElevated,
+            title = { Text("VIP Exclusive Feature", color = TextPrimary, fontWeight = FontWeight.Bold) },
+            text = { Text("Voice and video calls in 1:1 chat are available only for VIP members. Upgrade to VIP to unlock this feature.", color = TextMuted) },
+            confirmButton = {
+                TextButton(onClick = { showVipCallDialog = false; onOpenVip() }) {
+                    Text("Go to VIP", color = Color(0xFFFFD166), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showVipCallDialog = false }) {
+                    Text("Not now", color = TextMuted)
+                }
+            }
+        )
+    }
+
     if (confirmDeleteChat) {
         AlertDialog(
             onDismissRequest = { confirmDeleteChat = false },
@@ -857,20 +882,31 @@ fun ChatScreen(
                                 }
                             }
                         }
+                        val callsLockedForVip = !isCurrentUserVip
                         LightChatAction(
                             Icons.Filled.Call,
-                            if (startingCallType == RoomType.Voice) "Starting voice call" else "Start voice call",
-                            onAudioCall,
+                            when {
+                                startingCallType == RoomType.Voice -> "Starting voice call"
+                                callsLockedForVip -> "Voice call (VIP only)"
+                                else -> "Start voice call"
+                            },
+                            onClick = { if (callsLockedForVip) showVipCallDialog = true else onAudioCall() },
                             enabled = !isBlockedByMe && startingCallType == null,
-                            loading = startingCallType == RoomType.Voice
+                            loading = startingCallType == RoomType.Voice,
+                            locked = callsLockedForVip
                         )
                         Spacer(Modifier.width(6.dp))
                         LightChatAction(
                             Icons.Filled.Videocam,
-                            if (startingCallType == RoomType.Video) "Starting video call" else "Start video call",
-                            onVideoCall,
+                            when {
+                                startingCallType == RoomType.Video -> "Starting video call"
+                                callsLockedForVip -> "Video call (VIP only)"
+                                else -> "Start video call"
+                            },
+                            onClick = { if (callsLockedForVip) showVipCallDialog = true else onVideoCall() },
                             enabled = !isBlockedByMe && startingCallType == null,
-                            loading = startingCallType == RoomType.Video
+                            loading = startingCallType == RoomType.Video,
+                            locked = callsLockedForVip
                         )
                         Spacer(Modifier.width(6.dp))
                         LightChatAction(Icons.Filled.MoreVert, stringResource(R.string.a11y_conversation_options), onClick = { showMore = !showMore })
@@ -1112,7 +1148,7 @@ fun ChatScreen(
                                             modifier = Modifier.align(Alignment.CenterStart).padding(start = 4.dp)
                                         )
                                     }
-                                    Box(Modifier.offset(x = swipeOffset.value.dp)) {
+                                    Box(Modifier.offset { androidx.compose.ui.unit.IntOffset(swipeOffset.value.roundToInt(), 0) }) {
                                         MessageBubble(
                                             message = message,
                                             mine = mine,
@@ -1463,7 +1499,8 @@ private fun LightChatAction(
     label: String,
     onClick: () -> Unit,
     enabled: Boolean = true,
-    loading: Boolean = false
+    loading: Boolean = false,
+    locked: Boolean = false
 ) {
     Box(
         Modifier.size(44.dp).clip(CircleShape).background(if (enabled) SurfaceElevated else SurfaceElevated.copy(alpha = 0.55f))
@@ -1479,6 +1516,25 @@ private fun LightChatAction(
             )
         } else {
             Icon(icon, contentDescription = null, tint = if (enabled) TextPrimary else TextMuted, modifier = Modifier.size(20.dp))
+            if (locked) {
+                Box(
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .offset(x = 2.dp, y = 2.dp)
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(ChatSurface)
+                        .border(1.dp, BorderColor, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.Lock,
+                        contentDescription = null,
+                        tint = Color(0xFFFFD166),
+                        modifier = Modifier.size(10.dp)
+                    )
+                }
+            }
         }
     }
 }
@@ -1998,7 +2054,7 @@ private fun openChatMedia(context: android.content.Context, rawUrl: String) {
     val resolved = resolveMediaUrl(rawUrl) ?: rawUrl
     if (resolved.isBlank()) return
     runCatching {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(resolved)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val intent = Intent(Intent.ACTION_VIEW, resolved.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
     }.onFailure {
         android.widget.Toast.makeText(context, "Unable to open media", android.widget.Toast.LENGTH_SHORT).show()

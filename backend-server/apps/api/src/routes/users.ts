@@ -1048,8 +1048,12 @@ usersRouter.post("/messages/:userId/call", requireAuth, requireNotMuted, validat
   const receiverId = req.params.userId;
   if (receiverId === req.user!.id) throw new HttpError(400, "Cannot call yourself", ErrorCode.VALIDATION);
 
-  const receiver = await User.findById(receiverId).select("name username avatar").lean();
+  const [receiver, caller] = await Promise.all([
+    User.findById(receiverId).select("name username avatar").lean(),
+    User.findById(req.user!.id).select("vipTier vipExpiresAt vipStartedAt").lean()
+  ]);
   if (!receiver) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+  if (!getVipStatus(caller).isVip) throw new HttpError(403, "Private voice and video calls are available to VIP members only", ErrorCode.FORBIDDEN);
 
   const blocked = await Block.exists({
     $or: [

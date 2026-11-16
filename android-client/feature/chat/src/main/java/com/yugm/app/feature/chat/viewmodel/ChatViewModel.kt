@@ -1,6 +1,7 @@
 package com.yugm.app.feature.chat.viewmodel
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -44,6 +45,9 @@ class ChatViewModel @Inject constructor(
     var myActiveCosmetics by mutableStateOf(ActiveCosmetics())
         private set
 
+    var isCurrentUserVip by mutableStateOf(false)
+        private set
+
     var isLoading by mutableStateOf(false)
         private set
 
@@ -71,7 +75,7 @@ class ChatViewModel @Inject constructor(
     var gifts by mutableStateOf<List<GiftItem>>(emptyList())
         private set
 
-    var walletBalance by mutableStateOf(0)
+    var walletBalance by mutableIntStateOf(0)
         private set
 
     var searchResults by mutableStateOf<List<DirectMessage>?>(null)
@@ -211,7 +215,10 @@ class ChatViewModel @Inject constructor(
                             if (failure is CancellationException) throw failure
                             if (loadError == null) loadError = failure
                         }
-                    myProfileRequest.await().onSuccess { myActiveCosmetics = it.activeCosmetics }
+                    myProfileRequest.await().onSuccess {
+                    myActiveCosmetics = it.activeCosmetics
+                    isCurrentUserVip = it.isVip
+                }
                     giftsRequest.await().onSuccess { gifts = it }
                     walletRequest.await().onSuccess { walletBalance = it.balance }
                     runCatching { yugmApi.getBlockedUsers(authToken) }

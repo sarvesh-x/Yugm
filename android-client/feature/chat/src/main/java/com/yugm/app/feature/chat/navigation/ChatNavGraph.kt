@@ -97,6 +97,8 @@ fun NavGraphBuilder.chatNavGraph(
             onAttachmentSelected = chatViewModel::sendAttachment,
             onTyping = chatViewModel::sendTypingStatus,
             onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) },
+            isCurrentUserVip = chatViewModel.isCurrentUserVip,
+            onOpenVip = { navController.navigate(Screen.Vip.route) },
             onAudioCall = {
                 chatViewModel.startPrivateCall(RoomType.Voice, onSuccess = { room ->
                     navController.navigate(Screen.VoiceRoom.createRoute(room.id))
