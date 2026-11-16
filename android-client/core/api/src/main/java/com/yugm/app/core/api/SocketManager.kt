@@ -73,6 +73,16 @@ class SocketManager @Inject constructor() {
                 Timber.tag("SocketManager").d("Connected to $targetUrl")
                 _events.tryEmit(SocketEvent.Connected)
             }
+            socket?.on(Socket.EVENT_CONNECT_ERROR) { args ->
+                val message = (args.firstOrNull() as? Exception)?.message ?: args.firstOrNull()?.toString().orEmpty()
+                Timber.tag("SocketManager").w("Socket connect error: $message")
+                if (message.contains("Invalid token", ignoreCase = true) ||
+                    message.contains("Authentication", ignoreCase = true) ||
+                    message.contains("signed in on another device", ignoreCase = true)
+                ) {
+                    connectedToken = null
+                }
+            }
             socket?.on("direct:message:new") { args ->
                 val payload = args.firstOrNull() as? JSONObject ?: return@on
                 val messageJson = payload.optJSONObject("message") ?: payload
@@ -207,8 +217,9 @@ class SocketManager @Inject constructor() {
                 }
                 if (userId.isNotBlank()) _events.tryEmit(SocketEvent.UserOffline(userId))
             }
-            socket?.on(Socket.EVENT_DISCONNECT) {
-                Timber.tag("SocketManager").d("Disconnected")
+            socket?.on(Socket.EVENT_DISCONNECT) { args ->
+                val reason = args.firstOrNull()?.toString().orEmpty()
+                Timber.tag("SocketManager").d("Disconnected: $reason")
                 _events.tryEmit(SocketEvent.Disconnected)
             }
             socket?.connect()

@@ -158,11 +158,21 @@ throw ApiHttpException(response.code, errorContext)
                         refreshAccessToken?.invoke(requestAuth)
                     } catch (refreshError: IOException) {
                         throw refreshError
+                    } catch (refreshError: ApiHttpException) {
+                        if (refreshError.statusCode == 401 || refreshError.statusCode == 403) {
+                            null
+                        } else {
+                            throw refreshError
+                        }
+                    } catch (_: Exception) {
+                        null
                     }
                     if (!renewed.isNullOrBlank() && renewed != requestAuth) {
                         return@withContext request(method, path, renewed, body, allowRefresh = false)
                     }
-                    withContext(Dispatchers.Main) { onUnauthorized?.invoke(requestAuth) }
+                    onUnauthorized?.let { callback ->
+                        withContext(Dispatchers.Main) { callback(requestAuth) }
+                    }
                 } else if (error.statusCode == 401 && requestAuth != null && mayRefresh) {
                     onUnauthorized?.let { callback ->
                         withContext(Dispatchers.Main) { callback(requestAuth) }
@@ -222,7 +232,15 @@ throw ApiHttpException(response.code, errorContext)
             executeUpload(requestToken)
         } catch (error: ApiHttpException) {
             if (error.statusCode != 401) throw error
-            val renewed = refreshAccessToken?.invoke(requestToken)
+            val renewed = try {
+                refreshAccessToken?.invoke(requestToken)
+            } catch (refreshError: IOException) {
+                throw refreshError
+            } catch (refreshError: ApiHttpException) {
+                if (refreshError.statusCode == 401 || refreshError.statusCode == 403) null else throw refreshError
+            } catch (_: Exception) {
+                null
+            }
             if (!renewed.isNullOrBlank() && renewed != requestToken) {
                 executeUpload(renewed)
             } else {
