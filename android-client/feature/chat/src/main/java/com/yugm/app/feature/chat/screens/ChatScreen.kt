@@ -976,6 +976,7 @@ fun ChatScreen(
                                         voiceProgressMs = voiceProgressMs,
                                         voiceDurationMs = voiceDurationMs,
                                         startingCallType = startingCallType,
+                                        isBlockedByMe = isBlockedByMe,
                                         onReact = {
                                             when {
                                                 selectionMode -> toggleSelection(message.id)
@@ -1413,6 +1414,7 @@ private fun MessageBubble(
     voiceProgressMs: Int,
     voiceDurationMs: Int,
     startingCallType: RoomType? = null,
+    isBlockedByMe: Boolean = false,
     onReact: () -> Unit,
     onLongPress: () -> Unit,
     onOpenImage: (String) -> Unit,
@@ -1627,6 +1629,7 @@ private fun MessageBubble(
                             val cardCallType = if (isVideoCall) RoomType.Video else RoomType.Voice
                             val isCardStarting = startingCallType == cardCallType
                             val anyCallStarting = startingCallType != null
+                            val callActionEnabled = !anyCallStarting && !isBlockedByMe
                             Column(
                                 Modifier
                                     .clip(RoundedCornerShape(16.dp))
@@ -1655,7 +1658,11 @@ private fun MessageBubble(
                                     Column(Modifier.weight(1f)) {
                                         Text(callType, color = bubble?.text ?: TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                                         Text(
-                                            if (mine) "You started a call" else "Call invitation",
+                                            when {
+                                                isBlockedByMe -> "Unblock to start a call"
+                                                mine -> "You started a call"
+                                                else -> "Call invitation"
+                                            },
                                             color = (bubble?.text ?: TextMuted).copy(alpha = 0.8f),
                                             fontSize = 11.sp
                                         )
@@ -1665,18 +1672,18 @@ private fun MessageBubble(
                                     Modifier
                                         .clip(CircleShape)
                                         .then(
-                                            if (anyCallStarting) {
-                                                Modifier.background(Color.White.copy(alpha = 0.12f))
-                                            } else {
+                                            if (callActionEnabled) {
                                                 Modifier.background(
                                                     Brush.linearGradient(
                                                         listOf(PrimaryPurple.copy(alpha = 0.95f), Pink.copy(alpha = 0.9f))
                                                     )
                                                 )
+                                            } else {
+                                                Modifier.background(Color.White.copy(alpha = 0.12f))
                                             }
                                         )
                                         .clickable(
-                                            enabled = !anyCallStarting,
+                                            enabled = callActionEnabled,
                                             role = Role.Button,
                                             onClickLabel = if (isVideoCall) "Start video call again" else "Start voice call again"
                                         ) {
@@ -1695,6 +1702,7 @@ private fun MessageBubble(
                                         Text(
                                             when {
                                                 isCardStarting -> "Starting…"
+                                                isBlockedByMe -> "Unblock to call"
                                                 anyCallStarting -> "Please wait…"
                                                 mine -> "Start again"
                                                 else -> "Call back"
