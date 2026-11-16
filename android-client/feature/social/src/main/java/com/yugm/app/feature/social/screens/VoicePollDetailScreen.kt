@@ -105,13 +105,24 @@ fun VoicePollDetailScreen(
                         if (p.userName.isNotBlank()) {
                             Text("by ${p.userName}", color = TextMuted, fontSize = 12.sp)
                         }
+                        val selectedOptionText = selectedIndex?.let { p.options.getOrNull(it)?.text }?.takeIf { it.isNotBlank() }
                         val statusText = when {
                             !p.isActive -> "Poll closed"
                             expired -> "Poll expired"
+                            selectedOptionText != null -> "Your vote: $selectedOptionText"
                             hasVoted -> "You voted"
                             else -> "Tap an option to vote"
                         }
-                        Text(statusText, color = if (canVote) Cyan else TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+                        Text(
+                            statusText,
+                            color = when {
+                                selectedOptionText != null || hasVoted -> Gold
+                                canVote -> Cyan
+                                else -> TextMuted
+                            },
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
                         Spacer(Modifier.height(12.dp))
 
                         p.options.forEachIndexed { idx, opt ->

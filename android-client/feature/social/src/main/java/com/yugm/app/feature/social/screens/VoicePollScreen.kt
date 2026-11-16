@@ -156,7 +156,9 @@ fun VoicePollScreen(
                                 items(displayPolls, key = { it.id }) { poll ->
                                     val totalVotes = poll.options.sumOf { it.votes }
                                     val expired = runCatching { java.time.Instant.parse(poll.expiresAt).isBefore(java.time.Instant.now()) }.getOrDefault(false)
-                                    val hasVoted = userId.isNotBlank() && poll.voters.contains(userId)
+                                    val selectedIndex = if (userId.isNotBlank()) poll.selectedOptionIndexFor(userId) else null
+                                    val hasVoted = selectedIndex != null || (userId.isNotBlank() && poll.voters.contains(userId))
+                                    val selectedOptionText = selectedIndex?.let { poll.options.getOrNull(it)?.text }?.takeIf { it.isNotBlank() }
                                     val status = when {
                                         !poll.isActive -> "Closed"
                                         expired -> "Expired"
@@ -188,6 +190,11 @@ fun VoicePollScreen(
                                                 }
                                                 Text(poll.question, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 15.sp)
                                                 Text("${poll.options.size} options \u00B7 $totalVotes votes", color = TextMuted, fontSize = 12.sp)
+                                                if (selectedOptionText != null) {
+                                                    Text("Your vote: $selectedOptionText", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                                } else if (hasVoted) {
+                                                    Text("You voted", color = Gold.copy(alpha = 0.85f), fontSize = 12.sp)
+                                                }
                                             }
                                         }
                                     }
