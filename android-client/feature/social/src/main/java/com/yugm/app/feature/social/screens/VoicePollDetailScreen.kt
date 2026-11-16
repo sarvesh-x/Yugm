@@ -51,6 +51,7 @@ fun VoicePollDetailScreen(
     var isLoading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var votingIndex by remember { mutableStateOf<Int?>(null) }
+    var isClosing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     fun isExpired(p: VoicePoll): Boolean {
@@ -96,6 +97,8 @@ fun VoicePollDetailScreen(
                     val selectedIndex = p.selectedOptionIndexFor(userId)
                     val hasVoted = selectedIndex != null || p.voters.contains(userId)
                     val canVote = p.isActive && !expired && !hasVoted && votingIndex == null
+                    val isOwner = p.userId == userId
+                    val canClose = isOwner && p.isActive && !expired && !isClosing
 
                     GlassCard {
                         Text(p.question, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp)
@@ -182,6 +185,34 @@ fun VoicePollDetailScreen(
                                 }
                             }
                         }
+                    }
+
+                    if (isOwner) {
+                        Spacer(Modifier.height(12.dp))
+                        GlassButton(
+                            text = when {
+                                !p.isActive || expired -> "Poll closed"
+                                isClosing -> "Closing..."
+                                else -> "Close poll"
+                            },
+                            enabled = canClose,
+                            gradient = androidx.compose.ui.graphics.Brush.horizontalGradient(
+                                if (canClose) listOf(Pink, Purple) else listOf(Panel, Panel)
+                            ),
+                            onClick = {
+                                scope.launch {
+                                    isClosing = true
+                                    try {
+                                        poll = SocialApi.closeVoicePoll(token, pollId)
+                                        Toast.makeText(context, "Poll closed", Toast.LENGTH_SHORT).show()
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, e.message ?: "Failed to close poll", Toast.LENGTH_SHORT).show()
+                                    } finally {
+                                        isClosing = false
+                                    }
+                                }
+                            }
+                        )
                     }
                 }
             }

@@ -507,6 +507,7 @@ suspend fun leaderboard(): RoomLeaderboard
     suspend fun getActiveVoicePolls(token: String, page: Int = 1, limit: Int = 20): VoicePollListResponse
     suspend fun getVoicePollById(token: String, pollId: String): VoicePoll
     suspend fun voteVoicePoll(token: String, pollId: String, optionIndex: Int): VoicePoll
+    suspend fun closeVoicePoll(token: String, pollId: String): VoicePoll
     suspend fun getMyVoicePolls(token: String): List<VoicePoll>
     suspend fun getCountdowns(token: String): List<CountdownEvent>
 

@@ -7,7 +7,7 @@ import {
   setMood, setActivity, getMood, clearMood,
   sendWave, getWaves, markWaveRead, getUnreadWaveCount,
   getTodaysQuestion, answerDailyQuestion, getDailyQuestionAnswers, getMyDailyAnswer,
-  createVoicePoll, getActiveVoicePolls, voteVoicePoll, getMyVoicePolls, getVoicePollById,
+  createVoicePoll, getActiveVoicePolls, voteVoicePoll, getMyVoicePolls, getVoicePollById, closeVoicePoll,
   getActiveCountdowns, createCountdownEvent
 } from "../services/social.js";
 
@@ -148,6 +148,12 @@ socialRouter.post("/social/voice-polls/:pollId/vote", validateBody(voteVoicePoll
   if (!isValidObjectId(req.params.pollId)) throw new HttpError(400, "Invalid pollId", ErrorCode.VALIDATION);
   const { optionIndex } = req.body;
   const result = await voteVoicePoll(req.params.pollId, req.user!.id, optionIndex);
+  sendOk(res, result);
+}));
+
+socialRouter.post("/social/voice-polls/:pollId/close", asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.pollId)) throw new HttpError(400, "Invalid pollId", ErrorCode.VALIDATION);
+  const result = await closeVoicePoll(req.params.pollId, req.user!.id);
   sendOk(res, result);
 }));
 

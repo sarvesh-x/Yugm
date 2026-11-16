@@ -52,10 +52,10 @@ fun PollComposerSheet(
     onCreate: (String, List<String>) -> Unit
 ) {
     var question by rememberSaveable { mutableStateOf("") }
-    var optionA by rememberSaveable { mutableStateOf("") }
-    var optionB by rememberSaveable { mutableStateOf("") }
-    var optionC by rememberSaveable { mutableStateOf("") }
-    var optionD by rememberSaveable { mutableStateOf("") }
+    var options by rememberSaveable { mutableStateOf(listOf("", "")) }
+
+    val trimmed = options.map { it.trim() }.filter { it.isNotBlank() }
+    val canCreate = question.trim().isNotBlank() && trimmed.size in 2..6
 
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF141224)) {
         Column(
@@ -73,18 +73,40 @@ fun PollComposerSheet(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedTextField(optionA, { optionA = it.take(60) }, label = { Text("Option 1") }, modifier = Modifier.weight(1f), singleLine = true)
-                OutlinedTextField(optionB, { optionB = it.take(60) }, label = { Text("Option 2") }, modifier = Modifier.weight(1f), singleLine = true)
+            options.forEachIndexed { index, value ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = value,
+                        onValueChange = { v ->
+                            if (v.length <= 60) {
+                                options = options.toMutableList().also { it[index] = v }
+                            }
+                        },
+                        label = { Text("Option ${index + 1}") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    if (options.size > 2) {
+                        Text(
+                            "Remove",
+                            color = TextMuted,
+                            fontSize = 12.sp,
+                            modifier = Modifier.clickable { options = options.toMutableList().also { it.removeAt(index) } }
+                        )
+                    }
+                }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedTextField(optionC, { optionC = it.take(60) }, label = { Text("Option 3") }, modifier = Modifier.weight(1f), singleLine = true)
-                OutlinedTextField(optionD, { optionD = it.take(60) }, label = { Text("Option 4") }, modifier = Modifier.weight(1f), singleLine = true)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (options.size < 6) {
+                    Button(
+                        onClick = { options = options + "" },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0x332F2A4A))
+                    ) { Text("+ Add option", color = TextPrimary) }
+                }
+                Text("${trimmed.size}/6 options", color = TextMuted, fontSize = 12.sp)
             }
-            val options = listOf(optionA, optionB, optionC, optionD).map { it.trim() }.filter { it.isNotBlank() }
-            val canCreate = question.trim().isNotBlank() && options.size >= 2
             Button(
-                onClick = { if (canCreate) onCreate(question.trim(), options) },
+                onClick = { if (canCreate) onCreate(question.trim(), trimmed) },
                 enabled = canCreate,
                 modifier = Modifier.fillMaxWidth().height(48.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = RoomGoldAccent)

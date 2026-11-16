@@ -261,6 +261,18 @@ export async function getMyVoicePolls(userId: string) {
   return { polls };
 }
 
+export async function closeVoicePoll(pollId: string, userId: string) {
+  const poll = await VoicePoll.findById(pollId);
+  if (!poll) throw new HttpError(404, "Poll not found", ErrorCode.NOT_FOUND);
+  const ownerId = (poll.userId as any)?._id?.toString?.() ?? poll.userId?.toString?.();
+  if (ownerId !== userId) throw new HttpError(403, "Only the poll creator can close this poll", ErrorCode.FORBIDDEN);
+  if (!poll.isActive) return { poll: await VoicePoll.findById(pollId).populate("userId", "name username avatar").lean() };
+  poll.isActive = false;
+  await poll.save();
+  const populated = await VoicePoll.findById(pollId).populate("userId", "name username avatar").lean();
+  return { poll: populated };
+}
+
 // ─── Countdown Events ──────────────────────────────────────────
 
 export async function getActiveCountdowns() {

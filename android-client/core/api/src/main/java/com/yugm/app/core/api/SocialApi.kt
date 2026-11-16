@@ -192,6 +192,11 @@ object SocialApi {
         return parseVoicePoll(data.getJSONObject("poll"))
     }
 
+    suspend fun closeVoicePoll(token: String, pollId: String): VoicePoll {
+        val data = YugmHttpClient.post("/social/voice-polls/$pollId/close", token, JSONObject()).getJSONObject("data")
+        return parseVoicePoll(data.getJSONObject("poll"))
+    }
+
     suspend fun getMyVoicePolls(token: String): List<VoicePoll> {
         val data = YugmHttpClient.get("/social/voice-polls/mine", token).getJSONObject("data")
         val arr = data.getJSONArray("polls")

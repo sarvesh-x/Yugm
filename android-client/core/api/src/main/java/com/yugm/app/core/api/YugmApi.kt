@@ -541,6 +541,7 @@ object YugmApi : IYugmApi {
     override suspend fun getActiveVoicePolls(token: String, page: Int, limit: Int): VoicePollListResponse = SocialApi.getActiveVoicePolls(token, page, limit)
     override suspend fun getVoicePollById(token: String, pollId: String): VoicePoll = SocialApi.getVoicePollById(token, pollId)
     override suspend fun voteVoicePoll(token: String, pollId: String, optionIndex: Int): VoicePoll = SocialApi.voteVoicePoll(token, pollId, optionIndex)
+    override suspend fun closeVoicePoll(token: String, pollId: String): VoicePoll = SocialApi.closeVoicePoll(token, pollId)
     override suspend fun getMyVoicePolls(token: String): List<VoicePoll> = SocialApi.getMyVoicePolls(token)
     override suspend fun getCountdowns(token: String): List<CountdownEvent> = SocialApi.getCountdowns(token)
 
