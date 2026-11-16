@@ -1,5 +1,6 @@
 try {
   // Prefer native TensorFlow backend in Node for performance and to avoid tfjs plain-JS warnings.
+  // @ts-expect-error - optional native backend dependency; may not be installed in all environments
   await import("@tensorflow/tfjs-node");
 } catch {
   // Optional dependency; fall back to default tfjs backend if unavailable.
