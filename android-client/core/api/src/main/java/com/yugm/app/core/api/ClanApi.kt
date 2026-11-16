@@ -176,8 +176,9 @@ object ClanApi {
         return data.optJSONObject("message")?.toClanMessage() ?: ClanMessage()
     }
 
-    suspend fun reactToClanMessage(token: String, clanId: String, messageId: String, type: String): JSONObject {
-        return YugmHttpClient.post("/clans/$clanId/messages/$messageId/reactions", token, JSONObject().put("type", type))
+    suspend fun reactToClanMessage(token: String, clanId: String, messageId: String, type: String): ClanMessage {
+        val data = YugmHttpClient.post("/clans/$clanId/messages/$messageId/reactions", token, JSONObject().put("type", type)).getJSONObject("data")
+        return data.optJSONObject("message")?.toClanMessage() ?: ClanMessage()
     }
 
     suspend fun deleteClanMessage(token: String, clanId: String, messageId: String) {

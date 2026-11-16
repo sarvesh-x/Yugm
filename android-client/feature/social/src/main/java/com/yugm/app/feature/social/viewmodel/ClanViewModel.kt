@@ -457,8 +457,8 @@ class ClanViewModel @Inject constructor(
         viewModelScope.launch {
             error = null
             runCatching {
-                withContext(Dispatchers.IO) { yugmApi.reactToClanMessage(token, clanId, messageId, type) }
-                // Realtime update event will refresh for all members (including sender).
+                val updated = withContext(Dispatchers.IO) { yugmApi.reactToClanMessage(token, clanId, messageId, type) }
+                messages = messages.map { if (it.id == messageId) updated else it }
             }.onFailure {
                 error = it.message ?: "Failed to react to message"
             }

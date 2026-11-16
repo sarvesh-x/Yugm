@@ -267,7 +267,7 @@ suspend fun leaderboard(): RoomLeaderboard
     suspend fun leaveClan(token: String, clanId: String)
     suspend fun getClanMessages(token: String, clanId: String, limit: Int = 80, before: String? = null): List<ClanMessage>
     suspend fun sendClanMessage(token: String, clanId: String, message: String): ClanMessage
-    suspend fun reactToClanMessage(token: String, clanId: String, messageId: String, type: String): JSONObject
+    suspend fun reactToClanMessage(token: String, clanId: String, messageId: String, type: String): ClanMessage
     suspend fun deleteClanMessage(token: String, clanId: String, messageId: String)
     suspend fun reportClanMessage(token: String, clanId: String, messageId: String, reason: String = "", description: String = "")
 

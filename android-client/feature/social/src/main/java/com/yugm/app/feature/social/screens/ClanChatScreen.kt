@@ -85,7 +85,7 @@ private val ClanChatLine = Color(0x24FFFFFF)
 private val ClanChatMuted = Color(0xFF9EA3B9)
 private val ClanChatPurple = Color(0xFF8D35F6)
 private val ClanChatPink = Color(0xFFF6378B)
-private val clanReactionTypes = listOf("heart", "fire", "laugh", "clap", "wow")
+private val clanReactionTypes = listOf("heart", "fire", "laugh", "clap", "wow", "crown", "stars", "party")
 
 private sealed class ChatItem {
     data class DateHeader(val label: String) : ChatItem()
@@ -233,15 +233,23 @@ fun ClanChatScreen(
             title = { Text("Message actions", color = Color.White, fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val myReaction = target.reactions.firstOrNull { it.userId == currentUserId }?.type
                     Text(target.message, color = ClanChatMuted, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    Text(if (myReaction.isNullOrBlank()) "Choose a reaction" else "Tap the same reaction to remove it", color = ClanChatMuted, fontSize = 12.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         clanReactionTypes.forEach { type ->
+                            val selected = myReaction == type
                             Text(
                                 reactionEmoji(type), fontSize = 22.sp,
-                                modifier = Modifier.clip(CircleShape).clickable {
-                                    viewModel.reactToMessage(token, clanId, target.id, type)
-                                    actionMessage = null
-                                }.padding(6.dp)
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(if (selected) ClanChatPurple.copy(alpha = 0.2f) else Color.Transparent)
+                                    .border(1.dp, if (selected) ClanChatPurple else Color.Transparent, CircleShape)
+                                    .clickable {
+                                        viewModel.reactToMessage(token, clanId, target.id, type)
+                                        actionMessage = null
+                                    }
+                                    .padding(6.dp)
                             )
                         }
                     }
@@ -387,6 +395,7 @@ fun ClanChatScreen(
                             is ChatItem.MessageItem -> ClanChatMessageRow(
                                 message = item.message,
                                 mine = item.mine,
+                                currentUserId = currentUserId,
                                 showAvatar = item.showAvatar,
                                 showName = item.showName,
                                 grouped = item.grouped,
@@ -486,6 +495,7 @@ fun ClanChatScreen(
 private fun ClanChatMessageRow(
     message: ClanMessage,
     mine: Boolean,
+    currentUserId: String = "",
     showAvatar: Boolean,
     showName: Boolean,
     grouped: Boolean,
@@ -543,11 +553,21 @@ private fun ClanChatMessageRow(
                 }
             }
             if (message.reactions.isNotEmpty()) {
+                val myReaction = message.reactions.firstOrNull { it.userId == currentUserId }?.type
                 Row(Modifier.padding(top = 5.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     message.reactions.groupBy { it.type }.forEach { (type, reactions) ->
-                        Text("${reactionEmoji(type)} ${reactions.size}", color = Color.White, fontSize = 10.sp,
-                            modifier = Modifier.clip(CircleShape).background(ClanChatCard).border(1.dp, ClanChatLine, CircleShape).padding(horizontal = 8.dp, vertical = 4.dp)
-                                .clickable { onReact(type) })
+                        val selected = myReaction == type
+                        Text(
+                            "${reactionEmoji(type)} ${reactions.size}",
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(ClanChatCard)
+                                .border(1.dp, if (selected) ClanChatPurple.copy(alpha = 0.7f) else ClanChatLine, CircleShape)
+                                .clickable { onReact(type) }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
                     }
                 }
             }
@@ -565,12 +585,15 @@ private fun DateSeparator(label: String) {
     }
 }
 
-private fun reactionEmoji(type: String): String = when (type) {
+private fun reactionEmoji(type: String): String = when (type.lowercase()) {
     "heart" -> "❤️"
     "fire" -> "🔥"
     "laugh" -> "😂"
     "clap" -> "👏"
     "wow" -> "😮"
+    "crown" -> "👑"
+    "stars" -> "✨"
+    "party" -> "🎉"
     else -> "❤️"
 }
 

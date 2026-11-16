@@ -271,7 +271,7 @@ object YugmApi : IYugmApi {
     override suspend fun leaveClan(token: String, clanId: String) = ClanApi.leaveClan(token, clanId)
     override suspend fun getClanMessages(token: String, clanId: String, limit: Int, before: String?): List<ClanMessage> = ClanApi.getClanMessages(token, clanId, limit, before)
     override suspend fun sendClanMessage(token: String, clanId: String, message: String): ClanMessage = ClanApi.sendClanMessage(token, clanId, message)
-    override suspend fun reactToClanMessage(token: String, clanId: String, messageId: String, type: String): JSONObject = ClanApi.reactToClanMessage(token, clanId, messageId, type)
+    override suspend fun reactToClanMessage(token: String, clanId: String, messageId: String, type: String): ClanMessage = ClanApi.reactToClanMessage(token, clanId, messageId, type)
     override suspend fun deleteClanMessage(token: String, clanId: String, messageId: String) = ClanApi.deleteClanMessage(token, clanId, messageId)
     override suspend fun reportClanMessage(token: String, clanId: String, messageId: String, reason: String, description: String) = ClanApi.reportClanMessage(token, clanId, messageId, reason, description)
 

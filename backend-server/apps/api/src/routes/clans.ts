@@ -443,19 +443,36 @@ clansRouter.post("/:id/messages", requireNotMuted, chatLimiter, validateBody(cla
 clansRouter.post("/:id/messages/:messageId/reactions", chatLimiter, validateBody(reactionSchema), asyncHandler(async (req: AuthRequest, res) => {
   const { members } = await requireClanMember(req.params.id, req.user!.id);
   if (!isValidObjectId(req.params.messageId)) throw new HttpError(400, "Invalid message ID", ErrorCode.VALIDATION);
-  const message = await ClanMessage.findOne({ _id: req.params.messageId, clanId: req.params.id }).select("_id").lean();
+  const message = await ClanMessage.findOne({ _id: req.params.messageId, clanId: req.params.id }).select("_id reactions").lean();
   if (!message) throw new HttpError(404, "Message not found", ErrorCode.NOT_FOUND);
-  await ClanMessage.updateOne({ _id: req.params.messageId }, { $pull: { reactions: { userId: req.user!.id } } });
-  const updated = await ClanMessage.findByIdAndUpdate(
-    req.params.messageId,
-    { $push: { reactions: { userId: req.user!.id, type: req.body.type, createdAt: new Date() } } },
-    { new: true }
-  )
-    .populate("senderId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
-    .lean();
+
+  const requestedType = String(req.body.type || "");
+  const existingReaction = (message.reactions || []).find((reaction: any) => reaction?.userId?.toString?.() === req.user!.id);
+  const isRemoving = existingReaction?.type === requestedType;
+
+  let updated;
+  if (isRemoving) {
+    updated = await ClanMessage.findByIdAndUpdate(
+      req.params.messageId,
+      { $pull: { reactions: { userId: req.user!.id } } },
+      { new: true }
+    )
+      .populate("senderId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+      .lean();
+  } else {
+    await ClanMessage.updateOne({ _id: req.params.messageId }, { $pull: { reactions: { userId: req.user!.id } } });
+    updated = await ClanMessage.findByIdAndUpdate(
+      req.params.messageId,
+      { $push: { reactions: { userId: req.user!.id, type: requestedType, createdAt: new Date() } } },
+      { new: true }
+    )
+      .populate("senderId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+      .lean();
+  }
+
   const s = updated?.senderId as { _id?: { toString(): string }; toString?(): string } | undefined;
   const senderId = s?._id?.toString?.() ?? s?.toString?.();
-  if (senderId && senderId !== req.user!.id) {
+  if (!isRemoving && senderId && senderId !== req.user!.id) {
     await createNotification(senderId, "MESSAGE", "New family reaction", `${req.user!.name} reacted to your family message`, { clanId: req.params.id, messageId: req.params.messageId });
   }
   emitClanMembers(members, socketEvents.clanMessageUpdated, { clanId: req.params.id, message: updated });
