@@ -15,7 +15,7 @@ export async function requireAuth(req: AuthRequest, _res: Response, next: NextFu
   try {
     const header = req.headers.authorization;
     const token = header?.startsWith("Bearer ") ? header.slice(7) : undefined;
-    if (!token) throw new HttpError(401, "Missing auth token");
+    if (!token) throw new HttpError(401, "Missing auth token", ErrorCode.UNAUTHORIZED);
 
     const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] }) as { sub: string; tokenVersion?: number; sid?: string; typ?: string };
     if (decoded.typ !== "access" || !decoded.sid) throw new HttpError(401, "Invalid access token", ErrorCode.UNAUTHORIZED);
@@ -23,23 +23,23 @@ export async function requireAuth(req: AuthRequest, _res: Response, next: NextFu
       User.findById(decoded.sub).select("-__v"),
       AuthSession.findOne({ _id: decoded.sid, userId: decoded.sub, revokedAt: null, expiresAt: { $gt: new Date() } })
     ]);
-    if (!user || user.isBlocked) throw new HttpError(401, user?.moderationReason || "Invalid user");
+    if (!user || user.isBlocked) throw new HttpError(401, user?.moderationReason || "Invalid user", ErrorCode.UNAUTHORIZED);
     if (!session) throw new HttpError(401, "Session revoked", ErrorCode.UNAUTHORIZED);
     if ((session.tokenVersion ?? decoded.tokenVersion) !== decoded.tokenVersion) {
       throw new HttpError(401, "This account was signed in on another device", ErrorCode.UNAUTHORIZED);
     }
     if (user.suspendedUntil && user.suspendedUntil.getTime() > Date.now()) {
-      throw new HttpError(403, `Account suspended until ${user.suspendedUntil.toISOString()}`);
+      throw new HttpError(403, `Account suspended until ${user.suspendedUntil.toISOString()}`, ErrorCode.FORBIDDEN);
     }
     if (decoded.tokenVersion !== undefined && user.tokenVersion !== decoded.tokenVersion) {
-      throw new HttpError(401, "Token revoked");
+      throw new HttpError(401, "Token revoked", ErrorCode.UNAUTHORIZED);
     }
 
     req.user = user;
     req.authSession = session;
     next();
   } catch (error) {
-    next(error instanceof HttpError ? error : new HttpError(401, "Invalid auth token"));
+    next(error instanceof HttpError ? error : new HttpError(401, "Invalid auth token", ErrorCode.UNAUTHORIZED));
   }
 }
 
@@ -75,16 +75,16 @@ export async function optionalAuth(req: AuthRequest, _res: Response, next: NextF
 
 export function requireRole(...roles: UserRole[]) {
   return (req: AuthRequest, _res: Response, next: NextFunction) => {
-    if (!req.user) return next(new HttpError(401, "Missing user"));
-    if (!roles.includes(req.user.role)) return next(new HttpError(403, "Insufficient role"));
+    if (!req.user) return next(new HttpError(401, "Missing user", ErrorCode.UNAUTHORIZED));
+    if (!roles.includes(req.user.role)) return next(new HttpError(403, "Insufficient role", ErrorCode.FORBIDDEN));
     next();
   };
 }
 
 export function requireNotMuted(req: AuthRequest, _res: Response, next: NextFunction) {
-  if (!req.user) return next(new HttpError(401, "Missing user"));
+  if (!req.user) return next(new HttpError(401, "Missing user", ErrorCode.UNAUTHORIZED));
   if (req.user.mutedUntil && req.user.mutedUntil.getTime() > Date.now()) {
-    return next(new HttpError(403, `Account muted until ${req.user.mutedUntil.toISOString()}`));
+    return next(new HttpError(403, `Account muted until ${req.user.mutedUntil.toISOString()}`, ErrorCode.FORBIDDEN));
   }
   next();
 }

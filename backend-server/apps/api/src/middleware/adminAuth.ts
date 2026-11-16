@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import { AdminUser, type IAdminUser } from "../models/AdminUser.js";
 import { AdminSession } from "../models/AdminSession.js";
-import { HttpError } from "../utils/http.js";
+import { ErrorCode, HttpError } from "../utils/http.js";
 import { permissionsFor, type AdminPermission } from "../modules/admin/permissions.js";
 
 export interface AdminAuthRequest extends Request {
@@ -45,22 +45,22 @@ export async function requireAdminAuth(req: AdminAuthRequest, _res: Response, ne
   try {
     const header = req.headers.authorization;
     const token = header?.startsWith("Bearer ") ? header.slice(7) : undefined;
-    if (!token) throw new HttpError(401, "Missing admin auth token");
+    if (!token) throw new HttpError(401, "Missing admin auth token", ErrorCode.UNAUTHORIZED);
 
     const decoded = jwt.verify(token, adminJwtSecret(), { algorithms: ["HS256"] }) as { sub: string; sessionId?: string; type?: string };
-    if (decoded.type !== "admin") throw new HttpError(401, "Invalid admin token");
+    if (decoded.type !== "admin") throw new HttpError(401, "Invalid admin token", ErrorCode.UNAUTHORIZED);
     const admin = await AdminUser.findById(decoded.sub);
-    if (!admin || admin.status !== "ACTIVE") throw new HttpError(401, "Admin account is not active");
+    if (!admin || admin.status !== "ACTIVE") throw new HttpError(401, "Admin account is not active", ErrorCode.UNAUTHORIZED);
     if (decoded.sessionId) {
       const session = await AdminSession.findOne({ _id: decoded.sessionId, adminId: admin.id, revokedAt: { $exists: false }, expiresAt: { $gt: new Date() } });
-      if (!session) throw new HttpError(401, "Admin session expired");
+      if (!session) throw new HttpError(401, "Admin session expired", ErrorCode.UNAUTHORIZED);
       req.adminSessionId = session.id;
     }
     req.admin = admin;
     req.adminPermissions = permissionsFor(admin.role, admin.permissions, admin.isSuperAdmin);
     next();
   } catch (error) {
-    next(error instanceof HttpError ? error : new HttpError(401, "Invalid admin auth token"));
+    next(error instanceof HttpError ? error : new HttpError(401, "Invalid admin auth token", ErrorCode.UNAUTHORIZED));
   }
 }
 
