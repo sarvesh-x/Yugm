@@ -823,6 +823,9 @@ usersRouter.get("/messages/:userId", asyncHandler(async (req: AuthRequest, res) 
       if (cursorMsg?.createdAt) beforeDate = new Date(cursorMsg.createdAt as any);
     }
   }
+  const markReadRaw = String(req.query.markRead ?? "").trim().toLowerCase();
+  const markRead = markReadRaw === "" ? true : !["false", "0", "no"].includes(markReadRaw);
+
   const baseFilter: Record<string, unknown> = {
     $or: [
       { senderId: req.user!.id, receiverId: req.params.userId },
@@ -843,7 +846,7 @@ usersRouter.get("/messages/:userId", asyncHandler(async (req: AuthRequest, res) 
   const mutePreference: any = await ConversationMute.findOne({ ownerId: req.user!._id, partnerId: req.params.userId }).lean();
 
   // Only mark as read / emit receipts on initial (latest) fetch to avoid side effects when paginating older history.
-  if (!beforeDate) {
+  if (!beforeDate && markRead) {
     const readResult = await DirectMessage.updateMany(
       { senderId: req.params.userId, receiverId: req.user!.id, read: false, hiddenFor: { $ne: req.user!._id } },
       { $set: { read: true } }

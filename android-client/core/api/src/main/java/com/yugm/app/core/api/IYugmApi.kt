@@ -326,7 +326,7 @@ suspend fun leaderboard(): RoomLeaderboard
     suspend fun claimAchievement(token: String, achievementId: String): ClaimAchievementResult
     suspend fun notificationPreferences(token: String): NotificationPreferences
     suspend fun updateNotificationPreferences(token: String, preferences: Map<String, Boolean>): NotificationPreferences
-    suspend fun conversation(token: String, userId: String, before: String? = null, limit: Int? = null): Conversation
+    suspend fun conversation(token: String, userId: String, before: String? = null, limit: Int? = null, markRead: Boolean = true): Conversation
     suspend fun deleteConversation(token: String, userId: String)
     suspend fun deleteSelectedDirectMessages(token: String, userId: String, messageIds: List<String>, scope: String): List<String>
     suspend fun editDirectMessage(token: String, userId: String, messageId: String, message: String): DirectMessage

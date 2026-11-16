@@ -331,7 +331,7 @@ object YugmApi : IYugmApi {
     override suspend fun claimAchievement(token: String, achievementId: String): ClaimAchievementResult = CreatorApi.claimAchievement(token, achievementId)
     override suspend fun notificationPreferences(token: String): NotificationPreferences = UserApi.notificationPreferences(token)
     override suspend fun updateNotificationPreferences(token: String, preferences: Map<String, Boolean>): NotificationPreferences = UserApi.updateNotificationPreferences(token, preferences)
-    override suspend fun conversation(token: String, userId: String, before: String?, limit: Int?): Conversation = UserApi.conversation(token, userId, before, limit)
+    override suspend fun conversation(token: String, userId: String, before: String?, limit: Int?, markRead: Boolean): Conversation = UserApi.conversation(token, userId, before, limit, markRead)
     override suspend fun deleteConversation(token: String, userId: String) = UserApi.deleteConversation(token, userId)
     override suspend fun deleteSelectedDirectMessages(token: String, userId: String, messageIds: List<String>, scope: String) = UserApi.deleteSelectedDirectMessages(token, userId, messageIds, scope)
     override suspend fun editDirectMessage(token: String, userId: String, messageId: String, message: String) = UserApi.editDirectMessage(token, userId, messageId, message)

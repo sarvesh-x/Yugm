@@ -206,10 +206,11 @@ object UserApi {
         return NotificationPreferences(prefs.toBooleanMap())
     }
 
-    suspend fun conversation(token: String, userId: String, before: String? = null, limit: Int? = null): Conversation {
+    suspend fun conversation(token: String, userId: String, before: String? = null, limit: Int? = null, markRead: Boolean = true): Conversation {
         val query = buildList {
             if (!before.isNullOrBlank()) add("before=${java.net.URLEncoder.encode(before, "UTF-8")}")
             if (limit != null) add("limit=$limit")
+            if (!markRead) add("markRead=false")
         }.joinToString("&")
         val path = if (query.isBlank()) "/users/messages/$userId" else "/users/messages/$userId?$query"
         val data = YugmHttpClient.get(path, token).getJSONObject("data")

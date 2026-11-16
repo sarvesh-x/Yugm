@@ -211,7 +211,7 @@ class ChatListViewModel @Inject constructor(
                     if (missingMuted.isNotEmpty()) {
                         val mutedPreviews = missingMuted.map { partnerId ->
                             async(Dispatchers.IO) {
-                                runCatching { yugmApi.conversation(token, partnerId, limit = 1) }.getOrNull()?.messages?.lastOrNull()
+                                runCatching { yugmApi.conversation(token, partnerId, limit = 1, markRead = false) }.getOrNull()?.messages?.lastOrNull()
                             }
                         }.mapNotNull { it.await() }
                         if (mutedPreviews.isNotEmpty()) {
