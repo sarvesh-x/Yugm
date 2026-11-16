@@ -130,12 +130,7 @@ fun MainTabsScreen(
             userScrollEnabled = true
         ) { page ->
             when (page) {
-                TAB_GAME_ZONE -> GamesScreen(
-                    token = token,
-                    onBack = {},
-                    onOpenChat = { partnerId -> navController.navigate(Screen.Chat.createRoute(partnerId)) },
-                    showBack = false
-                )
+                TAB_GAME_ZONE -> GamesScreen()
 
                 TAB_PARTY -> VoiceRoomsScreen(
                     token = token,

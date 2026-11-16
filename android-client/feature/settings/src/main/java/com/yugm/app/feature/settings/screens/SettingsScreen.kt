@@ -324,7 +324,7 @@ private fun SettingsHome(
             AnimatedEntrance(delay = 200) {
                 SettingsGroup("Account") {
                     SettingsNavRow("Yugm Trust Verification", "Verify your face and voice to show people you're real.", onTrustVerification)
-                    SettingsNavRow("Yugm Arcade", "Play mini games and manage challenges.", onGames)
+                    SettingsNavRow("Yugm Arcade", "New games coming soon.", onGames)
                     SettingsNavRow("Yugm Clans", "Create or join a clan and chat with your family.", onClans)
                     SettingsNavRow("Notification settings", "Control messages, rooms, gifts, safety, and updates.", onNotifications)
                     SettingsNavRow("Appearance", "Choose light, dark, or system theme. Current: ${themeModeLabel(themeMode)}", onAppearance)
