@@ -333,6 +333,7 @@ fun NavGraphBuilder.socialNavGraph(
                     notification.roomId.isNotBlank() -> navController.navigate(Screen.RoomLobby.createRoute(notification.roomId))
                     notification.partnerId.isNotBlank() -> navController.navigate(Screen.Chat.createRoute(notification.partnerId))
                     notification.actorId.isNotBlank() -> navController.navigate(Screen.ProfileDetail.createRoute(notification.actorId))
+                    else -> navController.navigate(Screen.MainTabs.createRoute("discover")) { launchSingleTop = true }
                 }
             }
         )
