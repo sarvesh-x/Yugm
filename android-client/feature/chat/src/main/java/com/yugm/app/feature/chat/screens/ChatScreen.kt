@@ -47,11 +47,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Forward
+import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.EmojiEmotions
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
@@ -60,6 +67,7 @@ import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -177,7 +185,6 @@ fun ChatScreen(
     var confirmDeleteChat by rememberSaveable { mutableStateOf(false) }
     var showDeleteSelected by remember { mutableStateOf(false) }
     var selectedMessageIds by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var messageActionTarget by remember { mutableStateOf<DirectMessage?>(null) }
     var forwardMessage by remember { mutableStateOf<DirectMessage?>(null) }
     var infoMessage by remember { mutableStateOf<DirectMessage?>(null) }
     var reactPickerTarget by remember(partner?.id) { mutableStateOf<DirectMessage?>(null) }
@@ -396,38 +403,6 @@ fun ChatScreen(
             text = { Text("This removes the conversation from your inbox. The other person will still keep their copy.", color = TextMuted) },
             confirmButton = { TextButton(onClick = { confirmDeleteChat = false; onDeleteConversation() }) { Text("Delete", color = Danger) } },
             dismissButton = { TextButton(onClick = { confirmDeleteChat = false }) { Text("Cancel", color = TextMuted) } }
-        )
-    }
-    messageActionTarget?.let { selected ->
-        AlertDialog(
-            onDismissRequest = { messageActionTarget = null },
-            containerColor = SurfaceElevated,
-            title = { Text("Message options", color = TextPrimary) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    if (selected.message.isNotBlank()) {
-                        TextButton(onClick = {
-                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("message", selected.message))
-                            android.widget.Toast.makeText(context, "Message copied", android.widget.Toast.LENGTH_SHORT).show()
-                            messageActionTarget = null
-                            selectedMessageIds = emptySet()
-                        }) { Text("Copy", color = TextPrimary) }
-                    }
-                    TextButton(onClick = { infoMessage = selected; messageActionTarget = null; selectedMessageIds = emptySet() }) { Text("Info", color = TextPrimary) }
-                    if (selected.id.isNotBlank()) {
-                        TextButton(onClick = { reactPickerTarget = selected; messageActionTarget = null; selectedMessageIds = emptySet() }) { Text("React", color = TextPrimary) }
-                    }
-                    TextButton(onClick = { replyTarget = selected; editingTarget = null; draft = ""; selectedMessageIds = emptySet(); messageActionTarget = null }) { Text("Reply", color = TextPrimary) }
-                    if (selected.senderId == currentUserId && selected.canStillEdit()) {
-                        TextButton(onClick = { editingTarget = selected; replyTarget = null; draft = selected.message; selectedMessageIds = emptySet(); messageActionTarget = null }) { Text("Edit", color = TextPrimary) }
-                    }
-                    TextButton(onClick = { forwardMessage = selected; selectedMessageIds = emptySet(); messageActionTarget = null }) { Text("Forward", color = TextPrimary) }
-                    TextButton(onClick = { selectedMessageIds = setOf(selected.id); showDeleteSelected = true; messageActionTarget = null }) { Text("Delete for me", color = Danger) }
-                    if (selected.senderId == currentUserId) TextButton(onClick = { selectedMessageIds = setOf(selected.id); showDeleteSelected = true; messageActionTarget = null }) { Text("Delete for everyone", color = Danger) }
-                }
-            },
-            confirmButton = { TextButton(onClick = { messageActionTarget = null }) { Text("Close", color = TextMuted) } }
         )
     }
     forwardMessage?.let { selected ->
@@ -764,15 +739,60 @@ fun ChatScreen(
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
                 ) {
                     if (selectionMode) {
+                        val selected = selectedMessages.firstOrNull()
                         Row(
                             Modifier.fillMaxWidth().padding(vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            Text("${selectedMessageIds.size} selected", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                            if (selectedMessageIds.size == 1) TextButton(onClick = { messageActionTarget = selectedMessages.firstOrNull() }) { Text("More", color = TextPrimary) }
-                            TextButton(onClick = { showDeleteSelected = true }) { Text("Delete", color = Danger) }
-                            TextButton(onClick = { selectedMessageIds = emptySet() }) { Text("Cancel", color = TextMuted) }
+                            Text("${selectedMessageIds.size}", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 4.dp, end = 2.dp))
+                            if (selectedMessageIds.size == 1 && selected != null) {
+                                IconButton(onClick = {
+                                    replyTarget = selected
+                                    editingTarget = null
+                                    draft = ""
+                                    selectedMessageIds = emptySet()
+                                }) { Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = "Reply", tint = TextPrimary) }
+                                IconButton(onClick = {
+                                    forwardMessage = selected
+                                    selectedMessageIds = emptySet()
+                                }) { Icon(Icons.AutoMirrored.Filled.Forward, contentDescription = "Forward", tint = TextPrimary) }
+                                if (selected.senderId == currentUserId && selected.canStillEdit()) {
+                                    IconButton(onClick = {
+                                        editingTarget = selected
+                                        replyTarget = null
+                                        draft = selected.message
+                                        selectedMessageIds = emptySet()
+                                    }) { Icon(Icons.Filled.Edit, contentDescription = "Edit", tint = TextPrimary) }
+                                }
+                                IconButton(onClick = {
+                                    selectedMessageIds = setOf(selected.id)
+                                    showDeleteSelected = true
+                                }) { Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = Danger) }
+                                IconButton(onClick = {
+                                    infoMessage = selected
+                                    selectedMessageIds = emptySet()
+                                }) { Icon(Icons.Filled.Info, contentDescription = "Info", tint = TextPrimary) }
+                                if (selected.message.isNotBlank()) {
+                                    IconButton(onClick = {
+                                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("message", selected.message))
+                                        android.widget.Toast.makeText(context, "Message copied", android.widget.Toast.LENGTH_SHORT).show()
+                                        selectedMessageIds = emptySet()
+                                    }) { Icon(Icons.Filled.ContentCopy, contentDescription = "Copy", tint = TextPrimary) }
+                                }
+                                if (selected.id.isNotBlank()) {
+                                    IconButton(onClick = {
+                                        reactPickerTarget = selected
+                                        selectedMessageIds = emptySet()
+                                    }) { Icon(Icons.Filled.EmojiEmotions, contentDescription = "React", tint = TextPrimary) }
+                                }
+                            } else {
+                                Spacer(Modifier.weight(1f))
+                                IconButton(onClick = { showDeleteSelected = true }) { Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = Danger) }
+                            }
+                            if (selectedMessageIds.size != 1) Spacer(Modifier.width(0.dp))
+                            IconButton(onClick = { selectedMessageIds = emptySet() }) { Icon(Icons.Filled.Close, contentDescription = "Cancel", tint = TextMuted) }
                         }
                     } else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         LightChatAction(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.a11y_back), onClick = onBack)
