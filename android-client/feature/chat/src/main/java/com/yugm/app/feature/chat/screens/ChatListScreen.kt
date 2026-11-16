@@ -737,12 +737,15 @@ private fun LightChatRow(item: ConversationItem, currentUserId: String, unreadCo
 private fun buildConversationPreview(message: DirectMessage, currentUserId: String): String {
     val minePrefix = if (currentUserId.isNotBlank() && message.senderId == currentUserId) "You: " else ""
     val forwardedPrefix = if (message.forwarded) "Forwarded · " else ""
+    val lower = message.message.lowercase()
+    val isCall = lower.contains("call started") || (lower.contains("private") && lower.contains("call")) || lower.contains("call")
     val body = when {
         message.mediaType.equals("AUDIO", true) -> "🎤 Voice note"
         message.mediaType.equals("IMAGE", true) -> "📷 Photo"
         message.mediaType.equals("VIDEO", true) -> "🎬 Video"
-        message.message.contains("video call", ignoreCase = true) -> "📹 Video call"
-        message.message.contains("voice call", ignoreCase = true) || message.message.contains("audio call", ignoreCase = true) || message.message.contains("call", ignoreCase = true) -> "📞 Call"
+        isCall && lower.contains("video") -> "📹 Video call"
+        isCall && (lower.contains("voice") || lower.contains("audio")) -> "📞 Voice call"
+        isCall -> "📞 Call"
         message.message.isNotBlank() -> if (message.isEdited) "${message.message} (edited)" else message.message
         else -> "New message"
     }
