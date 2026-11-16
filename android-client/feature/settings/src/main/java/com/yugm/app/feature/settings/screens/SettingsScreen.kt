@@ -559,4 +559,3 @@ private fun paneTitle(pane: SettingsPane): String = when (pane) {
     SettingsPane.Privacy -> "Privacy Policy"
     SettingsPane.Guidelines -> "Community Guidelines"
 }
-

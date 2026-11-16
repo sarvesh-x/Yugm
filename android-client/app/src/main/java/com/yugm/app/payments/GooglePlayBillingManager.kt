@@ -245,4 +245,3 @@ object GooglePlayBillingManager {
 
     fun getBillingClient() = billingClient
 }
-
