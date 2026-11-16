@@ -61,6 +61,7 @@ class ChatListViewModel @Inject constructor(
     private var authToken: String = ""
     private var currentUserId: String = ""
     private var refreshRecentJob: Job? = null
+    private var pendingRecentRefreshPartnerId: String? = null
 
     init {
         viewModelScope.launch {
@@ -85,7 +86,14 @@ class ChatListViewModel @Inject constructor(
                                 val current = unreadCounts[partnerId] ?: 0
                                 unreadCounts = if (current <= 1) unreadCounts - partnerId else unreadCounts + (partnerId to (current - 1))
                             }
-                            scheduleRecentRefresh()
+                            val partnerId = if (event.partnerId.isNotBlank()) event.partnerId else {
+                                when (currentUserId) {
+                                    removed.senderId -> removed.receiverId
+                                    removed.receiverId -> removed.senderId
+                                    else -> ""
+                                }
+                            }
+                            scheduleRecentRefresh(partnerId)
                         }
                     }
                     is SocketEvent.DirectMessageReceived -> {
@@ -247,18 +255,37 @@ class ChatListViewModel @Inject constructor(
         }
     }
 
-    private fun scheduleRecentRefresh() {
+    private fun scheduleRecentRefresh(partnerId: String? = null) {
         val token = authToken
         if (token.isBlank() || isLoading) return
+        pendingRecentRefreshPartnerId = partnerId?.takeIf { it.isNotBlank() } ?: pendingRecentRefreshPartnerId
         refreshRecentJob?.cancel()
         refreshRecentJob = viewModelScope.launch {
             delay(350)
-            runCatching {
-                withContext(Dispatchers.IO) { yugmApi.getRecentMessagesPage(token) }
-            }.onSuccess { page ->
-                recentMessages = page.messages
-                hasMoreRecent = page.hasMore
-                recentNextBefore = page.nextBefore ?: page.messages.lastOrNull()?.createdAt
+            val targetPartnerId = pendingRecentRefreshPartnerId
+            pendingRecentRefreshPartnerId = null
+            if (!targetPartnerId.isNullOrBlank()) {
+                runCatching {
+                    withContext(Dispatchers.IO) { yugmApi.conversation(token, targetPartnerId, limit = 1) }
+                }.onSuccess { conversation ->
+                    val latest = conversation.messages.lastOrNull()
+                    val withoutPartner = recentMessages.filterNot { msg ->
+                        msg.senderId == targetPartnerId || msg.receiverId == targetPartnerId
+                    }
+                    recentMessages = if (latest != null) {
+                        (withoutPartner + latest).sortedByDescending { it.createdAt }
+                    } else {
+                        withoutPartner
+                    }
+                }
+            } else {
+                runCatching {
+                    withContext(Dispatchers.IO) { yugmApi.getRecentMessagesPage(token) }
+                }.onSuccess { page ->
+                    recentMessages = page.messages
+                    hasMoreRecent = page.hasMore
+                    recentNextBefore = page.nextBefore ?: page.messages.lastOrNull()?.createdAt
+                }
             }
         }
     }
