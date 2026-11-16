@@ -1,6 +1,7 @@
 package com.yugm.app.feature.chat.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -16,6 +17,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -1068,40 +1070,83 @@ fun ChatScreen(
                                 val groupedWithPrev = prev != null && prev.senderId == message.senderId && previousDate == currentDate
                                 val groupedWithNext = next != null && next.senderId == message.senderId && messageDateLabel(next.createdAt) == currentDate
                                 val inSearchResults = searchQuery.length >= 2
-                                Box(Modifier.padding(top = if (groupedWithPrev) 0.dp else 3.dp, bottom = if (groupedWithNext) 0.dp else 3.dp)) {
-                                    MessageBubble(
-                                        message = message,
-                                        mine = mine,
-                                        selected = message.id in selectedMessageIds,
-                                        highlighted = highlightedMessageId == message.id,
-                                        bubbleId = myActiveCosmetics.chatBubble,
-                                        partner = partner,
-                                        currentUserId = currentUserId,
-                                        myActiveCosmetics = myActiveCosmetics,
-                                        showIncomingAvatar = !mine && !groupedWithNext,
-                                        showOutgoingAvatar = mine && !groupedWithNext,
-                                        compact = groupedWithPrev,
-                                        playingVoiceMessageId = playingVoiceMessageId,
-                                        isVoicePlaying = isVoicePlaying,
-                                        isVoicePreparing = isVoicePreparing,
-                                        voiceProgressMs = voiceProgressMs,
-                                        voiceDurationMs = voiceDurationMs,
-                                        startingCallType = startingCallType,
-                                        isBlockedByMe = isBlockedByMe,
-                                        onReact = {
-                                            when {
-                                                selectionMode -> toggleSelection(message.id)
-                                                inSearchResults -> jumpToMessage(message)
-                                                message.id.isNotBlank() -> reactPickerTarget = message
-                                            }
-                                        },
-                                        onLongPress = { toggleSelection(message.id) },
-                                        onOpenImage = { url -> imageViewerUrl = url },
-                                        onToggleVoice = { toggleVoicePlayback(message) },
-                                        onSeekVoice = { pos -> seekVoicePlayback(message.id, pos) },
-                                        onAudioCall = onAudioCall,
-                                        onVideoCall = onVideoCall
-                                    )
+                                val swipeOffset = remember(message.id) { Animatable(0f) }
+                                var swipeReplyTriggered by remember(message.id) { mutableStateOf(false) }
+                                Box(
+                                    Modifier
+                                        .padding(top = if (groupedWithPrev) 0.dp else 3.dp, bottom = if (groupedWithNext) 0.dp else 3.dp)
+                                        .pointerInput(message.id, selectionMode, inSearchResults) {
+                                            if (selectionMode || inSearchResults) return@pointerInput
+                                            detectHorizontalDragGestures(
+                                                onDragEnd = {
+                                                    scope.launch {
+                                                        if (swipeOffset.value >= 72f && !swipeReplyTriggered) {
+                                                            swipeReplyTriggered = true
+                                                            replyTarget = message
+                                                            editingTarget = null
+                                                            draft = ""
+                                                            selectedMessageIds = emptySet()
+                                                        }
+                                                        swipeOffset.animateTo(0f)
+                                                        swipeReplyTriggered = false
+                                                    }
+                                                },
+                                                onDragCancel = {
+                                                    scope.launch {
+                                                        swipeOffset.animateTo(0f)
+                                                        swipeReplyTriggered = false
+                                                    }
+                                                },
+                                                onHorizontalDrag = { _, dragAmount ->
+                                                    val next = (swipeOffset.value + dragAmount).coerceIn(0f, 96f)
+                                                    scope.launch { swipeOffset.snapTo(next) }
+                                                }
+                                            )
+                                        }
+                                ) {
+                                    if (swipeOffset.value > 8f) {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.Reply,
+                                            contentDescription = null,
+                                            tint = PrimaryPurple.copy(alpha = (swipeOffset.value / 72f).coerceIn(0.25f, 1f)),
+                                            modifier = Modifier.align(Alignment.CenterStart).padding(start = 4.dp)
+                                        )
+                                    }
+                                    Box(Modifier.offset(x = swipeOffset.value.dp)) {
+                                        MessageBubble(
+                                            message = message,
+                                            mine = mine,
+                                            selected = message.id in selectedMessageIds,
+                                            highlighted = highlightedMessageId == message.id,
+                                            bubbleId = myActiveCosmetics.chatBubble,
+                                            partner = partner,
+                                            currentUserId = currentUserId,
+                                            myActiveCosmetics = myActiveCosmetics,
+                                            showIncomingAvatar = !mine && !groupedWithNext,
+                                            showOutgoingAvatar = mine && !groupedWithNext,
+                                            compact = groupedWithPrev,
+                                            playingVoiceMessageId = playingVoiceMessageId,
+                                            isVoicePlaying = isVoicePlaying,
+                                            isVoicePreparing = isVoicePreparing,
+                                            voiceProgressMs = voiceProgressMs,
+                                            voiceDurationMs = voiceDurationMs,
+                                            startingCallType = startingCallType,
+                                            isBlockedByMe = isBlockedByMe,
+                                            onReact = {
+                                                when {
+                                                    selectionMode -> toggleSelection(message.id)
+                                                    inSearchResults -> jumpToMessage(message)
+                                                    message.id.isNotBlank() -> reactPickerTarget = message
+                                                }
+                                            },
+                                            onLongPress = { toggleSelection(message.id) },
+                                            onOpenImage = { url -> imageViewerUrl = url },
+                                            onToggleVoice = { toggleVoicePlayback(message) },
+                                            onSeekVoice = { pos -> seekVoicePlayback(message.id, pos) },
+                                            onAudioCall = onAudioCall,
+                                            onVideoCall = onVideoCall
+                                        )
+                                    }
                                 }
                             }
                             if (isPartnerTyping) item {
