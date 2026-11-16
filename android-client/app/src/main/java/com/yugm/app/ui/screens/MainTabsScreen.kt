@@ -8,8 +8,12 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -45,23 +49,36 @@ fun MainTabsScreen(
     onRequestedTabConsumed: () -> Unit = {},
     onProfileUpdated: (com.yugm.app.core.model.YugmUser) -> Unit = {},
 ) {
-    val initialPage = when (initialTab.lowercase()) {
+    val requestedPage = when (initialTab.lowercase()) {
         "game", "games", "game_zone", "gamezone" -> TAB_GAME_ZONE
         "party", "live", "voice_rooms", "voicerooms" -> TAB_PARTY
         "chat", "chats", "chat_list", "chatlist" -> TAB_CHAT
         "profile", "mine" -> TAB_PROFILE
         else -> TAB_DISCOVER
     }
-    val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { 5 })
+    var appliedInitialTab by rememberSaveable { mutableStateOf<String?>(null) }
+    val pagerState = rememberPagerState(initialPage = requestedPage, pageCount = { 5 })
     val scope = rememberCoroutineScope()
     val chatListViewModel: ChatListViewModel = hiltViewModel()
     val chatUnreadBadge = remember(chatListViewModel.unreadCounts, chatListViewModel.mutedPartnerIds) {
         chatListViewModel.unreadCounts.filterKeys { it !in chatListViewModel.mutedPartnerIds }.values.sum().coerceAtMost(9)
     }
+    var isClanChatActive by remember { mutableStateOf(false) }
+
+    LaunchedEffect(pagerState.currentPage) {
+        if (pagerState.currentPage != TAB_CHAT) {
+            isClanChatActive = false
+        }
+    }
 
     LaunchedEffect(initialTab) {
-        val target = initialPage
-        if (pagerState.currentPage != target) pagerState.scrollToPage(target)
+        // Apply the route's initial tab only once for this destination instance so returning
+        // from pushed screens preserves the user's last selected tab.
+        if (appliedInitialTab == initialTab) return@LaunchedEffect
+        if (pagerState.currentPage != requestedPage) {
+            pagerState.scrollToPage(requestedPage)
+        }
+        appliedInitialTab = initialTab
     }
 
     LaunchedEffect(requestedTab) {
@@ -76,6 +93,7 @@ fun MainTabsScreen(
         if (pagerState.currentPage != target) {
             pagerState.animateScrollToPage(target)
         }
+        appliedInitialTab = tab
         onRequestedTabConsumed()
     }
 
@@ -168,6 +186,7 @@ fun MainTabsScreen(
                     onOpenClanDetail = { clanId -> navController.navigate(Screen.ClanDetail.createRoute(clanId)) },
                     onGameZone = { goTo(TAB_GAME_ZONE) },
                     showBottomDock = false,
+                    onClanTabActiveChanged = { isClanChatActive = it },
                     viewModel = chatListViewModel
                 )
 
@@ -221,17 +240,19 @@ fun MainTabsScreen(
             TAB_PROFILE -> YugmDockTab.PROFILE
             else -> YugmDockTab.DISCOVER
         }
-        YugmBottomDock(
-            selected = selectedTab,
-            modifier = Modifier.align(Alignment.BottomCenter),
-            onDiscover = { goTo(TAB_DISCOVER) },
-            onCreate = { navController.navigate(Screen.CreateRoom.route) },
-            onLive = { goTo(TAB_PARTY) },
-            onChat = { goTo(TAB_CHAT) },
-            onWallet = { navController.navigate(Screen.Wallet.route) },
-            onProfile = { openOwnProfileOrSetup() },
-            onGameZone = { goTo(TAB_GAME_ZONE) },
-            chatBadge = chatUnreadBadge
-        )
+        if (!(pagerState.currentPage == TAB_CHAT && isClanChatActive)) {
+            YugmBottomDock(
+                selected = selectedTab,
+                modifier = Modifier.align(Alignment.BottomCenter),
+                onDiscover = { goTo(TAB_DISCOVER) },
+                onCreate = { navController.navigate(Screen.CreateRoom.route) },
+                onLive = { goTo(TAB_PARTY) },
+                onChat = { goTo(TAB_CHAT) },
+                onWallet = { navController.navigate(Screen.Wallet.route) },
+                onProfile = { openOwnProfileOrSetup() },
+                onGameZone = { goTo(TAB_GAME_ZONE) },
+                chatBadge = chatUnreadBadge
+            )
+        }
     }
 }

@@ -88,51 +88,68 @@ fun ClanListScreen(
                     modifier = Modifier.padding(horizontal = 20.dp)
                 )
             }
-            if (selectedTab == 0) item {
-                Column(Modifier.padding(horizontal = 20.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp))
-                    .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF41204F), Color(0xFF241A3E))))
-                    .padding(16.dp)) {
-                    Text("Find your people", color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                    Text("Explore public clans, join a community, or start one of your own.", color = TextMuted, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
-                    androidx.compose.material3.Button(onClick = onCreateClan) { Text("＋  Create a clan") }
-                }
-            }
-            if (selectedTab == 0) item {
-                YugmSearchBar(
-                    query = searchQuery,
-                    onQueryChange = { searchQuery = it },
-                    placeholder = "Search clans…"
-                )
-            }
-            if (selectedTab == 0 && viewModel.isLoading) {
-                item { Box(Modifier.padding(horizontal = 20.dp)) { LoadingState("Loading clans…") } }
-            } else if (selectedTab == 0) {
-                if (viewModel.myClan != null) {
-                    item {
-                        MyClanCard(viewModel.myClan!!) { onMyClanClick(viewModel.myClan!!.id) }
+            if (selectedTab == 0) {
+                val myClan = viewModel.myClan
+                item {
+                    if (myClan != null) {
+                        MyClanCard(myClan) { onMyClanClick(myClan.id) }
+                    } else {
+                        Column(
+                            Modifier
+                                .padding(horizontal = 20.dp)
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(
+                                    androidx.compose.ui.graphics.Brush.linearGradient(
+                                        listOf(Color(0xFF41204F), Color(0xFF241A3E))
+                                    )
+                                )
+                                .padding(16.dp)
+                        ) {
+                            Text("Find your people", color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                "Explore public clans, join a community, or start one of your own.",
+                                color = TextMuted,
+                                fontSize = 12.sp,
+                                lineHeight = 17.sp,
+                                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                            )
+                            androidx.compose.material3.Button(onClick = onCreateClan) { Text("＋  Create a clan") }
+                        }
                     }
                 }
-                if (viewModel.clans.isEmpty() && searchQuery.isBlank()) {
-                    item {
-                        Text(
-                            "No public clans yet. Create one!",
-                            color = TextMuted,
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 40.dp)
-                        )
-                    }
-                } else if (viewModel.clans.isEmpty()) {
-                    item {
-                        Text(
-                            "No clans matching \"$searchQuery\"",
-                            color = TextMuted,
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 40.dp)
-                        )
-                    }
+                item {
+                    YugmSearchBar(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        placeholder = "Search clans…"
+                    )
+                }
+                if (viewModel.isLoading) {
+                    item { Box(Modifier.padding(horizontal = 20.dp)) { LoadingState("Loading clans…") } }
                 } else {
-                    items(viewModel.clans) { clan ->
-                        ClanCard(clan, onClick = { onClanClick(clan.id) })
+                    if (viewModel.clans.isEmpty() && searchQuery.isBlank()) {
+                        item {
+                            Text(
+                                "No public clans yet. Create one!",
+                                color = TextMuted,
+                                fontSize = 14.sp,
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 40.dp)
+                            )
+                        }
+                    } else if (viewModel.clans.isEmpty()) {
+                        item {
+                            Text(
+                                "No clans matching \"$searchQuery\"",
+                                color = TextMuted,
+                                fontSize = 14.sp,
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 40.dp)
+                            )
+                        }
+                    } else {
+                        items(viewModel.clans) { clan ->
+                            ClanCard(clan, onClick = { onClanClick(clan.id) })
+                        }
                     }
                 }
             }

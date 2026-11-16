@@ -53,6 +53,7 @@ export const socketEvents = {
   roomActivityNew: "room:activity:new",
   roomPollNew: "room:poll:new",
   roomPollVote: "room:poll:vote",
+  roomPollClosed: "room:poll:closed",
   roomSpeakerRequest: "room:speaker:request",
   roomSpeakerApprove: "room:speaker:approve",
   roomSpeakerReject: "room:speaker:reject",

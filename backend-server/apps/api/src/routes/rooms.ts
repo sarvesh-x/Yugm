@@ -798,7 +798,7 @@ roomsRouter.post("/:id/polls/:pollId/close", requireAuth, asyncHandler(async (re
     { new: true }
   ).lean();
   if (!poll) throw new HttpError(404, "Active poll not found", ErrorCode.NOT_FOUND);
-  emitRoom(req.params.id, "room:poll:closed", { poll });
+  emitRoom(req.params.id, socketEvents.roomPollClosed, { poll });
   sendOk(res, { poll });
 }));
 

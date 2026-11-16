@@ -104,11 +104,16 @@ fun ChatListScreen(
     onOpenClanDetail: (String) -> Unit = {},
     onGameZone: () -> Unit = {},
     showBottomDock: Boolean = true,
+    onClanTabActiveChanged: (Boolean) -> Unit = {},
     viewModel: com.yugm.app.feature.chat.viewmodel.ChatListViewModel = hiltViewModel()
 ) {
     var mainTab by remember { mutableIntStateOf(0) }
     var contactTab by remember { mutableIntStateOf(0) }
     var showFindPeople by remember { mutableStateOf(false) }
+
+    LaunchedEffect(mainTab) {
+        onClanTabActiveChanged(mainTab == 1)
+    }
 
     LaunchedEffect(token, currentUserId) { viewModel.load(token, currentUserId) }
     val listBottomPadding = if (showBottomDock) 120.dp else 100.dp
@@ -476,7 +481,7 @@ fun ChatListScreen(
                 }
             }
         }
-        if (showBottomDock) {
+        if (showBottomDock && mainTab != 1) {
             YugmBottomDock(
                 selected = YugmDockTab.CHAT,
                 onDiscover = onDiscover,

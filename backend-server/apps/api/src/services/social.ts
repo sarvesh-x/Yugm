@@ -205,21 +205,54 @@ export async function getActiveVoicePolls(page = 1, limit = 20) {
   return { polls, total, page, limit };
 }
 
-export async function voteVoicePoll(pollId: string, userId: string, optionIndex: number) {
-  const poll = await VoicePoll.findById(pollId);
+export async function getVoicePollById(pollId: string) {
+  const poll = await VoicePoll.findById(pollId).populate("userId", "name username avatar").lean();
   if (!poll) throw new HttpError(404, "Poll not found", ErrorCode.NOT_FOUND);
-  if (!poll.isActive) throw new HttpError(400, "Poll is closed", ErrorCode.VALIDATION);
-  if (poll.expiresAt && poll.expiresAt < new Date()) throw new HttpError(400, "Poll has expired", ErrorCode.VALIDATION);
-
-  const alreadyVoted = poll.voters.some((v) => v.toString() === userId);
-  if (alreadyVoted) throw new HttpError(409, "Already voted", ErrorCode.CONFLICT);
-  if (optionIndex < 0 || optionIndex >= poll.options.length) throw new HttpError(400, "Invalid option", ErrorCode.VALIDATION);
-
-  poll.options[optionIndex].votes += 1;
-  poll.voters.push(userId as any);
-  await poll.save();
-
   return { poll };
+}
+
+export async function voteVoicePoll(pollId: string, userId: string, optionIndex: number) {
+  if (!Number.isInteger(optionIndex) || optionIndex < 0) {
+    throw new HttpError(400, "Invalid option", ErrorCode.VALIDATION);
+  }
+
+  // Ensure poll exists and option index is valid before atomic update.
+  const existing = await VoicePoll.findById(pollId).select("options isActive expiresAt").lean();
+  if (!existing) throw new HttpError(404, "Poll not found", ErrorCode.NOT_FOUND);
+  if (!existing.isActive) throw new HttpError(400, "Poll is closed", ErrorCode.VALIDATION);
+  if (existing.expiresAt && new Date(existing.expiresAt) < new Date()) {
+    throw new HttpError(400, "Poll has expired", ErrorCode.VALIDATION);
+  }
+  if (optionIndex >= (existing.options?.length ?? 0)) {
+    throw new HttpError(400, "Invalid option", ErrorCode.VALIDATION);
+  }
+
+  const poll = await VoicePoll.findOneAndUpdate(
+    {
+      _id: pollId,
+      isActive: true,
+      expiresAt: { $gt: new Date() },
+      voters: { $ne: userId }
+    },
+    {
+      $inc: { [`options.${optionIndex}.votes`]: 1 },
+      $addToSet: { voters: userId }
+    },
+    { new: true }
+  ).populate("userId", "name username avatar");
+
+  if (poll) return { poll };
+
+  const latest = await VoicePoll.findById(pollId).select("isActive expiresAt voters").lean();
+  if (!latest) throw new HttpError(404, "Poll not found", ErrorCode.NOT_FOUND);
+  if (!latest.isActive) throw new HttpError(400, "Poll is closed", ErrorCode.VALIDATION);
+  if (latest.expiresAt && new Date(latest.expiresAt) < new Date()) {
+    throw new HttpError(400, "Poll has expired", ErrorCode.VALIDATION);
+  }
+  if ((latest.voters ?? []).some((v: any) => v.toString() === userId)) {
+    throw new HttpError(409, "Already voted", ErrorCode.CONFLICT);
+  }
+  throw new HttpError(409, "Could not record vote", ErrorCode.CONFLICT);
 }
 
 export async function getMyVoicePolls(userId: string) {

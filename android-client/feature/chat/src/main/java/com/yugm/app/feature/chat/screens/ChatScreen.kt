@@ -1,5 +1,6 @@
 package com.yugm.app.feature.chat.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -58,6 +59,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
@@ -195,10 +197,10 @@ fun ChatScreen(
     var showMore by rememberSaveable { mutableStateOf(false) }
     var confirmDeleteChat by rememberSaveable { mutableStateOf(false) }
     var showVipCallDialog by rememberSaveable(partner?.id) { mutableStateOf(false) }
-    var showDeleteSelected by remember { mutableStateOf(false) }
-    var selectedMessageIds by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var forwardMessage by remember { mutableStateOf<DirectMessage?>(null) }
-    var infoMessage by remember { mutableStateOf<DirectMessage?>(null) }
+    var showDeleteSelected by remember(partner?.id) { mutableStateOf(false) }
+    var selectedMessageIds by remember(partner?.id) { mutableStateOf<Set<String>>(emptySet()) }
+    var forwardMessage by remember(partner?.id) { mutableStateOf<DirectMessage?>(null) }
+    var infoMessage by remember(partner?.id) { mutableStateOf<DirectMessage?>(null) }
     var reactDialogTarget by remember(partner?.id) { mutableStateOf<DirectMessage?>(null) }
     var optionsDialogTarget by remember(partner?.id) { mutableStateOf<DirectMessage?>(null) }
     var targetMessageBounds by remember(partner?.id) { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
@@ -206,7 +208,6 @@ fun ChatScreen(
     var editingTarget by remember(partner?.id) { mutableStateOf<DirectMessage?>(null) }
     var searchVisible by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
-    var showSafety by rememberSaveable { mutableStateOf(true) }
     var typingSent by remember { mutableStateOf(false) }
     var highlightedMessageId by remember(partner?.id) { mutableStateOf<String?>(null) }
     var imageViewerUrl by remember(partner?.id) { mutableStateOf<String?>(null) }
@@ -219,6 +220,13 @@ fun ChatScreen(
     val voicePlayer = remember(partner?.id) { MediaPlayer() }
     val listState = rememberLazyListState()
     val context = LocalContext.current
+    val safetyPrefs = remember(context) { context.getSharedPreferences("chat_safety_tip", android.content.Context.MODE_PRIVATE) }
+    val safetyKey = remember(currentUserId, partner?.id) {
+        val uid = currentUserId.trim()
+        val pid = partner?.id?.trim().orEmpty()
+        if (uid.isNotBlank() && pid.isNotBlank()) "dismissed_${uid}_$pid" else null
+    }
+    var showSafety by remember(safetyKey) { mutableStateOf(safetyKey?.let { !safetyPrefs.getBoolean(it, false) } ?: true) }
     val messageFieldLabel = stringResource(R.string.a11y_message_field)
     val attachPhotoLabel = stringResource(R.string.a11y_attach_photo)
     val sendMessageLabel = stringResource(R.string.a11y_send_message)
@@ -234,6 +242,7 @@ fun ChatScreen(
         else -> messages
     }
     val selectionMode = selectedMessageIds.isNotEmpty()
+    BackHandler(enabled = selectionMode) { selectedMessageIds = emptySet() }
     val selectedMessages = visibleMessages.filter { it.id in selectedMessageIds }
     val selectedOwnIds = selectedMessages.filter { it.senderId == currentUserId }.map { it.id }
     fun toggleSelection(messageId: String) {
@@ -717,34 +726,18 @@ fun ChatScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            Text("${selectedMessageIds.size}", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 4.dp, end = 2.dp))
+                            IconButton(onClick = { selectedMessageIds = emptySet() }) {
+                                Icon(Icons.Filled.Close, contentDescription = "Cancel selection", tint = TextMuted)
+                            }
+                            Text(
+                                "${selectedMessageIds.size} selected",
+                                color = TextPrimary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(start = 2.dp)
+                            )
+                            Spacer(Modifier.weight(1f))
                             if (selectedMessageIds.size == 1 && selected != null) {
-                                IconButton(onClick = {
-                                    replyTarget = selected
-                                    editingTarget = null
-                                    draft = ""
-                                    selectedMessageIds = emptySet()
-                                }) { Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = "Reply", tint = TextPrimary) }
-                                IconButton(onClick = {
-                                    forwardMessage = selected
-                                    selectedMessageIds = emptySet()
-                                }) { Icon(Icons.AutoMirrored.Filled.Forward, contentDescription = "Forward", tint = TextPrimary) }
-                                if (selected.senderId == currentUserId && selected.canStillEdit()) {
-                                    IconButton(onClick = {
-                                        editingTarget = selected
-                                        replyTarget = null
-                                        draft = selected.message
-                                        selectedMessageIds = emptySet()
-                                    }) { Icon(Icons.Filled.Edit, contentDescription = "Edit", tint = TextPrimary) }
-                                }
-                                IconButton(onClick = {
-                                    selectedMessageIds = setOf(selected.id)
-                                    showDeleteSelected = true
-                                }) { Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = Danger) }
-                                IconButton(onClick = {
-                                    infoMessage = selected
-                                    selectedMessageIds = emptySet()
-                                }) { Icon(Icons.Filled.Info, contentDescription = "Info", tint = TextPrimary) }
                                 if (selected.message.isNotBlank()) {
                                     IconButton(onClick = {
                                         val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
@@ -753,18 +746,14 @@ fun ChatScreen(
                                         selectedMessageIds = emptySet()
                                     }) { Icon(Icons.Filled.ContentCopy, contentDescription = "Copy", tint = TextPrimary) }
                                 }
-                                if (selected.id.isNotBlank()) {
-                                    IconButton(onClick = {
-                                        optionsDialogTarget = selected
-                                        selectedMessageIds = emptySet()
-                                    }) { Icon(Icons.Filled.EmojiEmotions, contentDescription = "Options", tint = TextPrimary) }
-                                }
-                            } else {
-                                Spacer(Modifier.weight(1f))
-                                IconButton(onClick = { showDeleteSelected = true }) { Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = Danger) }
+                                IconButton(onClick = {
+                                    forwardMessage = selected
+                                    selectedMessageIds = emptySet()
+                                }) { Icon(Icons.AutoMirrored.Filled.Forward, contentDescription = "Forward", tint = TextPrimary) }
                             }
-                            if (selectedMessageIds.size != 1) Spacer(Modifier.width(0.dp))
-                            IconButton(onClick = { selectedMessageIds = emptySet() }) { Icon(Icons.Filled.Close, contentDescription = "Cancel", tint = TextMuted) }
+                            IconButton(onClick = { showDeleteSelected = true }) {
+                                Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = Danger)
+                            }
                         }
                     } else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         LightChatAction(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.a11y_back), onClick = onBack)
@@ -968,7 +957,12 @@ fun ChatScreen(
                                 }
                             }
                             if (messages.isEmpty()) item { MatchedBanner(partner?.name ?: "your match") }
-                            if (showSafety) item { SafetyTip(onDismiss = { showSafety = false }) }
+                            if (showSafety) item {
+                                SafetyTip(onDismiss = {
+                                    showSafety = false
+                                    safetyKey?.let { safetyPrefs.edit().putBoolean(it, true).apply() }
+                                })
+                            }
                             relationship?.let { bond -> item { BondStrip(bond) } }
                             if (searchQuery.isBlank() && visibleMessages.isNotEmpty() && hasMoreHistory) item {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
@@ -1125,7 +1119,10 @@ fun ChatScreen(
                                                 }
                                             },
                                             onLongPress = { bounds ->
-                                                if (message.id.isNotBlank()) {
+                                                if (message.id.isBlank()) return@MessageBubble
+                                                if (selectionMode) {
+                                                    toggleSelection(message.id)
+                                                } else {
                                                     targetMessageBounds = bounds
                                                     reactDialogTarget = null
                                                     optionsDialogTarget = message
@@ -1449,22 +1446,35 @@ fun ChatScreen(
 
     reactDialogTarget?.let { target ->
         val bounds = targetMessageBounds
+        var overlayOrigin by remember(target.id, bounds) { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
         BoxWithConstraints(
             Modifier
                 .fillMaxSize()
+                .onGloballyPositioned { overlayOrigin = it.boundsInRoot().topLeft }
                 .background(Color.Black.copy(alpha = 0.4f))
                 .clickable(role = Role.Button, onClickLabel = "Dismiss") { reactDialogTarget = null },
         ) {
             val screenWidth = maxWidth
+            val screenHeight = maxHeight
             val density = androidx.compose.ui.platform.LocalDensity.current
-            val bubbleLeft = bounds?.left?.let { with(density) { it.toDp() } } ?: 20.dp
-            val bubbleTop = bounds?.top?.let { with(density) { it.toDp() } } ?: 200.dp
+            val localLeftPx = (bounds?.left ?: 0f) - overlayOrigin.x
+            val localRightPx = (bounds?.right ?: 0f) - overlayOrigin.x
+            val localTopPx = (bounds?.top ?: 0f) - overlayOrigin.y
+            val bubbleLeft = if (bounds != null) with(density) { localLeftPx.toDp() } else 20.dp
+            val bubbleRight = if (bounds != null) with(density) { localRightPx.toDp() } else (screenWidth - 20.dp)
+            val bubbleTop = if (bounds != null) with(density) { localTopPx.toDp() } else 200.dp
             val barWidth = 260.dp
             val barHeight = 52.dp
+            val edgeMargin = 8.dp
+            val bubbleGap = 2.dp
 
-            val showBelow = bubbleTop < 80.dp
-            val offsetY = if (showBelow) (bounds?.bottom?.let { with(density) { it.toDp() } } ?: 250.dp) + 8.dp else (bubbleTop - barHeight - 8.dp).coerceAtLeast(40.dp)
-            val offsetX = bubbleLeft.coerceIn(16.dp, (screenWidth - barWidth - 16.dp).coerceAtLeast(16.dp))
+            val preferredAboveY = bubbleTop - barHeight - bubbleGap
+            val maxY = (screenHeight - barHeight - edgeMargin).coerceAtLeast(edgeMargin)
+            val offsetY = preferredAboveY.coerceIn(edgeMargin, maxY)
+
+            val bubbleCenterX = (bubbleLeft + bubbleRight) / 2
+            val idealX = bubbleCenterX - (barWidth / 2)
+            val offsetX = idealX.coerceIn(edgeMargin, (screenWidth - barWidth - edgeMargin).coerceAtLeast(edgeMargin))
 
             Box(
                 modifier = Modifier
@@ -1484,7 +1494,7 @@ fun ChatScreen(
                         "❤️" to "heart",
                         "🔥" to "fire",
                         "😂" to "laugh",
-                        "👍" to "clap",
+                        "👏" to "clap",
                         "😮" to "wow",
                         "👑" to "crown"
                     ).forEach { (emoji, type) ->
@@ -1511,24 +1521,37 @@ fun ChatScreen(
     optionsDialogTarget?.let { target ->
         val mine = target.senderId == currentUserId
         val bounds = targetMessageBounds
+        var overlayOrigin by remember(target.id, bounds) { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
         BoxWithConstraints(
             Modifier
                 .fillMaxSize()
+                .onGloballyPositioned { overlayOrigin = it.boundsInRoot().topLeft }
                 .background(Color.Black.copy(alpha = 0.4f))
                 .clickable(role = Role.Button, onClickLabel = "Dismiss") { optionsDialogTarget = null },
         ) {
             val screenWidth = maxWidth
             val screenHeight = maxHeight
             val density = androidx.compose.ui.platform.LocalDensity.current
-            val bubbleLeft = bounds?.left?.let { with(density) { it.toDp() } } ?: 20.dp
-            val bubbleTop = bounds?.top?.let { with(density) { it.toDp() } } ?: 200.dp
-            val bubbleBottom = bounds?.bottom?.let { with(density) { it.toDp() } } ?: 250.dp
+            val localLeftPx = (bounds?.left ?: 0f) - overlayOrigin.x
+            val localRightPx = (bounds?.right ?: 0f) - overlayOrigin.x
+            val localTopPx = (bounds?.top ?: 0f) - overlayOrigin.y
+            val localBottomPx = (bounds?.bottom ?: 0f) - overlayOrigin.y
+            val bubbleLeft = if (bounds != null) with(density) { localLeftPx.toDp() } else 20.dp
+            val bubbleRight = if (bounds != null) with(density) { localRightPx.toDp() } else (screenWidth - 20.dp)
+            val bubbleTop = if (bounds != null) with(density) { localTopPx.toDp() } else 200.dp
+            val bubbleBottom = if (bounds != null) with(density) { localBottomPx.toDp() } else 250.dp
             val cardWidth = 230.dp
-            val cardHeight = 270.dp
+            val cardHeight = 360.dp
+            val edgeMargin = 8.dp
+            val bubbleGap = 2.dp
 
-            val showBelow = bubbleBottom + cardHeight < screenHeight - 80.dp
-            val offsetY = if (showBelow) bubbleBottom + 8.dp else (bubbleTop - cardHeight - 8.dp).coerceAtLeast(40.dp)
-            val offsetX = bubbleLeft.coerceIn(16.dp, (screenWidth - cardWidth - 16.dp).coerceAtLeast(16.dp))
+            val preferredBelowY = bubbleBottom + bubbleGap
+            val preferredAboveY = bubbleTop - cardHeight - bubbleGap
+            val maxY = (screenHeight - cardHeight - edgeMargin).coerceAtLeast(edgeMargin)
+            val offsetY = if (preferredBelowY <= maxY) preferredBelowY else preferredAboveY.coerceIn(edgeMargin, maxY)
+
+            val idealX = if (mine) bubbleRight - cardWidth else bubbleLeft
+            val offsetX = idealX.coerceIn(edgeMargin, (screenWidth - cardWidth - edgeMargin).coerceAtLeast(edgeMargin))
 
             Box(
                 modifier = Modifier
@@ -1562,11 +1585,19 @@ fun ChatScreen(
                             draft = target.message
                         }
                     }
-                    CompactOptionRow(icon = Icons.AutoMirrored.Filled.Reply, label = "Reply in Thread") {
+                    CompactOptionRow(icon = Icons.AutoMirrored.Filled.Reply, label = "Reply") {
                         optionsDialogTarget = null
                         replyTarget = target
                         editingTarget = null
                         draft = ""
+                    }
+                    CompactOptionRow(icon = Icons.Filled.CheckCircle, label = "Select") {
+                        optionsDialogTarget = null
+                        selectedMessageIds = if (target.id in selectedMessageIds) selectedMessageIds else selectedMessageIds + target.id
+                    }
+                    CompactOptionRow(icon = Icons.AutoMirrored.Filled.Forward, label = "Forward") {
+                        optionsDialogTarget = null
+                        forwardMessage = target
                     }
                     CompactOptionRow(icon = Icons.Filled.Language, label = "Translate") {
                         optionsDialogTarget = null
@@ -1654,7 +1685,7 @@ private fun EmptyConversationState(name: String) {
         Box(
             Modifier.size(56.dp).clip(CircleShape).background(Brush.linearGradient(listOf(PrimaryPurple.copy(alpha = 0.75f), Pink.copy(alpha = 0.75f)))),
             contentAlignment = Alignment.Center
-        ) { Text("♡", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold) }
+        ) { Text("💬", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold) }
         Text("Start the conversation", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         Text("Send ${name.substringBefore(' ')} a message and see where the conversation goes.", color = TextMuted, fontSize = 13.sp, lineHeight = 18.sp)
     }
@@ -1663,7 +1694,7 @@ private fun EmptyConversationState(name: String) {
 @Composable
 private fun SafetyTip(onDismiss: () -> Unit) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(SurfaceElevated).border(1.dp, BorderColor, RoundedCornerShape(18.dp)).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("✦", color = Pink, fontSize = 28.sp)
+        Text("🛡️", color = Pink, fontSize = 28.sp)
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text("Safety Tip", color = PrimaryPurple, fontWeight = FontWeight.Bold, fontSize = 13.sp)
             Text("Be kind, respectful and keep the conversation safe. Report or block anything that feels off.", color = TextMuted, fontSize = 10.sp, lineHeight = 14.sp)
@@ -1793,7 +1824,7 @@ private fun MessageBubble(
                             onLongPress(rect)
                         }
                     )
-                    .padding(horizontal = 14.dp, vertical = if (compact) 8.dp else 10.dp)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 Column {
                     if (message.forwarded) {
@@ -2060,7 +2091,10 @@ private fun MessageBubble(
                         .clip(RoundedCornerShape(999.dp))
                         .background(SurfaceElevated)
                         .border(1.dp, if (myReaction != null) PrimaryPurple.copy(alpha = 0.55f) else BorderColor, RoundedCornerShape(999.dp))
-                        .clickable(role = Role.Button, onClickLabel = "View or change reaction") { onReact(androidx.compose.ui.geometry.Rect.Zero) }
+                        .clickable(role = Role.Button, onClickLabel = "View or change reaction") {
+                            val rect = bubbleCoordinates?.let { runCatching { it.boundsInRoot() }.getOrNull() } ?: androidx.compose.ui.geometry.Rect.Zero
+                            onReact(rect)
+                        }
                         .padding(horizontal = 9.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically

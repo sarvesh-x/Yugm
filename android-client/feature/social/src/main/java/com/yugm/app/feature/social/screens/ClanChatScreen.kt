@@ -32,6 +32,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -40,6 +42,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -308,12 +311,10 @@ fun ClanChatScreen(
             Avatar((clanName.ifBlank { clan?.name ?: "C" }).take(1).uppercase(), 44, clan?.avatar)
             Column(Modifier.weight(1f).padding(start = 10.dp)) {
                 Text(clanName.ifBlank { clan?.name ?: "Clan chat" }, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${clan?.memberCount ?: 0} members  ·  ${clan?.myRole?.replace('_', ' ')?.lowercase()?.replaceFirstChar { it.uppercase() } ?: "Clan"}", color = ClanChatMuted, fontSize = 11.sp, maxLines = 1)
+                Text("${clan?.memberCount ?: 0} members  ·  online", color = ClanChatMuted, fontSize = 11.sp, maxLines = 1)
             }
-            IconButton(onClick = { searchOpen = !searchOpen; search = "" }) {
-                Icon(if (searchOpen) Icons.Filled.Close else Icons.Filled.Search, contentDescription = if (searchOpen) "Close search" else "Search messages", tint = Color.White)
-            }
-            IconButton(onClick = onClanDetails) { Icon(Icons.Filled.Groups, contentDescription = "Clan members and details", tint = Color.White) }
+            IconButton(onClick = { /* Call action */ }) { Icon(Icons.Filled.Call, contentDescription = "Voice call", tint = Color.White) }
+            IconButton(onClick = { /* Video call */ }) { Icon(Icons.Filled.Videocam, contentDescription = "Video call", tint = Color.White) }
             Box {
                 IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "More clan chat options", tint = Color.White) }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -473,9 +474,11 @@ fun ClanChatScreen(
         ) {
             Row(
                 Modifier.weight(1f).clip(RoundedCornerShape(26.dp)).background(ClanChatCard)
-                    .border(1.dp, ClanChatLine, RoundedCornerShape(26.dp)).padding(horizontal = 16.dp, vertical = 4.dp),
+                    .border(1.dp, ClanChatLine, RoundedCornerShape(26.dp)).padding(horizontal = 14.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Icon(Icons.Filled.AttachFile, contentDescription = "Attach file", tint = ClanChatMuted, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
                 BasicTextField(
                     value = input,
                     onValueChange = { input = it.take(600) },
@@ -485,7 +488,7 @@ fun ClanChatScreen(
                     cursorBrush = SolidColor(ClanChatPink),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = { send() }),
-                    decorationBox = { inner -> Box { if (input.isBlank()) Text("Message your clan…", color = ClanChatMuted, fontSize = 14.sp); inner() } }
+                    decorationBox = { inner -> Box { if (input.isBlank()) Text("Message", color = ClanChatMuted, fontSize = 14.sp); inner() } }
                 )
             }
             Spacer(Modifier.width(9.dp))

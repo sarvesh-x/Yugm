@@ -111,6 +111,9 @@ class ChatViewModel @Inject constructor(
                             if (event.message.senderId == partnerUserId && event.message.receiverId == currentUserId && !event.message.read) {
                                 markConversationReadIfNeeded()
                             }
+                            if (event.message.senderId == partnerUserId) {
+                                refreshRelationshipSilently()
+                            }
                         }
                     }
                     is SocketEvent.DirectMessageReactionUpdated -> {
@@ -463,6 +466,20 @@ class ChatViewModel @Inject constructor(
     fun sendTypingStatus(isTyping: Boolean) {
         if (partnerUserId.isBlank()) return
         socketManager.sendTypingStatus(partnerUserId, isTyping)
+    }
+
+    private fun refreshRelationshipSilently() {
+        val token = authToken
+        val partnerId = partnerUserId
+        if (token.isBlank() || partnerId.isBlank()) return
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { yugmApi.conversation(token, partnerId, limit = 1) } }
+                .onSuccess { conversation ->
+                    if (partnerUserId != partnerId) return@onSuccess
+                    conversation.relationship?.let { relationship = it }
+                    isMuted = conversation.muted
+                }
+        }
     }
 
     fun loadOlderMessages() {

@@ -55,10 +55,19 @@ fun VoicePollScreen(
     var isLoading by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
 
+    var loadError by remember { mutableStateOf<String?>(null) }
+
     fun load() {
         scope.launch {
-            try { polls = SocialApi.getActiveVoicePolls(token) } catch (_: Exception) { }
-            isLoading = false
+            isLoading = true
+            loadError = null
+            try {
+                polls = SocialApi.getActiveVoicePolls(token)
+            } catch (e: Exception) {
+                loadError = e.message ?: "Failed to load polls"
+            } finally {
+                isLoading = false
+            }
         }
     }
 
@@ -86,32 +95,41 @@ fun VoicePollScreen(
                 Spacer(Modifier.height(16.dp))
             }
 
-            if (isLoading) {
-                com.yugm.app.core.ui.components.LoadingState("Loading polls...")
-            } else {
-                val list = polls
-                if (list == null || list.polls.isEmpty()) {
+            when {
+                isLoading -> com.yugm.app.core.ui.components.LoadingState("Loading polls...")
+                loadError != null -> {
                     GlassCard {
-                        Text("No active polls", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
-                        Text("Create one to start the conversation", color = TextMuted, fontSize = 13.sp)
+                        Text("Couldn't load polls", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                        Text(loadError ?: "Unknown error", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
+                        Spacer(Modifier.height(12.dp))
+                        GlassButton(text = "Retry", onClick = { load() })
                     }
-                } else {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        items(list.polls, key = { it.id }) { poll ->
-                            val totalVotes = poll.options.sumOf { it.votes }
-                            GlassCard(
-                                modifier = Modifier.fillMaxWidth(),
-                                onClick = { onPollDetail(poll.id) }
-                            ) {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    modifier = Modifier.fillMaxWidth()
+                }
+                else -> {
+                    val list = polls
+                    if (list == null || list.polls.isEmpty()) {
+                        GlassCard {
+                            Text("No active polls", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                            Text("Create one to start the conversation", color = TextMuted, fontSize = 13.sp)
+                        }
+                    } else {
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
+                            items(list.polls, key = { it.id }) { poll ->
+                                val totalVotes = poll.options.sumOf { it.votes }
+                                GlassCard(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onClick = { onPollDetail(poll.id) }
                                 ) {
-                                    Avatar(poll.userName.firstOrNull()?.toString() ?: "?", 36, imageUrl = poll.userAvatar)
-                                    Column(Modifier.weight(1f)) {
-                                        Text(poll.userName, color = TextMuted, fontSize = 12.sp)
-                                        Text(poll.question, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 15.sp)
-                                        Text("${poll.options.size} options \u00B7 $totalVotes votes", color = TextMuted, fontSize = 12.sp)
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Avatar(poll.userName.firstOrNull()?.toString() ?: "?", 36, imageUrl = poll.userAvatar)
+                                        Column(Modifier.weight(1f)) {
+                                            Text(if (poll.userName.isNotBlank()) poll.userName else "Someone", color = TextMuted, fontSize = 12.sp)
+                                            Text(poll.question, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 15.sp)
+                                            Text("${poll.options.size} options \u00B7 $totalVotes votes", color = TextMuted, fontSize = 12.sp)
+                                        }
                                     }
                                 }
                             }
@@ -135,45 +153,85 @@ private fun CreatePollSection(
     var question by remember { mutableStateOf("") }
     var options by remember { mutableStateOf(listOf("", "")) }
     var expiresInHours by remember { mutableStateOf("24") }
+    var isSubmitting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    val validOptionCount = options.count { it.isNotBlank() }
+    val expiryHours = expiresInHours.toIntOrNull()
+    val canSubmit = !isSubmitting && question.trim().isNotBlank() && validOptionCount in 2..6 && expiryHours != null && expiryHours in 1..168
 
     GlassCard {
         Text("New Poll", color = Gold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
         Spacer(Modifier.height(8.dp))
-        GlassTextField(value = question, onValueChange = { question = it }, label = "Your question")
+        GlassTextField(value = question, onValueChange = { if (it.length <= 200) question = it }, label = "Your question")
         Spacer(Modifier.height(8.dp))
         options.forEachIndexed { idx, opt ->
-            GlassTextField(
-                value = opt,
-                onValueChange = { v ->
-                    val copy = options.toMutableList()
-                    copy[idx] = v
-                    options = copy
-                },
-                label = "Option ${idx + 1}"
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Box(Modifier.weight(1f)) {
+                    GlassTextField(
+                        value = opt,
+                        onValueChange = { v ->
+                            if (v.length <= 100) {
+                                val copy = options.toMutableList()
+                                copy[idx] = v
+                                options = copy
+                            }
+                        },
+                        label = "Option ${idx + 1}"
+                    )
+                }
+                if (options.size > 2) {
+                    GlassButton(
+                        text = "Remove",
+                        height = 40.dp,
+                        gradient = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Panel, Panel)),
+                        onClick = { options = options.toMutableList().also { it.removeAt(idx) } }
+                    )
+                }
+            }
             Spacer(Modifier.height(6.dp))
         }
-        GlassButton(
-            text = "+ Add Option",
-            gradient = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Panel, Panel)),
-            height = 42.dp,
-            onClick = { options = options + "" }
-        )
+        if (options.size < 6) {
+            GlassButton(
+                text = "+ Add Option",
+                gradient = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Panel, Panel)),
+                height = 42.dp,
+                onClick = { options = options + "" }
+            )
+        }
+        Text("Add 2-6 options", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
         Spacer(Modifier.height(8.dp))
-        GlassTextField(value = expiresInHours, onValueChange = { expiresInHours = it }, label = "Expires in (hours)")
+        GlassTextField(value = expiresInHours, onValueChange = { expiresInHours = it.filter(Char::isDigit).take(3) }, label = "Expires in (hours, 1-168)")
         Spacer(Modifier.height(12.dp))
         GlassButton(
-            text = "Create Poll",
-            enabled = question.isNotBlank() && options.count { it.isNotBlank() } >= 2,
+            text = if (isSubmitting) "Creating..." else "Create Poll",
+            enabled = canSubmit,
             onClick = {
                 scope.launch {
-                    val validOptions = options.filter { it.isNotBlank() }.map { it to null as String? }
+                    val validOptions = options.map { it.trim() }.filter { it.isNotBlank() }.map { it to null as String? }
+                    if (question.trim().isBlank()) {
+                        Toast.makeText(context, "Question is required", Toast.LENGTH_SHORT).show(); return@launch
+                    }
+                    if (validOptions.size !in 2..6) {
+                        Toast.makeText(context, "Add 2-6 non-empty options", Toast.LENGTH_SHORT).show(); return@launch
+                    }
+                    val hours = expiresInHours.toIntOrNull()
+                    if (hours == null || hours !in 1..168) {
+                        Toast.makeText(context, "Expiry must be 1-168 hours", Toast.LENGTH_SHORT).show(); return@launch
+                    }
+                    isSubmitting = true
                     try {
-                        SocialApi.createVoicePoll(token, question, validOptions, expiresInHours = expiresInHours.toIntOrNull() ?: 24)
+                        SocialApi.createVoicePoll(token, question.trim(), validOptions, expiresInHours = hours)
                         Toast.makeText(context, "Poll created!", Toast.LENGTH_SHORT).show()
+                        question = ""
+                        options = listOf("", "")
+                        expiresInHours = "24"
                         onCreated()
-                    } catch (_: Exception) { }
+                    } catch (e: Exception) {
+                        Toast.makeText(context, e.message ?: "Failed to create poll", Toast.LENGTH_SHORT).show()
+                    } finally {
+                        isSubmitting = false
+                    }
                 }
             }
         )
