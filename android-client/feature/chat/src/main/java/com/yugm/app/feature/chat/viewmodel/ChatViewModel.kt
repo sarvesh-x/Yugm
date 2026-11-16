@@ -128,13 +128,13 @@ class ChatViewModel @Inject constructor(
                     }
                     is SocketEvent.DirectMessagesRead -> {
                         if (event.partnerId == partnerUserId) {
-                            val readThroughAt = runCatching { java.time.Instant.parse(event.readThrough) }.getOrNull()
+                            val readThroughAtMs = com.yugm.app.feature.chat.parseIsoMillis(event.readThrough)
                             messages.indices.forEach { index ->
                                 val message = messages[index]
                                 if (message.senderId != currentUserId || message.receiverId != partnerUserId || message.read) return@forEach
-                                val createdAt = runCatching { java.time.Instant.parse(message.createdAt) }.getOrNull()
+                                val createdAtMs = com.yugm.app.feature.chat.parseIsoMillis(message.createdAt)
                                 val isRead = when {
-                                    readThroughAt != null && createdAt != null -> !createdAt.isAfter(readThroughAt)
+                                    readThroughAtMs != null && createdAtMs != null -> createdAtMs <= readThroughAtMs
                                     event.readThrough.isNotBlank() -> message.createdAt <= event.readThrough
                                     else -> false
                                 }

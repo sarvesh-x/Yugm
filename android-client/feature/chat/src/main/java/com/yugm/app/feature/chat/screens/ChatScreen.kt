@@ -532,7 +532,7 @@ fun ChatScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(if (mine) "Sent by you" else "Received", color = TextMuted, fontSize = 12.sp)
-                    Text("Time: ${runCatching { java.time.Instant.parse(msg.createdAt).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy · HH:mm")) }.getOrElse { msg.createdAt }}", color = TextPrimary, fontSize = 13.sp)
+                    Text("Time: ${com.yugm.app.feature.chat.formatMessageInfoTime(msg.createdAt)}", color = TextPrimary, fontSize = 13.sp)
                     if (mine) Text(if (msg.read) "Status: Seen" else "Status: Sent", color = if (msg.read) Color(0xFF69F0AE) else TextMuted, fontSize = 13.sp, fontWeight = if (msg.read) FontWeight.SemiBold else FontWeight.Normal)
                     if (msg.isEdited) Text("Edited", color = TextMuted, fontSize = 13.sp)
                     if (msg.forwarded) Text("Forwarded message", color = TextMuted, fontSize = 13.sp)
@@ -1893,11 +1893,7 @@ fun TypingBubble() {
     }
 }
 
-private fun messageTime(value: String) = runCatching {
-    val instant = java.time.Instant.parse(value)
-    val local = instant.atZone(java.time.ZoneId.systemDefault())
-    java.time.format.DateTimeFormatter.ofPattern("HH:mm").format(local)
-}.getOrElse { if (value.length >= 16) value.substring(11, 16) else "now" }
+private fun messageTime(value: String) = com.yugm.app.feature.chat.formatChatMessageTime(value)
 
 private fun formatPlaybackTime(ms: Int): String {
     val totalSeconds = (ms.coerceAtLeast(0) / 1000)
@@ -1906,24 +1902,9 @@ private fun formatPlaybackTime(ms: Int): String {
     return "%d:%02d".format(minutes, seconds)
 }
 
-private fun messageDateLabel(value: String): String = runCatching {
-    val instant = java.time.Instant.parse(value)
-    val local = instant.atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-    val today = java.time.LocalDate.now()
-    when (local) {
-        today -> "Today"
-        today.minusDays(1) -> "Yesterday"
-        else -> if (local.year == today.year) {
-            local.format(java.time.format.DateTimeFormatter.ofPattern("MMM d"))
-        } else {
-            local.format(java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy"))
-        }
-    }
-}.getOrDefault("")
+private fun messageDateLabel(value: String): String = com.yugm.app.feature.chat.formatChatDateLabel(value)
 
-private fun DirectMessage.canStillEdit(): Boolean = runCatching {
-    java.time.Instant.parse(createdAt).isAfter(java.time.Instant.now().minusSeconds(15 * 60))
-}.getOrDefault(false)
+private fun DirectMessage.canStillEdit(): Boolean = com.yugm.app.feature.chat.canEditDirectMessage(createdAt)
 private fun getGiftEmoji(name: String, icon: String): String {
     val query = "$name $icon".lowercase()
     return when {

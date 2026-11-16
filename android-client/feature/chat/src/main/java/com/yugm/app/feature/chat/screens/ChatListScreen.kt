@@ -752,20 +752,7 @@ private fun buildConversationPreview(message: DirectMessage, currentUserId: Stri
     return minePrefix + forwardedPrefix + body
 }
 
-private fun conversationTimeLabel(createdAt: String): String {
-    if (createdAt.isBlank()) return ""
-    return runCatching {
-        val instant = java.time.Instant.parse(createdAt)
-        val local = instant.atZone(java.time.ZoneId.systemDefault())
-        val now = java.time.ZonedDateTime.now()
-        when {
-            local.toLocalDate() == now.toLocalDate() -> java.time.format.DateTimeFormatter.ofPattern("HH:mm").format(local)
-            local.toLocalDate() == now.toLocalDate().minusDays(1) -> "Yesterday"
-            local.year == now.year -> java.time.format.DateTimeFormatter.ofPattern("MMM d").format(local)
-            else -> java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy").format(local)
-        }
-    }.getOrElse { if (createdAt.length >= 16) createdAt.substring(11, 16) else "" }
-}
+private fun conversationTimeLabel(createdAt: String): String = com.yugm.app.feature.chat.formatConversationTimeLabel(createdAt)
 
 @Composable
 private fun RecommendedUserChip(user: Host, onClick: () -> Unit) {

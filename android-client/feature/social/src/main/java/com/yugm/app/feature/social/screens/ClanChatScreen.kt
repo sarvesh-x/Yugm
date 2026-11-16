@@ -611,18 +611,39 @@ private fun reactionEmoji(type: String): String = when (type.lowercase()) {
     else -> "❤️"
 }
 
-private fun msgDateLabel(value: String): String = runCatching {
-    val instant = java.time.Instant.parse(value)
-    val date = instant.atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-    val today = java.time.LocalDate.now()
-    when {
-        date == today -> "Today"
-        date == today.minusDays(1) -> "Yesterday"
-        date.year == today.year -> date.format(java.time.format.DateTimeFormatter.ofPattern("MMMM d"))
-        else -> date.format(java.time.format.DateTimeFormatter.ofPattern("MMMM d, yyyy"))
-    }
-}.getOrElse { if (value.length >= 10) value.substring(0, 10) else "Earlier" }
+private fun msgDateLabel(value: String): String {
+    val fallback = if (value.length >= 10) value.substring(0, 10) else "Earlier"
+    return runCatching {
+        val normalized = if (value.endsWith("Z")) value.replace("Z", "+00:00") else value
+        val dateObj = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", java.util.Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }.parse(normalized) ?: java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", java.util.Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }.parse(normalized) ?: return fallback
+        val cal = java.util.Calendar.getInstance().apply { time = dateObj }
+        val today = java.util.Calendar.getInstance()
+        fun java.util.Calendar.sameDay(other: java.util.Calendar) =
+            get(java.util.Calendar.YEAR) == other.get(java.util.Calendar.YEAR) && get(java.util.Calendar.DAY_OF_YEAR) == other.get(java.util.Calendar.DAY_OF_YEAR)
+        val yesterday = java.util.Calendar.getInstance().apply { add(java.util.Calendar.DAY_OF_YEAR, -1) }
+        when {
+            cal.sameDay(today) -> "Today"
+            cal.sameDay(yesterday) -> "Yesterday"
+            cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) ->
+                java.text.SimpleDateFormat("MMMM d", java.util.Locale.getDefault()).format(dateObj)
+            else -> java.text.SimpleDateFormat("MMMM d, yyyy", java.util.Locale.getDefault()).format(dateObj)
+        }
+    }.getOrDefault(fallback)
+}
 
-private fun clanMessageTime(value: String): String = runCatching {
-    java.time.Instant.parse(value).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("h:mm a"))
-}.getOrElse { if (value.length >= 16) value.substring(11, 16) else "now" }
+private fun clanMessageTime(value: String): String {
+    val fallback = if (value.length >= 16) value.substring(11, 16) else "now"
+    return runCatching {
+        val normalized = if (value.endsWith("Z")) value.replace("Z", "+00:00") else value
+        val dateObj = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", java.util.Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }.parse(normalized) ?: java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", java.util.Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }.parse(normalized) ?: return fallback
+        java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault()).format(dateObj)
+    }.getOrDefault(fallback)
+}
