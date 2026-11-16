@@ -51,6 +51,8 @@ fun VoicePollScreen(
     onPollDetail: (String) -> Unit
 ) {
     var polls by remember { mutableStateOf<VoicePollListResponse?>(null) }
+    var myPolls by remember { mutableStateOf<List<com.yugm.app.core.model.VoicePoll>>(emptyList()) }
+    var showMine by remember { mutableStateOf(false) }
     var showCreate by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
@@ -62,7 +64,11 @@ fun VoicePollScreen(
             isLoading = true
             loadError = null
             try {
-                polls = SocialApi.getActiveVoicePolls(token)
+                if (showMine) {
+                    myPolls = SocialApi.getMyVoicePolls(token)
+                } else {
+                    polls = SocialApi.getActiveVoicePolls(token)
+                }
             } catch (e: Exception) {
                 loadError = e.message ?: "Failed to load polls"
             } finally {
@@ -71,7 +77,7 @@ fun VoicePollScreen(
         }
     }
 
-    LaunchedEffect(token) { load() }
+    LaunchedEffect(token, showMine) { load() }
 
     YugmAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -82,6 +88,12 @@ fun VoicePollScreen(
             ) {
                 Text("Voice Polls", color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Black)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    GlassButton(
+                        text = if (showMine) "Active" else "Mine",
+                        height = 40.dp,
+                        gradient = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Panel, Panel)),
+                        onClick = { showMine = !showMine; showCreate = false }
+                    )
                     GlassButton(
                         text = "Refresh",
                         height = 40.dp,
@@ -99,7 +111,7 @@ fun VoicePollScreen(
             Spacer(Modifier.height(16.dp))
 
             if (showCreate) {
-                CreatePollSection(token, onCreated = { showCreate = false; load() })
+                CreatePollSection(token, onCreated = { showCreate = false; showMine = false; load() })
                 Spacer(Modifier.height(16.dp))
             }
 
@@ -115,16 +127,27 @@ fun VoicePollScreen(
                         }
                     }
                     else -> {
-                        val list = polls
-                        if (list == null || list.polls.isEmpty()) {
+                        val displayPolls = if (showMine) myPolls else (polls?.polls ?: emptyList())
+                        if (displayPolls.isEmpty()) {
                             GlassCard {
-                                Text("No active polls", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
-                                Text("Create one to start the conversation", color = TextMuted, fontSize = 13.sp)
+                                Text(if (showMine) "No polls yet" else "No active polls", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                                Text(
+                                    if (showMine) "Polls you create will appear here" else "Create one to start the conversation",
+                                    color = TextMuted,
+                                    fontSize = 13.sp
+                                )
                             }
                         } else {
                             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
-                                items(list.polls, key = { it.id }) { poll ->
+                                items(displayPolls, key = { it.id }) { poll ->
                                     val totalVotes = poll.options.sumOf { it.votes }
+                                    val expired = runCatching { java.time.Instant.parse(poll.expiresAt).isBefore(java.time.Instant.now()) }.getOrDefault(false)
+                                    val status = when {
+                                        !poll.isActive -> "Closed"
+                                        expired -> "Expired"
+                                        showMine -> "Active"
+                                        else -> null
+                                    }
                                     GlassCard(
                                         modifier = Modifier.fillMaxWidth(),
                                         onClick = { onPollDetail(poll.id) }
@@ -135,7 +158,10 @@ fun VoicePollScreen(
                                         ) {
                                             Avatar(poll.userName.firstOrNull()?.toString() ?: "?", 36, imageUrl = poll.userAvatar)
                                             Column(Modifier.weight(1f)) {
-                                                Text(if (poll.userName.isNotBlank()) poll.userName else "Someone", color = TextMuted, fontSize = 12.sp)
+                                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(if (poll.userName.isNotBlank()) poll.userName else "Someone", color = TextMuted, fontSize = 12.sp)
+                                                    if (status != null) Text("• $status", color = if (status == "Active") Cyan else TextMuted, fontSize = 12.sp)
+                                                }
                                                 Text(poll.question, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 15.sp)
                                                 Text("${poll.options.size} options \u00B7 $totalVotes votes", color = TextMuted, fontSize = 12.sp)
                                             }
