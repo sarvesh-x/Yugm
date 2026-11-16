@@ -91,4 +91,3 @@ class YugmFirebaseMessagingService : FirebaseMessagingService() {
         private var notifId = 0
     }
 }
-

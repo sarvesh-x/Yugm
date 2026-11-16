@@ -531,7 +531,7 @@ private fun ClanChatMessageRow(
             }
             Column(
                 Modifier.clip(RoundedCornerShape(topStart = 19.dp, topEnd = 19.dp, bottomStart = if (mine) 19.dp else 5.dp, bottomEnd = if (mine) 5.dp else 19.dp))
-                    .background(if (mine) Brush.linearGradient(listOf(Color(0xFF6428C6), Color(0xFF8D35F6))) else Brush.linearGradient(listOf(Color(0xFF191B30), Color(0xFF20243A))))
+                    .background(if (mine) Brush.linearGradient(listOf(Color(0xFF6428C6), LocalYugmColors.current.secondary)) else Brush.linearGradient(listOf(Color(0xFF191B30), Color(0xFF20243A))))
                     .border(1.dp, if (mine) Color(0x487D46E8) else LocalYugmColors.current.border, RoundedCornerShape(topStart = 19.dp, topEnd = 19.dp, bottomStart = if (mine) 19.dp else 5.dp, bottomEnd = if (mine) 5.dp else 19.dp))
                     .combinedClickable(onClick = onOpenActions, onLongClick = onOpenActions)
                     .padding(horizontal = 14.dp, vertical = 11.dp)

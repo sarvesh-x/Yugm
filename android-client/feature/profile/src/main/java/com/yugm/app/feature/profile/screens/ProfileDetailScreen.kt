@@ -71,6 +71,7 @@ import com.yugm.app.core.model.PkSideType
 import com.yugm.app.core.model.PkStats
 import com.yugm.app.core.model.Room
 import com.yugm.app.core.ui.components.*
+import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.core.ui.cosmetics.StyledName
 import com.yugm.app.core.ui.cosmetics.profileThemeAccent
 import com.yugm.app.core.ui.cosmetics.profileThemeColors
@@ -1220,7 +1221,7 @@ private fun ProfileHeroLegacy(
                     )
                     Text(
                         text = profile.bio.ifBlank { "Welcome to my Yugm space! Connect, vibe, and join voice rooms with me." },
-                        color = Color(0xFF9EA3B9),
+                        color = LocalYugmColors.current.textSecondary,
                         fontSize = 12.sp,
                         lineHeight = 17.sp,
                         maxLines = 3,

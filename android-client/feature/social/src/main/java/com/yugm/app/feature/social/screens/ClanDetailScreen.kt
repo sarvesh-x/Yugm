@@ -47,6 +47,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.yugm.app.core.model.Clan
 import com.yugm.app.core.model.Host
 import com.yugm.app.core.ui.components.Avatar
+import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.core.ui.components.GradientAction
 import com.yugm.app.core.ui.components.LoadingState
 import com.yugm.app.core.ui.components.RoundAction
@@ -58,7 +59,7 @@ import com.yugm.app.core.ui.theme.TextPrimary
 import com.yugm.app.core.ui.theme.TextSecondary
 import com.yugm.app.feature.social.viewmodel.ClanViewModel
 
-private val DangerRed = Color(0xFFFF6B6B)
+// Theme-aware: use LocalYugmColors.current.danger
 
 @Composable
 fun ClanDetailScreen(
@@ -377,7 +378,7 @@ fun ClanDetailScreen(
                     Text("Clan ID  ·  #${currentClan.slug}", color = TextMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
                     if (currentClan.ownerId == currentUserId) {
                         Spacer(Modifier.height(8.dp))
-                        Text("DANGER ZONE", color = DangerRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text("DANGER ZONE", color = LocalYugmColors.current.danger, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         TextButton(
                             onClick = {
                                 showSettings = false
@@ -385,7 +386,7 @@ fun ClanDetailScreen(
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Delete clan", color = DangerRed, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Delete clan", color = LocalYugmColors.current.danger, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         }
                         Text("Permanently deletes the clan, its chat, and all memberships.", color = TextMuted, fontSize = 10.sp)
                     }
@@ -449,7 +450,7 @@ fun ClanDetailScreen(
                     TextButton(onClick = {
                         confirmKick = target
                         manageTarget = null
-                    }) { Text("Remove from clan", color = DangerRed, fontSize = 12.sp) }
+                    }) { Text("Remove from clan", color = LocalYugmColors.current.danger, fontSize = 12.sp) }
                 }
             },
             confirmButton = { TextButton(onClick = { manageTarget = null }) { Text("Close", color = TextMuted) } }
@@ -466,7 +467,7 @@ fun ClanDetailScreen(
                     viewModel.kickMember(token, clanId, target.id)
                     confirmKick = null
                     status = "${target.name} removed from the clan"
-                }) { Text("Remove", color = DangerRed) }
+                }) { Text("Remove", color = LocalYugmColors.current.danger) }
             },
             dismissButton = { TextButton(onClick = { confirmKick = null }) { Text("Cancel", color = TextMuted) } }
         )
@@ -497,7 +498,7 @@ fun ClanDetailScreen(
                 TextButton(onClick = {
                     confirmDelete = false
                     viewModel.deleteClan(token, clanId) { onBack() }
-                }) { Text("Delete", color = DangerRed) }
+                }) { Text("Delete", color = LocalYugmColors.current.danger) }
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel", color = TextMuted) } }
         )
@@ -541,9 +542,10 @@ private fun roleLabel(role: String): String = when (role) {
     else -> "Member"
 }
 
+@Composable
 private fun roleColor(role: String): Color = when (role) {
     "LEADER" -> Color(0xFFFFC857)
     "CO_LEADER" -> Color(0xFFC9A5FF)
     "OFFICER" -> Color(0xFF62D6C6)
-    else -> Color(0xFF9EA3B9)
+    else -> LocalYugmColors.current.textSecondary
 }

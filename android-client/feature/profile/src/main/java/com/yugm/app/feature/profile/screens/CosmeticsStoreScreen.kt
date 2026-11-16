@@ -40,21 +40,14 @@ import coil.compose.AsyncImage
 import com.yugm.app.core.model.ActiveCosmetics
 import com.yugm.app.core.model.ProfileCosmetic
 import com.yugm.app.core.ui.components.AuroraBackground
+import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.core.ui.components.LoadingState
 import com.yugm.app.core.ui.cosmetics.CosmeticArtwork
 import com.yugm.app.feature.profile.viewmodel.CosmeticsViewModel
 import kotlinx.coroutines.launch
 
 // Colors matching the dark, cosmic attire of the Yugm app
-private val StoreBg = Color(0xFF060714)
-private val StoreCardBg = Color(0xFF171A2C)
-private val StorePrimaryPurple = Color(0xFF8D35F6)
-private val StorePillInactiveBg = Color(0xFF14182B)
-private val StoreTextDark = Color(0xFFF8FAFC)
-private val StoreTextMuted = Color(0xFF9EA3B9)
-private val StoreTextSubtle = Color(0xFF6E748B)
-private val StoreGemColor = Color(0xFFFF2D55)
-private val StoreBorder = Color(0x24FFFFFF)
+// Theme-aware palette via LocalYugmColors (definitions removed; usages replaced below).
 
 // Category tab definition with illustrated icons and gradient backgrounds
 private data class StoreCategory(
@@ -158,13 +151,13 @@ fun CosmeticsStoreScreen(
                         modifier = Modifier
                             .size(38.dp)
                             .clip(CircleShape)
-                            .background(StorePillInactiveBg)
-                            .border(1.dp, StoreBorder, CircleShape)
+                            .background(LocalYugmColors.current.surfaceVariant)
+                            .border(1.dp, LocalYugmColors.current.border, CircleShape)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = StoreTextDark,
+                            tint = LocalYugmColors.current.textPrimary,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -172,7 +165,7 @@ fun CosmeticsStoreScreen(
                     // Centered Store Title
                     Text(
                         text = "Store",
-                        color = StoreTextDark,
+                        color = LocalYugmColors.current.textPrimary,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Black
                     )
@@ -184,13 +177,13 @@ fun CosmeticsStoreScreen(
                             modifier = Modifier
                                 .size(38.dp)
                                 .clip(CircleShape)
-                                .background(StorePillInactiveBg)
-                                .border(1.dp, StoreBorder, CircleShape)
+                                .background(LocalYugmColors.current.surfaceVariant)
+                                .border(1.dp, LocalYugmColors.current.border, CircleShape)
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Discount,
                                 contentDescription = "Discounts",
-                                tint = StoreTextDark,
+                                tint = LocalYugmColors.current.textPrimary,
                                 modifier = Modifier.size(19.dp)
                             )
                         }
@@ -200,13 +193,13 @@ fun CosmeticsStoreScreen(
                             modifier = Modifier
                                 .size(38.dp)
                                 .clip(CircleShape)
-                                .background(StorePillInactiveBg)
-                                .border(1.dp, StoreBorder, CircleShape)
+                                .background(LocalYugmColors.current.surfaceVariant)
+                                .border(1.dp, LocalYugmColors.current.border, CircleShape)
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.ShoppingBag,
                                 contentDescription = "My Wardrobe",
-                                tint = StoreTextDark,
+                                tint = LocalYugmColors.current.textPrimary,
                                 modifier = Modifier.size(19.dp)
                             )
                         }
@@ -237,7 +230,7 @@ fun CosmeticsStoreScreen(
                     ) {
                         Text(
                             text = "Balance: ",
-                            color = StoreTextMuted,
+                            color = LocalYugmColors.current.textSecondary,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -248,14 +241,14 @@ fun CosmeticsStoreScreen(
                         )
                         Text(
                             text = "${viewModel.balance}",
-                            color = StoreTextDark,
+                            color = LocalYugmColors.current.textPrimary,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Black
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
                             text = "+",
-                            color = StorePrimaryPurple,
+                            color = LocalYugmColors.current.secondary,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Black,
                             modifier = Modifier
@@ -297,7 +290,7 @@ fun CosmeticsStoreScreen(
                                         )
                                         .border(
                                             width = if (isSelected) 2.dp else 1.dp,
-                                            color = if (isSelected) StorePrimaryPurple else StoreBorder,
+                                            color = if (isSelected) LocalYugmColors.current.secondary else LocalYugmColors.current.border,
                                             shape = RoundedCornerShape(16.dp)
                                         ),
                                     contentAlignment = Alignment.Center
@@ -312,7 +305,7 @@ fun CosmeticsStoreScreen(
 
                                 Text(
                                     text = cat.title,
-                                    color = if (isSelected) StorePrimaryPurple else StoreTextDark,
+                                    color = if (isSelected) LocalYugmColors.current.secondary else LocalYugmColors.current.textPrimary,
                                     fontSize = 11.sp,
                                     fontWeight = if (isSelected) FontWeight.Black else FontWeight.Medium,
                                     textAlign = TextAlign.Center,
@@ -333,7 +326,7 @@ fun CosmeticsStoreScreen(
                     ) {
                         Text(
                             text = selectedCategory.subcategoryHeading,
-                            color = StoreTextDark,
+                            color = LocalYugmColors.current.textPrimary,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Black
                         )
@@ -344,7 +337,7 @@ fun CosmeticsStoreScreen(
                                 .width(28.dp)
                                 .height(3.dp)
                                 .clip(RoundedCornerShape(2.dp))
-                                .background(StorePrimaryPurple)
+                                .background(LocalYugmColors.current.secondary)
                         )
                     }
 
@@ -362,13 +355,13 @@ fun CosmeticsStoreScreen(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(50))
-                                    .background(if (isActive) StorePrimaryPurple else StorePillInactiveBg)
+                                    .background(if (isActive) LocalYugmColors.current.secondary else LocalYugmColors.current.surfaceVariant)
                                     .clickable { outfitFilter = filterName }
                                     .padding(horizontal = 14.dp, vertical = 6.dp)
                             ) {
                                 Text(
                                     text = filterName,
-                                    color = if (isActive) Color.White else StoreTextDark,
+                                    color = if (isActive) Color.White else LocalYugmColors.current.textPrimary,
                                     fontSize = 12.sp,
                                     fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium
                                 )
@@ -397,7 +390,7 @@ fun CosmeticsStoreScreen(
                         ) {
                             Text(
                                 "No items available in this category.",
-                                color = StoreTextMuted,
+                                color = LocalYugmColors.current.textSecondary,
                                 fontSize = 14.sp
                             )
                         }
@@ -476,7 +469,7 @@ fun CosmeticsStoreScreen(
         AlertDialog(
             onDismissRequest = { showPurchaseDialogFor = null },
             title = {
-                Text("Confirm Purchase", color = StoreTextDark, fontWeight = FontWeight.Black)
+                Text("Confirm Purchase", color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Black)
             },
             text = {
                 Column(
@@ -490,11 +483,11 @@ fun CosmeticsStoreScreen(
                     ) {
                         CosmeticPreviewBox(cosmetic = item, isActive = false)
                     }
-                    Text(item.name, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = StoreTextDark)
-                    Text("Duration: Permanent", color = StoreTextMuted, fontSize = 12.sp)
+                    Text(item.name, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = LocalYugmColors.current.textPrimary)
+                    Text("Duration: Permanent", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Price: 💎 ", fontSize = 15.sp)
-                        Text("${item.coinPrice} Coins", fontWeight = FontWeight.Black, fontSize = 16.sp, color = StorePrimaryPurple)
+                        Text("${item.coinPrice} Coins", fontWeight = FontWeight.Black, fontSize = 16.sp, color = LocalYugmColors.current.secondary)
                     }
                     if (viewModel.balance < item.coinPrice) {
                         Text(
@@ -522,10 +515,10 @@ fun CosmeticsStoreScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showPurchaseDialogFor = null }) {
-                    Text("Cancel", color = StoreTextMuted)
+                    Text("Cancel", color = LocalYugmColors.current.textSecondary)
                 }
             },
-            containerColor = StoreCardBg
+            containerColor = LocalYugmColors.current.surfaceElevated
         )
     }
 
@@ -533,23 +526,23 @@ fun CosmeticsStoreScreen(
     if (showBonusDialog) {
         AlertDialog(
             onDismissRequest = { showBonusDialog = false },
-            title = { Text("🎁 Recharge Bonus", fontWeight = FontWeight.Black, color = StoreTextDark) },
+            title = { Text("🎁 Recharge Bonus", fontWeight = FontWeight.Black, color = LocalYugmColors.current.textPrimary) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Get up to 20% bonus coins on your first recharge of the week!", color = StoreTextDark, fontSize = 13.sp)
-                    Text("Current Balance: 💎 ${viewModel.balance} Coins", color = StorePrimaryPurple, fontWeight = FontWeight.Bold)
-                    Text("Visit Wallet to top up coins and unlock exclusive limited frames.", color = StoreTextMuted, fontSize = 12.sp)
+                    Text("Get up to 20% bonus coins on your first recharge of the week!", color = LocalYugmColors.current.textPrimary, fontSize = 13.sp)
+                    Text("Current Balance: 💎 ${viewModel.balance} Coins", color = LocalYugmColors.current.secondary, fontWeight = FontWeight.Bold)
+                    Text("Visit Wallet to top up coins and unlock exclusive limited frames.", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
                 }
             },
             confirmButton = {
                 Button(
                     onClick = { showBonusDialog = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = StorePrimaryPurple)
+                    colors = ButtonDefaults.buttonColors(containerColor = LocalYugmColors.current.secondary)
                 ) {
                     Text("Got It", color = Color.White)
                 }
             },
-            containerColor = StoreCardBg
+            containerColor = LocalYugmColors.current.surfaceElevated
         )
     }
 
@@ -557,24 +550,24 @@ fun CosmeticsStoreScreen(
     if (showDiscountDialog) {
         AlertDialog(
             onDismissRequest = { showDiscountDialog = false },
-            title = { Text("🏷️ Special Offers & Bundles", fontWeight = FontWeight.Black, color = StoreTextDark) },
+            title = { Text("🏷️ Special Offers & Bundles", fontWeight = FontWeight.Black, color = LocalYugmColors.current.textPrimary) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Bundle deals with up to 30% savings are available in your account!", color = StoreTextDark, fontSize = 13.sp)
-                    Text("• Vibe Starter Pack: 3 essential frames for 150 💎", fontSize = 12.sp, color = StoreTextMuted)
-                    Text("• Neon Nights Pack: 4 animated items for 350 💎", fontSize = 12.sp, color = StoreTextMuted)
-                    Text("• Royal Collection: Premium VIP cosmetics for 500 💎", fontSize = 12.sp, color = StoreTextMuted)
+                    Text("Bundle deals with up to 30% savings are available in your account!", color = LocalYugmColors.current.textPrimary, fontSize = 13.sp)
+                    Text("• Vibe Starter Pack: 3 essential frames for 150 💎", fontSize = 12.sp, color = LocalYugmColors.current.textSecondary)
+                    Text("• Neon Nights Pack: 4 animated items for 350 💎", fontSize = 12.sp, color = LocalYugmColors.current.textSecondary)
+                    Text("• Royal Collection: Premium VIP cosmetics for 500 💎", fontSize = 12.sp, color = LocalYugmColors.current.textSecondary)
                 }
             },
             confirmButton = {
                 Button(
                     onClick = { showDiscountDialog = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = StorePrimaryPurple)
+                    colors = ButtonDefaults.buttonColors(containerColor = LocalYugmColors.current.secondary)
                 ) {
                     Text("Awesome", color = Color.White)
                 }
             },
-            containerColor = StoreCardBg
+            containerColor = LocalYugmColors.current.surfaceElevated
         )
     }
     }
@@ -601,8 +594,8 @@ private fun StoreGridItemCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(StoreCardBg)
-            .border(1.dp, StoreBorder, RoundedCornerShape(16.dp))
+            .background(LocalYugmColors.current.surfaceElevated)
+            .border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(16.dp))
             .padding(vertical = 10.dp, horizontal = 6.dp)
     ) {
         // Preview area with top-right Tier Hexagon Badge
@@ -646,7 +639,7 @@ private fun StoreGridItemCard(
         // Item Name
         Text(
             text = cosmetic.name,
-            color = StoreTextDark,
+            color = LocalYugmColors.current.textPrimary,
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
@@ -666,7 +659,7 @@ private fun StoreGridItemCard(
             Spacer(modifier = Modifier.width(3.dp))
             Text(
                 text = "${cosmetic.coinPrice}",
-                color = StoreTextDark,
+                color = LocalYugmColors.current.textPrimary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Black
             )
@@ -675,7 +668,7 @@ private fun StoreGridItemCard(
         // Validity / Duration
         Text(
             text = "1 Day",
-            color = StoreTextSubtle,
+            color = LocalYugmColors.current.textSecondary,
             fontSize = 10.sp,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.padding(top = 1.dp, bottom = 6.dp)

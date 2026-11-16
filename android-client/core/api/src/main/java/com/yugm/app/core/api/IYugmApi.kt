@@ -1,4 +1,4 @@
-﻿package com.yugm.app.core.api
+package com.yugm.app.core.api
 
 import com.yugm.app.core.model.Achievement
 import com.yugm.app.core.model.PagedDirectMessages

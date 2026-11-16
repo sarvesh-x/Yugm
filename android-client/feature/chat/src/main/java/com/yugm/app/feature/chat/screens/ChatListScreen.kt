@@ -1159,7 +1159,7 @@ private fun GroupChatsEntryRow(onClick: () -> Unit) {
     ) {
         Box(
             Modifier.size(52.dp).clip(CircleShape)
-                .background(Brush.linearGradient(listOf(LocalYugmColors.current.secondary.copy(alpha = 0.9f), Color(0xFFF6378B).copy(alpha = 0.9f)))),
+                .background(Brush.linearGradient(listOf(LocalYugmColors.current.secondary.copy(alpha = 0.9f), LocalYugmColors.current.primary.copy(alpha = 0.9f)))),
             contentAlignment = Alignment.Center
         ) {
             Icon(Icons.Filled.Groups, contentDescription = null, tint = Color.White, modifier = Modifier.size(26.dp))

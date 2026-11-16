@@ -560,4 +560,3 @@ private fun paneTitle(pane: SettingsPane): String = when (pane) {
     SettingsPane.Guidelines -> "Community Guidelines"
 }
 
-
