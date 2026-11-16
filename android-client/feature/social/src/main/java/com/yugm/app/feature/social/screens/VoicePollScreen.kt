@@ -169,57 +169,63 @@ fun VoicePollScreen(
                                         showMine -> "Active"
                                         else -> null
                                     }
-                                    GlassCard(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        onClick = { onPollDetail(poll.id) }
-                                    ) {
+                                    GlassCard(modifier = Modifier.fillMaxWidth()) {
                                         Row(
                                             horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            verticalAlignment = Alignment.Top,
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
-                                            Avatar(poll.userName.firstOrNull()?.toString() ?: "?", 36, imageUrl = poll.userAvatar)
-                                            Column(Modifier.weight(1f)) {
-                                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                                    Text(if (poll.userName.isNotBlank()) poll.userName else "Someone", color = TextMuted, fontSize = 12.sp)
-                                                    if (status != null) Text(
-                                                        "• $status",
-                                                        color = when (status) {
-                                                            "Active" -> Cyan
-                                                            "Voted" -> Gold
-                                                            else -> TextMuted
-                                                        },
-                                                        fontSize = 12.sp
-                                                    )
-                                                    if (canClose) {
-                                                        Spacer(Modifier.weight(1f))
-                                                        Text(
-                                                            "Close",
-                                                            color = Pink,
-                                                            fontSize = 12.sp,
-                                                            fontWeight = FontWeight.SemiBold,
-                                                            modifier = Modifier.clickable {
-                                                                scope.launch {
-                                                                    runCatching { SocialApi.closeVoicePoll(token, poll.id) }
-                                                                        .onSuccess { updated ->
-                                                                            polls = polls.map { if (it.id == updated.id) updated else it }
-                                                                            myPolls = myPolls.map { if (it.id == updated.id) updated else it }
-                                                                            Toast.makeText(context, "Poll closed", Toast.LENGTH_SHORT).show()
-                                                                        }
-                                                                        .onFailure { e ->
-                                                                            Toast.makeText(context, e.message ?: "Failed to close poll", Toast.LENGTH_SHORT).show()
-                                                                        }
-                                                                }
-                                                            }
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .clickable { onPollDetail(poll.id) }
+                                            ) {
+                                                Avatar(poll.userName.firstOrNull()?.toString() ?: "?", 36, imageUrl = poll.userAvatar)
+                                                Column(Modifier.weight(1f)) {
+                                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                        Text(if (poll.userName.isNotBlank()) poll.userName else "Someone", color = TextMuted, fontSize = 12.sp)
+                                                        if (status != null) Text(
+                                                            "• $status",
+                                                            color = when (status) {
+                                                                "Active" -> Cyan
+                                                                "Voted" -> Gold
+                                                                else -> TextMuted
+                                                            },
+                                                            fontSize = 12.sp
                                                         )
                                                     }
+                                                    Text(poll.question, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 15.sp)
+                                                    Text("${poll.options.size} options \u00B7 $totalVotes votes", color = TextMuted, fontSize = 12.sp)
+                                                    if (selectedOptionText != null) {
+                                                        Text("Your vote: $selectedOptionText", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                                    } else if (hasVoted) {
+                                                        Text("You voted", color = Gold.copy(alpha = 0.85f), fontSize = 12.sp)
+                                                    }
                                                 }
-                                                Text(poll.question, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 15.sp)
-                                                Text("${poll.options.size} options \u00B7 $totalVotes votes", color = TextMuted, fontSize = 12.sp)
-                                                if (selectedOptionText != null) {
-                                                    Text("Your vote: $selectedOptionText", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                                } else if (hasVoted) {
-                                                    Text("You voted", color = Gold.copy(alpha = 0.85f), fontSize = 12.sp)
-                                                }
+                                            }
+                                            if (canClose) {
+                                                Text(
+                                                    "Close",
+                                                    color = Pink,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    modifier = Modifier
+                                                        .padding(start = 8.dp, top = 2.dp)
+                                                        .clickable {
+                                                            scope.launch {
+                                                                runCatching { SocialApi.closeVoicePoll(token, poll.id) }
+                                                                    .onSuccess { updated ->
+                                                                        polls = polls.map { if (it.id == updated.id) updated else it }
+                                                                        myPolls = myPolls.map { if (it.id == updated.id) updated else it }
+                                                                        Toast.makeText(context, "Poll closed", Toast.LENGTH_SHORT).show()
+                                                                    }
+                                                                    .onFailure { e ->
+                                                                        Toast.makeText(context, e.message ?: "Failed to close poll", Toast.LENGTH_SHORT).show()
+                                                                    }
+                                                            }
+                                                        }
+                                                )
                                             }
                                         }
                                     }
