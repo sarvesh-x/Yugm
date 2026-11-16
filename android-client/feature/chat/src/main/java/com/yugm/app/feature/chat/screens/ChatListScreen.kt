@@ -142,7 +142,10 @@ fun ChatListScreen(
             }
             .sortedByDescending { it.lastMessage.createdAt }
     }
-    val unread = viewModel.unreadCounts.values.sum()
+    val displayUnreadCounts = remember(viewModel.unreadCounts, viewModel.mutedPartnerIds) {
+        viewModel.unreadCounts.filterKeys { it !in viewModel.mutedPartnerIds }
+    }
+    val unread = displayUnreadCounts.values.sum()
     val friendIds = remember(viewModel.followers, viewModel.following) { viewModel.followers.map { it.id }.intersect(viewModel.following.map { it.id }.toSet()) }
     val contactList = when (contactTab) {
         0 -> viewModel.following.filter { it.id in friendIds }
@@ -278,11 +281,12 @@ fun ChatListScreen(
                                                 .background(ChatCard)
                                         ) {
                                             if (index > 0) Box(Modifier.fillMaxWidth().padding(start = 82.dp).height(1.dp).background(ChatLine))
+                                            val isMutedConversation = item.partner.id in viewModel.mutedPartnerIds
                                             LightChatRow(
                                                 item,
                                                 currentUserId = currentUserId,
-                                                unreadCount = viewModel.unreadCounts[item.partner.id] ?: if (!item.lastMessage.read && item.lastMessage.receiverId == currentUserId) 1 else 0,
-                                                muted = item.partner.id in viewModel.mutedPartnerIds
+                                                unreadCount = if (isMutedConversation) 0 else (displayUnreadCounts[item.partner.id] ?: if (!item.lastMessage.read && item.lastMessage.receiverId == currentUserId) 1 else 0),
+                                                muted = isMutedConversation
                                             ) { onOpenChat(item.partner.id) }
                                         }
                                     }
