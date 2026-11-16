@@ -561,6 +561,12 @@ class ChatViewModel @Inject constructor(
         if (token.isBlank() || partnerId.isBlank() || userId.isBlank() || isMarkingConversationRead) return
         val hasUnreadIncoming = messages.any { it.senderId == partnerId && it.receiverId == userId && !it.read }
         if (!hasUnreadIncoming) return
+        messages.indices.forEach { index ->
+            val message = messages[index]
+            if (message.senderId == partnerId && message.receiverId == userId && !message.read) {
+                messages[index] = message.copy(read = true)
+            }
+        }
         viewModelScope.launch {
             if (isMarkingConversationRead) return@launch
             isMarkingConversationRead = true

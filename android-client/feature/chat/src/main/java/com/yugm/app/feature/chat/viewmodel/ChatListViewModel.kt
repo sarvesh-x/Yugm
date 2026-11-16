@@ -92,6 +92,22 @@ class ChatListViewModel @Inject constructor(
                     }
                     is SocketEvent.DirectConversationRead -> {
                         unreadCounts = unreadCounts - event.partnerId
+                        val partnerId = event.partnerId
+                        val me = currentUserId
+                        if (partnerId.isNotBlank() && me.isNotBlank()) {
+                            val readThroughAt = runCatching { java.time.Instant.parse(event.readThrough) }.getOrNull()
+                            recentMessages = recentMessages.map { message ->
+                                val incomingFromPartner = message.senderId == partnerId && message.receiverId == me
+                                if (!incomingFromPartner || message.read) return@map message
+                                val createdAt = runCatching { java.time.Instant.parse(message.createdAt) }.getOrNull()
+                                val isRead = when {
+                                    readThroughAt != null && createdAt != null -> !createdAt.isAfter(readThroughAt)
+                                    event.readThrough.isNotBlank() -> message.createdAt <= event.readThrough
+                                    else -> true
+                                }
+                                if (isRead) message.copy(read = true) else message
+                            }
+                        }
                     }
                     is SocketEvent.UserOnline -> updateHostOnline(event.userId, true)
                     is SocketEvent.UserOffline -> updateHostOnline(event.userId, false)
