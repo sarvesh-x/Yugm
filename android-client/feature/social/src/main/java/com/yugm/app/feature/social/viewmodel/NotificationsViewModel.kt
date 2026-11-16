@@ -6,6 +6,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yugm.app.core.api.IYugmApi
+import com.yugm.app.core.api.SocketEvent
+import com.yugm.app.core.api.SocketManager
 import com.yugm.app.core.model.NotificationItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -14,7 +16,10 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
-class NotificationsViewModel @Inject constructor(private val yugmApi: IYugmApi) : ViewModel() {
+class NotificationsViewModel @Inject constructor(
+    private val yugmApi: IYugmApi,
+    socketManager: SocketManager
+) : ViewModel() {
 
     var notifications by mutableStateOf<List<NotificationItem>>(emptyList())
         private set
@@ -24,6 +29,22 @@ class NotificationsViewModel @Inject constructor(private val yugmApi: IYugmApi) 
         private set
     var error by mutableStateOf<String?>(null)
         private set
+    var isMarkingAllRead by mutableStateOf(false)
+        private set
+
+    init {
+        viewModelScope.launch {
+            socketManager.events.collect { event ->
+                if (event is SocketEvent.NotificationReceived) {
+                    val item = event.notification
+                    if (item.id.isNotBlank() && notifications.none { it.id == item.id }) {
+                        notifications = listOf(item) + notifications
+                        if (!item.read) unreadCount += 1
+                    }
+                }
+            }
+        }
+    }
 
     fun clearError() {
         error = null
@@ -37,8 +58,9 @@ class NotificationsViewModel @Inject constructor(private val yugmApi: IYugmApi) 
                 val (notifList, unread) = withContext(Dispatchers.IO) {
                     yugmApi.getNotifications(token)
                 }
-                notifications = notifList
-                unreadCount = unread
+                notifications = (notifications + notifList).distinctBy { it.id }
+                    .sortedByDescending { it.createdAt }
+                unreadCount = maxOf(unread, notifications.count { !it.read })
             }.onFailure {
                 error = it.message ?: "Failed to load notifications"
             }
@@ -59,13 +81,23 @@ class NotificationsViewModel @Inject constructor(private val yugmApi: IYugmApi) 
     }
 
     fun markAllRead(token: String) {
+        if (isMarkingAllRead || unreadCount == 0) return
         viewModelScope.launch {
+            isMarkingAllRead = true
+            val previousNotifications = notifications
+            val previousUnread = unreadCount
+            notifications = notifications.map { it.copy(read = true) }
+            unreadCount = 0
             runCatching {
                 withContext(Dispatchers.IO) {
                     yugmApi.markAllNotificationsRead(token)
                 }
+            }.onFailure {
+                notifications = previousNotifications
+                unreadCount = previousUnread
+                error = it.message ?: "Could not mark notifications as read"
             }
-            load(token)
+            isMarkingAllRead = false
         }
     }
 }

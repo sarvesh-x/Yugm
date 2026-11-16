@@ -33,20 +33,30 @@ class SettingsViewModel @Inject constructor(
     var isLoading by mutableStateOf(false)
         private set
 
+    var error by mutableStateOf<String?>(null)
+        private set
+
     fun loadBlocked(token: String) {
         viewModelScope.launch {
             isLoading = true
-            blockedUsers = withContext(Dispatchers.IO) { yugmApi.getBlockedUsers(token) }
+            error = null
+            runCatching { withContext(Dispatchers.IO) { yugmApi.getBlockedUsers(token) } }
+                .onSuccess { blockedUsers = it }
+                .onFailure { error = it.message ?: "Could not load blocked users." }
             isLoading = false
         }
     }
 
-    fun unblock(token: String, userId: String) {
+    fun unblock(token: String, userId: String, onComplete: (Result<Unit>) -> Unit = {}) {
         viewModelScope.launch {
             isLoading = true
-            withContext(Dispatchers.IO) { yugmApi.unblockUser(userId, token) }
-            blockedUsers = withContext(Dispatchers.IO) { yugmApi.getBlockedUsers(token) }
+            error = null
+            val result = runCatching {
+                withContext(Dispatchers.IO) { yugmApi.unblockUser(userId, token) }
+                blockedUsers = withContext(Dispatchers.IO) { yugmApi.getBlockedUsers(token) }
+            }.onFailure { error = it.message ?: "Could not unblock this user." }
             isLoading = false
+            onComplete(result)
         }
     }
 }

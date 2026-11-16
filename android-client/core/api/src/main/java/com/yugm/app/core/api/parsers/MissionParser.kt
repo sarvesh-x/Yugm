@@ -158,7 +158,17 @@ fun JSONObject.toBattlePass(): BattlePass {
 fun JSONObject.toBattlePassResponse(): BattlePassResponse {
     return BattlePassResponse(
         battlePass = optJSONObject("battlePass")?.toBattlePass(),
-        season = optJSONObject("season")?.toSeason()
+        season = optJSONObject("season")?.toSeason(),
+        previousSeasonSummary = optJSONObject("previousSeasonSummary")?.let { previous ->
+            com.yugm.app.core.model.PreviousSeasonSummary(
+                name = previous.optString("name", ""),
+                level = previous.optInt("level", 0),
+                maxLevel = previous.optInt("maxLevel", 50),
+                premium = previous.optBoolean("premium", false),
+                unclaimedRewards = previous.optInt("unclaimedRewards", 0),
+                endedAt = previous.optString("endedAt", "")
+            )
+        }
     )
 }
 

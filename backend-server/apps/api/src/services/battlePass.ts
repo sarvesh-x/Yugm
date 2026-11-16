@@ -1,12 +1,13 @@
 import mongoose from "mongoose";
 import { BattlePass, type IBattlePass } from "../models/BattlePass.js";
+import { BattlePassXpGrant } from "../models/BattlePassXpGrant.js";
 import { Season, defaultSeason, type ISeason, type ISeasonReward } from "../models/Season.js";
 import { Cosmetic } from "../models/Cosmetic.js";
 import { User } from "../models/User.js";
 import { debitWallet, creditWallet } from "./wallet.js";
 import { creditDiamonds } from "./diamonds.js";
 import { ensureDefaultCosmetics } from "./cosmetics.js";
-import { levelMilestones } from "@yugm/shared";
+import { getLevelMilestoneForXp, getLevelMilestone } from "@yugm/shared";
 import { HttpError, ErrorCode } from "../utils/http.js";
 
 type SeasonForPass = Pick<ISeason, "name" | "rewards" | "endDate" | "xpPerLevel" | "maxLevel" | "premiumPrice"> & { _id: mongoose.Types.ObjectId };
@@ -24,21 +25,27 @@ export async function getActiveSeason() {
   const startDate = new Date(Date.UTC(year, month, 1));
   const endDate = new Date(Date.UTC(year, month + 3, 1));
   const monthLabel = startDate.toLocaleString("en", { month: "long", timeZone: "UTC" });
-  const season = await Season.findOneAndUpdate(
-    { key },
-    {
-      $set: { active: true, startDate, endDate, name: `Voyage · ${monthLabel} ${year}` },
-      $setOnInsert: {
-        description: defaultSeason.description,
-        maxLevel: defaultSeason.maxLevel,
-        xpPerLevel: defaultSeason.xpPerLevel,
-        rewards: defaultSeason.rewards,
-        premiumPrice: defaultSeason.premiumPrice
-      }
-    },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  ).lean();
-  return season;
+  try {
+    return await Season.findOneAndUpdate(
+      { key },
+      {
+        $set: { active: true, startDate, endDate, name: `Voyage · ${monthLabel} ${year}` },
+        $setOnInsert: {
+          description: defaultSeason.description,
+          maxLevel: defaultSeason.maxLevel,
+          xpPerLevel: defaultSeason.xpPerLevel,
+          rewards: defaultSeason.rewards,
+          premiumPrice: defaultSeason.premiumPrice
+        }
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    ).lean();
+  } catch (error) {
+    if ((error as { code?: number })?.code !== 11000) throw error;
+    const season = await Season.findOne({ key }).lean();
+    if (!season) throw error;
+    return season;
+  }
 }
 
 async function ensureBattlePass(userId: string, season: SeasonForPass, session?: mongoose.ClientSession) {
@@ -70,10 +77,34 @@ async function ensureBattlePass(userId: string, season: SeasonForPass, session?:
   }
 }
 
-export async function getBattlePass(userId: string) {
+export async function getBattlePass(userId: string, includePreviousSummary = false) {
   const season = await getActiveSeason();
   const battlePass = await ensureBattlePass(userId, season);
-  return { battlePass, season };
+  if (!includePreviousSummary) return { battlePass, season };
+
+  const previousSeason = await Season.findOne({ active: false, endDate: { $lte: season.startDate } }).sort({ endDate: -1 }).lean();
+  if (!previousSeason) return { battlePass, season };
+  const previousPass = await BattlePass.findOne({ userId, "season.id": previousSeason._id }).lean();
+  if (!previousPass) return { battlePass, season };
+  const unclaimedRewards = previousSeason.rewards.reduce((count, reward) => {
+    if (reward.level > previousPass.level) return count;
+    const state = previousPass.rewards.find((item) => item.level === reward.level);
+    const freeUnclaimed = Boolean(reward.freeReward) && state?.freeClaimed !== true && state?.claimed !== true;
+    const premiumUnclaimed = previousPass.premium && Boolean(reward.premiumReward) && state?.premiumClaimed !== true;
+    return count + Number(freeUnclaimed) + Number(premiumUnclaimed);
+  }, 0);
+  return {
+    battlePass,
+    season,
+    previousSeasonSummary: {
+      name: previousSeason.name,
+      level: previousPass.level,
+      maxLevel: previousSeason.maxLevel,
+      premium: previousPass.premium,
+      unclaimedRewards,
+      endedAt: previousSeason.endDate
+    }
+  };
 }
 
 export async function purchaseBattlePass(userId: string) {
@@ -102,10 +133,36 @@ export async function purchaseBattlePass(userId: string) {
   }
 }
 
-export async function addBattlePassXp(userId: string, xpGained: number) {
+export async function addBattlePassXp(userId: string, xpGained: number, actionKey?: string) {
   if (!Number.isInteger(xpGained) || xpGained <= 0) return;
   const { battlePass, season } = await getBattlePass(userId);
   if (battlePass.level >= season.maxLevel) return;
+
+  if (actionKey) {
+    const ledgerKey = { userId: new mongoose.Types.ObjectId(userId), seasonId: season._id, actionKey };
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        if (await BattlePassXpGrant.exists(ledgerKey).session(session)) return;
+        await BattlePassXpGrant.create([{ ...ledgerKey, xpGained }], { session });
+        const current = await BattlePass.findById(battlePass._id).session(session);
+        if (!current || current.level >= season.maxLevel) return;
+        const total = Math.max(0, current.xp) + xpGained;
+        const levelsGained = Math.floor(total / season.xpPerLevel);
+        const level = Math.min(season.maxLevel, current.level + levelsGained);
+        current.level = level;
+        current.xp = level >= season.maxLevel ? 0 : total - levelsGained * season.xpPerLevel;
+        await current.save({ session });
+      });
+      return;
+    } catch (error) {
+      if ((error as { code?: number })?.code !== 11000) throw error;
+      if (await BattlePassXpGrant.exists(ledgerKey)) return;
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+  }
 
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const current = await BattlePass.findById(battlePass._id).select("level xp").lean();
@@ -163,12 +220,11 @@ export async function claimBattlePassReward(userId: string, level: number, track
     } else if (reward.type === "xp" && (reward.amount ?? 0) > 0) {
       const user = await User.findByIdAndUpdate(userId, { $inc: { xp: reward.amount } }, { new: true, session }).select("xp level").lean();
       if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
-      let milestone = levelMilestones[0];
-      for (const candidate of levelMilestones) if (user.xp >= candidate.requiredXp) milestone = candidate;
+      const milestone = getLevelMilestoneForXp(user.xp);
       const previousLevel = Math.max(user.level ?? 1, 1);
       if (milestone.level > previousLevel) {
         await User.updateOne({ _id: userId }, { $set: { level: milestone.level, levelTitle: milestone.title } }, { session });
-        const bonus = levelMilestones.filter((candidate) => candidate.level > previousLevel && candidate.level <= milestone.level).reduce((sum, candidate) => sum + candidate.coinReward, 0);
+        const bonus = Array.from({ length: Math.max(0, milestone.level - previousLevel) }, (_, index) => getLevelMilestone(previousLevel + index + 1)).reduce((sum, candidate) => sum + candidate.coinReward, 0);
         if (bonus > 0) await creditWallet(userId, bonus, "LEVEL_REWARD", { levels: [previousLevel + 1, milestone.level], source: "battle_pass" }, session);
       }
     } else {

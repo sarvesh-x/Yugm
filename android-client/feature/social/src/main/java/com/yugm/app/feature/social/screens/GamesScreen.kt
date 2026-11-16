@@ -128,9 +128,15 @@ fun GamesScreen(
         viewModel.submitScore(token, score.gameId, score.score, score.durationMs, score.rounds) { result ->
             savedResult = result
             finishedScore = null
+            val xpMessage = when {
+                result.reward.xpAwarded > 0 -> "+${result.reward.xpAwarded} XP${if (result.reward.capped) " · daily cap reached" else ""}"
+                result.reward.capped -> "Daily XP cap reached"
+                else -> ""
+            }
+            val levelReward = if (result.reward.levelUpReward > 0) " · +${result.reward.levelUpReward} coins level reward" else ""
             Toast.makeText(
                 context,
-                if (result.isPersonalBest) "New personal best: ${result.score.score}. +${result.reward.xpAwarded} XP" else "Score saved: ${result.score.score}",
+                listOf(if (result.isPersonalBest) "New personal best: ${result.score.score}" else "Score saved: ${result.score.score}", xpMessage, levelReward).filter { it.isNotBlank() }.joinToString(" · "),
                 Toast.LENGTH_SHORT
             ).show()
             isSaving = false

@@ -442,7 +442,7 @@ fun RoomTopBar(room: Room, onBack: () -> Unit) {
 
 @Composable
 fun SectionTitle(text: String) {
-    Text(text, color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Black, modifier = Modifier.semantics { heading() })
+    Text(text, color = LocalYugmColors.current.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Black, modifier = Modifier.semantics { heading() })
 }
 
 @Composable
@@ -496,11 +496,12 @@ fun LiveBadge() {
 
 @Composable
 fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val colors = LocalYugmColors.current
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(Brush.linearGradient(listOf(SurfaceElevated.copy(alpha = 0.92f), Surface.copy(alpha = 0.92f))))
-            .border(1.dp, Line, RoundedCornerShape(20.dp))
+            .background(Brush.linearGradient(listOf(colors.surfaceElevated.copy(alpha = 0.98f), colors.surface.copy(alpha = 0.96f))))
+            .border(1.dp, colors.border, RoundedCornerShape(20.dp))
             .padding(16.dp),
         content = content
     )

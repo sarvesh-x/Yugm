@@ -17,8 +17,6 @@ import com.yugm.app.core.model.VibeUpdateResponse
 import com.yugm.app.core.model.YugmEvent
 import com.yugm.app.core.model.EventPagination
 import com.yugm.app.core.model.MyEvents
-import com.yugm.app.core.model.GroupChat
-import com.yugm.app.core.model.GroupMessage
 import com.yugm.app.core.model.StoryGroup
 import com.yugm.app.core.model.StoryItem
 import com.yugm.app.core.model.StoryCommentItem
@@ -172,6 +170,9 @@ object YugmApi : IYugmApi {
     override suspend fun trendingRooms(): List<Room> = RoomApi.trendingRooms()
     override suspend fun recommendedRooms(token: String): List<Room> = RoomApi.recommendedRooms(token)
     override suspend fun scheduledRooms(): List<Room> = RoomApi.scheduledRooms()
+    override suspend fun followedRooms(token: String): List<Room> = RoomApi.followedRooms(token)
+    override suspend fun followRoom(token: String, roomId: String) = RoomApi.followRoom(token, roomId)
+    override suspend fun unfollowRoom(token: String, roomId: String) = RoomApi.unfollowRoom(token, roomId)
 
   override suspend fun presenceCount(token: String): Int = DiscoverApi.presenceCount(token)
     override suspend fun leaderboard(): RoomLeaderboard = RoomApi.leaderboard()
@@ -318,6 +319,7 @@ object YugmApi : IYugmApi {
     override suspend fun suggestedHosts(token: String): List<Host> = UserApi.suggestedHosts(token)
     override suspend fun recommendedChatUsers(token: String): List<Host> = UserApi.recommendedChatUsers(token)
     override suspend fun levelLeaderboard(token: String): List<Host> = UserApi.levelLeaderboard(token)
+    override suspend fun levelLeaderboardPage(token: String, page: Int, pageSize: Int): com.yugm.app.core.model.LevelLeaderboardPage = UserApi.levelLeaderboardPage(token, page, pageSize)
     override suspend fun getNotifications(token: String): Pair<List<NotificationItem>, Int> = UserApi.getNotifications(token)
     override suspend fun markNotificationRead(token: String, notificationId: String) = UserApi.markNotificationRead(token, notificationId)
     override suspend fun markAllNotificationsRead(token: String) = UserApi.markAllNotificationsRead(token)
@@ -328,6 +330,7 @@ object YugmApi : IYugmApi {
     override suspend fun deleteOwnAccount(token: String) = UserApi.deleteOwnAccount(token)
     override suspend fun level(token: String): LevelStatus = UserApi.level(token)
     override suspend fun checkIn(token: String): DailyCheckInResult = UserApi.checkIn(token)
+    override suspend fun achievements(token: String): List<Achievement> = CreatorApi.achievements(token)
     override suspend fun claimAchievement(token: String, achievementId: String): ClaimAchievementResult = CreatorApi.claimAchievement(token, achievementId)
     override suspend fun notificationPreferences(token: String): NotificationPreferences = UserApi.notificationPreferences(token)
     override suspend fun updateNotificationPreferences(token: String, preferences: Map<String, Boolean>): NotificationPreferences = UserApi.updateNotificationPreferences(token, preferences)
@@ -364,6 +367,7 @@ object YugmApi : IYugmApi {
     override suspend fun submitTrustFace(token: String, selfieImageUrl: String?, selfieVideoUrl: String?, livenessVideoUrl: String?): TrustVerificationStatus = CreatorApi.submitTrustFace(token, selfieImageUrl, selfieVideoUrl, livenessVideoUrl)
     override suspend fun submitTrustVoice(token: String, audioUrl: String, promptText: String, transcriptText: String?): TrustVerificationStatus = CreatorApi.submitTrustVoice(token, audioUrl, promptText, transcriptText)
     override suspend fun submitTrustReview(token: String): TrustVerificationStatus = CreatorApi.submitTrustReview(token)
+    override suspend fun retryTrustVerification(token: String): TrustVerificationStatus = CreatorApi.retryTrustVerification(token)
     override suspend fun creatorPayoutKycStatus(token: String): CreatorPayoutKycStatus = CreatorApi.creatorPayoutKycStatus(token)
     override suspend fun submitCreatorPayoutKyc(token: String, legalFullName: String, panNumber: String, upiId: String?, bankAccount: String?, bankIfsc: String?, bankHolderName: String?, dateOfBirth: String?): CreatorPayoutKycStatus = CreatorApi.submitCreatorPayoutKyc(token, legalFullName, panNumber, upiId, bankAccount, bankIfsc, bankHolderName, dateOfBirth)
     override suspend fun withdrawalEligibility(token: String): WithdrawalEligibility = CreatorApi.withdrawalEligibility(token)
@@ -409,16 +413,6 @@ object YugmApi : IYugmApi {
     override suspend fun leaveEvent(token: String, eventId: String): YugmEvent = EventsApi.leave(token, eventId)
     override suspend fun cancelEvent(token: String, eventId: String): YugmEvent = EventsApi.cancel(token, eventId)
     override suspend fun myEvents(token: String): MyEvents = EventsApi.myEvents(token)
-
-    // Group Chats
-    override suspend fun listGroups(token: String): List<GroupChat> = GroupsApi.list(token)
-    override suspend fun groupDetail(token: String, groupId: String): Pair<GroupChat, Int> = GroupsApi.detail(token, groupId)
-    override suspend fun createGroup(token: String, name: String, participantIds: List<String>): GroupChat = GroupsApi.create(token, name, participantIds)
-    override suspend fun addGroupParticipants(token: String, groupId: String, participantIds: List<String>): GroupChat = GroupsApi.addParticipants(token, groupId, participantIds)
-    override suspend fun removeGroupParticipant(token: String, groupId: String, userId: String): GroupChat = GroupsApi.removeParticipant(token, groupId, userId)
-    override suspend fun leaveGroup(token: String, groupId: String) = GroupsApi.leave(token, groupId)
-    override suspend fun groupMessages(token: String, groupId: String, skip: Int, limit: Int): List<GroupMessage> = GroupsApi.messages(token, groupId, skip, limit)
-    override suspend fun sendGroupMessage(token: String, groupId: String, message: String, mediaUrl: String?, mediaType: String?, duration: Int?): GroupMessage = GroupsApi.sendMessage(token, groupId, message, mediaUrl, mediaType, duration)
 
     // Stories
     override suspend fun storyFeed(token: String): List<StoryGroup> = StoryApi.feed(token)

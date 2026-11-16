@@ -73,7 +73,17 @@ data class BattlePassRewardState(
 
 data class BattlePassResponse(
     val battlePass: BattlePass? = null,
-    val season: Season? = null
+    val season: Season? = null,
+    val previousSeasonSummary: PreviousSeasonSummary? = null
+)
+
+data class PreviousSeasonSummary(
+    val name: String = "",
+    val level: Int = 0,
+    val maxLevel: Int = 50,
+    val premium: Boolean = false,
+    val unclaimedRewards: Int = 0,
+    val endedAt: String = ""
 )
 
 data class Season(

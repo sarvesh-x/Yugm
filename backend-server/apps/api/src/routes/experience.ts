@@ -1,8 +1,9 @@
 import { Router } from "express";
+import mongoose from "mongoose";
 import { z } from "zod";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
-import { Achievement, nextTier } from "../models/Achievement.js";
+import { Achievement } from "../models/Achievement.js";
 import { Block } from "../models/Block.js";
 import { ChatMessage } from "../models/ChatMessage.js";
 import { DirectMessage } from "../models/DirectMessage.js";
@@ -12,12 +13,14 @@ import { Notification } from "../models/Notification.js";
 import { Room } from "../models/Room.js";
 import { RoomInvite } from "../models/RoomInvite.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
+import { MiniGameScore } from "../models/MiniGameScore.js";
 import { User } from "../models/User.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode } from "../utils/http.js";
 import { getLevelStatus } from "../services/levels.js";
 import { creditWallet } from "../services/wallet.js";
 import { getVipStatus } from "../services/vip.js";
 import { creatorCoinsToInr } from "../services/withdrawal.js";
+import { createNotification } from "../services/notifications.js";
 
 export const experienceRouter = Router();
 experienceRouter.use(requireAuth);
@@ -81,8 +84,11 @@ function profileCompletion(user: any) {
 function streakEstimate(user: any, streakCount: number) {
   if (!user?.lastDailyCheckInAt) return 0;
   const last = new Date(user.lastDailyCheckInAt);
-  const ageHours = (Date.now() - last.getTime()) / 36e5;
-  return ageHours <= 30 ? streakCount : 0;
+  const today = new Date();
+  const lastUtcDay = Date.UTC(last.getUTCFullYear(), last.getUTCMonth(), last.getUTCDate());
+  const todayUtcDay = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  const dayGap = Math.floor((todayUtcDay - lastUtcDay) / 86400000);
+  return dayGap <= 1 ? streakCount : 0;
 }
 
 async function blockedIdsFor(userId: string) {
@@ -92,24 +98,25 @@ async function blockedIdsFor(userId: string) {
   return rows.map((row) => row.blockerId.toString() === userId ? row.blockedUserId : row.blockerId);
 }
 
-function computeProgress(achievement: any, user: any, followingCount: number, hostedRooms: number, sentGifts: number, chatMessages: number, streak: number) {
+function computeProgress(achievement: any, user: any, followingCount: number, hostedRooms: number, sentGifts: number, chatMessages: number, streak: number, joinedRooms: number, gamesPlayed: number, receivedGifts: number) {
   const raw: Record<string, number> = {
-    profile_complete: profileCompletion(user).percent >= 100 ? 1 : 0,
+    profile_complete: profileCompletion(user).percent,
     daily_streak_3: streak,
     follow_10: followingCount,
     host_3: hostedRooms,
     gift_5: sentGifts,
     chat_25: chatMessages,
-    level_5: getLevelStatus(user).level
+    level_5: getLevelStatus(user).level,
+    room_join_10: joinedRooms,
+    game_plays_10: gamesPlayed,
+    gift_received_5: receivedGifts
   };
   return raw[achievement.id] ?? 0;
 }
 
 function buildTierInfo(achievement: any, currentProgress: number, claimedTiers: Set<string>) {
   const activeTier = achievement.tiers.slice().reverse().find((t: any) => currentProgress >= t.target) ?? null;
-  const nextTierDef = activeTier ? nextTier(activeTier.tier) : "BRONZE";
-  const nextTierIndex = achievement.tiers.findIndex((t: any) => t.tier === nextTierDef);
-  const nextTierData = nextTierIndex >= 0 ? achievement.tiers[nextTierIndex] : null;
+  const nextTierData = achievement.tiers.find((t: any) => !claimedTiers.has(`${achievement.id}:${t.tier}`)) ?? null;
 
   const tiers = achievement.tiers.map((t: any) => ({
     tier: t.tier,
@@ -128,16 +135,16 @@ function buildTierInfo(achievement: any, currentProgress: number, claimedTiers: 
   }
 
   const allTiersClaimed = achievement.tiers.every((t: any) => claimedTiers.has(`${achievement.id}:${t.tier}`));
-  const canClaim = !allTiersClaimed && nextTierData && currentProgress >= nextTierData.target;
-  const canUpgrade = activeTier !== null && !allTiersClaimed && nextTierData && currentProgress >= nextTierData.target;
+  const canClaim = nextTierData !== null && currentProgress >= nextTierData.target;
+  const canUpgrade = activeTier !== null && canClaim;
 
   return {
-    progress: Math.min(currentProgress, nextTierData?.target ?? currentProgress),
+    progress: Math.min(currentProgress, nextTierData?.target ?? activeTier?.target ?? 0),
     total: nextTierData?.target ?? (activeTier?.target ?? 0),
     currentTier: activeTier?.tier ?? null,
     highestClaimedTier,
     tiers,
-    nextTier: nextTierDef,
+    nextTier: nextTierData?.tier ?? null,
     canClaim,
     canUpgrade,
     complete: allTiersClaimed
@@ -145,11 +152,14 @@ function buildTierInfo(achievement: any, currentProgress: number, claimedTiers: 
 }
 
 async function buildAchievements(userId: string, user: any) {
-  const [followingCount, hostedRooms, sentGifts, chatMessages, allAchievements] = await Promise.all([
+  const [followingCount, hostedRooms, sentGifts, chatMessages, joinedRooms, gamesPlayed, receivedGifts, allAchievements] = await Promise.all([
     Follow.countDocuments({ followerId: userId }),
     Room.countDocuments({ hostId: userId }),
     GiftTransaction.countDocuments({ senderId: userId }),
     ChatMessage.countDocuments({ senderId: userId }),
+    RoomParticipant.distinct("roomId", { userId }),
+    MiniGameScore.countDocuments({ userId }),
+    GiftTransaction.countDocuments({ receiverId: userId }),
     Achievement.find().sort({ order: 1 }).lean()
   ]);
 
@@ -158,7 +168,7 @@ async function buildAchievements(userId: string, user: any) {
   const claimedTiers = new Set<string>(rawTiers.map((ct) => `${ct.achievementId}:${ct.tier}`));
 
   return allAchievements.map((achievement) => {
-    const progress = computeProgress(achievement, user, followingCount, hostedRooms, sentGifts, chatMessages, streak);
+    const progress = computeProgress(achievement, user, followingCount, hostedRooms, sentGifts, chatMessages, streak, joinedRooms.length, gamesPlayed, receivedGifts);
     const tierInfo = buildTierInfo(achievement, progress, claimedTiers);
     return {
       id: achievement.id,
@@ -229,6 +239,7 @@ experienceRouter.get("/home", asyncHandler(async (req: AuthRequest, res) => {
   ]);
 
   sendOk(res, {
+    schemaVersion: 1,
     user: publicUser(user),
     profileCompletion: profileCompletion(user),
     level: getLevelStatus(user),
@@ -349,13 +360,13 @@ experienceRouter.put("/notification-preferences", validateBody(notificationPrefe
 
 experienceRouter.post("/achievements/claim", asyncHandler(async (req: AuthRequest, res) => {
   const { achievementId } = z.object({ achievementId: z.string().min(1) }).parse(req.body);
-  const user = await User.findById(req.user!.id).select("claimedAchievementIds claimedAchievementTiers ownedCosmeticIds walletBalance").lean();
+  const user = await User.findById(req.user!.id).lean();
   if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
 
   const achievement = await Achievement.findOne({ id: achievementId }).lean();
   if (!achievement) throw new HttpError(404, "Achievement not found", ErrorCode.NOT_FOUND);
 
-  const allAchievements = await buildAchievements(req.user!.id, req.user);
+  const allAchievements = await buildAchievements(req.user!.id, user);
   const entry = allAchievements.find((a) => a.id === achievementId);
   if (!entry) throw new HttpError(404, "Achievement not found", ErrorCode.NOT_FOUND);
 
@@ -365,26 +376,42 @@ experienceRouter.post("/achievements/claim", asyncHandler(async (req: AuthReques
   if (!nextTierToClaim) throw new HttpError(409, "All tiers already claimed", ErrorCode.CONFLICT);
   if (entry.progress < nextTierToClaim.target) throw new HttpError(400, `Reach ${nextTierToClaim.target} to unlock ${nextTierToClaim.tier}`, ErrorCode.VALIDATION);
 
-  const update: Record<string, unknown> = {
-    $push: {
-      claimedAchievementIds: achievementId,
-      claimedAchievementTiers: { achievementId, tier: nextTierToClaim.tier, claimedAt: new Date() }
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const claimed = await User.findOneAndUpdate(
+      {
+        _id: req.user!.id,
+        claimedAchievementTiers: { $not: { $elemMatch: { achievementId, tier: nextTierToClaim.tier } } }
+      },
+      {
+        $addToSet: {
+          claimedAchievementIds: achievementId,
+          claimedAchievementTiers: { achievementId, tier: nextTierToClaim.tier, claimedAt: new Date() },
+          ...(nextTierToClaim.rewardCosmetic ? { ownedCosmeticIds: nextTierToClaim.rewardCosmetic } : {})
+        }
+      },
+      { new: true, session }
+    );
+    if (!claimed) throw new HttpError(409, "This achievement tier has already been claimed", ErrorCode.CONFLICT);
+    if (nextTierToClaim.rewardCoins > 0) {
+      await creditWallet(req.user!.id, nextTierToClaim.rewardCoins, "LEVEL_REWARD", { achievementId, tier: nextTierToClaim.tier }, session);
     }
-  };
-  if (nextTierToClaim.rewardCosmetic && !user.ownedCosmeticIds.includes(nextTierToClaim.rewardCosmetic)) {
-    update.$push = { ownedCosmeticIds: nextTierToClaim.rewardCosmetic, claimedAchievementIds: achievementId, claimedAchievementTiers: { achievementId, tier: nextTierToClaim.tier, claimedAt: new Date() } };
+    await session.commitTransaction();
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    await session.endSession();
   }
-  if (nextTierToClaim.rewardCoins > 0) {
-    await creditWallet(req.user!.id, nextTierToClaim.rewardCoins, "LEVEL_REWARD", { achievementId, tier: nextTierToClaim.tier });
-  }
-  await User.findByIdAndUpdate(req.user!.id, update);
+  void createNotification(req.user!.id, "SYSTEM", "Achievement unlocked", `${achievement.title} · ${nextTierToClaim.tier}`, { type: "ACHIEVEMENT_UNLOCKED", achievementId, tier: nextTierToClaim.tier }).catch(() => undefined);
   sendOk(res, { claimed: true, tier: nextTierToClaim.tier, rewardCoins: nextTierToClaim.rewardCoins, rewardCosmetic: nextTierToClaim.rewardCosmetic });
 }));
 
 experienceRouter.get("/achievements", asyncHandler(async (req: AuthRequest, res) => {
   const user = await User.findById(req.user!.id).lean();
   const achievementsList = await buildAchievements(req.user!.id, user);
-  sendOk(res, { achievements: achievementsList });
+  sendOk(res, { schemaVersion: 1, achievements: achievementsList });
 }));
 
 const showcasedBadgeSchema = z.object({ badgeIds: z.array(z.string()).max(5) });
@@ -444,15 +471,16 @@ experienceRouter.post("/achievements/:id/share", asyncHandler(async (req: AuthRe
     .slice()
     .reverse()
     .find((t) => claimedTiers.some((ct: { achievementId: string; tier: string }) => ct.achievementId === achievement.id && ct.tier === t.tier));
+  if (!highestTier) throw new HttpError(403, "Claim this achievement before sharing it", ErrorCode.FORBIDDEN);
 
-  const shareText = `🏆 I earned "${achievement.title}" (${highestTier?.tier ?? "BRONZE"}) on Yugm!\n${achievement.description}\n\nMatch the vibe.`;
+  const shareText = `🏆 I earned "${achievement.title}" (${highestTier.tier}) on Yugm!\n${achievement.description}\n\nMatch the vibe.`;
 
   sendOk(res, {
     shareText,
     achievement: {
       id: achievement.id,
       title: achievement.title,
-      tier: highestTier?.tier ?? "BRONZE",
+      tier: highestTier.tier,
       icon: achievement.icon
     }
   });

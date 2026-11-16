@@ -49,8 +49,6 @@ import com.yugm.app.core.model.DailyQuestionAnswer
 import com.yugm.app.core.model.VoicePoll
 import com.yugm.app.core.model.VoicePollListResponse
 import com.yugm.app.core.model.CountdownEvent
-import com.yugm.app.core.model.GroupChat
-import com.yugm.app.core.model.GroupMessage
 import com.yugm.app.core.model.Host
 import com.yugm.app.core.model.ImmersiveTheme
 import com.yugm.app.core.model.LevelStatus
@@ -161,6 +159,9 @@ interface IYugmApi {
     suspend fun trendingRooms(): List<Room>
     suspend fun recommendedRooms(token: String): List<Room>
     suspend fun scheduledRooms(): List<Room>
+    suspend fun followedRooms(token: String): List<Room>
+    suspend fun followRoom(token: String, roomId: String)
+    suspend fun unfollowRoom(token: String, roomId: String)
     suspend fun presenceCount(token: String): Int
 
 suspend fun leaderboard(): RoomLeaderboard
@@ -313,6 +314,7 @@ suspend fun leaderboard(): RoomLeaderboard
 
     suspend fun recommendedChatUsers(token: String): List<Host>
     suspend fun levelLeaderboard(token: String): List<Host>
+    suspend fun levelLeaderboardPage(token: String, page: Int = 1, pageSize: Int = 25): com.yugm.app.core.model.LevelLeaderboardPage
     suspend fun getNotifications(token: String): Pair<List<NotificationItem>, Int>
     suspend fun markNotificationRead(token: String, notificationId: String)
     suspend fun markAllNotificationsRead(token: String)
@@ -323,6 +325,7 @@ suspend fun leaderboard(): RoomLeaderboard
     suspend fun deleteOwnAccount(token: String)
     suspend fun level(token: String): LevelStatus
     suspend fun checkIn(token: String): DailyCheckInResult
+    suspend fun achievements(token: String): List<Achievement>
     suspend fun claimAchievement(token: String, achievementId: String): ClaimAchievementResult
     suspend fun notificationPreferences(token: String): NotificationPreferences
     suspend fun updateNotificationPreferences(token: String, preferences: Map<String, Boolean>): NotificationPreferences
@@ -358,6 +361,7 @@ suspend fun leaderboard(): RoomLeaderboard
     suspend fun submitTrustFace(token: String, selfieImageUrl: String? = null, selfieVideoUrl: String? = null, livenessVideoUrl: String? = null): TrustVerificationStatus
     suspend fun submitTrustVoice(token: String, audioUrl: String, promptText: String, transcriptText: String? = null): TrustVerificationStatus
     suspend fun submitTrustReview(token: String): TrustVerificationStatus
+    suspend fun retryTrustVerification(token: String): TrustVerificationStatus
     suspend fun creatorPayoutKycStatus(token: String): CreatorPayoutKycStatus
     suspend fun submitCreatorPayoutKyc(token: String, legalFullName: String, panNumber: String, upiId: String? = null, bankAccount: String? = null, bankIfsc: String? = null, bankHolderName: String? = null, dateOfBirth: String? = null): CreatorPayoutKycStatus
     suspend fun withdrawalEligibility(token: String): WithdrawalEligibility
@@ -397,15 +401,6 @@ suspend fun leaderboard(): RoomLeaderboard
     suspend fun leaveEvent(token: String, eventId: String): YugmEvent
     suspend fun cancelEvent(token: String, eventId: String): YugmEvent
     suspend fun myEvents(token: String): MyEvents
-
-    suspend fun listGroups(token: String): List<GroupChat>
-    suspend fun groupDetail(token: String, groupId: String): Pair<GroupChat, Int>
-    suspend fun createGroup(token: String, name: String, participantIds: List<String>): GroupChat
-    suspend fun addGroupParticipants(token: String, groupId: String, participantIds: List<String>): GroupChat
-    suspend fun removeGroupParticipant(token: String, groupId: String, userId: String): GroupChat
-    suspend fun leaveGroup(token: String, groupId: String)
-    suspend fun groupMessages(token: String, groupId: String, skip: Int = 0, limit: Int = 30): List<GroupMessage>
-    suspend fun sendGroupMessage(token: String, groupId: String, message: String, mediaUrl: String? = null, mediaType: String? = null, duration: Int? = null): GroupMessage
 
     suspend fun storyFeed(token: String): List<StoryGroup>
     suspend fun userStories(token: String, userId: String): List<StoryItem>

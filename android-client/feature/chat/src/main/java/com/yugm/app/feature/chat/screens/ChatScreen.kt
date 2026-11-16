@@ -72,6 +72,8 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
@@ -105,6 +107,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -135,6 +138,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 // Theme-aware palette is read via LocalYugmColors inside composables.
+
+private fun chatCanvas(dark: Boolean) = if (dark) Color(0xFF100D1D) else Color(0xFFFAF8FC)
+private fun chatHeaderSurface(dark: Boolean) = if (dark) Color(0xFF1C182D) else Color.White
+private fun incomingBubbleSurface(dark: Boolean) = if (dark) Color(0xFF252238) else Color.White
+private fun outgoingBubbleGradient(dark: Boolean) = if (dark) {
+    listOf(Color(0xFF7C21D8), Color(0xFFAA168D))
+} else {
+    listOf(Color(0xFFAD79E6), Color(0xFF5343A5))
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -714,11 +726,11 @@ fun ChatScreen(
     }
     // Scroll behavior is handled by the visible-messages auto-scroll effect above.
 
-    Box(Modifier.fillMaxSize().background(LocalYugmColors.current.background)) {
+    Box(Modifier.fillMaxSize().background(chatCanvas(LocalYugmColors.current.isDark))) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
                 GlassCard(
                     modifier = Modifier.fillMaxWidth(),
-                    gradient = Brush.linearGradient(listOf(LocalYugmColors.current.surfaceElevated, LocalYugmColors.current.surface)),
+                    gradient = Brush.linearGradient(listOf(chatHeaderSurface(LocalYugmColors.current.isDark), chatHeaderSurface(LocalYugmColors.current.isDark))),
                     borderGradient = Brush.horizontalGradient(listOf(LocalYugmColors.current.border, LocalYugmColors.current.border)),
                     cornerRadius = 0.dp,
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
@@ -876,8 +888,8 @@ fun ChatScreen(
                             Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(16.dp))
-                                .background(Color(0xFF131629))
-                                .border(1.dp, Color(0x30FFFFFF), RoundedCornerShape(16.dp))
+                                .background(LocalYugmColors.current.surface)
+                                .border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(16.dp))
                                 .padding(horizontal = 14.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -947,7 +959,7 @@ fun ChatScreen(
                                     Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(16.dp))
-                                        .background(Color(0xFF2A1020))
+                                        .background(LocalYugmColors.current.danger.copy(alpha = 0.08f))
                                         .border(1.dp, LocalYugmColors.current.danger.copy(alpha = 0.45f), RoundedCornerShape(16.dp))
                                         .padding(horizontal = 14.dp, vertical = 12.dp),
                                     verticalAlignment = Alignment.CenterVertically
@@ -1229,8 +1241,8 @@ fun ChatScreen(
                                 .fillMaxWidth()
                                 .padding(bottom = 10.dp)
                                 .clip(RoundedCornerShape(14.dp))
-                                .background(Color(0xFF131629))
-                                .border(1.dp, Color(0x30FFFFFF), RoundedCornerShape(14.dp))
+                                .background(LocalYugmColors.current.surface)
+                                .border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(14.dp))
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -1257,8 +1269,8 @@ fun ChatScreen(
                         LightChatAction(Icons.Filled.SentimentSatisfiedAlt, stringResource(R.string.a11y_toggle_emoji_picker), onClick = { showEmojiBar = !showEmojiBar })
                         Row(
                             Modifier.weight(1f).height(52.dp).clip(RoundedCornerShape(26.dp))
-                                .background(Color(0xFF131629))
-                                .border(1.dp, Color(0x30FFFFFF), RoundedCornerShape(26.dp))
+                                .background(LocalYugmColors.current.surface)
+                                .border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(26.dp))
                                 .padding(horizontal = 14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -1300,7 +1312,12 @@ fun ChatScreen(
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(if (isRecordingVoice) "⏹️" else "🎤", fontSize = 16.sp)
+                                Icon(
+                                    imageVector = if (isRecordingVoice) Icons.Filled.StopCircle else Icons.Filled.Mic,
+                                    contentDescription = null,
+                                    tint = if (isRecordingVoice) Color(0xFFFF5F64) else LocalYugmColors.current.textSecondary,
+                                    modifier = Modifier.size(19.dp)
+                                )
                             }
                             Spacer(Modifier.width(4.dp))
                             Box(
@@ -1874,14 +1891,14 @@ private fun MessageBubble(
                 Modifier
                     // Hug the content, capped so long messages still leave the
                     // opposite side visible (WhatsApp/Telegram read at ~78%).
-                    .widthIn(max = 290.dp)
+                    .widthIn(max = (LocalConfiguration.current.screenWidthDp * 0.78f).dp)
                     .onGloballyPositioned { bubbleCoordinates = it }
                     .clip(bubbleShape)
                     .background(
                         bubble?.fill ?: if (mine) {
-                            Brush.horizontalGradient(listOf(Color(0xFF6F35E8), Color(0xFFA24CFF)))
+                            Brush.horizontalGradient(outgoingBubbleGradient(LocalYugmColors.current.isDark))
                         } else {
-                            Brush.linearGradient(listOf(Color(0xFF1C1833), Color(0xFF141127)))
+                            Brush.linearGradient(listOf(incomingBubbleSurface(LocalYugmColors.current.isDark), incomingBubbleSurface(LocalYugmColors.current.isDark)))
                         }
                     )
                     .border(
@@ -1891,7 +1908,7 @@ private fun MessageBubble(
                             selected -> LocalYugmColors.current.primary
                             bubble?.border != null -> bubble.border
                             mine -> Color.White.copy(alpha = 0.14f)
-                            else -> Color(0x2EFFFFFF)
+                            else -> LocalYugmColors.current.border
                         },
                         shape = bubbleShape
                     )
@@ -2161,7 +2178,7 @@ private fun MessageBubble(
                             Spacer(Modifier.width(4.dp))
                             Text(
                                 if (message.read) "Seen" else "Sent",
-                                color = if (message.read) Color(0xFF69F0AE) else (bubble?.text ?: Color.White).copy(alpha = 0.75f),
+                                color = if (message.read) Color(0xFF69F0AE) else (bubble?.text ?: LocalYugmColors.current.textSecondary).copy(alpha = 0.82f),
                                 fontSize = 10.sp,
                                 fontWeight = if (message.read) FontWeight.SemiBold else FontWeight.Medium
                             )

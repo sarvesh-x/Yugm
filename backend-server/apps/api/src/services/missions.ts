@@ -3,6 +3,7 @@ import { Mission } from "../models/Mission.js";
 import { UserMission } from "../models/UserMission.js";
 import { grantXp } from "./levels.js";
 import { creditWallet } from "./wallet.js";
+import { HttpError, ErrorCode } from "../utils/http.js";
 
 export async function getActiveMissions(userId: string) {
   const now = new Date();
@@ -97,24 +98,39 @@ export async function updateMissionProgress(
 
 export async function claimMission(userId: string, missionId: string) {
   const mission = await Mission.findById(missionId).lean();
-  if (!mission) throw new Error("Mission not found");
+  if (!mission) throw new HttpError(404, "Mission not found", ErrorCode.NOT_FOUND);
 
   const userMission = await UserMission.findOne({ userId, missionId }).lean();
-  if (!userMission || !userMission.completed) throw new Error("Mission not completed");
-  if (userMission.claimed) throw new Error("Mission already claimed");
+  if (!userMission || !userMission.completed) throw new HttpError(409, "Mission not completed", ErrorCode.CONFLICT);
+  if (userMission.claimed) throw new HttpError(409, "Mission already claimed", ErrorCode.CONFLICT);
 
   const rewards: { xp?: number; coins?: number; diamonds?: number } = {};
 
   if (mission.rewards.xp > 0) {
-    await grantXp(userId, "DAILY_CHECKIN", { missionId });
+    await grantXp(userId, "MISSION_REWARD", { missionId, idempotencyKey: `mission:${userId}:${missionId}` }, mission.rewards.xp);
     rewards.xp = mission.rewards.xp;
   }
-  if (mission.rewards.coins > 0) {
-    await creditWallet(userId, mission.rewards.coins, "MISSION_REWARD", { missionId });
-    rewards.coins = mission.rewards.coins;
-  }
 
-  await UserMission.findByIdAndUpdate(userMission._id, { $set: { claimed: true } });
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const claimed = await UserMission.findOneAndUpdate(
+      { _id: userMission._id, userId, completed: true, $or: [{ claimed: false }, { claimed: { $exists: false } }] },
+      { $set: { claimed: true } },
+      { new: true, session }
+    );
+    if (!claimed) throw new HttpError(409, "Mission already claimed", ErrorCode.CONFLICT);
+    if (mission.rewards.coins > 0) {
+      await creditWallet(userId, mission.rewards.coins, "MISSION_REWARD", { missionId, idempotencyKey: `mission:${userId}:${missionId}` }, session);
+      rewards.coins = mission.rewards.coins;
+    }
+    await session.commitTransaction();
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    await session.endSession();
+  }
 
   return { missionId, key: mission.key, rewards };
 }

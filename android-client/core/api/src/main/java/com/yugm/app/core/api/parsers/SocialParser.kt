@@ -5,7 +5,6 @@ import com.yugm.app.core.model.ClanMemberRole
 import com.yugm.app.core.model.ClanMessage
 import com.yugm.app.core.model.ClanReaction
 import com.yugm.app.core.model.ClanSummary
-import com.yugm.app.core.model.GroupMessage
 import com.yugm.app.core.model.NotificationItem
 import org.json.JSONArray
 import org.json.JSONObject
@@ -13,19 +12,27 @@ import org.json.JSONObject
 fun JSONArray.toNotificationItems(): List<NotificationItem> = buildList {
     for (index in 0 until length()) {
         val item = getJSONObject(index)
-        val metadata = item.optJSONObject("metadata") ?: JSONObject()
-        add(NotificationItem(
-            id = item.optString("_id", item.optString("id", "")),
-            type = metadata.optString("type", item.optString("type", "general")),
-            message = item.optString("body", item.optString("message", item.optString("title", ""))),
-            actorName = item.optString("title", item.optString("actorName", "")),
-            actorId = metadata.optString("userId", item.optString("actorId", "")),
-            partnerId = metadata.optString("partnerId", item.optString("partnerId", "")),
-            roomId = metadata.optString("roomId", item.optString("roomId", "")),
-            read = item.optBoolean("read", false),
-            createdAt = item.optString("createdAt", "")
-        ))
+        add(item.toNotificationItem())
     }
+}
+
+fun JSONObject.toNotificationItem(): NotificationItem {
+    val data = optJSONObject("data") ?: optJSONObject("metadata") ?: JSONObject()
+    return NotificationItem(
+        id = optString("_id", optString("id", "")),
+        type = optString("type", data.optString("type", "SYSTEM")),
+        message = optString("body", optString("message", "")),
+        actorName = optString("title", optString("actorName", "")),
+        actorId = data.optString("userId", data.optString("actorId", "")),
+        partnerId = data.optString("partnerId", ""),
+        roomId = data.optString("roomId", ""),
+        clanId = data.optString("clanId", ""),
+        achievementId = data.optString("achievementId", ""),
+        actionType = data.optString("type", ""),
+        callType = data.optString("callType", ""),
+        read = optBoolean("read", false),
+        createdAt = optString("createdAt", "")
+    )
 }
 
 fun JSONObject.toClan(): Clan = Clan(
@@ -83,25 +90,7 @@ fun JSONArray.toClanReactions(): List<ClanReaction> = buildList {
     for (index in 0 until length()) {
         add(getJSONObject(index).toClanReaction())
     }
-}
-
-fun JSONObject.toGroupMessage(): GroupMessage {
-    val senderObj = optJSONObject("senderId")
-    return GroupMessage(
-        id = optString("_id", optString("id", "")),
-        groupId = optString("groupId", ""),
-        senderId = senderObj?.optString("_id", "") ?: optString("senderId", ""),
-        senderName = senderObj?.optString("name", "") ?: optString("senderName", ""),
-        senderAvatar = (senderObj?.optString("avatar", "") ?: optString("senderAvatar", "")).ifEmpty { null },
-        message = optString("message", ""),
-        mediaUrl = optString("mediaUrl", ""),
-        mediaType = optString("mediaType", ""),
-        duration = optInt("duration", 0),
-        createdAt = optString("createdAt", "")
-    )
-}
-
-fun JSONObject.toClanSummary(): ClanSummary = ClanSummary(
+}fun JSONObject.toClanSummary(): ClanSummary = ClanSummary(
     id = optString("_id", optString("id", "")),
     name = optString("name", "Family"),
     slug = optString("slug", ""),

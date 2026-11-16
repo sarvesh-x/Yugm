@@ -129,8 +129,8 @@ fun ClanDetailScreen(
                     Column(
                         Modifier.padding(horizontal = 16.dp).fillMaxWidth()
                             .clip(RoundedCornerShape(26.dp))
-                            .border(1.dp, Color(0x30FFFFFF), RoundedCornerShape(26.dp))
-                            .background(Brush.linearGradient(listOf(Color(0xFF41264F), Color(0xFF211B35), Color(0xFF171522))))
+                            .border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(26.dp))
+                            .background(Brush.linearGradient(listOf(LocalYugmColors.current.surfaceElevated, LocalYugmColors.current.surfaceVariant, LocalYugmColors.current.surface)))
                             .padding(20.dp),
                         horizontalAlignment = Alignment.Start
                     ) {
@@ -225,8 +225,8 @@ fun ClanDetailScreen(
                         Row(
                             Modifier.padding(horizontal = 16.dp).fillMaxWidth()
                                 .clip(RoundedCornerShape(18.dp))
-                                .background(Color(0xB3131424))
-                                .border(1.dp, Color(0x18FFFFFF), RoundedCornerShape(18.dp))
+                                .background(LocalYugmColors.current.surface)
+                                .border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(18.dp))
                                 .clickable { onMemberClick(member.id) }
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -312,7 +312,7 @@ fun ClanDetailScreen(
     if (showSettings && currentClan != null) {
         AlertDialog(
             onDismissRequest = { showSettings = false },
-            containerColor = Color(0xFF171827),
+            containerColor = LocalYugmColors.current.surface,
             shape = RoundedCornerShape(26.dp),
             title = { Text("Clan settings", color = TextPrimary, fontWeight = FontWeight.Bold) },
             text = {
@@ -322,8 +322,8 @@ fun ClanDetailScreen(
                 ) {
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
-                            .background(Brush.horizontalGradient(listOf(Color(0xFF302044), Color(0xFF222238))))
-                            .border(1.dp, Color(0x28FFFFFF), RoundedCornerShape(18.dp)).padding(12.dp),
+                            .background(Brush.horizontalGradient(listOf(LocalYugmColors.current.surfaceVariant, LocalYugmColors.current.surface)))
+                            .border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(18.dp)).padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
@@ -361,7 +361,7 @@ fun ClanDetailScreen(
                         singleLine = true
                     )
                     Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFF202235)).padding(horizontal = 14.dp, vertical = 10.dp),
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(LocalYugmColors.current.surfaceVariant).padding(horizontal = 14.dp, vertical = 10.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -528,10 +528,10 @@ private fun roleOf(clan: Clan, userId: String): String =
 private fun ClanInfoPill(label: String) {
     Box(
         Modifier.clip(CircleShape)
-            .background(Color(0x28FFFFFF))
+            .background(LocalYugmColors.current.surfaceVariant)
             .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
-        Text(label, color = TextPrimary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Text(label, color = LocalYugmColors.current.textSecondary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }
 

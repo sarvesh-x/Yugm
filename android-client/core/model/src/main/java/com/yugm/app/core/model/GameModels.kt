@@ -88,7 +88,12 @@ data class GameChallenges(
 
 data class GameReward(
     val xpAwarded: Int = 0,
-    val levelUpReward: Int = 0
+    val levelUpReward: Int = 0,
+    val capped: Boolean = false,
+    val cap: Int? = null,
+    val earnedToday: Int? = null,
+    val remainingToday: Int? = null,
+    val levelUp: Boolean = false
 )
 
 data class SavedGameScoreResult(

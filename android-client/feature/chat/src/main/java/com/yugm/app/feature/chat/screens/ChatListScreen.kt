@@ -101,7 +101,6 @@ fun ChatListScreen(
     onOpenClan: (String, String) -> Unit = { _, _ -> },
     onJoinClan: () -> Unit = {},
     onOpenClanDetail: (String) -> Unit = {},
-    onOpenGroups: () -> Unit = {},
     onGameZone: () -> Unit = {},
     showBottomDock: Boolean = true,
     onClanTabActiveChanged: (Boolean) -> Unit = {},
@@ -401,9 +400,6 @@ fun ChatListScreen(
                                             onClick = { onOpenClan(clan.id, clan.name) }
                                         )
                                     }
-                                }
-                                if (searchQuery.isBlank()) item(key = "group-chats-entry") {
-                                    GroupChatsEntryRow(onClick = onOpenGroups)
                                 }
                                 item {
                                     Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1145,33 +1141,6 @@ private fun ClanConversationRow(clan: Clan, lastMessage: ClanMessage?, onClick: 
 }
 
 @Composable
-private fun GroupChatsEntryRow(onClick: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(LocalYugmColors.current.surface)
-            .border(1.dp, LocalYugmColors.current.border.copy(alpha = 0.7f), RoundedCornerShape(18.dp))
-            .clickable(role = Role.Button, onClickLabel = "Open group chats", onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            Modifier.size(52.dp).clip(CircleShape)
-                .background(Brush.linearGradient(listOf(LocalYugmColors.current.secondary.copy(alpha = 0.9f), LocalYugmColors.current.primary.copy(alpha = 0.9f)))),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Filled.Groups, contentDescription = null, tint = Color.White, modifier = Modifier.size(26.dp))
-        }
-        Column(Modifier.weight(1f).padding(start = 12.dp)) {
-            Text("Group chats", color = LocalYugmColors.current.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-            Text("Bring several friends into one conversation", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        Text("›", color = LocalYugmColors.current.textSecondary, fontSize = 25.sp)
-    }
-}
-
 private fun buildClanPreview(message: ClanMessage?): String {
     if (message == null) return "Tap to start the clan conversation"
     val sender = message.senderId?.name?.takeIf { it.isNotBlank() } ?: "Clan"

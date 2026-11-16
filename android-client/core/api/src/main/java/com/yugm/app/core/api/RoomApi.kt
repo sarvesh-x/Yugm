@@ -114,6 +114,19 @@ object RoomApi {
         return data.getJSONArray("rooms").toRooms()
     }
 
+    suspend fun followedRooms(token: String): List<Room> {
+        val data = YugmHttpClient.get("/rooms/followed", token).getJSONObject("data")
+        return data.optJSONArray("rooms")?.toRooms() ?: emptyList()
+    }
+
+    suspend fun followRoom(token: String, roomId: String) {
+        YugmHttpClient.post("/rooms/$roomId/follow", token, JSONObject())
+    }
+
+    suspend fun unfollowRoom(token: String, roomId: String) {
+        YugmHttpClient.delete("/rooms/$roomId/follow", token)
+    }
+
     suspend fun leaderboard(): RoomLeaderboard {
         val data = YugmHttpClient.get("/rooms/leaderboard", auth = null).getJSONObject("data")
         return RoomLeaderboard(

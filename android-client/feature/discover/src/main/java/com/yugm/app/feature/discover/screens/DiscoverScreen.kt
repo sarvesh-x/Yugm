@@ -13,21 +13,21 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.sizeIn
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -51,6 +51,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -671,12 +672,14 @@ private fun HeaderAction(
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .size(17.dp)
+                    .offset(x = 4.dp, y = (-4).dp)
+                    .size(18.dp)
                     .clip(CircleShape)
-                    .background(Danger),
+                    .background(Danger)
+                    .border(1.5.dp, Color.White.copy(alpha = 0.9f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Text(if (badge > 9) "9+" else badge.toString(), color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Black)
+                Text(if (badge > 9) "9+" else badge.toString(), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Black)
             }
         }
     }
@@ -708,10 +711,11 @@ private fun SearchPill(onSearch: () -> Unit) {
 
 @Composable
 private fun SearchGlyph() {
+    val mutedColor = TextMuted
     Canvas(Modifier.size(20.dp)) {
-        drawCircle(color = TextMuted, radius = size.minDimension * 0.34f, style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
+        drawCircle(color = mutedColor, radius = size.minDimension * 0.34f, style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
         drawLine(
-            color = TextMuted,
+            color = mutedColor,
             start = Offset(size.width * 0.68f, size.height * 0.68f),
             end = Offset(size.width * 0.94f, size.height * 0.94f),
             strokeWidth = 2.dp.toPx()

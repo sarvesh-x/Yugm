@@ -87,7 +87,9 @@ data class InventoryItem(
     val gift: GiftV2? = null,
     val quantity: Int = 1,
     val tradable: Boolean = false,
-    val source: String = "purchased"
+    val source: String = "purchased",
+    val upgradeLevel: Int = 1,
+    val upgradeCost: Int = 0
 )
 
 data class InventoryResponse(

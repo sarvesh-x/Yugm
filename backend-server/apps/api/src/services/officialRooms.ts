@@ -90,11 +90,11 @@ export async function ensureOfficialRooms() {
           hostId: host._id,
           speakerIds: [host._id],
           moderatorIds: [host._id],
-          status: "LIVE",
+          status: "ENDED",
           visibility: "PUBLIC",
-          allowAudienceMicRequests: true
+          allowAudienceMicRequests: true,
+          endedAt: new Date()
         },
-        $unset: { endedAt: "" },
         $setOnInsert: {
           startedAt: new Date()
         }
@@ -122,5 +122,5 @@ export async function ensureOfficialRooms() {
   }
 
   await invalidateCache("rooms:*");
-  console.log(`Official public rooms active: ${officialRooms.length}`);
+  console.log(`Official public rooms seeded as inactive: ${officialRooms.length}`);
 }

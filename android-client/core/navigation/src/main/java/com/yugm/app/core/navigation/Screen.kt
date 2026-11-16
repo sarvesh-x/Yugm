@@ -46,6 +46,8 @@ sealed class Screen(val route: String) {
     }
     object Wallet : Screen("wallet")
     object Growth : Screen("growth")
+    object Achievements : Screen("achievements")
+    object LevelLeaderboard : Screen("level_leaderboard")
     object TrustVerificationIntro : Screen("trust_verification_intro")
     object VerificationConsent : Screen("verification_consent")
     object FaceVerification : Screen("face_verification")
@@ -99,10 +101,6 @@ sealed class Screen(val route: String) {
     object EventCreate : Screen("event_create")
     object EventDetail : Screen("event_detail/{eventId}") {
         fun createRoute(eventId: String) = "event_detail/$eventId"
-    }
-    object GroupChats : Screen("group_chats")
-    object GroupChatDetail : Screen("group_chat_detail/{groupId}") {
-        fun createRoute(groupId: String) = "group_chat_detail/$groupId"
     }
     object StoryViewer : Screen("story_viewer/{userId}") {
         fun createRoute(userId: String) = "story_viewer/$userId"

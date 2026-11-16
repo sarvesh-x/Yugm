@@ -22,11 +22,13 @@ fun JSONObject.toExperienceHome(): ExperienceHome {
     val roomsJson = optJSONObject("rooms") ?: JSONObject()
     val peopleJson = optJSONObject("people") ?: JSONObject()
     val notificationsJson = optJSONObject("notifications") ?: JSONObject()
+    val userJson = optJSONObject("user") ?: JSONObject()
     return ExperienceHome(
-        userRole = optJSONObject("user")?.optString("role", "USER") ?: "USER",
+        userId = userJson.optString("_id", userJson.optString("id", "")),
+        userRole = userJson.optString("role", "USER"),
         profileCompletion = optJSONObject("profileCompletion")?.toProfileCompletion() ?: ProfileCompletion(),
         level = optJSONObject("level")?.toLevelStatus() ?: LevelStatus(),
-        streakCount = optJSONObject("user")?.optInt("streakCount", 0) ?: 0,
+        streakCount = userJson.optInt("streakCount", 0),
         achievements = optJSONArray("achievements")?.toAchievements() ?: emptyList(),
         feed = optJSONArray("feed")?.toExperienceFeedItems() ?: emptyList(),
         liveRooms = roomsJson.optJSONArray("live")?.toRooms() ?: emptyList(),

@@ -136,7 +136,12 @@ fun Avatar(
                     Box(Modifier.fillMaxSize()) {
                         DefaultAvatarPlaceholder(Modifier.fillMaxSize())
                         coil.compose.AsyncImage(
-                            model = finalImageUrl,
+                            model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                                .data(finalImageUrl)
+                                .crossfade(true)
+                                .memoryCacheKey(finalImageUrl)
+                                .diskCacheKey(finalImageUrl)
+                                .build(),
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
@@ -315,6 +320,7 @@ private fun avatarAssetUrl(id: String): String? = when (id) {
     else -> null
 }
 
+@Composable
 private fun avatarFrameBrush(id: String): Brush = when (id) {
     "frame_neon" -> Brush.linearGradient(listOf(Pink, Purple, Color(0xFF27D3FF)))
     "frame_crystal" -> Brush.linearGradient(listOf(Color(0xFFB9F2FF), Color.White, Purple))

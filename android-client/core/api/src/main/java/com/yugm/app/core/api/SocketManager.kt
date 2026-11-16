@@ -3,11 +3,11 @@ package com.yugm.app.core.api
 import com.yugm.app.core.api.parsers.toClan
 import com.yugm.app.core.api.parsers.toClanMessage
 import com.yugm.app.core.api.parsers.toDirectMessage
-import com.yugm.app.core.api.parsers.toGroupMessage
+import com.yugm.app.core.api.parsers.toNotificationItem
 import com.yugm.app.core.model.Clan
 import com.yugm.app.core.model.ClanMessage
 import com.yugm.app.core.model.DirectMessage
-import com.yugm.app.core.model.GroupMessage
+import com.yugm.app.core.model.NotificationItem
 import io.socket.client.IO
 import io.socket.client.Socket
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -19,6 +19,7 @@ import javax.inject.Singleton
 
 sealed class SocketEvent {
     data class DirectMessageReceived(val message: DirectMessage) : SocketEvent()
+    data class NotificationReceived(val notification: NotificationItem) : SocketEvent()
     data class DirectMessageReactionUpdated(val message: DirectMessage, val partnerId: String = "") : SocketEvent()
     data class DirectMessageDeleted(val messageId: String, val partnerId: String) : SocketEvent()
     data class DirectConversationDeleted(val partnerId: String) : SocketEvent()
@@ -35,7 +36,6 @@ sealed class SocketEvent {
     data class ClanDeleted(val clanId: String) : SocketEvent()
     data class ClanMembershipChanged(val clanId: String, val type: String, val userId: String, val clan: Clan?) : SocketEvent()
     data class ClanTypingUpdate(val clanId: String, val userId: String, val typing: Boolean) : SocketEvent()
-    data class GroupMessageReceived(val groupId: String, val message: GroupMessage) : SocketEvent()
     object Connected : SocketEvent()
     object Disconnected : SocketEvent()
 }
@@ -97,6 +97,13 @@ class SocketManager @Inject constructor() {
                 } catch (e: Exception) {
                     Timber.tag("SocketManager").e(e, "Failed to parse direct message")
                 }
+            }
+            socket?.on("notification:new") { args ->
+                val payload = args.firstOrNull() as? JSONObject ?: return@on
+                val item = payload.optJSONObject("notification") ?: payload
+                runCatching { item.toNotificationItem() }
+                    .onSuccess { _events.tryEmit(SocketEvent.NotificationReceived(it)) }
+                    .onFailure { Timber.tag("SocketManager").e(it, "Failed to parse notification") }
             }
             socket?.on("direct:reaction:new") { args ->
                 val payload = args.firstOrNull() as? JSONObject ?: return@on
@@ -204,15 +211,6 @@ class SocketManager @Inject constructor() {
             socket?.on("clan:typing:update") { args ->
                 (args.firstOrNull() as? JSONObject)?.let { payload ->
                     _events.tryEmit(SocketEvent.ClanTypingUpdate(payload.optString("clanId"), payload.optString("userId"), payload.optBoolean("typing")))
-                }
-            }
-            socket?.on("group:message:new") { args ->
-                (args.firstOrNull() as? JSONObject)?.let { payload ->
-                    val groupId = payload.optString("groupId")
-                    payload.optJSONObject("message")?.let { messageJson ->
-                        runCatching { _events.tryEmit(SocketEvent.GroupMessageReceived(groupId, messageJson.toGroupMessage())) }
-                            .onFailure { Timber.tag("SocketManager").e(it, "Failed to parse group message") }
-                    }
                 }
             }
             socket?.on("user:online") { args ->

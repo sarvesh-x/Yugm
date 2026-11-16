@@ -94,6 +94,7 @@ fun SettingsScreen(
 ) {
     var pane by remember { mutableStateOf(SettingsPane.Home) }
     var preferences by remember { mutableStateOf(defaultNotificationPreferences()) }
+    var preferencesLoaded by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var feedbackSubject by remember { mutableStateOf("") }
     var feedbackMessage by remember { mutableStateOf("") }
@@ -112,12 +113,37 @@ fun SettingsScreen(
 
     fun unblock(userId: String) {
         busy = true
-        viewModel.unblock(token, userId)
-        busy = false
+        error = null
+        viewModel.unblock(token, userId) { result ->
+            busy = false
+            result.onFailure { error = it.message ?: "Could not unblock this user." }
+        }
     }
 
     LaunchedEffect(token) {
-        if (token.isNotBlank()) viewModel.loadBlocked(token)
+        if (token.isNotBlank()) {
+            viewModel.loadBlocked(token)
+            runCatching { withContext(Dispatchers.IO) { YugmApi.notificationPreferences(token) } }
+                .onSuccess { preferences = it.values; preferencesLoaded = true }
+                .onFailure { error = it.message ?: "Could not load notification preferences."; preferencesLoaded = true }
+        }
+    }
+
+    fun updateNotificationPreference(key: String, value: Boolean) {
+        val previous = preferences
+        preferences = previous + (key to value)
+        scope.launch {
+            busy = true
+            error = null
+            runCatching {
+                withContext(Dispatchers.IO) { YugmApi.updateNotificationPreferences(token, mapOf(key to value)) }
+            }.onSuccess { preferences = it.values }
+                .onFailure {
+                    preferences = previous
+                    error = it.message ?: "Could not save notification preferences."
+                }
+            busy = false
+        }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -166,20 +192,37 @@ fun SettingsScreen(
                     onNavigateToSupport = onNavigateToSupport,
                     onLogout = { showLogoutConfirm = true }
                 )
-                SettingsPane.Blocked -> BlockedPane(Modifier.padding(innerPadding), viewModel.blockedUsers, busy, onUnblock = { unblock(it) })
-                SettingsPane.Notifications -> NotificationsPane(Modifier.padding(innerPadding), preferences, busy, onToggle = { key, value -> preferences = preferences + (key to value) })
+                SettingsPane.Blocked -> BlockedPane(Modifier.padding(innerPadding), viewModel.blockedUsers, busy || viewModel.isLoading, viewModel.error, onUnblock = { unblock(it) })
+                SettingsPane.Notifications -> NotificationsPane(
+                    Modifier.padding(innerPadding), preferences, busy, !preferencesLoaded,
+                    error = error,
+                    onToggle = ::updateNotificationPreference
+                )
                 SettingsPane.Appearance -> AppearancePane(Modifier.padding(innerPadding), viewModel.themeMode, onModeSelected = { viewModel.updateThemeMode(it) })
                 SettingsPane.Feedback -> FeedbackPane(
                     modifier = Modifier.padding(innerPadding),
                     subject = feedbackSubject,
                     message = feedbackMessage,
                     busy = busy,
+                    error = error,
                     onSubjectChange = { feedbackSubject = it },
                     onMessageChange = { feedbackMessage = it },
                     onSubmit = {
-                        feedbackSubject = ""
-                        feedbackMessage = ""
-                        pane = SettingsPane.Home
+                        scope.launch {
+                            busy = true
+                            error = null
+                            runCatching {
+                                withContext(Dispatchers.IO) {
+                                    YugmApi.sendFeedback(token, feedbackSubject.trim(), feedbackMessage.trim(), "OTHER")
+                                }
+                            }.onSuccess {
+                                feedbackSubject = ""
+                                feedbackMessage = ""
+                                pane = SettingsPane.Home
+                                android.widget.Toast.makeText(context, "Feedback sent. Thank you!", android.widget.Toast.LENGTH_SHORT).show()
+                            }.onFailure { error = it.message ?: "Could not send feedback. Please try again." }
+                            busy = false
+                        }
                     }
                 )
                 SettingsPane.About, SettingsPane.Terms, SettingsPane.Privacy, SettingsPane.Guidelines -> DocumentPane(Modifier.padding(innerPadding), pane)
@@ -366,12 +409,14 @@ private fun themeModeLabel(mode: String): String = when (mode) {
 }
 
 @Composable
-private fun BlockedPane(modifier: Modifier, blockedUsers: List<Host>, busy: Boolean, onUnblock: (String) -> Unit) {
+private fun BlockedPane(modifier: Modifier, blockedUsers: List<Host>, busy: Boolean, error: String?, onUnblock: (String) -> Unit) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        if (!error.isNullOrBlank()) item { Text(error, color = Danger, fontSize = 13.sp) }
+        if (busy && blockedUsers.isEmpty()) item { LoadingState("Loading blocked users...") }
         item {
             Text("People you unblock can view eligible public activity and interact again unless they have blocked you.", color = LocalYugmColors.current.textSecondary, fontWeight = FontWeight.Bold, lineHeight = 20.sp)
         }
@@ -408,24 +453,28 @@ private fun NotificationsPane(
     modifier: Modifier,
     preferences: Map<String, Boolean>,
     busy: Boolean,
+    loading: Boolean,
+    error: String?,
     onToggle: (String, Boolean) -> Unit
 ) {
     val rows = listOf(
-        "messages" to "Direct messages",
-        "roomInvites" to "Room invites",
-        "gifts" to "Gifts and wallet",
-        "follows" to "Followers",
-        "hostGoingLive" to "Hosts going live",
-        "wallet" to "Wallet activity",
-        "safety" to "Safety alerts",
-        "marketing" to "Product updates"
+        Triple("messages", "Messages and calls", "New direct messages and private call alerts."),
+        Triple("roomInvites", "Room invitations", "Invitations and speaker requests."),
+        Triple("gifts", "Gifts", "Gifts sent to you in rooms and chats."),
+        Triple("follows", "Social activity", "Follows, friend requests, comments and reactions."),
+        Triple("hostGoingLive", "Live rooms", "When someone you follow starts a room."),
+        Triple("wallet", "Wallet activity", "Coin rewards, purchases and payout updates."),
+        Triple("safety", "Safety alerts", "Important account and moderation updates."),
+        Triple("marketing", "Product updates", "News and announcements from Yugm.")
     )
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(rows, key = { it.first }) { (key, title) ->
+        if (!error.isNullOrBlank()) item { Text(error, color = Danger, fontSize = 13.sp) }
+        if (loading) item { LoadingState("Loading notification settings...") }
+        items(rows, key = { it.first }) { (key, title, description) ->
             Row(
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(LocalYugmColors.current.surface).padding(12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -433,12 +482,13 @@ private fun NotificationsPane(
             ) {
                 Column {
                     Text(title, color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Black)
-                    Text(if (preferences[key] == true) "Enabled" else "Muted", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(description, color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
+                    Text(if (preferences[key] == true) "On" else "Off", color = LocalYugmColors.current.textSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
-                Switch(
+                    Switch(
                     checked = preferences[key] == true,
                     onCheckedChange = { onToggle(key, it) },
-                    enabled = !busy
+                    enabled = !busy && !loading
                 )
             }
         }
@@ -451,6 +501,7 @@ private fun FeedbackPane(
     subject: String,
     message: String,
     busy: Boolean,
+    error: String?,
     onSubjectChange: (String) -> Unit,
     onMessageChange: (String) -> Unit,
     onSubmit: () -> Unit
@@ -460,6 +511,7 @@ private fun FeedbackPane(
         contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        if (!error.isNullOrBlank()) item { Text(error, color = Danger, fontSize = 13.sp) }
         item {
             Text("Tell us what broke, what is confusing, or what you want Yugm to improve next.", color = LocalYugmColors.current.textSecondary, fontWeight = FontWeight.Bold, lineHeight = 20.sp)
         }

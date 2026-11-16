@@ -118,35 +118,6 @@ fun NavGraphBuilder.socialNavGraph(
         )
     }
 
-    composable(Screen.GroupChats.route) {
-        GroupChatScreen(
-            token = authTokenProvider(),
-            onBack = { navController.popBackStack() },
-            onOpenGroup = { groupId ->
-                navController.navigate(Screen.GroupChatDetail.createRoute(groupId))
-            }
-        )
-    }
-
-    composable(
-        route = Screen.GroupChatDetail.route,
-        arguments = listOf(navArgument("groupId") { type = NavType.StringType })
-    ) { backStackEntry ->
-        val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
-        val viewModel: com.yugm.app.feature.social.viewmodel.GroupChatDetailViewModel = hiltViewModel(backStackEntry)
-        LaunchedEffect(groupId) {
-            viewModel.connect(authTokenProvider(), groupId)
-            viewModel.load()
-        }
-        GroupChatDetailScreen(
-            messages = viewModel.messages,
-            messageText = viewModel.messageText,
-            onMessageChange = viewModel::updateText,
-            onBack = { navController.popBackStack() },
-            onSend = viewModel::send
-        )
-    }
-
     composable(
         route = Screen.StoryViewer.route,
         arguments = listOf(navArgument("userId") { type = NavType.StringType })
@@ -304,6 +275,11 @@ fun NavGraphBuilder.socialNavGraph(
             onBack = { navController.popBackStack() },
             onOpenTarget = { notification ->
                 when {
+                        notification.actionType == "ACHIEVEMENT_UNLOCKED" || notification.achievementId.isNotBlank() -> navController.navigate(Screen.Achievements.route)
+                        notification.actionType == "LEVEL_UP" -> navController.navigate(Screen.Growth.route)
+                        notification.callType.equals("VIDEO", true) && notification.roomId.isNotBlank() -> navController.navigate(Screen.VideoRoom.createRoute(notification.roomId))
+                        notification.callType.equals("VOICE", true) && notification.roomId.isNotBlank() -> navController.navigate(Screen.VoiceRoom.createRoute(notification.roomId))
+                        notification.clanId.isNotBlank() -> navController.navigate(Screen.ClanDetail.createRoute(notification.clanId))
                     notification.roomId.isNotBlank() -> navController.navigate(Screen.RoomLobby.createRoute(notification.roomId))
                     notification.partnerId.isNotBlank() -> navController.navigate(Screen.Chat.createRoute(notification.partnerId))
                     notification.actorId.isNotBlank() -> navController.navigate(Screen.ProfileDetail.createRoute(notification.actorId))
@@ -320,7 +296,25 @@ fun NavGraphBuilder.socialNavGraph(
             onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
             onPayoutVerification = { navController.navigate(Screen.CreatorPayoutKycIntro.route) },
             onWithdraw = { navController.navigate(Screen.WithdrawalEligibility.route) },
+            onOpenBattlePass = { navController.navigate(Screen.BattlePass.route) },
+            onOpenAchievements = { navController.navigate(Screen.Achievements.route) },
+            onOpenLeaderboard = { navController.navigate(Screen.LevelLeaderboard.route) },
             onOpenRoom = { room -> navController.navigate(Screen.RoomLobby.createRoute(room.id, room.type.name.uppercase())) }
+        )
+    }
+
+    composable(Screen.Achievements.route) {
+        AchievementsScreen(
+            token = authTokenProvider(),
+            onBack = { navController.popBackStack() }
+        )
+    }
+
+    composable(Screen.LevelLeaderboard.route) {
+        LevelLeaderboardScreen(
+            token = authTokenProvider(),
+            onBack = { navController.popBackStack() },
+            onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) }
         )
     }
 

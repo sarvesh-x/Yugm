@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,6 +22,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +43,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.yugm.app.core.api.YugmApi
+import com.yugm.app.core.model.GiftItem
 import com.yugm.app.core.model.WishlistItem
 import com.yugm.app.core.ui.components.GlassCard
 import com.yugm.app.core.ui.components.GradientAction
@@ -52,7 +59,10 @@ import com.yugm.app.core.ui.theme.Pink
 import com.yugm.app.core.ui.theme.SurfaceElevated
 import com.yugm.app.core.ui.theme.TextMuted
 import com.yugm.app.core.ui.theme.TextPrimary
+import com.yugm.app.core.ui.theme.Danger
 import com.yugm.app.feature.social.viewmodel.SocialViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun WishlistScreen(
@@ -64,11 +74,27 @@ fun WishlistScreen(
     val context = LocalContext.current
     var showForm by remember { mutableStateOf(false) }
     var giftId by remember { mutableStateOf("") }
+    var giftName by remember { mutableStateOf("") }
+    var gifts by remember { mutableStateOf<List<GiftItem>>(emptyList()) }
+    var giftsLoading by remember { mutableStateOf(false) }
+    var giftLoadAttempt by remember { mutableStateOf(0) }
+    var giftsError by remember { mutableStateOf<String?>(null) }
+    var showGiftPicker by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
     var isPublic by remember { mutableStateOf(true) }
     var adding by remember { mutableStateOf(false) }
 
     LaunchedEffect(token) { viewModel.loadWishlist(token) }
+    LaunchedEffect(showForm, token, giftLoadAttempt) {
+        if (showForm && gifts.isEmpty() && !giftsLoading) {
+            giftsLoading = true
+            giftsError = null
+            runCatching { withContext(Dispatchers.IO) { YugmApi.gifts(token) } }
+                .onSuccess { gifts = it }
+                .onFailure { giftsError = it.message ?: "Could not load gifts." }
+            giftsLoading = false
+        }
+    }
 
     YugmAmbientBackground {
         LazyColumn(
@@ -94,7 +120,6 @@ fun WishlistScreen(
                     items(viewModel.wishlist, key = { it._id }) { item ->
                         WishlistItemRow(
                             item = item,
-                            onClick = { Toast.makeText(context, "Coming soon", Toast.LENGTH_SHORT).show() },
                             onDelete = { viewModel.deleteWishlistItem(token, item._id) }
                         )
                     }
@@ -119,24 +144,19 @@ fun WishlistScreen(
                                     .padding(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                OutlinedTextField(
-                                    value = giftId,
-                                    onValueChange = { giftId = it },
-                                    label = { Text("Gift ID") },
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedTextColor = TextPrimary,
-                                        unfocusedTextColor = TextPrimary,
-                                        focusedLabelColor = Gold,
-                                        unfocusedLabelColor = TextMuted,
-                                        focusedBorderColor = Gold,
-                                        unfocusedBorderColor = Line,
-                                        cursorColor = Gold,
-                                        focusedContainerColor = Panel,
-                                        unfocusedContainerColor = Panel
-                                    ),
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                )
+                                OutlinedButton(
+                                    onClick = { showGiftPicker = true },
+                                    enabled = !giftsLoading && gifts.isNotEmpty(),
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                                ) {
+                                    Text(if (giftName.isBlank()) "Choose a gift" else "🎁  $giftName")
+                                }
+                                giftsError?.let { message ->
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(message, color = Danger, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                                        TextButton(onClick = { giftLoadAttempt++ }) { Text("Retry") }
+                                    }
+                                }
                                 OutlinedTextField(
                                     value = message,
                                     onValueChange = { message = it },
@@ -169,12 +189,18 @@ fun WishlistScreen(
                                     enabled = !adding && giftId.isNotBlank(),
                                     onClick = {
                                         adding = true
-                                        viewModel.addWishlistItem(token, giftId, message.ifBlank { null }, isPublic)
-                                        giftId = ""
-                                        message = ""
-                                        isPublic = true
-                                        showForm = false
-                                        adding = false
+                                        viewModel.addWishlistItem(token, giftId.trim(), message.trim().ifBlank { null }, isPublic) { success ->
+                                            adding = false
+                                            if (success) {
+                                                giftId = ""
+                                                giftName = ""
+                                                message = ""
+                                                isPublic = true
+                                                showForm = false
+                                            } else {
+                                                Toast.makeText(context, viewModel.error ?: "Could not add this gift.", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
                                     }
                                 )
                             }
@@ -184,10 +210,44 @@ fun WishlistScreen(
             }
         }
     }
+
+    if (showGiftPicker) {
+        AlertDialog(
+            onDismissRequest = { showGiftPicker = false },
+            title = { Text("Choose a gift", color = TextPrimary, fontWeight = FontWeight.Black) },
+            text = {
+                when {
+                    giftsLoading -> CircularProgressIndicator()
+                    gifts.isEmpty() -> Text(giftsError ?: "No gifts are available right now.", color = TextMuted)
+                    else -> LazyColumn(Modifier.heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(gifts, key = { it.id }) { gift ->
+                            Row(
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable {
+                                    giftId = gift.id
+                                    giftName = gift.name
+                                    showGiftPicker = false
+                                }.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(gift.icon.ifBlank { "🎁" }, fontSize = 22.sp)
+                                Column(Modifier.padding(start = 10.dp).weight(1f)) {
+                                    Text(gift.name, color = TextPrimary, fontWeight = FontWeight.Bold)
+                                    Text("${gift.price} coins", color = TextMuted, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showGiftPicker = false }) { Text("Close") }
+            }
+        )
+    }
 }
 
 @Composable
-private fun WishlistItemRow(item: WishlistItem, onClick: () -> Unit, onDelete: () -> Unit) {
+private fun WishlistItemRow(item: WishlistItem, onDelete: () -> Unit) {
     val gift = item.giftId
     val name = gift?.name ?: "Unknown Gift"
     val icon = gift?.icon ?: "🎁"
@@ -199,7 +259,6 @@ private fun WishlistItemRow(item: WishlistItem, onClick: () -> Unit, onDelete: (
             .clip(RoundedCornerShape(16.dp))
             .background(SurfaceElevated)
             .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

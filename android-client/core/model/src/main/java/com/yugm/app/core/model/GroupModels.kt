@@ -1,31 +1,5 @@
 package com.yugm.app.core.model
 
-data class GroupChat(
-    val id: String = "",
-    val name: String = "",
-    val createdBy: String = "",
-    val createdByName: String = "",
-    val createdByAvatar: String? = null,
-    val participantIds: List<String> = emptyList(),
-    val participantCount: Int = 0,
-    val lastMessage: String? = null,
-    val lastMessageAt: String? = null,
-    val createdAt: String = ""
-)
-
-data class GroupMessage(
-    val id: String = "",
-    val groupId: String = "",
-    val senderId: String = "",
-    val senderName: String = "",
-    val senderAvatar: String? = null,
-    val message: String = "",
-    val mediaUrl: String = "",
-    val mediaType: String = "",
-    val duration: Int = 0,
-    val createdAt: String = ""
-)
-
 data class Clan(
     val id: String = "",
     val name: String = "",

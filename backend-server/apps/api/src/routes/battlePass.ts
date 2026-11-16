@@ -9,8 +9,8 @@ export const battlePassRouter = Router();
 battlePassRouter.use(requireAuth);
 
 battlePassRouter.get("/battle-pass", asyncHandler(async (req: AuthRequest, res) => {
-  const bp = await getBattlePass(req.user!.id);
-  sendOk(res, { battlePass: bp.battlePass, season: bp.season });
+  const bp = await getBattlePass(req.user!.id, true);
+  sendOk(res, { schemaVersion: 1, battlePass: bp.battlePass, season: bp.season, previousSeasonSummary: bp.previousSeasonSummary });
 }));
 
 battlePassRouter.post("/battle-pass/purchase", asyncHandler(async (req: AuthRequest, res) => {

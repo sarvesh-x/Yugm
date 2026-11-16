@@ -10,17 +10,20 @@ import { Follow } from "../models/Follow.js";
 import { FriendMatchRequest } from "../models/FriendMatchRequest.js";
 import { GiftInventory } from "../models/GiftInventory.js";
 import { GiftTransaction } from "../models/GiftTransaction.js";
+import { XpGrant } from "../models/XpGrant.js";
 import { Match } from "../models/Match.js";
 import { MiniGameChallenge } from "../models/MiniGameChallenge.js";
 import { MiniGameScore } from "../models/MiniGameScore.js";
 import { Notification } from "../models/Notification.js";
 import { Purchase } from "../models/Purchase.js";
 import { BattlePass } from "../models/BattlePass.js";
+import { BattlePassXpGrant } from "../models/BattlePassXpGrant.js";
 import { Season } from "../models/Season.js";
 import { PayoutReview } from "../models/PayoutReview.js";
 import { Relationship } from "../models/Relationship.js";
 import { Report } from "../models/Report.js";
 import { Room } from "../models/Room.js";
+import { RoomFollow } from "../models/RoomFollow.js";
 import { RoomActivity } from "../models/RoomActivity.js";
 import { RoomInvite } from "../models/RoomInvite.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
@@ -34,6 +37,7 @@ import { WithdrawalRequest } from "../models/WithdrawalRequest.js";
 const indexedModels = [
   User,
   Room,
+  RoomFollow,
   RoomParticipant,
   ChatMessage,
   DirectMessage,
@@ -51,9 +55,11 @@ const indexedModels = [
   SpeakerRequest,
   GiftInventory,
   GiftTransaction,
+  XpGrant,
   WalletTransaction,
   Purchase,
   BattlePass,
+  BattlePassXpGrant,
   Season,
   Report,
   MiniGameScore,

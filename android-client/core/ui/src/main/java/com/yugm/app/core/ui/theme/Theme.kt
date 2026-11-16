@@ -19,11 +19,11 @@ private val DarkColorScheme = darkColorScheme(
     primary = PrimaryPink,
     secondary = PrimaryPurple,
     tertiary = SaffronGold,
-    background = Background,
-    surface = Surface,
-    onPrimary = Background,
+    background = Color(0xFF060714),
+    surface = Color(0xFF0E1121),
+    onPrimary = Color(0xFF060714),
     onSecondary = Color.White,
-    onTertiary = Background,
+    onTertiary = Color(0xFF060714),
     onBackground = Color.White,
     onSurface = Color.White
 )

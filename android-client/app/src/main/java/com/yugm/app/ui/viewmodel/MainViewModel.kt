@@ -11,6 +11,7 @@ import com.yugm.app.core.api.SocketManager
 import com.yugm.app.core.api.YugmSocket
 import com.yugm.app.core.api.YugmMediaRoom
 import com.yugm.app.core.model.RefreshedSession
+import com.yugm.app.core.model.NotificationItem
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.android.gms.tasks.Tasks
@@ -48,10 +49,24 @@ class MainViewModel @Inject constructor(
     var profileCompleted by mutableStateOf(sessionManager.profileCompleted)
         private set
 
+    var inAppNotification by mutableStateOf<NotificationItem?>(null)
+        private set
+
     init {
+        viewModelScope.launch {
+            socketManager.events.collect { event ->
+                if (event is com.yugm.app.core.api.SocketEvent.NotificationReceived) {
+                    inAppNotification = event.notification
+                }
+            }
+        }
         if (sessionManager.authToken.isNotBlank()) {
             socketManager.connect(sessionManager.authToken)
         }
+    }
+
+    fun dismissInAppNotification() {
+        inAppNotification = null
     }
 
     fun updateSession(token: String, userId: String, name: String, username: String, balance: Int, refreshToken: String, sessionId: String, expiresIn: Long, emailVerified: Boolean, profileCompleted: Boolean) {

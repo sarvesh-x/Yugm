@@ -8,6 +8,7 @@ data class ExperienceFeedItem(
 )
 
 data class ExperienceHome(
+    val userId: String = "",
     val userRole: String = "USER",
     val profileCompletion: ProfileCompletion = ProfileCompletion(),
     val level: LevelStatus = LevelStatus(),

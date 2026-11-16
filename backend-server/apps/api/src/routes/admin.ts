@@ -41,6 +41,11 @@ import { RoomParticipant } from "../models/RoomParticipant.js";
 import { SpeakerRequest } from "../models/SpeakerRequest.js";
 import { SupportTicket } from "../models/SupportTicket.js";
 import { User } from "../models/User.js";
+import { XpDailyCap } from "../models/XpDailyCap.js";
+import { XpGrant } from "../models/XpGrant.js";
+import { Season } from "../models/Season.js";
+import { BattlePass } from "../models/BattlePass.js";
+import { xpDailyCaps } from "@yugm/shared";
 import { UserSafetyStatus } from "../models/UserSafetyStatus.js";
 import { WalletTransaction } from "../models/WalletTransaction.js";
 import { WithdrawalRequest } from "../models/WithdrawalRequest.js";
@@ -72,6 +77,53 @@ const adminUserSchema = z.object({
   firebaseUid: z.string().optional(),
   password: z.string().min(8).optional()
 });
+
+adminRouter.get("/progression/health", requirePermission("analytics.read"), asyncHandler(async (_req, res) => {
+  const now = new Date();
+  const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const recentCutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const staleCutoff = new Date(now.getTime() - 15 * 60 * 1000);
+  const [grantActivity, dailyCaps, processingCount, staleProcessingCount, activeSeason] = await Promise.all([
+    XpGrant.aggregate([
+      { $match: { createdAt: { $gte: recentCutoff } } },
+      { $group: {
+        _id: { event: "$event", status: "$status" },
+        grants: { $sum: 1 },
+        xpAwarded: { $sum: { $ifNull: ["$receipt.xpAwarded", 0] } }
+      } },
+      { $sort: { "_id.event": 1, "_id.status": 1 } }
+    ]),
+    XpDailyCap.aggregate([
+      { $match: { day: todayUtc } },
+      { $group: { _id: "$event", awardedXp: { $sum: "$amount" }, users: { $sum: 1 } } },
+      { $sort: { _id: 1 } }
+    ]),
+    XpGrant.countDocuments({ status: "PROCESSING" }),
+    XpGrant.countDocuments({ status: "PROCESSING", updatedAt: { $lte: staleCutoff } }),
+    Season.findOne({ active: true, startDate: { $lte: now }, endDate: { $gt: now } })
+      .select("_id key name startDate endDate maxLevel xpPerLevel premiumPrice")
+      .lean()
+  ]);
+  const activePassCount = activeSeason
+    ? await BattlePass.countDocuments({ "season.id": activeSeason._id })
+    : 0;
+
+  adminOk(res, {
+    generatedAt: now.toISOString(),
+    window: { since: recentCutoff.toISOString(), staleAfterMinutes: 15 },
+    xpGrants: { byEventAndStatus: grantActivity, processingCount, staleProcessingCount },
+    dailyCaps: dailyCaps.map((item) => ({
+      event: item._id,
+      awardedXp: item.awardedXp,
+      activeCap: xpDailyCaps[item._id as keyof typeof xpDailyCaps] ?? null,
+      users: item.users
+    })),
+    battlePass: {
+      activeSeason,
+      activePassCount
+    }
+  });
+}));
 
 for (const param of ["adminId", "battleId", "giftId", "id", "messageId", "queueId", "reportId", "roomId", "ticketId", "userId"] as const) {
   adminRouter.param(param, (_req, _res, next, value) => {

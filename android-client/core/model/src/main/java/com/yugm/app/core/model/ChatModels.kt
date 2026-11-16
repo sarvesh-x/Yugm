@@ -90,6 +90,10 @@ data class NotificationItem(
     val actorId: String = "",
     val partnerId: String = "",
     val roomId: String = "",
+    val clanId: String = "",
+    val achievementId: String = "",
+    val actionType: String = "",
+    val callType: String = "",
     val read: Boolean = false,
     val createdAt: String = ""
 )

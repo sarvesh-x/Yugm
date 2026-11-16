@@ -5,7 +5,8 @@ const giftInventorySchema = new Schema(
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     giftId: { type: Schema.Types.ObjectId, ref: "Gift", required: true },
     quantity: { type: Number, required: true, min: 1 },
-    source: { type: String, default: "purchased", enum: ["purchased", "received", "reward", "mystery"] },
+    source: { type: String, default: "purchased", enum: ["purchased", "received", "reward", "mystery", "upgrade", "trade"] },
+    upgradeLevel: { type: Number, default: 1, min: 1 },
     tradable: { type: Boolean, default: false }
   },
   { timestamps: true }

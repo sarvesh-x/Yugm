@@ -13,6 +13,7 @@
     "restore:official": "tsx src/scripts/restore-official.ts",
     "seed:festivals": "tsx src/scripts/seed-festivals.ts",
     "seed:admin": "tsx src/scripts/seed-admin.ts",
+    "migrate:progression:backfill": "tsx src/scripts/backfill-progression.ts",
     "env:check": "tsx src/scripts/check-env.ts",
     "test": "tsx --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit"

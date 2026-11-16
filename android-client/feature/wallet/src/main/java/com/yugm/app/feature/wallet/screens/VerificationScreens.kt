@@ -9,7 +9,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -21,10 +20,8 @@ import com.yugm.app.core.model.CreatorPayoutKycStatus
 import com.yugm.app.core.model.PayoutRequirements
 import com.yugm.app.core.model.TrustVerificationStatus
 import com.yugm.app.core.ui.components.GlassCard
-import com.yugm.app.core.ui.theme.Background
-import com.yugm.app.core.ui.theme.Gold
+import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.core.ui.theme.Success
-import com.yugm.app.core.ui.theme.TextMuted
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -35,12 +32,12 @@ private fun VerificationScaffold(title: String, onBack: () -> Unit, content: @Co
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(title, color = Color.White, fontWeight = FontWeight.Bold) },
-                navigationIcon = { TextButton(onClick = onBack) { Text("Back", color = Gold) } },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
+                title = { Text(title, color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                navigationIcon = { TextButton(onClick = onBack) { Text("Back", color = LocalYugmColors.current.secondary) } },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = LocalYugmColors.current.background)
             )
         },
-        containerColor = Background
+        containerColor = LocalYugmColors.current.background
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
@@ -57,8 +54,8 @@ private fun VerificationScaffold(title: String, onBack: () -> Unit, content: @Co
 @Composable
 fun TrustVerificationIntroScreen(onBack: () -> Unit, onStart: () -> Unit) {
     VerificationScaffold("Yugm Trust Verification", onBack) {
-        Text("Show people you're real.", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Black)
-        Text("Verify your face and voice to show people you're real.", color = TextMuted)
+        Text("Show people you're real.", color = LocalYugmColors.current.textPrimary, fontSize = 24.sp, fontWeight = FontWeight.Black)
+        Text("Verify your face and voice to show people you're real.", color = LocalYugmColors.current.textSecondary)
         Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) { Text("Start") }
     }
 }
@@ -66,9 +63,9 @@ fun TrustVerificationIntroScreen(onBack: () -> Unit, onStart: () -> Unit) {
 @Composable
 fun VerificationConsentScreen(onBack: () -> Unit, onAccept: () -> Unit) {
     VerificationScaffold("Consent", onBack) {
-        Text("Yugm Trust Verification", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        Text("We use your face, voice, and liveness submission only for platform trust and safety review.", color = TextMuted)
-        Text("This is not payout KYC and does not collect PAN, UPI, or bank details.", color = TextMuted)
+        Text("Yugm Trust Verification", color = LocalYugmColors.current.textPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text("We use your face, voice, and liveness submission only for platform trust and safety review.", color = LocalYugmColors.current.textSecondary)
+        Text("This is not payout KYC and does not collect PAN, UPI, or bank details.", color = LocalYugmColors.current.textSecondary)
         Button(onClick = onAccept, modifier = Modifier.fillMaxWidth()) { Text("Accept and continue") }
     }
 }
@@ -87,10 +84,10 @@ fun FaceVerificationScreen(token: String, onBack: () -> Unit, onSubmit: (String)
     }
 
     VerificationScaffold("Face Verification", onBack) {
-        Text("Take or pick a selfie for liveness verification.", color = TextMuted)
+        Text("Take or pick a selfie for liveness verification.", color = LocalYugmColors.current.textSecondary)
 
         selectedUri?.let {
-            Text("Selected: ${it.lastPathSegment ?: "image"}", color = Color.White)
+            Text("Selected: ${it.lastPathSegment ?: "image"}", color = LocalYugmColors.current.textPrimary)
         }
 
         uploadError?.let {
@@ -132,7 +129,7 @@ fun FaceVerificationScreen(token: String, onBack: () -> Unit, onSubmit: (String)
                 CircularProgressIndicator(
                     modifier = Modifier.size(20.dp),
                     strokeWidth = 2.dp,
-                    color = Color.White
+                    color = LocalYugmColors.current.textPrimary
                 )
                 Spacer(Modifier.width(8.dp))
             }
@@ -155,11 +152,11 @@ fun VoiceVerificationScreen(token: String, promptText: String, onBack: () -> Uni
     }
 
     VerificationScaffold("Voice Verification", onBack) {
-        Text("Read this prompt aloud:", color = TextMuted)
-        GlassCard(modifier = Modifier.fillMaxWidth()) { Text(promptText, color = Color.White, fontWeight = FontWeight.Bold) }
+        Text("Read this prompt aloud:", color = LocalYugmColors.current.textSecondary)
+        GlassCard(modifier = Modifier.fillMaxWidth()) { Text(promptText, color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Bold) }
 
         selectedUri?.let {
-            Text("Selected: ${it.lastPathSegment ?: "audio"}", color = Color.White)
+            Text("Selected: ${it.lastPathSegment ?: "audio"}", color = LocalYugmColors.current.textPrimary)
         }
 
         uploadError?.let {
@@ -201,7 +198,7 @@ fun VoiceVerificationScreen(token: String, promptText: String, onBack: () -> Uni
                 CircularProgressIndicator(
                     modifier = Modifier.size(20.dp),
                     strokeWidth = 2.dp,
-                    color = Color.White
+                    color = LocalYugmColors.current.textPrimary
                 )
                 Spacer(Modifier.width(8.dp))
             }
@@ -213,31 +210,36 @@ fun VoiceVerificationScreen(token: String, promptText: String, onBack: () -> Uni
 @Composable
 fun TrustVerificationStatusScreen(status: TrustVerificationStatus, onBack: () -> Unit, onSubmitReview: () -> Unit, onRetry: () -> Unit) {
     VerificationScaffold("Verification Status", onBack) {
+        Text("Current status: ${status.status.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }}", color = LocalYugmColors.current.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         StatusRow("Status", status.status)
         StatusRow("Face", status.faceStatus)
         StatusRow("Voice", status.voiceStatus)
         StatusRow("Liveness", status.livenessStatus)
         val rejectionReason = status.rejectionReason
-        if (!rejectionReason.isNullOrBlank()) Text(rejectionReason, color = TextMuted)
-        Button(onClick = onSubmitReview, modifier = Modifier.fillMaxWidth()) { Text("Submit for review") }
-        OutlinedButton(onClick = onRetry, modifier = Modifier.fillMaxWidth()) { Text("Retry") }
+        if (!rejectionReason.isNullOrBlank()) Text(rejectionReason, color = LocalYugmColors.current.textSecondary)
+        val canSubmit = status.faceStatus != "NOT_SUBMITTED" && status.voiceStatus != "NOT_SUBMITTED" &&
+            status.status !in setOf("PENDING_REVIEW", "VERIFIED", "SUSPENDED")
+        if (canSubmit) Button(onClick = onSubmitReview, modifier = Modifier.fillMaxWidth()) { Text("Submit for review") }
+        if (status.status in setOf("REJECTED", "NEEDS_RETRY", "EXPIRED")) {
+            OutlinedButton(onClick = onRetry, modifier = Modifier.fillMaxWidth()) { Text("Try again") }
+        }
     }
 }
 
 @Composable
 fun CreatorPayoutKycIntroScreen(onBack: () -> Unit, onStart: () -> Unit) {
     VerificationScaffold("Creator Payout Verification", onBack) {
-        Text("Turn gift earnings into payouts", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Black)
-        Text("Required only when you withdraw real money earned from gifts. This never affects normal Yugm access or your public verified badge.", color = TextMuted, lineHeight = 21.sp)
+        Text("Turn gift earnings into payouts", color = LocalYugmColors.current.textPrimary, fontSize = 26.sp, fontWeight = FontWeight.Black)
+        Text("Required only when you withdraw real money earned from gifts. This never affects normal Yugm access or your public verified badge.", color = LocalYugmColors.current.textSecondary, lineHeight = 21.sp)
         GlassCard(modifier = Modifier.fillMaxWidth()) {
-            Text("What you'll need", color = Gold, fontWeight = FontWeight.Black, fontSize = 13.sp)
+            Text("What you'll need", color = LocalYugmColors.current.secondary, fontWeight = FontWeight.Black, fontSize = 13.sp)
             Spacer(Modifier.height(10.dp))
             DetailRow("1", "Legal identity", "Full name, date of birth, and PAN")
             DetailRow("2", "Settlement method", "UPI ID or bank account details")
             DetailRow("3", "Finance review", "Masked details are reviewed before payouts")
         }
         GlassCard(modifier = Modifier.fillMaxWidth()) {
-            Text("Your sensitive identifiers are encrypted. Mobile and admin screens receive masked values only.", color = TextMuted, fontSize = 12.sp, lineHeight = 18.sp)
+            Text("Your sensitive identifiers are encrypted. Mobile and admin screens receive masked values only.", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp, lineHeight = 18.sp)
         }
         Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) { Text("Start payout verification") }
     }
@@ -252,16 +254,16 @@ fun CreatorPayoutKycFormScreen(onBack: () -> Unit, onSubmit: (String, String, St
     val panValid = Regex("^[A-Z]{5}[0-9]{4}[A-Z]$").matches(pan)
     val upiValid = Regex("^[a-zA-Z0-9._-]{2,}@[a-zA-Z]{2,}$").matches(upi)
     VerificationScaffold("Payout Details", onBack) {
-        Text("Identity details", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
-        Text("Enter the same legal details used by your payout account.", color = TextMuted, fontSize = 13.sp)
+        Text("Identity details", color = LocalYugmColors.current.textPrimary, fontSize = 20.sp, fontWeight = FontWeight.Black)
+        Text("Enter the same legal details used by your payout account.", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp)
         OutlinedTextField(value = legalName, onValueChange = { legalName = it }, label = { Text("Legal full name") }, supportingText = { Text("Match the name printed on PAN") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(value = pan, onValueChange = { pan = it.uppercase().take(10) }, label = { Text("PAN") }, supportingText = { Text(if (pan.isNotBlank() && !panValid) "Enter a valid 10-character PAN" else "Example: ABCDE1234F") }, isError = pan.isNotBlank() && !panValid, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(value = upi, onValueChange = { upi = it.trim() }, label = { Text("UPI ID") }, supportingText = { Text(if (upi.isNotBlank() && !upiValid) "Enter a valid UPI ID" else "Example: creator@upi") }, isError = upi.isNotBlank() && !upiValid, modifier = Modifier.fillMaxWidth(), singleLine = true)
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Switch(checked = declarationsAccepted, onCheckedChange = { declarationsAccepted = it })
-            Text("I confirm these payout details belong to me and may be reviewed for creator settlement.", color = TextMuted, modifier = Modifier.weight(1f))
+            Text("I confirm these payout details belong to me and may be reviewed for creator settlement.", color = LocalYugmColors.current.textSecondary, modifier = Modifier.weight(1f))
         }
-        Text("PAN and payout identifiers are encrypted. Yugm clients receive masked values only.", color = TextMuted, fontSize = 12.sp)
+        Text("PAN and payout identifiers are encrypted. Yugm clients receive masked values only.", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
         Button(onClick = { onSubmit(legalName, pan, upi) }, modifier = Modifier.fillMaxWidth(), enabled = legalName.trim().length >= 2 && panValid && upiValid && declarationsAccepted) {
             Text("Submit for finance review")
         }
@@ -272,9 +274,9 @@ fun CreatorPayoutKycFormScreen(onBack: () -> Unit, onSubmit: (String, String, St
 fun CreatorPayoutKycStatusScreen(status: CreatorPayoutKycStatus, onBack: () -> Unit) {
     VerificationScaffold("Payout Verification", onBack) {
         GlassCard(modifier = Modifier.fillMaxWidth()) {
-            Text(if (status.kycStatus == "VERIFIED" && status.payoutStatus == "ENABLED") "Payout profile ready" else "Finance review status", color = if (status.kycStatus == "VERIFIED") Success else Gold, fontSize = 20.sp, fontWeight = FontWeight.Black)
+            Text(if (status.kycStatus == "VERIFIED" && status.payoutStatus == "ENABLED") "Payout profile ready" else "Finance review status", color = if (status.kycStatus == "VERIFIED") Success else LocalYugmColors.current.secondary, fontSize = 20.sp, fontWeight = FontWeight.Black)
             Spacer(Modifier.height(6.dp))
-            Text(if (status.kycStatus == "VERIFIED") "Your masked payout profile is approved." else "Pull back into this screen later to see review updates.", color = TextMuted, fontSize = 12.sp)
+            Text(if (status.kycStatus == "VERIFIED") "Your masked payout profile is approved." else "Pull back into this screen later to see review updates.", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
         }
         StatusRow("Verification status", status.kycStatus)
         StatusRow("Payout status", status.payoutStatus)
@@ -282,7 +284,7 @@ fun CreatorPayoutKycStatusScreen(status: CreatorPayoutKycStatus, onBack: () -> U
         status.upiIdMasked?.let { StatusRow("UPI", it) }
         status.bankAccountLast4?.let { StatusRow("Bank", "****$it") }
         val rejectionReason = status.rejectionReason
-        if (!rejectionReason.isNullOrBlank()) Text(rejectionReason, color = TextMuted)
+        if (!rejectionReason.isNullOrBlank()) Text(rejectionReason, color = LocalYugmColors.current.textSecondary)
     }
 }
 
@@ -291,9 +293,9 @@ fun WithdrawalEligibilityScreen(balance: CreatorEarningBalance, payoutKyc: Creat
     var amount by remember { mutableStateOf("") }
     VerificationScaffold("Withdrawal", onBack) {
         GlassCard(modifier = Modifier.fillMaxWidth()) {
-            Text("Available to withdraw", color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            Text("${balance.availableCoins} gift coins", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black)
-            Text("Estimated ₹${"%.2f".format(Locale.US, balance.availableCoins * coinToInrRate)}", color = Gold, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text("Available to withdraw", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text("${balance.availableCoins} gift coins", color = LocalYugmColors.current.textPrimary, fontSize = 28.sp, fontWeight = FontWeight.Black)
+            Text("Estimated ₹${"%.2f".format(Locale.US, balance.availableCoins * coinToInrRate)}", color = LocalYugmColors.current.secondary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(14.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 BalanceMini("Lifetime", balance.earnedCoins)
@@ -301,7 +303,7 @@ fun WithdrawalEligibilityScreen(balance: CreatorEarningBalance, payoutKyc: Creat
                 BalanceMini("Paid", balance.withdrawnCoins)
             }
         }
-        Text("Payout readiness", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
+        Text("Payout readiness", color = LocalYugmColors.current.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Black)
         GlassCard(modifier = Modifier.fillMaxWidth()) {
             ReadinessRow("Creator account", requirements.creatorAccount)
             ReadinessRow("Trust Verification", requirements.trustVerified && requirements.creatorTrustEnabled)
@@ -334,29 +336,29 @@ fun WithdrawalEligibilityScreen(balance: CreatorEarningBalance, payoutKyc: Creat
 @Composable
 private fun DetailRow(number: String, title: String, detail: String) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(number, color = Gold, fontWeight = FontWeight.Black)
-        Column { Text(title, color = Color.White, fontWeight = FontWeight.Bold); Text(detail, color = TextMuted, fontSize = 12.sp) }
+        Text(number, color = LocalYugmColors.current.secondary, fontWeight = FontWeight.Black)
+        Column { Text(title, color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Bold); Text(detail, color = LocalYugmColors.current.textSecondary, fontSize = 12.sp) }
     }
 }
 
 @Composable
 private fun BalanceMini(label: String, value: Int) {
-    Column { Text(value.toString(), color = Color.White, fontWeight = FontWeight.Black); Text(label, color = TextMuted, fontSize = 11.sp) }
+    Column { Text(value.toString(), color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Black); Text(label, color = LocalYugmColors.current.textSecondary, fontSize = 11.sp) }
 }
 
 @Composable
 private fun ReadinessRow(label: String, complete: Boolean) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = Color.White, fontWeight = FontWeight.Bold)
-        Text(if (complete) "Done" else "Needed", color = if (complete) Success else Gold, fontWeight = FontWeight.Black, fontSize = 12.sp)
+        Text(label, color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Bold)
+        Text(if (complete) "Done" else "Needed", color = if (complete) Success else LocalYugmColors.current.secondary, fontWeight = FontWeight.Black, fontSize = 12.sp)
     }
 }
 
 @Composable
 private fun StatusLine(label: String, value: String, highlight: Boolean = false) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = TextMuted, fontSize = 12.sp)
-        Text(value, color = if (highlight) Gold else Color.White, fontWeight = FontWeight.Bold)
+        Text(label, color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
+        Text(value, color = if (highlight) LocalYugmColors.current.secondary else LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -364,8 +366,8 @@ private fun StatusLine(label: String, value: String, highlight: Boolean = false)
 private fun StatusRow(label: String, value: String) {
     GlassCard(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, color = TextMuted)
-            Text(value, color = Color.White, fontWeight = FontWeight.Bold)
+            Text(label, color = LocalYugmColors.current.textSecondary)
+            Text(value, color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Bold)
         }
     }
 }

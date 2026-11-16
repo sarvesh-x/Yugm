@@ -138,6 +138,7 @@ fun MainTabsScreen(
                 )
 
                 TAB_PARTY -> VoiceRoomsScreen(
+                    token = token,
                     onOpenRoom = ::openRoom,
                     onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
                     onDiscover = { goTo(TAB_DISCOVER) },
@@ -145,6 +146,7 @@ fun MainTabsScreen(
                     onWallet = { navController.navigate(Screen.Wallet.route) },
                     onProfile = { openOwnProfileOrSetup() },
                     onSearch = { navController.navigate(Screen.Search.route) },
+                    onEvents = { navController.navigate(Screen.Events.route) },
                     onGameZone = { goTo(TAB_GAME_ZONE) },
                     showBottomDock = false
                 )
@@ -184,7 +186,6 @@ fun MainTabsScreen(
                     onOpenClan = { clanId, clanName -> navController.navigate(Screen.ClanChat.createRoute(clanId, clanName)) },
                     onJoinClan = { navController.navigate(Screen.ClanList.route) },
                     onOpenClanDetail = { clanId -> navController.navigate(Screen.ClanDetail.createRoute(clanId)) },
-                    onOpenGroups = { navController.navigate(Screen.GroupChats.route) },
                     onGameZone = { goTo(TAB_GAME_ZONE) },
                     showBottomDock = false,
                     onClanTabActiveChanged = { isClanChatActive = it },

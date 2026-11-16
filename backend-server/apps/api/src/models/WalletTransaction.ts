@@ -24,6 +24,10 @@ const walletTransactionSchema = new Schema(
 
 walletTransactionSchema.index({ userId: 1, createdAt: -1 });
 walletTransactionSchema.index(
+  { userId: 1, "metadata.idempotencyKey": 1 },
+  { unique: true, partialFilterExpression: { "metadata.idempotencyKey": { $type: "string" } } }
+);
+walletTransactionSchema.index(
   { userId: 1, source: 1, "metadata.day": 1 },
   {
     unique: true,

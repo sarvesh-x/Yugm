@@ -19,12 +19,25 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.yugm.app.core.api.YugmApi
 import com.yugm.app.core.api.YugmMediaRoom
@@ -36,6 +49,7 @@ import com.yugm.app.navigation.NavGraph
 import com.yugm.app.core.navigation.Screen
 import com.yugm.app.core.ui.theme.Background
 import com.yugm.app.core.ui.theme.YugmTheme
+import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.ui.viewmodel.MainViewModel
 import com.yugm.app.core.data.SessionManager
 import com.yugm.app.payments.RazorpayCoordinator
@@ -98,6 +112,13 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
             YugmTheme(darkTheme = darkTheme, dynamicColor = false) {
                 val navController = androidx.navigation.compose.rememberNavController()
                 val mainViewModel: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                val inAppNotification = mainViewModel.inAppNotification
+                LaunchedEffect(inAppNotification?.id) {
+                    if (inAppNotification != null) {
+                        kotlinx.coroutines.delay(5_000)
+                        mainViewModel.dismissInAppNotification()
+                    }
+                }
                 val scope = rememberCoroutineScope()
                 val context = this@MainActivity
                 var notificationPromptAttempted by remember { mutableStateOf(false) }
@@ -239,6 +260,33 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                             }
                         },
                     )
+                    inAppNotification?.let { notification ->
+                        val colors = LocalYugmColors.current
+                        Surface(
+                            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp)
+                                .fillMaxWidth().clickable {
+                                    mainViewModel.dismissInAppNotification()
+                                    when {
+                                        notification.callType.equals("VIDEO", true) && notification.roomId.isNotBlank() -> navController.navigate(Screen.VideoRoom.createRoute(notification.roomId))
+                                        notification.callType.equals("VOICE", true) && notification.roomId.isNotBlank() -> navController.navigate(Screen.VoiceRoom.createRoute(notification.roomId))
+                                        notification.clanId.isNotBlank() -> navController.navigate(Screen.ClanDetail.createRoute(notification.clanId))
+                                        notification.roomId.isNotBlank() -> navController.navigate(Screen.RoomLobby.createRoute(notification.roomId))
+                                        notification.partnerId.isNotBlank() -> navController.navigate(Screen.Chat.createRoute(notification.partnerId))
+                                        notification.actorId.isNotBlank() -> navController.navigate(Screen.ProfileDetail.createRoute(notification.actorId))
+                                        else -> navController.navigate(Screen.Notifications.route)
+                                    }
+                                },
+                            shape = RoundedCornerShape(18.dp),
+                            color = colors.surfaceElevated,
+                            contentColor = colors.textPrimary,
+                            shadowElevation = 10.dp
+                        ) {
+                            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                                Text(notification.actorName.ifBlank { "New activity" }, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(notification.message, color = colors.textSecondary, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp))
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -280,12 +328,17 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
     private fun routeFromPushIntent(intent: Intent?): String? {
         val roomId = intent?.getStringExtra("roomId")
+        val callType = intent?.getStringExtra("callType").orEmpty()
+        val clanId = intent?.getStringExtra("clanId")
         // The API sends partnerId in direct-message notification data. Accept the
         // older chatPartnerId key too so notifications from either client version work.
         val chatPartnerId = intent?.getStringExtra("chatPartnerId")
             ?: intent?.getStringExtra("partnerId")
         return when {
+            !roomId.isNullOrBlank() && callType.equals("VIDEO", true) -> Screen.VideoRoom.createRoute(roomId)
+            !roomId.isNullOrBlank() && callType.equals("VOICE", true) -> Screen.VoiceRoom.createRoute(roomId)
             !roomId.isNullOrBlank() -> Screen.RoomLobby.createRoute(roomId)
+            !clanId.isNullOrBlank() -> Screen.ClanDetail.createRoute(clanId)
             !chatPartnerId.isNullOrBlank() -> Screen.Chat.createRoute(chatPartnerId)
             else -> null
         }

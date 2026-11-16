@@ -23,7 +23,8 @@ object CreatorApi {
         return ClaimAchievementResult(
             claimed = data.optBoolean("claimed", false),
             rewardCoins = data.optInt("rewardCoins", 0),
-            rewardCosmetic = data.optString("rewardCosmetic", "")
+            rewardCosmetic = data.optString("rewardCosmetic", ""),
+            tier = data.optString("tier", "")
         )
     }
 
@@ -68,6 +69,11 @@ object CreatorApi {
 
     suspend fun submitTrustReview(token: String): TrustVerificationStatus {
         val data = YugmHttpClient.post("/trust-verification/submit-review", token, JSONObject()).getJSONObject("data")
+        return data.getJSONObject("verification").toTrustVerificationStatus()
+    }
+
+    suspend fun retryTrustVerification(token: String): TrustVerificationStatus {
+        val data = YugmHttpClient.post("/trust-verification/retry", token, JSONObject()).getJSONObject("data")
         return data.getJSONObject("verification").toTrustVerificationStatus()
     }
 
@@ -138,13 +144,26 @@ object CreatorApi {
         val result = mutableListOf<Achievement>()
         for (i in 0 until arr.length()) {
             val obj = arr.optJSONObject(i) ?: continue
-            result.add(Achievement(id = obj.optString("id", ""), title = obj.optString("title", ""), description = obj.optString("description", ""), rewardCoins = obj.optInt("rewardCoins", 0)))
+            result.add(Achievement(
+                id = obj.optString("id", ""),
+                title = obj.optString("title", ""),
+                description = obj.optString("description", ""),
+                rewardCoins = obj.optInt("rewardCoins", 0),
+                category = obj.optString("category", ""),
+                icon = obj.optString("icon", "🏅"),
+                highestClaimedTier = obj.optString("tier", "").takeIf { it.isNotBlank() }
+            ))
         }
         return result
     }
 
     suspend fun shareAchievement(token: String, achievementId: String): String {
         val data = YugmHttpClient.post("/achievements/$achievementId/share", token, JSONObject()).getJSONObject("data")
-        return data.optString("shareUrl", "")
+        return data.optString("shareText", data.optString("shareUrl", ""))
+    }
+
+    suspend fun achievements(token: String): List<Achievement> {
+        val data = YugmHttpClient.get("/experience/achievements", token).getJSONObject("data")
+        return data.optJSONArray("achievements")?.toAchievements() ?: emptyList()
     }
 }

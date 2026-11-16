@@ -14,6 +14,8 @@ import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.model.YugmUser
 import com.yugm.app.core.model.UserFullInventory
 import com.yugm.app.core.model.LevelOverview
+import com.yugm.app.core.model.LevelLeaderboardEntry
+import com.yugm.app.core.model.LevelLeaderboardPage
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -188,7 +190,29 @@ object UserApi {
         return DailyCheckInResult(
             streak = data.optInt("streak", 0),
             claimed = !data.optBoolean("alreadyClaimed", true),
-            unlockedCosmetic = data.optString("unlockedCosmetic", "")
+            unlockedCosmetic = data.optString("unlockedCosmetic", ""),
+            xpAwarded = data.optInt("xpAwarded", 0),
+            streakBonus = data.optInt("streakBonus", 0),
+            levelUpReward = data.optInt("levelUpReward", 0),
+            alreadyClaimed = data.optBoolean("alreadyClaimed", false),
+            balance = if (data.has("balance") && !data.isNull("balance")) data.optInt("balance") else null,
+            level = data.optJSONObject("level")?.toLevelStatus() ?: data.optJSONObject("levelStatus")?.toLevelStatus() ?: LevelStatus(),
+            xpGrant = data.optJSONObject("xpGrant")?.let { receipt ->
+                com.yugm.app.core.model.XpGrantReceipt(
+                    event = receipt.optString("event", "DAILY_CHECKIN"),
+                    xpAwarded = receipt.optInt("xpAwarded", 0),
+                    capped = receipt.optBoolean("capped", false),
+                    cap = if (receipt.has("cap") && !receipt.isNull("cap")) receipt.optInt("cap") else null,
+                    earnedToday = if (receipt.has("earnedToday") && !receipt.isNull("earnedToday")) receipt.optInt("earnedToday") else null,
+                    remainingToday = if (receipt.has("remainingToday") && !receipt.isNull("remainingToday")) receipt.optInt("remainingToday") else null,
+                    levelUpReward = receipt.optInt("levelUpReward", 0),
+                    levelsGained = receipt.optJSONArray("levelsGained")?.let { array -> List(array.length()) { index -> array.optInt(index) } }.orEmpty(),
+                    level = receipt.optJSONObject("level")?.toLevelStatus() ?: LevelStatus()
+                )
+            },
+            levelsGained = data.optJSONArray("levelsGained")?.let { array ->
+                List(array.length()) { index -> array.optInt(index) }
+            }.orEmpty()
         )
     }
 
@@ -405,5 +429,29 @@ object UserApi {
     suspend fun levelLeaderboard(token: String): List<Host> {
         val data = YugmHttpClient.get("/leaderboard/levels", token).getJSONObject("data")
         return data.optJSONArray("leaderboard")?.toHosts() ?: emptyList()
+    }
+
+    suspend fun levelLeaderboardPage(token: String, page: Int, pageSize: Int): LevelLeaderboardPage {
+        val safePage = page.coerceAtLeast(1)
+        val safePageSize = pageSize.coerceIn(1, 50)
+        val data = YugmHttpClient.get("/leaderboard/levels?page=$safePage&pageSize=$safePageSize", token).getJSONObject("data")
+        val rows = data.optJSONArray("leaderboard") ?: data.optJSONArray("users") ?: JSONArray()
+        val entries = buildList {
+            for (index in 0 until rows.length()) {
+                val row = rows.optJSONObject(index) ?: continue
+                add(LevelLeaderboardEntry(
+                    rank = row.optInt("rank", (safePage - 1) * safePageSize + index + 1),
+                    user = row.toHost()
+                ))
+            }
+        }
+        return LevelLeaderboardPage(
+            entries = entries,
+            page = data.optInt("page", safePage),
+            pageSize = data.optInt("pageSize", safePageSize),
+            total = data.optInt("total", entries.size),
+            requesterId = data.optString("requesterId", ""),
+            requesterRank = if (data.has("requesterRank") && !data.isNull("requesterRank")) data.optInt("requesterRank") else null
+        )
     }
 }

@@ -7,7 +7,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yugm.app.core.api.IYugmApi
 import com.yugm.app.core.model.GiftLeaderboardResponse
-import com.yugm.app.core.model.GroupChat
 import com.yugm.app.core.model.Host
 import com.yugm.app.core.model.ReferralStatsResponse
 import com.yugm.app.core.model.WishlistItem
@@ -37,8 +36,6 @@ class SocialViewModel @Inject constructor(
     var referralStats by mutableStateOf<ReferralStatsResponse?>(null)
         private set
     var suggestedHosts by mutableStateOf<List<Host>>(emptyList())
-        private set
-    var groups by mutableStateOf<List<GroupChat>>(emptyList())
         private set
     var wishlist by mutableStateOf<List<WishlistItem>>(emptyList())
         private set
@@ -200,33 +197,6 @@ class SocialViewModel @Inject constructor(
         }
     }
 
-    fun loadGroups(token: String) {
-        viewModelScope.launch {
-            isLoading = true
-            error = null
-            runCatching {
-                groups = withContext(Dispatchers.IO) { yugmApi.listGroups(token) }
-            }.onFailure {
-                error = it.message ?: "Failed to load groups"
-            }
-            isLoading = false
-        }
-    }
-
-    fun createGroup(token: String, name: String, participantIds: List<String>) {
-        viewModelScope.launch {
-            isLoading = true
-            error = null
-            runCatching {
-                withContext(Dispatchers.IO) { yugmApi.createGroup(token, name, participantIds) }
-                groups = withContext(Dispatchers.IO) { yugmApi.listGroups(token) }
-            }.onFailure {
-                error = it.message ?: "Failed to create group"
-            }
-            isLoading = false
-        }
-    }
-
     fun loadWishlist(token: String) {
         viewModelScope.launch {
             isLoading = true
@@ -240,17 +210,18 @@ class SocialViewModel @Inject constructor(
         }
     }
 
-    fun addWishlistItem(token: String, giftId: String, message: String?, isPublic: Boolean) {
+    fun addWishlistItem(token: String, giftId: String, message: String?, isPublic: Boolean, onComplete: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             isLoading = true
             error = null
-            runCatching {
+            val result = runCatching {
                 withContext(Dispatchers.IO) { yugmApi.addWishlistItem(token, giftId, message, isPublic) }
                 wishlist = withContext(Dispatchers.IO) { yugmApi.myWishlist(token) }
             }.onFailure {
                 error = it.message ?: "Failed to add wishlist item"
             }
             isLoading = false
+            onComplete(result.isSuccess)
         }
     }
 

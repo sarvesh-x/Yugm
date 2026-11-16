@@ -26,6 +26,7 @@ const roomParticipantSchema = new Schema<IRoomParticipant>({
 });
 
 roomParticipantSchema.index({ roomId: 1, userId: 1, leftAt: 1 });
+roomParticipantSchema.index({ userId: 1, roomId: 1 });
 roomParticipantSchema.index(
   { roomId: 1, seatIndex: 1 },
   { unique: true, partialFilterExpression: { seatIndex: { $type: "number" }, leftAt: null } }

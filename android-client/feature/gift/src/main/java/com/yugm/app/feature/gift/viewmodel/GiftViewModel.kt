@@ -9,6 +9,7 @@ import com.yugm.app.core.model.GiftPurchaseResult
 import com.yugm.app.core.model.InventoryItem
 import com.yugm.app.core.model.SurpriseBoxResult
 import com.yugm.app.core.model.UpgradeResult
+import com.yugm.app.core.model.UserFullInventory
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +21,7 @@ data class GiftUiState(
     val gifts: List<GiftV2> = emptyList(),
     val collections: List<GiftCollection> = emptyList(),
     val inventory: List<InventoryItem> = emptyList(),
+    val fullInventory: UserFullInventory? = null,
     val giftTotal: Int = 0,
     val isLoading: Boolean = false,
     val error: String? = null,
@@ -61,7 +63,10 @@ class GiftViewModel @Inject constructor() : ViewModel() {
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true, error = null)
             runCatching { YugmApi.inventory(token) }
-                .onSuccess { _state.value = _state.value.copy(inventory = it.items, isLoading = false) }
+                .onSuccess {
+                    val full = runCatching { YugmApi.fullInventory(token) }.getOrNull()
+                    _state.value = _state.value.copy(inventory = it.items, fullInventory = full, isLoading = false)
+                }
                 .onFailure { _state.value = _state.value.copy(isLoading = false, error = it.message) }
         }
     }
@@ -72,7 +77,8 @@ class GiftViewModel @Inject constructor() : ViewModel() {
             runCatching { YugmApi.surpriseBox(token, tier) }
                 .onSuccess {
                     val inventory = runCatching { YugmApi.inventory(token) }.getOrNull()
-                    _state.value = _state.value.copy(surpriseResult = it, inventory = inventory?.items ?: _state.value.inventory, isLoading = false)
+                    val full = runCatching { YugmApi.fullInventory(token) }.getOrNull()
+                    _state.value = _state.value.copy(surpriseResult = it, inventory = inventory?.items ?: _state.value.inventory, fullInventory = full ?: _state.value.fullInventory, isLoading = false)
                 }
                 .onFailure { _state.value = _state.value.copy(isLoading = false, error = it.message) }
         }
@@ -84,7 +90,8 @@ class GiftViewModel @Inject constructor() : ViewModel() {
             runCatching { YugmApi.purchaseGift(token, giftId) }
                 .onSuccess {
                     val inventory = runCatching { YugmApi.inventory(token) }.getOrNull()
-                    _state.value = _state.value.copy(purchaseResult = it, inventory = inventory?.items ?: _state.value.inventory, isLoading = false)
+                    val full = runCatching { YugmApi.fullInventory(token) }.getOrNull()
+                    _state.value = _state.value.copy(purchaseResult = it, inventory = inventory?.items ?: _state.value.inventory, fullInventory = full ?: _state.value.fullInventory, isLoading = false)
                 }
                 .onFailure { _state.value = _state.value.copy(isLoading = false, error = it.message) }
         }
@@ -96,7 +103,8 @@ class GiftViewModel @Inject constructor() : ViewModel() {
             runCatching { YugmApi.upgradeGift(token, inventoryId) }
                 .onSuccess {
                     val inventory = runCatching { YugmApi.inventory(token) }.getOrNull()
-                    _state.value = _state.value.copy(upgradeResult = it, inventory = inventory?.items ?: _state.value.inventory, isLoading = false)
+                    val full = runCatching { YugmApi.fullInventory(token) }.getOrNull()
+                    _state.value = _state.value.copy(upgradeResult = it, inventory = inventory?.items ?: _state.value.inventory, fullInventory = full ?: _state.value.fullInventory, isLoading = false)
                 }
                 .onFailure { _state.value = _state.value.copy(isLoading = false, error = it.message) }
         }

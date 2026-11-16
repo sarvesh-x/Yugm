@@ -9,7 +9,9 @@ data class LevelStatus(
     val requiredXp: Int = 100,
     val nextLevel: Int? = 2,
     val canDailyCheckIn: Boolean = false,
-    val dailyCheckInXp: Int = 25
+    val dailyCheckInXp: Int = 25,
+    val currentLevelXp: Int = 0,
+    val nextLevelXp: Int? = null
 )
 
 data class VipStatus(
@@ -41,7 +43,24 @@ data class Achievement(
     val rewardCoins: Int = 0,
     val rewardCosmetic: String = "",
     val progress: Int = 0,
-    val complete: Boolean = false
+    val complete: Boolean = false,
+    val category: String = "",
+    val icon: String = "🏅",
+    val currentTier: String? = null,
+    val highestClaimedTier: String? = null,
+    val tiers: List<AchievementTier> = emptyList(),
+    val nextTier: String? = null,
+    val canClaim: Boolean = false,
+    val canUpgrade: Boolean = false
+)
+
+data class AchievementTier(
+    val tier: String = "BRONZE",
+    val target: Int = 0,
+    val rewardCoins: Int = 0,
+    val rewardCosmetic: String = "",
+    val reached: Boolean = false,
+    val claimed: Boolean = false
 )
 
 data class CosmeticBundle(
@@ -55,13 +74,34 @@ data class CosmeticBundle(
 data class DailyCheckInResult(
     val streak: Int = 0,
     val claimed: Boolean = false,
-    val unlockedCosmetic: String = ""
+    val unlockedCosmetic: String = "",
+    val xpAwarded: Int = 0,
+    val streakBonus: Int = 0,
+    val levelUpReward: Int = 0,
+    val levelsGained: List<Int> = emptyList(),
+    val alreadyClaimed: Boolean = false,
+    val balance: Int? = null,
+    val level: LevelStatus = LevelStatus(),
+    val xpGrant: XpGrantReceipt? = null
+)
+
+data class XpGrantReceipt(
+    val event: String = "",
+    val xpAwarded: Int = 0,
+    val capped: Boolean = false,
+    val cap: Int? = null,
+    val earnedToday: Int? = null,
+    val remainingToday: Int? = null,
+    val levelUpReward: Int = 0,
+    val levelsGained: List<Int> = emptyList(),
+    val level: LevelStatus = LevelStatus()
 )
 
 data class ClaimAchievementResult(
     val claimed: Boolean = false,
     val rewardCoins: Int = 0,
-    val rewardCosmetic: String = ""
+    val rewardCosmetic: String = "",
+    val tier: String = ""
 )
 
 data class ProfileCosmetic(
@@ -153,7 +193,17 @@ data class XpEventInfo(
     val key: String = "",
     val name: String = "",
     val xp: Int = 0,
-    val icon: String = "⭐"
+    val icon: String = "⭐",
+    val category: String = "",
+    val cap: Int? = null,
+    val earnedToday: Int = 0
+)
+
+data class StreakMilestoneInfo(
+    val streakDays: Int = 0,
+    val rewardCoins: Int = 0,
+    val cosmeticId: String = "",
+    val reached: Boolean = false
 )
 
 data class LevelOverview(
@@ -162,7 +212,27 @@ data class LevelOverview(
     val canCheckIn: Boolean = false,
     val nextMilestone: Int? = null,
     val nextMilestoneReward: Int = 0,
+    val streakMilestones: List<StreakMilestoneInfo> = emptyList(),
     val milestones: List<LevelMilestoneInfo> = emptyList(),
     val xpEvents: List<XpEventInfo> = emptyList(),
-    val leaderboard: List<Host> = emptyList()
+    val leaderboard: List<Host> = emptyList(),
+    val leaderboardRank: Int? = null,
+    val todayXpEarned: Int = 0,
+    val todayXpCap: Int = 0
 )
+
+data class LevelLeaderboardEntry(
+    val rank: Int = 0,
+    val user: Host = Host()
+)
+
+data class LevelLeaderboardPage(
+    val entries: List<LevelLeaderboardEntry> = emptyList(),
+    val page: Int = 1,
+    val pageSize: Int = 25,
+    val total: Int = 0,
+    val requesterId: String = "",
+    val requesterRank: Int? = null
+) {
+    val hasMore: Boolean get() = page * pageSize < total
+}

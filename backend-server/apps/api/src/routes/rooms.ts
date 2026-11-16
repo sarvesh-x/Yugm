@@ -14,6 +14,7 @@ import { Friendship } from "../models/Friendship.js";
 import { Poll } from "../models/Poll.js";
 import { PkBattle } from "../models/PkBattle.js";
 import { Room } from "../models/Room.js";
+import { RoomFollow } from "../models/RoomFollow.js";
 import { RoomActivity } from "../models/RoomActivity.js";
 import { RoomInvite } from "../models/RoomInvite.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
@@ -30,7 +31,6 @@ import { createReportWithEvidence } from "../services/moderation.js";
 import { assertUsersCanInteract } from "../services/safety.js";
 import { autoModerate } from "../middleware/autoModerate.js";
 import { applyAutoModeration } from "../services/autoModeration.js";
-import { isAlwaysOnOfficialVoiceRoom } from "../services/officialRooms.js";
 import { endRoom, recordRoomParticipantExit } from "../services/roomLifecycle.js";
 
 const patchSchema = z.object({
@@ -217,8 +217,36 @@ roomsRouter.post("/", requireAuth, requireNotMuted, requireNotRoomRestricted, re
     await addActivity(room.id, "MISSION", `${req.user!.name} started the room`, req.user!.id);
   }
   await invalidateCache("rooms:*");
-  await grantRoomXp(req.user!.id, "ROOM_CREATE", { roomId: room.id });
-  sendOk(res, { room }, 201);
+  const xpGrant = await grantRoomXp(req.user!.id, "ROOM_CREATE", { roomId: room.id, idempotencyKey: `room-create:${room.id}` });
+  if (room.visibility === "PUBLIC") {
+    try {
+      const [followers, friendships, roomFollowers] = await Promise.all([
+        Follow.find({ followingId: req.user!.id }).select("followerId").limit(500).lean(),
+        Friendship.find({
+          status: "ACCEPTED",
+          $or: [{ userId: req.user!._id }, { friendId: req.user!._id }]
+        }).select("userId friendId").limit(500).lean(),
+        RoomFollow.find({ roomId: room._id }).select("userId").limit(500).lean()
+      ]);
+      const recipientIds = new Set<string>(followers.map(({ followerId }) => followerId.toString()));
+      roomFollowers.forEach(({ userId }) => recipientIds.add(userId.toString()));
+      friendships.forEach(({ userId, friendId }) => {
+        const friendIdForUser = userId.toString() === req.user!.id ? friendId.toString() : userId.toString();
+        if (friendIdForUser !== req.user!.id) recipientIds.add(friendIdForUser);
+      });
+      const activity = isScheduled ? "scheduled a room" : "started a room";
+      await Promise.allSettled([...recipientIds].map((recipientId) => createNotification(
+        recipientId,
+        "ROOM_LIVE",
+        `${req.user!.name} ${activity}`,
+        room.title,
+        { roomId: room.id, actorId: req.user!.id, scheduled: Boolean(isScheduled) }
+      )));
+    } catch (error) {
+      console.warn("Room follower notifications failed (non-fatal):", error instanceof Error ? error.message : String(error));
+    }
+  }
+  sendOk(res, { room, xpGrant }, 201);
 }));
 
 roomsRouter.get("/", asyncHandler(async (req, res) => {
@@ -241,6 +269,27 @@ roomsRouter.get("/scheduled", asyncHandler(async (_req, res) => {
     .limit(30)
     .lean();
   sendOk(res, { rooms });
+}));
+
+roomsRouter.get("/followed", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
+  const follows = await RoomFollow.find({ userId: req.user!._id }).sort({ createdAt: -1 }).populate({
+    path: "roomId",
+    match: { visibility: "PUBLIC" },
+    populate: { path: "hostId", select: "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle" }
+  }).lean();
+  sendOk(res, { rooms: follows.map((follow: any) => follow.roomId).filter(Boolean) });
+}));
+
+roomsRouter.post("/:id/follow", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
+  const room = await Room.findById(req.params.id).select("_id visibility status").lean();
+  if (!room || room.visibility !== "PUBLIC" || room.status === "ENDED") throw new HttpError(404, "Public room not found", ErrorCode.NOT_FOUND);
+  await RoomFollow.updateOne({ roomId: room._id, userId: req.user!._id }, { $setOnInsert: { roomId: room._id, userId: req.user!._id } }, { upsert: true });
+  sendOk(res, { following: true, roomId: room._id.toString() });
+}));
+
+roomsRouter.delete("/:id/follow", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
+  await RoomFollow.deleteOne({ roomId: req.params.id, userId: req.user!._id });
+  sendOk(res, { following: false, roomId: req.params.id });
 }));
 
 roomsRouter.get("/recommended", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
@@ -376,6 +425,9 @@ roomsRouter.get("/:id", requireAuth, asyncHandler(async (req: AuthRequest, res) 
 roomsRouter.post("/:id/join", requireAuth, requireNotRoomRestricted, requireNotShadowBanned, asyncHandler(async (req: AuthRequest, res) => {
   const room = await getRoomOrThrow(req.params.id);
   assertPrivateRoomAccess(room, req.user!.id);
+  if (room.hostId.toString() !== req.user!.id && !(await RoomFollow.exists({ roomId: room._id, userId: req.user!._id }))) {
+    throw new HttpError(403, "Follow this room before joining", ErrorCode.FORBIDDEN);
+  }
   if (room.status === "SCHEDULED") throw new HttpError(400, "This room is scheduled for later", ErrorCode.VALIDATION);
   if (room.vipOnly) {
     const user = await User.findById(req.user!.id).select("vipExpiresAt").lean();
@@ -388,14 +440,15 @@ roomsRouter.post("/:id/join", requireAuth, requireNotRoomRestricted, requireNotS
   const role = privateRoomRole(room, req.user!.id) ?? "AUDIENCE";
   const existingParticipant = await RoomParticipant.findOne({ roomId: room._id, userId: req.user!.id, leftAt: null });
   const newlyJoined = !existingParticipant;
+  let xpGrant: Awaited<ReturnType<typeof grantRoomXp>> = undefined;
   if (existingParticipant) {
     existingParticipant.role = role;
     await existingParticipant.save();
   } else {
-    await RoomParticipant.create({ roomId: room._id, userId: req.user!.id, role });
+    const participant = await RoomParticipant.create({ roomId: room._id, userId: req.user!.id, role });
     await Room.findByIdAndUpdate(room._id, { $inc: { participantCount: 1 } });
     await invalidateCache("rooms:*");
-    await grantRoomXp(req.user!.id, "ROOM_JOIN", { roomId: room._id.toString() });
+    xpGrant = await grantRoomXp(req.user!.id, "ROOM_JOIN", { roomId: room._id.toString(), idempotencyKey: `room-join:${participant._id}` });
   }
   // NOTE: emitRoom is called after the socket room join for consistent ordering
   emitRoom(room._id.toString(), socketEvents.roomParticipantUpdate, { userId: req.user!.id, action: "join" });
@@ -408,16 +461,13 @@ roomsRouter.post("/:id/join", requireAuth, requireNotRoomRestricted, requireNotS
       entranceEffect: req.user!.activeCosmetics?.entranceEffect ?? ""
     }
   );
-  sendOk(res, { joined: true, role });
+  sendOk(res, { joined: true, role, xpGrant });
 }));
 
 roomsRouter.post("/:id/leave", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
   const room = await Room.findById(req.params.id);
-  if (room && isAlwaysOnOfficialVoiceRoom(room) && room.hostId.toString() === req.user!.id) {
-    sendOk(res, { left: true, hostRemains: true });
-    return;
-  }
+
   const exit = await recordRoomParticipantExit(req.params.id, req.user!.id, "explicit leave");
   emitRoom(req.params.id, socketEvents.roomParticipantUpdate, { userId: req.user!.id, action: "leave" });
   await addActivity(req.params.id, "LEAVE", `${req.user!.name} left`, req.user!.id);
@@ -428,9 +478,7 @@ roomsRouter.post("/:id/leave", requireAuth, asyncHandler(async (req: AuthRequest
 
 roomsRouter.post("/:id/end", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   const room = await assertHost(req, req.params.id);
-  if (isAlwaysOnOfficialVoiceRoom(room)) {
-    throw new HttpError(409, "The Yugm Official voice room is always open", ErrorCode.CONFLICT);
-  }
+
   const ended = await endRoom(req.params.id, "host ended room");
   if (ended) emitRoom(req.params.id, socketEvents.roomEnded, { roomId: req.params.id, reason: "host ended room" });
   await addActivity(req.params.id, "MISSION", "Room ended");
@@ -857,9 +905,9 @@ roomsRouter.post("/:id/messages/direct", requireAuth, requireNotMuted, requireNo
   emitUser(receiverId, socketEvents.directMessageNew, { message, partnerId: req.user!.id, roomId: room._id.toString() });
   emitUser(req.user!.id, socketEvents.directMessageNew, { message, partnerId: receiverId, roomId: room._id.toString() });
   await createNotification(receiverId, "MESSAGE", "New message", `${req.user!.name}: ${message.message}`, { roomId: room._id.toString(), partnerId: req.user!.id, messageId: message._id.toString() });
-  await grantRoomXp(req.user!.id, "CHAT_MESSAGE", { roomId: room._id.toString(), direct: true });
+  const xpGrant = await grantRoomXp(req.user!.id, "CHAT_MESSAGE", { roomId: room._id.toString(), direct: true, messageId: message._id.toString(), idempotencyKey: `message:${message._id}` });
   const relationship = await grantRelationshipXp(req.user!.id, receiverId, "ROOM_DM_SENT", { roomId: room._id.toString(), messageId: message._id.toString() });
-  sendOk(res, { message, relationship: relationship?.relationship }, 201);
+  sendOk(res, { message, relationship: relationship?.relationship, xpGrant }, 201);
 }));
 
 roomsRouter.post("/:id/messages", requireAuth, requireNotMuted, requireNotChatRestricted, chatLimiter, validateBody(chatMessageSchema), autoModerate("message"), asyncHandler(async (req: AuthRequest, res) => {
@@ -877,7 +925,7 @@ roomsRouter.post("/:id/messages", requireAuth, requireNotMuted, requireNotChatRe
   const populatedMessage = await message.populate("senderId", "name username avatar");
   // NOTE: emitRoom is called after the socket room join for consistent ordering
   emitRoom(req.params.id, socketEvents.roomChatMessage, { message: populatedMessage });
-  void grantRoomXp(req.user!.id, "CHAT_MESSAGE", { roomId: req.params.id }).catch((error) => {
+  void grantRoomXp(req.user!.id, "CHAT_MESSAGE", { roomId: req.params.id, messageId: message._id.toString(), idempotencyKey: `message:${message._id}` }).catch((error) => {
     console.error("Room chat XP grant failed:", error);
   });
   sendOk(res, { message: populatedMessage }, 201);

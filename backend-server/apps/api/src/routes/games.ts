@@ -201,7 +201,7 @@ gamesRouter.post("/scores", chatLimiter, validateBody(scoreSchema), asyncHandler
     metadata: req.body.metadata ?? {}
   });
   const isPersonalBest = !previousBest || score.score > previousBest.score;
-  const reward = await grantXp(req.user!.id, "MINI_GAME_PLAY", { gameId, score: score.score });
+  const reward = await grantXp(req.user!.id, "MINI_GAME_PLAY", { gameId, score: score.score, idempotencyKey: `game-score:${score._id}` });
   sendOk(res, {
     score,
     isPersonalBest,

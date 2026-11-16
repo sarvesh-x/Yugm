@@ -1,6 +1,7 @@
 package com.yugm.app.core.api.parsers
 
 import com.yugm.app.core.model.Achievement
+import com.yugm.app.core.model.AchievementTier
 import com.yugm.app.core.model.ActiveCosmetics
 import com.yugm.app.core.model.CosmeticCatalog
 import com.yugm.app.core.model.CreatorDashboard
@@ -23,6 +24,7 @@ import com.yugm.app.core.model.InventoryItem
 import com.yugm.app.core.model.GiftV2
 import com.yugm.app.core.model.LevelMilestoneInfo
 import com.yugm.app.core.model.XpEventInfo
+import com.yugm.app.core.model.StreakMilestoneInfo
 import com.yugm.app.core.model.LevelOverview
 import com.yugm.app.core.model.Host
 import org.json.JSONArray
@@ -53,7 +55,9 @@ fun JSONObject.toLevelStatus(): LevelStatus = LevelStatus(
     requiredXp = optInt("requiredXp", 0),
     nextLevel = if (has("nextLevel") && !isNull("nextLevel")) optInt("nextLevel") else null,
     canDailyCheckIn = optBoolean("canDailyCheckIn", false),
-    dailyCheckInXp = optInt("dailyCheckInXp", 25)
+    dailyCheckInXp = optInt("dailyCheckInXp", 25),
+    currentLevelXp = optInt("currentLevelXp", 0),
+    nextLevelXp = if (has("nextLevelXp") && !isNull("nextLevelXp")) optInt("nextLevelXp") else null
 )
 
 fun JSONObject.toVipStatus(): VipStatus = VipStatus(
@@ -147,11 +151,31 @@ fun JSONObject.toAchievement(): Achievement = Achievement(
     id = optString("id", ""),
     title = optString("title", ""),
     description = optString("description", ""),
-    target = optInt("target", 0),
+    target = optInt("target", optInt("total", 0)),
     rewardCoins = optInt("rewardCoins", 0),
     rewardCosmetic = optString("rewardCosmetic", ""),
     progress = optInt("progress", 0),
-    complete = optBoolean("complete", false)
+    complete = optBoolean("complete", false),
+    category = optString("category", ""),
+    icon = optString("icon", "🏅"),
+    currentTier = optString("currentTier").takeIf { it.isNotBlank() && it != "null" },
+    highestClaimedTier = optString("highestClaimedTier").takeIf { it.isNotBlank() && it != "null" },
+    tiers = optJSONArray("tiers")?.let { tiers -> buildList {
+        for (i in 0 until tiers.length()) {
+            val tier = tiers.optJSONObject(i) ?: continue
+            add(AchievementTier(
+                tier = tier.optString("tier", "BRONZE"),
+                target = tier.optInt("target", 0),
+                rewardCoins = tier.optInt("rewardCoins", 0),
+                rewardCosmetic = tier.optString("rewardCosmetic", ""),
+                reached = tier.optBoolean("reached", false),
+                claimed = tier.optBoolean("claimed", false)
+            ))
+        }
+    } } ?: emptyList(),
+    nextTier = optString("nextTier").takeIf { it.isNotBlank() && it != "null" },
+    canClaim = optBoolean("canClaim", false),
+    canUpgrade = optBoolean("canUpgrade", false)
 )
 
 fun JSONArray.toAchievements(): List<Achievement> = buildList {
@@ -241,11 +265,14 @@ fun JSONObject.toUserFullInventory(): UserFullInventory {
                         icon = item.optString("icon", "🎁"),
                         coinPrice = item.optInt("coinPrice", 0),
                         tradable = item.optBoolean("tradable", false),
-                        upgradeable = item.optBoolean("upgradeable", false)
+                        upgradeable = item.optBoolean("upgradeable", false),
+                        rarity = item.optString("rarity", "common")
                     ),
                     quantity = item.optInt("quantity", 1),
                     tradable = item.optBoolean("tradable", false),
-                    source = item.optString("source", "purchased")
+                    source = item.optString("source", "purchased"),
+                    upgradeLevel = item.optInt("upgradeLevel", 1),
+                    upgradeCost = item.optInt("upgradeCost", 0)
                 ))
             }
         },
@@ -285,6 +312,17 @@ fun JSONObject.toLevelOverview(): LevelOverview {
         canCheckIn = streakJson.optBoolean("canCheckIn", false),
         nextMilestone = if (streakJson.has("nextMilestone") && !streakJson.isNull("nextMilestone")) streakJson.optInt("nextMilestone") else null,
         nextMilestoneReward = streakJson.optInt("nextMilestoneReward", 0),
+        streakMilestones = streakJson.optJSONArray("milestones")?.let { milestones -> buildList {
+            for (i in 0 until milestones.length()) {
+                val item = milestones.optJSONObject(i) ?: continue
+                add(StreakMilestoneInfo(
+                    streakDays = item.optInt("streakDays", 0),
+                    rewardCoins = item.optInt("rewardCoins", 0),
+                    cosmeticId = item.optString("cosmeticId", ""),
+                    reached = item.optBoolean("reached", false)
+                ))
+            }
+        } } ?: emptyList(),
         milestones = buildList {
             for (i in 0 until milestonesArr.length()) {
                 val item = milestonesArr.getJSONObject(i)
@@ -306,7 +344,10 @@ fun JSONObject.toLevelOverview(): LevelOverview {
                         key = key,
                         name = event.optString("name", key),
                         xp = event.optInt("xp", 0),
-                        icon = event.optString("icon", "⭐")
+                        icon = event.optString("icon", "⭐"),
+                        category = event.optString("category", ""),
+                        cap = if (event.has("cap") && !event.isNull("cap")) event.optInt("cap") else null,
+                        earnedToday = event.optInt("earnedToday", 0)
                     ))
                 }
             }
@@ -315,6 +356,9 @@ fun JSONObject.toLevelOverview(): LevelOverview {
             for (i in 0 until leaderboardArr.length()) {
                 add(leaderboardArr.getJSONObject(i).toHost())
             }
-        }
+        },
+        leaderboardRank = if (has("leaderboardRank") && !isNull("leaderboardRank")) optInt("leaderboardRank") else null,
+        todayXpEarned = optInt("todayXpEarned", 0),
+        todayXpCap = optInt("todayXpCap", 0)
     )
 }

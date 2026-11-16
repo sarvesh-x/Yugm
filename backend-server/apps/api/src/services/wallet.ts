@@ -21,6 +21,13 @@ export async function assertWalletNotFrozen(userId: string) {
 }
 
 export async function creditWallet(userId: string, amount: number, source: string, metadata = {}, session?: mongoose.ClientSession) {
+  const idempotencyKey = (metadata as Record<string, unknown>).idempotencyKey;
+  if (typeof idempotencyKey === "string" && idempotencyKey.trim()) {
+    const lookup = WalletTransaction.findOne({ userId, "metadata.idempotencyKey": idempotencyKey });
+    if (session) lookup.session(session);
+    const existing = await lookup;
+    if (existing) return [existing];
+  }
   const opts: Record<string, unknown> = { new: true };
   if (session) opts.session = session;
   const after = await User.findByIdAndUpdate(userId, { $inc: { walletBalance: amount } }, opts);

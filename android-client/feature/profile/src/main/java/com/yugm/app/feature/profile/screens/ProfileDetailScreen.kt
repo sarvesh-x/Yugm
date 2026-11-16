@@ -64,6 +64,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.yugm.app.core.api.VibeApi
+import com.yugm.app.core.api.YugmApi
+import com.yugm.app.core.model.Achievement
 import com.yugm.app.feature.profile.viewmodel.ProfileViewModel
 import com.yugm.app.core.model.Host
 import com.yugm.app.core.model.PkBattle
@@ -115,6 +117,7 @@ fun ProfileDetailScreen(
     var liked by remember { mutableStateOf(false) }
     var profileRefreshing by remember { mutableStateOf(false) }
     var vibeMatch by remember { mutableStateOf<com.yugm.app.core.model.VibeMatchResponse?>(null) }
+    var showcasedBadges by remember { mutableStateOf<List<Achievement>>(emptyList()) }
     var showEditProfileScreen by remember { mutableStateOf(false) }
     var nameDraft by remember { mutableStateOf("") }
     var usernameDraft by remember { mutableStateOf("") }
@@ -150,6 +153,10 @@ fun ProfileDetailScreen(
             autoEditTriggered = true
             openProfileEditor()
         }
+    }
+    LaunchedEffect(token, userId) {
+        runCatching { YugmApi.getUserBadges(token, userId) }
+            .onSuccess { showcasedBadges = it }
     }
     var showPasswordDialog by remember { mutableStateOf(false) }
     var currentPassword by remember { mutableStateOf("") }
@@ -287,7 +294,7 @@ fun ProfileDetailScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 104.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Header card
@@ -301,6 +308,23 @@ fun ProfileDetailScreen(
                             onOpenSocialList = onOpenSocialList,
                             onOpenWallet = onOpenWallet
                         )
+                    }
+                }
+
+                if (showcasedBadges.isNotEmpty()) item {
+                    GlassCard(Modifier.fillMaxWidth()) {
+                        Text("Showcase badges", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 17.sp)
+                        showcasedBadges.forEach { badge ->
+                            Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(40.dp).clip(CircleShape).background(PrimaryPurple.copy(alpha = .14f)), contentAlignment = Alignment.Center) {
+                                    Text(badge.icon, fontSize = 21.sp)
+                                }
+                                Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                                    Text(badge.title, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text("${badge.highestClaimedTier ?: "Earned"} achievement", color = TextMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -778,28 +802,29 @@ private fun EditProfilePage(
     onChangePassword: () -> Unit, onSave: () -> Unit
 ) {
     val clipboard = LocalClipboardManager.current
+    val colors = LocalYugmColors.current
     val canSave = !isBusy && profile != null && name.trim().length in 2..60 && username.trim().length in 3..24 && (age.isBlank() || age.toIntOrNull()?.let { it in 18..100 } == true)
     Column(
-        Modifier.fillMaxSize().background(Color(0xFF101116)).systemBarsPadding(),
+        Modifier.fillMaxSize().background(colors.background).systemBarsPadding(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(
             Modifier.fillMaxWidth().height(58.dp).padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onClose, enabled = !isBusy, modifier = Modifier.size(42.dp).clip(CircleShape).background(Color(0xFF1A1B22))) {
-                Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+            IconButton(onClick = onClose, enabled = !isBusy, modifier = Modifier.size(42.dp).clip(CircleShape).background(colors.surfaceElevated)) {
+                Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = colors.textPrimary)
             }
-            Text("Edit Profile", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).padding(start = 12.dp))
+            Text("Edit Profile", color = colors.textPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).padding(start = 12.dp))
             IconButton(onClick = onChangePassword, enabled = !isBusy) {
-                Icon(Icons.Filled.Key, contentDescription = "Change password", tint = Color(0xFFB8BAC7))
+                Icon(Icons.Filled.Key, contentDescription = "Change password", tint = colors.textSecondary)
             }
             Button(
                 onClick = onSave,
                 enabled = canSave,
                 shape = CircleShape,
                 contentPadding = PaddingValues(horizontal = 17.dp, vertical = 8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF3E83), disabledContainerColor = Color(0xFF66304A))
+                colors = ButtonDefaults.buttonColors(containerColor = colors.primary, disabledContainerColor = colors.surfaceVariant)
             ) { Text(if (isBusy) "Saving…" else "Save", color = Color.White, fontWeight = FontWeight.Bold) }
         }
 
@@ -809,38 +834,38 @@ private fun EditProfilePage(
         ) {
             Column(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(contentAlignment = Alignment.BottomEnd) {
-                    Box(Modifier.size(104.dp).clip(CircleShape).background(Color(0xFF20212A)).border(3.dp, Color.White.copy(alpha = .86f), CircleShape), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(104.dp).clip(CircleShape).background(colors.surfaceElevated).border(3.dp, colors.border, CircleShape), contentAlignment = Alignment.Center) {
                         Avatar(name.take(1).ifBlank { "?" }, 96, profile?.avatar, profile?.activeCosmetics ?: com.yugm.app.core.model.ActiveCosmetics())
                     }
                     IconButton(
                         onClick = onChangePhoto,
                         enabled = !isBusy,
-                        modifier = Modifier.size(34.dp).clip(CircleShape).background(Color(0xFFEF3E83)).border(2.dp, Color(0xFF101116), CircleShape)
+                        modifier = Modifier.size(34.dp).clip(CircleShape).background(colors.primary).border(2.dp, colors.background, CircleShape)
                     ) { Icon(Icons.Filled.CameraAlt, contentDescription = "Change photo", tint = Color.White, modifier = Modifier.size(17.dp)) }
                 }
-                Text("Change Photo", color = Color(0xFFA4A6B3), fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 9.dp).clickable(onClick = onChangePhoto))
+                Text("Change Photo", color = colors.textSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 9.dp).clickable(onClick = onChangePhoto))
             }
 
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFF291923)).border(1.dp, Color(0x55EF3E83), RoundedCornerShape(16.dp)).padding(13.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(colors.primary.copy(alpha = 0.08f)).border(1.dp, colors.primary.copy(alpha = 0.2f), RoundedCornerShape(16.dp)).padding(13.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("ⓘ", color = Color(0xFFFF6B9E), fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text("Make your profile yours. Add a little detail so people can find a reason to connect.", color = Color(0xFFE4DDE2), fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(start = 10.dp))
+                Text("ⓘ", color = colors.primary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("Make your profile yours. Add a little detail so people can find a reason to connect.", color = colors.textPrimary, fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(start = 10.dp))
             }
 
             EditProfileSection("BASIC INFO") {
                 EditProfileTextField("Name", name, onNameChange, maxLength = 60)
                 Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("ID", color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                    Text(profile?.id?.takeLast(9).orEmpty(), color = Color(0xFFC3C5D0), fontSize = 14.sp)
+                    Text("ID", color = colors.textPrimary, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                    Text(profile?.id?.takeLast(9).orEmpty(), color = colors.textSecondary, fontSize = 14.sp)
                     TextButton(onClick = { clipboard.setText(AnnotatedString(profile?.id?.takeLast(9).orEmpty())) }) {
-                        Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = Color(0xFFC3C5D0), modifier = Modifier.size(15.dp))
-                        Text("Copy", color = Color(0xFFC3C5D0), modifier = Modifier.padding(start = 4.dp))
+                        Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(15.dp))
+                        Text("Copy", color = colors.textSecondary, modifier = Modifier.padding(start = 4.dp))
                     }
                 }
                 EditProfileTextField("Username", username, onUsernameChange, prefix = "@", maxLength = 24)
-                Text("Gender", color = Color(0xFFDADBE2), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text("Gender", color = colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("Female", "Male", "Non-Binary", "Other", "Prefer not to say").forEach { option ->
                         ProfileEditChip(option, selected = gender.equals(option, ignoreCase = true)) { onGenderChange(option) }
@@ -879,17 +904,18 @@ private fun EditProfilePage(
                     onCustomHobbyChange("")
                 }
             }
-            if (error != null) Text(error, color = Color(0xFFFF647C), fontSize = 13.sp, modifier = Modifier.padding(bottom = 20.dp))
+            if (error != null) Text(error, color = colors.danger, fontSize = 13.sp, modifier = Modifier.padding(bottom = 20.dp))
         }
     }
 }
 
 @Composable
 private fun EditProfileSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+    val colors = LocalYugmColors.current
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(title, color = Color(0xFF9EA3B4), fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, modifier = Modifier.padding(start = 4.dp))
+        Text(title, color = colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, modifier = Modifier.padding(start = 4.dp))
         Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color(0xFF191A20)).border(1.dp, Color(0xFF292A31), RoundedCornerShape(18.dp)).padding(14.dp),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(colors.surface).border(1.dp, colors.border, RoundedCornerShape(18.dp)).padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             content = content
         )
@@ -914,11 +940,12 @@ private fun EditProfileTextField(label: String, value: String, onValueChange: (S
 
 @Composable
 private fun ProfileEditChip(label: String, selected: Boolean, accent: Color = Color(0xFFB777FF), onClick: () -> Unit) {
+    val colors = LocalYugmColors.current
     Box(
-        Modifier.clip(CircleShape).background(if (selected) accent.copy(alpha = .28f) else Color(0xFF22232A))
-            .border(1.dp, if (selected) accent.copy(alpha = .72f) else Color(0xFF373840), CircleShape)
+        Modifier.clip(CircleShape).background(if (selected) accent.copy(alpha = .16f) else colors.surfaceVariant)
+            .border(1.dp, if (selected) accent.copy(alpha = .5f) else colors.border, CircleShape)
             .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp)
-    ) { Text(label, color = if (selected) Color.White else Color(0xFFC2C4CF), fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium) }
+    ) { Text(label, color = if (selected) accent else colors.textSecondary, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium) }
 }
 
 @Composable
@@ -961,13 +988,14 @@ private fun ProfileHero(
     onOpenSocialList: ((String) -> Unit)? = null,
     onOpenWallet: (() -> Unit)? = null
 ) {
-    val surface = Color(0xE80C0D19)
+    val colors = LocalYugmColors.current
+    val surface = colors.surface.copy(alpha = 0.96f)
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(26.dp))
-            .background(Brush.verticalGradient(listOf(Color(0xFF261044), surface, Color(0xFF0B0C15))))
-            .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(26.dp))
+            .background(Brush.verticalGradient(listOf(colors.primary.copy(alpha = 0.1f), colors.surfaceElevated, surface)))
+            .border(1.dp, colors.border, RoundedCornerShape(26.dp))
             .padding(horizontal = 16.dp, vertical = 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -977,7 +1005,7 @@ private fun ProfileHero(
             }
             Box(
                 Modifier.align(Alignment.TopCenter).size(104.dp).clip(CircleShape)
-                    .background(Color(0xFF11121D)).border(3.dp, Color.White.copy(alpha = 0.9f), CircleShape),
+                    .background(colors.surfaceVariant).border(3.dp, colors.border, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Avatar(
@@ -1072,6 +1100,7 @@ private fun ProfileHeroLegacy(
     onOpenSocialList: ((String) -> Unit)? = null,
     onOpenWallet: (() -> Unit)? = null
 ) {
+    val colors = LocalYugmColors.current
     val themeColors = profileThemeColors(profile.activeCosmetics.profileTheme)
     val themeAccent = profileThemeAccent(profile.activeCosmetics.profileTheme)
     val bannerColors = profileBannerColors(profile.activeCosmetics.profileBanner)
@@ -1250,7 +1279,7 @@ private fun ProfileHeroLegacy(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0x2EFFFFFF))
+                            .background(colors.surfaceVariant)
                             .padding(vertical = 10.dp, horizontal = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceEvenly
@@ -1265,7 +1294,7 @@ private fun ProfileHeroLegacy(
                             Modifier
                                 .width(1.dp)
                                 .height(26.dp)
-                                .background(Color(0x2EFFFFFF))
+                                .background(colors.border)
                         )
                         HeroStatChip(
                             label = "Following",
@@ -1277,7 +1306,7 @@ private fun ProfileHeroLegacy(
                             Modifier
                                 .width(1.dp)
                                 .height(26.dp)
-                                .background(Color(0x2EFFFFFF))
+                                .background(colors.border)
                         )
                         HeroStatChip(
                             label = "Followers",
@@ -1322,8 +1351,8 @@ private fun ProfileMenuCard(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Box(Modifier.size(38.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFF30264F)), contentAlignment = Alignment.Center) {
-                            Text(glyph, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Box(Modifier.size(38.dp).clip(RoundedCornerShape(13.dp)).background(LocalYugmColors.current.primary.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
+                            Text(glyph, color = LocalYugmColors.current.primary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                         }
                         Text(label, color = TextPrimary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                     }
@@ -1355,6 +1384,7 @@ private fun HeroStatChip(label: String, value: String, modifier: Modifier = Modi
     }
 }
 
+@Composable
 private fun nameStyleColor(value: String): Color = when {
     value.contains("gold", true) -> Gold
     value.contains("neon", true) -> Color(0xFF55E6FF)
@@ -1444,6 +1474,7 @@ private fun ProfileCompletionCard(
     onCompleteClick: () -> Unit,
     onAddAvatar: () -> Unit
 ) {
+    val colors = LocalYugmColors.current
     val tasks = listOf(
         Triple(!profile.avatar.isNullOrBlank(), "Avatar", 20),
         Triple(profile.bio.isNotBlank() && profile.bio.length >= 10, "Bio", 15),
@@ -1465,7 +1496,7 @@ private fun ProfileCompletionCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         if (isComplete) "🌟 100% Vibe Master" else "Vibe Profile Strength",
-                        color = if (isComplete) Gold else Color.White,
+                        color = if (isComplete) Gold else colors.textPrimary,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Black
                     )
@@ -1524,8 +1555,8 @@ private fun ProfileCompletionCard(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0x22FFFFFF))
-                                .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                                .background(colors.surfaceVariant)
+                                .border(1.dp, colors.border, RoundedCornerShape(8.dp))
                                 .clickable {
                                     if (label == "Avatar") onAddAvatar() else onCompleteClick()
                                 }
@@ -1543,11 +1574,11 @@ private fun ProfileCompletionCard(
 
                 Button(
                     onClick = onCompleteClick,
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryPurple),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth().height(38.dp)
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp)
                 ) {
-                    Text("Complete Profile Details", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black)
+                    Text(if (isComplete) "Edit profile details" else "Complete profile details", color = colors.primaryOn, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

@@ -1,19 +1,12 @@
 package com.yugm.app.feature.settings.navigation
 
-import android.widget.Toast
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.composable
-import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.navArgument
 import com.yugm.app.core.navigation.Screen
 import com.yugm.app.feature.settings.screens.*
-import kotlinx.coroutines.launch
 
 fun NavGraphBuilder.settingsNavGraph(
     navController: NavHostController,
@@ -39,7 +32,6 @@ fun NavGraphBuilder.settingsNavGraph(
     }
 
     composable(Screen.Settings.route) {
-        val context = LocalContext.current
         SettingsScreen(
             token = authTokenProvider(),
             userName = userNameProvider(),
@@ -55,8 +47,8 @@ fun NavGraphBuilder.settingsNavGraph(
             onNavigateToSupport = { navController.navigate(Screen.Support.route) },
             onNavigateToProfileSetup = { navController.navigate(Screen.ProfileDetail.createRoute(currentUserIdProvider(), edit = true)) },
             onNavigateToGames = { navController.navigate(Screen.Games.route) },
-            onNavigateToClans = { Toast.makeText(context, "Coming soon", Toast.LENGTH_SHORT).show() },
-            onNavigateToTrustVerification = { Toast.makeText(context, "Coming soon", Toast.LENGTH_SHORT).show() }
+            onNavigateToClans = { navController.navigate(Screen.ClanList.route) },
+            onNavigateToTrustVerification = { navController.navigate(Screen.TrustVerificationIntro.route) }
         )
     }
 

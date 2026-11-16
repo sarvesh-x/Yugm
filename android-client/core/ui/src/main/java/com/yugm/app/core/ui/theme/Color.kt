@@ -1,6 +1,7 @@
 package com.yugm.app.core.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.Composable
 
 val Purple80 = Color(0xFFD0BCFF)
 val PurpleGrey80 = Color(0xFFCCC2DC)
@@ -10,10 +11,14 @@ val Purple40 = Color(0xFF6650a4)
 val PurpleGrey40 = Color(0xFF625b71)
 val Pink40 = Color(0xFF7D5260)
 
-// Premium Theme Colors
-val Background = Color(0xFF060714)
-val Surface = Color(0xFF0E1121)
-val SurfaceElevated = Color(0xFF171A2C)
+// Theme-aware semantic colors. Keep these legacy names so existing screens
+// automatically follow the selected app theme.
+val Background: Color
+    @Composable get() = LocalYugmColors.current.background
+val Surface: Color
+    @Composable get() = LocalYugmColors.current.surface
+val SurfaceElevated: Color
+    @Composable get() = LocalYugmColors.current.surfaceElevated
 val PrimaryPink = Color(0xFFF6378B)
 val AccessiblePrimaryPink = Color(0xFFB5125A)
 val AccessibleSaffron = Color(0xFFB7462B)
@@ -21,9 +26,12 @@ val PrimaryPurple = Color(0xFF8D35F6)
 val SaffronGold = Color(0xFFFFC52F)
 val SuccessGreen = Color(0xFF3BE477)
 val DangerRed = Color(0xFFFF3B4F)
-val TextPrimaryColor = Color(0xFFFFFFFF)
-val TextSecondaryColor = Color(0xFF9EA3B9)
-val BorderColor = Color(0x24FFFFFF)
+val TextPrimaryColor: Color
+    @Composable get() = LocalYugmColors.current.textPrimary
+val TextSecondaryColor: Color
+    @Composable get() = LocalYugmColors.current.textSecondary
+val BorderColor: Color
+    @Composable get() = LocalYugmColors.current.border
 
 // Aurora Gradients - each is a list of colors for gradient transitions
 object Aurora {
@@ -40,15 +48,24 @@ object Aurora {
 }
 
 // Legacy mappings for backwards compatibility
-val Ink = Background
-val Ink2 = Surface
-val Panel = Color(0xB3141728)
-val PanelStrong = Color(0xFF20243A)
-val Line = BorderColor
-val TextPrimary = Color(0xFFF8FAFC)
-val TextSecondary = TextSecondaryColor
-val TextMuted = TextSecondaryColor
-val SurfaceColor = Surface
+val Ink: Color
+    @Composable get() = Background
+val Ink2: Color
+    @Composable get() = Surface
+val Panel: Color
+    @Composable get() = SurfaceElevated
+val PanelStrong: Color
+    @Composable get() = LocalYugmColors.current.surfaceVariant
+val Line: Color
+    @Composable get() = LocalYugmColors.current.divider
+val TextPrimary: Color
+    @Composable get() = LocalYugmColors.current.textPrimary
+val TextSecondary: Color
+    @Composable get() = LocalYugmColors.current.textSecondary
+val TextMuted: Color
+    @Composable get() = LocalYugmColors.current.textSecondary
+val SurfaceColor: Color
+    @Composable get() = Surface
 val Gold = SaffronGold
 val Saffron = Color(0xFFFF684D)
 val Pink = PrimaryPink

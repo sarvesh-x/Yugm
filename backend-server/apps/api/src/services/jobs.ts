@@ -17,7 +17,6 @@ import { ConversationMute } from "../models/ConversationMute.js";
 import { ChatMessage } from "../models/ChatMessage.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
 import { RoomInvite } from "../models/RoomInvite.js";
-import { ALWAYS_ON_OFFICIAL_VOICE_ROOM } from "./officialRooms.js";
 import { endRoom } from "./roomLifecycle.js";
 
 type PushPayload = {
@@ -147,7 +146,6 @@ async function runMaintenanceTasks() {
   try {
     const staleRooms = await Room.find({
       status: "LIVE",
-      livekitRoomName: { $ne: ALWAYS_ON_OFFICIAL_VOICE_ROOM },
       createdAt: { $lte: new Date(Date.now() - 48 * 60 * 60 * 1000) }
     }).select("_id").lean();
     let endedStaleRooms = 0;

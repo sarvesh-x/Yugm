@@ -595,14 +595,7 @@ fun MatchOverlayScreen(
                         .background(Brush.radialGradient(listOf(PrimaryPink, Color.Transparent)))
                         .padding(4.dp)
                 ) {
-                    AsyncImage(
-                        model = "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80", // user placeholder
-                        contentDescription = "Me",
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape),
-                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                    )
+                    Avatar("You", 102)
                 }
                 Text("🔥", fontSize = 36.sp)
                 Box(
@@ -612,14 +605,16 @@ fun MatchOverlayScreen(
                         .background(Brush.radialGradient(listOf(Gold, Color.Transparent)))
                         .padding(4.dp)
                 ) {
-                    AsyncImage(
-                        model = partner.avatar ?: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80",
-                        contentDescription = "Partner",
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape),
-                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                    )
+                    if (partner.avatar.isNullOrBlank()) {
+                        Avatar(partner.name.take(1).ifBlank { "?" }, 102, cosmetics = partner.activeCosmetics)
+                    } else {
+                        AsyncImage(
+                            model = partner.avatar,
+                            contentDescription = "${partner.name}'s profile photo",
+                            modifier = Modifier.fillMaxSize().clip(CircleShape),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                        )
+                    }
                 }
             }
 

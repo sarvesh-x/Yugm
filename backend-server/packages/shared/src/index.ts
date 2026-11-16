@@ -337,6 +337,46 @@ export const levelMilestones = [
   })
 ];
 
+export type LevelMilestone = (typeof levelMilestones)[number];
+
+/** Return a configured milestone, continuing the established XP curve beyond level 50. */
+export function getLevelMilestone(level: number): LevelMilestone {
+  const safeLevel = Math.max(1, Math.floor(level));
+  const configured = levelMilestones[safeLevel - 1];
+  if (configured) return configured;
+  const stepsAfterTen = safeLevel - 10;
+  return {
+    level: safeLevel,
+    requiredXp: 6000 + (1200 * stepsAfterTen) + (100 * stepsAfterTen * (stepsAfterTen + 1)),
+    title: extendedLevelTitles[extendedLevelTitles.length - 1],
+    coinReward: 200 + (safeLevel - 11) * 10
+  };
+}
+
+/** Derive the canonical level from XP without imposing a level ceiling. */
+export function getLevelMilestoneForXp(xp: number): LevelMilestone {
+  const safeXp = Math.max(0, Math.floor(xp));
+  let current = levelMilestones[0];
+  for (const milestone of levelMilestones) {
+    if (safeXp < milestone.requiredXp) break;
+    current = milestone;
+  }
+  if (safeXp < levelMilestones[levelMilestones.length - 1].requiredXp) return current;
+
+  let low = levelMilestones.length;
+  let high = low + 1;
+  while (getLevelMilestone(high).requiredXp <= safeXp) {
+    low = high;
+    high *= 2;
+  }
+  while (low + 1 < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (getLevelMilestone(middle).requiredXp <= safeXp) low = middle;
+    else high = middle;
+  }
+  return getLevelMilestone(low);
+}
+
 export const xpEvents = {
   PROFILE_COMPLETE: 80,
   DAILY_CHECKIN: 25,
@@ -349,10 +389,41 @@ export const xpEvents = {
   COSMETIC_PURCHASE: 60,
   FOLLOW_USER: 10,
   MINI_GAME_PLAY: 8,
+  MISSION_REWARD: 0,
   BATTLE_PASS_REWARD: 0
 } as const;
 
 export type XpEvent = keyof typeof xpEvents;
+
+export const xpDailyCaps: Partial<Record<XpEvent, number>> = {
+  ROOM_CREATE: 200,
+  ROOM_JOIN: 50,
+  CHAT_MESSAGE: 100,
+  GIFT_SENT: 300,
+  GIFT_RECEIVED: 300,
+  FOLLOW_USER: 50,
+  COSMETIC_PURCHASE: 300,
+  MINI_GAME_PLAY: 80,
+  VIP_PURCHASE: 200
+};
+
+export const xpEventDisplay: Record<XpEvent, { name: string; icon: string; category: "social" | "rooms" | "rewards" | "account" }> = {
+  PROFILE_COMPLETE: { name: "Complete Profile", icon: "⭐", category: "account" },
+  DAILY_CHECKIN: { name: "Daily Check-In", icon: "📅", category: "account" },
+  ROOM_CREATE: { name: "Host Live Room", icon: "🎙️", category: "rooms" },
+  ROOM_JOIN: { name: "Join Room", icon: "🎧", category: "rooms" },
+  CHAT_MESSAGE: { name: "Send Chat Message", icon: "💬", category: "social" },
+  GIFT_SENT: { name: "Send Gift", icon: "🎁", category: "social" },
+  GIFT_RECEIVED: { name: "Receive Gift", icon: "🎁", category: "social" },
+  VIP_PURCHASE: { name: "VIP Subscription", icon: "👑", category: "rewards" },
+  COSMETIC_PURCHASE: { name: "Cosmetic Purchase", icon: "🎨", category: "rewards" },
+  FOLLOW_USER: { name: "Follow a Friend", icon: "🤝", category: "social" },
+  MINI_GAME_PLAY: { name: "Play a Mini Game", icon: "🎮", category: "social" },
+  MISSION_REWARD: { name: "Complete a Mission", icon: "✅", category: "rewards" },
+  BATTLE_PASS_REWARD: { name: "Season Reward", icon: "🏆", category: "rewards" }
+};
+
+export const streakCoinBonuses: Record<number, number> = { 3: 10, 7: 25, 14: 50, 30: 100, 60: 200, 90: 500 };
 
 export const roomModes = ["coffee_date", "blind_date", "truth_or_dare", "never_have_i_ever", "would_you_rather"] as const;
 export type RoomMode = (typeof roomModes)[number];

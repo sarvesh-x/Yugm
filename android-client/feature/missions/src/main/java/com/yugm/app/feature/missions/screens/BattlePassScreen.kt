@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,23 +46,18 @@ import com.yugm.app.core.api.YugmApi
 import com.yugm.app.core.model.BattlePassResponse
 import com.yugm.app.core.model.BattlePassTrackReward
 import com.yugm.app.core.model.SeasonReward
-import com.yugm.app.core.ui.theme.Background
-import com.yugm.app.core.ui.theme.Gold
-import com.yugm.app.core.ui.theme.Panel
-import com.yugm.app.core.ui.theme.Pink
-import com.yugm.app.core.ui.theme.PrimaryPurple
-import com.yugm.app.core.ui.theme.TextMuted
-import com.yugm.app.core.ui.theme.TextPrimary
-import com.yugm.app.core.ui.theme.TextSecondary
+import com.yugm.app.core.ui.theme.LocalYugmColors
 import kotlinx.coroutines.launch
 
 @Composable
 fun BattlePassScreen(token: String, onBack: () -> Unit) {
+    val colors = LocalYugmColors.current
     val scope = rememberCoroutineScope()
     var data by remember { mutableStateOf<BattlePassResponse?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var isPurchasing by remember { mutableStateOf(false) }
     var claiming by remember { mutableStateOf<Pair<Int, String>?>(null) }
+    var showPurchaseConfirmation by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
 
@@ -77,26 +73,26 @@ fun BattlePassScreen(token: String, onBack: () -> Unit) {
     }
     LaunchedEffect(token) { reload() }
 
-    Column(Modifier.fillMaxSize().background(Background)) {
+    Column(Modifier.fillMaxSize().background(colors.background)) {
         Row(
             Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(onClick = onBack, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("‹", color = TextPrimary, fontSize = 30.sp) }
-            Text("Level & Rewards", color = TextPrimary, fontSize = 19.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
-            TextButton(onClick = ::reload, enabled = !isLoading) { Text("Refresh", color = Gold, fontSize = 12.sp) }
+            TextButton(onClick = onBack, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("‹", color = colors.textPrimary, fontSize = 30.sp) }
+            Text("Level & Rewards", color = colors.textPrimary, fontSize = 19.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
+            TextButton(onClick = ::reload, enabled = !isLoading) { Text("Refresh", color = colors.accent, fontSize = 12.sp) }
         }
 
         when {
-            isLoading && data == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Pink) }
+            isLoading && data == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = colors.primary) }
             data == null -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(error ?: "Season information is unavailable.", color = TextSecondary)
+                    Text(error ?: "Season information is unavailable.", color = colors.textSecondary)
                     Button(onClick = ::reload, modifier = Modifier.padding(top = 12.dp)) { Text("Try again") }
                 }
             }
             data?.season == null || data?.battlePass == null -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                Text("There isn’t an active season right now. Please check back soon.", color = TextSecondary)
+                Text("There isn’t an active season right now. Please check back soon.", color = colors.textSecondary)
             }
             else -> {
                 val response = data!!
@@ -120,30 +116,21 @@ fun BattlePassScreen(token: String, onBack: () -> Unit) {
                             premium = bp.premium,
                             price = season.premiumPrice,
                             isPurchasing = isPurchasing,
-                            onPurchase = {
-                                scope.launch {
-                                    isPurchasing = true
-                                    error = null
-                                    runCatching { YugmApi.purchaseBattlePass(token) }
-                                        .onSuccess { result ->
-                                            data = BattlePassResponse(result.battlePass, result.season)
-                                            message = "Premium rewards unlocked for this season."
-                                        }
-                                        .onFailure { error = it.message ?: "Premium pass purchase failed" }
-                                    isPurchasing = false
-                                }
-                            }
+                            onPurchase = { showPurchaseConfirmation = true }
                         )
                     }
-                    message?.let { msg -> item { Text(msg, color = Gold, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp)) } }
-                    error?.let { msg -> item { Text(msg, color = Pink, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp)) } }
+                    response.previousSeasonSummary?.let { previous ->
+                        item { PreviousSeasonSummaryCard(previous) }
+                    }
+                    message?.let { msg -> item { Text(msg, color = colors.accent, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp)) } }
+                    error?.let { msg -> item { Text(msg, color = colors.danger, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp)) } }
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text("Season rewards", color = TextPrimary, fontSize = 19.sp, fontWeight = FontWeight.Black)
-                                Text("Claim each unlocked reward as you progress.", color = TextMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
+                                Text("Season rewards", color = colors.textPrimary, fontSize = 19.sp, fontWeight = FontWeight.Black)
+                                Text("Claim each unlocked reward as you progress.", color = colors.textSecondary, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
                             }
-                            Text("${season.rewards.size} LEVELS", color = Gold, fontSize = 10.sp, fontWeight = FontWeight.Black)
+                            Text("${season.rewards.size} LEVELS", color = colors.accent, fontSize = 10.sp, fontWeight = FontWeight.Black)
                         }
                     }
                     items(season.rewards, key = { it.level }) { reward ->
@@ -161,8 +148,8 @@ fun BattlePassScreen(token: String, onBack: () -> Unit) {
                                     claiming = reward.level to track
                                     error = null
                                     runCatching { YugmApi.claimBattlePassReward(token, reward.level, track) }
-                                        .onSuccess {
-                                            data = it
+                                        .onSuccess { result ->
+                                            data = result.copy(previousSeasonSummary = data?.previousSeasonSummary)
                                             message = "Level ${reward.level} ${track} reward claimed."
                                         }
                                         .onFailure { error = it.message ?: "Could not claim this reward" }
@@ -173,6 +160,35 @@ fun BattlePassScreen(token: String, onBack: () -> Unit) {
                     }
                 }
             }
+        }
+        if (showPurchaseConfirmation) {
+            val price = data?.season?.premiumPrice ?: 0
+            AlertDialog(
+                onDismissRequest = { if (!isPurchasing) showPurchaseConfirmation = false },
+                title = { Text("Unlock premium rewards?", color = colors.textPrimary, fontWeight = FontWeight.Bold) },
+                text = { Text("Unlock this season’s premium track for $price coins. Your free-track progress will stay the same.", color = colors.textSecondary) },
+                confirmButton = {
+                    TextButton(
+                        enabled = !isPurchasing,
+                        onClick = {
+                            showPurchaseConfirmation = false
+                            scope.launch {
+                                isPurchasing = true
+                                error = null
+                                runCatching { YugmApi.purchaseBattlePass(token) }
+                                    .onSuccess { result ->
+                                        data = BattlePassResponse(result.battlePass, result.season, data?.previousSeasonSummary)
+                                        message = "Premium rewards unlocked for this season."
+                                    }
+                                    .onFailure { error = it.message ?: "Premium pass purchase failed" }
+                                isPurchasing = false
+                            }
+                        }
+                    ) { Text(if (isPurchasing) "Unlocking…" else "Unlock · $price coins", color = colors.primary, fontWeight = FontWeight.Bold) }
+                },
+                dismissButton = { TextButton(onClick = { showPurchaseConfirmation = false }, enabled = !isPurchasing) { Text("Cancel", color = colors.textSecondary) } },
+                containerColor = colors.surface
+            )
         }
     }
 }
@@ -192,35 +208,37 @@ private fun PassHero(
     isPurchasing: Boolean,
     onPurchase: () -> Unit
 ) {
+    val colors = LocalYugmColors.current
     val isMaxLevel = level >= maxLevel
     val progress = if (isMaxLevel) 1f else (xp.toFloat() / xpPerLevel.coerceAtLeast(1)).coerceIn(0f, 1f)
+    val daysRemaining = runCatching { java.time.Duration.between(java.time.Instant.now(), java.time.Instant.parse(endDate)).toDays().coerceAtLeast(0) }.getOrNull()
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
-            .background(Brush.linearGradient(listOf(Color(0xFF381B48), Color(0xFF211932), Color(0xFF18223B))))
-            .border(1.dp, Pink.copy(alpha = .25f), RoundedCornerShape(24.dp)).padding(18.dp)
+            .background(Brush.linearGradient(if (colors.isDark) listOf(Color(0xFF381B48), Color(0xFF211932), Color(0xFF18223B)) else listOf(Color(0xFFF0E7FF), Color(0xFFFFEFF5), Color.White)))
+            .border(1.dp, colors.primary.copy(alpha = .25f), RoundedCornerShape(24.dp)).padding(18.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(46.dp).clip(RoundedCornerShape(15.dp)).background(Brush.linearGradient(listOf(Gold, Color(0xFFE48F54)))), contentAlignment = Alignment.Center) {
-                Text("✦", color = Color(0xFF3A2340), fontSize = 25.sp, fontWeight = FontWeight.Black)
+            Box(Modifier.size(46.dp).clip(RoundedCornerShape(15.dp)).background(Brush.linearGradient(listOf(colors.accent, colors.primary))), contentAlignment = Alignment.Center) {
+                Text("✦", color = colors.primaryOn, fontSize = 25.sp, fontWeight = FontWeight.Black)
             }
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                Text(name, color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${startDate.take(10)}  —  ${endDate.take(10)}", color = TextMuted, fontSize = 10.sp, modifier = Modifier.padding(top = 3.dp))
+                Text(name, color = colors.textPrimary, fontSize = 20.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("${startDate.take(10)}  —  ${endDate.take(10)}${daysRemaining?.let { " · $it days left" }.orEmpty()}", color = colors.textSecondary, fontSize = 10.sp, modifier = Modifier.padding(top = 3.dp))
             }
-            if (premium) PassBadge("PREMIUM", Gold)
+            if (premium) PassBadge("PREMIUM", colors.accent)
         }
-        if (description.isNotBlank()) Text(description, color = TextSecondary, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 12.dp))
+        if (description.isNotBlank()) Text(description, color = colors.textSecondary, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 12.dp))
         Row(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("LEVEL $level", color = Gold, fontSize = 14.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
-            Text(if (isMaxLevel) "MAX LEVEL" else "${xpPerLevel.coerceAtLeast(0) - xp.coerceAtLeast(0)} XP TO NEXT", color = TextMuted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Text("LEVEL $level", color = colors.accent, fontSize = 14.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
+            Text(if (isMaxLevel) "MAX LEVEL" else "${xpPerLevel.coerceAtLeast(0) - xp.coerceAtLeast(0)} XP TO NEXT", color = colors.textSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
         }
         LinearProgressIndicator(
             progress = { progress }, modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape),
-            color = Gold, trackColor = Color.White.copy(alpha = .14f)
+            color = colors.accent, trackColor = colors.border
         )
         Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(if (isMaxLevel) "Every season reward unlocked" else "$xp / $xpPerLevel XP", color = TextMuted, fontSize = 10.sp)
-            Text("MAX $maxLevel", color = TextMuted, fontSize = 10.sp)
+            Text(if (isMaxLevel) "Every season reward unlocked" else "$xp / $xpPerLevel XP", color = colors.textSecondary, fontSize = 10.sp)
+            Text("MAX $maxLevel", color = colors.textSecondary, fontSize = 10.sp)
         }
         if (!premium) {
             Button(
@@ -228,10 +246,10 @@ private fun PassHero(
                 enabled = !isPurchasing,
                 modifier = Modifier.fillMaxWidth().padding(top = 15.dp).height(48.dp),
                 shape = RoundedCornerShape(15.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Color(0xFF2D1B34))
+                colors = ButtonDefaults.buttonColors(containerColor = colors.accent, contentColor = colors.primaryOn)
             ) { Text(if (isPurchasing) "Unlocking…" else "Unlock Premium  ·  $price coins", fontWeight = FontWeight.Black) }
         } else {
-            Text("Premium track unlocked · rewards are ready when you reach them", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 13.dp))
+            Text("Premium track unlocked · rewards are ready when you reach them", color = colors.accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 13.dp))
         }
     }
 }
@@ -246,17 +264,18 @@ private fun PassRewardLevel(
     claimingTrack: String?,
     onClaim: (String) -> Unit
 ) {
+    val colors = LocalYugmColors.current
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(19.dp))
-            .background(if (unlocked) Color(0xFF201D31) else Panel.copy(alpha = .84f))
-            .border(1.dp, if (unlocked) Gold.copy(alpha = .19f) else Color.White.copy(alpha = .045f), RoundedCornerShape(19.dp)).padding(12.dp)
+            .background(if (unlocked) colors.surfaceElevated else colors.surface)
+            .border(1.dp, if (unlocked) colors.accent.copy(alpha = .25f) else colors.border, RoundedCornerShape(19.dp)).padding(12.dp)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(30.dp).clip(CircleShape).background(if (unlocked) Gold.copy(alpha = .2f) else Color.White.copy(alpha = .07f)), contentAlignment = Alignment.Center) {
-                Text("${reward.level}", color = if (unlocked) Gold else TextMuted, fontWeight = FontWeight.Black, fontSize = 12.sp)
+            Box(Modifier.size(30.dp).clip(CircleShape).background(if (unlocked) colors.accent.copy(alpha = .16f) else colors.surfaceVariant), contentAlignment = Alignment.Center) {
+                Text("${reward.level}", color = if (unlocked) colors.accent else colors.textSecondary, fontWeight = FontWeight.Black, fontSize = 12.sp)
             }
-            Text("Level ${reward.level}", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).padding(start = 9.dp))
-            Text(if (unlocked) "UNLOCKED" else "${(reward.level - 1).coerceAtLeast(0)} LEVELS TO GO", color = if (unlocked) Gold else TextMuted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Text("Level ${reward.level}", color = colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).padding(start = 9.dp))
+            Text(if (unlocked) "UNLOCKED" else "${(reward.level - 1).coerceAtLeast(0)} LEVELS TO GO", color = if (unlocked) colors.accent else colors.textSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
         }
         Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             RewardTrackCard("FREE", reward.freeReward, freeClaimed, unlocked, true, claimingTrack == "free", Modifier.weight(1f)) { onClaim("free") }
@@ -276,15 +295,16 @@ private fun RewardTrackCard(
     modifier: Modifier = Modifier,
     onClaim: () -> Unit
 ) {
-    val accent = if (label == "PREMIUM") Pink else Gold
+    val colors = LocalYugmColors.current
+    val accent = if (label == "PREMIUM") colors.secondary else colors.accent
     Column(
-        modifier.clip(RoundedCornerShape(14.dp)).background(Color.Black.copy(alpha = .17f))
+        modifier.clip(RoundedCornerShape(14.dp)).background(colors.surface)
             .border(1.dp, accent.copy(alpha = .15f), RoundedCornerShape(14.dp)).padding(10.dp)
     ) {
         Text(label, color = accent, fontSize = 9.sp, fontWeight = FontWeight.Black)
         Spacer(Modifier.height(5.dp))
-        Text(reward?.let(::rewardTitle) ?: "No reward", color = if (reward == null) TextMuted else TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(reward?.let(::rewardDescription) ?: "—", color = TextMuted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+        Text(reward?.let(::rewardTitle) ?: "No reward", color = if (reward == null) colors.textSecondary else colors.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(reward?.let(::rewardDescription) ?: "—", color = colors.textSecondary, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
         if (reward != null) {
             val buttonLabel = when {
                 claimed -> "Claimed"
@@ -299,7 +319,7 @@ private fun RewardTrackCard(
                 modifier = Modifier.fillMaxWidth().padding(top = 7.dp).height(34.dp),
                 contentPadding = PaddingValues(horizontal = 5.dp),
                 shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = accent.copy(alpha = .19f), disabledContainerColor = Color.White.copy(alpha = .05f), contentColor = accent, disabledContentColor = TextMuted)
+                colors = ButtonDefaults.buttonColors(containerColor = accent.copy(alpha = .14f), disabledContainerColor = colors.surfaceVariant, contentColor = accent, disabledContentColor = colors.textSecondary)
             ) { Text(buttonLabel, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1) }
         }
     }
@@ -309,6 +329,31 @@ private fun RewardTrackCard(
 private fun PassBadge(label: String, tint: Color) {
     Text(label, color = tint, fontSize = 8.sp, fontWeight = FontWeight.Black,
         modifier = Modifier.clip(CircleShape).background(tint.copy(alpha = .15f)).border(1.dp, tint.copy(alpha = .35f), CircleShape).padding(horizontal = 8.dp, vertical = 5.dp))
+}
+
+@Composable
+private fun PreviousSeasonSummaryCard(summary: com.yugm.app.core.model.PreviousSeasonSummary) {
+    val colors = LocalYugmColors.current
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+            .background(colors.surface).border(1.dp, colors.border, RoundedCornerShape(18.dp)).padding(14.dp)
+    ) {
+        Text("Previous season · ${summary.name}", color = colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        Text(
+            "Level ${summary.level}/${summary.maxLevel} · ${if (summary.premium) "Premium" else "Free track"} · ended ${summary.endedAt.take(10)}",
+            color = colors.textSecondary,
+            fontSize = 10.sp,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+        Text(
+            if (summary.unclaimedRewards > 0) "${summary.unclaimedRewards} earned rewards were left unclaimed. Previous seasons are read-only."
+            else "All earned rewards from this season were claimed.",
+            color = if (summary.unclaimedRewards > 0) colors.warning else colors.success,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+    }
 }
 
 private fun rewardTitle(reward: BattlePassTrackReward) = when (reward.type.lowercase()) {

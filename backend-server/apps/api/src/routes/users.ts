@@ -1,7 +1,7 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
-import { levelMilestones, profileSchema, reactionSchema, socketEvents, streakCosmeticRewards, xpEvents } from "@yugm/shared";
+import { getLevelMilestone, levelMilestones, profileSchema, reactionSchema, socketEvents, streakCoinBonuses, streakCosmeticRewards, xpEventDisplay, xpEvents, type XpEvent } from "@yugm/shared";
 import { optionalAuth, requireAuth, requireNotMuted, type AuthRequest } from "../middleware/auth.js";
 import { activeCosmeticKey, ensureDefaultCosmetics, listCosmeticsByIds } from "../services/cosmetics.js";
 import { chatLimiter } from "../middleware/rateLimit.js";
@@ -25,7 +25,8 @@ import { createNotification } from "../services/notifications.js";
 import { emitUser, getOnlineUserIds, isUserOnline } from "../services/socket.js";
 import { autoModerate } from "../middleware/autoModerate.js";
 import { getVipStatus } from "../services/vip.js";
-import { dailyCheckInStart, getLevelStatus, grantXp } from "../services/levels.js";
+import { dailyCheckInStart, dailyXpCaps, getLevelStatus, grantXp } from "../services/levels.js";
+import { XpDailyCap } from "../models/XpDailyCap.js";
 import { creditWallet } from "../services/wallet.js";
 import { findRelationship, grantRelationshipXp } from "../services/relationships.js";
 import { DeviceToken } from "../models/DeviceToken.js";
@@ -366,13 +367,14 @@ usersRouter.patch("/me", validateBody(profileSchema.partial().refine((data) => d
     }
     throw error;
   }
+  let xpGrant: Awaited<ReturnType<typeof grantXp>> = undefined;
   if (user && !user.profileCompletedAt && hasCompletedProfile(user)) {
     user.profileCompletedAt = new Date();
     await user.save();
-    await grantXp(user.id, "PROFILE_COMPLETE");
+    xpGrant = await grantXp(user.id, "PROFILE_COMPLETE", { idempotencyKey: `profile-complete:${user.id}` });
     user = await User.findById(req.user!.id).select("-__v");
   }
-  sendOk(res, { user: publicUser(user) });
+  sendOk(res, { user: publicUser(user), xpGrant });
 }));
 
 usersRouter.get("/me/close-friends", asyncHandler(async (req: AuthRequest, res) => {
@@ -428,7 +430,7 @@ usersRouter.post("/me/feedback", validateBody(feedbackSchema), asyncHandler(asyn
 }));
 
 usersRouter.get("/me/level", (req: AuthRequest, res) => {
-  sendOk(res, { level: getLevelStatus(req.user) });
+  sendOk(res, { schemaVersion: 1, level: getLevelStatus(req.user) });
 });
 
 usersRouter.get("/me/level-overview", asyncHandler(async (req: AuthRequest, res) => {
@@ -439,45 +441,82 @@ usersRouter.get("/me/level-overview", asyncHandler(async (req: AuthRequest, res)
 
   const levelStatus = getLevelStatus(user);
   const streak = user.streakCount ?? 0;
-  const streakBonuses: Record<number, number> = { 3: 10, 7: 25, 14: 50, 30: 100, 60: 200, 90: 500 };
-  const milestones = Object.keys(streakBonuses).map(Number).sort((a, b) => a - b);
+  const milestones = Object.keys(streakCoinBonuses).map(Number).sort((a, b) => a - b);
   const nextMilestone = milestones.find((m) => m > streak) ?? null;
+  const today = dailyCheckInStart();
+  const capRows = await XpDailyCap.find({ userId: req.user!.id, day: today }).select("event amount").lean();
+  const earnedByEvent = new Map(capRows.map((row) => [row.event, row.amount]));
+  const eventInfo = (key: XpEvent) => ({
+    ...xpEventDisplay[key],
+    xp: xpEvents[key],
+    cap: dailyXpCaps[key] ?? null,
+    earnedToday: earnedByEvent.get(key) ?? 0
+  });
+  const todayXpEarned = capRows.reduce((total, row) => total + row.amount, 0);
+  const todayXpCap = Object.values(dailyXpCaps).reduce((total, cap) => total + (cap ?? 0), 0);
+  const roadmapMilestones = levelStatus.level <= levelMilestones.length
+    ? levelMilestones
+    : Array.from({ length: 31 }, (_, index) => getLevelMilestone(Math.max(1, levelStatus.level - 10) + index));
 
-  const topUsers = await User.find({ isBlocked: { $ne: true } })
-    .sort({ level: -1, xp: -1 })
-    .limit(10)
-    .select("name username avatar level levelTitle xp activeCosmetics")
-    .lean();
+  const [topUsers, usersAhead] = await Promise.all([
+    User.find({ isBlocked: { $ne: true } })
+      .sort({ level: -1, xp: -1, _id: 1 })
+      .limit(10)
+      .select("name username avatar level levelTitle xp activeCosmetics")
+      .lean(),
+    User.countDocuments({
+      isBlocked: { $ne: true },
+      _id: { $ne: user._id },
+      $or: [
+        { level: { $gt: levelStatus.level } },
+        { level: levelStatus.level, xp: { $gt: levelStatus.xp } },
+        { level: levelStatus.level, xp: levelStatus.xp, _id: { $lt: user._id } }
+      ]
+    })
+  ]);
 
   sendOk(res, {
+    schemaVersion: 1,
     level: levelStatus,
     streak: {
       count: streak,
       canCheckIn: levelStatus.canDailyCheckIn,
       nextMilestone,
-      nextMilestoneReward: nextMilestone ? streakBonuses[nextMilestone] : 0,
-      streakBonuses
+      nextMilestoneReward: nextMilestone ? streakCoinBonuses[nextMilestone] : 0,
+      milestones: milestones.map((streakDays) => ({
+        streakDays,
+        rewardCoins: streakCoinBonuses[streakDays],
+        cosmeticId: streakCosmeticRewards[streakDays] ?? "",
+        reached: streak >= streakDays
+      })),
+      streakBonuses: streakCoinBonuses
     },
-    milestones: levelMilestones,
+    leaderboardRank: usersAhead + 1,
+    milestones: roadmapMilestones,
     xpEvents: {
-      DAILY_CHECKIN: { name: "Daily Check-In", xp: xpEvents.DAILY_CHECKIN, icon: "📅" },
-      PROFILE_COMPLETE: { name: "Complete Profile", xp: xpEvents.PROFILE_COMPLETE, icon: "⭐" },
-      ROOM_CREATE: { name: "Host Live Room", xp: xpEvents.ROOM_CREATE, icon: "🎙️" },
-      ROOM_JOIN: { name: "Join Room", xp: xpEvents.ROOM_JOIN, icon: "🎧" },
-      CHAT_MESSAGE: { name: "Send Chat Message", xp: xpEvents.CHAT_MESSAGE, icon: "💬" },
-      GIFT_SENT: { name: "Send Gift", xp: xpEvents.GIFT_SENT, icon: "🎁" },
-      VIP_PURCHASE: { name: "VIP Subscription", xp: xpEvents.VIP_PURCHASE, icon: "👑" },
-      COSMETIC_PURCHASE: { name: "Cosmetic Purchase", xp: xpEvents.COSMETIC_PURCHASE, icon: "🎨" }
+      DAILY_CHECKIN: eventInfo("DAILY_CHECKIN"),
+      PROFILE_COMPLETE: eventInfo("PROFILE_COMPLETE"),
+      ROOM_CREATE: eventInfo("ROOM_CREATE"),
+      ROOM_JOIN: eventInfo("ROOM_JOIN"),
+      CHAT_MESSAGE: eventInfo("CHAT_MESSAGE"),
+      GIFT_SENT: eventInfo("GIFT_SENT"),
+      GIFT_RECEIVED: eventInfo("GIFT_RECEIVED"),
+      VIP_PURCHASE: eventInfo("VIP_PURCHASE"),
+      COSMETIC_PURCHASE: eventInfo("COSMETIC_PURCHASE"),
+      FOLLOW_USER: eventInfo("FOLLOW_USER"),
+      MINI_GAME_PLAY: eventInfo("MINI_GAME_PLAY")
     },
+    todayXpEarned,
+    todayXpCap,
     leaderboard: topUsers.map((u, i) => ({
       rank: i + 1,
       id: u._id.toString(),
       name: u.name,
       username: u.username,
       avatar: u.avatar,
-      level: u.level ?? 1,
-      levelTitle: u.levelTitle ?? "New Vibe",
-      xp: u.xp ?? 0,
+      level: getLevelStatus(u).level,
+      levelTitle: getLevelStatus(u).title,
+      xp: getLevelStatus(u).xp,
       activeCosmetics: u.activeCosmetics ?? {}
     }))
   });
@@ -512,11 +551,13 @@ usersRouter.get("/me/inventory", asyncHandler(async (req: AuthRequest, res) => {
     name: item.giftId?.name ?? "Gift",
     icon: item.giftId?.icon ?? "🎁",
     coinPrice: item.giftId?.coinPrice ?? 0,
+    rarity: item.giftId?.rarity ?? "common",
     quantity: item.quantity,
     source: item.source,
     tradable: item.tradable,
     upgradeLevel: item.upgradeLevel ?? 1,
-    upgradeable: Boolean(item.giftId?.upgradeable)
+    upgradeable: Boolean(item.giftId?.upgradeable),
+    upgradeCost: item.giftId?.upgradeable ? Math.floor((item.giftId?.coinPrice ?? 0) * 1.5) : 0
   }));
 
   const claimedTiers = user.claimedAchievementTiers ?? [];
@@ -555,10 +596,11 @@ usersRouter.get("/me/inventory", asyncHandler(async (req: AuthRequest, res) => {
 
 usersRouter.post("/me/check-in", asyncHandler(async (req: AuthRequest, res) => {
   const now = new Date();
+  const todayStart = dailyCheckInStart(now);
   const user = await User.findById(req.user!.id).select("xp level levelTitle lastDailyCheckInAt walletBalance streakCount ownedCosmeticIds").lean();
   if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
 
-  const alreadyClaimed = user.lastDailyCheckInAt && user.lastDailyCheckInAt >= dailyCheckInStart();
+  const alreadyClaimed = user.lastDailyCheckInAt && user.lastDailyCheckInAt >= todayStart;
   if (alreadyClaimed) {
     return sendOk(res, { alreadyClaimed: true, level: getLevelStatus(user), balance: user.walletBalance, streak: user.streakCount ?? 0 });
   }
@@ -567,33 +609,56 @@ usersRouter.post("/me/check-in", asyncHandler(async (req: AuthRequest, res) => {
   const isConsecutive = user.lastDailyCheckInAt && user.lastDailyCheckInAt >= dailyCheckInStart(yesterday);
   const newStreak = (isConsecutive ? (user.streakCount ?? 0) : 0) + 1;
 
-  const update: Record<string, unknown> = { lastDailyCheckInAt: now, streakCount: newStreak };
   const rewardCosmetic = streakCosmeticRewards[newStreak];
   let unlockedCosmetic: string | undefined;
-  if (rewardCosmetic && !user.ownedCosmeticIds.includes(rewardCosmetic)) {
-    update.$push = { ownedCosmeticIds: rewardCosmetic };
+  if (rewardCosmetic && !(user.ownedCosmeticIds ?? []).includes(rewardCosmetic)) {
     unlockedCosmetic = rewardCosmetic;
   }
 
-  await User.findByIdAndUpdate(req.user!.id, update);
+  const claimUpdate: Record<string, unknown> = {
+    $set: { lastDailyCheckInAt: now, streakCount: newStreak },
+    ...(unlockedCosmetic ? { $addToSet: { ownedCosmeticIds: unlockedCosmetic } } : {})
+  };
+  const claimedUser = await User.findOneAndUpdate(
+    { _id: req.user!.id, lastDailyCheckInAt: user.lastDailyCheckInAt ?? null },
+    claimUpdate,
+    { new: true }
+  ).select("xp level levelTitle lastDailyCheckInAt walletBalance streakCount").lean();
+  if (!claimedUser) {
+    const currentUser = await User.findById(req.user!.id).select("xp level levelTitle lastDailyCheckInAt walletBalance streakCount").lean();
+    return sendOk(res, {
+      alreadyClaimed: true,
+      level: getLevelStatus(currentUser),
+      balance: currentUser?.walletBalance,
+      streak: currentUser?.streakCount ?? 0
+    });
+  }
 
-  const streakBonuses: Record<number, number> = { 3: 10, 7: 25, 14: 50, 30: 100, 60: 200, 90: 500 };
-  const milestones = Object.keys(streakBonuses).map(Number).sort((a, b) => a - b);
+  const milestones = Object.keys(streakCoinBonuses).map(Number).sort((a, b) => a - b);
   let streakBonus = 0;
-  if (streakBonuses[newStreak]) {
-    streakBonus = streakBonuses[newStreak];
-    await creditWallet(req.user!.id, streakBonus, "STREAK_BONUS", { streak: newStreak, milestone: newStreak });
+  if (streakCoinBonuses[newStreak]) {
+    streakBonus = streakCoinBonuses[newStreak];
+    await creditWallet(req.user!.id, streakBonus, "STREAK_BONUS", {
+      streak: newStreak,
+      milestone: newStreak,
+      idempotencyKey: `check-in:${req.user!.id}:${todayStart.toISOString()}:streak`
+    });
   }
 
   const nextMilestone = milestones.find((m) => m > newStreak) ?? null;
 
-  const xpReward = await grantXp(req.user!.id, "DAILY_CHECKIN");
+  const xpReward = await grantXp(req.user!.id, "DAILY_CHECKIN", {
+    idempotencyKey: `check-in:${req.user!.id}:${todayStart.toISOString()}:xp`
+  });
   sendOk(res, {
+    schemaVersion: 1,
     alreadyClaimed: false,
     streak: newStreak,
     unlockedCosmetic,
     streakBonus,
     nextMilestone,
+    balance: (xpReward as { walletBalance?: number } | undefined)?.walletBalance,
+    xpGrant: xpReward,
     ...(xpReward ?? {})
   });
 }));
@@ -1038,9 +1103,9 @@ usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, requireNotCh
   emitUser(req.user!.id, socketEvents.directMessageNew, { message, partnerId: receiverId });
   const receiverMuted = await ConversationMute.exists({ ownerId: receiverId, partnerId: req.user!._id, muted: true });
   if (!receiverMuted) await createNotification(receiverId, "MESSAGE", "New message", `${req.user!.name}: ${message?.message ?? ""}`, { partnerId: req.user!.id, messageId: created._id.toString() });
-  await grantXp(req.user!.id, "CHAT_MESSAGE");
+  const xpGrant = await grantXp(req.user!.id, "CHAT_MESSAGE", { messageId: created._id.toString(), idempotencyKey: `message:${created._id}` });
   const relationship = await grantRelationshipXp(req.user!.id, receiverId, "MESSAGE_SENT", { messageId: created._id.toString() });
-  sendOk(res, { message, relationship: relationship?.relationship }, 201);
+  sendOk(res, { message, relationship: relationship?.relationship, xpGrant }, 201);
 }));
 
 usersRouter.post("/messages/:userId/call", requireAuth, requireNotMuted, validateBody(privateCallSchema), asyncHandler(async (req: AuthRequest, res) => {
@@ -1177,13 +1242,38 @@ usersRouter.get("/me/blocked", requireAuth, asyncHandler(async (req: AuthRequest
   sendOk(res, { users });
 }));
 
-usersRouter.get("/leaderboard/levels", asyncHandler(async (_req: AuthRequest, res) => {
-  const users = await User.find({ isBlocked: { $ne: true } })
+usersRouter.get("/leaderboard/levels", asyncHandler(async (req: AuthRequest, res) => {
+  const page = Math.max(1, Number.parseInt(String(req.query.page ?? "1"), 10) || 1);
+  const pageSize = Math.min(50, Math.max(1, Number.parseInt(String(req.query.pageSize ?? "25"), 10) || 25));
+  const requester = await User.findById(req.user!.id).select("level xp").lean();
+  if (!requester) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+  const [users, total] = await Promise.all([
+    User.find({ isBlocked: { $ne: true } })
     .select("name username avatar city followersCount activeCosmetics vipTier vipExpiresAt xp level levelTitle")
-    .sort({ level: -1, xp: -1, followersCount: -1 })
-    .limit(50)
-    .lean();
-  sendOk(res, { users: users.map(publicUser) });
+      .sort({ level: -1, xp: -1, _id: 1 })
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
+      .lean(),
+    User.countDocuments({ isBlocked: { $ne: true } })
+  ]);
+  const usersAhead = await User.countDocuments({
+    isBlocked: { $ne: true },
+    $or: [
+      { level: { $gt: requester.level ?? 1 } },
+      { level: requester.level ?? 1, xp: { $gt: requester.xp ?? 0 } },
+      { level: requester.level ?? 1, xp: requester.xp ?? 0, _id: { $lt: requester._id } }
+    ]
+  });
+  const ranked = users.map((user, index) => ({ ...publicUser(user), rank: (page - 1) * pageSize + index + 1 }));
+  sendOk(res, {
+    users: ranked,
+    leaderboard: ranked,
+    page,
+    pageSize,
+    total,
+    requesterId: req.user!.id,
+    requesterRank: usersAhead + 1
+  });
 }));
 
 usersRouter.get("/:userId/pk-stats", asyncHandler(async (req: AuthRequest, res) => {
@@ -1249,7 +1339,7 @@ usersRouter.post("/:id/follow", asyncHandler(async (req: AuthRequest, res) => {
   try {
     const existing = await Follow.findOne({ followerId: req.user!.id, followingId: req.params.id }).session(session);
     if (!existing) {
-      await Follow.create([{ followerId: req.user!.id, followingId: req.params.id }], { session, ordered: true });
+      const [follow] = await Follow.create([{ followerId: req.user!.id, followingId: req.params.id }], { session, ordered: true });
       await User.findByIdAndUpdate(req.user!.id, { $inc: { followingCount: 1 } }, { session });
       await User.findByIdAndUpdate(req.params.id, { $inc: { followersCount: 1 } }, { session });
       await createNotification(req.params.id, "FOLLOW", "New Follower", `${req.user!.name} started following you`, { userId: req.user!.id });
@@ -1262,8 +1352,10 @@ usersRouter.post("/:id/follow", asyncHandler(async (req: AuthRequest, res) => {
     session.endSession();
     throw err;
   }
-  if (createdFollow) await grantXp(req.user!.id, "FOLLOW_USER");
-  sendOk(res, { following: true });
+  const xpGrant = createdFollow
+    ? await grantXp(req.user!.id, "FOLLOW_USER", { targetId: req.params.id, idempotencyKey: `follow:${req.user!.id}:${req.params.id}` })
+    : undefined;
+  sendOk(res, { following: true, xpGrant });
 }));
 
 usersRouter.post("/:id/close-friend", asyncHandler(async (req: AuthRequest, res) => {
@@ -1292,9 +1384,11 @@ usersRouter.delete("/:id/close-friend", asyncHandler(async (req: AuthRequest, re
 usersRouter.delete("/:id/follow", asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
   const session = await mongoose.startSession();
+  let unfollowed = false;
   session.startTransaction();
   try {
     const deleted = await Follow.findOneAndDelete({ followerId: req.user!.id, followingId: req.params.id }).session(session);
+    unfollowed = Boolean(deleted);
     if (deleted) {
       await User.updateOne({ _id: req.user!.id, followingCount: { $gt: 0 } }, { $inc: { followingCount: -1 } }, { session });
       await User.updateOne({ _id: req.params.id, followersCount: { $gt: 0 } }, { $inc: { followersCount: -1 } }, { session });
@@ -1305,6 +1399,10 @@ usersRouter.delete("/:id/follow", asyncHandler(async (req: AuthRequest, res) => 
     await session.abortTransaction();
     session.endSession();
     throw err;
+  }
+  if (unfollowed) {
+    const unfollower = await User.findById(req.user!.id).select("name").lean();
+    await Promise.resolve(createNotification(req.params.id, "FOLLOW", "A follower left", `${unfollower?.name ?? "Someone"} unfollowed you`, { userId: req.user!.id, action: "UNFOLLOW" })).catch(() => undefined);
   }
   sendOk(res, { following: false });
 }));

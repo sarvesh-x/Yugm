@@ -110,7 +110,9 @@ fun JSONObject.toInventoryItem(): InventoryItem {
         gift = giftObj?.toGiftV2(),
         quantity = optInt("quantity", 1),
         tradable = optBoolean("tradable", false),
-        source = optString("source", "purchased")
+        source = optString("source", "purchased"),
+        upgradeLevel = optInt("upgradeLevel", 1),
+        upgradeCost = optInt("upgradeCost", 0)
     )
 }
 

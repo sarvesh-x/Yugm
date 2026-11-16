@@ -32,11 +32,28 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.ChatBubble
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MonetizationOn
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.RadioButtonChecked
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -57,6 +74,7 @@ import androidx.compose.ui.unit.sp
 import com.yugm.app.core.ui.cosmetics.RoomAmbienceBackdrop
 import com.yugm.app.core.ui.theme.Background
 import com.yugm.app.core.ui.theme.LocalMotionEnabled
+import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.core.ui.theme.AccessiblePrimaryPink
 import com.yugm.app.core.ui.theme.AccessibleSaffron
 import com.yugm.app.core.ui.theme.BorderColor
@@ -151,6 +169,33 @@ fun YugmBackButton(
     )
 }
 
+private fun resolveGlyphVector(glyph: String): ImageVector? {
+    return when (glyph.trim()) {
+        "⚙", "⚙️" -> Icons.Filled.Settings
+        "+", "＋" -> Icons.Filled.Add
+        "✓", "✔" -> Icons.Filled.Check
+        "←" -> Icons.AutoMirrored.Filled.ArrowBack
+        "♢", "✦" -> Icons.Filled.CardGiftcard
+        "●●" -> Icons.Filled.GridView
+        "☷" -> Icons.Filled.FilterList
+        "◉" -> Icons.Filled.MonetizationOn
+        "↗", "↗️" -> Icons.AutoMirrored.Filled.TrendingUp
+        "↙", "↙️" -> Icons.AutoMirrored.Filled.TrendingDown
+        "♛", "👑" -> Icons.Filled.EmojiEvents
+        "⚡" -> Icons.Filled.Mic
+        "◈" -> Icons.Filled.MeetingRoom
+        "✉" -> Icons.Filled.Email
+        "⌖" -> Icons.Filled.LocationOn
+        "◇" -> Icons.Filled.Favorite
+        "◎" -> Icons.Filled.RadioButtonChecked
+        "▣" -> Icons.Filled.CheckBox
+        "♪" -> Icons.Filled.MusicNote
+        "◆" -> Icons.Filled.SportsEsports
+        "♡", "♥" -> Icons.Filled.Favorite
+        else -> null
+    }
+}
+
 @Composable
 fun RoundAction(
     glyph: String,
@@ -162,6 +207,7 @@ fun RoundAction(
     accessibilityLabel: String? = null,
     onClick: () -> Unit
 ) {
+    val resolvedVector = imageVector ?: resolveGlyphVector(glyph)
     Box(modifier) {
         Box(
             modifier = Modifier
@@ -181,9 +227,9 @@ fun RoundAction(
                 .clickable(role = Role.Button, onClickLabel = accessibilityLabel, onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
-            if (imageVector != null) {
-                Icon(imageVector, contentDescription = null, modifier = Modifier.size(22.dp), tint = Color.White)
-            } else {
+            if (resolvedVector != null) {
+                Icon(resolvedVector, contentDescription = null, modifier = Modifier.size(22.dp), tint = Color.White)
+            } else if (glyph.isNotBlank()) {
                 Text(glyph, color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
             }
         }
@@ -240,6 +286,7 @@ fun ReferenceChip(
     onClick: (() -> Unit)? = null
 ) {
     val shape = RoundedCornerShape(13.dp)
+    val resolvedVector = resolveGlyphVector(glyph)
     Row(
         modifier = Modifier
             .heightIn(min = 48.dp)
@@ -252,7 +299,11 @@ fun ReferenceChip(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        if (glyph.isNotBlank()) Text(glyph, color = if (selected) Pink else TextMuted, fontSize = 14.sp)
+        if (resolvedVector != null) {
+            Icon(resolvedVector, contentDescription = null, modifier = Modifier.size(16.dp), tint = if (selected) Pink else TextMuted)
+        } else if (glyph.isNotBlank()) {
+            Text(glyph, color = if (selected) Pink else TextMuted, fontSize = 14.sp)
+        }
         Text(text, color = TextPrimary, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
     }
 }
@@ -288,6 +339,7 @@ fun SegmentedTabs(
     ) {
         items.forEachIndexed { index, item ->
             val selected = index == selectedIndex
+            val resolvedVector = resolveGlyphVector(item.first)
             Row(
                 modifier = Modifier
                     .weight(1f)
@@ -305,8 +357,13 @@ fun SegmentedTabs(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
-                if (item.first.isNotBlank()) Text(item.first, color = if (selected) Color.White else TextMuted, fontSize = 15.sp)
-                Spacer(Modifier.width(6.dp))
+                if (resolvedVector != null) {
+                    Icon(resolvedVector, contentDescription = null, modifier = Modifier.size(18.dp), tint = if (selected) Color.White else TextMuted)
+                    Spacer(Modifier.width(6.dp))
+                } else if (item.first.isNotBlank()) {
+                    Text(item.first, color = if (selected) Color.White else TextMuted, fontSize = 15.sp)
+                    Spacer(Modifier.width(6.dp))
+                }
                 Text(item.second, color = if (selected) Color.White else TextMuted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
         }
@@ -343,9 +400,11 @@ fun YugmBottomDock(
             Triple(YugmDockTab.PROFILE, Icons.Filled.Person, "Profile")
         )
     }
-    val dockColor = Color(0xF5181B2D)
-    val inactiveColor = TextMuted
-    val selectedColor = PrimaryPurple
+    val colors = LocalYugmColors.current
+    val dockColor = colors.surface.copy(alpha = 0.97f)
+    val inactiveColor = colors.textSecondary
+    val selectedColor = colors.secondary
+    val dockShadow = if (colors.isDark) Color.Black.copy(alpha = 0.6f) else Color(0xFF343447).copy(alpha = 0.14f)
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -358,7 +417,7 @@ fun YugmBottomDock(
                 .fillMaxWidth()
                 .height(72.dp)
                 .align(Alignment.BottomCenter)
-                .shadow(24.dp, RoundedCornerShape(25.dp), ambientColor = Color.Black)
+                .shadow(if (colors.isDark) 24.dp else 12.dp, RoundedCornerShape(25.dp), ambientColor = dockShadow, spotColor = dockShadow)
                 .clip(RoundedCornerShape(25.dp))
                 .background(dockColor)
                 .border(1.dp, BorderColor, RoundedCornerShape(25.dp))

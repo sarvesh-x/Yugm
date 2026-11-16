@@ -225,16 +225,16 @@ walletRouter.post("/wallet/cosmetics/purchase", requireWalletNotFrozen, validate
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    await debitWallet(req.user!.id, cosmetic.coinPrice, "PROFILE_COSMETIC_PURCHASE", { cosmeticId: req.body.cosmeticId, type: cosmetic.type }, session);
+    const [purchaseDebit] = await debitWallet(req.user!.id, cosmetic.coinPrice, "PROFILE_COSMETIC_PURCHASE", { cosmeticId: req.body.cosmeticId, type: cosmetic.type }, session);
     const key = activeCosmeticKey(cosmetic.type);
     const update: Record<string, unknown> = { $addToSet: { ownedCosmeticIds: req.body.cosmeticId } };
     if (key) update.$set = { [`activeCosmetics.${key}`]: req.body.cosmeticId };
     await User.findByIdAndUpdate(req.user!.id, update, { session });
     await session.commitTransaction();
     session.endSession();
-    const level = await runWalletSideEffect("cosmetic purchase XP", () => grantXp(req.user!.id, "COSMETIC_PURCHASE", { cosmeticId: req.body.cosmeticId }));
+    const level = await runWalletSideEffect("cosmetic purchase XP", () => grantXp(req.user!.id, "COSMETIC_PURCHASE", { cosmeticId: req.body.cosmeticId, idempotencyKey: `wallet-txn:${purchaseDebit._id}` }));
     const user = await User.findById(req.user!.id).select("walletBalance ownedCosmeticIds activeCosmetics xp level levelTitle lastDailyCheckInAt").lean();
-    sendOk(res, { cosmetic: toPublicCosmetic(cosmetic), balance: user?.walletBalance ?? 0, ownedCosmeticIds: user?.ownedCosmeticIds ?? [], activeCosmetics: user?.activeCosmetics ?? {}, level: level?.level ?? getLevelStatus(user), cosmetics: await listPublicCosmetics() }, 201);
+    sendOk(res, { cosmetic: toPublicCosmetic(cosmetic), balance: user?.walletBalance ?? 0, ownedCosmeticIds: user?.ownedCosmeticIds ?? [], activeCosmetics: user?.activeCosmetics ?? {}, level: level?.level ?? getLevelStatus(user), xpGrant: level, cosmetics: await listPublicCosmetics() }, 201);
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
@@ -270,10 +270,10 @@ walletRouter.post("/wallet/cosmetics/bundle-purchase", requireWalletNotFrozen, v
   if (alreadyOwned.length === bundle.cosmeticIds.length) throw new HttpError(409, "You already own all cosmetics in this bundle", ErrorCode.CONFLICT);
   if ((req.user!.walletBalance ?? 0) < bundle.coinPrice) throw new HttpError(403, "Insufficient balance", ErrorCode.INSUFFICIENT_FUNDS);
   const newIds = bundle.cosmeticIds.filter((id) => !(req.user!.ownedCosmeticIds ?? []).includes(id));
-  await debitWallet(req.user!.id, bundle.coinPrice, "COSMETIC_BUNDLE_PURCHASE", { bundleId: bundle.id });
+  const [purchaseDebit] = await debitWallet(req.user!.id, bundle.coinPrice, "COSMETIC_BUNDLE_PURCHASE", { bundleId: bundle.id });
   const user = await User.findByIdAndUpdate(req.user!.id, { $push: { ownedCosmeticIds: { $each: newIds } } }, { new: true }).select("ownedCosmeticIds activeCosmetics walletBalance").lean();
-  await grantXp(req.user!.id, "COSMETIC_PURCHASE", { bundleId: bundle.id });
-  sendOk(res, { ownedCosmeticIds: user?.ownedCosmeticIds ?? [], activeCosmetics: user?.activeCosmetics ?? {}, balance: user?.walletBalance ?? 0, newCosmetics: newIds, cosmetics: await listPublicCosmetics() });
+  const xpGrant = await grantXp(req.user!.id, "COSMETIC_PURCHASE", { bundleId: bundle.id, idempotencyKey: `wallet-txn:${purchaseDebit._id}` });
+  sendOk(res, { ownedCosmeticIds: user?.ownedCosmeticIds ?? [], activeCosmetics: user?.activeCosmetics ?? {}, balance: user?.walletBalance ?? 0, newCosmetics: newIds, xpGrant, cosmetics: await listPublicCosmetics() });
 }));
 
 walletRouter.post("/wallet/cosmetics/transfer", requireWalletNotFrozen, validateBody(transferCosmeticSchema), asyncHandler(async (req: AuthRequest, res) => {
@@ -305,7 +305,7 @@ walletRouter.post("/wallet/vip/activate", requireWalletNotFrozen, validateBody(p
     const user = await User.findById(req.user!.id).session(session);
     if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
 
-    await debitWallet(user.id, plan.coinPrice, "VIP_PURCHASE", { planId: plan.id, durationDays: plan.durationDays }, session);
+    const [purchaseDebit] = await debitWallet(user.id, plan.coinPrice, "VIP_PURCHASE", { planId: plan.id, durationDays: plan.durationDays }, session);
     const expiresAt = addVipDays(user, plan.durationDays);
     user.vipTier = "VIP";
     user.vipStartedAt = user.vipStartedAt ?? new Date();
@@ -315,9 +315,9 @@ walletRouter.post("/wallet/vip/activate", requireWalletNotFrozen, validateBody(p
     await session.commitTransaction();
     session.endSession();
 
-    const level = await runWalletSideEffect("VIP purchase XP", () => grantXp(user.id, "VIP_PURCHASE", { planId: plan.id }));
+    const level = await runWalletSideEffect("VIP purchase XP", () => grantXp(user.id, "VIP_PURCHASE", { planId: plan.id, idempotencyKey: `wallet-txn:${purchaseDebit._id}` }));
     const fresh = await User.findById(user.id).select("walletBalance vipTier vipStartedAt vipExpiresAt xp level levelTitle lastDailyCheckInAt").lean();
-    sendOk(res, { balance: fresh?.walletBalance ?? 0, vip: getVipStatus(fresh), level: level?.level ?? getLevelStatus(fresh), plan });
+    sendOk(res, { balance: fresh?.walletBalance ?? 0, vip: getVipStatus(fresh), level: level?.level ?? getLevelStatus(fresh), xpGrant: level, plan });
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
@@ -559,8 +559,8 @@ walletRouter.post("/rooms/:id/send-gift", giftLimiter, requireWalletNotFrozen, v
     session.endSession();
   }
 
-  await runWalletSideEffect("sender gift XP", () => grantXp(req.user!.id, "GIFT_SENT", { roomId: room._id.toString(), giftId: gift._id.toString() }));
-  await runWalletSideEffect("receiver gift XP", () => grantXp(req.body.receiverId, "GIFT_RECEIVED", { roomId: room._id.toString(), giftId: gift._id.toString() }));
+  const senderXpGrant = await runWalletSideEffect("sender gift XP", () => grantXp(req.user!.id, "GIFT_SENT", { roomId: room._id.toString(), giftId: gift._id.toString(), idempotencyKey: `gift:${createdGiftTransaction._id}:sent` }));
+  const receiverXpGrant = await runWalletSideEffect("receiver gift XP", () => grantXp(req.body.receiverId, "GIFT_RECEIVED", { roomId: room._id.toString(), giftId: gift._id.toString(), idempotencyKey: `gift:${createdGiftTransaction._id}:received` }));
   await runWalletSideEffect("gift relationship XP", () => grantRelationshipXp(req.user!.id, req.body.receiverId, "GIFT_SENT", { roomId: room._id.toString(), giftId: gift._id.toString() }));
   await runWalletSideEffect("gift notification", () => createNotification(req.body.receiverId, "GIFT", "Gift Received", `${req.user!.name} sent you a ${gift.name}!`, { roomId: room._id.toString(), giftId: gift._id.toString() }));
   // NOTE: emitRoom is called after the socket room join for consistent ordering
@@ -579,7 +579,7 @@ walletRouter.post("/rooms/:id/send-gift", giftLimiter, requireWalletNotFrozen, v
     metadata: { giftId: gift._id.toString(), receiverId: req.body.receiverId, price: giftAmount, currency }
   }));
   if (activity) emitRoom(room._id.toString(), socketEvents.roomActivityNew, { activity });
-  sendOk(res, { giftTransaction: createdGiftTransaction }, 201);
+  sendOk(res, { giftTransaction: createdGiftTransaction, xpGrant: { sent: senderXpGrant, received: receiverXpGrant } }, 201);
 }));
 
 walletRouter.post("/direct-send-gift", requireWalletNotFrozen, validateBody(sendGiftSchema), asyncHandler(async (req: AuthRequest, res) => {
@@ -622,8 +622,8 @@ walletRouter.post("/direct-send-gift", requireWalletNotFrozen, validateBody(send
     }], { session, ordered: true });
     await session.commitTransaction();
     session.endSession();
-    await runWalletSideEffect("direct sender gift XP", () => grantXp(req.user!.id, "GIFT_SENT", { giftId: gift._id.toString(), direct: true }));
-    await runWalletSideEffect("direct receiver gift XP", () => grantXp(receiverId, "GIFT_RECEIVED", { giftId: gift._id.toString(), direct: true }));
+    const senderXpGrant = await runWalletSideEffect("direct sender gift XP", () => grantXp(req.user!.id, "GIFT_SENT", { giftId: gift._id.toString(), direct: true, idempotencyKey: `gift:${giftTransaction[0]._id}:sent` }));
+    const receiverXpGrant = await runWalletSideEffect("direct receiver gift XP", () => grantXp(receiverId, "GIFT_RECEIVED", { giftId: gift._id.toString(), direct: true, idempotencyKey: `gift:${giftTransaction[0]._id}:received` }));
     const relationship = await runWalletSideEffect("direct gift relationship XP", () => grantRelationshipXp(req.user!.id, receiverId, "GIFT_SENT", { giftId: gift._id.toString(), direct: true }));
 
     // Create a direct message indicating the gift was sent
@@ -644,7 +644,7 @@ walletRouter.post("/direct-send-gift", requireWalletNotFrozen, validateBody(send
       emitUser(req.user!.id, socketEvents.directMessageNew, { message, partnerId: receiverId });
     }
     await runWalletSideEffect("direct gift notification", () => createNotification(receiverId, "GIFT", "Gift Received", `${req.user!.name} sent you a ${gift.name}!`, { partnerId: req.user!.id }));
-    sendOk(res, { giftTransaction: giftTransaction[0], message, relationship: relationship?.relationship }, 201);
+    sendOk(res, { giftTransaction: giftTransaction[0], message, relationship: relationship?.relationship, xpGrant: { sent: senderXpGrant, received: receiverXpGrant } }, 201);
   } catch (err) {
     await session.abortTransaction();
     session.endSession();

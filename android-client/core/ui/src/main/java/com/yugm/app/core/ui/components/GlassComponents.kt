@@ -119,23 +119,26 @@ fun AuroraShimmer(speed: Float = 1f) {
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
-    gradient: Brush = Brush.linearGradient(
-        listOf(SurfaceElevated.copy(alpha = 0.88f), Surface.copy(alpha = 0.85f))
-    ),
-    borderGradient: Brush = Brush.horizontalGradient(
-        listOf(PrimaryPurple.copy(alpha = 0.2f), PrimaryPink.copy(alpha = 0.15f), Color.Transparent)
-    ),
+    gradient: Brush? = null,
+    borderGradient: Brush? = null,
     borderWidth: Dp = 1.dp,
     cornerRadius: Dp = 20.dp,
     contentPadding: PaddingValues = PaddingValues(16.dp),
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val colors = LocalYugmColors.current
+    val cardGradient = gradient ?: Brush.linearGradient(
+        listOf(colors.surfaceElevated.copy(alpha = 0.96f), colors.surface.copy(alpha = 0.94f))
+    )
+    val cardBorder = borderGradient ?: Brush.horizontalGradient(
+        listOf(colors.secondary.copy(alpha = 0.2f), colors.primary.copy(alpha = 0.16f), Color.Transparent)
+    )
     val shape = RoundedCornerShape(cornerRadius)
     val mod = modifier
         .clip(shape)
-        .background(gradient)
-        .border(borderWidth, borderGradient, shape)
+        .background(cardGradient)
+        .border(borderWidth, cardBorder, shape)
         .then(
             if (onClick != null) Modifier.clickable(
                 interactionSource = remember { MutableInteractionSource() },

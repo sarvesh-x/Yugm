@@ -121,5 +121,10 @@ fun JSONObject.toSavedGameScoreResult(): SavedGameScoreResult = SavedGameScoreRe
 
 fun JSONObject.toGameReward(): GameReward = GameReward(
     xpAwarded = optInt("xpAwarded", 0),
-    levelUpReward = optInt("levelUpReward", 0)
+    levelUpReward = optInt("levelUpReward", 0),
+    capped = optBoolean("capped", false),
+    cap = if (has("cap") && !isNull("cap")) optInt("cap") else null,
+    earnedToday = if (has("earnedToday") && !isNull("earnedToday")) optInt("earnedToday") else null,
+    remainingToday = if (has("remainingToday") && !isNull("remainingToday")) optInt("remainingToday") else null,
+    levelUp = optBoolean("levelUp", false)
 )
