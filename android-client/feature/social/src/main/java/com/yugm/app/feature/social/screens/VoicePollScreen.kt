@@ -176,7 +176,15 @@ fun VoicePollScreen(
                                             Column(Modifier.weight(1f)) {
                                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                                     Text(if (poll.userName.isNotBlank()) poll.userName else "Someone", color = TextMuted, fontSize = 12.sp)
-                                                    if (status != null) Text("• $status", color = if (status == "Active") Cyan else TextMuted, fontSize = 12.sp)
+                                                    if (status != null) Text(
+                                                        "• $status",
+                                                        color = when (status) {
+                                                            "Active" -> Cyan
+                                                            "Voted" -> Gold
+                                                            else -> TextMuted
+                                                        },
+                                                        fontSize = 12.sp
+                                                    )
                                                 }
                                                 Text(poll.question, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 15.sp)
                                                 Text("${poll.options.size} options \u00B7 $totalVotes votes", color = TextMuted, fontSize = 12.sp)
