@@ -1940,13 +1940,13 @@ private fun openChatMedia(context: android.content.Context, rawUrl: String) {
     }
 }
 private fun reactionEmoji(type: String): String = when (type.lowercase()) {
-    "heart" -> "??"
-    "fire" -> "??"
-    "laugh" -> "??"
-    "clap" -> "??"
-    "wow" -> "??"
-    "crown" -> "??"
-    "stars" -> "?"
-    "party" -> "??"
-    else -> "??"
+    "heart" -> "\u2764\uFE0F"
+    "fire" -> "\uD83D\uDD25"
+    "laugh" -> "\uD83D\uDE02"
+    "clap" -> "\uD83D\uDC4F"
+    "wow" -> "\uD83D\uDE2E"
+    "crown" -> "\uD83D\uDC51"
+    "stars" -> "\u2728"
+    "party" -> "\uD83C\uDF89"
+    else -> "\u2764\uFE0F"
 }
