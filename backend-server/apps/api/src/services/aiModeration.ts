@@ -1,3 +1,10 @@
+try {
+  // Prefer native TensorFlow backend in Node for performance and to avoid tfjs plain-JS warnings.
+  await import("@tensorflow/tfjs-node");
+} catch {
+  // Optional dependency; fall back to default tfjs backend if unavailable.
+}
+
 import * as toxicity from "@tensorflow-models/toxicity";
 
 const THRESHOLD = 0.85;
