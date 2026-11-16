@@ -614,32 +614,67 @@ class RoomViewModel @Inject constructor(
         }
     }
 
-    fun createPoll(question: String, options: List<String>) {
+    fun createPoll(
+        question: String,
+        options: List<String>,
+        onSuccess: () -> Unit = {},
+        onFailure: (String) -> Unit = {}
+    ) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
+            actionError = null
+            val result = withContext(Dispatchers.IO) {
                 runCatching { yugmApi.createPoll(authToken, roomId, question, options) }
-                    .onSuccess { actionError = null; scheduleRealtimeRefresh("room:poll:new") }
-                    .onFailure { actionError = it.message ?: "Failed to create poll" }
+            }
+            result.onSuccess {
+                scheduleRealtimeRefresh("room:poll:new")
+                onSuccess()
+            }.onFailure { e ->
+                val msg = e.message ?: "Failed to create poll"
+                actionError = msg
+                onFailure(msg)
             }
         }
     }
 
-    fun votePoll(pollId: String, optionIndex: Int) {
+    fun votePoll(
+        pollId: String,
+        optionIndex: Int,
+        onSuccess: () -> Unit = {},
+        onFailure: (String) -> Unit = {}
+    ) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
+            actionError = null
+            val result = withContext(Dispatchers.IO) {
                 runCatching { yugmApi.votePoll(authToken, roomId, pollId, optionIndex) }
-                    .onSuccess { actionError = null; scheduleRealtimeRefresh("room:poll:vote") }
-                    .onFailure { actionError = it.message ?: "Failed to submit your vote" }
+            }
+            result.onSuccess {
+                scheduleRealtimeRefresh("room:poll:vote")
+                onSuccess()
+            }.onFailure { e ->
+                val msg = e.message ?: "Failed to submit your vote"
+                actionError = msg
+                onFailure(msg)
             }
         }
     }
 
-    fun closePoll(pollId: String) {
+    fun closePoll(
+        pollId: String,
+        onSuccess: () -> Unit = {},
+        onFailure: (String) -> Unit = {}
+    ) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
+            actionError = null
+            val result = withContext(Dispatchers.IO) {
                 runCatching { yugmApi.closePoll(authToken, roomId, pollId) }
-                    .onSuccess { actionError = null; scheduleRealtimeRefresh("room:poll:closed") }
-                    .onFailure { actionError = it.message ?: "Failed to close poll" }
+            }
+            result.onSuccess {
+                scheduleRealtimeRefresh("room:poll:closed")
+                onSuccess()
+            }.onFailure { e ->
+                val msg = e.message ?: "Failed to close poll"
+                actionError = msg
+                onFailure(msg)
             }
         }
     }

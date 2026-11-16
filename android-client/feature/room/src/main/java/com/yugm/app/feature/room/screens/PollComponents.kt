@@ -171,6 +171,18 @@ fun PollCard(
         if (!poll.isActive) closeRequested = false
     }
 
+    LaunchedEffect(poll.id, pendingVoteIndex) {
+        val idx = pendingVoteIndex ?: return@LaunchedEffect
+        kotlinx.coroutines.delay(6000)
+        if (pendingVoteIndex == idx && !hasVoted && poll.isActive) pendingVoteIndex = null
+    }
+
+    LaunchedEffect(poll.id, closeRequested) {
+        if (!closeRequested) return@LaunchedEffect
+        kotlinx.coroutines.delay(6000)
+        if (closeRequested && poll.isActive) closeRequested = false
+    }
+
     GlassCard {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
