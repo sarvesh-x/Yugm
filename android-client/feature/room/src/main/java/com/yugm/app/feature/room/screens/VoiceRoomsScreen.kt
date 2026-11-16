@@ -76,6 +76,8 @@ fun VoiceRoomsScreen(
     onWallet: () -> Unit,
     onProfile: () -> Unit,
     onSearch: () -> Unit = {},
+    onGameZone: () -> Unit = {},
+    showBottomDock: Boolean = true,
     viewModel: RoomViewModel = hiltViewModel()
 ) {
     var selectedSection by remember { mutableStateOf(PartySection.Voice) }
@@ -101,7 +103,7 @@ fun VoiceRoomsScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             LazyColumn(
-                contentPadding = PaddingValues(top = 14.dp, bottom = 120.dp),
+                contentPadding = PaddingValues(top = 14.dp, bottom = if (showBottomDock) 120.dp else 100.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
@@ -225,16 +227,19 @@ fun VoiceRoomsScreen(
             }
             }
         }
-        YugmBottomDock(
-            selected = YugmDockTab.LIVE,
-            onDiscover = onDiscover,
-            onCreate = onCreateRoom,
-            onLive = {},
-            onChat = onChat,
-            onWallet = onWallet,
-            onProfile = onProfile,
-            modifier = Modifier.align(Alignment.BottomCenter)
-        )
+        if (showBottomDock) {
+            YugmBottomDock(
+                selected = YugmDockTab.LIVE,
+                onDiscover = onDiscover,
+                onCreate = onCreateRoom,
+                onLive = {},
+                onChat = onChat,
+                onWallet = onWallet,
+                onProfile = onProfile,
+                onGameZone = onGameZone,
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+        }
     }
 }
 

@@ -44,7 +44,7 @@ fun NavGraphBuilder.authNavGraph(
             val start = when {
                 !isLoggedIn -> Screen.Onboarding.route
                 !isProfileCompleted -> Screen.ProfileSetup.route
-                else -> Screen.Discover.route
+                else -> Screen.MainTabs.createRoute("discover")
             }
             navController.navigate(start) {
                 popUpTo(Screen.Splash.route) { inclusive = true }

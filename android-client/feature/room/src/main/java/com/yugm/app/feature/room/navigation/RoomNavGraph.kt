@@ -44,18 +44,12 @@ fun NavGraphBuilder.roomNavGraph(
     onMinimizeRoom: (com.yugm.app.core.model.Room, com.yugm.app.core.model.RoomType) -> Unit = { _, _ -> },
 ) {
     composable(Screen.VoiceRooms.route) {
-        VoiceRoomsScreen(
-            onOpenRoom = { room -> navController.navigate(Screen.RoomLobby.createRoute(room.id, room.type.name.uppercase())) },
-            onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
-            onDiscover = { navController.navigateTopLevel(Screen.Discover.route) },
-            onChat = { navController.navigateTopLevel(Screen.ChatList.route) },
-            onWallet = { navController.navigateTopLevel(Screen.Wallet.route) },
-            onProfile = {
-                if (currentUserIdProvider().isNotBlank()) navController.navigateTopLevel(Screen.ProfileDetail.createRoute(currentUserIdProvider()))
-                else navController.navigate(Screen.ProfileSetup.route)
-            },
-            onSearch = { navController.navigate(Screen.Search.route) }
-        )
+        LaunchedEffect(Unit) {
+            navController.navigate(Screen.MainTabs.createRoute("party")) {
+                popUpTo(Screen.VoiceRooms.route) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
     }
 
     composable(
@@ -429,7 +423,7 @@ private fun RoomConnectionFallback(
 
 private fun NavHostController.returnFromRoom() {
     if (!popBackStack()) {
-        navigate(Screen.Discover.route) {
+        navigate(Screen.MainTabs.createRoute("discover")) {
             popUpTo(0) { inclusive = true }
             launchSingleTop = true
         }

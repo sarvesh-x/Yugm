@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,7 +68,7 @@ import com.yugm.app.core.ui.theme.SurfaceElevated
 import com.yugm.app.core.ui.theme.TextMuted
 import com.yugm.app.core.ui.theme.TextPrimary
 
-enum class YugmDockTab { DISCOVER, LIVE, CHAT, WALLET, PROFILE }
+enum class YugmDockTab { GAME_ZONE, LIVE, DISCOVER, CHAT, PROFILE, WALLET }
 
 @Composable
 fun YugmAmbientBackground(
@@ -322,6 +323,7 @@ fun YugmBottomDock(
     onChat: () -> Unit = {},
     onWallet: () -> Unit = {},
     onProfile: () -> Unit = {},
+    onGameZone: () -> Unit = {},
     chatBadge: Int = 0,
     compactSet: Boolean = false
 ) {
@@ -334,20 +336,22 @@ fun YugmBottomDock(
         )
     } else {
         listOf(
-            Triple(YugmDockTab.DISCOVER, Icons.Filled.Home, "Home"),
+            Triple(YugmDockTab.GAME_ZONE, Icons.Filled.SportsEsports, "Game Zone"),
             Triple(YugmDockTab.LIVE, Icons.Filled.Mic, "Party"),
+            Triple(YugmDockTab.DISCOVER, Icons.Filled.Home, "Discover"),
             Triple(YugmDockTab.CHAT, Icons.Filled.ChatBubble, "Chat"),
-            Triple(YugmDockTab.PROFILE, Icons.Filled.Person, "Mine")
+            Triple(YugmDockTab.PROFILE, Icons.Filled.Person, "Profile")
         )
     }
     val dockColor = Color(0xF5181B2D)
     val inactiveColor = TextMuted
+    val selectedColor = PrimaryPurple
     Box(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 14.dp, vertical = 10.dp)
-            .height(112.dp)
+            .padding(horizontal = 10.dp, vertical = 10.dp)
+            .height(if (compactSet) 112.dp else 96.dp)
     ) {
         Row(
             modifier = Modifier
@@ -359,7 +363,7 @@ fun YugmBottomDock(
                 .background(dockColor)
                 .border(1.dp, BorderColor, RoundedCornerShape(25.dp))
                 .selectableGroup()
-                .padding(horizontal = 5.dp),
+                .padding(horizontal = 4.dp),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -370,7 +374,9 @@ fun YugmBottomDock(
                     YugmDockTab.CHAT -> onChat
                     YugmDockTab.WALLET -> onWallet
                     YugmDockTab.PROFILE -> onProfile
+                    YugmDockTab.GAME_ZONE -> onGameZone
                 }
+                val isMainCenter = !compactSet && tab == YugmDockTab.DISCOVER
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
@@ -390,16 +396,23 @@ fun YugmBottomDock(
                         Icon(
                             imageVector = icon,
                             contentDescription = null,
-                            modifier = Modifier.size(24.dp),
-                            tint = if (tab == selected) PrimaryPurple else inactiveColor
+                            modifier = Modifier.size(if (isMainCenter) 26.dp else 24.dp),
+                            tint = if (tab == selected) selectedColor else inactiveColor
                         )
                         if (tab == YugmDockTab.CHAT && chatBadge > 0) {
                             Box(
                                 Modifier.align(Alignment.TopEnd).clip(CircleShape).background(Pink).padding(horizontal = 4.dp, vertical = 1.dp)
-                            ) { Text(chatBadge.coerceAtMost(99).toString(), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black) }
+                            ) { Text(chatBadge.coerceAtMost(99).toString(), color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Black) }
                         }
                     }
-                    Text(label, color = if (tab == selected) PrimaryPurple else inactiveColor, fontSize = 12.sp, fontWeight = if (tab == selected) FontWeight.Bold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        label,
+                        color = if (tab == selected) selectedColor else inactiveColor,
+                        fontSize = if (isMainCenter) 11.sp else 10.sp,
+                        fontWeight = if (tab == selected || isMainCenter) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }

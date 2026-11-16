@@ -104,7 +104,9 @@ fun ProfileDetailScreen(
     onOpenWallet: () -> Unit = {},
     onOpenInventory: () -> Unit = {},
     onOpenClan: (String) -> Unit = {},
-    onOpenClanList: () -> Unit = {}
+    onOpenClanList: () -> Unit = {},
+    onGameZone: () -> Unit = {},
+    showBottomDock: Boolean = true
 ) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -201,16 +203,17 @@ fun ProfileDetailScreen(
                 }
             },
             bottomBar = {
-            if (isOwnProfile) {
+            if (isOwnProfile && showBottomDock) {
                 YugmBottomDock(
                     selected = YugmDockTab.PROFILE,
                     onDiscover = onDiscover,
                     onLive = onParty,
                     onChat = onChatTab,
                     onProfile = {},
+                    onGameZone = onGameZone,
                     modifier = Modifier.fillMaxWidth()
                 )
-            } else viewModel.profile?.let { profile ->
+            } else if (!isOwnProfile) viewModel.profile?.let { profile ->
                 Surface(
                     color = SurfaceElevated,
                     border = BorderStroke(1.dp, Color(0x1AFFFFFF)),

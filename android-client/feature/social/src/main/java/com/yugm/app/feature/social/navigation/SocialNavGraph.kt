@@ -11,6 +11,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.yugm.app.core.navigation.Screen
 import com.yugm.app.core.navigation.navigateTopLevel
+import com.yugm.app.feature.social.screens.CountdownScreen
+import com.yugm.app.feature.social.screens.DatingDiscoveryScreen
+import com.yugm.app.feature.social.screens.FriendsScreen
+import com.yugm.app.feature.social.screens.GiftLeaderboardScreen
+import com.yugm.app.feature.social.screens.VoicePollDetailScreen
 import com.yugm.app.feature.social.screens.*
 import kotlinx.coroutines.launch
 
@@ -34,7 +39,7 @@ fun NavGraphBuilder.socialNavGraph(
             onLive = { navController.navigateTopLevel(Screen.VoiceRooms.route) },
             onWallet = { navController.navigate(Screen.Wallet.route) },
             onSelfProfile = {
-                if (currentUserIdProvider().isNotBlank()) navController.navigateTopLevel(Screen.ProfileDetail.createRoute(currentUserIdProvider()))
+                if (currentUserIdProvider().isNotBlank()) navController.navigate(Screen.MainTabs.createRoute("profile")) { launchSingleTop = true }
                 else navController.navigate(Screen.ProfileSetup.route)
             }
         )
@@ -303,11 +308,12 @@ fun NavGraphBuilder.socialNavGraph(
     }
 
     composable(Screen.Games.route) {
-        GamesScreen(
-            token = authTokenProvider(),
-            onBack = { navController.popBackStack() },
-            onOpenChat = { partnerId -> navController.navigate(Screen.Chat.createRoute(partnerId)) }
-        )
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            navController.navigate(Screen.MainTabs.createRoute("game_zone")) {
+                popUpTo(Screen.Games.route) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
     }
 
     composable(Screen.Friends.route) {

@@ -50,6 +50,16 @@ fun NavGraphBuilder.profileNavGraph(
     ) { backStackEntry ->
         val userId = backStackEntry.arguments?.getString("userId") ?: ""
         val autoEdit = backStackEntry.arguments?.getBoolean("edit") ?: false
+        val isOwnProfile = userId == currentUserIdProvider()
+        if (isOwnProfile && !autoEdit) {
+            LaunchedEffect(userId) {
+                navController.navigate(Screen.MainTabs.createRoute("profile")) {
+                    popUpTo(Screen.ProfileDetail.route) { inclusive = true }
+                    launchSingleTop = true
+                }
+            }
+            return@composable
+        }
         val profileScope = rememberCoroutineScope()
         val profileContext = androidx.compose.ui.platform.LocalContext.current
         ProfileDetailScreen(
@@ -82,6 +92,7 @@ fun NavGraphBuilder.profileNavGraph(
             onDiscover = { navController.navigateTopLevel(Screen.Discover.route) },
             onParty = { navController.navigateTopLevel(Screen.VoiceRooms.route) },
             onChatTab = { navController.navigateTopLevel(Screen.ChatList.route) },
+            onGameZone = { navController.navigateTopLevel(Screen.Games.route) },
             onOpenStore = onOpenStore,
             onOpenCustomize = onOpenCustomize,
             onOpenPublicProfile = { onOpenPublicProfile(userId) },

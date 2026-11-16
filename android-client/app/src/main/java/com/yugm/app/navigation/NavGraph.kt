@@ -39,8 +39,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
 import com.yugm.app.core.api.VibeApi
 import com.yugm.app.core.model.CoinPack
 import com.yugm.app.core.model.RazorpayCheckoutData
@@ -68,6 +70,7 @@ import com.yugm.app.feature.roommodes.navigation.roomModesNavGraph
 import com.yugm.app.feature.settings.navigation.settingsNavGraph
 import com.yugm.app.feature.social.navigation.socialNavGraph
 import com.yugm.app.feature.wallet.navigation.walletNavGraph
+import com.yugm.app.ui.screens.MainTabsScreen
 import com.yugm.app.ui.screens.WingmanScreen
 import com.yugm.app.ui.viewmodel.MainViewModel
 
@@ -107,7 +110,7 @@ fun NavGraph(
         val dest = if (!session.user.profileCompleted) {
             Screen.ProfileSetup.route
         } else {
-            Screen.Discover.route
+            Screen.MainTabs.createRoute("discover")
         }
         navController.navigate(dest) {
             popUpTo(Screen.Login.route) { inclusive = true }
@@ -136,12 +139,25 @@ fun NavGraph(
                 // token/session ID saved during sign-in instead of overwriting them
                 // with the empty defaults on this lightweight Session wrapper.
                 mainViewModel.validateAndUpdate(session.user)
-                navController.navigate(Screen.Discover.route) {
+                navController.navigate(Screen.MainTabs.createRoute("discover")) {
                     popUpTo(Screen.ProfileSetup.route) { inclusive = true }
                     launchSingleTop = true
                 }
             }
         )
+        composable(
+            route = Screen.MainTabs.route,
+            arguments = listOf(navArgument("tab") { type = NavType.StringType; defaultValue = "discover" })
+        ) { backStackEntry ->
+            val tab = backStackEntry.arguments?.getString("tab") ?: "discover"
+            MainTabsScreen(
+                navController = navController,
+                token = mainViewModel.authToken,
+                currentUserId = mainViewModel.currentUserId,
+                initialTab = tab,
+                onProfileUpdated = mainViewModel::validateAndUpdate
+            )
+        }
         discoverNavGraph(
             navController = navController,
             authTokenProvider = { mainViewModel.authToken },
@@ -157,7 +173,7 @@ fun NavGraph(
             onMinimizeRoom = { room, roomType ->
                 minimizedRoom = room
                 minimizedRoomType = roomType
-                navController.navigate(Screen.Discover.route) { launchSingleTop = true }
+                navController.navigate(Screen.MainTabs.createRoute("discover")) { launchSingleTop = true }
             }
         )
         profileNavGraph(

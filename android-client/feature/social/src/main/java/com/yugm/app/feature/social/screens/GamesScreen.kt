@@ -103,8 +103,9 @@ private val fallbackGames = listOf(
 @Composable
 fun GamesScreen(
     token: String,
-    onBack: () -> Unit,
-    onOpenChat: (String) -> Unit
+    onBack: () -> Unit = {},
+    onOpenChat: (String) -> Unit,
+    showBack: Boolean = true
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -164,7 +165,9 @@ fun GamesScreen(
             TopAppBar(
                 title = { Text("Yugm Arcade", color = TextPrimary, fontWeight = FontWeight.Black) },
                 navigationIcon = {
-                    TextButton(onClick = onBack) { Text("Back", color = Gold, fontWeight = FontWeight.Bold) }
+                    if (showBack) {
+                        TextButton(onClick = onBack) { Text("Back", color = Gold, fontWeight = FontWeight.Bold) }
+                    }
                 },
                 actions = {
                     TextButton(onClick = { viewModel.refresh(token) }) { Text("Refresh", color = Gold, fontWeight = FontWeight.Bold) }

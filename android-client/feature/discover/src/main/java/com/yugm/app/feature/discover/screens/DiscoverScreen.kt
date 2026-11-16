@@ -145,6 +145,7 @@ fun DiscoverScreen(
     onCreatorDashboard: () -> Unit = {},
     onLeaderboards: () -> Unit = {},
     onClans: () -> Unit = {},
+    showBottomDock: Boolean = true,
     viewModel: DiscoverViewModel = hiltViewModel(),
 ) {
     LaunchedEffect(token) {
@@ -204,7 +205,7 @@ fun DiscoverScreen(
                 modifier = Modifier.fillMaxSize()
             ) {
                 LazyColumn(
-                    contentPadding = PaddingValues(top = 8.dp, bottom = 150.dp),
+                    contentPadding = PaddingValues(top = 8.dp, bottom = if (showBottomDock) 150.dp else 110.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
@@ -316,16 +317,19 @@ fun DiscoverScreen(
             )
         }
 
-        YugmBottomDock(
-            modifier = Modifier.align(Alignment.BottomCenter),
-            selected = YugmDockTab.DISCOVER,
-            onDiscover = {},
-            onCreate = onCreateRoom,
-            onLive = onVoiceRooms,
-            onChat = onChat,
-            onWallet = onWallet,
-            onProfile = onSelfProfile
-        )
+        if (showBottomDock) {
+            YugmBottomDock(
+                modifier = Modifier.align(Alignment.BottomCenter),
+                selected = YugmDockTab.DISCOVER,
+                onDiscover = {},
+                onCreate = onCreateRoom,
+                onLive = onVoiceRooms,
+                onChat = onChat,
+                onWallet = onWallet,
+                onProfile = onSelfProfile,
+                onGameZone = onGames
+            )
+        }
     }
 
     if (isFriendSearchOpen) {

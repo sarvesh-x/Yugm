@@ -101,7 +101,9 @@ fun ChatListScreen(
     onProfile: () -> Unit = {},
     onOpenClan: (String, String) -> Unit = { _, _ -> },
     onJoinClan: () -> Unit = {},
-    onOpenClanDetail: (String) -> Unit = {}
+    onOpenClanDetail: (String) -> Unit = {},
+    onGameZone: () -> Unit = {},
+    showBottomDock: Boolean = true
 ) {
     val viewModel: ChatListViewModel = hiltViewModel()
     var mainTab by remember { mutableIntStateOf(0) }
@@ -109,6 +111,7 @@ fun ChatListScreen(
     var showFindPeople by remember { mutableStateOf(false) }
 
     LaunchedEffect(token, currentUserId) { viewModel.load(token, currentUserId) }
+    val listBottomPadding = if (showBottomDock) 120.dp else 100.dp
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, token, currentUserId) {
         val observer = LifecycleEventObserver { _, event ->
@@ -156,25 +159,60 @@ fun ChatListScreen(
     Box(Modifier.fillMaxSize().background(ChatBg)) {
         Column(Modifier.fillMaxSize()) {
             Row(
-                Modifier.fillMaxWidth().padding(start = 18.dp, end = 16.dp, top = 14.dp, bottom = 10.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                ChatTopTab("Chats", selected = mainTab == 0) { mainTab = 0 }
-                Spacer(Modifier.width(16.dp))
-                ChatTopTab("Clan", selected = mainTab == 1) { mainTab = 1 }
-                Spacer(Modifier.width(16.dp))
-                ChatTopTab("Contacts", selected = mainTab == 2) { mainTab = 2 }
+                Text("Messages", color = ChatInk, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
                 Box(
                     Modifier
-                        .size(42.dp)
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(ChatPanel)
+                        .border(1.dp, ChatLine, CircleShape)
+                        .clickable(role = Role.Button, onClickLabel = "Search chats", onClick = { showFindPeople = true }),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Filled.Search, contentDescription = null, tint = ChatInk, modifier = Modifier.size(18.dp))
+                }
+                Spacer(Modifier.width(10.dp))
+                Box(
+                    Modifier
+                        .size(40.dp)
                         .clip(CircleShape)
                         .background(ChatPanel)
                         .border(1.dp, ChatLine, CircleShape)
                         .clickable(role = Role.Button, onClickLabel = "Find people by username", onClick = { showFindPeople = true }),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Filled.PersonAdd, contentDescription = null, tint = ChatInk, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Filled.PersonAdd, contentDescription = null, tint = ChatInk, modifier = Modifier.size(18.dp))
+                }
+            }
+
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf("Chats", "Clan", "Contacts").forEachIndexed { index, label ->
+                    val selected = mainTab == index
+                    Box(
+                        modifier = Modifier
+                            .height(40.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(if (selected) ChatPurple else ChatPanel)
+                            .border(1.dp, if (selected) Color.Transparent else ChatLine, RoundedCornerShape(20.dp))
+                            .clickable(role = Role.Tab, onClickLabel = label, onClick = { mainTab = index })
+                            .padding(horizontal = 22.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            label,
+                            color = if (selected) Color.White else ChatMuted,
+                            fontSize = 14.sp,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
                 }
             }
 
@@ -196,7 +234,7 @@ fun ChatListScreen(
                         ) {
                             LazyColumn(
                                 modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(top = 10.dp, bottom = 120.dp),
+                                contentPadding = PaddingValues(top = 10.dp, bottom = listBottomPadding),
                                 verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
                                 item {
@@ -372,7 +410,7 @@ fun ChatListScreen(
                         ) {
                             LazyColumn(
                                 modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(top = 10.dp, bottom = 120.dp),
+                                contentPadding = PaddingValues(top = 10.dp, bottom = listBottomPadding),
                                 verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
                                 item {
@@ -438,17 +476,20 @@ fun ChatListScreen(
                 }
             }
         }
-        YugmBottomDock(
-            selected = YugmDockTab.CHAT,
-            onDiscover = onDiscover,
-            onCreate = onCreateRoom,
-            onLive = onLive,
-            onChat = {},
-            onWallet = onWallet,
-            onProfile = onProfile,
-            chatBadge = unread.coerceAtMost(9),
-            modifier = Modifier.align(Alignment.BottomCenter)
-        )
+        if (showBottomDock) {
+            YugmBottomDock(
+                selected = YugmDockTab.CHAT,
+                onDiscover = onDiscover,
+                onCreate = onCreateRoom,
+                onLive = onLive,
+                onChat = {},
+                onWallet = onWallet,
+                onProfile = onProfile,
+                onGameZone = onGameZone,
+                chatBadge = unread.coerceAtMost(9),
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+        }
         if (showFindPeople) {
             FindPeopleSheet(
                 token = token,
@@ -660,13 +701,7 @@ private fun FindPeopleResultRow(
     }
 }
 
-@Composable
-private fun ChatTopTab(label: String, selected: Boolean, onClick: () -> Unit) {
-    Column(Modifier.height(48.dp).clickable(role = Role.Tab, onClickLabel = label, onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Text(label, color = if (selected) ChatInk else ChatMuted, fontSize = 17.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
-        Box(Modifier.padding(top = 2.dp).size(width = if (selected) 30.dp else 0.dp, height = 4.dp).clip(CircleShape).background(ChatPurple))
-    }
-}
+
 
 
 @Composable

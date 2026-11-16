@@ -24,6 +24,7 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -63,6 +64,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
@@ -98,6 +100,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -195,7 +199,9 @@ fun ChatScreen(
     var selectedMessageIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var forwardMessage by remember { mutableStateOf<DirectMessage?>(null) }
     var infoMessage by remember { mutableStateOf<DirectMessage?>(null) }
-    var reactPickerTarget by remember(partner?.id) { mutableStateOf<DirectMessage?>(null) }
+    var reactDialogTarget by remember(partner?.id) { mutableStateOf<DirectMessage?>(null) }
+    var optionsDialogTarget by remember(partner?.id) { mutableStateOf<DirectMessage?>(null) }
+    var targetMessageBounds by remember(partner?.id) { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var replyTarget by remember(partner?.id) { mutableStateOf<DirectMessage?>(null) }
     var editingTarget by remember(partner?.id) { mutableStateOf<DirectMessage?>(null) }
     var searchVisible by rememberSaveable { mutableStateOf(false) }
@@ -462,67 +468,6 @@ fun ChatScreen(
                 }
             },
             confirmButton = { TextButton(onClick = { forwardMessage = null }) { Text("Cancel", color = TextMuted) } }
-        )
-    }
-    reactPickerTarget?.let { target ->
-        val reactions = listOf(
-            "❤️" to "heart",
-            "🔥" to "fire",
-            "😂" to "laugh",
-            "👏" to "clap",
-            "😮" to "wow",
-            "👑" to "crown",
-            "✨" to "stars",
-            "🎉" to "party"
-        )
-        val myReactionType = currentUserId.takeIf { it.isNotBlank() }?.let { uid ->
-            target.reactions.firstOrNull { it.userId == uid }?.type
-        }
-        val myReactionEmoji = myReactionType?.let(::reactionEmoji)
-        AlertDialog(
-            onDismissRequest = { reactPickerTarget = null },
-            containerColor = SurfaceElevated,
-            title = { Text("React to message", color = TextPrimary) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        if (myReactionType.isNullOrBlank()) "Choose a reaction" else "Your reaction: $myReactionEmoji  •  Tap it again to remove",
-                        color = TextMuted,
-                        fontSize = 13.sp
-                    )
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        reactions.chunked(4).forEach { rowItems ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                rowItems.forEach { (emoji, type) ->
-                                    val selected = myReactionType == type
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(48.dp)
-                                            .clip(RoundedCornerShape(14.dp))
-                                            .background(if (selected) PrimaryPurple.copy(alpha = 0.22f) else ChatSurface)
-                                            .border(1.dp, if (selected) PrimaryPurple else BorderColor, RoundedCornerShape(14.dp))
-                                            .clickable(role = Role.Button, onClickLabel = if (selected) "Remove $emoji reaction" else "React with $emoji") {
-                                                onReactMessage(target, type)
-                                                reactPickerTarget = null
-                                            },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(emoji, fontSize = 22.sp)
-                                    }
-                                }
-                                repeat((4 - rowItems.size).coerceAtLeast(0)) {
-                                    Spacer(Modifier.weight(1f).height(48.dp))
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { reactPickerTarget = null }) { Text("Cancel", color = TextMuted) } }
         )
     }
     infoMessage?.let { msg ->
@@ -810,9 +755,9 @@ fun ChatScreen(
                                 }
                                 if (selected.id.isNotBlank()) {
                                     IconButton(onClick = {
-                                        reactPickerTarget = selected
+                                        optionsDialogTarget = selected
                                         selectedMessageIds = emptySet()
-                                    }) { Icon(Icons.Filled.EmojiEmotions, contentDescription = "React", tint = TextPrimary) }
+                                    }) { Icon(Icons.Filled.EmojiEmotions, contentDescription = "Options", tint = TextPrimary) }
                                 }
                             } else {
                                 Spacer(Modifier.weight(1f))
@@ -1168,14 +1113,24 @@ fun ChatScreen(
                                             voiceDurationMs = voiceDurationMs,
                                             startingCallType = startingCallType,
                                             isBlockedByMe = isBlockedByMe,
-                                            onReact = {
+                                            onReact = { bounds ->
                                                 when {
                                                     selectionMode -> toggleSelection(message.id)
                                                     inSearchResults -> jumpToMessage(message)
-                                                    message.id.isNotBlank() -> reactPickerTarget = message
+                                                    message.id.isNotBlank() -> {
+                                                        targetMessageBounds = bounds
+                                                        optionsDialogTarget = null
+                                                        reactDialogTarget = message
+                                                    }
                                                 }
                                             },
-                                            onLongPress = { toggleSelection(message.id) },
+                                            onLongPress = { bounds ->
+                                                if (message.id.isNotBlank()) {
+                                                    targetMessageBounds = bounds
+                                                    reactDialogTarget = null
+                                                    optionsDialogTarget = message
+                                                }
+                                            },
                                             onOpenImage = { url -> imageViewerUrl = url },
                                             onToggleVoice = { toggleVoicePlayback(message) },
                                             onSeekVoice = { pos -> seekVoicePlayback(message.id, pos) },
@@ -1491,6 +1446,142 @@ fun ChatScreen(
             }
         }
     }
+
+    reactDialogTarget?.let { target ->
+        val bounds = targetMessageBounds
+        BoxWithConstraints(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.4f))
+                .clickable(role = Role.Button, onClickLabel = "Dismiss") { reactDialogTarget = null },
+        ) {
+            val screenWidth = maxWidth
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            val bubbleLeft = bounds?.left?.let { with(density) { it.toDp() } } ?: 20.dp
+            val bubbleTop = bounds?.top?.let { with(density) { it.toDp() } } ?: 200.dp
+            val barWidth = 260.dp
+            val barHeight = 52.dp
+
+            val showBelow = bubbleTop < 80.dp
+            val offsetY = if (showBelow) (bounds?.bottom?.let { with(density) { it.toDp() } } ?: 250.dp) + 8.dp else (bubbleTop - barHeight - 8.dp).coerceAtLeast(40.dp)
+            val offsetX = bubbleLeft.coerceIn(16.dp, (screenWidth - barWidth - 16.dp).coerceAtLeast(16.dp))
+
+            Box(
+                modifier = Modifier
+                    .offset(x = offsetX, y = offsetY)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .width(barWidth)
+                        .clip(RoundedCornerShape(32.dp))
+                        .background(SurfaceElevated)
+                        .border(1.dp, BorderColor, RoundedCornerShape(32.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    listOf(
+                        "❤️" to "heart",
+                        "🔥" to "fire",
+                        "😂" to "laugh",
+                        "👍" to "clap",
+                        "😮" to "wow",
+                        "👑" to "crown"
+                    ).forEach { (emoji, type) ->
+                        val myReaction = currentUserId.takeIf { it.isNotBlank() }?.let { uid -> target.reactions.firstOrNull { it.userId == uid }?.type }
+                        val isSelected = myReaction == type
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(if (isSelected) PrimaryPurple.copy(alpha = 0.3f) else Color.Transparent)
+                                .clickable(role = Role.Button, onClickLabel = "React with $emoji") {
+                                    onReactMessage(target, type)
+                                    reactDialogTarget = null
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(emoji, fontSize = 18.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    optionsDialogTarget?.let { target ->
+        val mine = target.senderId == currentUserId
+        val bounds = targetMessageBounds
+        BoxWithConstraints(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.4f))
+                .clickable(role = Role.Button, onClickLabel = "Dismiss") { optionsDialogTarget = null },
+        ) {
+            val screenWidth = maxWidth
+            val screenHeight = maxHeight
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            val bubbleLeft = bounds?.left?.let { with(density) { it.toDp() } } ?: 20.dp
+            val bubbleTop = bounds?.top?.let { with(density) { it.toDp() } } ?: 200.dp
+            val bubbleBottom = bounds?.bottom?.let { with(density) { it.toDp() } } ?: 250.dp
+            val cardWidth = 230.dp
+            val cardHeight = 270.dp
+
+            val showBelow = bubbleBottom + cardHeight < screenHeight - 80.dp
+            val offsetY = if (showBelow) bubbleBottom + 8.dp else (bubbleTop - cardHeight - 8.dp).coerceAtLeast(40.dp)
+            val offsetX = bubbleLeft.coerceIn(16.dp, (screenWidth - cardWidth - 16.dp).coerceAtLeast(16.dp))
+
+            Box(
+                modifier = Modifier
+                    .offset(x = offsetX, y = offsetY)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .width(cardWidth)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(SurfaceElevated)
+                        .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
+                        .padding(vertical = 4.dp)
+                ) {
+                    CompactOptionRow(icon = Icons.Filled.Info, label = "Info") {
+                        optionsDialogTarget = null
+                        infoMessage = target
+                    }
+                    CompactOptionRow(icon = Icons.Filled.ContentCopy, label = "Copy") {
+                        optionsDialogTarget = null
+                        if (target.message.isNotBlank()) {
+                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("message", target.message))
+                            android.widget.Toast.makeText(context, "Message copied", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    if (mine && target.canStillEdit()) {
+                        CompactOptionRow(icon = Icons.Filled.Edit, label = "Edit") {
+                            optionsDialogTarget = null
+                            editingTarget = target
+                            replyTarget = null
+                            draft = target.message
+                        }
+                    }
+                    CompactOptionRow(icon = Icons.AutoMirrored.Filled.Reply, label = "Reply in Thread") {
+                        optionsDialogTarget = null
+                        replyTarget = target
+                        editingTarget = null
+                        draft = ""
+                    }
+                    CompactOptionRow(icon = Icons.Filled.Language, label = "Translate") {
+                        optionsDialogTarget = null
+                        val textToTranslate = target.message.ifBlank { "Media message" }
+                        android.widget.Toast.makeText(context, "Translated: $textToTranslate", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    CompactOptionRow(icon = Icons.Filled.Delete, label = "Delete", tint = Danger) {
+                        optionsDialogTarget = null
+                        selectedMessageIds = setOf(target.id)
+                        showDeleteSelected = true
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -1626,8 +1717,8 @@ private fun MessageBubble(
     voiceDurationMs: Int,
     startingCallType: RoomType? = null,
     isBlockedByMe: Boolean = false,
-    onReact: () -> Unit,
-    onLongPress: () -> Unit,
+    onReact: (androidx.compose.ui.geometry.Rect) -> Unit,
+    onLongPress: (androidx.compose.ui.geometry.Rect) -> Unit,
     onOpenImage: (String) -> Unit,
     onToggleVoice: () -> Unit,
     onSeekVoice: (Int) -> Unit,
@@ -1639,6 +1730,7 @@ private fun MessageBubble(
     val isVoiceActive = playingVoiceMessageId == message.id
     val effectiveDuration = voiceDurationMs.coerceAtLeast(1)
     val safeProgress = if (isVoiceActive) voiceProgressMs.coerceIn(0, effectiveDuration) else 0
+    var bubbleCoordinates by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
@@ -1670,7 +1762,8 @@ private fun MessageBubble(
             )
             Box(
                 Modifier
-                    .widthIn(max = 300.dp)
+                    .widthIn(max = 280.dp)
+                    .onGloballyPositioned { bubbleCoordinates = it }
                     .clip(bubbleShape)
                     .background(
                         bubble?.fill ?: if (mine) {
@@ -1690,8 +1783,17 @@ private fun MessageBubble(
                         },
                         shape = bubbleShape
                     )
-                    .combinedClickable(onClick = onReact, onLongClick = onLongPress)
-                    .padding(horizontal = 16.dp, vertical = if (compact) 10.dp else 13.dp)
+                    .combinedClickable(
+                        onClick = {
+                            val rect = bubbleCoordinates?.let { try { it.boundsInRoot() } catch (_: Exception) { null } } ?: androidx.compose.ui.geometry.Rect.Zero
+                            onReact(rect)
+                        },
+                        onLongClick = {
+                            val rect = bubbleCoordinates?.let { try { it.boundsInRoot() } catch (_: Exception) { null } } ?: androidx.compose.ui.geometry.Rect.Zero
+                            onLongPress(rect)
+                        }
+                    )
+                    .padding(horizontal = 14.dp, vertical = if (compact) 8.dp else 10.dp)
             ) {
                 Column {
                     if (message.forwarded) {
@@ -1926,7 +2028,7 @@ private fun MessageBubble(
                                 }
                             }
                         } else {
-                            Text(message.message, color = bubble?.text ?: TextPrimary, fontSize = 14.sp, lineHeight = 21.sp)
+                            Text(message.message, color = bubble?.text ?: TextPrimary, fontSize = 14.sp, lineHeight = 20.sp)
                         }
                     }
                     Row(Modifier.align(Alignment.End).padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1958,7 +2060,7 @@ private fun MessageBubble(
                         .clip(RoundedCornerShape(999.dp))
                         .background(SurfaceElevated)
                         .border(1.dp, if (myReaction != null) PrimaryPurple.copy(alpha = 0.55f) else BorderColor, RoundedCornerShape(999.dp))
-                        .clickable(role = Role.Button, onClickLabel = "View or change reaction") { onReact() }
+                        .clickable(role = Role.Button, onClickLabel = "View or change reaction") { onReact(androidx.compose.ui.geometry.Rect.Zero) }
                         .padding(horizontal = 9.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -2026,6 +2128,47 @@ private fun formatPlaybackTime(ms: Int): String {
 private fun messageDateLabel(value: String): String = com.yugm.app.feature.chat.formatChatDateLabel(value)
 
 private fun DirectMessage.canStillEdit(): Boolean = com.yugm.app.feature.chat.canEditDirectMessage(createdAt)
+
+@Composable
+private fun ChatOptionRow(
+    icon: ImageVector,
+    label: String,
+    tint: Color = TextPrimary,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, color = tint, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+    }
+}
+
+@Composable
+private fun CompactOptionRow(
+    icon: ImageVector,
+    label: String,
+    tint: Color = TextPrimary,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, color = tint, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+    }
+}
+
 private fun getGiftEmoji(name: String, icon: String): String {
     val query = "$name $icon".lowercase()
     return when {

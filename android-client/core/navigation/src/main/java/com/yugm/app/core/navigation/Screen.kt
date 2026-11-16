@@ -91,6 +91,9 @@ sealed class Screen(val route: String) {
     object RecordingPlayer : Screen("recording_player/{recordingId}") {
         fun createRoute(recordingId: String) = "recording_player/$recordingId"
     }
+    object MainTabs : Screen("main_tabs?tab={tab}") {
+        fun createRoute(tab: String = "discover") = "main_tabs?tab=$tab"
+    }
     object LanguagePicker : Screen("language_picker")
     object Events : Screen("events")
     object EventCreate : Screen("event_create")
