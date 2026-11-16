@@ -60,6 +60,66 @@ data class Gradients(
 
 val LocalGradients = staticCompositionLocalOf { Gradients() }
 
+@Immutable
+data class YugmColors(
+    val background: Color,
+    val surface: Color,
+    val surfaceElevated: Color,
+    val surfaceVariant: Color,
+    val textPrimary: Color,
+    val textSecondary: Color,
+    val border: Color,
+    val divider: Color,
+    val primary: Color,
+    val primaryOn: Color,
+    val secondary: Color,
+    val accent: Color,
+    val success: Color,
+    val danger: Color,
+    val warning: Color,
+    val isDark: Boolean
+)
+
+val DarkYugmColors = YugmColors(
+    background = Color(0xFF060714),
+    surface = Color(0xFF0E1121),
+    surfaceElevated = Color(0xFF171A2C),
+    surfaceVariant = Color(0xFF1F2236),
+    textPrimary = Color.White,
+    textSecondary = Color(0xFF9EA3B9),
+    border = Color(0x24FFFFFF),
+    divider = Color(0x14FFFFFF),
+    primary = Color(0xFFF6378B),
+    primaryOn = Color(0xFF060714),
+    secondary = Color(0xFF8D35F6),
+    accent = Color(0xFFFFC52F),
+    success = Color(0xFF3BE477),
+    danger = Color(0xFFFF3B4F),
+    warning = Color(0xFFFF9F43),
+    isDark = true
+)
+
+val LightYugmColors = YugmColors(
+    background = Color(0xFFF7F6FB),
+    surface = Color(0xFFFFFFFF),
+    surfaceElevated = Color(0xFFF1F1F7),
+    surfaceVariant = Color(0xFFE9E8F0),
+    textPrimary = Color(0xFF191A22),
+    textSecondary = Color(0xFF5A5D70),
+    border = Color(0x1A000000),
+    divider = Color(0x0F000000),
+    primary = Color(0xFFB5125A),
+    primaryOn = Color.White,
+    secondary = Color(0xFF6123AE),
+    accent = Color(0xFF795600),
+    success = Color(0xFF1E8E4E),
+    danger = Color(0xFFBA1B1B),
+    warning = Color(0xFFB7462B),
+    isDark = false
+)
+
+val LocalYugmColors = staticCompositionLocalOf { DarkYugmColors }
+
 object YugmShapes {
     val extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
     val small = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
@@ -85,7 +145,8 @@ fun YugmTheme(
         else -> LightColorScheme
     }
 
-    CompositionLocalProvider(LocalMotionEnabled provides motionEnabled) {
+    val yugmColors = if (darkTheme) DarkYugmColors else LightYugmColors
+    CompositionLocalProvider(LocalMotionEnabled provides motionEnabled, LocalYugmColors provides yugmColors) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = YugmTypography,

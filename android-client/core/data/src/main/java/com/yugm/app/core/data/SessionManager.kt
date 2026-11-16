@@ -7,6 +7,9 @@ import androidx.security.crypto.MasterKeys
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 @Singleton
 class SessionManager @Inject constructor(
@@ -68,6 +71,16 @@ class SessionManager @Inject constructor(
         get() = prefs.getInt("balance", 0)
         set(value) = prefs.edit().putInt("balance", value).apply()
 
+    private val _themeModeFlow = MutableStateFlow(prefs.getString("themeMode", "SYSTEM") ?: "SYSTEM")
+    val themeModeFlow: StateFlow<String> = _themeModeFlow.asStateFlow()
+
+    var themeMode: String
+        get() = prefs.getString("themeMode", "SYSTEM") ?: "SYSTEM"
+        set(value) {
+            prefs.edit().putString("themeMode", value).apply()
+            _themeModeFlow.value = value
+        }
+
     fun saveSession(token: String, refresh: String, session: String, expiresInSeconds: Long, id: String, name: String, handle: String, walletBalance: Int, emailVerified: Boolean, profileCompleted: Boolean = false) {
         prefs.edit()
             .putString("authToken", token)
@@ -84,6 +97,8 @@ class SessionManager @Inject constructor(
     }
 
     fun logout() {
+        val mode = themeMode
         prefs.edit().clear().apply()
+        themeMode = mode
     }
 }

@@ -77,17 +77,13 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.yugm.app.core.model.ClanMessage
 import com.yugm.app.core.ui.components.Avatar
+import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.core.ui.components.LoadingState
 import com.yugm.app.feature.social.viewmodel.ClanViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private val ClanChatBg = Color(0xFF080817)
-private val ClanChatCard = Color(0xFF151629)
-private val ClanChatLine = Color(0x24FFFFFF)
-private val ClanChatMuted = Color(0xFF9EA3B9)
-private val ClanChatPurple = Color(0xFF8D35F6)
-private val ClanChatPink = Color(0xFFF6378B)
+// Theme-aware palette is read via LocalYugmColors inside composables.
 private val clanReactionTypes = listOf("heart", "fire", "laugh", "clap", "wow", "crown", "stars", "party")
 
 private sealed class ChatItem {
@@ -203,14 +199,14 @@ fun ClanChatScreen(
             onDismissRequest = { deleteMessage = null },
             containerColor = Color(0xFF191A2C),
             title = { Text("Delete message?", color = Color.White, fontWeight = FontWeight.Bold) },
-            text = { Text("This message will be removed from the clan chat.", color = ClanChatMuted) },
+            text = { Text("This message will be removed from the clan chat.", color = LocalYugmColors.current.textSecondary) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteMessage(token, clanId, target.id)
                     deleteMessage = null
-                }) { Text("Delete", color = ClanChatPink) }
+                }) { Text("Delete", color = LocalYugmColors.current.primary) }
             },
-            dismissButton = { TextButton(onClick = { deleteMessage = null }) { Text("Cancel", color = ClanChatMuted) } }
+            dismissButton = { TextButton(onClick = { deleteMessage = null }) { Text("Cancel", color = LocalYugmColors.current.textSecondary) } }
         )
     }
 
@@ -219,13 +215,13 @@ fun ClanChatScreen(
             onDismissRequest = { cleanConfirm = false },
             containerColor = Color(0xFF191A2C),
             title = { Text("Clean chat?", color = Color.White, fontWeight = FontWeight.Bold) },
-            text = { Text("This removes all messages for everyone in the clan. This cannot be undone.", color = ClanChatMuted) },
+            text = { Text("This removes all messages for everyone in the clan. This cannot be undone.", color = LocalYugmColors.current.textSecondary) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.cleanChat(token, clanId) { cleanConfirm = false }
-                }) { Text("Clean", color = ClanChatPink) }
+                }) { Text("Clean", color = LocalYugmColors.current.primary) }
             },
-            dismissButton = { TextButton(onClick = { cleanConfirm = false }) { Text("Cancel", color = ClanChatMuted) } }
+            dismissButton = { TextButton(onClick = { cleanConfirm = false }) { Text("Cancel", color = LocalYugmColors.current.textSecondary) } }
         )
     }
 
@@ -237,10 +233,10 @@ fun ClanChatScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     val myReaction = target.reactions.firstOrNull { it.userId == currentUserId }?.type
-                    Text(target.message, color = ClanChatMuted, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    Text(target.message, color = LocalYugmColors.current.textSecondary, maxLines = 3, overflow = TextOverflow.Ellipsis)
                     Text(
                         if (myReaction.isNullOrBlank()) "Choose a reaction" else "Your reaction: ${reactionEmoji(myReaction)}  •  Tap it again to remove",
-                        color = ClanChatMuted,
+                        color = LocalYugmColors.current.textSecondary,
                         fontSize = 12.sp
                     )
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -252,8 +248,8 @@ fun ClanChatScreen(
                                         modifier = Modifier
                                             .weight(1f)
                                             .clip(RoundedCornerShape(12.dp))
-                                            .background(if (selected) ClanChatPurple.copy(alpha = 0.18f) else ClanChatCard)
-                                            .border(1.dp, if (selected) ClanChatPurple else ClanChatLine, RoundedCornerShape(12.dp))
+                                            .background(if (selected) LocalYugmColors.current.secondary.copy(alpha = 0.18f) else LocalYugmColors.current.surface)
+                                            .border(1.dp, if (selected) LocalYugmColors.current.secondary else LocalYugmColors.current.border, RoundedCornerShape(12.dp))
                                             .clickable {
                                                 viewModel.reactToMessage(token, clanId, target.id, type)
                                                 actionMessage = null
@@ -274,34 +270,34 @@ fun ClanChatScreen(
                         clipboardManager.setText(AnnotatedString(target.message))
                         actionMessage = null
                     }) {
-                        Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = ClanChatMuted)
-                        Text("  Copy message", color = ClanChatMuted)
+                        Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = LocalYugmColors.current.textSecondary)
+                        Text("  Copy message", color = LocalYugmColors.current.textSecondary)
                     }
                     TextButton(onClick = {
                         replyTo = target
                         actionMessage = null
                     }) {
-                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = ClanChatMuted)
-                        Text("  Reply", color = ClanChatMuted)
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = LocalYugmColors.current.textSecondary)
+                        Text("  Reply", color = LocalYugmColors.current.textSecondary)
                     }
                     if (target.senderId?.id == currentUserId || clan?.canModerate == true) {
                         TextButton(onClick = { deleteMessage = target; actionMessage = null }) {
-                            Icon(Icons.Filled.DeleteOutline, contentDescription = null, tint = ClanChatPink)
-                            Text("  Delete message", color = ClanChatPink)
+                            Icon(Icons.Filled.DeleteOutline, contentDescription = null, tint = LocalYugmColors.current.primary)
+                            Text("  Delete message", color = LocalYugmColors.current.primary)
                         }
                     } else {
                         TextButton(onClick = {
                             viewModel.reportMessage(token, clanId, target.id)
                             actionMessage = null
-                        }) { Text("Report message", color = ClanChatPink) }
+                        }) { Text("Report message", color = LocalYugmColors.current.primary) }
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { actionMessage = null }) { Text("Done", color = ClanChatPurple) } }
+            confirmButton = { TextButton(onClick = { actionMessage = null }) { Text("Done", color = LocalYugmColors.current.secondary) } }
         )
     }
 
-    Column(Modifier.fillMaxSize().background(ClanChatBg).statusBarsPadding().imePadding()) {
+    Column(Modifier.fillMaxSize().background(LocalYugmColors.current.background).statusBarsPadding().imePadding()) {
         // Header
         Row(
             Modifier.fillMaxWidth().background(Color(0xF3111222)).padding(start = 6.dp, end = 8.dp, top = 8.dp, bottom = 10.dp),
@@ -311,7 +307,7 @@ fun ClanChatScreen(
             Avatar((clanName.ifBlank { clan?.name ?: "C" }).take(1).uppercase(), 44, clan?.avatar)
             Column(Modifier.weight(1f).padding(start = 10.dp)) {
                 Text(clanName.ifBlank { clan?.name ?: "Clan chat" }, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${clan?.memberCount ?: 0} members", color = ClanChatMuted, fontSize = 11.sp, maxLines = 1)
+                Text("${clan?.memberCount ?: 0} members", color = LocalYugmColors.current.textSecondary, fontSize = 11.sp, maxLines = 1)
             }
             Box {
                 IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "More clan chat options", tint = Color.White) }
@@ -326,7 +322,7 @@ fun ClanChatScreen(
                     )
                     if (clan?.canModerate == true) {
                         DropdownMenuItem(
-                            text = { Text("Clean chat", color = ClanChatPink) }, leadingIcon = { Icon(Icons.Filled.DeleteOutline, null, tint = ClanChatPink) },
+                            text = { Text("Clean chat", color = LocalYugmColors.current.primary) }, leadingIcon = { Icon(Icons.Filled.DeleteOutline, null, tint = LocalYugmColors.current.primary) },
                             onClick = { menuOpen = false; cleanConfirm = true }
                         )
                     }
@@ -337,7 +333,7 @@ fun ClanChatScreen(
         if (searchOpen) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp).clip(RoundedCornerShape(16.dp))
-                    .background(ClanChatCard).border(1.dp, ClanChatLine, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 11.dp),
+                    .background(LocalYugmColors.current.surface).border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 11.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 BasicTextField(
@@ -345,17 +341,17 @@ fun ClanChatScreen(
                     onValueChange = { search = it.take(100) },
                     modifier = Modifier.weight(1f), singleLine = true,
                     textStyle = TextStyle(color = Color.White, fontSize = 14.sp),
-                    cursorBrush = SolidColor(ClanChatPink),
-                    decorationBox = { inner -> Box { if (search.isBlank()) Text("Search in clan chat…", color = ClanChatMuted); inner() } }
+                    cursorBrush = SolidColor(LocalYugmColors.current.primary),
+                    decorationBox = { inner -> Box { if (search.isBlank()) Text("Search in clan chat…", color = LocalYugmColors.current.textSecondary); inner() } }
                 )
                 if (search.isNotBlank()) IconButton(onClick = { search = "" }, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Filled.Close, contentDescription = "Clear search", tint = ClanChatMuted)
+                    Icon(Icons.Filled.Close, contentDescription = "Clear search", tint = LocalYugmColors.current.textSecondary)
                 }
             }
             if (search.isNotBlank()) {
                 Text(
                     "${visibleMessages.size} result${if (visibleMessages.size == 1) "" else "s"}",
-                    color = ClanChatMuted, fontSize = 11.sp,
+                    color = LocalYugmColors.current.textSecondary, fontSize = 11.sp,
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp)
                 )
             }
@@ -363,8 +359,8 @@ fun ClanChatScreen(
 
         if (viewModel.error != null) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(viewModel.error.orEmpty(), color = ClanChatPink, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                Text("Retry", color = ClanChatPurple, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                Text(viewModel.error.orEmpty(), color = LocalYugmColors.current.primary, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Text("Retry", color = LocalYugmColors.current.secondary, fontSize = 12.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.clickable { viewModel.clearError(); viewModel.loadMessages(token, clanId) }.padding(8.dp))
             }
         }
@@ -382,10 +378,10 @@ fun ClanChatScreen(
                     if (viewModel.hasMoreOlder && search.isBlank()) item {
                         Box(Modifier.fillMaxWidth().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
                             if (viewModel.isLoadingOlder) {
-                                CircularProgressIndicator(color = ClanChatPurple, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                CircularProgressIndicator(color = LocalYugmColors.current.secondary, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                             } else {
                                 TextButton(onClick = { viewModel.loadOlderMessages(token, clanId) }) {
-                                    Text("Load older messages", color = ClanChatPurple, fontSize = 12.sp)
+                                    Text("Load older messages", color = LocalYugmColors.current.secondary, fontSize = 12.sp)
                                 }
                             }
                         }
@@ -394,7 +390,7 @@ fun ClanChatScreen(
                         Column(Modifier.fillMaxWidth().padding(vertical = 55.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Avatar((clanName.ifBlank { "C" }).take(1).uppercase(), 58, clan?.avatar)
                             Text(if (search.isBlank()) "Start your clan conversation" else "No messages found", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                            Text(if (search.isBlank()) "Say hello and bring everyone together." else "Try another word or phrase.", color = ClanChatMuted, fontSize = 13.sp)
+                            Text(if (search.isBlank()) "Say hello and bring everyone together." else "Try another word or phrase.", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp)
                         }
                     }
                     items(chatItems, key = { item ->
@@ -424,8 +420,8 @@ fun ClanChatScreen(
             if (!isAtBottom && chatItems.isNotEmpty()) {
                 Surface(
                     shape = CircleShape,
-                    color = ClanChatCard,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, ClanChatLine),
+                    color = LocalYugmColors.current.surface,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, LocalYugmColors.current.border),
                     onClick = { scope.launch { if (chatItems.isNotEmpty()) listState.animateScrollToItem(chatItems.lastIndex) } },
                     modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
                 ) {
@@ -442,7 +438,7 @@ fun ClanChatScreen(
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     if (typingNames.size == 1) "${typingNames.first()} is typing…" else "${typingNames.size} people are typing…",
-                    color = ClanChatMuted, fontSize = 11.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                    color = LocalYugmColors.current.textSecondary, fontSize = 11.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
                 )
             }
         }
@@ -453,14 +449,14 @@ fun ClanChatScreen(
                 Modifier.fillMaxWidth().background(Color(0xF3111222)).padding(horizontal = 14.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(Modifier.width(3.dp).height(32.dp).background(ClanChatPurple, RoundedCornerShape(2.dp)))
+                Box(Modifier.width(3.dp).height(32.dp).background(LocalYugmColors.current.secondary, RoundedCornerShape(2.dp)))
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(target.senderId?.name ?: "Message", color = ClanChatPurple, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    Text(target.message, color = ClanChatMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(target.senderId?.name ?: "Message", color = LocalYugmColors.current.secondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text(target.message, color = LocalYugmColors.current.textSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 IconButton(onClick = { replyTo = null }, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Filled.Close, contentDescription = "Cancel reply", tint = ClanChatMuted)
+                    Icon(Icons.Filled.Close, contentDescription = "Cancel reply", tint = LocalYugmColors.current.textSecondary)
                 }
             }
         }
@@ -471,8 +467,8 @@ fun ClanChatScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
-                Modifier.weight(1f).clip(RoundedCornerShape(26.dp)).background(ClanChatCard)
-                    .border(1.dp, ClanChatLine, RoundedCornerShape(26.dp)).padding(horizontal = 14.dp, vertical = 4.dp),
+                Modifier.weight(1f).clip(RoundedCornerShape(26.dp)).background(LocalYugmColors.current.surface)
+                    .border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(26.dp)).padding(horizontal = 14.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 BasicTextField(
@@ -481,15 +477,15 @@ fun ClanChatScreen(
                     modifier = Modifier.weight(1f).padding(vertical = 10.dp),
                     singleLine = true,
                     textStyle = TextStyle(color = Color.White, fontSize = 14.sp),
-                    cursorBrush = SolidColor(ClanChatPink),
+                    cursorBrush = SolidColor(LocalYugmColors.current.primary),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = { send() }),
-                    decorationBox = { inner -> Box { if (input.isBlank()) Text("Message", color = ClanChatMuted, fontSize = 14.sp); inner() } }
+                    decorationBox = { inner -> Box { if (input.isBlank()) Text("Message", color = LocalYugmColors.current.textSecondary, fontSize = 14.sp); inner() } }
                 )
             }
             Spacer(Modifier.width(9.dp))
             Box(
-                Modifier.size(48.dp).clip(CircleShape).background(Brush.linearGradient(listOf(ClanChatPurple, ClanChatPink)))
+                Modifier.size(48.dp).clip(CircleShape).background(Brush.linearGradient(listOf(LocalYugmColors.current.secondary, LocalYugmColors.current.primary)))
                     .clickable(enabled = input.isNotBlank() && !viewModel.isSendingMessage) { send() },
                 contentAlignment = Alignment.Center
             ) {
@@ -531,12 +527,12 @@ private fun ClanChatMessageRow(
         }
         Column(Modifier.widthIn(max = 300.dp), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
             if (showName && sender != null) {
-                Text(sender.name, color = ClanChatPurple, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 5.dp, bottom = 4.dp))
+                Text(sender.name, color = LocalYugmColors.current.secondary, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 5.dp, bottom = 4.dp))
             }
             Column(
                 Modifier.clip(RoundedCornerShape(topStart = 19.dp, topEnd = 19.dp, bottomStart = if (mine) 19.dp else 5.dp, bottomEnd = if (mine) 5.dp else 19.dp))
                     .background(if (mine) Brush.linearGradient(listOf(Color(0xFF6428C6), Color(0xFF8D35F6))) else Brush.linearGradient(listOf(Color(0xFF191B30), Color(0xFF20243A))))
-                    .border(1.dp, if (mine) Color(0x487D46E8) else ClanChatLine, RoundedCornerShape(topStart = 19.dp, topEnd = 19.dp, bottomStart = if (mine) 19.dp else 5.dp, bottomEnd = if (mine) 5.dp else 19.dp))
+                    .border(1.dp, if (mine) Color(0x487D46E8) else LocalYugmColors.current.border, RoundedCornerShape(topStart = 19.dp, topEnd = 19.dp, bottomStart = if (mine) 19.dp else 5.dp, bottomEnd = if (mine) 5.dp else 19.dp))
                     .combinedClickable(onClick = onOpenActions, onLongClick = onOpenActions)
                     .padding(horizontal = 14.dp, vertical = 11.dp)
             ) {
@@ -576,8 +572,8 @@ private fun ClanChatMessageRow(
                             fontSize = 10.sp,
                             modifier = Modifier
                                 .clip(CircleShape)
-                                .background(ClanChatCard)
-                                .border(1.dp, if (selected) ClanChatPurple.copy(alpha = 0.7f) else ClanChatLine, CircleShape)
+                                .background(LocalYugmColors.current.surface)
+                                .border(1.dp, if (selected) LocalYugmColors.current.secondary.copy(alpha = 0.7f) else LocalYugmColors.current.border, CircleShape)
                                 .clickable { onReact(type) }
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         )
@@ -592,9 +588,9 @@ private fun ClanChatMessageRow(
 @Composable
 private fun DateSeparator(label: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.weight(1f).height(1.dp).background(ClanChatLine))
-        Text(label, color = ClanChatMuted, fontSize = 11.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(horizontal = 10.dp))
-        Box(Modifier.weight(1f).height(1.dp).background(ClanChatLine))
+        Box(Modifier.weight(1f).height(1.dp).background(LocalYugmColors.current.border))
+        Text(label, color = LocalYugmColors.current.textSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(horizontal = 10.dp))
+        Box(Modifier.weight(1f).height(1.dp).background(LocalYugmColors.current.border))
     }
 }
 

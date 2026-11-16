@@ -74,6 +74,7 @@ import com.yugm.app.core.model.FriendRequest
 import com.yugm.app.core.model.FriendUser
 import com.yugm.app.core.model.Host
 import com.yugm.app.core.ui.components.Avatar
+import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.core.ui.components.YugmBottomDock
 import com.yugm.app.core.ui.components.YugmPullToRefreshBox
 import com.yugm.app.core.ui.components.YugmDockTab
@@ -85,13 +86,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private val ChatBg = Color(0xFF060714)
-private val ChatInk = Color(0xFFF8FAFC)
-private val ChatMuted = Color(0xFF9EA3B9)
-private val ChatPurple = Color(0xFF8D35F6)
-private val ChatLine = Color(0x24FFFFFF)
-private val ChatCard = Color(0xFF0E1121)
-private val ChatPanel = Color(0xFF171A2C)
+// Theme-aware palette is read via LocalYugmColors inside composables.
 
 @Composable
 fun ChatListScreen(
@@ -217,20 +212,20 @@ fun ChatListScreen(
         else -> "following"
     }
 
-    Box(Modifier.fillMaxSize().background(ChatBg)) {
+    Box(Modifier.fillMaxSize().background(LocalYugmColors.current.background)) {
         Column(Modifier.fillMaxSize()) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Messages", color = ChatInk, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Text("Messages", color = LocalYugmColors.current.textPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
                 Box(
                     Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background(ChatPanel)
-                        .border(1.dp, ChatLine, CircleShape)
+                        .background(LocalYugmColors.current.surfaceElevated)
+                        .border(1.dp, LocalYugmColors.current.border, CircleShape)
                         .clickable(role = Role.Button, onClickLabel = "Search chats", onClick = {
                             searchOpen = !searchOpen
                             if (!searchOpen) searchQuery = ""
@@ -240,7 +235,7 @@ fun ChatListScreen(
                     Icon(
                         if (searchOpen) Icons.Filled.Close else Icons.Filled.Search,
                         contentDescription = null,
-                        tint = ChatInk,
+                        tint = LocalYugmColors.current.textPrimary,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -249,12 +244,12 @@ fun ChatListScreen(
                     Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background(ChatPanel)
-                        .border(1.dp, ChatLine, CircleShape)
+                        .background(LocalYugmColors.current.surfaceElevated)
+                        .border(1.dp, LocalYugmColors.current.border, CircleShape)
                         .clickable(role = Role.Button, onClickLabel = "Find people by username", onClick = { showFindPeople = true }),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Filled.PersonAdd, contentDescription = null, tint = ChatInk, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Filled.PersonAdd, contentDescription = null, tint = LocalYugmColors.current.textPrimary, modifier = Modifier.size(18.dp))
                 }
             }
 
@@ -269,15 +264,15 @@ fun ChatListScreen(
                         modifier = Modifier
                             .height(40.dp)
                             .clip(RoundedCornerShape(20.dp))
-                            .background(if (selected) ChatPurple else ChatPanel)
-                            .border(1.dp, if (selected) Color.Transparent else ChatLine, RoundedCornerShape(20.dp))
+                            .background(if (selected) LocalYugmColors.current.secondary else LocalYugmColors.current.surfaceElevated)
+                            .border(1.dp, if (selected) Color.Transparent else LocalYugmColors.current.border, RoundedCornerShape(20.dp))
                             .clickable(role = Role.Tab, onClickLabel = label, onClick = { mainTab = index })
                             .padding(horizontal = 22.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             label,
-                            color = if (selected) Color.White else ChatMuted,
+                            color = if (selected) Color.White else LocalYugmColors.current.textSecondary,
                             fontSize = 14.sp,
                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
                         )
@@ -292,19 +287,19 @@ fun ChatListScreen(
                         .padding(horizontal = 20.dp, vertical = 4.dp)
                         .height(48.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(ChatPanel)
-                        .border(1.dp, ChatLine, RoundedCornerShape(16.dp))
+                        .background(LocalYugmColors.current.surfaceElevated)
+                        .border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(16.dp))
                         .padding(horizontal = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Filled.Search, contentDescription = null, tint = ChatMuted, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Filled.Search, contentDescription = null, tint = LocalYugmColors.current.textSecondary, modifier = Modifier.size(18.dp))
                     BasicTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it.take(60) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        textStyle = TextStyle(color = ChatInk, fontSize = 14.sp),
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(ChatPurple),
+                        textStyle = TextStyle(color = LocalYugmColors.current.textPrimary, fontSize = 14.sp),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(LocalYugmColors.current.secondary),
                         modifier = Modifier.weight(1f).padding(start = 10.dp),
                         decorationBox = { inner ->
                             Box {
@@ -315,7 +310,7 @@ fun ChatListScreen(
                                             2 -> "Search people"
                                             else -> "Search chats, people or messages"
                                         },
-                                        color = ChatMuted,
+                                        color = LocalYugmColors.current.textSecondary,
                                         fontSize = 13.sp
                                     )
                                 }
@@ -339,10 +334,10 @@ fun ChatListScreen(
             }
 
             if (viewModel.error != null) {
-                Column(Modifier.padding(horizontal = 20.dp, vertical = 6.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(ChatCard).padding(16.dp)) {
-                    Text("Couldn't refresh your connections", color = ChatInk, fontWeight = FontWeight.Bold)
-                    Text(viewModel.error.orEmpty(), color = ChatMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
-                    TextButton(onClick = { viewModel.load(token, currentUserId) }) { Text("Try again", color = ChatPurple) }
+                Column(Modifier.padding(horizontal = 20.dp, vertical = 6.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(LocalYugmColors.current.surface).padding(16.dp)) {
+                    Text("Couldn't refresh your connections", color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Bold)
+                    Text(viewModel.error.orEmpty(), color = LocalYugmColors.current.textSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                    TextButton(onClick = { viewModel.load(token, currentUserId) }) { Text("Try again", color = LocalYugmColors.current.secondary) }
                 }
             }
 
@@ -365,10 +360,10 @@ fun ChatListScreen(
                                             Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Text("People online", color = ChatInk, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                                            Text("People online", color = LocalYugmColors.current.textPrimary, fontSize = 19.sp, fontWeight = FontWeight.Bold)
                                             Spacer(Modifier.weight(1f))
                                             if (viewModel.isLoading && viewModel.recommendedChatUsers.isEmpty()) {
-                                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = ChatPurple, strokeWidth = 2.dp)
+                                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = LocalYugmColors.current.secondary, strokeWidth = 2.dp)
                                             }
                                         }
                                         if (viewModel.recommendedChatUsers.isNotEmpty()) {
@@ -381,18 +376,18 @@ fun ChatListScreen(
                                                 }
                                             }
                                         } else if (!viewModel.isLoading) {
-                                            Text("Random people online will show up here.", color = ChatMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp))
+                                            Text("Random people online will show up here.", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp))
                                         }
                                     }
                                 }
                                 if (viewModel.matches.isNotEmpty() && searchQuery.isBlank()) item {
                                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        Text("People you may know", color = ChatInk, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp))
+                                        Text("People you may know", color = LocalYugmColors.current.textPrimary, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp))
                                         LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                                             items(viewModel.matches.take(20), key = { "match-${it.id}" }) { user ->
                                                 Column(Modifier.width(70.dp).clickable(role = Role.Button, onClickLabel = "Chat with ${user.name}") { onOpenChat(user.id) }, horizontalAlignment = Alignment.CenterHorizontally) {
                                                     Avatar(user.name.take(1), 58, user.avatar, user.activeCosmetics)
-                                                    Text(user.name, color = ChatInk, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 5.dp))
+                                                    Text(user.name, color = LocalYugmColors.current.textPrimary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 5.dp))
                                                 }
                                             }
                                         }
@@ -412,24 +407,24 @@ fun ChatListScreen(
                                 }
                                 item {
                                     Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Text("Chatlist", color = ChatInk, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                                        Text("Chatlist", color = LocalYugmColors.current.textPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                                         Spacer(Modifier.weight(1f))
-                                        if (unread > 0) Text("Mark read", color = ChatPurple, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                                        if (unread > 0) Text("Mark read", color = LocalYugmColors.current.secondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
                                             modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Mark all messages as read") { viewModel.markAllRead(token, currentUserId) }.padding(horizontal = 8.dp, vertical = 4.dp))
-                                        Text("${filteredConversations.size} chats", color = ChatMuted, fontSize = 12.sp)
+                                        Text("${filteredConversations.size} chats", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
                                     }
                                 }
                                 if (viewModel.isLoading && filteredConversations.isEmpty()) item {
-                                    Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ChatPurple) }
+                                    Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = LocalYugmColors.current.secondary) }
                                 } else if (filteredConversations.isEmpty() && searchQuery.isNotBlank()) item {
                                     Column(
                                         Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 40.dp),
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
-                                        Text("No chats found", color = ChatInk, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                                        Text("No chats found", color = LocalYugmColors.current.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                                         Text(
                                             "Nothing matches “$searchQuery”. Try a different name or word.",
-                                            color = ChatMuted,
+                                            color = LocalYugmColors.current.textSecondary,
                                             fontSize = 12.sp,
                                             textAlign = TextAlign.Center,
                                             modifier = Modifier.padding(top = 6.dp)
@@ -441,22 +436,22 @@ fun ChatListScreen(
                                             .fillMaxWidth()
                                             .padding(horizontal = 24.dp, vertical = 48.dp)
                                             .clip(RoundedCornerShape(22.dp))
-                                            .background(ChatCard.copy(alpha = 0.55f))
-                                            .border(1.dp, ChatLine.copy(alpha = 0.7f), RoundedCornerShape(22.dp))
+                                            .background(LocalYugmColors.current.surface.copy(alpha = 0.55f))
+                                            .border(1.dp, LocalYugmColors.current.border.copy(alpha = 0.7f), RoundedCornerShape(22.dp))
                                             .padding(horizontal = 22.dp, vertical = 30.dp),
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
                                         Text("▰", color = Color(0xFFC9B9FF), fontSize = 56.sp)
-                                        Text("No conversations yet", color = ChatInk, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
+                                        Text("No conversations yet", color = LocalYugmColors.current.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
                                         Text(
                                             "Find interesting people and say hello.",
-                                            color = ChatMuted,
+                                            color = LocalYugmColors.current.textSecondary,
                                             fontSize = 13.sp,
                                             textAlign = TextAlign.Center,
                                             modifier = Modifier.padding(top = 8.dp)
                                         )
                                         TextButton(onClick = onDiscover, modifier = Modifier.padding(top = 6.dp)) {
-                                            Text("Find friends", color = ChatPurple, fontWeight = FontWeight.Bold)
+                                            Text("Find friends", color = LocalYugmColors.current.secondary, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 } else {
@@ -464,9 +459,9 @@ fun ChatListScreen(
                                         Column(
                                             Modifier.padding(horizontal = 16.dp, vertical = 1.dp)
                                                 .clip(RoundedCornerShape(18.dp))
-                                                .background(ChatCard)
+                                                .background(LocalYugmColors.current.surface)
                                         ) {
-                                            if (index > 0) Box(Modifier.fillMaxWidth().padding(start = 82.dp).height(1.dp).background(ChatLine))
+                                            if (index > 0) Box(Modifier.fillMaxWidth().padding(start = 82.dp).height(1.dp).background(LocalYugmColors.current.border))
                                             val isMutedConversation = item.partner.id in viewModel.mutedPartnerIds
                                             LightChatRow(
                                                 item,
@@ -485,13 +480,13 @@ fun ChatListScreen(
                                             ) {
                                                 Text(
                                                     text = if (viewModel.isLoadingMoreRecent) "Loading more chats…" else "Load more chats",
-                                                    color = if (viewModel.isLoadingMoreRecent) ChatMuted else ChatInk,
+                                                    color = if (viewModel.isLoadingMoreRecent) LocalYugmColors.current.textSecondary else LocalYugmColors.current.textPrimary,
                                                     fontSize = 12.sp,
                                                     fontWeight = FontWeight.SemiBold,
                                                     modifier = Modifier
                                                         .clip(CircleShape)
-                                                        .background(ChatPanel)
-                                                        .border(1.dp, ChatLine, CircleShape)
+                                                        .background(LocalYugmColors.current.surfaceElevated)
+                                                        .border(1.dp, LocalYugmColors.current.border, CircleShape)
                                                         .clickable(
                                                             enabled = !viewModel.isLoadingMoreRecent,
                                                             role = Role.Button,
@@ -511,7 +506,7 @@ fun ChatListScreen(
                         when {
                             viewModel.isLoading && clan == null -> {
                                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    CircularProgressIndicator(color = ChatPurple)
+                                    CircularProgressIndicator(color = LocalYugmColors.current.secondary)
                                 }
                             }
                             clan == null -> {
@@ -520,22 +515,22 @@ fun ChatListScreen(
                                         .fillMaxWidth()
                                         .padding(horizontal = 24.dp, vertical = 48.dp)
                                         .clip(RoundedCornerShape(22.dp))
-                                        .background(ChatCard.copy(alpha = 0.55f))
-                                        .border(1.dp, ChatLine.copy(alpha = 0.7f), RoundedCornerShape(22.dp))
+                                        .background(LocalYugmColors.current.surface.copy(alpha = 0.55f))
+                                        .border(1.dp, LocalYugmColors.current.border.copy(alpha = 0.7f), RoundedCornerShape(22.dp))
                                         .padding(horizontal = 22.dp, vertical = 30.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
                                     Text("▰", color = Color(0xFFC9B9FF), fontSize = 56.sp)
-                                    Text("No clan joined yet", color = ChatInk, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
+                                    Text("No clan joined yet", color = LocalYugmColors.current.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
                                     Text(
                                         "Join a clan to unlock a shared family chat.",
-                                        color = ChatMuted,
+                                        color = LocalYugmColors.current.textSecondary,
                                         fontSize = 13.sp,
                                         textAlign = TextAlign.Center,
                                         modifier = Modifier.padding(top = 8.dp)
                                     )
                                     TextButton(onClick = onJoinClan, modifier = Modifier.padding(top = 6.dp)) {
-                                        Text("Join Clan", color = ChatPurple, fontWeight = FontWeight.Bold)
+                                        Text("Join Clan", color = LocalYugmColors.current.secondary, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -563,7 +558,7 @@ fun ChatListScreen(
                                 verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
                                 item {
-                                    Column(Modifier.padding(horizontal = 18.dp).clip(RoundedCornerShape(20.dp)).background(ChatCard).padding(5.dp)) {
+                                    Column(Modifier.padding(horizontal = 18.dp).clip(RoundedCornerShape(20.dp)).background(LocalYugmColors.current.surface).padding(5.dp)) {
                                         Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                                             val requestCount = viewModel.friendRequests.size
                                             listOf(
@@ -577,7 +572,7 @@ fun ChatListScreen(
                                                     .clickable(role = Role.Tab) { contactTab = index }, contentAlignment = Alignment.Center) {
                                                     Text(
                                                         label,
-                                                        color = if (selected) ChatPurple else if (index == 1 && requestCount > 0) Color(0xFFFF7AAE) else ChatMuted,
+                                                        color = if (selected) LocalYugmColors.current.secondary else if (index == 1 && requestCount > 0) Color(0xFFFF7AAE) else LocalYugmColors.current.textSecondary,
                                                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                                                         fontSize = 12.sp,
                                                         maxLines = 1
@@ -594,14 +589,14 @@ fun ChatListScreen(
                                     ) {
                                         Text(
                                             "$contactCount $contactLabel${if (contactCount == 1) "" else "s"}",
-                                            color = ChatMuted,
+                                            color = LocalYugmColors.current.textSecondary,
                                             fontSize = 13.sp
                                         )
                                         Spacer(Modifier.weight(1f))
                                         if (contactTab == 0) {
                                             Text(
                                                 "Add friends",
-                                                color = ChatPurple,
+                                                color = LocalYugmColors.current.secondary,
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.SemiBold,
                                                 modifier = Modifier
@@ -615,7 +610,7 @@ fun ChatListScreen(
                                 when (contactTab) {
                                     0 -> {
                                         if (viewModel.isLoading && filteredFriends.isEmpty()) item {
-                                            Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ChatPurple) }
+                                            Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = LocalYugmColors.current.secondary) }
                                         } else if (filteredFriends.isEmpty()) item {
                                             ContactEmptyState(
                                                 title = if (searchQuery.isBlank()) "No friends yet" else "No friends found",
@@ -661,7 +656,7 @@ fun ChatListScreen(
                                     }
                                     2 -> {
                                         if (viewModel.isLoading && filteredFollowers.isEmpty()) item {
-                                            Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ChatPurple) }
+                                            Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = LocalYugmColors.current.secondary) }
                                         } else if (filteredFollowers.isEmpty()) item {
                                             ContactEmptyState(
                                                 title = "No followers yet",
@@ -675,7 +670,7 @@ fun ChatListScreen(
                                     }
                                     else -> {
                                         if (viewModel.isLoading && filteredFollowing.isEmpty()) item {
-                                            Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ChatPurple) }
+                                            Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = LocalYugmColors.current.secondary) }
                                         } else if (filteredFollowing.isEmpty()) item {
                                             ContactEmptyState(
                                                 title = "Not following anyone yet",
@@ -771,8 +766,8 @@ private fun FindPeopleSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = ChatBg,
-        contentColor = ChatInk,
+        containerColor = LocalYugmColors.current.background,
+        contentColor = LocalYugmColors.current.textPrimary,
         dragHandle = null
     ) {
         Column(
@@ -783,38 +778,38 @@ private fun FindPeopleSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
-                    Modifier.size(44.dp).clip(RoundedCornerShape(15.dp)).background(ChatPurple.copy(alpha = 0.2f)),
+                    Modifier.size(44.dp).clip(RoundedCornerShape(15.dp)).background(LocalYugmColors.current.secondary.copy(alpha = 0.2f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(Icons.Filled.PersonAdd, contentDescription = null, tint = Color(0xFFC9A5FF), modifier = Modifier.size(22.dp))
                 }
                 Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                    Text("Find people", color = ChatInk, fontSize = 21.sp, fontWeight = FontWeight.Bold)
-                    Text("Search by username and start a conversation", color = ChatMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 3.dp))
+                    Text("Find people", color = LocalYugmColors.current.textPrimary, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                    Text("Search by username and start a conversation", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 3.dp))
                 }
                 IconButton(onClick = onDismiss) {
-                    Icon(Icons.Filled.Close, contentDescription = "Close search", tint = ChatMuted)
+                    Icon(Icons.Filled.Close, contentDescription = "Close search", tint = LocalYugmColors.current.textSecondary)
                 }
             }
 
             Row(
                 Modifier.fillMaxWidth().padding(top = 20.dp).height(54.dp)
-                    .clip(RoundedCornerShape(17.dp)).background(ChatPanel)
-                    .border(1.dp, ChatLine, RoundedCornerShape(17.dp)).padding(horizontal = 15.dp),
+                    .clip(RoundedCornerShape(17.dp)).background(LocalYugmColors.current.surfaceElevated)
+                    .border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(17.dp)).padding(horizontal = 15.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Filled.Search, contentDescription = null, tint = ChatMuted, modifier = Modifier.size(21.dp))
+                Icon(Icons.Filled.Search, contentDescription = null, tint = LocalYugmColors.current.textSecondary, modifier = Modifier.size(21.dp))
                 BasicTextField(
                     value = query,
                     onValueChange = { query = it.take(32) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    textStyle = TextStyle(color = ChatInk, fontSize = 15.sp),
-                    cursorBrush = androidx.compose.ui.graphics.SolidColor(ChatPurple),
+                    textStyle = TextStyle(color = LocalYugmColors.current.textPrimary, fontSize = 15.sp),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(LocalYugmColors.current.secondary),
                     modifier = Modifier.weight(1f).padding(start = 11.dp),
                     decorationBox = { inner ->
                         Box {
-                            if (query.isBlank()) Text("Enter a username", color = ChatMuted, fontSize = 14.sp)
+                            if (query.isBlank()) Text("Enter a username", color = LocalYugmColors.current.textSecondary, fontSize = 14.sp)
                             inner()
                         }
                     }
@@ -824,24 +819,24 @@ private fun FindPeopleSheet(
                         modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Clear username search") { query = "" }.padding(start = 10.dp))
                 }
             }
-            Text("Use at least 2 characters", color = ChatMuted, fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 12.dp))
+            Text("Use at least 2 characters", color = LocalYugmColors.current.textSecondary, fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 12.dp))
 
             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                 when {
                     query.trim().removePrefix("@").trim().length < 2 -> {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Filled.PersonAdd, contentDescription = null, tint = ChatPurple.copy(alpha = 0.75f), modifier = Modifier.size(38.dp))
-                            Text("Find someone by their @username", color = ChatMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp))
+                            Icon(Icons.Filled.PersonAdd, contentDescription = null, tint = LocalYugmColors.current.secondary.copy(alpha = 0.75f), modifier = Modifier.size(38.dp))
+                            Text("Find someone by their @username", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp))
                         }
                     }
-                    searching -> CircularProgressIndicator(color = ChatPurple, strokeWidth = 2.5.dp)
+                    searching -> CircularProgressIndicator(color = LocalYugmColors.current.secondary, strokeWidth = 2.5.dp)
                     error != null -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(error.orEmpty(), color = ChatMuted, fontSize = 13.sp)
+                        Text(error.orEmpty(), color = LocalYugmColors.current.textSecondary, fontSize = 13.sp)
                         TextButton(onClick = { retry++ }) { Text("Try again", color = Color(0xFFC9A5FF)) }
                     }
                     results.isEmpty() -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("No users found", color = ChatInk, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                        Text("Check the spelling or try another username.", color = ChatMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
+                        Text("No users found", color = LocalYugmColors.current.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Check the spelling or try another username.", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
                     }
                     else -> LazyColumn(
                         Modifier.fillMaxSize(),
@@ -891,8 +886,8 @@ private fun FindPeopleResultRow(
     onFollow: () -> Unit
 ) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(19.dp)).background(ChatCard)
-            .border(1.dp, ChatLine, RoundedCornerShape(19.dp)).padding(horizontal = 13.dp, vertical = 12.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(19.dp)).background(LocalYugmColors.current.surface)
+            .border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(19.dp)).padding(horizontal = 13.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Avatar(user.name.take(1), 48, user.avatar, user.activeCosmetics)
@@ -900,18 +895,18 @@ private fun FindPeopleResultRow(
             Modifier.weight(1f).padding(start = 11.dp).clickable(role = Role.Button, onClickLabel = "Start a chat with ${user.name}", onClick = onOpenChat),
             verticalArrangement = Arrangement.Center
         ) {
-            Text(user.name.ifBlank { user.username }, color = ChatInk, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("@${user.username}", color = ChatMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(user.name.ifBlank { user.username }, color = LocalYugmColors.current.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("@${user.username}", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Box(
             Modifier.padding(start = 8.dp).clip(RoundedCornerShape(13.dp))
-                .background(if (user.isFollowing) ChatPanel else ChatPurple.copy(alpha = 0.88f))
+                .background(if (user.isFollowing) LocalYugmColors.current.surfaceElevated else LocalYugmColors.current.secondary.copy(alpha = 0.88f))
                 .clickable(enabled = !followBusy, role = Role.Button, onClickLabel = if (user.isFollowing) "Unfollow ${user.name}" else "Follow ${user.name}", onClick = onFollow)
                 .padding(horizontal = 12.dp, vertical = 9.dp),
             contentAlignment = Alignment.Center
         ) {
-            if (followBusy) CircularProgressIndicator(Modifier.size(15.dp), color = ChatInk, strokeWidth = 2.dp)
-            else Text(if (user.isFollowing) "Following" else "Follow", color = ChatInk, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            if (followBusy) CircularProgressIndicator(Modifier.size(15.dp), color = LocalYugmColors.current.textPrimary, strokeWidth = 2.dp)
+            else Text(if (user.isFollowing) "Following" else "Follow", color = LocalYugmColors.current.textPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         }
         TextButton(onClick = onOpenChat, modifier = Modifier.padding(start = 3.dp)) {
             Text("Message", color = Color(0xFFC9A5FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -927,9 +922,9 @@ private fun ContactCard(showDivider: Boolean, content: @Composable () -> Unit) {
     Column(
         Modifier.padding(horizontal = 16.dp, vertical = 1.dp)
             .clip(RoundedCornerShape(18.dp))
-            .background(ChatCard)
+            .background(LocalYugmColors.current.surface)
     ) {
-        if (showDivider) Box(Modifier.fillMaxWidth().padding(start = 74.dp).height(1.dp).background(ChatLine))
+        if (showDivider) Box(Modifier.fillMaxWidth().padding(start = 74.dp).height(1.dp).background(LocalYugmColors.current.border))
         content()
     }
 }
@@ -946,22 +941,22 @@ private fun ContactEmptyState(
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 42.dp)
             .clip(RoundedCornerShape(20.dp))
-            .background(ChatCard.copy(alpha = 0.55f))
-            .border(1.dp, ChatLine.copy(alpha = 0.7f), RoundedCornerShape(20.dp))
+            .background(LocalYugmColors.current.surface.copy(alpha = 0.55f))
+            .border(1.dp, LocalYugmColors.current.border.copy(alpha = 0.7f), RoundedCornerShape(20.dp))
             .padding(horizontal = 20.dp, vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(title, color = ChatInk, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+        Text(title, color = LocalYugmColors.current.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
         Text(
             body,
-            color = ChatMuted,
+            color = LocalYugmColors.current.textSecondary,
             fontSize = 12.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 6.dp)
         )
         if (actionLabel != null) {
             TextButton(onClick = onAction, modifier = Modifier.padding(top = 4.dp)) {
-                Text(actionLabel, color = ChatPurple, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Text(actionLabel, color = LocalYugmColors.current.secondary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
             }
         }
     }
@@ -986,7 +981,7 @@ private fun FriendContactRow(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         friend.name.ifBlank { friend.username },
-                        color = ChatInk,
+                        color = LocalYugmColors.current.textPrimary,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -996,14 +991,14 @@ private fun FriendContactRow(
                 }
                 Text(
                     if (friend.username.isNotBlank()) "@${friend.username} · Level ${friend.level}" else "Level ${friend.level}",
-                    color = ChatMuted,
+                    color = LocalYugmColors.current.textSecondary,
                     fontSize = 12.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            if (busy) CircularProgressIndicator(Modifier.size(16.dp), color = ChatPurple, strokeWidth = 2.dp)
-            else Text("›", color = ChatMuted, fontSize = 25.sp)
+            if (busy) CircularProgressIndicator(Modifier.size(16.dp), color = LocalYugmColors.current.secondary, strokeWidth = 2.dp)
+            else Text("›", color = LocalYugmColors.current.textSecondary, fontSize = 25.sp)
         }
     }
 }
@@ -1025,7 +1020,7 @@ private fun FriendRequestRow(
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
                 Text(
                     person.name.ifBlank { person.username },
-                    color = ChatInk,
+                    color = LocalYugmColors.current.textPrimary,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -1033,14 +1028,14 @@ private fun FriendRequestRow(
                 )
                 Text(
                     if (person.username.isNotBlank()) "@${person.username}" else "Wants to connect",
-                    color = ChatMuted,
+                    color = LocalYugmColors.current.textSecondary,
                     fontSize = 12.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
             if (busy) {
-                CircularProgressIndicator(Modifier.size(18.dp), color = ChatPurple, strokeWidth = 2.dp)
+                CircularProgressIndicator(Modifier.size(18.dp), color = LocalYugmColors.current.secondary, strokeWidth = 2.dp)
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(
@@ -1055,10 +1050,10 @@ private fun FriendRequestRow(
                     }
                     Text(
                         "Decline",
-                        color = ChatMuted,
+                        color = LocalYugmColors.current.textSecondary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clip(CircleShape).background(ChatPanel)
+                        modifier = Modifier.clip(CircleShape).background(LocalYugmColors.current.surfaceElevated)
                             .clickable(role = Role.Button, onClickLabel = "Decline friend request from ${person.name}", onClick = onDecline)
                             .padding(horizontal = 11.dp, vertical = 8.dp)
                     )
@@ -1079,21 +1074,21 @@ private fun PersonContactRow(person: Host, showDivider: Boolean, onClick: () -> 
         ) {
             Box {
                 Avatar(person.name.take(1).uppercase(), 48, person.avatar, person.activeCosmetics)
-                if (person.isOnline) Box(Modifier.align(Alignment.BottomEnd).size(12.dp).clip(CircleShape).background(Color(0xFF39C891)).border(2.dp, ChatCard, CircleShape))
+                if (person.isOnline) Box(Modifier.align(Alignment.BottomEnd).size(12.dp).clip(CircleShape).background(Color(0xFF39C891)).border(2.dp, LocalYugmColors.current.surface, CircleShape))
             }
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                Text(person.name, color = ChatInk, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(person.name, color = LocalYugmColors.current.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     when {
                         person.username.isNotBlank() -> "@${person.username}"
                         person.isOnline -> "Online"
                         else -> "Yugm member"
                     },
-                    color = ChatMuted,
+                    color = LocalYugmColors.current.textSecondary,
                     fontSize = 12.sp
                 )
             }
-            Text("›", color = ChatMuted, fontSize = 25.sp)
+            Text("›", color = LocalYugmColors.current.textSecondary, fontSize = 25.sp)
         }
     }
 }
@@ -1105,8 +1100,8 @@ private fun ClanConversationRow(clan: Clan, lastMessage: ClanMessage?, onClick: 
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .clip(RoundedCornerShape(18.dp))
-            .background(ChatCard.copy(alpha = 0.92f))
-            .border(1.dp, ChatLine.copy(alpha = 0.7f), RoundedCornerShape(18.dp))
+            .background(LocalYugmColors.current.surface.copy(alpha = 0.92f))
+            .border(1.dp, LocalYugmColors.current.border.copy(alpha = 0.7f), RoundedCornerShape(18.dp))
             .clickable(role = Role.Button, onClickLabel = "Open clan chat for ${clan.name}", onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1115,7 +1110,7 @@ private fun ClanConversationRow(clan: Clan, lastMessage: ClanMessage?, onClick: 
             Avatar(clan.name.take(1).uppercase(), 52, clan.avatar)
             Box(
                 Modifier.align(Alignment.BottomEnd).size(18.dp).clip(RoundedCornerShape(6.dp))
-                    .background(ChatPurple).border(2.dp, ChatCard, RoundedCornerShape(6.dp)),
+                    .background(LocalYugmColors.current.secondary).border(2.dp, LocalYugmColors.current.surface, RoundedCornerShape(6.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Text("👥", fontSize = 8.sp)
@@ -1125,7 +1120,7 @@ private fun ClanConversationRow(clan: Clan, lastMessage: ClanMessage?, onClick: 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     clan.name,
-                    color = ChatInk,
+                    color = LocalYugmColors.current.textPrimary,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
@@ -1133,12 +1128,12 @@ private fun ClanConversationRow(clan: Clan, lastMessage: ClanMessage?, onClick: 
                     modifier = Modifier.weight(1f)
                 )
                 val time = lastMessage?.createdAt?.let { conversationTimeLabel(it) }.orEmpty()
-                if (time.isNotBlank()) Text(time, color = ChatMuted, fontSize = 11.sp)
+                if (time.isNotBlank()) Text(time, color = LocalYugmColors.current.textSecondary, fontSize = 11.sp)
             }
             Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     buildClanPreview(lastMessage),
-                    color = ChatMuted,
+                    color = LocalYugmColors.current.textSecondary,
                     fontSize = 12.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1156,24 +1151,24 @@ private fun GroupChatsEntryRow(onClick: () -> Unit) {
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .clip(RoundedCornerShape(18.dp))
-            .background(ChatCard)
-            .border(1.dp, ChatLine.copy(alpha = 0.7f), RoundedCornerShape(18.dp))
+            .background(LocalYugmColors.current.surface)
+            .border(1.dp, LocalYugmColors.current.border.copy(alpha = 0.7f), RoundedCornerShape(18.dp))
             .clickable(role = Role.Button, onClickLabel = "Open group chats", onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             Modifier.size(52.dp).clip(CircleShape)
-                .background(Brush.linearGradient(listOf(ChatPurple.copy(alpha = 0.9f), Color(0xFFF6378B).copy(alpha = 0.9f)))),
+                .background(Brush.linearGradient(listOf(LocalYugmColors.current.secondary.copy(alpha = 0.9f), Color(0xFFF6378B).copy(alpha = 0.9f)))),
             contentAlignment = Alignment.Center
         ) {
             Icon(Icons.Filled.Groups, contentDescription = null, tint = Color.White, modifier = Modifier.size(26.dp))
         }
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
-            Text("Group chats", color = ChatInk, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-            Text("Bring several friends into one conversation", color = ChatMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("Group chats", color = LocalYugmColors.current.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text("Bring several friends into one conversation", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text("›", color = ChatMuted, fontSize = 25.sp)
+        Text("›", color = LocalYugmColors.current.textSecondary, fontSize = 25.sp)
     }
 }
 
@@ -1194,21 +1189,21 @@ private fun LightChatRow(item: ConversationItem, currentUserId: String, unreadCo
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp)
             .clip(RoundedCornerShape(18.dp))
-            .background(if (hasUnread) ChatCard.copy(alpha = 0.98f) else ChatCard.copy(alpha = 0.78f))
-            .border(1.dp, if (hasUnread) ChatPurple.copy(alpha = 0.28f) else ChatLine.copy(alpha = 0.7f), RoundedCornerShape(18.dp))
+            .background(if (hasUnread) LocalYugmColors.current.surface.copy(alpha = 0.98f) else LocalYugmColors.current.surface.copy(alpha = 0.78f))
+            .border(1.dp, if (hasUnread) LocalYugmColors.current.secondary.copy(alpha = 0.28f) else LocalYugmColors.current.border.copy(alpha = 0.7f), RoundedCornerShape(18.dp))
             .clickable(role = Role.Button, onClickLabel = "Open conversation with ${item.partner.name}", onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box {
             Avatar(item.partner.name.take(1), 52, item.partner.avatar, item.partner.activeCosmetics)
-            if (item.partner.isOnline) Box(Modifier.align(Alignment.BottomEnd).size(13.dp).clip(CircleShape).background(Color(0xFF39C891)).border(2.dp, ChatCard, CircleShape))
+            if (item.partner.isOnline) Box(Modifier.align(Alignment.BottomEnd).size(13.dp).clip(CircleShape).background(Color(0xFF39C891)).border(2.dp, LocalYugmColors.current.surface, CircleShape))
         }
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     item.partner.name.ifBlank { item.partner.username.ifBlank { "User" } },
-                    color = ChatInk,
+                    color = LocalYugmColors.current.textPrimary,
                     fontSize = 15.sp,
                     fontWeight = if (hasUnread) FontWeight.Bold else FontWeight.SemiBold,
                     maxLines = 1,
@@ -1218,7 +1213,7 @@ private fun LightChatRow(item: ConversationItem, currentUserId: String, unreadCo
                 if (time.isNotBlank()) {
                     Text(
                         time,
-                        color = if (hasUnread) Color(0xFFC9A5FF) else ChatMuted,
+                        color = if (hasUnread) Color(0xFFC9A5FF) else LocalYugmColors.current.textSecondary,
                         fontSize = 11.sp,
                         fontWeight = if (hasUnread) FontWeight.SemiBold else FontWeight.Normal
                     )
@@ -1228,7 +1223,7 @@ private fun LightChatRow(item: ConversationItem, currentUserId: String, unreadCo
                 if (muted) Text("🔕 ", fontSize = 11.sp)
                 Text(
                     preview,
-                    color = if (hasUnread) ChatInk.copy(alpha = 0.9f) else ChatMuted,
+                    color = if (hasUnread) LocalYugmColors.current.textPrimary.copy(alpha = 0.9f) else LocalYugmColors.current.textSecondary,
                     fontSize = 12.sp,
                     fontWeight = if (hasUnread) FontWeight.Medium else FontWeight.Normal,
                     maxLines = 1,
@@ -1240,7 +1235,7 @@ private fun LightChatRow(item: ConversationItem, currentUserId: String, unreadCo
                     Box(
                         Modifier
                             .clip(CircleShape)
-                            .background(ChatPurple)
+                            .background(LocalYugmColors.current.secondary)
                             .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
                             .padding(horizontal = 7.dp, vertical = 3.dp),
                         contentAlignment = Alignment.Center
@@ -1293,7 +1288,7 @@ private fun RecommendedUserChip(user: Host, onClick: () -> Unit) {
                 modifier = Modifier
                     .size(66.dp)
                     .clip(CircleShape)
-                    .background(ChatPanel)
+                    .background(LocalYugmColors.current.surfaceElevated)
                     .border(2.dp, if (user.isOnline) Color(0xFF39C891).copy(alpha = 0.6f) else Color(0xFF2E3050), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
@@ -1310,12 +1305,12 @@ private fun RecommendedUserChip(user: Host, onClick: () -> Unit) {
                     .size(14.dp)
                     .clip(CircleShape)
                     .background(if (user.isOnline) Color(0xFF39C891) else Color(0xFF4A4D6A))
-                    .border(2.dp, ChatBg, CircleShape)
+                    .border(2.dp, LocalYugmColors.current.background, CircleShape)
             )
         }
         Text(
             text = user.name.ifBlank { user.username }.take(10),
-            color = ChatInk,
+            color = LocalYugmColors.current.textPrimary,
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
             maxLines = 1,

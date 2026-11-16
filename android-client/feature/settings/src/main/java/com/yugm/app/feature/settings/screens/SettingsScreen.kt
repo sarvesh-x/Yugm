@@ -2,7 +2,9 @@ package com.yugm.app.feature.settings.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
@@ -59,17 +62,13 @@ import android.content.Intent
 import android.net.Uri
 import com.yugm.app.core.model.Host
 import com.yugm.app.core.ui.components.*
+import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.core.ui.theme.Danger
 import com.yugm.app.feature.settings.viewmodel.SettingsViewModel
 
-private enum class SettingsPane { Home, Blocked, Notifications, Feedback, About, Terms, Privacy, Guidelines }
+private enum class SettingsPane { Home, Blocked, Notifications, Feedback, About, Terms, Privacy, Guidelines, Appearance }
 
-private val SettingsBg = Color(0xFF060714)
-private val SettingsInk = Color.White
-private val SettingsMuted = Color(0xFF9EA3B9)
-private val SettingsCard = Color(0xFF151629)
-private val SettingsLine = Color(0x24FFFFFF)
-private val SettingsAccent = Color(0xFF7546F5)
+// Theme-aware palette is read via LocalYugmColors inside composables.
 
 private val docs = mapOf(
     SettingsPane.About to "Yugm is a social voice, video, chat, dating, and community app built around live connection, private conversations, creator growth, gifts, and families.",
@@ -122,20 +121,20 @@ fun SettingsScreen(
     }
 
     Box(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize().background(SettingsBg))
+        Box(Modifier.fillMaxSize().background(LocalYugmColors.current.background))
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text(paneTitle(pane), color = SettingsInk, fontWeight = FontWeight.Black) },
+                    title = { Text(paneTitle(pane), color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Black) },
                     navigationIcon = {
                         TextButton(onClick = { if (pane == SettingsPane.Home) onBack() else pane = SettingsPane.Home }) {
-                            Text("Back", color = SettingsAccent, fontWeight = FontWeight.Bold)
+                            Text("Back", color = LocalYugmColors.current.secondary, fontWeight = FontWeight.Bold)
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = SettingsBg)
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = LocalYugmColors.current.background)
                 )
             },
-            containerColor = SettingsBg
+            containerColor = LocalYugmColors.current.background
         ) { innerPadding ->
         if (viewModel.isLoading && pane == SettingsPane.Home) {
             Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
@@ -156,6 +155,8 @@ fun SettingsScreen(
                     onSafety = onNavigateToSafety,
                     onBlocked = { pane = SettingsPane.Blocked },
                     onNotifications = { pane = SettingsPane.Notifications },
+                    onAppearance = { pane = SettingsPane.Appearance },
+                    themeMode = viewModel.themeMode,
                     onFeedback = { pane = SettingsPane.Feedback },
                     onDoc = { pane = it },
                     onOpenPrivacy = { openLegalPage("privacy") },
@@ -167,6 +168,7 @@ fun SettingsScreen(
                 )
                 SettingsPane.Blocked -> BlockedPane(Modifier.padding(innerPadding), viewModel.blockedUsers, busy, onUnblock = { unblock(it) })
                 SettingsPane.Notifications -> NotificationsPane(Modifier.padding(innerPadding), preferences, busy, onToggle = { key, value -> preferences = preferences + (key to value) })
+                SettingsPane.Appearance -> AppearancePane(Modifier.padding(innerPadding), viewModel.themeMode, onModeSelected = { viewModel.updateThemeMode(it) })
                 SettingsPane.Feedback -> FeedbackPane(
                     modifier = Modifier.padding(innerPadding),
                     subject = feedbackSubject,
@@ -201,10 +203,10 @@ fun SettingsScreen(
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { if (!busy) showDeleteConfirm = false },
-            title = { Text("Delete your account?", color = SettingsInk, fontWeight = FontWeight.Black) },
+            title = { Text("Delete your account?", color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Black) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Your account will be scheduled for deletion. Signing in again within 30 days cancels the request.", color = SettingsMuted)
+                    Text("Your account will be scheduled for deletion. Signing in again within 30 days cancels the request.", color = LocalYugmColors.current.textSecondary)
                     OutlinedTextField(value = deletePhrase, onValueChange = { deletePhrase = it }, label = { Text("Type DELETE") }, singleLine = true)
                     if (!error.isNullOrBlank()) Text(error.orEmpty(), color = Danger)
                 }
@@ -221,7 +223,7 @@ fun SettingsScreen(
                     }
                 }) { Text(if (busy) "Submitting…" else "Delete account", color = Danger) }
             },
-            dismissButton = { TextButton(enabled = !busy, onClick = { showDeleteConfirm = false }) { Text("Cancel", color = SettingsMuted) } }
+            dismissButton = { TextButton(enabled = !busy, onClick = { showDeleteConfirm = false }) { Text("Cancel", color = LocalYugmColors.current.textSecondary) } }
         )
     }
 }
@@ -240,6 +242,8 @@ private fun SettingsHome(
     onSafety: () -> Unit,
     onBlocked: () -> Unit,
     onNotifications: () -> Unit,
+    onAppearance: () -> Unit = {},
+    themeMode: String = "SYSTEM",
     onFeedback: () -> Unit,
     onDoc: (SettingsPane) -> Unit,
     onOpenPrivacy: () -> Unit,
@@ -260,11 +264,11 @@ private fun SettingsHome(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Avatar(userName.firstOrNull()?.toString() ?: "Y", 52)
                     Column(Modifier.weight(1f)) {
-                        Text(userName.ifBlank { "Yugm User" }, color = SettingsInk, fontWeight = FontWeight.Black, fontSize = 18.sp)
-                        Text("@${username.ifBlank { "yugm" }}", color = SettingsInk.copy(alpha = 0.74f), fontWeight = FontWeight.Bold)
+                        Text(userName.ifBlank { "Yugm User" }, color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                        Text("@${username.ifBlank { "yugm" }}", color = LocalYugmColors.current.textPrimary.copy(alpha = 0.74f), fontWeight = FontWeight.Bold)
                     }
                     OutlinedButton(onClick = onProfile, border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)), shape = RoundedCornerShape(8.dp)) {
-                        Text("Edit", color = SettingsInk, fontWeight = FontWeight.Bold)
+                        Text("Edit", color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -280,6 +284,7 @@ private fun SettingsHome(
                     SettingsNavRow("Yugm Arcade", "Play mini games and manage challenges.", onGames)
                     SettingsNavRow("Yugm Clans", "Create or join a clan and chat with your family.", onClans)
                     SettingsNavRow("Notification settings", "Control messages, rooms, gifts, safety, and updates.", onNotifications)
+                    SettingsNavRow("Appearance", "Choose light, dark, or system theme. Current: ${themeModeLabel(themeMode)}", onAppearance)
                     SettingsNavRow("Delete account", "Request deletion of your account and associated data.", onDeleteAccount)
                 }
             }
@@ -312,11 +317,52 @@ private fun SettingsHome(
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.fillMaxWidth().height(50.dp)
             ) {
-                Text("Logout from Yugm", color = SettingsInk, fontWeight = FontWeight.Black)
+                Text("Logout from Yugm", color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Black)
             }
-            Text("Yugm v1.2.0 / Match the vibe.", color = SettingsMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp).fillMaxWidth())
+            Text("Yugm v1.2.0 / Match the vibe.", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp).fillMaxWidth())
         }
     }
+}
+
+@Composable
+private fun AppearancePane(modifier: Modifier, currentMode: String, onModeSelected: (String) -> Unit) {
+    val modes = listOf("SYSTEM" to "System default", "LIGHT" to "Light", "DARK" to "Dark")
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Text("Pick how Yugm looks. System default follows your device setting.", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp, lineHeight = 18.sp)
+        }
+        items(modes) { (value, label) ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(LocalYugmColors.current.surface)
+                    .clickable(role = Role.Button, onClickLabel = label) { onModeSelected(value) }
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    Modifier.size(20.dp).clip(CircleShape)
+                        .border(2.dp, if (currentMode == value) LocalYugmColors.current.secondary else LocalYugmColors.current.textSecondary, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (currentMode == value) Box(Modifier.size(10.dp).clip(CircleShape).background(LocalYugmColors.current.secondary))
+                }
+                Text(label, color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            }
+        }
+    }
+}
+
+private fun themeModeLabel(mode: String): String = when (mode) {
+    "LIGHT" -> "Light"
+    "DARK" -> "Dark"
+    else -> "System"
 }
 
 @Composable
@@ -327,26 +373,26 @@ private fun BlockedPane(modifier: Modifier, blockedUsers: List<Host>, busy: Bool
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Text("People you unblock can view eligible public activity and interact again unless they have blocked you.", color = SettingsMuted, fontWeight = FontWeight.Bold, lineHeight = 20.sp)
+            Text("People you unblock can view eligible public activity and interact again unless they have blocked you.", color = LocalYugmColors.current.textSecondary, fontWeight = FontWeight.Bold, lineHeight = 20.sp)
         }
         if (blockedUsers.isEmpty()) {
-            item { WhiteCard { Text("No blocked users.", color = SettingsMuted) } }
+            item { WhiteCard { Text("No blocked users.", color = LocalYugmColors.current.textSecondary) } }
         } else {
             items(blockedUsers, key = { it.id }) { user ->
                 Row(
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(SettingsCard).padding(12.dp),
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(LocalYugmColors.current.surface).padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Avatar(user.name.firstOrNull()?.toString() ?: "?", 44, imageUrl = user.avatar, cosmetics = user.activeCosmetics)
                     Column(Modifier.weight(1f)) {
-                        Text(user.name, color = SettingsInk, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("@${user.username.ifBlank { user.city }}", color = SettingsMuted, fontSize = 12.sp)
+                        Text(user.name, color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("@${user.username.ifBlank { user.city }}", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
                     }
                     Button(
                         onClick = { onUnblock(user.id) },
                         enabled = !busy,
-                        colors = ButtonDefaults.buttonColors(containerColor = SettingsAccent),
+                        colors = ButtonDefaults.buttonColors(containerColor = LocalYugmColors.current.secondary),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text("Unblock", color = Color.White, fontWeight = FontWeight.Black, fontSize = 12.sp)
@@ -381,13 +427,13 @@ private fun NotificationsPane(
     ) {
         items(rows, key = { it.first }) { (key, title) ->
             Row(
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(SettingsCard).padding(12.dp),
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(LocalYugmColors.current.surface).padding(12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text(title, color = SettingsInk, fontWeight = FontWeight.Black)
-                    Text(if (preferences[key] == true) "Enabled" else "Muted", color = SettingsMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(title, color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Black)
+                    Text(if (preferences[key] == true) "Enabled" else "Muted", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
                 Switch(
                     checked = preferences[key] == true,
@@ -415,7 +461,7 @@ private fun FeedbackPane(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Text("Tell us what broke, what is confusing, or what you want Yugm to improve next.", color = SettingsMuted, fontWeight = FontWeight.Bold, lineHeight = 20.sp)
+            Text("Tell us what broke, what is confusing, or what you want Yugm to improve next.", color = LocalYugmColors.current.textSecondary, fontWeight = FontWeight.Bold, lineHeight = 20.sp)
         }
         item { YugmTextField(value = subject, onValueChange = onSubjectChange, label = "Subject") }
         item { YugmTextField(value = message, onValueChange = onMessageChange, label = "Write your feedback", minLines = 5) }
@@ -423,11 +469,11 @@ private fun FeedbackPane(
             Button(
                 onClick = onSubmit,
                 enabled = !busy && subject.trim().isNotBlank() && message.trim().isNotBlank(),
-                colors = ButtonDefaults.buttonColors(containerColor = SettingsAccent),
+                colors = ButtonDefaults.buttonColors(containerColor = LocalYugmColors.current.secondary),
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.fillMaxWidth().height(48.dp)
             ) {
-                if (busy) CircularProgressIndicator(color = SettingsInk, strokeWidth = 2.dp, modifier = Modifier.height(18.dp))
+                if (busy) CircularProgressIndicator(color = LocalYugmColors.current.textPrimary, strokeWidth = 2.dp, modifier = Modifier.height(18.dp))
                 else Text("Send feedback", color = Color.White, fontWeight = FontWeight.Black)
             }
         }
@@ -442,8 +488,8 @@ private fun DocumentPane(modifier: Modifier, pane: SettingsPane) {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Text(paneTitle(pane), color = SettingsInk, fontWeight = FontWeight.Black, fontSize = 24.sp)
-            Text(docs[pane].orEmpty(), color = SettingsMuted, fontWeight = FontWeight.Bold, lineHeight = 24.sp, modifier = Modifier.padding(top = 12.dp))
+            Text(paneTitle(pane), color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Black, fontSize = 24.sp)
+            Text(docs[pane].orEmpty(), color = LocalYugmColors.current.textSecondary, fontWeight = FontWeight.Bold, lineHeight = 24.sp, modifier = Modifier.padding(top = 12.dp))
         }
     }
 }
@@ -451,7 +497,7 @@ private fun DocumentPane(modifier: Modifier, pane: SettingsPane) {
 @Composable
 private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
     WhiteCard(modifier = Modifier.fillMaxWidth()) {
-        Text(title, color = SettingsAccent, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
+        Text(title, color = LocalYugmColors.current.secondary, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
         content()
     }
 }
@@ -459,8 +505,8 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
 @Composable
 private fun WhiteCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Surface(
-        color = SettingsCard,
-        border = BorderStroke(1.dp, SettingsLine),
+        color = LocalYugmColors.current.surface,
+        border = BorderStroke(1.dp, LocalYugmColors.current.border),
         shape = RoundedCornerShape(20.dp),
         modifier = modifier
     ) {
@@ -471,8 +517,8 @@ private fun WhiteCard(modifier: Modifier = Modifier, content: @Composable Column
 @Composable
 private fun SettingsNavRow(title: String, subtitle: String, onClick: () -> Unit) {
     Surface(
-        color = SettingsCard,
-        border = BorderStroke(1.dp, SettingsLine),
+        color = LocalYugmColors.current.surface,
+        border = BorderStroke(1.dp, LocalYugmColors.current.border),
         shape = RoundedCornerShape(8.dp),
         modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = title, onClick = onClick)
     ) {
@@ -481,12 +527,12 @@ private fun SettingsNavRow(title: String, subtitle: String, onClick: () -> Unit)
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(Modifier.width(4.dp).height(36.dp).clip(RoundedCornerShape(8.dp)).background(SettingsAccent))
+            Box(Modifier.width(4.dp).height(36.dp).clip(RoundedCornerShape(8.dp)).background(LocalYugmColors.current.secondary))
             Column(Modifier.weight(1f)) {
-                Text(title, color = SettingsInk, fontWeight = FontWeight.Black)
-                Text(subtitle, color = SettingsMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(title, color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Black)
+                Text(subtitle, color = LocalYugmColors.current.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
-            Text(">", color = SettingsAccent, fontWeight = FontWeight.Black)
+            Text(">", color = LocalYugmColors.current.secondary, fontWeight = FontWeight.Black)
         }
     }
 }
@@ -506,6 +552,7 @@ private fun paneTitle(pane: SettingsPane): String = when (pane) {
     SettingsPane.Home -> "Settings & Privacy"
     SettingsPane.Blocked -> "Blocked Users"
     SettingsPane.Notifications -> "Notifications"
+    SettingsPane.Appearance -> "Appearance"
     SettingsPane.Feedback -> "Help & Feedback"
     SettingsPane.About -> "About Yugm"
     SettingsPane.Terms -> "Terms of Use"

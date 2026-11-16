@@ -128,21 +128,13 @@ import com.yugm.app.core.model.RelationshipStatus
 import com.yugm.app.core.ui.components.*
 import com.yugm.app.core.ui.cosmetics.chatBubbleVisual
 import com.yugm.app.core.ui.theme.LocalMotionEnabled
+import com.yugm.app.core.ui.theme.LocalYugmColors
 import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private val Background = Color(0xFF060714)
-private val SurfaceElevated = Color(0xFF171A2C)
-private val BorderColor = Color(0x24FFFFFF)
-private val TextPrimary = Color(0xFFF8FAFC)
-private val TextMuted = Color(0xFF9EA3B9)
-private val PrimaryPurple = Color(0xFF8D35F6)
-private val Pink = Color(0xFFF6378B)
-private val Danger = Color(0xFFFF3B4F)
-private val Success = Color(0xFF3BE477)
-private val ChatSurface = Color(0xFF0E1121)
+// Theme-aware palette is read via LocalYugmColors inside composables.
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -423,9 +415,9 @@ fun ChatScreen(
     if (showVipCallDialog) {
         AlertDialog(
             onDismissRequest = { showVipCallDialog = false },
-            containerColor = SurfaceElevated,
-            title = { Text("VIP Exclusive Feature", color = TextPrimary, fontWeight = FontWeight.Bold) },
-            text = { Text("Voice and video calls in 1:1 chat are available only for VIP members. Upgrade to VIP to unlock this feature.", color = TextMuted) },
+            containerColor = LocalYugmColors.current.surfaceElevated,
+            title = { Text("VIP Exclusive Feature", color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+            text = { Text("Voice and video calls in 1:1 chat are available only for VIP members. Upgrade to VIP to unlock this feature.", color = LocalYugmColors.current.textSecondary) },
             confirmButton = {
                 TextButton(onClick = { showVipCallDialog = false; onOpenVip() }) {
                     Text("Go to VIP", color = Color(0xFFFFD166), fontWeight = FontWeight.Bold)
@@ -433,7 +425,7 @@ fun ChatScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showVipCallDialog = false }) {
-                    Text("Not now", color = TextMuted)
+                    Text("Not now", color = LocalYugmColors.current.textSecondary)
                 }
             }
         )
@@ -442,11 +434,11 @@ fun ChatScreen(
     if (confirmDeleteChat) {
         AlertDialog(
             onDismissRequest = { confirmDeleteChat = false },
-            containerColor = SurfaceElevated,
-            title = { Text("Delete this chat?", color = TextPrimary) },
-            text = { Text("This removes the conversation from your inbox. The other person will still keep their copy.", color = TextMuted) },
-            confirmButton = { TextButton(onClick = { confirmDeleteChat = false; onDeleteConversation() }) { Text("Delete", color = Danger) } },
-            dismissButton = { TextButton(onClick = { confirmDeleteChat = false }) { Text("Cancel", color = TextMuted) } }
+            containerColor = LocalYugmColors.current.surfaceElevated,
+            title = { Text("Delete this chat?", color = LocalYugmColors.current.textPrimary) },
+            text = { Text("This removes the conversation from your inbox. The other person will still keep their copy.", color = LocalYugmColors.current.textSecondary) },
+            confirmButton = { TextButton(onClick = { confirmDeleteChat = false; onDeleteConversation() }) { Text("Delete", color = LocalYugmColors.current.danger) } },
+            dismissButton = { TextButton(onClick = { confirmDeleteChat = false }) { Text("Cancel", color = LocalYugmColors.current.textSecondary) } }
         )
     }
 
@@ -462,11 +454,11 @@ fun ChatScreen(
     forwardMessage?.let { selected ->
         AlertDialog(
             onDismissRequest = { forwardMessage = null },
-            containerColor = SurfaceElevated,
-            title = { Text("Forward message", color = TextPrimary) },
+            containerColor = LocalYugmColors.current.surfaceElevated,
+            title = { Text("Forward message", color = LocalYugmColors.current.textPrimary) },
             text = {
                 if (forwardTargets.isEmpty()) {
-                    Text("Start a chat with someone before forwarding.", color = TextMuted)
+                    Text("Start a chat with someone before forwarding.", color = LocalYugmColors.current.textSecondary)
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         forwardTargets.take(8).forEach { target ->
@@ -480,30 +472,30 @@ fun ChatScreen(
                             ) {
                                 Avatar(target.name.take(1), 34, target.avatar, target.activeCosmetics)
                                 Column(Modifier.padding(start = 10.dp)) {
-                                    Text(target.name.ifBlank { target.username.ifBlank { "User" } }, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                                    if (target.username.isNotBlank()) Text("@${target.username}", color = TextMuted, fontSize = 11.sp)
+                                    Text(target.name.ifBlank { target.username.ifBlank { "User" } }, color = LocalYugmColors.current.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                    if (target.username.isNotBlank()) Text("@${target.username}", color = LocalYugmColors.current.textSecondary, fontSize = 11.sp)
                                 }
                             }
                         }
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { forwardMessage = null }) { Text("Cancel", color = TextMuted) } }
+            confirmButton = { TextButton(onClick = { forwardMessage = null }) { Text("Cancel", color = LocalYugmColors.current.textSecondary) } }
         )
     }
     infoMessage?.let { msg ->
         val mine = msg.senderId == currentUserId
         AlertDialog(
             onDismissRequest = { infoMessage = null },
-            containerColor = SurfaceElevated,
-            title = { Text("Message info", color = TextPrimary) },
+            containerColor = LocalYugmColors.current.surfaceElevated,
+            title = { Text("Message info", color = LocalYugmColors.current.textPrimary) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(if (mine) "Sent by you" else "Received", color = TextMuted, fontSize = 12.sp)
-                    Text("Time: ${com.yugm.app.feature.chat.formatMessageInfoTime(msg.createdAt)}", color = TextPrimary, fontSize = 13.sp)
-                    if (mine) Text(if (msg.read) "Status: Seen" else "Status: Sent", color = if (msg.read) Color(0xFF69F0AE) else TextMuted, fontSize = 13.sp, fontWeight = if (msg.read) FontWeight.SemiBold else FontWeight.Normal)
-                    if (msg.isEdited) Text("Edited", color = TextMuted, fontSize = 13.sp)
-                    if (msg.forwarded) Text("Forwarded message", color = TextMuted, fontSize = 13.sp)
+                    Text(if (mine) "Sent by you" else "Received", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
+                    Text("Time: ${com.yugm.app.feature.chat.formatMessageInfoTime(msg.createdAt)}", color = LocalYugmColors.current.textPrimary, fontSize = 13.sp)
+                    if (mine) Text(if (msg.read) "Status: Seen" else "Status: Sent", color = if (msg.read) Color(0xFF69F0AE) else LocalYugmColors.current.textSecondary, fontSize = 13.sp, fontWeight = if (msg.read) FontWeight.SemiBold else FontWeight.Normal)
+                    if (msg.isEdited) Text("Edited", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp)
+                    if (msg.forwarded) Text("Forwarded message", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp)
                     if (msg.reactions.isNotEmpty()) {
                         val summary = msg.reactions
                             .groupBy { it.type }
@@ -511,33 +503,33 @@ fun ChatScreen(
                             .sortedByDescending { it.value.size }
                             .joinToString("  ") { (type, items) -> "${reactionEmoji(type)} ${items.size}" }
                         val mineReaction = currentUserId.takeIf { it.isNotBlank() }?.let { uid -> msg.reactions.firstOrNull { it.userId == uid }?.type }
-                        Text("Reactions: $summary", color = TextMuted, fontSize = 13.sp)
-                        if (!mineReaction.isNullOrBlank()) Text("Your reaction: ${reactionEmoji(mineReaction)}", color = TextPrimary, fontSize = 13.sp)
+                        Text("Reactions: $summary", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp)
+                        if (!mineReaction.isNullOrBlank()) Text("Your reaction: ${reactionEmoji(mineReaction)}", color = LocalYugmColors.current.textPrimary, fontSize = 13.sp)
                     }
                     msg.replyTo?.let { reply ->
-                        Text("Reply to: ${reply.author.ifBlank { "message" }} — ${reply.text.ifBlank { "Media" }}", color = TextMuted, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text("Reply to: ${reply.author.ifBlank { "message" }} — ${reply.text.ifBlank { "Media" }}", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
-                    if (msg.mediaType.isNotBlank()) Text("Type: ${msg.mediaType.lowercase().replaceFirstChar { it.uppercase() }}", color = TextMuted, fontSize = 13.sp)
+                    if (msg.mediaType.isNotBlank()) Text("Type: ${msg.mediaType.lowercase().replaceFirstChar { it.uppercase() }}", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp)
                 }
             },
-            confirmButton = { TextButton(onClick = { infoMessage = null }) { Text("Close", color = PrimaryPurple) } }
+            confirmButton = { TextButton(onClick = { infoMessage = null }) { Text("Close", color = LocalYugmColors.current.secondary) } }
         )
     }
     if (showDeleteSelected) {
         val selectedCount = selectedMessageIds.size
         AlertDialog(
             onDismissRequest = { showDeleteSelected = false },
-            containerColor = SurfaceElevated,
-            title = { Text(if (selectedCount == 1) "Delete message?" else "Delete selected messages?", color = TextPrimary) },
+            containerColor = LocalYugmColors.current.surfaceElevated,
+            title = { Text(if (selectedCount == 1) "Delete message?" else "Delete selected messages?", color = LocalYugmColors.current.textPrimary) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         "Choose how to delete ${if (selectedCount == 1) "this message" else "$selectedCount messages"}.",
-                        color = TextMuted
+                        color = LocalYugmColors.current.textSecondary
                     )
-                    Text("• Delete for me: removes it from your chat only.", color = TextMuted, fontSize = 12.sp)
+                    Text("• Delete for me: removes it from your chat only.", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
                     if (selectedOwnIds.isNotEmpty()) {
-                        Text("• Delete for everyone: removes ${if (selectedOwnIds.size == 1) "your selected message" else "${selectedOwnIds.size} of your selected messages"} for both people.", color = TextMuted, fontSize = 12.sp)
+                        Text("• Delete for everyone: removes ${if (selectedOwnIds.size == 1) "your selected message" else "${selectedOwnIds.size} of your selected messages"} for both people.", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
                     }
                 }
             },
@@ -547,12 +539,12 @@ fun ChatScreen(
                         onDeleteSelected(selectedMessageIds.toList(), "ME")
                         selectedMessageIds = emptySet()
                         showDeleteSelected = false
-                    }) { Text("Delete for me", color = Danger) }
+                    }) { Text("Delete for me", color = LocalYugmColors.current.danger) }
                     if (selectedOwnIds.isNotEmpty()) TextButton(onClick = {
                         onDeleteSelected(selectedOwnIds, "EVERYONE")
                         selectedMessageIds = emptySet()
                         showDeleteSelected = false
-                    }) { Text(if (selectedOwnIds.size == 1) "Delete for everyone" else "Delete ${selectedOwnIds.size} for everyone", color = Danger) }
+                    }) { Text(if (selectedOwnIds.size == 1) "Delete for everyone" else "Delete ${selectedOwnIds.size} for everyone", color = LocalYugmColors.current.danger) }
                 }
             },
             dismissButton = { TextButton(onClick = { showDeleteSelected = false }) { Text("Cancel") } }
@@ -722,12 +714,12 @@ fun ChatScreen(
     }
     // Scroll behavior is handled by the visible-messages auto-scroll effect above.
 
-    Box(Modifier.fillMaxSize().background(Background)) {
+    Box(Modifier.fillMaxSize().background(LocalYugmColors.current.background)) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
                 GlassCard(
                     modifier = Modifier.fillMaxWidth(),
-                    gradient = Brush.linearGradient(listOf(SurfaceElevated, ChatSurface)),
-                    borderGradient = Brush.horizontalGradient(listOf(BorderColor, BorderColor)),
+                    gradient = Brush.linearGradient(listOf(LocalYugmColors.current.surfaceElevated, LocalYugmColors.current.surface)),
+                    borderGradient = Brush.horizontalGradient(listOf(LocalYugmColors.current.border, LocalYugmColors.current.border)),
                     cornerRadius = 0.dp,
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
                 ) {
@@ -739,11 +731,11 @@ fun ChatScreen(
                             horizontalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
                             IconButton(onClick = { selectedMessageIds = emptySet() }) {
-                                Icon(Icons.Filled.Close, contentDescription = "Cancel selection", tint = TextMuted)
+                                Icon(Icons.Filled.Close, contentDescription = "Cancel selection", tint = LocalYugmColors.current.textSecondary)
                             }
                             Text(
                                 "${selectedMessageIds.size} selected",
-                                color = TextPrimary,
+                                color = LocalYugmColors.current.textPrimary,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(start = 2.dp)
@@ -756,15 +748,15 @@ fun ChatScreen(
                                         clipboard.setPrimaryClip(android.content.ClipData.newPlainText("message", selected.message))
                                         android.widget.Toast.makeText(context, "Message copied", android.widget.Toast.LENGTH_SHORT).show()
                                         selectedMessageIds = emptySet()
-                                    }) { Icon(Icons.Filled.ContentCopy, contentDescription = "Copy", tint = TextPrimary) }
+                                    }) { Icon(Icons.Filled.ContentCopy, contentDescription = "Copy", tint = LocalYugmColors.current.textPrimary) }
                                 }
                                 IconButton(onClick = {
                                     forwardMessage = selected
                                     selectedMessageIds = emptySet()
-                                }) { Icon(Icons.AutoMirrored.Filled.Forward, contentDescription = "Forward", tint = TextPrimary) }
+                                }) { Icon(Icons.AutoMirrored.Filled.Forward, contentDescription = "Forward", tint = LocalYugmColors.current.textPrimary) }
                             }
                             IconButton(onClick = { showDeleteSelected = true }) {
-                                Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = Danger)
+                                Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = LocalYugmColors.current.danger)
                             }
                         }
                     } else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -775,7 +767,7 @@ fun ChatScreen(
                                 partner?.id?.takeIf(String::isNotBlank)?.let(onOpenProfile)
                             }
                         ) {
-                            Box(Modifier.fillMaxSize().border(2.dp, Brush.linearGradient(listOf(Pink, PrimaryPurple)), CircleShape).padding(2.dp)) {
+                            Box(Modifier.fillMaxSize().border(2.dp, Brush.linearGradient(listOf(LocalYugmColors.current.primary, LocalYugmColors.current.secondary)), CircleShape).padding(2.dp)) {
                                 Avatar(partner?.name?.take(1) ?: "?", 38, partner?.avatar, partner?.activeCosmetics ?: ActiveCosmetics(), accessibilityLabel = stringResource(R.string.a11y_profile_picture, partner?.name ?: defaultMatchName))
                             }
                             if (partner?.isOnline == true) {
@@ -784,20 +776,20 @@ fun ChatScreen(
                                         .align(Alignment.BottomEnd)
                                         .size(12.dp)
                                         .clip(CircleShape)
-                                        .background(Success)
-                                        .border(2.dp, SurfaceElevated, CircleShape)
+                                        .background(LocalYugmColors.current.success)
+                                        .border(2.dp, LocalYugmColors.current.surfaceElevated, CircleShape)
                                 )
                             }
                         }
                         Column(Modifier.weight(1f).padding(start = 10.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(partner?.name ?: "Loading match…", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(partner?.name ?: "Loading match…", color = LocalYugmColors.current.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Spacer(Modifier.width(4.dp))
                                 Box(
                                     Modifier
                                         .size(16.dp)
                                         .clip(CircleShape)
-                                        .background(Brush.linearGradient(listOf(PrimaryPurple, Pink))),
+                                        .background(Brush.linearGradient(listOf(LocalYugmColors.current.secondary, LocalYugmColors.current.primary))),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text("✓", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Black)
@@ -808,23 +800,23 @@ fun ChatScreen(
                                     Modifier
                                         .size(7.dp)
                                         .clip(CircleShape)
-                                        .background(if (partner?.isOnline == true) Success else TextMuted)
+                                        .background(if (partner?.isOnline == true) LocalYugmColors.current.success else LocalYugmColors.current.textSecondary)
                                 )
                                 Text(
                                     if (partner?.isOnline == true) "Online" else partner?.username?.let { "@$it" } ?: "Your conversation",
-                                    color = if (partner?.isOnline == true) Success else TextMuted,
+                                    color = if (partner?.isOnline == true) LocalYugmColors.current.success else LocalYugmColors.current.textSecondary,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 if (isMuted) {
-                                    Text("·", color = TextMuted, fontSize = 12.sp)
-                                    Text("🔕 Muted", color = TextMuted, fontSize = 11.sp, maxLines = 1)
+                                    Text("·", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
+                                    Text("🔕 Muted", color = LocalYugmColors.current.textSecondary, fontSize = 11.sp, maxLines = 1)
                                 }
                                 if (isBlockedByMe) {
-                                    Text("·", color = TextMuted, fontSize = 12.sp)
-                                    Text("Blocked", color = Danger, fontSize = 11.sp, maxLines = 1, fontWeight = FontWeight.SemiBold)
+                                    Text("·", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
+                                    Text("Blocked", color = LocalYugmColors.current.danger, fontSize = 11.sp, maxLines = 1, fontWeight = FontWeight.SemiBold)
                                 }
                             }
                         }
@@ -860,23 +852,23 @@ fun ChatScreen(
                 }
 
                 if (showMore) {
-                    Row(Modifier.fillMaxWidth().background(SurfaceElevated.copy(alpha = 0.97f)).padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) {
-                        Text("Profile", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable(enabled = !partner?.id.isNullOrBlank()) { showMore = false; partner?.id?.takeIf(String::isNotBlank)?.let(onOpenProfile) }.padding(10.dp))
-                        Text("Search", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable {
+                    Row(Modifier.fillMaxWidth().background(LocalYugmColors.current.surfaceElevated.copy(alpha = 0.97f)).padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) {
+                        Text("Profile", color = LocalYugmColors.current.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable(enabled = !partner?.id.isNullOrBlank()) { showMore = false; partner?.id?.takeIf(String::isNotBlank)?.let(onOpenProfile) }.padding(10.dp))
+                        Text("Search", color = LocalYugmColors.current.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable {
                             showMore = false
                             if (searchVisible) { searchVisible = false; searchQuery = "" } else searchVisible = true
                         }.padding(10.dp))
-                        Text(if (isMuted) "Unmute" else "Mute", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable { showMore = false; onMute(!isMuted) }.padding(10.dp))
-                        Text("Report", color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable(role = Role.Button, onClickLabel = stringResource(R.string.a11y_report_conversation)) { showMore = false; showReportDialog = true }.padding(10.dp))
-                        Text(if (isBlockedByMe) "Unblock" else "Block", color = if (isBlockedByMe) TextPrimary else Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable(role = Role.Button, onClickLabel = if (isBlockedByMe) "Unblock user" else stringResource(R.string.a11y_block_person)) { showMore = false; onToggleBlock() }.padding(10.dp))
-                        Text("Delete chat", color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable { showMore = false; confirmDeleteChat = true }.padding(10.dp))
+                        Text(if (isMuted) "Unmute" else "Mute", color = LocalYugmColors.current.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable { showMore = false; onMute(!isMuted) }.padding(10.dp))
+                        Text("Report", color = LocalYugmColors.current.danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable(role = Role.Button, onClickLabel = stringResource(R.string.a11y_report_conversation)) { showMore = false; showReportDialog = true }.padding(10.dp))
+                        Text(if (isBlockedByMe) "Unblock" else "Block", color = if (isBlockedByMe) LocalYugmColors.current.textPrimary else LocalYugmColors.current.danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable(role = Role.Button, onClickLabel = if (isBlockedByMe) "Unblock user" else stringResource(R.string.a11y_block_person)) { showMore = false; onToggleBlock() }.padding(10.dp))
+                        Text("Delete chat", color = LocalYugmColors.current.danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable { showMore = false; confirmDeleteChat = true }.padding(10.dp))
                     }
                 }
                 if (searchVisible) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(SurfaceElevated.copy(alpha = 0.98f))
+                            .background(LocalYugmColors.current.surfaceElevated.copy(alpha = 0.98f))
                             .padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -893,12 +885,12 @@ fun ChatScreen(
                                 value = searchQuery,
                                 onValueChange = { searchQuery = it.take(100) },
                                 singleLine = true,
-                                textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 14.sp),
-                                cursorBrush = androidx.compose.ui.graphics.SolidColor(Pink),
+                                textStyle = androidx.compose.ui.text.TextStyle(color = LocalYugmColors.current.textPrimary, fontSize = 14.sp),
+                                cursorBrush = androidx.compose.ui.graphics.SolidColor(LocalYugmColors.current.primary),
                                 modifier = Modifier.weight(1f),
                                 decorationBox = { inner ->
                                     Box {
-                                        if (searchQuery.isBlank()) Text("Search in this chat…", color = TextMuted, fontSize = 14.sp)
+                                        if (searchQuery.isBlank()) Text("Search in this chat…", color = LocalYugmColors.current.textSecondary, fontSize = 14.sp)
                                         inner()
                                     }
                                 }
@@ -907,7 +899,7 @@ fun ChatScreen(
                                 Spacer(Modifier.width(8.dp))
                                 Text(
                                     "Clear",
-                                    color = TextMuted,
+                                    color = LocalYugmColors.current.textSecondary,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium,
                                     modifier = Modifier
@@ -919,7 +911,7 @@ fun ChatScreen(
                             Spacer(Modifier.width(4.dp))
                             Text(
                                 "Close",
-                                color = Pink,
+                                color = LocalYugmColors.current.primary,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 modifier = Modifier
@@ -939,8 +931,8 @@ fun ChatScreen(
                     if (loading && visibleMessages.isEmpty()) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                androidx.compose.material3.CircularProgressIndicator(color = PrimaryPurple)
-                                Text("Loading conversation…", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp))
+                                androidx.compose.material3.CircularProgressIndicator(color = LocalYugmColors.current.secondary)
+                                Text("Loading conversation…", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp))
                             }
                         }
                     } else {
@@ -956,16 +948,16 @@ fun ChatScreen(
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(16.dp))
                                         .background(Color(0xFF2A1020))
-                                        .border(1.dp, Danger.copy(alpha = 0.45f), RoundedCornerShape(16.dp))
+                                        .border(1.dp, LocalYugmColors.current.danger.copy(alpha = 0.45f), RoundedCornerShape(16.dp))
                                         .padding(horizontal = 14.dp, vertical = 12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text("🚫", fontSize = 18.sp)
                                     Column(Modifier.padding(start = 10.dp).weight(1f)) {
-                                        Text("You blocked this user", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                                        Text("Unblock to send messages and calls again.", color = TextMuted, fontSize = 11.sp, lineHeight = 15.sp)
+                                        Text("You blocked this user", color = LocalYugmColors.current.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                        Text("Unblock to send messages and calls again.", color = LocalYugmColors.current.textSecondary, fontSize = 11.sp, lineHeight = 15.sp)
                                     }
-                                    Text("Unblock", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clip(CircleShape).background(Danger.copy(alpha = 0.85f)).clickable(role = Role.Button, onClickLabel = "Unblock user") { onToggleBlock() }.padding(horizontal = 12.dp, vertical = 8.dp))
+                                    Text("Unblock", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clip(CircleShape).background(LocalYugmColors.current.danger.copy(alpha = 0.85f)).clickable(role = Role.Button, onClickLabel = "Unblock user") { onToggleBlock() }.padding(horizontal = 12.dp, vertical = 8.dp))
                                 }
                             }
                             if (messages.isEmpty() && isMatched) item { MatchedBanner(partner?.name ?: "your match") }
@@ -980,25 +972,25 @@ fun ChatScreen(
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                                     Text(
                                         text = if (isLoadingMore) "Loading earlier messages…" else "Load earlier messages",
-                                        color = if (isLoadingMore) TextMuted else TextPrimary,
+                                        color = if (isLoadingMore) LocalYugmColors.current.textSecondary else LocalYugmColors.current.textPrimary,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         modifier = Modifier
                                             .clip(CircleShape)
-                                            .background(Brush.horizontalGradient(listOf(SurfaceElevated, PrimaryPurple.copy(alpha = 0.18f))))
-                                            .border(1.dp, Brush.horizontalGradient(listOf(BorderColor, PrimaryPurple.copy(alpha = 0.45f))), CircleShape)
+                                            .background(Brush.horizontalGradient(listOf(LocalYugmColors.current.surfaceElevated, LocalYugmColors.current.secondary.copy(alpha = 0.18f))))
+                                            .border(1.dp, Brush.horizontalGradient(listOf(LocalYugmColors.current.border, LocalYugmColors.current.secondary.copy(alpha = 0.45f))), CircleShape)
                                             .clickable(enabled = !isLoadingMore, role = Role.Button, onClickLabel = "Load earlier messages", onClick = onLoadOlder)
                                             .padding(horizontal = 16.dp, vertical = 9.dp)
                                     )
                                 }
                             }
                             if (error.isNotBlank()) item {
-                                Text("$error · Retry", color = Pink, fontSize = 12.sp, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.clickable(role = Role.Button, onClickLabel = stringResource(R.string.a11y_retry_messages), onClick = onRetry).padding(vertical = 12.dp))
+                                Text("$error · Retry", color = LocalYugmColors.current.primary, fontSize = 12.sp, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.clickable(role = Role.Button, onClickLabel = stringResource(R.string.a11y_retry_messages), onClick = onRetry).padding(vertical = 12.dp))
                             }
                             if (searchQuery.length >= 2 && visibleMessages.isNotEmpty()) item {
                                 Text(
                                     "Tap a result to jump to it in the conversation",
-                                    color = TextMuted,
+                                    color = LocalYugmColors.current.textSecondary,
                                     fontSize = 12.sp,
                                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -1008,20 +1000,20 @@ fun ChatScreen(
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                                     Text(
                                         text = if (isLoadingMoreSearch) "Loading more results…" else "Load more results",
-                                        color = if (isLoadingMoreSearch) TextMuted else TextPrimary,
+                                        color = if (isLoadingMoreSearch) LocalYugmColors.current.textSecondary else LocalYugmColors.current.textPrimary,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         modifier = Modifier
                                             .clip(CircleShape)
-                                            .background(Brush.horizontalGradient(listOf(SurfaceElevated, PrimaryPurple.copy(alpha = 0.14f))))
-                                            .border(1.dp, Brush.horizontalGradient(listOf(BorderColor, PrimaryPurple.copy(alpha = 0.35f))), CircleShape)
+                                            .background(Brush.horizontalGradient(listOf(LocalYugmColors.current.surfaceElevated, LocalYugmColors.current.secondary.copy(alpha = 0.14f))))
+                                            .border(1.dp, Brush.horizontalGradient(listOf(LocalYugmColors.current.border, LocalYugmColors.current.secondary.copy(alpha = 0.35f))), CircleShape)
                                             .clickable(enabled = !isLoadingMoreSearch, role = Role.Button, onClickLabel = "Load more results", onClick = onLoadMoreSearch)
                                             .padding(horizontal = 16.dp, vertical = 9.dp)
                                     )
                                 }
                             }
                             if (searchQuery.isNotBlank() && visibleMessages.isEmpty()) item {
-                                Text("No matching messages", color = TextMuted, fontSize = 13.sp, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 28.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                                Text("No matching messages", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 28.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                             }
                             if (visibleMessages.isEmpty() && !loading && error.isBlank() && searchQuery.isBlank()) {
                                 item {
@@ -1031,12 +1023,12 @@ fun ChatScreen(
                                             listOf("Hello!", "Hi~", "Good day!").forEach { greeting ->
                                                 Text(
                                                     greeting,
-                                                    color = TextPrimary,
+                                                    color = LocalYugmColors.current.textPrimary,
                                                     fontSize = 14.sp,
                                                     modifier = Modifier
                                                         .clip(CircleShape)
-                                                        .background(SurfaceElevated)
-                                                        .border(1.dp, BorderColor, CircleShape)
+                                                        .background(LocalYugmColors.current.surfaceElevated)
+                                                        .border(1.dp, LocalYugmColors.current.border, CircleShape)
                                                         .clickable(role = Role.Button, onClickLabel = "Send $greeting") { onSend(greeting, {}, {}) }
                                                         .padding(horizontal = 18.dp, vertical = 11.dp)
                                                 )
@@ -1100,7 +1092,7 @@ fun ChatScreen(
                                         Icon(
                                             Icons.AutoMirrored.Filled.Reply,
                                             contentDescription = null,
-                                            tint = PrimaryPurple.copy(alpha = (swipeOffset.value / 72f).coerceIn(0.25f, 1f)),
+                                            tint = LocalYugmColors.current.secondary.copy(alpha = (swipeOffset.value / 72f).coerceIn(0.25f, 1f)),
                                             modifier = Modifier.align(Alignment.CenterStart).padding(start = 4.dp)
                                         )
                                     }
@@ -1160,7 +1152,7 @@ fun ChatScreen(
                                     Avatar(partner?.name?.take(1) ?: "?", 30, partner?.avatar, partner?.activeCosmetics ?: com.yugm.app.core.model.ActiveCosmetics(), accessibilityLabel = stringResource(R.string.a11y_profile_picture, partner?.name ?: defaultMatchName))
                                     Column(Modifier.padding(start = 8.dp)) {
                                         TypingBubble()
-                                        Text("${partner?.name ?: "Your match"} is typing…", color = TextMuted, fontSize = 10.sp)
+                                        Text("${partner?.name ?: "Your match"} is typing…", color = LocalYugmColors.current.textSecondary, fontSize = 10.sp)
                                     }
                                 }
                             }
@@ -1173,7 +1165,7 @@ fun ChatScreen(
                                 .padding(end = 14.dp, bottom = 14.dp)
                                 .size(42.dp)
                                 .clip(CircleShape)
-                                .background(Brush.linearGradient(listOf(PrimaryPurple, Pink)))
+                                .background(Brush.linearGradient(listOf(LocalYugmColors.current.secondary, LocalYugmColors.current.primary)))
                                 .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
                                 .clickable(role = Role.Button, onClickLabel = "Scroll to latest messages") {
                                     scope.launch {
@@ -1192,7 +1184,7 @@ fun ChatScreen(
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .background(SurfaceElevated.copy(alpha = 0.98f))
+                            .background(LocalYugmColors.current.surfaceElevated.copy(alpha = 0.98f))
                             .horizontalScroll(rememberScrollState())
                             .padding(horizontal = 14.dp, vertical = 10.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -1204,8 +1196,8 @@ fun ChatScreen(
                                 Modifier
                                     .sizeIn(minWidth = 42.dp, minHeight = 42.dp)
                                     .clip(CircleShape)
-                                    .background(ChatSurface.copy(alpha = 0.55f))
-                                    .border(1.dp, BorderColor.copy(alpha = 0.6f), CircleShape)
+                                    .background(LocalYugmColors.current.surface.copy(alpha = 0.55f))
+                                    .border(1.dp, LocalYugmColors.current.border.copy(alpha = 0.6f), CircleShape)
                                     .semantics { contentDescription = stickerLabel }
                                     .clickable(
                                         enabled = !isBlockedByMe && !isSending,
@@ -1225,8 +1217,8 @@ fun ChatScreen(
 
                 GlassCard(
                     modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding(),
-                    gradient = Brush.linearGradient(listOf(SurfaceElevated, ChatSurface)),
-                    borderGradient = Brush.horizontalGradient(listOf(BorderColor, BorderColor)),
+                    gradient = Brush.linearGradient(listOf(LocalYugmColors.current.surfaceElevated, LocalYugmColors.current.surface)),
+                    borderGradient = Brush.horizontalGradient(listOf(LocalYugmColors.current.border, LocalYugmColors.current.border)),
                     cornerRadius = 0.dp,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
                 ) {
@@ -1242,23 +1234,23 @@ fun ChatScreen(
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(Modifier.width(3.dp).height(28.dp).clip(CircleShape).background(Brush.verticalGradient(listOf(PrimaryPurple, Pink))))
+                            Box(Modifier.width(3.dp).height(28.dp).clip(CircleShape).background(Brush.verticalGradient(listOf(LocalYugmColors.current.secondary, LocalYugmColors.current.primary))))
                             Column(Modifier.weight(1f).padding(start = 10.dp, end = 8.dp)) {
                                 Text(
                                     if (editingTarget != null) "Editing message" else "Replying to ${contextMessage.sender?.name ?: "message"}",
-                                    color = TextPrimary,
+                                    color = LocalYugmColors.current.textPrimary,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 Text(
                                     contextMessage.message.ifBlank { "Media message" },
-                                    color = TextMuted,
+                                    color = LocalYugmColors.current.textSecondary,
                                     fontSize = 11.sp,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
-                            Text("Cancel", color = Pink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable(role = Role.Button) { replyTarget = null; editingTarget = null; draft = "" }.padding(horizontal = 6.dp, vertical = 4.dp))
+                            Text("Cancel", color = LocalYugmColors.current.primary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable(role = Role.Button) { replyTarget = null; editingTarget = null; draft = "" }.padding(horizontal = 6.dp, vertical = 4.dp))
                         }
                     }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1273,12 +1265,12 @@ fun ChatScreen(
                             BasicTextField(
                                 value = draft,
                                 onValueChange = { draft = it.take(1000) },
-                                textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 14.sp),
-                                cursorBrush = androidx.compose.ui.graphics.SolidColor(Pink),
+                                textStyle = androidx.compose.ui.text.TextStyle(color = LocalYugmColors.current.textPrimary, fontSize = 14.sp),
+                                cursorBrush = androidx.compose.ui.graphics.SolidColor(LocalYugmColors.current.primary),
                                 modifier = Modifier.weight(1f).semantics { contentDescription = messageFieldLabel },
                                 decorationBox = { inner ->
                                     Box {
-                                        if (draft.isBlank()) Text(if (editingTarget != null) "Edit message…" else if (replyTarget != null) "Write a reply…" else "Type a message...", color = TextMuted, fontSize = 14.sp)
+                                        if (draft.isBlank()) Text(if (editingTarget != null) "Edit message…" else if (replyTarget != null) "Write a reply…" else "Type a message...", color = LocalYugmColors.current.textSecondary, fontSize = 14.sp)
                                         inner()
                                     }
                                 }
@@ -1291,7 +1283,7 @@ fun ChatScreen(
                                     .clickable(role = Role.Button, onClickLabel = "Attach media") { mediaPicker.launch(arrayOf("image/*", "video/*")) },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Filled.AttachFile, contentDescription = null, tint = TextMuted, modifier = Modifier.size(19.dp))
+                                Icon(Icons.Filled.AttachFile, contentDescription = null, tint = LocalYugmColors.current.textSecondary, modifier = Modifier.size(19.dp))
                             }
                             Spacer(Modifier.width(4.dp))
                             Box(
@@ -1318,7 +1310,7 @@ fun ChatScreen(
                                     .clickable(role = Role.Button, onClickLabel = "Send gift") { showGiftSheet = true },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Filled.CardGiftcard, contentDescription = null, tint = TextMuted, modifier = Modifier.size(19.dp))
+                                Icon(Icons.Filled.CardGiftcard, contentDescription = null, tint = LocalYugmColors.current.textSecondary, modifier = Modifier.size(19.dp))
                             }
                         }
                         Box(
@@ -1418,16 +1410,16 @@ fun ChatScreen(
             }
         }
         if (showGiftSheet) {
-            ModalBottomSheet(onDismissRequest = { showGiftSheet = false }, containerColor = ChatSurface) {
+            ModalBottomSheet(onDismissRequest = { showGiftSheet = false }, containerColor = LocalYugmColors.current.surface) {
                 Column(Modifier.fillMaxWidth().padding(20.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Send a Gift", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
+                        Text("Send a Gift", color = LocalYugmColors.current.textPrimary, fontSize = 20.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
                         Text("● $balance", color = Color(0xFFFFC52F), fontWeight = FontWeight.Bold)
                     }
                     if (gifts.isEmpty()) {
                         Text(
                             "No gifts available right now.",
-                            color = TextMuted,
+                            color = LocalYugmColors.current.textSecondary,
                             fontSize = 13.sp,
                             modifier = Modifier.padding(top = 14.dp)
                         )
@@ -1435,7 +1427,7 @@ fun ChatScreen(
                         Row(Modifier.padding(top = 14.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             gifts.forEach { gift ->
                                 Column(
-                                    Modifier.width(105.dp).height(132.dp).clip(RoundedCornerShape(18.dp)).background(Background).border(1.dp, BorderColor, RoundedCornerShape(18.dp)).clickable(enabled = balance >= gift.price) { onGift(gift); showGiftSheet = false }.padding(10.dp),
+                                    Modifier.width(105.dp).height(132.dp).clip(RoundedCornerShape(18.dp)).background(LocalYugmColors.current.background).border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(18.dp)).clickable(enabled = balance >= gift.price) { onGift(gift); showGiftSheet = false }.padding(10.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.Center
                                 ) {
@@ -1450,8 +1442,8 @@ fun ChatScreen(
                                         val emoji = getGiftEmoji(gift.name, gift.icon)
                                         Text(emoji, fontSize = 36.sp)
                                     }
-                                    Text(gift.name, color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text("● ${gift.price}", color = if (balance >= gift.price) Color(0xFFFFC52F) else Danger, fontSize = 10.sp)
+                                    Text(gift.name, color = LocalYugmColors.current.textPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text("● ${gift.price}", color = if (balance >= gift.price) Color(0xFFFFC52F) else LocalYugmColors.current.danger, fontSize = 10.sp)
                                 }
                             }
                         }
@@ -1502,8 +1494,8 @@ fun ChatScreen(
                     modifier = Modifier
                         .width(barWidth)
                         .clip(RoundedCornerShape(32.dp))
-                        .background(SurfaceElevated)
-                        .border(1.dp, BorderColor, RoundedCornerShape(32.dp))
+                        .background(LocalYugmColors.current.surfaceElevated)
+                        .border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(32.dp))
                         .padding(horizontal = 10.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
@@ -1522,7 +1514,7 @@ fun ChatScreen(
                             modifier = Modifier
                                 .size(34.dp)
                                 .clip(CircleShape)
-                                .background(if (isSelected) PrimaryPurple.copy(alpha = 0.3f) else Color.Transparent)
+                                .background(if (isSelected) LocalYugmColors.current.secondary.copy(alpha = 0.3f) else Color.Transparent)
                                 .clickable(role = Role.Button, onClickLabel = "React with $emoji") {
                                     onReactMessage(target, type)
                                     reactDialogTarget = null
@@ -1579,8 +1571,8 @@ fun ChatScreen(
                     modifier = Modifier
                         .width(cardWidth)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(SurfaceElevated)
-                        .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
+                        .background(LocalYugmColors.current.surfaceElevated)
+                        .border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(16.dp))
                         .padding(vertical = 4.dp)
                 ) {
                     CompactOptionRow(icon = Icons.Filled.Info, label = "Info") {
@@ -1618,7 +1610,7 @@ fun ChatScreen(
                         forwardMessage = target
                     }
 
-                    CompactOptionRow(icon = Icons.Filled.Delete, label = "Delete", tint = Danger) {
+                    CompactOptionRow(icon = Icons.Filled.Delete, label = "Delete", tint = LocalYugmColors.current.danger) {
                         optionsDialogTarget = null
                         selectedMessageIds = setOf(target.id)
                         showDeleteSelected = true
@@ -1639,7 +1631,7 @@ private fun LightChatAction(
     locked: Boolean = false
 ) {
     Box(
-        Modifier.size(44.dp).clip(CircleShape).background(if (enabled) SurfaceElevated else SurfaceElevated.copy(alpha = 0.55f))
+        Modifier.size(44.dp).clip(CircleShape).background(if (enabled) LocalYugmColors.current.surfaceElevated else LocalYugmColors.current.surfaceElevated.copy(alpha = 0.55f))
             .semantics { contentDescription = label }
             .clickable(enabled = enabled && !loading, role = Role.Button, onClickLabel = label, onClick = onClick),
         contentAlignment = Alignment.Center
@@ -1647,11 +1639,11 @@ private fun LightChatAction(
         if (loading) {
             androidx.compose.material3.CircularProgressIndicator(
                 modifier = Modifier.size(18.dp),
-                color = TextPrimary,
+                color = LocalYugmColors.current.textPrimary,
                 strokeWidth = 2.dp
             )
         } else {
-            Icon(icon, contentDescription = null, tint = if (enabled) TextPrimary else TextMuted, modifier = Modifier.size(20.dp))
+            Icon(icon, contentDescription = null, tint = if (enabled) LocalYugmColors.current.textPrimary else LocalYugmColors.current.textSecondary, modifier = Modifier.size(20.dp))
             if (locked) {
                 Box(
                     Modifier
@@ -1659,8 +1651,8 @@ private fun LightChatAction(
                         .offset(x = 2.dp, y = 2.dp)
                         .size(16.dp)
                         .clip(CircleShape)
-                        .background(ChatSurface)
-                        .border(1.dp, BorderColor, CircleShape),
+                        .background(LocalYugmColors.current.surface)
+                        .border(1.dp, LocalYugmColors.current.border, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -1690,46 +1682,46 @@ private fun ReportDialog(onDismiss: () -> Unit, onSubmit: (String) -> Unit) {
     )
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceElevated,
-        title = { Text("Report this conversation", color = TextPrimary) },
+        containerColor = LocalYugmColors.current.surfaceElevated,
+        title = { Text("Report this conversation", color = LocalYugmColors.current.textPrimary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Pick a reason. Our team reviews every report.", color = TextMuted, fontSize = 12.sp)
+                Text("Pick a reason. Our team reviews every report.", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
                 categories.forEach { (value, label) ->
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                            .background(if (selected == value) PrimaryPurple.copy(alpha = 0.2f) else Color.Transparent)
+                            .background(if (selected == value) LocalYugmColors.current.secondary.copy(alpha = 0.2f) else Color.Transparent)
                             .clickable(role = Role.Button, onClickLabel = label) { selected = value }
                             .padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
-                            Modifier.size(16.dp).clip(CircleShape).border(1.dp, if (selected == value) PrimaryPurple else TextMuted, CircleShape),
+                            Modifier.size(16.dp).clip(CircleShape).border(1.dp, if (selected == value) LocalYugmColors.current.secondary else LocalYugmColors.current.textSecondary, CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
-                            if (selected == value) Box(Modifier.size(8.dp).clip(CircleShape).background(PrimaryPurple))
+                            if (selected == value) Box(Modifier.size(8.dp).clip(CircleShape).background(LocalYugmColors.current.secondary))
                         }
                         Spacer(Modifier.width(10.dp))
-                        Text(label, color = TextPrimary, fontSize = 13.sp)
+                        Text(label, color = LocalYugmColors.current.textPrimary, fontSize = 13.sp)
                     }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onSubmit(selected) }) { Text("Submit report", color = Danger, fontWeight = FontWeight.Bold) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextMuted) } }
+        confirmButton = { TextButton(onClick = { onSubmit(selected) }) { Text("Submit report", color = LocalYugmColors.current.danger, fontWeight = FontWeight.Bold) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = LocalYugmColors.current.textSecondary) } }
     )
 }
 
 @Composable
 private fun MatchedBanner(name: String) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Brush.horizontalGradient(listOf(PrimaryPurple.copy(alpha = 0.4f), Pink.copy(alpha = 0.3f)))).border(1.dp, Pink.copy(alpha = 0.4f), RoundedCornerShape(18.dp)).padding(14.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Brush.horizontalGradient(listOf(LocalYugmColors.current.secondary.copy(alpha = 0.4f), LocalYugmColors.current.primary.copy(alpha = 0.3f)))).border(1.dp, LocalYugmColors.current.primary.copy(alpha = 0.4f), RoundedCornerShape(18.dp)).padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(Brush.linearGradient(listOf(Pink, PrimaryPurple))), contentAlignment = Alignment.Center) { Text("♡", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Black) }
+        Box(Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(Brush.linearGradient(listOf(LocalYugmColors.current.primary, LocalYugmColors.current.secondary))), contentAlignment = Alignment.Center) { Text("♡", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Black) }
         Column(Modifier.padding(start = 12.dp)) {
-            Text("You're Matched!", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Black)
-            Text("Say hello to $name and start your story ✨", color = TextMuted, fontSize = 11.sp)
+            Text("You're Matched!", color = LocalYugmColors.current.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Black)
+            Text("Say hello to $name and start your story ✨", color = LocalYugmColors.current.textSecondary, fontSize = 11.sp)
         }
     }
 }
@@ -1742,32 +1734,32 @@ private fun EmptyConversationState(name: String) {
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Box(
-            Modifier.size(56.dp).clip(CircleShape).background(Brush.linearGradient(listOf(PrimaryPurple.copy(alpha = 0.75f), Pink.copy(alpha = 0.75f)))),
+            Modifier.size(56.dp).clip(CircleShape).background(Brush.linearGradient(listOf(LocalYugmColors.current.secondary.copy(alpha = 0.75f), LocalYugmColors.current.primary.copy(alpha = 0.75f)))),
             contentAlignment = Alignment.Center
         ) { Text("💬", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold) }
-        Text("Start the conversation", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        Text("Send ${name.substringBefore(' ')} a message and see where the conversation goes.", color = TextMuted, fontSize = 13.sp, lineHeight = 18.sp)
+        Text("Start the conversation", color = LocalYugmColors.current.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text("Send ${name.substringBefore(' ')} a message and see where the conversation goes.", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp, lineHeight = 18.sp)
     }
 }
 
 @Composable
 private fun SafetyTip(onDismiss: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(SurfaceElevated).border(1.dp, BorderColor, RoundedCornerShape(18.dp)).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("🛡️", color = Pink, fontSize = 28.sp)
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(LocalYugmColors.current.surfaceElevated).border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(18.dp)).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("🛡️", color = LocalYugmColors.current.primary, fontSize = 28.sp)
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-            Text("Safety Tip", color = PrimaryPurple, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            Text("Be kind, respectful and keep the conversation safe. Report or block anything that feels off.", color = TextMuted, fontSize = 10.sp, lineHeight = 14.sp)
+            Text("Safety Tip", color = LocalYugmColors.current.secondary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            Text("Be kind, respectful and keep the conversation safe. Report or block anything that feels off.", color = LocalYugmColors.current.textSecondary, fontSize = 10.sp, lineHeight = 14.sp)
         }
-        Text("×", color = TextMuted, fontSize = 22.sp, modifier = Modifier.clickable(onClick = onDismiss))
+        Text("×", color = LocalYugmColors.current.textSecondary, fontSize = 22.sp, modifier = Modifier.clickable(onClick = onDismiss))
     }
 }
 
 @Composable
 private fun BondStrip(bond: RelationshipStatus) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(SurfaceElevated).padding(12.dp)) {
-        Row { Text("Bond Level ${bond.level}", color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.weight(1f)); Text(bond.title, color = Pink, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(LocalYugmColors.current.surfaceElevated).padding(12.dp)) {
+        Row { Text("Bond Level ${bond.level}", color = LocalYugmColors.current.textPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.weight(1f)); Text(bond.title, color = LocalYugmColors.current.primary, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
         Box(Modifier.fillMaxWidth().padding(top = 7.dp).height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.08f))) {
-            Box(Modifier.fillMaxWidth(bond.progress.coerceIn(0f, 1f)).height(4.dp).background(Brush.horizontalGradient(listOf(PrimaryPurple, Pink))))
+            Box(Modifier.fillMaxWidth(bond.progress.coerceIn(0f, 1f)).height(4.dp).background(Brush.horizontalGradient(listOf(LocalYugmColors.current.secondary, LocalYugmColors.current.primary))))
         }
     }
 }
@@ -1778,11 +1770,11 @@ private fun ConversationDivider(label: String, highlight: Boolean = false) {
         Box(
             Modifier
                 .clip(RoundedCornerShape(50))
-                .background(SurfaceElevated)
-                .border(1.dp, BorderColor, RoundedCornerShape(50))
+                .background(LocalYugmColors.current.surfaceElevated)
+                .border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(50))
                 .padding(horizontal = 16.dp, vertical = 6.dp)
         ) {
-            Text(label, color = if (highlight) Pink else TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text(label, color = if (highlight) LocalYugmColors.current.primary else LocalYugmColors.current.textSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -1859,7 +1851,7 @@ private fun MessageBubble(
     ) {
         if (!mine) {
             if (showIncomingAvatar) {
-                Box(Modifier.size(28.dp).clip(CircleShape).background(SurfaceElevated)) {
+                Box(Modifier.size(28.dp).clip(CircleShape).background(LocalYugmColors.current.surfaceElevated)) {
                     Avatar(
                         initial = partner?.name?.firstOrNull()?.toString() ?: "?",
                         size = 28,
@@ -1896,7 +1888,7 @@ private fun MessageBubble(
                         width = if (selected || highlighted) 2.dp else 1.dp,
                         color = when {
                             highlighted -> Color(0xFFFFC107)
-                            selected -> Pink
+                            selected -> LocalYugmColors.current.primary
                             bubble?.border != null -> bubble.border
                             mine -> Color.White.copy(alpha = 0.14f)
                             else -> Color(0x2EFFFFFF)
@@ -1920,12 +1912,12 @@ private fun MessageBubble(
             ) {
                 Column {
                     if (message.forwarded) {
-                        Text("Forwarded", color = Pink, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 3.dp))
+                        Text("Forwarded", color = LocalYugmColors.current.primary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 3.dp))
                     }
                     message.replyTo?.let { reply ->
                         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.22f)).padding(horizontal = 8.dp, vertical = 6.dp)) {
-                            Text(reply.author.ifBlank { "Replied message" }, color = Pink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            Text(reply.text.ifBlank { "Media" }, color = TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(reply.author.ifBlank { "Replied message" }, color = LocalYugmColors.current.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text(reply.text.ifBlank { "Media" }, color = LocalYugmColors.current.textSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         Spacer(Modifier.height(4.dp))
                     }
@@ -1972,14 +1964,14 @@ private fun MessageBubble(
                                     }
                                     Spacer(Modifier.width(10.dp))
                                     Column(Modifier.weight(1f)) {
-                                        Text("Voice note", color = (bubble?.text ?: TextPrimary), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                        Text("Voice note", color = (bubble?.text ?: LocalYugmColors.current.textPrimary), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                         Text(
                                             when {
                                                 isVoiceActive && isVoicePreparing -> "Loading…"
                                                 isVoiceActive -> "${formatPlaybackTime(safeProgress)} / ${formatPlaybackTime(voiceDurationMs)}"
                                                 else -> "Tap to play"
                                             },
-                                            color = (bubble?.text ?: TextMuted).copy(alpha = 0.8f),
+                                            color = (bubble?.text ?: LocalYugmColors.current.textSecondary).copy(alpha = 0.8f),
                                             fontSize = 10.sp
                                         )
                                     }
@@ -2081,7 +2073,7 @@ private fun MessageBubble(
                                         Modifier
                                             .size(34.dp)
                                             .clip(CircleShape)
-                                            .background(Brush.linearGradient(listOf(PrimaryPurple.copy(alpha = 0.95f), Pink.copy(alpha = 0.9f)))),
+                                            .background(Brush.linearGradient(listOf(LocalYugmColors.current.secondary.copy(alpha = 0.95f), LocalYugmColors.current.primary.copy(alpha = 0.9f)))),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
@@ -2092,14 +2084,14 @@ private fun MessageBubble(
                                         )
                                     }
                                     Column(Modifier.weight(1f)) {
-                                        Text(callType, color = bubble?.text ?: TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                        Text(callType, color = bubble?.text ?: LocalYugmColors.current.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                                         Text(
                                             when {
                                                 isBlockedByMe -> "Unblock to start a call"
                                                 mine -> "You started a call"
                                                 else -> "Call invitation"
                                             },
-                                            color = (bubble?.text ?: TextMuted).copy(alpha = 0.8f),
+                                            color = (bubble?.text ?: LocalYugmColors.current.textSecondary).copy(alpha = 0.8f),
                                             fontSize = 11.sp
                                         )
                                     }
@@ -2111,7 +2103,7 @@ private fun MessageBubble(
                                             if (callActionEnabled) {
                                                 Modifier.background(
                                                     Brush.linearGradient(
-                                                        listOf(PrimaryPurple.copy(alpha = 0.95f), Pink.copy(alpha = 0.9f))
+                                                        listOf(LocalYugmColors.current.secondary.copy(alpha = 0.95f), LocalYugmColors.current.primary.copy(alpha = 0.9f))
                                                     )
                                                 )
                                             } else {
@@ -2151,7 +2143,7 @@ private fun MessageBubble(
                                 }
                             }
                         } else {
-                            Text(message.message, color = bubble?.text ?: TextPrimary, fontSize = 14.sp, lineHeight = 20.sp)
+                            Text(message.message, color = bubble?.text ?: LocalYugmColors.current.textPrimary, fontSize = 14.sp, lineHeight = 20.sp)
                         }
                     }
                     Row(
@@ -2161,10 +2153,10 @@ private fun MessageBubble(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (message.isEdited) {
-                            Text("edited", color = (bubble?.text ?: TextMuted).copy(alpha = 0.7f), fontSize = 10.sp)
-                            Text(" · ", color = (bubble?.text ?: TextMuted).copy(alpha = 0.6f), fontSize = 10.sp)
+                            Text("edited", color = (bubble?.text ?: LocalYugmColors.current.textSecondary).copy(alpha = 0.7f), fontSize = 10.sp)
+                            Text(" · ", color = (bubble?.text ?: LocalYugmColors.current.textSecondary).copy(alpha = 0.6f), fontSize = 10.sp)
                         }
-                        Text(messageTime(message.createdAt), color = (bubble?.text ?: TextMuted).copy(alpha = 0.78f), fontSize = 10.sp)
+                        Text(messageTime(message.createdAt), color = (bubble?.text ?: LocalYugmColors.current.textSecondary).copy(alpha = 0.78f), fontSize = 10.sp)
                         if (mine) {
                             Spacer(Modifier.width(4.dp))
                             Text(
@@ -2186,8 +2178,8 @@ private fun MessageBubble(
                     Modifier
                         .offset(y = (-6).dp)
                         .clip(RoundedCornerShape(999.dp))
-                        .background(SurfaceElevated)
-                        .border(1.dp, if (myReaction != null) PrimaryPurple.copy(alpha = 0.55f) else BorderColor, RoundedCornerShape(999.dp))
+                        .background(LocalYugmColors.current.surfaceElevated)
+                        .border(1.dp, if (myReaction != null) LocalYugmColors.current.secondary.copy(alpha = 0.55f) else LocalYugmColors.current.border, RoundedCornerShape(999.dp))
                         .clickable(role = Role.Button, onClickLabel = "View or change reaction") {
                             val rect = bubbleCoordinates?.let { runCatching { it.boundsInRoot() }.getOrNull() } ?: androidx.compose.ui.geometry.Rect.Zero
                             onReact(rect)
@@ -2199,13 +2191,13 @@ private fun MessageBubble(
                     aggregates.forEach { (type, count) ->
                         Text(
                             "${reactionEmoji(type)}${if (count > 1) " $count" else ""}",
-                            color = if (type == myReaction) TextPrimary else TextMuted,
+                            color = if (type == myReaction) LocalYugmColors.current.textPrimary else LocalYugmColors.current.textSecondary,
                             fontSize = 10.sp,
                             fontWeight = if (type == myReaction) FontWeight.Bold else FontWeight.Medium
                         )
                     }
                     if (hiddenTypes > 0) {
-                        Text("+$hiddenTypes", color = TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                        Text("+$hiddenTypes", color = LocalYugmColors.current.textSecondary, fontSize = 10.sp, fontWeight = FontWeight.Medium)
                     }
                 }
             }
@@ -2214,7 +2206,7 @@ private fun MessageBubble(
         if (mine) {
             Spacer(Modifier.width(8.dp))
             if (showOutgoingAvatar) {
-                Box(Modifier.size(28.dp).clip(CircleShape).background(SurfaceElevated)) {
+                Box(Modifier.size(28.dp).clip(CircleShape).background(LocalYugmColors.current.surfaceElevated)) {
                     Avatar(
                         initial = "You".first().toString(),
                         size = 28,
@@ -2237,12 +2229,12 @@ fun TypingIndicatorDot(delay: Int) {
         val animatedOffset by transition.animateFloat(0f, -6f, infiniteRepeatable(tween(300, delayMillis = delay, easing = LinearEasing), RepeatMode.Reverse), label = "typing-dot")
         animatedOffset
     } else 0f
-    Box(Modifier.size(5.dp).offset(y = offsetY.dp).clip(CircleShape).background(PrimaryPurple))
+    Box(Modifier.size(5.dp).offset(y = offsetY.dp).clip(CircleShape).background(LocalYugmColors.current.secondary))
 }
 
 @Composable
 fun TypingBubble() {
-    Row(Modifier.clip(RoundedCornerShape(14.dp)).background(SurfaceElevated).padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    Row(Modifier.clip(RoundedCornerShape(14.dp)).background(LocalYugmColors.current.surfaceElevated).padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         TypingIndicatorDot(0); TypingIndicatorDot(100); TypingIndicatorDot(200)
     }
 }
@@ -2264,7 +2256,7 @@ private fun DirectMessage.canStillEdit(): Boolean = com.yugm.app.feature.chat.ca
 private fun ChatOptionRow(
     icon: ImageVector,
     label: String,
-    tint: Color = TextPrimary,
+    tint: Color = LocalYugmColors.current.textPrimary,
     onClick: () -> Unit
 ) {
     Row(
@@ -2284,7 +2276,7 @@ private fun ChatOptionRow(
 private fun CompactOptionRow(
     icon: ImageVector,
     label: String,
-    tint: Color = TextPrimary,
+    tint: Color = LocalYugmColors.current.textPrimary,
     onClick: () -> Unit
 ) {
     Row(

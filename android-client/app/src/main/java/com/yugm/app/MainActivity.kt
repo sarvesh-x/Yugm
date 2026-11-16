@@ -22,6 +22,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import com.yugm.app.core.api.YugmApi
@@ -82,7 +84,19 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
         )
 
         setContent {
-            YugmTheme(dynamicColor = false) {
+            val themeMode by sessionManager.themeModeFlow.collectAsState()
+            val darkTheme = when (themeMode) {
+                "DARK" -> true
+                "LIGHT" -> false
+                else -> isSystemInDarkTheme()
+            }
+            LaunchedEffect(darkTheme) {
+                androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)?.apply {
+                    isAppearanceLightStatusBars = !darkTheme
+                    isAppearanceLightNavigationBars = !darkTheme
+                }
+            }
+            YugmTheme(darkTheme = darkTheme, dynamicColor = false) {
                 val navController = androidx.navigation.compose.rememberNavController()
                 val mainViewModel: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
                 val scope = rememberCoroutineScope()
