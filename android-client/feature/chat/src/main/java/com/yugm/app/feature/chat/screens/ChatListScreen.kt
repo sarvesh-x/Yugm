@@ -103,9 +103,9 @@ fun ChatListScreen(
     onJoinClan: () -> Unit = {},
     onOpenClanDetail: (String) -> Unit = {},
     onGameZone: () -> Unit = {},
-    showBottomDock: Boolean = true
+    showBottomDock: Boolean = true,
+    viewModel: com.yugm.app.feature.chat.viewmodel.ChatListViewModel = hiltViewModel()
 ) {
-    val viewModel: ChatListViewModel = hiltViewModel()
     var mainTab by remember { mutableIntStateOf(0) }
     var contactTab by remember { mutableIntStateOf(0) }
     var showFindPeople by remember { mutableStateOf(false) }

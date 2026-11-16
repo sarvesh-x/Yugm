@@ -8,9 +8,11 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomType
@@ -19,6 +21,7 @@ import com.yugm.app.core.navigation.navigateTopLevel
 import com.yugm.app.core.ui.components.YugmBottomDock
 import com.yugm.app.core.ui.components.YugmDockTab
 import com.yugm.app.feature.chat.screens.ChatListScreen
+import com.yugm.app.feature.chat.viewmodel.ChatListViewModel
 import com.yugm.app.feature.discover.screens.DiscoverScreen
 import com.yugm.app.feature.profile.screens.ProfileDetailScreen
 import com.yugm.app.feature.room.screens.VoiceRoomsScreen
@@ -49,6 +52,10 @@ fun MainTabsScreen(
     }
     val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { 5 })
     val scope = rememberCoroutineScope()
+    val chatListViewModel: ChatListViewModel = hiltViewModel()
+    val chatUnreadBadge = remember(chatListViewModel.unreadCounts, chatListViewModel.mutedPartnerIds) {
+        chatListViewModel.unreadCounts.filterKeys { it !in chatListViewModel.mutedPartnerIds }.values.sum().coerceAtMost(9)
+    }
 
     LaunchedEffect(initialTab) {
         val target = initialPage
@@ -143,7 +150,8 @@ fun MainTabsScreen(
                     onJoinClan = { navController.navigate(Screen.ClanList.route) },
                     onOpenClanDetail = { clanId -> navController.navigate(Screen.ClanDetail.createRoute(clanId)) },
                     onGameZone = { goTo(TAB_GAME_ZONE) },
-                    showBottomDock = false
+                    showBottomDock = false,
+                    viewModel = chatListViewModel
                 )
 
                 TAB_PROFILE -> {
@@ -202,7 +210,8 @@ fun MainTabsScreen(
             onChat = { goTo(TAB_CHAT) },
             onWallet = { navController.navigate(Screen.Wallet.route) },
             onProfile = { openOwnProfileOrSetup() },
-            onGameZone = { goTo(TAB_GAME_ZONE) }
+            onGameZone = { goTo(TAB_GAME_ZONE) },
+            chatBadge = chatUnreadBadge
         )
     }
 }
