@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import fsp from "fs/promises";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode } from "../utils/http.js";
 import { persistUploadedFile, safeUploadName } from "../services/storage.js";
@@ -159,12 +160,31 @@ function assertSafeTrustMedia(file: Express.Multer.File | undefined, purpose: st
 uploadRouter.post("/upload/avatar", requireAuth, upload.single("avatar"), asyncHandler(async (req: AuthRequest, res) => {
   assertSafeImage(req.file);
   const file = req.file!;
-  const { url, storage } = await persistUploadedFile(file, "avatars");
-  await req.user!.updateOne({
-    avatar: url,
-    "activeCosmetics.avatarAsset": ""
-  });
-  sendOk(res, { url, storage });
+  try {
+    const bytes = await fsp.readFile(file.path);
+    const maxThumbnailBytes = 220 * 1024;
+    if (bytes.length > maxThumbnailBytes) {
+      throw new HttpError(400, "Avatar image is too large. Please choose or crop a smaller image.", ErrorCode.VALIDATION);
+    }
+
+    let mime = (file.mimetype || "").toLowerCase();
+    if (!mime.startsWith("image/")) {
+      const ext = path.extname(file.originalname).toLowerCase();
+      mime = ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : ext === ".gif" ? "image/gif" : "image/jpeg";
+    }
+    if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(mime)) {
+      mime = "image/jpeg";
+    }
+
+    const url = `data:${mime};base64,${bytes.toString("base64")}`;
+    await req.user!.updateOne({
+      avatar: url,
+      "activeCosmetics.avatarAsset": ""
+    });
+    sendOk(res, { url, storage: "mongo-thumbnail" });
+  } finally {
+    await fsp.unlink(file.path).catch(() => {});
+  }
 }));
 
 uploadRouter.post("/upload/cover", requireAuth, upload.single("cover"), asyncHandler(async (req: AuthRequest, res) => {

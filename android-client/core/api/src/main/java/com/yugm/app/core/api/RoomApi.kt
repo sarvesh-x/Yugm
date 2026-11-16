@@ -273,14 +273,51 @@ object RoomApi {
     }
 
     suspend fun uploadAvatar(token: String, bytes: ByteArray, mimeType: String): String {
+        val (uploadBytes, uploadMime, ext) = prepareAvatarThumbnail(bytes, mimeType)
         val data = YugmHttpClient.multipartUpload("/upload/avatar", token) {
-            val mediaType = mimeType.ifBlank { "image/jpeg" }.toMediaType()
-            val ext = mimeType.substringAfter('/', "jpg")
-            addFormDataPart("avatar", "avatar.$ext", bytes.toRequestBody(mediaType))
+            addFormDataPart("avatar", "avatar.$ext", uploadBytes.toRequestBody(uploadMime.toMediaType()))
         }
         val url = data.getJSONObject("data").optString("url")
         if (url.isBlank()) throw ApiProtocolException("Avatar upload returned no URL")
         return resolveMediaUrl(url) ?: throw ApiProtocolException("Avatar upload returned an invalid URL")
+    }
+
+    private fun prepareAvatarThumbnail(bytes: ByteArray, mimeType: String): Triple<ByteArray, String, String> {
+        return try {
+            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                Triple(bytes, mimeType.ifBlank { "image/jpeg" }, "jpg")
+            } else {
+                val maxDim = 256
+                var sample = 1
+                while (bounds.outWidth / sample > maxDim * 2 || bounds.outHeight / sample > maxDim * 2) sample *= 2
+                val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample.coerceAtLeast(1) }
+                val decoded = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+                    ?: return Triple(bytes, mimeType.ifBlank { "image/jpeg" }, "jpg")
+                val scale = minOf(maxDim.toFloat() / decoded.width, maxDim.toFloat() / decoded.height, 1f)
+                val targetW = (decoded.width * scale).toInt().coerceAtLeast(1)
+                val targetH = (decoded.height * scale).toInt().coerceAtLeast(1)
+                val bitmap = if (targetW != decoded.width || targetH != decoded.height) {
+                    android.graphics.Bitmap.createScaledBitmap(decoded, targetW, targetH, true)
+                } else decoded
+                val out = java.io.ByteArrayOutputStream()
+                var quality = 82
+                bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, quality, out)
+                var result = out.toByteArray()
+                while (result.size > 180 * 1024 && quality > 45) {
+                    out.reset()
+                    quality -= 8
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, quality, out)
+                    result = out.toByteArray()
+                }
+                if (bitmap != decoded) bitmap.recycle()
+                decoded.recycle()
+                Triple(result, "image/jpeg", "jpg")
+            }
+        } catch (_: Exception) {
+            Triple(bytes, mimeType.ifBlank { "image/jpeg" }, mimeType.substringAfter('/', "jpg"))
+        }
     }
 
     suspend fun uploadMessageMedia(token: String, bytes: ByteArray, mimeType: String, fileName: String): Pair<String, String> {
