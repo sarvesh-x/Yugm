@@ -51,6 +51,7 @@ object YugmHttpClient {
         if (configuredBase.isNotBlank()) add(configuredBase)
         if (ApiConfig.isDebug) {
             add("http://10.0.2.2:4000/api")
+            add("http://127.0.0.1:4000/api")
             if (ApiConfig.lanApiBaseUrl.isNotBlank()) add(ApiConfig.lanApiBaseUrl.trim().trimEnd('/'))
         }
     }.distinct()
@@ -76,16 +77,16 @@ object YugmHttpClient {
         if (!isOnline) throw IllegalStateException("No internet connection")
         val canRetry = isSafeRetryMethod(method)
         val preferredBase = workingBaseUrl ?: baseCandidates.firstOrNull()
-        val bases = if (canRetry) {
-            listOfNotNull(workingBaseUrl) + baseCandidates.filter { it != workingBaseUrl }
-        } else {
-            listOfNotNull(preferredBase)
+        val bases = buildList {
+            if (workingBaseUrl != null) add(workingBaseUrl!!)
+            baseCandidates.forEach { if (it != workingBaseUrl) add(it) }
         }
         if (bases.isEmpty()) throw IllegalStateException("API_BASE_URL is not configured for this build")
         var lastError: IOException? = null
-        // Auth POSTs issue refresh sessions and are not idempotent. Retrying after a
-        // read timeout can create orphan sessions and turn one slow login into two.
-        val attempts = if (canRetry) bases else bases.take(1)
+        // Auth POSTs can issue/rotate sessions and are not idempotent once received.
+        // But connect failures (ECONNREFUSED/no route/unreachable host) happen before
+        // the request reaches the server, so trying alternate configured bases is safe.
+        val attempts = if (canRetry) bases else listOfNotNull(preferredBase)
         for ((attempt, base) in attempts.withIndex()) {
             currentCoroutineContext().ensureActive()
             var requestAuth: String? = null
@@ -184,7 +185,13 @@ throw ApiHttpException(response.code, errorContext)
             } catch (error: IOException) {
                 Timber.tag(TAG).e(error, "Request failed for $base$path")
                 lastError = error
-                if (attempt == attempts.lastIndex || !canRetry) throw error
+                if (workingBaseUrl == base) workingBaseUrl = null
+                val canFailoverToNextBase = attempt < bases.lastIndex && (
+                    canRetry || error is java.net.ConnectException || error is java.net.NoRouteToHostException ||
+                        error is java.net.UnknownHostException || error is java.net.PortUnreachableException
+                )
+                if (!canFailoverToNextBase) throw error
+                continue
             }
         }
         throw lastError ?: IllegalStateException("API unavailable")
@@ -196,8 +203,11 @@ throw ApiHttpException(response.code, errorContext)
         buildBody: MultipartBody.Builder.() -> Unit
     ): JSONObject = withContext(Dispatchers.IO) {
         if (!isOnline) throw IllegalStateException("No internet connection")
-        val base = workingBaseUrl ?: baseCandidates.firstOrNull()
-            ?: throw IllegalStateException("API_BASE_URL is not configured for this build")
+        val bases = buildList {
+            workingBaseUrl?.let(::add)
+            baseCandidates.forEach { if (it != workingBaseUrl) add(it) }
+        }
+        if (bases.isEmpty()) throw IllegalStateException("API_BASE_URL is not configured for this build")
         val body = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .apply(buildBody)
@@ -206,47 +216,58 @@ throw ApiHttpException(response.code, errorContext)
         // Profile routes can hold an older token snapshot after a refresh. Use the
         // persisted current token and apply the same single-refresh retry as JSON APIs.
         val requestToken = authTokenProvider?.invoke()?.takeIf(String::isNotBlank) ?: token
-        fun executeUpload(authToken: String): JSONObject {
-            val request = Request.Builder()
-                .url("$base$path")
-                .header("Authorization", "Bearer $authToken")
-                .post(body)
-                .build()
-            return client.newCall(request).execute().use { response ->
-                val raw = response.body?.string().orEmpty()
-                if (!response.isSuccessful) {
-                    val message = runCatching { JSONObject(raw).optJSONObject("error")?.optString("message") }.getOrNull()
-                    throw ApiHttpException(response.code, message ?: "Upload failed")
+        var lastIoError: IOException? = null
+        for (base in bases) {
+            currentCoroutineContext().ensureActive()
+            fun executeUpload(authToken: String): JSONObject {
+                val request = Request.Builder()
+                    .url("$base$path")
+                    .header("Authorization", "Bearer $authToken")
+                    .post(body)
+                    .build()
+                return client.newCall(request).execute().use { response ->
+                    val raw = response.body?.string().orEmpty()
+                    if (!response.isSuccessful) {
+                        val message = runCatching { JSONObject(raw).optJSONObject("error")?.optString("message") }.getOrNull()
+                        throw ApiHttpException(response.code, message ?: "Upload failed")
+                    }
+                    val payload = try {
+                        JSONObject(raw)
+                    } catch (e: Exception) {
+                        throw ApiProtocolException("Invalid JSON upload response", e)
+                    }
+                    workingBaseUrl = base
+                    payload
                 }
-                val payload = try {
-                    JSONObject(raw)
-                } catch (e: Exception) {
-                    throw ApiProtocolException("Invalid JSON upload response", e)
-                }
-                workingBaseUrl = base
-                payload
             }
-        }
 
-        try {
-            executeUpload(requestToken)
-        } catch (error: ApiHttpException) {
-            if (error.statusCode != 401) throw error
-            val renewed = try {
-                refreshAccessToken?.invoke(requestToken)
-            } catch (refreshError: IOException) {
-                throw refreshError
-            } catch (refreshError: ApiHttpException) {
-                if (refreshError.statusCode == 401 || refreshError.statusCode == 403) null else throw refreshError
-            } catch (_: Exception) {
-                null
-            }
-            if (!renewed.isNullOrBlank() && renewed != requestToken) {
-                executeUpload(renewed)
-            } else {
-                withContext(Dispatchers.Main) { onUnauthorized?.invoke(requestToken) }
-                throw error
+            try {
+                return@withContext executeUpload(requestToken)
+            } catch (error: ApiHttpException) {
+                if (error.statusCode != 401) throw error
+                val renewed = try {
+                    refreshAccessToken?.invoke(requestToken)
+                } catch (refreshError: IOException) {
+                    throw refreshError
+                } catch (refreshError: ApiHttpException) {
+                    if (refreshError.statusCode == 401 || refreshError.statusCode == 403) null else throw refreshError
+                } catch (_: Exception) {
+                    null
+                }
+                if (!renewed.isNullOrBlank() && renewed != requestToken) {
+                    return@withContext executeUpload(renewed)
+                } else {
+                    withContext(Dispatchers.Main) { onUnauthorized?.invoke(requestToken) }
+                    throw error
+                }
+            } catch (error: IOException) {
+                lastIoError = error
+                if (workingBaseUrl == base) workingBaseUrl = null
+                val canFailover = error is java.net.ConnectException || error is java.net.NoRouteToHostException ||
+                    error is java.net.UnknownHostException || error is java.net.PortUnreachableException
+                if (!canFailover) throw error
             }
         }
+        throw lastIoError ?: IllegalStateException("API unavailable")
     }
 }
