@@ -71,6 +71,18 @@ class ChatListViewModel @Inject constructor(
                         following = following.filterNot { it.id == partnerId }
                         recommendedChatUsers = recommendedChatUsers.filterNot { it.id == partnerId }
                     }
+                    is SocketEvent.DirectMessageDeleted -> {
+                        val removed = recentMessages.firstOrNull { it.id == event.messageId }
+                        if (removed != null) {
+                            recentMessages = recentMessages.filterNot { it.id == event.messageId }
+                            val me = currentUserId
+                            if (me.isNotBlank() && removed.receiverId == me && !removed.read) {
+                                val partnerId = if (event.partnerId.isNotBlank()) event.partnerId else removed.senderId
+                                val current = unreadCounts[partnerId] ?: 0
+                                unreadCounts = if (current <= 1) unreadCounts - partnerId else unreadCounts + (partnerId to (current - 1))
+                            }
+                        }
+                    }
                     is SocketEvent.DirectMessageReceived -> {
                         val msg = event.message
                         val existingIndex = recentMessages.indexOfFirst { it.id == msg.id && msg.id.isNotBlank() }
