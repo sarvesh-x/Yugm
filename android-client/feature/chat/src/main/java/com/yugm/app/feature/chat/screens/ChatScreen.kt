@@ -225,6 +225,10 @@ fun ChatScreen(
         if (value.isBlank()) return
         val editing = editingTarget
         val replying = replyTarget
+        if (typingSent) {
+            typingSent = false
+            onTyping(false)
+        }
         draft = ""
         editingTarget = null
         replyTarget = null
@@ -720,6 +724,11 @@ fun ChatScreen(
         } else if (typingSent) {
             typingSent = false
             onTyping(false)
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            if (typingSent) onTyping(false)
         }
     }
     // Scroll behavior is handled by the visible-messages auto-scroll effect above.
