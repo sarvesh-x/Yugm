@@ -18,7 +18,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.gms.google-services")
     alias(libs.plugins.hilt.android)
-    id("org.jetbrains.kotlin.kapt")
+    alias(libs.plugins.ksp)
 }
 
 fun configValue(name: String): String? {
@@ -158,12 +158,32 @@ android {
             buildConfigField("String", "LAN_API_BASE_URL", quoted(localLanHost?.let { "http://$it:4000/api" }.orEmpty()))
             buildConfigField("String", "FPNV_TEST_TOKEN", "\"$fpnvTestToken\"")
             buildConfigField("String", "LAN_SOCKET_BASE_URL", quoted(localLanHost?.let { "http://$it:4000" }.orEmpty()))
+
+            // Debug packaging only. The LiveKit/WebRTC dependency ships ~44 MB of
+            // native libraries across four ABIs; a phone plus a desktop emulator
+            // only ever need two of them. Trimming the rest makes every
+            // mergeDebugNativeLibs/packageDebug/installDebug pass cheaper and the
+            // debug APK ~18 MB smaller. Release keeps all ABIs. Override with
+            // -PYUGM_DEBUG_ABIS=arm64-v8a (or set YUGM_DEBUG_ABIS in local.properties).
+            ndk {
+                abiFilters.clear()
+                abiFilters.addAll(
+                    configValue("YUGM_DEBUG_ABIS")
+                        ?.split(',', ' ')
+                        ?.map(String::trim)
+                        ?.filter(String::isNotBlank)
+                        ?.takeIf(List<String>::isNotEmpty)
+                        ?: listOf("arm64-v8a", "x86_64"),
+                )
+            }
         }
 
         release {
             signingConfig = signingConfigs.getByName("playUpload")
             isMinifyEnabled = true
-            buildConfigField("String", "FPNV_TEST_TOKEN", "\"$fpnvTestToken\"")
+            // Never ship the local Firebase phone-verification test token in a
+            // public artifact; CI release builds have always had it empty.
+            buildConfigField("String", "FPNV_TEST_TOKEN", "\"\"")
             isShrinkResources = true
             buildConfigField("String", "API_BASE_URL", quoted(yugmApiBaseUrl))
             buildConfigField("String", "SOCKET_BASE_URL", quoted(yugmSocketBaseUrl))
@@ -220,7 +240,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.hilt.android)
 
-    kapt(libs.hilt.compiler)
+    ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
 
     implementation(project(":core:model"))
