@@ -1,83 +1,38 @@
 package com.yugm.app.feature.discover.screens
 
 import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.offset
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.selected as selectedSemantics
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ChatBubble
-import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.LocationOn
@@ -86,20 +41,46 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SportsEsports
-import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.Coffee
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected as selectedSemantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import com.yugm.app.core.api.YugmApi
-import com.yugm.app.core.model.Host
+import coil.compose.AsyncImage
 import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomType
-import com.yugm.app.core.ui.components.*
+import com.yugm.app.core.ui.components.Avatar
+import com.yugm.app.core.ui.components.YugmBottomDock
+import com.yugm.app.core.ui.components.YugmDockTab
+import com.yugm.app.core.ui.components.YugmPullToRefreshBox
 import com.yugm.app.core.ui.theme.Background
 import com.yugm.app.core.ui.theme.BorderColor
 import com.yugm.app.core.ui.theme.Danger
-import com.yugm.app.core.ui.theme.Gold
-import com.yugm.app.core.ui.theme.Ink2
 import com.yugm.app.core.ui.theme.Pink
 import com.yugm.app.core.ui.theme.PrimaryPurple
 import com.yugm.app.core.ui.theme.Success
@@ -107,10 +88,9 @@ import com.yugm.app.core.ui.theme.SurfaceElevated
 import com.yugm.app.core.ui.theme.TextMuted
 import com.yugm.app.core.ui.theme.TextPrimary
 import com.yugm.app.feature.discover.viewmodel.DiscoverViewModel
-import com.yugm.app.feature.discover.R
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private data class DiscoveryFilter(val label: String, val icon: ImageVector)
 
@@ -119,11 +99,10 @@ private val discoveryFilters = listOf(
     DiscoveryFilter("Nearby", Icons.Filled.LocationOn),
     DiscoveryFilter("Voice", Icons.Filled.Mic),
     DiscoveryFilter("Video", Icons.Filled.Videocam),
-    DiscoveryFilter("Music", Icons.Filled.MusicNote),
-    DiscoveryFilter("Gaming", Icons.Filled.SportsEsports),
-    DiscoveryFilter("Events", Icons.Filled.Event),
-    DiscoveryFilter("Chill", Icons.Filled.Coffee)
+    DiscoveryFilter("Music", Icons.Filled.MusicNote)
 )
+
+private data class ExploreAction(val label: String, val icon: ImageVector, val onClick: () -> Unit)
 
 @Composable
 fun DiscoverScreen(
@@ -147,46 +126,48 @@ fun DiscoverScreen(
     onLeaderboards: () -> Unit = {},
     onClans: () -> Unit = {},
     showBottomDock: Boolean = true,
-    viewModel: DiscoverViewModel = hiltViewModel(),
+    viewModel: DiscoverViewModel = hiltViewModel()
 ) {
     LaunchedEffect(token) {
         if (token.isNotBlank()) viewModel.refreshHome(token)
     }
-
     LaunchedEffect(token) {
         if (token.isBlank()) return@LaunchedEffect
         while (true) {
             viewModel.refreshPresenceCount(token)
-            kotlinx.coroutines.delay(15_000)
+            delay(15_000)
         }
     }
 
     val rooms = remember(viewModel.recommendedRooms, viewModel.rooms) {
-        (viewModel.recommendedRooms + viewModel.rooms).distinctBy { it.id }
+        (viewModel.recommendedRooms + viewModel.rooms).distinctBy(Room::id)
     }
     val onlineHosts = viewModel.home?.suggestedHosts.orEmpty().filter { it.isOnline }
-    var selectedDiscoveryFilter by remember { mutableStateOf("Trending") }
-    var isFriendSearchOpen by remember { mutableStateOf(false) }
-    var isJoiningParty by remember { mutableStateOf(false) }
+    val currentCity = viewModel.home?.city.orEmpty()
+    var selectedFilter by rememberSaveable { mutableStateOf("Trending") }
+    var friendSearchOpen by remember { mutableStateOf(false) }
     var friendSearchError by remember { mutableStateOf<String?>(null) }
-    val context = LocalContext.current
+    var joiningParty by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
+    val visibleRooms = remember(rooms, selectedFilter, currentCity) {
+        filterDiscoveryRooms(rooms, selectedFilter, currentCity)
+    }
 
-    LaunchedEffect(isFriendSearchOpen, token) {
-        if (!isFriendSearchOpen) return@LaunchedEffect
+    LaunchedEffect(friendSearchOpen, token) {
+        if (!friendSearchOpen) return@LaunchedEffect
         friendSearchError = null
         try {
-            val searchDeadline = System.currentTimeMillis() + 90_000
-            var matchedRoom = viewModel.searchRandomFriend(token)
-            while (isFriendSearchOpen && matchedRoom == null && System.currentTimeMillis() < searchDeadline) {
+            val deadline = System.currentTimeMillis() + 90_000
+            var match = viewModel.searchRandomFriend(token)
+            while (friendSearchOpen && match == null && System.currentTimeMillis() < deadline) {
                 delay(2_000)
-                matchedRoom = viewModel.randomFriendMatch(token)
+                match = viewModel.randomFriendMatch(token)
             }
-            val match = matchedRoom
-            if (isFriendSearchOpen && match != null) {
-                isFriendSearchOpen = false
+            if (friendSearchOpen && match != null) {
+                friendSearchOpen = false
                 onOpenMatchedCall(match)
-            } else if (isFriendSearchOpen) {
+            } else if (friendSearchOpen) {
                 viewModel.cancelRandomFriendSearch(token)
                 friendSearchError = "No one joined the search yet. Try again in a little while."
             }
@@ -197,125 +178,114 @@ fun DiscoverScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize().background(Background)) {
-            AmbientBackdrop()
-            YugmPullToRefreshBox(
-                isRefreshing = viewModel.isLoading,
-                onRefresh = { viewModel.refreshHome(token) },
-                modifier = Modifier.fillMaxSize()
+    Box(Modifier.fillMaxSize().background(Background)) {
+        YugmPullToRefreshBox(
+            isRefreshing = viewModel.isLoading,
+            onRefresh = { viewModel.refreshHome(token) },
+            modifier = Modifier.fillMaxSize()
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(top = 8.dp, bottom = if (showBottomDock) 120.dp else 32.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                LazyColumn(
-                    contentPadding = PaddingValues(top = 8.dp, bottom = if (showBottomDock) 150.dp else 110.dp),
-                    verticalArrangement = Arrangement.spacedBy(18.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
                 item {
-                    HomeTopBar(
+                    DiscoverHero(
+                        onlineCount = viewModel.totalOnlineCount,
                         unreadCount = viewModel.home?.unreadNotifications ?: 0,
                         onSearch = onSearch,
-                        onNotifications = onNotifications
+                        onNotifications = onNotifications,
+                        onOnline = { onlineHosts.firstOrNull()?.let { onOpenProfile(it.id) } ?: onSearch() }
                     )
                 }
                 item {
                     Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        HomeFeatureCard(
+                        DiscoverActionCard(
                             title = "Find Friends",
-                            subtitle = "Random private call",
+                            subtitle = "Meet someone new",
                             icon = Icons.Filled.Call,
-                            colors = listOf(Color(0xFFD946A6), Color(0xFF8B35E8)),
+                            colors = listOf(Color(0xFF7138E9), Color(0xFF9D32DC)),
                             modifier = Modifier.weight(1f),
-                            onClick = { isFriendSearchOpen = true }
+                            onClick = { friendSearchOpen = true }
                         )
-                        HomeFeatureCard(
+                        DiscoverActionCard(
                             title = "Join Party",
-                            subtitle = if (isJoiningParty) "Finding a live room…" else "Join a random live room",
+                            subtitle = if (joiningParty) "Finding a live room…" else "Join a live conversation",
                             icon = Icons.Filled.Groups,
-                            colors = listOf(Color(0xFFB241CA), Color(0xFF6932D6)),
+                            colors = listOf(Color(0xFFED2FA7), Color(0xFFC42084)),
+                            loading = joiningParty,
                             modifier = Modifier.weight(1f),
                             onClick = {
-                                if (!isJoiningParty) scope.launch {
-                                    isJoiningParty = true
-                                    runCatching { viewModel.randomLivePublicRoom() }
-                                        .onSuccess { room ->
-                                            if (room == null) {
-                                                Toast.makeText(context, "No joinable public rooms are live right now. Try again soon.", Toast.LENGTH_SHORT).show()
-                                            } else {
-                                                onJoinParty(room)
-                                            }
+                                if (!joiningParty) scope.launch {
+                                    joiningParty = true
+                                    try {
+                                        val room = viewModel.randomLivePublicRoom()
+                                        if (room == null) {
+                                            Toast.makeText(context, "No joinable public rooms are live right now. Try again soon.", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            onJoinParty(room)
                                         }
-                                        .onFailure { error ->
-                                            Toast.makeText(context, error.message ?: "Could not join a party.", Toast.LENGTH_SHORT).show()
-                                        }
-                                    isJoiningParty = false
+                                    } catch (error: Exception) {
+                                        Toast.makeText(context, error.message ?: "Could not join a party.", Toast.LENGTH_SHORT).show()
+                                    } finally {
+                                        joiningParty = false
+                                    }
                                 }
                             }
                         )
                     }
                 }
                 item {
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 18.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        HomeShortcut("Ranking", Icons.Filled.EmojiEvents, Modifier.weight(1f), onLeaderboards)
-                        HomeShortcut("Blind Date", Icons.Filled.Favorite, Modifier.weight(1f), onDating)
-                        HomeShortcut("Yugm Arcade", Icons.Filled.SportsEsports, Modifier.weight(1f), onGames)
-                        HomeShortcut("Clans", Icons.Filled.Groups, Modifier.weight(1f), onClans)
-                    }
-                }
-                item {
-                    Row(
-                        Modifier.fillMaxWidth().padding(start = 20.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Recommend", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
-                        OnlineCountLabel(count = viewModel.totalOnlineCount)
-                    }
-                }
-                item {
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 18.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        items(discoveryFilters, key = { it.label }) { filter ->
-                            HomeDiscoveryChip(
-                                filter = filter,
-                                selected = selectedDiscoveryFilter == filter.label,
-                                onClick = { selectedDiscoveryFilter = filter.label }
-                            )
+                    DiscoverSectionHeading(
+                        title = if (selectedFilter == "Trending") "Recommended" else selectedFilter,
+                        subtitle = when (selectedFilter) {
+                            "Nearby" -> if (currentCity.isBlank()) "Add your city to see rooms near you" else "Live rooms in $currentCity"
+                            else -> "Live rooms picked for you"
                         }
-                    }
+                    )
+                }
+                item {
+                    FilterRail(selected = selectedFilter, onSelected = { selectedFilter = it })
                 }
                 if (viewModel.isLoading && rooms.isEmpty()) {
+                    item { DiscoverLoadingState() }
+                } else if (visibleRooms.isEmpty()) {
                     item {
-                        Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 40.dp), contentAlignment = Alignment.Center) {
-                            LoadingState("Finding live rooms…")
-                        }
-                    }
-                } else if (rooms.isEmpty()) {
-                    item {
-                        HomeEmptyRooms(error = viewModel.error, onCreateRoom = onCreateRoom, onRetry = { viewModel.refreshHome(token) })
+                        EmptyRecommendations(
+                            filter = selectedFilter,
+                            hasCity = currentCity.isNotBlank(),
+                            error = viewModel.error,
+                            onAddCity = onSelfProfile,
+                            onCreateRoom = onCreateRoom,
+                            onRetry = { viewModel.refreshHome(token) }
+                        )
                     }
                 } else {
-                    items(rooms.take(12), key = { "home-room-${it.id}" }) { room ->
-                        HomeRoomCard(room = room, onClick = { onOpenRoom(room) })
+                    items(visibleRooms.take(12), key = { "discover-room-${it.id}" }) { room ->
+                        RecommendedRoomCard(
+                            room = room,
+                            onOpen = { onOpenRoom(room) },
+                            onJoin = { onJoinParty(room) }
+                        )
                     }
                 }
+                item {
+                    ExploreMoreRow(
+                        actions = listOf(
+                            ExploreAction("Events", Icons.Filled.Event, onEvents),
+                            ExploreAction("Blind Date", Icons.Filled.Favorite, onDating),
+                            ExploreAction("Arcade", Icons.Filled.SportsEsports, onGames),
+                            ExploreAction("Clans", Icons.Filled.Groups, onClans),
+                            ExploreAction("Rankings", Icons.Filled.EmojiEvents, onLeaderboards),
+                            ExploreAction("Vibes", Icons.Filled.ChatBubble, onVibeGraph),
+                            ExploreAction("Creator", Icons.Filled.Mic, onCreatorDashboard)
+                        )
+                    )
                 }
             }
-        }
-
-        onlineHosts.firstOrNull()?.let { host ->
-            HomeOnlineBubble(
-                host = host,
-                onlineCount = onlineHosts.size,
-                onClick = { onOpenProfile(host.id) },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 0.dp, bottom = 116.dp)
-            )
         }
 
         if (showBottomDock) {
@@ -333,25 +303,22 @@ fun DiscoverScreen(
         }
     }
 
-    if (isFriendSearchOpen) {
+    if (friendSearchOpen) {
         AlertDialog(
             onDismissRequest = {
-                isFriendSearchOpen = false
+                friendSearchOpen = false
                 scope.launch { runCatching { viewModel.cancelRandomFriendSearch(token) } }
             },
             title = { Text("Find a friend", fontWeight = FontWeight.Black) },
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text(
-                        friendSearchError ?: "We’re finding someone who is looking for a private voice call too.",
-                        color = TextMuted
-                    )
-                    if (friendSearchError == null) CircularProgressIndicator(color = Pink)
+                    Text(friendSearchError ?: "We’re finding someone who is looking for a private voice call too.", color = TextMuted)
+                    if (friendSearchError == null) CircularProgressIndicator(color = PrimaryPurple)
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    isFriendSearchOpen = false
+                    friendSearchOpen = false
                     scope.launch { runCatching { viewModel.cancelRandomFriendSearch(token) } }
                 }) { Text("Cancel search") }
             },
@@ -360,323 +327,126 @@ fun DiscoverScreen(
     }
 }
 
+private fun filterDiscoveryRooms(rooms: List<Room>, filter: String, city: String): List<Room> = when (filter) {
+    "Voice" -> rooms.filter { it.type == RoomType.Voice }
+    "Video" -> rooms.filter { it.type == RoomType.Video }
+    "Music" -> rooms.filter { room ->
+        listOf(room.title, room.description, room.category, room.tags.joinToString(" "))
+            .any { it.contains("music", ignoreCase = true) }
+    }
+    "Nearby" -> if (city.isBlank()) emptyList() else rooms.filter { room ->
+        room.host?.city?.equals(city.trim(), ignoreCase = true) == true
+    }
+    else -> rooms.sortedByDescending { it.participants }
+}
+
 @Composable
-private fun HomeTopBar(
+private fun DiscoverHero(
+    onlineCount: Int,
     unreadCount: Int,
     onSearch: () -> Unit,
-    onNotifications: () -> Unit
-) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        BrandHeader(compact = true)
-        Spacer(Modifier.weight(1f))
-        HeaderAction(Icons.Filled.Search, "Search", onClick = onSearch)
-        Spacer(Modifier.width(8.dp))
-        HeaderAction(Icons.Filled.Notifications, "Notifications", badge = unreadCount, onClick = onNotifications)
-    }
-}
-
-@Composable
-private fun HomeFeatureCard(
-    title: String,
-    subtitle: String,
-    icon: ImageVector,
-    colors: List<Color>,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
+    onNotifications: () -> Unit,
+    onOnline: () -> Unit
 ) {
     Box(
-        modifier
-            .height(100.dp)
-            .clip(RoundedCornerShape(22.dp))
-            .background(Brush.linearGradient(colors))
-            .border(1.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(22.dp))
-            .semantics { contentDescription = "$title. $subtitle" }
-            .clickable(role = Role.Button, onClickLabel = title, onClick = onClick)
-    ) {
-        Row(
-            Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Column(
-                Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(5.dp)
-            ) {
-                Text(
-                    title,
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    lineHeight = 17.sp,
-                    fontWeight = FontWeight.Black,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    subtitle,
-                    color = Color.White.copy(alpha = 0.82f),
-                    fontSize = 10.sp,
-                    lineHeight = 13.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Box(
-                Modifier.size(38.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.16f))
-                    .border(1.dp, Color.White.copy(alpha = 0.22f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = Color.White)
-            }
-        }
-    }
-}
-
-@Composable
-private fun HomeShortcut(label: String, icon: ImageVector, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Column(
-        modifier.height(78.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(Brush.horizontalGradient(listOf(Color(0xFF15223F), Color(0xFF24203A))))
-            .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(18.dp))
-            .semantics { contentDescription = label }
-            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, color = TextPrimary, fontSize = 13.sp, lineHeight = 15.sp, fontWeight = FontWeight.Bold, maxLines = 2)
-        Icon(icon, contentDescription = null, modifier = Modifier.align(Alignment.End).size(24.dp), tint = Color(0xFFD5C4FF))
-    }
-}
-
-@Composable
-private fun OnlineCountLabel(count: Int) {
-    // Rank-style chip (mirrors RoomHeader rank label) — purely informational.
-    Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(topStart = 50.dp, bottomStart = 50.dp, topEnd = 0.dp, bottomEnd = 0.dp))
-            .background(Color(0xFF7A6368).copy(alpha = 0.45f))
-            .padding(start = 14.dp, end = 20.dp, top = 6.dp, bottom = 6.dp)
-            .semantics { contentDescription = "$count users online" },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp)
-    ) {
-        Icon(Icons.Filled.Groups, contentDescription = null, tint = Color(0xFF69F0AE), modifier = Modifier.size(20.dp))
-        Text(if (count > 0) count.toString() else "—", color = Color(0xFF69F0AE), fontSize = 15.sp, fontWeight = FontWeight.Bold)
-        Text("online", color = Color(0xFF69F0AE).copy(alpha = 0.85f), fontSize = 12.sp, fontWeight = FontWeight.Medium)
-    }
-}
-
-@Composable
-private fun HomeDiscoveryChip(filter: DiscoveryFilter, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier.height(44.dp).clip(CircleShape)
-            .background(if (selected) Brush.horizontalGradient(listOf(PrimaryPurple, Pink)) else Brush.horizontalGradient(listOf(Color(0xFF17192B), Color(0xFF22243A))))
-            .border(1.dp, if (selected) Pink.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.16f), CircleShape)
-            .selectable(selected = selected, role = Role.Tab, onClick = onClick)
-            .semantics(mergeDescendants = true) {
-                contentDescription = filter.label
-                selectedSemantics = selected
-            }
-            .padding(horizontal = 13.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp)
-    ) {
-        Icon(filter.icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = if (selected) Color.White else TextMuted)
-        Text(filter.label, color = if (selected) Color.White else TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-    }
-}
-
-@Composable
-private fun HomeRoomCard(room: Room, onClick: () -> Unit) {
-    val colors = room.gradient.takeIf { it.size >= 2 } ?: listOf(Color(0xFF36225B), Color(0xFF17172D))
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(136.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(Brush.linearGradient(colors))
-            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
-            .semantics { contentDescription = "${room.title}, ${room.participants} people listening" }
-            .clickable(role = Role.Button, onClickLabel = "Open ${room.title}", onClick = onClick),
-        verticalAlignment = Alignment.CenterVertically
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp)
+            .heightIn(min = 238.dp)
+            .shadow(16.dp, RoundedCornerShape(30.dp), ambientColor = PrimaryPurple.copy(alpha = 0.25f))
+            .clip(RoundedCornerShape(30.dp))
+            .background(Brush.linearGradient(listOf(Color(0xFF7139E8), Color(0xFF8525C9), Color(0xFFD92BA4))))
     ) {
         Box(
-            Modifier.width(94.dp).fillMaxSize()
-                .background(Brush.verticalGradient(listOf(Color(0xFF482678), Color(0xFF16152B)))),
-            contentAlignment = Alignment.Center
-        ) {
-            room.host?.let { host ->
-                Avatar(host.name.take(1), 70, host.avatar, host.activeCosmetics)
-            } ?: Icon(Icons.Filled.Mic, contentDescription = "Empty room", modifier = Modifier.size(36.dp), tint = Color.White.copy(alpha = 0.85f))
-        }
-        Column(
-            Modifier.weight(1f).fillMaxSize().padding(start = 13.dp, end = 12.dp, top = 13.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                Text(room.title.ifBlank { "Live voice room" }, color = Color.White, fontSize = 16.sp, lineHeight = 19.sp, fontWeight = FontWeight.Black, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                Text("● LIVE", color = Color.White.copy(alpha = 0.88f), fontSize = 9.sp, fontWeight = FontWeight.Black)
-            }
-            Text(room.host?.name?.let { "Hosted by $it" } ?: room.category.ifBlank { "Join the conversation" }, color = Color.White.copy(alpha = 0.76f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Modifier.align(Alignment.TopEnd).size(190.dp).offset(x = 46.dp, y = (-55).dp)
+                .clip(CircleShape).background(Color.White.copy(alpha = 0.08f))
+        )
+        Box(
+            Modifier.align(Alignment.BottomStart).size(150.dp).offset(x = (-50).dp, y = 68.dp)
+                .clip(CircleShape).background(Color(0xFFFF69C7).copy(alpha = 0.18f))
+        )
+        Column(Modifier.fillMaxWidth().padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Groups, contentDescription = null, modifier = Modifier.size(17.dp), tint = Color.White.copy(alpha = 0.9f))
-                Text(" ${room.participants}", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.weight(1f))
-                Row(Modifier.clip(CircleShape).background(Background.copy(alpha = 0.68f)).padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.ChatBubble, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.White)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Chat", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Box(
+                    Modifier.size(44.dp).clip(RoundedCornerShape(14.dp))
+                        .background(Brush.linearGradient(listOf(Color(0xFFFF5F84), Color(0xFFAA35F4)))),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Y", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Black)
                 }
+                Text(
+                    "Yugm",
+                    color = Color.White,
+                    fontSize = 25.sp,
+                    fontWeight = FontWeight.Black,
+                    modifier = Modifier.padding(start = 10.dp)
+                )
+                Spacer(Modifier.weight(1f))
+                DiscoverHeaderAction(Icons.Filled.Search, "Search", onSearch)
+                Spacer(Modifier.width(9.dp))
+                DiscoverHeaderAction(Icons.Filled.Notifications, "Notifications", onNotifications, unreadCount)
             }
-        }
-    }
-}
-
-@Composable
-private fun HomeEmptyRooms(error: String?, onCreateRoom: () -> Unit, onRetry: () -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().padding(horizontal = 18.dp).clip(RoundedCornerShape(20.dp))
-            .background(SurfaceElevated).padding(20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Icon(Icons.Filled.Mic, contentDescription = null, modifier = Modifier.size(36.dp), tint = Pink)
-        Text(if (error == null) "No rooms are live right now" else "Couldn't load rooms", color = TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
-        Text(error ?: "Start a room and invite people to join.", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
-        TextButton(onClick = if (error == null) onCreateRoom else onRetry) {
-            Text(if (error == null) "Create a room" else "Try again", color = Pink, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
-private fun HomeOnlineBubble(host: Host, onlineCount: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Row(
-        modifier.widthIn(min = 190.dp, max = 245.dp).height(70.dp)
-            .clip(RoundedCornerShape(topStart = 38.dp, bottomStart = 38.dp, topEnd = 0.dp, bottomEnd = 0.dp))
-            .background(Brush.horizontalGradient(listOf(PrimaryPurple, Color(0xFF9B3FE5))))
-            .semantics { contentDescription = "$onlineCount people online. Open ${host.name}'s profile" }
-            .clickable(role = Role.Button, onClickLabel = "View online people", onClick = onClick)
-            .padding(start = 8.dp, end = 15.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Avatar(host.name.take(1), 48, host.avatar, host.activeCosmetics)
-        Column(Modifier.weight(1f).padding(start = 9.dp)) {
+            Spacer(Modifier.height(18.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Groups, contentDescription = null, modifier = Modifier.size(17.dp), tint = Color.White)
-                Text(" $onlineCount", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black)
-            }
-            Text("Online now", color = Color.White.copy(alpha = 0.72f), fontSize = 12.sp)
-        }
-        Icon(Icons.Filled.ChevronRight, contentDescription = null, modifier = Modifier.size(22.dp), tint = Color.White)
-    }
-}
-
-@Composable
-private fun AmbientBackdrop() {
-    Canvas(Modifier.fillMaxSize()) {
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(PrimaryPurple.copy(alpha = 0.18f), Color.Transparent),
-                center = Offset(size.width * 0.88f, size.height * 0.18f),
-                radius = size.width * 0.72f
-            ),
-            radius = size.width * 0.72f,
-            center = Offset(size.width * 0.88f, size.height * 0.18f)
-        )
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(Pink.copy(alpha = 0.10f), Color.Transparent),
-                center = Offset(size.width * 0.05f, size.height * 0.60f),
-                radius = size.width * 0.54f
-            ),
-            radius = size.width * 0.54f,
-            center = Offset(size.width * 0.05f, size.height * 0.60f)
-        )
-    }
-}
-
-@Composable
-private fun DiscoveryHeader(
-    unreadCount: Int,
-    onNotifications: () -> Unit,
-    onCreateRoom: () -> Unit,
-    onProfile: () -> Unit
-) {
-    val yourProfileLabel = stringResource(R.string.a11y_your_profile)
-    Column(
-        modifier = Modifier.padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            BrandHeader(compact = true)
-            Spacer(Modifier.weight(1f))
-            HeaderAction(icon = Icons.Filled.Notifications, accessibilityLabel = if (unreadCount > 0) stringResource(R.string.a11y_notifications_unread, unreadCount) else stringResource(R.string.a11y_notifications), badge = unreadCount, onClick = onNotifications)
-            Spacer(Modifier.width(10.dp))
-            HeaderAction(icon = Icons.Filled.Add, accessibilityLabel = stringResource(R.string.a11y_create_room), onClick = onCreateRoom, gradient = true)
-            Spacer(Modifier.width(10.dp))
-            Surface(
-                onClick = onProfile,
-                shape = CircleShape,
-                color = SurfaceElevated,
-                border = BorderStroke(1.dp, Pink.copy(alpha = 0.7f)),
-                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics { contentDescription = yourProfileLabel }
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text("Y", color = Color.White, fontWeight = FontWeight.Black)
-                    Box(
-                        Modifier
-                            .align(Alignment.BottomEnd)
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(Success)
-                            .border(2.dp, Background, CircleShape)
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Find your people.",
+                        color = Color.White,
+                        fontSize = 28.sp,
+                        lineHeight = 32.sp,
+                        fontWeight = FontWeight.Black,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        "Make new connections, every day.",
+                        color = Color.White.copy(alpha = 0.88f),
+                        fontSize = 14.sp,
+                        lineHeight = 19.sp,
+                        modifier = Modifier.padding(top = 7.dp),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
+                ConversationIllustration()
             }
-        }
-        Column {
-            Text("Good evening 👋", color = TextMuted, fontSize = 14.sp)
-            Text("Find your room.", color = TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.Black)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Row(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.18f))
+                        .border(1.dp, Color.White.copy(alpha = 0.28f), CircleShape)
+                        .clickable(role = Role.Button, onClickLabel = "View online people", onClick = onOnline)
+                        .semantics(mergeDescendants = true) { contentDescription = "$onlineCount people online" }
+                        .padding(horizontal = 13.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(Color(0xFF43E78C)))
+                    Text("$onlineCount online", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun HeaderAction(
-    icon: ImageVector,
-    accessibilityLabel: String,
-    badge: Int = 0,
-    gradient: Boolean = false,
-    onClick: () -> Unit
-) {
+private fun DiscoverHeaderAction(icon: ImageVector, label: String, onClick: () -> Unit, badge: Int = 0) {
     Box {
         Box(
-            modifier = Modifier
-                .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                .clip(RoundedCornerShape(15.dp))
-                .then(
-                    if (gradient) Modifier.background(Brush.linearGradient(listOf(Pink, PrimaryPurple)))
-                    else Modifier.background(SurfaceElevated)
-                )
-                .border(1.dp, BorderColor, RoundedCornerShape(15.dp))
-                .semantics { contentDescription = accessibilityLabel }
-                .clickable(role = Role.Button, onClickLabel = accessibilityLabel, onClick = onClick),
+            Modifier.size(48.dp).clip(RoundedCornerShape(16.dp))
+                .background(Color.White.copy(alpha = 0.18f))
+                .border(1.dp, Color.White.copy(alpha = 0.26f), RoundedCornerShape(16.dp))
+                .semantics { contentDescription = label }
+                .clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp), tint = Color.White)
+            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(23.dp))
         }
         if (badge > 0) {
             Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = 4.dp, y = (-4).dp)
-                    .size(18.dp)
-                    .clip(CircleShape)
-                    .background(Danger)
-                    .border(1.5.dp, Color.White.copy(alpha = 0.9f), CircleShape),
+                Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-3).dp).size(17.dp)
+                    .clip(CircleShape).background(Danger).border(1.5.dp, Color.White, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Text(if (badge > 9) "9+" else badge.toString(), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Black)
@@ -686,255 +456,279 @@ private fun HeaderAction(
 }
 
 @Composable
-private fun SearchPill(onSearch: () -> Unit) {
-    GlassCard(
-        onClick = onSearch,
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
+private fun ConversationIllustration() {
+    Box(Modifier.size(width = 124.dp, height = 112.dp)) {
+        Box(
+            Modifier.align(Alignment.TopStart).size(width = 88.dp, height = 66.dp)
+                .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp, bottomEnd = 24.dp, bottomStart = 7.dp))
+                .background(Color.White.copy(alpha = 0.3f))
+                .border(1.dp, Color.White.copy(alpha = 0.55f), RoundedCornerShape(24.dp)),
+            contentAlignment = Alignment.Center
+        ) { BubbleDots() }
+        Box(
+            Modifier.align(Alignment.BottomEnd).size(width = 88.dp, height = 62.dp)
+                .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp, bottomStart = 22.dp, bottomEnd = 7.dp))
+                .background(Color(0xFFFF82D1).copy(alpha = 0.5f))
+                .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(22.dp)),
+            contentAlignment = Alignment.Center
+        ) { BubbleDots(dotColor = Color.White.copy(alpha = 0.8f)) }
+        Text("✦", modifier = Modifier.align(Alignment.TopEnd).offset(y = (-4).dp), color = Color(0xFFFFE795), fontSize = 28.sp)
+    }
+}
+
+@Composable
+private fun BubbleDots(dotColor: Color = Color.White) {
+    Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+        repeat(3) { Box(Modifier.size(9.dp).clip(CircleShape).background(dotColor)) }
+    }
+}
+
+@Composable
+private fun DiscoverActionCard(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    colors: List<Color>,
+    modifier: Modifier = Modifier,
+    loading: Boolean = false,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = modifier.heightIn(min = 108.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(Brush.linearGradient(colors))
+            .border(1.dp, Color.White.copy(alpha = 0.26f), RoundedCornerShape(24.dp))
+            .semantics(mergeDescendants = true) { contentDescription = "$title. $subtitle" }
+            .clickable(role = Role.Button, onClickLabel = title, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(9.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().height(56.dp)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text(title, color = Color.White, fontSize = 17.sp, lineHeight = 20.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, color = Color.White.copy(alpha = 0.88f), fontSize = 12.sp, lineHeight = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        Box(
+            Modifier.size(48.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.2f))
+                .border(1.dp, Color.White.copy(alpha = 0.3f), CircleShape),
+            contentAlignment = Alignment.Center
         ) {
-            SearchGlyph()
-            Text(
-                "Search rooms, people, or topics…",
-                color = TextMuted,
-                fontSize = 14.sp,
-                modifier = Modifier.padding(start = 12.dp).weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text("⌁", color = Pink, fontSize = 22.sp)
+            if (loading) CircularProgressIndicator(Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
+            else Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(23.dp))
         }
     }
 }
 
 @Composable
-private fun SearchGlyph() {
-    val mutedColor = TextMuted
-    Canvas(Modifier.size(20.dp)) {
-        drawCircle(color = mutedColor, radius = size.minDimension * 0.34f, style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
-        drawLine(
-            color = mutedColor,
-            start = Offset(size.width * 0.68f, size.height * 0.68f),
-            end = Offset(size.width * 0.94f, size.height * 0.94f),
-            strokeWidth = 2.dp.toPx()
-        )
+private fun DiscoverSectionHeading(title: String, subtitle: String) {
+    Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 2.dp)) {
+        Text(title, color = TextPrimary, fontSize = 23.sp, fontWeight = FontWeight.Black)
+        Text(subtitle, color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 3.dp))
     }
 }
 
 @Composable
 private fun FilterRail(selected: String, onSelected: (String) -> Unit) {
-    Row(
-        modifier = Modifier.horizontalScroll(rememberScrollState()).selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    LazyRow(
+        modifier = Modifier.fillMaxWidth().selectableGroup(),
+        contentPadding = PaddingValues(horizontal = 18.dp),
+        horizontalArrangement = Arrangement.spacedBy(9.dp)
     ) {
-        discoveryFilters.forEach { filter ->
-            val active = filter.label == selected
+        items(discoveryFilters, key = { it.label }) { filter ->
+            val active = selected == filter.label
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
-                modifier = Modifier
-                    .heightIn(min = 48.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .then(
-                        if (active) Modifier.background(Brush.linearGradient(listOf(Pink, PrimaryPurple)))
-                        else Modifier.background(SurfaceElevated)
-                    )
-                    .border(1.dp, if (active) Pink.copy(alpha = 0.45f) else BorderColor, RoundedCornerShape(14.dp))
+                modifier = Modifier.heightIn(min = 44.dp)
+                    .clip(CircleShape)
+                    .background(if (active) Brush.horizontalGradient(listOf(PrimaryPurple, Color(0xFF922CF3))) else Brush.horizontalGradient(listOf(SurfaceElevated, SurfaceElevated)))
+                    .border(1.dp, if (active) PrimaryPurple.copy(alpha = 0.55f) else BorderColor, CircleShape)
                     .selectable(selected = active, role = Role.Tab) { onSelected(filter.label) }
                     .semantics(mergeDescendants = true) {
                         contentDescription = filter.label
                         selectedSemantics = active
                     }
-                    .padding(horizontal = 13.dp)
+                    .padding(horizontal = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(7.dp)
             ) {
-                Icon(filter.icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = if (active) Color.White else TextMuted)
-                Text(filter.label, color = if (active) Color.White else TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Icon(filter.icon, contentDescription = null, tint = if (active) Color.White else TextMuted, modifier = Modifier.size(18.dp))
+                Text(filter.label, color = if (active) Color.White else TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
             }
         }
     }
 }
 
 @Composable
-private fun FeaturedRoomCard(room: Room, onOpen: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .padding(horizontal = 20.dp)
-            .fillMaxWidth()
-            .height(246.dp)
-            .shadow(24.dp, RoundedCornerShape(26.dp), ambientColor = PrimaryPurple.copy(alpha = 0.35f))
-            .clip(RoundedCornerShape(26.dp))
-            .border(1.dp, Pink.copy(alpha = 0.5f), RoundedCornerShape(26.dp))
-            .clickable(onClick = onOpen)
+private fun RecommendedRoomCard(room: Room, onOpen: () -> Unit, onJoin: () -> Unit) {
+    val fallbackGradient = room.gradient.takeIf { it.size >= 2 } ?: listOf(Color(0xFF7B40DB), Color(0xFFCB3A9D))
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+            .heightIn(min = 148.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(SurfaceElevated)
+            .border(1.dp, BorderColor, RoundedCornerShape(24.dp))
+            .semantics { contentDescription = "${room.title}, ${room.participants} people live" }
+            .clickable(role = Role.Button, onClickLabel = "Open ${room.title}", onClick = onOpen)
+            .padding(11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(13.dp)
     ) {
-        Image(
-            painter = painterResource(android.R.drawable.ic_menu_gallery),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
-        )
         Box(
-            Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.horizontalGradient(
-                        listOf(
-                            Background.copy(alpha = 0.96f),
-                            Background.copy(alpha = 0.70f),
-                            Background.copy(alpha = 0.10f)
-                        )
-                    )
-                )
-        )
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Brush.verticalGradient(listOf(Color.Transparent, Background.copy(alpha = 0.74f))))
-        )
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier.size(width = 104.dp, height = 124.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(Brush.linearGradient(fallbackGradient)),
+            contentAlignment = Alignment.Center
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("✦  FEATURED LIVE", color = Color(0xFFD787FF), fontSize = 12.sp, fontWeight = FontWeight.Black)
-                Spacer(Modifier.weight(1f))
-                LiveBadge()
+            if (!room.coverImage.isNullOrBlank()) {
+                AsyncImage(model = room.coverImage, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+            } else {
+                Icon(
+                    if (room.type == RoomType.Video) Icons.Filled.Videocam else Icons.Filled.Mic,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.92f),
+                    modifier = Modifier.size(38.dp)
+                )
             }
+            Box(
+                Modifier.align(Alignment.TopStart).padding(7.dp).clip(CircleShape)
+                    .background(Color(0xFFE34A66)).padding(horizontal = 8.dp, vertical = 4.dp)
+            ) { Text("LIVE", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Black) }
+        }
+        Column(Modifier.weight(1f).heightIn(min = 118.dp), verticalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                room.title.ifBlank { "Live conversation" },
+                color = TextPrimary,
+                fontSize = 17.sp,
+                lineHeight = 20.sp,
+                fontWeight = FontWeight.Black,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                room.host?.let { host ->
+                    Avatar(host.name.take(1).ifBlank { "Y" }, 30, host.avatar, host.activeCosmetics)
+                    Text(
+                        host.name.ifBlank { "Yugm host" },
+                        color = TextPrimary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = 7.dp).weight(1f)
+                    )
+                } ?: Text(room.category.ifBlank { "Open room" }, color = TextMuted, fontSize = 12.sp, modifier = Modifier.weight(1f))
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                RoomInfoChip(
+                    icon = if (room.type == RoomType.Video) Icons.Filled.Videocam else Icons.Filled.Mic,
+                    label = room.category.ifBlank { if (room.type == RoomType.Video) "Video" else "Voice" }
+                )
+                RoomInfoChip(icon = Icons.Filled.Groups, label = room.participants.toString())
+                Spacer(Modifier.weight(1f))
+                Box(
+                    Modifier.heightIn(min = 42.dp).widthIn(min = 68.dp)
+                        .clip(CircleShape)
+                        .background(Brush.horizontalGradient(listOf(PrimaryPurple, Color(0xFF8A2DE8))))
+                        .clickable(role = Role.Button, onClickLabel = "Join ${room.title}", onClick = onJoin)
+                        .padding(horizontal = 15.dp, vertical = 9.dp),
+                    contentAlignment = Alignment.Center
+                ) { Text("Join", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black) }
+            }
+        }
+    }
+}
 
-            Column {
-                Text(
-                    room.title.ifBlank { "Late Night Talks ✨" },
-                    color = Color.White,
-                    fontSize = 25.sp,
-                    lineHeight = 28.sp,
-                    fontWeight = FontWeight.Black,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    room.description.ifBlank { "Deep conversations, good vibes and new people." },
-                    color = Color.White.copy(alpha = 0.76f),
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                    modifier = Modifier.padding(top = 5.dp).fillMaxWidth(0.72f),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 12.dp)
+@Composable
+private fun RoomInfoChip(icon: ImageVector, label: String) {
+    Row(
+        modifier = Modifier.clip(CircleShape).background(PrimaryPurple.copy(alpha = 0.1f)).padding(horizontal = 9.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        Icon(icon, contentDescription = null, tint = PrimaryPurple, modifier = Modifier.size(15.dp))
+        Text(label, color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun DiscoverLoadingState() {
+    Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 34.dp), contentAlignment = Alignment.Center) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            CircularProgressIndicator(Modifier.size(22.dp), color = PrimaryPurple, strokeWidth = 2.dp)
+            Text("Finding conversations for you…", color = TextMuted, fontSize = 14.sp)
+        }
+    }
+}
+
+@Composable
+private fun EmptyRecommendations(
+    filter: String,
+    hasCity: Boolean,
+    error: String?,
+    onAddCity: () -> Unit,
+    onCreateRoom: () -> Unit,
+    onRetry: () -> Unit
+) {
+    val nearbyNeedsCity = filter == "Nearby" && !hasCity
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp)
+            .clip(RoundedCornerShape(22.dp)).background(SurfaceElevated).border(1.dp, BorderColor, RoundedCornerShape(22.dp))
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            when {
+                nearbyNeedsCity -> "Find conversations close to you"
+                error != null -> "We couldn’t load rooms"
+                else -> "No ${filter.lowercase()} rooms are live right now"
+            },
+            color = TextPrimary,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            when {
+                nearbyNeedsCity -> "Add your city to get recommendations from people nearby."
+                error != null -> error
+                else -> "Check back soon, or start a room and bring people together."
+            },
+            color = TextMuted,
+            fontSize = 13.sp,
+            lineHeight = 18.sp
+        )
+        TextButton(
+            onClick = when {
+                nearbyNeedsCity -> onAddCity
+                error != null -> onRetry
+                else -> onCreateRoom
+            }
+        ) {
+            Text(when {
+                nearbyNeedsCity -> "Add my city"
+                error != null -> "Try again"
+                else -> "Create a room"
+            }, color = PrimaryPurple, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun ExploreMoreRow(actions: List<ExploreAction>) {
+    Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
+        Text("Explore more", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 20.dp))
+        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(actions, key = { it.label }) { action ->
+                Column(
+                    modifier = Modifier.width(76.dp).heightIn(min = 76.dp)
+                        .clip(RoundedCornerShape(18.dp)).background(SurfaceElevated).border(1.dp, BorderColor, RoundedCornerShape(18.dp))
+                        .clickable(role = Role.Button, onClickLabel = action.label, onClick = action.onClick)
+                        .padding(horizontal = 8.dp, vertical = 10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
-                    room.host?.let { host ->
-                        Avatar(
-                            initial = host.name.firstOrNull()?.toString() ?: "?",
-                            size = 34,
-                            imageUrl = host.avatar,
-                            cosmetics = host.activeCosmetics,
-                            isSpeaking = false
-                        )
-                    }
-                    Column(Modifier.padding(start = 4.dp).weight(1f)) {
-                        Text(room.host?.name ?: "Yugm host", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        Text("${formatAudience(room.participants)} listening", color = Color.White.copy(alpha = 0.62f), fontSize = 11.sp)
-                    }
-                    Button(
-                        onClick = onOpen,
-                        contentPadding = PaddingValues(horizontal = 17.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                        modifier = Modifier
-                            .heightIn(min = 48.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Brush.horizontalGradient(listOf(PrimaryPurple, Pink)))
-                    ) {
-                        Text("Join room", color = Color.White, fontWeight = FontWeight.Black, fontSize = 13.sp)
-                    }
+                    Icon(action.icon, contentDescription = null, tint = PrimaryPurple, modifier = Modifier.size(22.dp))
+                    Text(action.label, color = TextPrimary, fontSize = 10.sp, lineHeight = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
     }
-}
-
-@Composable
-private fun DiscoverySectionHeader(title: String, subtitle: String, onSeeAll: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 2.dp),
-        verticalAlignment = Alignment.Bottom
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, color = TextPrimary, fontSize = 19.sp, fontWeight = FontWeight.Black)
-            Text(subtitle, color = TextMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
-        }
-        Text("See all  ›", color = Pink, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable(onClick = onSeeAll))
-    }
-}
-
-@Composable
-private fun NearbyHost(host: Host, onOpen: () -> Unit, onFollow: () -> Unit) {
-    val hostStatusLabel = stringResource(if (host.isOnline) R.string.a11y_host_online else R.string.a11y_host_away, host.name)
-    val openProfileLabel = stringResource(R.string.a11y_open_profile, host.name)
-    val followLabel = stringResource(if (host.isFollowing) R.string.a11y_unfollow_user else R.string.a11y_follow_user, host.name)
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(76.dp).heightIn(min = 48.dp)
-            .semantics(mergeDescendants = true) {
-                contentDescription = hostStatusLabel
-            }
-            .clickable(role = Role.Button, onClickLabel = openProfileLabel, onClick = onOpen)
-    ) {
-        Box {
-            Avatar(
-                initial = host.name.firstOrNull()?.toString() ?: "?",
-                size = 62,
-                imageUrl = host.avatar,
-                cosmetics = host.activeCosmetics
-            )
-            Box(
-                Modifier
-                    .align(Alignment.BottomEnd)
-                    .size(13.dp)
-                    .clip(CircleShape)
-                    .background(if (host.isOnline) Success else Gold)
-                    .border(2.dp, Background, CircleShape)
-            )
-        }
-        Text(host.name, color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(
-            if (host.isFollowing) "Following" else host.city.ifBlank { "Nearby" },
-            color = if (host.isFollowing) Pink else TextMuted,
-            fontSize = 10.sp,
-            maxLines = 1,
-            modifier = Modifier.heightIn(min = 48.dp)
-                .semantics { contentDescription = followLabel }
-                .clickable(role = Role.Button, onClickLabel = followLabel, onClick = onFollow)
-        )
-    }
-}
-
-@Composable
-private fun TrendingHost(host: Host, onOpen: () -> Unit) {
-    val profileLabel = stringResource(R.string.a11y_host_followers, host.name, formatAudience(host.followers))
-    val openProfileLabel = stringResource(R.string.a11y_open_profile, host.name)
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(82.dp).heightIn(min = 48.dp).semantics(mergeDescendants = true) {
-        contentDescription = profileLabel
-    }.clickable(role = Role.Button, onClickLabel = openProfileLabel, onClick = onOpen)) {
-        Avatar(
-            initial = host.name.firstOrNull()?.toString() ?: "?",
-            size = 68,
-            imageUrl = host.avatar,
-            cosmetics = host.activeCosmetics,
-            isSpeaking = false
-        )
-        Text(host.name, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text("${formatAudience(host.followers)} followers", color = TextMuted, fontSize = 9.sp, maxLines = 1)
-    }
-}
-
-private fun formatAudience(value: Int): String = when {
-    value >= 1_000_000 -> "${value / 1_000_000}.${(value % 1_000_000) / 100_000}M"
-    value >= 1_000 -> "${value / 1_000}.${(value % 1_000) / 100}K"
-    else -> value.toString()
 }

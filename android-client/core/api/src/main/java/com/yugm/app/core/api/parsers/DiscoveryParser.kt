@@ -26,6 +26,7 @@ fun JSONObject.toExperienceHome(): ExperienceHome {
     return ExperienceHome(
         userId = userJson.optString("_id", userJson.optString("id", "")),
         userRole = userJson.optString("role", "USER"),
+        city = userJson.optString("city", ""),
         profileCompletion = optJSONObject("profileCompletion")?.toProfileCompletion() ?: ProfileCompletion(),
         level = optJSONObject("level")?.toLevelStatus() ?: LevelStatus(),
         streakCount = userJson.optInt("streakCount", 0),

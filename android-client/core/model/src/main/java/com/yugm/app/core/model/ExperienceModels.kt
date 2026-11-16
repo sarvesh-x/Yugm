@@ -10,6 +10,7 @@ data class ExperienceFeedItem(
 data class ExperienceHome(
     val userId: String = "",
     val userRole: String = "USER",
+    val city: String = "",
     val profileCompletion: ProfileCompletion = ProfileCompletion(),
     val level: LevelStatus = LevelStatus(),
     val streakCount: Int = 0,
