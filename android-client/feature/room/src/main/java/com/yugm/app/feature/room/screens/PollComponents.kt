@@ -139,12 +139,14 @@ fun PollCard(
     }
 
     var pendingVoteIndex by rememberSaveable(poll.id) { mutableStateOf<Int?>(null) }
+    var closeRequested by rememberSaveable(poll.id) { mutableStateOf(false) }
     val voteTotal = poll.options.sumOf { it.votes }
     val total = voteTotal.coerceAtLeast(1)
     val hasVoted = currentUserId.isNotBlank() && currentUserId in poll.voters
 
     LaunchedEffect(poll.id, hasVoted, poll.isActive) {
         if (hasVoted || !poll.isActive) pendingVoteIndex = null
+        if (!poll.isActive) closeRequested = false
     }
 
     GlassCard {
@@ -154,7 +156,16 @@ fun PollCard(
                 Spacer(Modifier.weight(1f))
                 Text(if (!poll.isActive) "Ended • $voteTotal votes" else "$voteTotal votes", color = TextMuted, fontSize = 10.sp)
                 if (isHost && poll.isActive) {
-                    Text("  Close", color = Pink, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable(onClick = onClose))
+                    Text(
+                        if (closeRequested) "  Closing..." else "  Close",
+                        color = if (closeRequested) TextMuted else Pink,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = if (closeRequested) Modifier else Modifier.clickable {
+                            closeRequested = true
+                            onClose()
+                        }
+                    )
                 }
             }
             Text(poll.question, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Black, lineHeight = 19.sp)

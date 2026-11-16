@@ -47,6 +47,7 @@ import java.util.TimeZone
 @Composable
 fun VoicePollScreen(
     token: String,
+    userId: String = "",
     onBack: () -> Unit,
     onPollDetail: (String) -> Unit
 ) {
@@ -155,9 +156,11 @@ fun VoicePollScreen(
                                 items(displayPolls, key = { it.id }) { poll ->
                                     val totalVotes = poll.options.sumOf { it.votes }
                                     val expired = runCatching { java.time.Instant.parse(poll.expiresAt).isBefore(java.time.Instant.now()) }.getOrDefault(false)
+                                    val hasVoted = userId.isNotBlank() && poll.voters.contains(userId)
                                     val status = when {
                                         !poll.isActive -> "Closed"
                                         expired -> "Expired"
+                                        hasVoted -> "Voted"
                                         showMine -> "Active"
                                         else -> null
                                     }

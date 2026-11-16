@@ -282,6 +282,7 @@ fun NavGraphBuilder.socialNavGraph(
     composable(Screen.VoicePolls.route) {
         VoicePollScreen(
             token = authTokenProvider(),
+            userId = currentUserIdProvider(),
             onBack = { navController.popBackStack() },
             onPollDetail = { pollId -> navController.navigate(Screen.VoicePollDetail.createRoute(pollId)) }
         )
