@@ -262,7 +262,7 @@ fun DiscoverScreen(
                     ) {
                         HomeShortcut("Ranking", Icons.Filled.EmojiEvents, Modifier.weight(1f), onLeaderboards)
                         HomeShortcut("Blind Date", Icons.Filled.Favorite, Modifier.weight(1f), onDating)
-                        HomeShortcut("Game", Icons.Filled.SportsEsports, Modifier.weight(1f), onGames)
+                        HomeShortcut("Yugm Arcade", Icons.Filled.SportsEsports, Modifier.weight(1f), onGames)
                         HomeShortcut("Clans", Icons.Filled.Groups, Modifier.weight(1f), onClans)
                     }
                 }

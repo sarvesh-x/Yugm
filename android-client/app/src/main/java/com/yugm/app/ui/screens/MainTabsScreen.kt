@@ -174,6 +174,9 @@ fun MainTabsScreen(
                 TAB_PROFILE -> {
                     val profileUserId = currentUserId
                     if (profileUserId.isBlank()) {
+                        LaunchedEffect(Unit) {
+                            navController.navigate(Screen.ProfileSetup.route) { launchSingleTop = true }
+                        }
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text("Complete your profile to continue")
                         }
