@@ -724,6 +724,21 @@ usersRouter.post("/messages/read-all", asyncHandler(async (req: AuthRequest, res
   sendOk(res, { updated: result.modifiedCount });
 }));
 
+usersRouter.post("/messages/:userId/read", asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.userId)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
+  const unavailable = await User.exists({ _id: req.params.userId, deletionRequestedAt: { $type: "date" } });
+  if (unavailable) throw new HttpError(404, "This account is no longer available", ErrorCode.NOT_FOUND);
+  const readResult = await DirectMessage.updateMany(
+    { senderId: req.params.userId, receiverId: req.user!.id, read: false, hiddenFor: { $ne: req.user!._id } },
+    { $set: { read: true } }
+  );
+  const readThrough = new Date().toISOString();
+  if (readResult.modifiedCount > 0) {
+    emitUser(req.params.userId, socketEvents.directMessageRead, { partnerId: req.user!.id, readThrough });
+  }
+  sendOk(res, { updated: readResult.modifiedCount, readThrough });
+}));
+
 usersRouter.get("/messages/unread-counts", asyncHandler(async (req: AuthRequest, res) => {
   const unavailableUsers = await User.distinct("_id", { deletionRequestedAt: { $type: "date" } });
   const rows = await DirectMessage.aggregate([

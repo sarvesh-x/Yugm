@@ -350,6 +350,7 @@ object YugmApi : IYugmApi {
     override suspend fun cancelRandomFriendSearch(token: String) = UserApi.cancelRandomFriendSearch(token)
     override suspend fun reactToDirectMessage(token: String, userId: String, messageId: String, type: String): DirectMessage = UserApi.reactToDirectMessage(token, userId, messageId, type)
     override suspend fun markAllMessagesRead(token: String) = UserApi.markAllMessagesRead(token)
+    override suspend fun markConversationRead(token: String, partnerId: String) = UserApi.markConversationRead(token, partnerId)
     override suspend fun getRecentMessages(token: String, before: String?, limit: Int?): List<DirectMessage> = UserApi.getRecentMessages(token, before, limit)
     override suspend fun getRecentMessagesPage(token: String, before: String?, limit: Int?) = UserApi.getRecentMessagesPage(token, before, limit)
 

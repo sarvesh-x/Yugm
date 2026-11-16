@@ -95,6 +95,7 @@ class ChatViewModel @Inject constructor(
     private var currentUserId = ""
     private var partnerUserId = ""
     private var activeSearchQuery = ""
+    private var isMarkingConversationRead = false
 
     init {
         viewModelScope.launch {
@@ -103,6 +104,9 @@ class ChatViewModel @Inject constructor(
                     is SocketEvent.DirectMessageReceived -> {
                         if (event.message.belongsToConversation(currentUserId, partnerUserId)) {
                             replaceOrAppendMessage(event.message)
+                            if (event.message.senderId == partnerUserId && event.message.receiverId == currentUserId && !event.message.read) {
+                                markConversationReadIfNeeded()
+                            }
                         }
                     }
                     is SocketEvent.DirectMessageDeleted -> {
@@ -215,6 +219,7 @@ class ChatViewModel @Inject constructor(
             } finally {
                 isLoading = false
             }
+            markConversationReadIfNeeded()
             error = loadError?.message.orEmpty()
         }
     }
@@ -547,6 +552,21 @@ class ChatViewModel @Inject constructor(
     private fun removeMessages(ids: Set<String>) {
         messages.removeAll { it.id in ids }
         searchResults = searchResults?.filterNot { it.id in ids }
+    }
+
+    private fun markConversationReadIfNeeded() {
+        val token = authToken
+        val partnerId = partnerUserId
+        val userId = currentUserId
+        if (token.isBlank() || partnerId.isBlank() || userId.isBlank() || isMarkingConversationRead) return
+        val hasUnreadIncoming = messages.any { it.senderId == partnerId && it.receiverId == userId && !it.read }
+        if (!hasUnreadIncoming) return
+        viewModelScope.launch {
+            if (isMarkingConversationRead) return@launch
+            isMarkingConversationRead = true
+            runCatching { withContext(Dispatchers.IO) { yugmApi.markConversationRead(token, partnerId) } }
+            isMarkingConversationRead = false
+        }
     }
 
     override fun onCleared() {

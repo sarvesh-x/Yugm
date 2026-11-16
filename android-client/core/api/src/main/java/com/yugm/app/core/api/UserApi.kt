@@ -354,6 +354,10 @@ object UserApi {
         YugmHttpClient.post("/users/messages/read-all", token, JSONObject())
     }
 
+    suspend fun markConversationRead(token: String, partnerId: String) {
+        YugmHttpClient.post("/users/messages/$partnerId/read", token, JSONObject())
+    }
+
     suspend fun getRecentMessages(token: String, before: String? = null, limit: Int? = null): List<DirectMessage> =
         getRecentMessagesPage(token, before, limit).messages
 

@@ -345,6 +345,7 @@ suspend fun leaderboard(): RoomLeaderboard
     suspend fun cancelRandomFriendSearch(token: String)
     suspend fun reactToDirectMessage(token: String, userId: String, messageId: String, type: String = "heart"): DirectMessage
     suspend fun markAllMessagesRead(token: String)
+    suspend fun markConversationRead(token: String, partnerId: String)
     suspend fun getRecentMessages(token: String, before: String? = null, limit: Int? = null): List<DirectMessage>
     suspend fun getRecentMessagesPage(token: String, before: String? = null, limit: Int? = null): PagedDirectMessages
 
