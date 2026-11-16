@@ -282,7 +282,7 @@ class ChatListViewModel @Inject constructor(
             pendingRecentRefreshPartnerId = null
             if (!targetPartnerId.isNullOrBlank()) {
                 runCatching {
-                    withContext(Dispatchers.IO) { yugmApi.conversation(token, targetPartnerId, limit = 1) }
+                    withContext(Dispatchers.IO) { yugmApi.conversation(token, targetPartnerId, limit = 1, markRead = false) }
                 }.onSuccess { conversation ->
                     val latest = conversation.messages.lastOrNull()
                     val withoutPartner = recentMessages.filterNot { msg ->
