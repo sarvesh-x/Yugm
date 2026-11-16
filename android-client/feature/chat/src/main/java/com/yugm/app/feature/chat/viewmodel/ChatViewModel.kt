@@ -109,6 +109,12 @@ class ChatViewModel @Inject constructor(
                             }
                         }
                     }
+                    is SocketEvent.DirectMessageReactionUpdated -> {
+                        val belongs = event.message.belongsToConversation(currentUserId, partnerUserId) || event.partnerId == partnerUserId
+                        if (belongs && event.message.id.isNotBlank() && messages.any { it.id == event.message.id }) {
+                            replaceOrAppendMessage(event.message)
+                        }
+                    }
                     is SocketEvent.DirectMessageDeleted -> {
                         if (event.partnerId == partnerUserId) removeMessages(setOf(event.messageId))
                     }

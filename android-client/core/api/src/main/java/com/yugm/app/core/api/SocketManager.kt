@@ -17,6 +17,7 @@ import javax.inject.Singleton
 
 sealed class SocketEvent {
     data class DirectMessageReceived(val message: DirectMessage) : SocketEvent()
+    data class DirectMessageReactionUpdated(val message: DirectMessage, val partnerId: String = "") : SocketEvent()
     data class DirectMessageDeleted(val messageId: String, val partnerId: String) : SocketEvent()
     data class DirectConversationDeleted(val partnerId: String) : SocketEvent()
     data class DirectMessagesRead(val partnerId: String, val readThrough: String) : SocketEvent()
@@ -87,8 +88,9 @@ class SocketManager @Inject constructor() {
             socket?.on("direct:reaction:new") { args ->
                 val payload = args.firstOrNull() as? JSONObject ?: return@on
                 val messageJson = payload.optJSONObject("message") ?: payload
+                val partnerId = payload.optString("partnerId", "")
                 runCatching { messageJson.toDirectMessage() }
-                    .onSuccess { _events.tryEmit(SocketEvent.DirectMessageReceived(it)) }
+                    .onSuccess { _events.tryEmit(SocketEvent.DirectMessageReactionUpdated(it, partnerId)) }
                     .onFailure { Timber.tag("SocketManager").e(it, "Failed to parse direct message reaction") }
             }
             socket?.on("direct:message:deleted") { args ->

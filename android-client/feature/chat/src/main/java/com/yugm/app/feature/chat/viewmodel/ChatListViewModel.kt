@@ -73,10 +73,15 @@ class ChatListViewModel @Inject constructor(
                     }
                     is SocketEvent.DirectMessageReceived -> {
                         val msg = event.message
-                        val isNew = msg.id.isBlank() || recentMessages.none { it.id == msg.id }
-                        recentMessages = (listOf(msg) + recentMessages.filterNot { it.id == msg.id }).sortedByDescending { it.createdAt }
+                        val existingIndex = recentMessages.indexOfFirst { it.id == msg.id && msg.id.isNotBlank() }
+                        val isNewMessage = existingIndex < 0
+                        recentMessages = if (isNewMessage) {
+                            (listOf(msg) + recentMessages.filterNot { it.id == msg.id && msg.id.isNotBlank() }).sortedByDescending { it.createdAt }
+                        } else {
+                            recentMessages.toMutableList().also { it[existingIndex] = msg }
+                        }
                         val me = currentUserId
-                        if (isNew && me.isNotBlank()) {
+                        if (isNewMessage && me.isNotBlank()) {
                             val partnerId = when (me) {
                                 msg.senderId -> msg.receiverId
                                 msg.receiverId -> msg.senderId
@@ -85,6 +90,13 @@ class ChatListViewModel @Inject constructor(
                             if (partnerId.isNotBlank() && msg.receiverId == me && !msg.read) {
                                 unreadCounts = unreadCounts + (partnerId to ((unreadCounts[partnerId] ?: 0) + 1))
                             }
+                        }
+                    }
+                    is SocketEvent.DirectMessageReactionUpdated -> {
+                        val msg = event.message
+                        val idx = recentMessages.indexOfFirst { it.id == msg.id && msg.id.isNotBlank() }
+                        if (idx >= 0) {
+                            recentMessages = recentMessages.toMutableList().also { it[idx] = msg }
                         }
                     }
                     is SocketEvent.DirectMessagesRead -> {

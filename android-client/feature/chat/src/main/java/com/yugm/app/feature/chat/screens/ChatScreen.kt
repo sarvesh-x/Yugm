@@ -476,36 +476,45 @@ fun ChatScreen(
         val myReactionType = currentUserId.takeIf { it.isNotBlank() }?.let { uid ->
             target.reactions.firstOrNull { it.userId == uid }?.type
         }
+        val myReactionEmoji = myReactionType?.let(::reactionEmoji)
         AlertDialog(
             onDismissRequest = { reactPickerTarget = null },
             containerColor = SurfaceElevated,
             title = { Text("React to message", color = TextPrimary) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        if (myReactionType.isNullOrBlank()) "Choose a reaction" else "Tap the same reaction to remove it",
+                        if (myReactionType.isNullOrBlank()) "Choose a reaction" else "Your reaction: $myReactionEmoji  •  Tap it again to remove",
                         color = TextMuted,
                         fontSize = 13.sp
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        reactions.forEach { (emoji, type) ->
-                            val selected = myReactionType == type
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(if (selected) PrimaryPurple.copy(alpha = 0.22f) else ChatSurface)
-                                    .border(1.dp, if (selected) PrimaryPurple else BorderColor, CircleShape)
-                                    .clickable(role = Role.Button, onClickLabel = if (selected) "Remove $emoji reaction" else "React with $emoji") {
-                                        onReactMessage(target, type)
-                                        reactPickerTarget = null
-                                    },
-                                contentAlignment = Alignment.Center
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        reactions.chunked(4).forEach { rowItems ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Text(emoji, fontSize = 20.sp)
+                                rowItems.forEach { (emoji, type) ->
+                                    val selected = myReactionType == type
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(48.dp)
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .background(if (selected) PrimaryPurple.copy(alpha = 0.22f) else ChatSurface)
+                                            .border(1.dp, if (selected) PrimaryPurple else BorderColor, RoundedCornerShape(14.dp))
+                                            .clickable(role = Role.Button, onClickLabel = if (selected) "Remove $emoji reaction" else "React with $emoji") {
+                                                onReactMessage(target, type)
+                                                reactPickerTarget = null
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(emoji, fontSize = 22.sp)
+                                    }
+                                }
+                                repeat((4 - rowItems.size).coerceAtLeast(0)) {
+                                    Spacer(Modifier.weight(1f).height(48.dp))
+                                }
                             }
                         }
                     }
@@ -1818,19 +1827,18 @@ private fun MessageBubble(
                 }
             }
             if (message.reactions.isNotEmpty()) {
-                val aggregates = message.reactions
-                    .groupBy { it.type }
-                    .map { (type, items) -> type to items.size }
-                    .sortedByDescending { it.second }
-                    .take(3)
+                val grouped = message.reactions.groupBy { it.type }.mapValues { it.value.size }
+                val aggregates = grouped.entries.sortedByDescending { it.value }.take(3).map { it.key to it.value }
                 val myReaction = currentUserId.takeIf { it.isNotBlank() }?.let { uid -> message.reactions.firstOrNull { it.userId == uid }?.type }
+                val hiddenTypes = (grouped.size - aggregates.size).coerceAtLeast(0)
                 Row(
                     Modifier
                         .offset(y = (-6).dp)
-                        .clip(CircleShape)
+                        .clip(RoundedCornerShape(999.dp))
                         .background(SurfaceElevated)
-                        .border(1.dp, if (myReaction != null) PrimaryPurple.copy(alpha = 0.45f) else BorderColor, CircleShape)
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                        .border(1.dp, if (myReaction != null) PrimaryPurple.copy(alpha = 0.55f) else BorderColor, RoundedCornerShape(999.dp))
+                        .clickable(role = Role.Button, onClickLabel = "View or change reaction") { onReact() }
+                        .padding(horizontal = 9.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -1842,8 +1850,8 @@ private fun MessageBubble(
                             fontWeight = if (type == myReaction) FontWeight.Bold else FontWeight.Medium
                         )
                     }
-                    if (message.reactions.size > aggregates.sumOf { it.second }) {
-                        Text("+", color = TextMuted, fontSize = 10.sp)
+                    if (hiddenTypes > 0) {
+                        Text("+$hiddenTypes", color = TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Medium)
                     }
                 }
             }

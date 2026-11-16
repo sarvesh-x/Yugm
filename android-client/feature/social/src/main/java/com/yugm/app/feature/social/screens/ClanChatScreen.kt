@@ -235,22 +235,36 @@ fun ClanChatScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     val myReaction = target.reactions.firstOrNull { it.userId == currentUserId }?.type
                     Text(target.message, color = ClanChatMuted, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                    Text(if (myReaction.isNullOrBlank()) "Choose a reaction" else "Tap the same reaction to remove it", color = ClanChatMuted, fontSize = 12.sp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        clanReactionTypes.forEach { type ->
-                            val selected = myReaction == type
-                            Text(
-                                reactionEmoji(type), fontSize = 22.sp,
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .background(if (selected) ClanChatPurple.copy(alpha = 0.2f) else Color.Transparent)
-                                    .border(1.dp, if (selected) ClanChatPurple else Color.Transparent, CircleShape)
-                                    .clickable {
-                                        viewModel.reactToMessage(token, clanId, target.id, type)
-                                        actionMessage = null
+                    Text(
+                        if (myReaction.isNullOrBlank()) "Choose a reaction" else "Your reaction: ${reactionEmoji(myReaction)}  •  Tap it again to remove",
+                        color = ClanChatMuted,
+                        fontSize = 12.sp
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        clanReactionTypes.chunked(4).forEach { rowItems ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                rowItems.forEach { type ->
+                                    val selected = myReaction == type
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(if (selected) ClanChatPurple.copy(alpha = 0.18f) else ClanChatCard)
+                                            .border(1.dp, if (selected) ClanChatPurple else ClanChatLine, RoundedCornerShape(12.dp))
+                                            .clickable {
+                                                viewModel.reactToMessage(token, clanId, target.id, type)
+                                                actionMessage = null
+                                            }
+                                            .padding(vertical = 8.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(reactionEmoji(type), fontSize = 20.sp)
                                     }
-                                    .padding(6.dp)
-                            )
+                                }
+                                repeat((4 - rowItems.size).coerceAtLeast(0)) {
+                                    Spacer(Modifier.weight(1f))
+                                }
+                            }
                         }
                     }
                     TextButton(onClick = {
