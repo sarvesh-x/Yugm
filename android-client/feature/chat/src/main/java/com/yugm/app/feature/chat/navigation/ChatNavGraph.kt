@@ -84,7 +84,7 @@ fun NavGraphBuilder.chatNavGraph(
             onRetry = chatViewModel::refresh,
             onDeleteConversation = { chatViewModel.deleteConversation(onDone = { navController.popBackStack() }) },
             onDeleteSelected = chatViewModel::deleteSelectedMessages,
-            onReactMessage = chatViewModel::reactToMessage,
+            onReactMessage = { message, type -> chatViewModel.reactToMessage(message, type) },
             onReply = { text, message, onSuccess, onFailure -> chatViewModel.replyMessage(text, message, onSuccess, onFailure) },
             onEdit = { message, text, onSuccess, onFailure -> chatViewModel.editMessage(message, text, onSuccess, onFailure) },
             onForward = { message, targetId -> chatViewModel.forwardMessage(message, targetId) },

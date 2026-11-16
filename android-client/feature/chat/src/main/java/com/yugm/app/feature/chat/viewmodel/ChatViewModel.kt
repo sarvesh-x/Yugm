@@ -338,10 +338,10 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    fun reactToMessage(message: DirectMessage) {
-        if (message.id.isBlank()) return
+    fun reactToMessage(message: DirectMessage, type: String = "heart") {
+        if (message.id.isBlank() || type.isBlank()) return
         viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { yugmApi.reactToDirectMessage(authToken, partnerUserId, message.id) } }
+            runCatching { withContext(Dispatchers.IO) { yugmApi.reactToDirectMessage(authToken, partnerUserId, message.id, type) } }
                 .onSuccess(::replaceOrAppendMessage)
                 .onFailure { error = it.message ?: "Reaction could not be sent" }
         }

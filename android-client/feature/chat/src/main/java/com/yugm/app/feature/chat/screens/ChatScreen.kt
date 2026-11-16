@@ -144,7 +144,7 @@ fun ChatScreen(
     onRetry: () -> Unit = {},
     onSend: (String, () -> Unit, (String) -> Unit) -> Unit = { _, _, _ -> },
     onGift: (GiftItem) -> Unit = {},
-    onReactMessage: (DirectMessage) -> Unit = {},
+    onReactMessage: (DirectMessage, String) -> Unit = { _, _ -> },
     onTyping: (Boolean) -> Unit = {},
     onAudioCall: () -> Unit = {},
     onVideoCall: () -> Unit = {},
@@ -180,6 +180,7 @@ fun ChatScreen(
     var messageActionTarget by remember { mutableStateOf<DirectMessage?>(null) }
     var forwardMessage by remember { mutableStateOf<DirectMessage?>(null) }
     var infoMessage by remember { mutableStateOf<DirectMessage?>(null) }
+    var reactPickerTarget by remember(partner?.id) { mutableStateOf<DirectMessage?>(null) }
     var replyTarget by remember(partner?.id) { mutableStateOf<DirectMessage?>(null) }
     var editingTarget by remember(partner?.id) { mutableStateOf<DirectMessage?>(null) }
     var searchVisible by rememberSaveable { mutableStateOf(false) }
@@ -411,7 +412,7 @@ fun ChatScreen(
                     }
                     TextButton(onClick = { infoMessage = selected; messageActionTarget = null; selectedMessageIds = emptySet() }) { Text("Info", color = TextPrimary) }
                     if (selected.id.isNotBlank()) {
-                        TextButton(onClick = { onReactMessage(selected); messageActionTarget = null; selectedMessageIds = emptySet() }) { Text("React", color = TextPrimary) }
+                        TextButton(onClick = { reactPickerTarget = selected; messageActionTarget = null; selectedMessageIds = emptySet() }) { Text("React", color = TextPrimary) }
                     }
                     TextButton(onClick = { replyTarget = selected; editingTarget = null; draft = ""; selectedMessageIds = emptySet(); messageActionTarget = null }) { Text("Reply", color = TextPrimary) }
                     if (selected.senderId == currentUserId && selected.canStillEdit()) {
@@ -455,6 +456,50 @@ fun ChatScreen(
                 }
             },
             confirmButton = { TextButton(onClick = { forwardMessage = null }) { Text("Cancel", color = TextMuted) } }
+        )
+    }
+    reactPickerTarget?.let { target ->
+        val reactions = listOf(
+            "❤️" to "heart",
+            "🔥" to "fire",
+            "😂" to "laugh",
+            "👏" to "clap",
+            "😮" to "wow",
+            "👑" to "crown",
+            "✨" to "stars",
+            "🎉" to "party"
+        )
+        AlertDialog(
+            onDismissRequest = { reactPickerTarget = null },
+            containerColor = SurfaceElevated,
+            title = { Text("React to message", color = TextPrimary) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Choose a reaction", color = TextMuted, fontSize = 13.sp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        reactions.forEach { (emoji, type) ->
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(ChatSurface)
+                                    .border(1.dp, BorderColor, CircleShape)
+                                    .clickable(role = Role.Button, onClickLabel = "React with $emoji") {
+                                        onReactMessage(target, type)
+                                        reactPickerTarget = null
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(emoji, fontSize = 20.sp)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { reactPickerTarget = null }) { Text("Cancel", color = TextMuted) } }
         )
     }
     infoMessage?.let { msg ->
@@ -981,7 +1026,7 @@ fun ChatScreen(
                                             when {
                                                 selectionMode -> toggleSelection(message.id)
                                                 inSearchResults -> jumpToMessage(message)
-                                                message.id.isNotBlank() -> onReactMessage(message)
+                                                message.id.isNotBlank() -> reactPickerTarget = message
                                             }
                                         },
                                         onLongPress = { toggleSelection(message.id) },
