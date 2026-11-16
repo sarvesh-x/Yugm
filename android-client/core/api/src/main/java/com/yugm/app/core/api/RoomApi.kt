@@ -284,9 +284,12 @@ object RoomApi {
     }
 
     suspend fun uploadMessageMedia(token: String, bytes: ByteArray, mimeType: String, fileName: String): Pair<String, String> {
-        val data = YugmHttpClient.multipartUpload("/upload/profile-media", token) {
-            val mediaType = mimeType.ifBlank { "image/jpeg" }.toMediaType()
-            addFormDataPart("media", fileName.ifBlank { "message-media.jpg" }, bytes.toRequestBody(mediaType))
+        val normalizedMime = mimeType.ifBlank { "image/jpeg" }
+        val isAudio = normalizedMime.startsWith("audio/") || normalizedMime == "application/ogg"
+        val endpoint = if (isAudio) "/upload/voice-note" else "/upload/profile-media"
+        val fallbackName = if (isAudio) "voice-note.m4a" else "message-media.jpg"
+        val data = YugmHttpClient.multipartUpload(endpoint, token) {
+            addFormDataPart("media", fileName.ifBlank { fallbackName }, bytes.toRequestBody(normalizedMime.toMediaType()))
         }
         val d = data.getJSONObject("data")
         val url = d.optString("url")
