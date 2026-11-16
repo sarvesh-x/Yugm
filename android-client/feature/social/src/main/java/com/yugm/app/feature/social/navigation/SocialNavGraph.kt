@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.yugm.app.core.navigation.Screen
@@ -132,45 +133,17 @@ fun NavGraphBuilder.socialNavGraph(
         arguments = listOf(navArgument("groupId") { type = NavType.StringType })
     ) { backStackEntry ->
         val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
-        val scope = rememberCoroutineScope()
-        val context = androidx.compose.ui.platform.LocalContext.current
-        val messages = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateListOf<com.yugm.app.core.model.GroupMessage>() }
-        var messageText by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
-
-        fun loadMessages() {
-            scope.launch {
-                runCatching { com.yugm.app.core.api.YugmApi.groupMessages(authTokenProvider(), groupId) }
-                    .onSuccess {
-                        messages.clear()
-                        messages.addAll(it)
-                    }
-                    .onFailure { android.widget.Toast.makeText(context, it.message ?: "Failed to load messages", android.widget.Toast.LENGTH_SHORT).show() }
-            }
+        val viewModel: com.yugm.app.feature.social.viewmodel.GroupChatDetailViewModel = hiltViewModel(backStackEntry)
+        LaunchedEffect(groupId) {
+            viewModel.connect(authTokenProvider(), groupId)
+            viewModel.load()
         }
-
-        LaunchedEffect(groupId) { loadMessages() }
-
         GroupChatDetailScreen(
-            messages = messages,
-            messageText = messageText,
-            onMessageChange = { messageText = it },
+            messages = viewModel.messages,
+            messageText = viewModel.messageText,
+            onMessageChange = viewModel::updateText,
             onBack = { navController.popBackStack() },
-            onSend = {
-                scope.launch {
-                    runCatching {
-                        com.yugm.app.core.api.YugmApi.sendGroupMessage(
-                            token = authTokenProvider(),
-                            groupId = groupId,
-                            message = messageText
-                        )
-                    }.onSuccess {
-                        messageText = ""
-                        loadMessages()
-                    }.onFailure {
-                        android.widget.Toast.makeText(context, it.message ?: "Failed", android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
+            onSend = viewModel::send
         )
     }
 

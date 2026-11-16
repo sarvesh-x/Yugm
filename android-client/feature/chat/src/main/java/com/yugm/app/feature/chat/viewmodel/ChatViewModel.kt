@@ -12,6 +12,7 @@ import com.yugm.app.core.model.ActiveCosmetics
 import com.yugm.app.core.model.DirectMessage
 import com.yugm.app.core.model.Host
 import com.yugm.app.core.model.GiftItem
+import com.yugm.app.core.model.ModerationReportRequest
 import com.yugm.app.core.model.RelationshipStatus
 import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomType
@@ -70,6 +71,9 @@ class ChatViewModel @Inject constructor(
         private set
 
     var isBlockedByMe by mutableStateOf(false)
+        private set
+
+    var isMatched by mutableStateOf(false)
         private set
 
     var gifts by mutableStateOf<List<GiftItem>>(emptyList())
@@ -164,7 +168,10 @@ class ChatViewModel @Inject constructor(
     }
 
     fun connect(token: String, userId: String, partnerId: String) {
-        if (partnerUserId != partnerId || currentUserId != userId) messages.clear()
+        if (partnerUserId != partnerId || currentUserId != userId) {
+            messages.clear()
+            isMatched = false
+        }
         activeSearchQuery = ""
         searchResults = null
         authToken = token
@@ -200,6 +207,9 @@ class ChatViewModel @Inject constructor(
                     }
                     val giftsRequest = async(Dispatchers.IO) { runCatching { yugmApi.gifts(authToken) } }
                     val walletRequest = async(Dispatchers.IO) { runCatching { yugmApi.walletOverview(authToken) } }
+                    val matchesRequest = async(Dispatchers.IO) {
+                        runCatching { yugmApi.datingMatches(authToken) }.getOrDefault(emptyList())
+                    }
                     historyRequest.await()
                         .onSuccess { conversation ->
                             mergeMessages(conversation.messages)
@@ -224,6 +234,7 @@ class ChatViewModel @Inject constructor(
                 }
                     giftsRequest.await().onSuccess { gifts = it }
                     walletRequest.await().onSuccess { walletBalance = it.balance }
+                    isMatched = matchesRequest.await().any { it.id == partnerUserId }
                     runCatching { yugmApi.getBlockedUsers(authToken) }
                         .onSuccess { blocked -> isBlockedByMe = blocked.any { it.id == partnerUserId } }
                     val recentTargets = runCatching { yugmApi.getRecentMessages(authToken) }.getOrDefault(emptyList())
@@ -434,6 +445,35 @@ class ChatViewModel @Inject constructor(
                 error = if (targetBlocked) "User blocked. You can unblock them anytime." else "User unblocked."
             }.onFailure {
                 error = it.message ?: "Could not update block setting"
+            }
+        }
+    }
+
+    fun reportConversation(
+        category: String,
+        description: String = "",
+        onSuccess: () -> Unit = {},
+        onFailure: (String) -> Unit = {}
+    ) {
+        if (authToken.isBlank() || partnerUserId.isBlank() || category.isBlank()) return
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    yugmApi.moderationReport(
+                        authToken,
+                        ModerationReportRequest(
+                            targetUserId = partnerUserId,
+                            category = category,
+                            description = description.trim().ifBlank { null }
+                        )
+                    )
+                }
+            }.onSuccess {
+                onSuccess()
+            }.onFailure {
+                val message = it.message ?: "Couldn't submit this report"
+                error = message
+                onFailure(message)
             }
         }
     }

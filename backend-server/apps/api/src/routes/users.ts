@@ -789,7 +789,7 @@ usersRouter.get("/messages/:userId/search", asyncHandler(async (req: AuthRequest
   const rows = await DirectMessage.find(filter).sort({ createdAt: -1, _id: -1 }).limit(limit + 1).lean();
   const hasMore = rows.length > limit;
   const messages = hasMore ? rows.slice(0, limit) : rows;
-  sendOk(res, { messages: messages.reverse(), hasMore, nextBefore: messages.length ? (messages[messages.length - 1] as any).createdAt : null });
+  sendOk(res, { messages: messages.reverse(), hasMore, nextBefore: messages.length ? (messages[0] as any).createdAt : null });
 }));
 
 usersRouter.put("/messages/:userId/mute", asyncHandler(async (req: AuthRequest, res) => {
@@ -859,7 +859,7 @@ usersRouter.get("/messages/:userId", asyncHandler(async (req: AuthRequest, res) 
     relationship,
     muted: Boolean(mutePreference?.muted),
     hasMore,
-    nextBefore: page.length ? (page[page.length - 1] as any).createdAt : null
+    nextBefore: page.length ? (page[0] as any).createdAt : null
   });
 }));
 

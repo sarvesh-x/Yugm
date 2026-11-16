@@ -52,6 +52,22 @@ fun NavGraphBuilder.chatNavGraph(
             error = chatViewModel.error,
             isMuted = chatViewModel.isMuted,
             isBlockedByMe = chatViewModel.isBlockedByMe,
+            isMatched = chatViewModel.isMatched,
+            onReport = { category ->
+                chatViewModel.reportConversation(
+                    category = category,
+                    onSuccess = {
+                        android.widget.Toast.makeText(
+                            context,
+                            "Report submitted. Thanks for helping keep Yugm safe.",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    },
+                    onFailure = { message ->
+                        android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                )
+            },
             forwardTargets = chatViewModel.forwardTargets,
             searchResults = chatViewModel.searchResults,
             hasMoreHistory = chatViewModel.hasMoreHistory,

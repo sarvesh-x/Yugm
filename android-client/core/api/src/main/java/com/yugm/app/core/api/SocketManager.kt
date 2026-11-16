@@ -3,9 +3,11 @@ package com.yugm.app.core.api
 import com.yugm.app.core.api.parsers.toClan
 import com.yugm.app.core.api.parsers.toClanMessage
 import com.yugm.app.core.api.parsers.toDirectMessage
+import com.yugm.app.core.api.parsers.toGroupMessage
 import com.yugm.app.core.model.Clan
 import com.yugm.app.core.model.ClanMessage
 import com.yugm.app.core.model.DirectMessage
+import com.yugm.app.core.model.GroupMessage
 import io.socket.client.IO
 import io.socket.client.Socket
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -33,6 +35,7 @@ sealed class SocketEvent {
     data class ClanDeleted(val clanId: String) : SocketEvent()
     data class ClanMembershipChanged(val clanId: String, val type: String, val userId: String, val clan: Clan?) : SocketEvent()
     data class ClanTypingUpdate(val clanId: String, val userId: String, val typing: Boolean) : SocketEvent()
+    data class GroupMessageReceived(val groupId: String, val message: GroupMessage) : SocketEvent()
     object Connected : SocketEvent()
     object Disconnected : SocketEvent()
 }
@@ -201,6 +204,15 @@ class SocketManager @Inject constructor() {
             socket?.on("clan:typing:update") { args ->
                 (args.firstOrNull() as? JSONObject)?.let { payload ->
                     _events.tryEmit(SocketEvent.ClanTypingUpdate(payload.optString("clanId"), payload.optString("userId"), payload.optBoolean("typing")))
+                }
+            }
+            socket?.on("group:message:new") { args ->
+                (args.firstOrNull() as? JSONObject)?.let { payload ->
+                    val groupId = payload.optString("groupId")
+                    payload.optJSONObject("message")?.let { messageJson ->
+                        runCatching { _events.tryEmit(SocketEvent.GroupMessageReceived(groupId, messageJson.toGroupMessage())) }
+                            .onFailure { Timber.tag("SocketManager").e(it, "Failed to parse group message") }
+                    }
                 }
             }
             socket?.on("user:online") { args ->

@@ -168,7 +168,8 @@ fun ChatScreen(
     onAudioCall: () -> Unit = {},
     onVideoCall: () -> Unit = {},
     onAttachmentSelected: (ByteArray, String, String) -> Unit = { _, _, _ -> },
-    onReport: () -> Unit = {},
+    onReport: (String) -> Unit = {},
+    isMatched: Boolean = false,
     onToggleBlock: () -> Unit = {},
     onDeleteConversation: () -> Unit = {},
     onDeleteSelected: (List<String>, String) -> Unit = { _, _ -> },
@@ -195,6 +196,7 @@ fun ChatScreen(
     var showGiftSheet by rememberSaveable { mutableStateOf(false) }
     var showEmojiBar by rememberSaveable { mutableStateOf(false) }
     var showMore by rememberSaveable { mutableStateOf(false) }
+    var showReportDialog by rememberSaveable { mutableStateOf(false) }
     var confirmDeleteChat by rememberSaveable { mutableStateOf(false) }
     var showVipCallDialog by rememberSaveable(partner?.id) { mutableStateOf(false) }
     var showDeleteSelected by remember(partner?.id) { mutableStateOf(false) }
@@ -445,6 +447,16 @@ fun ChatScreen(
             text = { Text("This removes the conversation from your inbox. The other person will still keep their copy.", color = TextMuted) },
             confirmButton = { TextButton(onClick = { confirmDeleteChat = false; onDeleteConversation() }) { Text("Delete", color = Danger) } },
             dismissButton = { TextButton(onClick = { confirmDeleteChat = false }) { Text("Cancel", color = TextMuted) } }
+        )
+    }
+
+    if (showReportDialog) {
+        ReportDialog(
+            onDismiss = { showReportDialog = false },
+            onSubmit = { category ->
+                showReportDialog = false
+                onReport(category)
+            }
         )
     }
     forwardMessage?.let { selected ->
@@ -855,7 +867,7 @@ fun ChatScreen(
                             if (searchVisible) { searchVisible = false; searchQuery = "" } else searchVisible = true
                         }.padding(10.dp))
                         Text(if (isMuted) "Unmute" else "Mute", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable { showMore = false; onMute(!isMuted) }.padding(10.dp))
-                        Text("Report", color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable(role = Role.Button, onClickLabel = stringResource(R.string.a11y_report_conversation)) { showMore = false; onReport() }.padding(10.dp))
+                        Text("Report", color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable(role = Role.Button, onClickLabel = stringResource(R.string.a11y_report_conversation)) { showMore = false; showReportDialog = true }.padding(10.dp))
                         Text(if (isBlockedByMe) "Unblock" else "Block", color = if (isBlockedByMe) TextPrimary else Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable(role = Role.Button, onClickLabel = if (isBlockedByMe) "Unblock user" else stringResource(R.string.a11y_block_person)) { showMore = false; onToggleBlock() }.padding(10.dp))
                         Text("Delete chat", color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.sizeIn(minHeight = 48.dp).clickable { showMore = false; confirmDeleteChat = true }.padding(10.dp))
                     }
@@ -956,7 +968,7 @@ fun ChatScreen(
                                     Text("Unblock", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clip(CircleShape).background(Danger.copy(alpha = 0.85f)).clickable(role = Role.Button, onClickLabel = "Unblock user") { onToggleBlock() }.padding(horizontal = 12.dp, vertical = 8.dp))
                                 }
                             }
-                            if (messages.isEmpty()) item { MatchedBanner(partner?.name ?: "your match") }
+                            if (messages.isEmpty() && isMatched) item { MatchedBanner(partner?.name ?: "your match") }
                             if (showSafety) item {
                                 SafetyTip(onDismiss = {
                                     showSafety = false
@@ -1605,11 +1617,7 @@ fun ChatScreen(
                         optionsDialogTarget = null
                         forwardMessage = target
                     }
-                    CompactOptionRow(icon = Icons.Filled.Language, label = "Translate") {
-                        optionsDialogTarget = null
-                        val textToTranslate = target.message.ifBlank { "Media message" }
-                        android.widget.Toast.makeText(context, "Translated: $textToTranslate", android.widget.Toast.LENGTH_SHORT).show()
-                    }
+
                     CompactOptionRow(icon = Icons.Filled.Delete, label = "Delete", tint = Danger) {
                         optionsDialogTarget = null
                         selectedMessageIds = setOf(target.id)
@@ -1665,6 +1673,51 @@ private fun LightChatAction(
             }
         }
     }
+}
+
+@Composable
+private fun ReportDialog(onDismiss: () -> Unit, onSubmit: (String) -> Unit) {
+    var selected by remember { mutableStateOf("harassment") }
+    val categories = listOf(
+        "harassment" to "Harassment",
+        "spam" to "Spam",
+        "nudity" to "Nudity",
+        "hate_speech" to "Hate speech",
+        "violence" to "Violence",
+        "scam" to "Scam",
+        "impersonation" to "Impersonation",
+        "other" to "Other"
+    )
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceElevated,
+        title = { Text("Report this conversation", color = TextPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Pick a reason. Our team reviews every report.", color = TextMuted, fontSize = 12.sp)
+                categories.forEach { (value, label) ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                            .background(if (selected == value) PrimaryPurple.copy(alpha = 0.2f) else Color.Transparent)
+                            .clickable(role = Role.Button, onClickLabel = label) { selected = value }
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            Modifier.size(16.dp).clip(CircleShape).border(1.dp, if (selected == value) PrimaryPurple else TextMuted, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (selected == value) Box(Modifier.size(8.dp).clip(CircleShape).background(PrimaryPurple))
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Text(label, color = TextPrimary, fontSize = 13.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSubmit(selected) }) { Text("Submit report", color = Danger, fontWeight = FontWeight.Bold) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextMuted) } }
+    )
 }
 
 @Composable

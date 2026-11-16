@@ -130,7 +130,7 @@ fun GroupChatScreen(
                     OutlinedTextField(
                         value = newGroupParticipants,
                         onValueChange = { newGroupParticipants = it },
-                        label = { Text("Participant IDs (comma-separated)", color = TextMuted) },
+                        label = { Text("Participant user IDs (comma-separated)", color = TextMuted) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Pink,
@@ -140,6 +140,12 @@ fun GroupChatScreen(
                             cursorColor = TextPrimary
                         ),
                         modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "At least two participant IDs are required. You can find them on a user's profile.",
+                        color = TextMuted,
+                        fontSize = 11.sp
                     )
                 }
             },
@@ -152,7 +158,7 @@ fun GroupChatScreen(
                         newGroupName = ""
                         newGroupParticipants = ""
                     },
-                    enabled = newGroupName.isNotBlank()
+                    enabled = newGroupName.isNotBlank() && newGroupParticipants.split(",").map { it.trim() }.filter { it.isNotBlank() }.size >= 2
                 ) {
                     Text("Create", color = Pink, fontWeight = FontWeight.Black)
                 }

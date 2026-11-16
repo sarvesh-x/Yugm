@@ -11,6 +11,8 @@ import com.yugm.app.core.api.SocketEvent
 import com.yugm.app.core.model.Clan
 import com.yugm.app.core.model.ClanMessage
 import com.yugm.app.core.model.DirectMessage
+import com.yugm.app.core.model.FriendRequest
+import com.yugm.app.core.model.FriendUser
 import com.yugm.app.core.model.Host
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +45,12 @@ class ChatListViewModel @Inject constructor(
     var following by mutableStateOf<List<Host>>(emptyList())
         private set
     var recommendedChatUsers by mutableStateOf<List<Host>>(emptyList())
+        private set
+    var friends by mutableStateOf<List<FriendUser>>(emptyList())
+        private set
+    var friendRequests by mutableStateOf<List<FriendRequest>>(emptyList())
+        private set
+    var friendActionBusyId by mutableStateOf<String?>(null)
         private set
     var myClan by mutableStateOf<Clan?>(null)
         private set
@@ -194,6 +202,12 @@ class ChatListViewModel @Inject constructor(
                     val recommendedRequest = async(Dispatchers.IO) {
                         runCatching { yugmApi.recommendedChatUsers(token) }.getOrDefault(emptyList())
                     }
+                    val friendsRequest = async(Dispatchers.IO) {
+                        runCatching { yugmApi.friendList(token) }.getOrDefault(emptyList())
+                    }
+                    val friendRequestsRequest = async(Dispatchers.IO) {
+                        runCatching { yugmApi.friendRequests(token) }.getOrDefault(emptyList())
+                    }
 
                     matches = matchesRequest.await()
                     val recentPage = messagesRequest.await()
@@ -206,6 +220,8 @@ class ChatListViewModel @Inject constructor(
                     followers = followersRequest.await()
                     following = followingRequest.await()
                     recommendedChatUsers = recommendedRequest.await()
+                    friends = friendsRequest.await()
+                    friendRequests = friendRequestsRequest.await()
                     val knownPartnerIds = mergedRecent.map { if (it.senderId == currentUserId) it.receiverId else it.senderId }.toSet()
                     val missingMuted = mutedIds.filter { it.isNotBlank() && it !in knownPartnerIds }
                     if (missingMuted.isNotEmpty()) {
@@ -269,6 +285,49 @@ class ChatListViewModel @Inject constructor(
             }
             isLoadingMoreRecent = false
         }
+    }
+
+    fun acceptFriendRequest(token: String, userId: String) {
+        if (userId.isBlank() || friendActionBusyId != null) return
+        friendActionBusyId = userId
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { yugmApi.friendAccept(token, userId) } }
+                .onSuccess {
+                    friendRequests = friendRequests.filterNot { (it.userId?._id ?: it.friendId?._id) == userId }
+                    runCatching { withContext(Dispatchers.IO) { yugmApi.friendList(token) } }
+                        .onSuccess { friends = it }
+                }
+                .onFailure { error = it.message ?: "Couldn't accept this friend request" }
+            friendActionBusyId = null
+        }
+    }
+
+    fun declineFriendRequest(token: String, userId: String) {
+        if (userId.isBlank() || friendActionBusyId != null) return
+        friendActionBusyId = userId
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { yugmApi.friendDecline(token, userId) } }
+                .onSuccess {
+                    friendRequests = friendRequests.filterNot { (it.userId?._id ?: it.friendId?._id) == userId }
+                }
+                .onFailure { error = it.message ?: "Couldn't decline this friend request" }
+            friendActionBusyId = null
+        }
+    }
+
+    fun removeFriend(token: String, userId: String) {
+        if (userId.isBlank() || friendActionBusyId != null) return
+        friendActionBusyId = userId
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { yugmApi.friendUnfriend(token, userId) } }
+                .onSuccess { friends = friends.filterNot { it._id == userId } }
+                .onFailure { error = it.message ?: "Couldn't remove this friend" }
+            friendActionBusyId = null
+        }
+    }
+
+    fun clearFriendError() {
+        error = null
     }
 
     private fun scheduleRecentRefresh(partnerId: String? = null) {

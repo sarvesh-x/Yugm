@@ -5,6 +5,7 @@ import com.yugm.app.core.model.ClanMemberRole
 import com.yugm.app.core.model.ClanMessage
 import com.yugm.app.core.model.ClanReaction
 import com.yugm.app.core.model.ClanSummary
+import com.yugm.app.core.model.GroupMessage
 import com.yugm.app.core.model.NotificationItem
 import org.json.JSONArray
 import org.json.JSONObject
@@ -82,6 +83,22 @@ fun JSONArray.toClanReactions(): List<ClanReaction> = buildList {
     for (index in 0 until length()) {
         add(getJSONObject(index).toClanReaction())
     }
+}
+
+fun JSONObject.toGroupMessage(): GroupMessage {
+    val senderObj = optJSONObject("senderId")
+    return GroupMessage(
+        id = optString("_id", optString("id", "")),
+        groupId = optString("groupId", ""),
+        senderId = senderObj?.optString("_id", "") ?: optString("senderId", ""),
+        senderName = senderObj?.optString("name", "") ?: optString("senderName", ""),
+        senderAvatar = (senderObj?.optString("avatar", "") ?: optString("senderAvatar", "")).ifEmpty { null },
+        message = optString("message", ""),
+        mediaUrl = optString("mediaUrl", ""),
+        mediaType = optString("mediaType", ""),
+        duration = optInt("duration", 0),
+        createdAt = optString("createdAt", "")
+    )
 }
 
 fun JSONObject.toClanSummary(): ClanSummary = ClanSummary(

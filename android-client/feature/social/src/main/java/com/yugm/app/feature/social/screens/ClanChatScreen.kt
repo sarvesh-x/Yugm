@@ -311,10 +311,8 @@ fun ClanChatScreen(
             Avatar((clanName.ifBlank { clan?.name ?: "C" }).take(1).uppercase(), 44, clan?.avatar)
             Column(Modifier.weight(1f).padding(start = 10.dp)) {
                 Text(clanName.ifBlank { clan?.name ?: "Clan chat" }, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${clan?.memberCount ?: 0} members  ·  online", color = ClanChatMuted, fontSize = 11.sp, maxLines = 1)
+                Text("${clan?.memberCount ?: 0} members", color = ClanChatMuted, fontSize = 11.sp, maxLines = 1)
             }
-            IconButton(onClick = { /* Call action */ }) { Icon(Icons.Filled.Call, contentDescription = "Voice call", tint = Color.White) }
-            IconButton(onClick = { /* Video call */ }) { Icon(Icons.Filled.Videocam, contentDescription = "Video call", tint = Color.White) }
             Box {
                 IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "More clan chat options", tint = Color.White) }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -477,8 +475,6 @@ fun ClanChatScreen(
                     .border(1.dp, ClanChatLine, RoundedCornerShape(26.dp)).padding(horizontal = 14.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Filled.AttachFile, contentDescription = "Attach file", tint = ClanChatMuted, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(8.dp))
                 BasicTextField(
                     value = input,
                     onValueChange = { input = it.take(600) },

@@ -184,6 +184,7 @@ fun MainTabsScreen(
                     onOpenClan = { clanId, clanName -> navController.navigate(Screen.ClanChat.createRoute(clanId, clanName)) },
                     onJoinClan = { navController.navigate(Screen.ClanList.route) },
                     onOpenClanDetail = { clanId -> navController.navigate(Screen.ClanDetail.createRoute(clanId)) },
+                    onOpenGroups = { navController.navigate(Screen.GroupChats.route) },
                     onGameZone = { goTo(TAB_GAME_ZONE) },
                     showBottomDock = false,
                     onClanTabActiveChanged = { isClanChatActive = it },

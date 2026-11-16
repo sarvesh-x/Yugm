@@ -32,7 +32,9 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
@@ -68,6 +70,8 @@ import com.yugm.app.core.api.YugmApi
 import com.yugm.app.core.model.Clan
 import com.yugm.app.core.model.ClanMessage
 import com.yugm.app.core.model.DirectMessage
+import com.yugm.app.core.model.FriendRequest
+import com.yugm.app.core.model.FriendUser
 import com.yugm.app.core.model.Host
 import com.yugm.app.core.ui.components.Avatar
 import com.yugm.app.core.ui.components.YugmBottomDock
@@ -102,6 +106,7 @@ fun ChatListScreen(
     onOpenClan: (String, String) -> Unit = { _, _ -> },
     onJoinClan: () -> Unit = {},
     onOpenClanDetail: (String) -> Unit = {},
+    onOpenGroups: () -> Unit = {},
     onGameZone: () -> Unit = {},
     showBottomDock: Boolean = true,
     onClanTabActiveChanged: (Boolean) -> Unit = {},
@@ -110,6 +115,8 @@ fun ChatListScreen(
     var mainTab by remember { mutableIntStateOf(0) }
     var contactTab by remember { mutableIntStateOf(0) }
     var showFindPeople by remember { mutableStateOf(false) }
+    var searchOpen by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
 
     LaunchedEffect(mainTab) {
         onClanTabActiveChanged(mainTab == 1)
@@ -154,11 +161,60 @@ fun ChatListScreen(
         viewModel.unreadCounts.filterKeys { it !in viewModel.mutedPartnerIds }
     }
     val unread = displayUnreadCounts.values.sum()
-    val friendIds = remember(viewModel.followers, viewModel.following) { viewModel.followers.map { it.id }.intersect(viewModel.following.map { it.id }.toSet()) }
-    val contactList = when (contactTab) {
-        0 -> viewModel.following.filter { it.id in friendIds }
-        1 -> viewModel.followers
-        else -> viewModel.following
+    val normalizedQuery = searchQuery.trim().lowercase()
+
+    val filteredConversations = remember(conversations, normalizedQuery) {
+        if (normalizedQuery.isBlank()) conversations
+        else conversations.filter { item ->
+            item.partner.name.lowercase().contains(normalizedQuery) ||
+                item.partner.username.lowercase().contains(normalizedQuery) ||
+                item.lastMessage.message.lowercase().contains(normalizedQuery)
+        }
+    }
+    val filteredFriends = remember(viewModel.friends, normalizedQuery) {
+        if (normalizedQuery.isBlank()) viewModel.friends
+        else viewModel.friends.filter {
+            it.name.lowercase().contains(normalizedQuery) || it.username.lowercase().contains(normalizedQuery)
+        }
+    }
+    val filteredRequests = remember(viewModel.friendRequests, normalizedQuery) {
+        if (normalizedQuery.isBlank()) viewModel.friendRequests
+        else viewModel.friendRequests.filter { request ->
+            val person = request.userId ?: request.friendId
+            person?.name?.lowercase()?.contains(normalizedQuery) == true ||
+                person?.username?.lowercase()?.contains(normalizedQuery) == true
+        }
+    }
+    val filteredFollowers = remember(viewModel.followers, normalizedQuery) {
+        if (normalizedQuery.isBlank()) viewModel.followers
+        else viewModel.followers.filter {
+            it.name.lowercase().contains(normalizedQuery) || it.username.lowercase().contains(normalizedQuery)
+        }
+    }
+    val filteredFollowing = remember(viewModel.following, normalizedQuery) {
+        if (normalizedQuery.isBlank()) viewModel.following
+        else viewModel.following.filter {
+            it.name.lowercase().contains(normalizedQuery) || it.username.lowercase().contains(normalizedQuery)
+        }
+    }
+    val clanMatchesSearch = remember(viewModel.myClan, normalizedQuery) {
+        val clan = viewModel.myClan
+        normalizedQuery.isBlank() || (clan != null && (
+            clan.name.lowercase().contains(normalizedQuery) ||
+                clan.familyLabel.lowercase().contains(normalizedQuery)
+            ))
+    }
+    val contactCount = when (contactTab) {
+        0 -> filteredFriends.size
+        1 -> filteredRequests.size
+        2 -> filteredFollowers.size
+        else -> filteredFollowing.size
+    }
+    val contactLabel = when (contactTab) {
+        0 -> "friend"
+        1 -> "request"
+        2 -> "follower"
+        else -> "following"
     }
 
     Box(Modifier.fillMaxSize().background(ChatBg)) {
@@ -175,10 +231,18 @@ fun ChatListScreen(
                         .clip(CircleShape)
                         .background(ChatPanel)
                         .border(1.dp, ChatLine, CircleShape)
-                        .clickable(role = Role.Button, onClickLabel = "Search chats", onClick = { showFindPeople = true }),
+                        .clickable(role = Role.Button, onClickLabel = "Search chats", onClick = {
+                            searchOpen = !searchOpen
+                            if (!searchOpen) searchQuery = ""
+                        }),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Filled.Search, contentDescription = null, tint = ChatInk, modifier = Modifier.size(18.dp))
+                    Icon(
+                        if (searchOpen) Icons.Filled.Close else Icons.Filled.Search,
+                        contentDescription = null,
+                        tint = ChatInk,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
                 Spacer(Modifier.width(10.dp))
                 Box(
@@ -216,6 +280,59 @@ fun ChatListScreen(
                             color = if (selected) Color.White else ChatMuted,
                             fontSize = 14.sp,
                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
+                }
+            }
+
+            if (searchOpen) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 4.dp)
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(ChatPanel)
+                        .border(1.dp, ChatLine, RoundedCornerShape(16.dp))
+                        .padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Search, contentDescription = null, tint = ChatMuted, modifier = Modifier.size(18.dp))
+                    BasicTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it.take(60) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        textStyle = TextStyle(color = ChatInk, fontSize = 14.sp),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(ChatPurple),
+                        modifier = Modifier.weight(1f).padding(start = 10.dp),
+                        decorationBox = { inner ->
+                            Box {
+                                if (searchQuery.isBlank()) {
+                                    Text(
+                                        when (mainTab) {
+                                            1 -> "Search clan chat"
+                                            2 -> "Search people"
+                                            else -> "Search chats, people or messages"
+                                        },
+                                        color = ChatMuted,
+                                        fontSize = 13.sp
+                                    )
+                                }
+                                inner()
+                            }
+                        }
+                    )
+                    if (searchQuery.isNotBlank()) {
+                        Text(
+                            "Clear",
+                            color = Color(0xFFC9A5FF),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .clickable(role = Role.Button, onClickLabel = "Clear search") { searchQuery = "" }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }
                 }
@@ -268,7 +385,7 @@ fun ChatListScreen(
                                         }
                                     }
                                 }
-                                if (viewModel.matches.isNotEmpty()) item {
+                                if (viewModel.matches.isNotEmpty() && searchQuery.isBlank()) item {
                                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                         Text("People you may know", color = ChatInk, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp))
                                         LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -281,18 +398,44 @@ fun ChatListScreen(
                                         }
                                     }
                                 }
+                                viewModel.myClan?.takeIf { clanMatchesSearch }?.let { clan ->
+                                    item(key = "clan-conversation") {
+                                        ClanConversationRow(
+                                            clan = clan,
+                                            lastMessage = viewModel.clanLastMessage,
+                                            onClick = { onOpenClan(clan.id, clan.name) }
+                                        )
+                                    }
+                                }
+                                if (searchQuery.isBlank()) item(key = "group-chats-entry") {
+                                    GroupChatsEntryRow(onClick = onOpenGroups)
+                                }
                                 item {
                                     Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                                         Text("Chatlist", color = ChatInk, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                                         Spacer(Modifier.weight(1f))
                                         if (unread > 0) Text("Mark read", color = ChatPurple, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
                                             modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Mark all messages as read") { viewModel.markAllRead(token, currentUserId) }.padding(horizontal = 8.dp, vertical = 4.dp))
-                                        Text("${conversations.size} chats", color = ChatMuted, fontSize = 12.sp)
+                                        Text("${filteredConversations.size} chats", color = ChatMuted, fontSize = 12.sp)
                                     }
                                 }
-                                if (viewModel.isLoading && conversations.isEmpty()) item {
+                                if (viewModel.isLoading && filteredConversations.isEmpty()) item {
                                     Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ChatPurple) }
-                                } else if (conversations.isEmpty()) item {
+                                } else if (filteredConversations.isEmpty() && searchQuery.isNotBlank()) item {
+                                    Column(
+                                        Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 40.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text("No chats found", color = ChatInk, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                                        Text(
+                                            "Nothing matches “$searchQuery”. Try a different name or word.",
+                                            color = ChatMuted,
+                                            fontSize = 12.sp,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.padding(top = 6.dp)
+                                        )
+                                    }
+                                } else if (filteredConversations.isEmpty()) item {
                                     Column(
                                         Modifier
                                             .fillMaxWidth()
@@ -317,7 +460,7 @@ fun ChatListScreen(
                                         }
                                     }
                                 } else {
-                                    itemsIndexed(conversations, key = { _, item -> "conversation-${item.partner.id}" }) { index, item ->
+                                    itemsIndexed(filteredConversations, key = { _, item -> "conversation-${item.partner.id}" }) { index, item ->
                                         Column(
                                             Modifier.padding(horizontal = 16.dp, vertical = 1.dp)
                                                 .clip(RoundedCornerShape(18.dp))
@@ -328,7 +471,8 @@ fun ChatListScreen(
                                             LightChatRow(
                                                 item,
                                                 currentUserId = currentUserId,
-                                                unreadCount = if (isMutedConversation) 0 else (displayUnreadCounts[item.partner.id] ?: if (!item.lastMessage.read && item.lastMessage.receiverId == currentUserId) 1 else 0),
+                                                unreadCount = viewModel.unreadCounts[item.partner.id]
+                                                    ?: if (viewModel.unreadCounts.isEmpty() && !item.lastMessage.read && item.lastMessage.receiverId == currentUserId) 1 else 0,
                                                 muted = isMutedConversation
                                             ) { onOpenChat(item.partner.id) }
                                         }
@@ -421,56 +565,125 @@ fun ChatListScreen(
                                 item {
                                     Column(Modifier.padding(horizontal = 18.dp).clip(RoundedCornerShape(20.dp)).background(ChatCard).padding(5.dp)) {
                                         Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                                            listOf("Friends", "Followers", "Following").forEachIndexed { index, label ->
+                                            val requestCount = viewModel.friendRequests.size
+                                            listOf(
+                                                "Friends",
+                                                if (requestCount > 0) "Requests ($requestCount)" else "Requests",
+                                                "Followers",
+                                                "Following"
+                                            ).forEachIndexed { index, label ->
                                                 val selected = contactTab == index
                                                 Box(Modifier.weight(1f).height(46.dp).clip(RoundedCornerShape(15.dp)).background(if (selected) Color(0xFF28243A) else Color.Transparent)
                                                     .clickable(role = Role.Tab) { contactTab = index }, contentAlignment = Alignment.Center) {
-                                                    Text(label, color = if (selected) ChatPurple else ChatMuted, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, fontSize = 13.sp)
+                                                    Text(
+                                                        label,
+                                                        color = if (selected) ChatPurple else if (index == 1 && requestCount > 0) Color(0xFFFF7AAE) else ChatMuted,
+                                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                                        fontSize = 12.sp,
+                                                        maxLines = 1
+                                                    )
                                                 }
                                             }
                                         }
                                     }
                                 }
                                 item {
-                                    Text("${contactList.size} ${listOf("friends", "followers", "following")[contactTab]}", color = ChatMuted, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp))
-                                }
-                                if (viewModel.isLoading && contactList.isEmpty()) item { Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ChatPurple) } }
-                                else if (contactList.isEmpty()) item {
-                                    Column(
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 24.dp, vertical = 42.dp)
-                                            .clip(RoundedCornerShape(20.dp))
-                                            .background(ChatCard.copy(alpha = 0.55f))
-                                            .border(1.dp, ChatLine.copy(alpha = 0.7f), RoundedCornerShape(20.dp))
-                                            .padding(horizontal = 20.dp, vertical = 28.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    Row(
+                                        Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text("No people to show yet", color = ChatInk, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
                                         Text(
-                                            "When you connect with more people, they’ll appear here.",
+                                            "$contactCount $contactLabel${if (contactCount == 1) "" else "s"}",
                                             color = ChatMuted,
-                                            fontSize = 12.sp,
-                                            textAlign = TextAlign.Center,
-                                            modifier = Modifier.padding(top = 6.dp)
+                                            fontSize = 13.sp
                                         )
+                                        Spacer(Modifier.weight(1f))
+                                        if (contactTab == 0) {
+                                            Text(
+                                                "Add friends",
+                                                color = ChatPurple,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                modifier = Modifier
+                                                    .clip(CircleShape)
+                                                    .clickable(role = Role.Button, onClickLabel = "Find friends") { showFindPeople = true }
+                                                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                                            )
+                                        }
                                     }
                                 }
-                                else {
-                                    itemsIndexed(contactList, key = { _, person -> "contact-${person.id}" }) { index, person ->
-                                        Column(
-                                            Modifier.padding(horizontal = 16.dp, vertical = 1.dp)
-                                                .clip(RoundedCornerShape(18.dp))
-                                                .background(ChatCard)
-                                        ) {
-                                            if (index > 0) Box(Modifier.fillMaxWidth().padding(start = 74.dp).height(1.dp).background(ChatLine))
-                                            Row(Modifier.fillMaxWidth().height(76.dp).clickable(role = Role.Button, onClickLabel = "Open chat with ${person.name}") { onOpenChat(person.id) }.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                                Avatar(person.name.take(1), 48, person.avatar, person.activeCosmetics)
-                                                Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                                                    Text(person.name, color = ChatInk, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                                    Text(if (person.username.isNotBlank()) "@${person.username}" else if (person.isOnline) "Online" else "Yugm member", color = ChatMuted, fontSize = 12.sp)
+                                when (contactTab) {
+                                    0 -> {
+                                        if (viewModel.isLoading && filteredFriends.isEmpty()) item {
+                                            Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ChatPurple) }
+                                        } else if (filteredFriends.isEmpty()) item {
+                                            ContactEmptyState(
+                                                title = if (searchQuery.isBlank()) "No friends yet" else "No friends found",
+                                                body = if (searchQuery.isBlank()) {
+                                                    "Accepted friend requests will appear here. Tap “Add friends” to find people."
+                                                } else {
+                                                    "Nothing matches “$searchQuery”."
+                                                },
+                                                actionLabel = if (searchQuery.isBlank()) "Find people" else null,
+                                                onAction = { showFindPeople = true }
+                                            )
+                                        } else {
+                                            itemsIndexed(filteredFriends, key = { _, friend -> "friend-${friend._id}" }) { index, friend ->
+                                                FriendContactRow(
+                                                    friend = friend,
+                                                    showDivider = index > 0,
+                                                    busy = viewModel.friendActionBusyId == friend._id,
+                                                    onOpenChat = { onOpenChat(friend._id) }
+                                                )
+                                            }
+                                        }
+                                    }
+                                    1 -> {
+                                        if (filteredRequests.isEmpty()) item {
+                                            ContactEmptyState(
+                                                title = "No pending requests",
+                                                body = "New friend requests will show up here so you can accept or decline them."
+                                            )
+                                        } else {
+                                            itemsIndexed(filteredRequests, key = { _, request -> "request-${request._id}" }) { index, request ->
+                                                val person = request.userId ?: request.friendId
+                                                if (person != null) {
+                                                    FriendRequestRow(
+                                                        person = person,
+                                                        showDivider = index > 0,
+                                                        busy = viewModel.friendActionBusyId == person._id,
+                                                        onAccept = { viewModel.acceptFriendRequest(token, person._id) },
+                                                        onDecline = { viewModel.declineFriendRequest(token, person._id) }
+                                                    )
                                                 }
-                                                Text("›", color = ChatMuted, fontSize = 25.sp)
+                                            }
+                                        }
+                                    }
+                                    2 -> {
+                                        if (viewModel.isLoading && filteredFollowers.isEmpty()) item {
+                                            Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ChatPurple) }
+                                        } else if (filteredFollowers.isEmpty()) item {
+                                            ContactEmptyState(
+                                                title = "No followers yet",
+                                                body = if (searchQuery.isBlank()) "People who follow you will appear here." else "Nothing matches “$searchQuery”."
+                                            )
+                                        } else {
+                                            itemsIndexed(filteredFollowers, key = { _, person -> "follower-${person.id}" }) { index, person ->
+                                                PersonContactRow(person = person, showDivider = index > 0, onClick = { onOpenChat(person.id) })
+                                            }
+                                        }
+                                    }
+                                    else -> {
+                                        if (viewModel.isLoading && filteredFollowing.isEmpty()) item {
+                                            Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ChatPurple) }
+                                        } else if (filteredFollowing.isEmpty()) item {
+                                            ContactEmptyState(
+                                                title = "Not following anyone yet",
+                                                body = if (searchQuery.isBlank()) "People you follow will appear here." else "Nothing matches “$searchQuery”."
+                                            )
+                                        } else {
+                                            itemsIndexed(filteredFollowing, key = { _, person -> "following-${person.id}" }) { index, person ->
+                                                PersonContactRow(person = person, showDivider = index > 0, onClick = { onOpenChat(person.id) })
                                             }
                                         }
                                     }
@@ -710,6 +923,268 @@ private fun FindPeopleResultRow(
 
 
 @Composable
+private fun ContactCard(showDivider: Boolean, content: @Composable () -> Unit) {
+    Column(
+        Modifier.padding(horizontal = 16.dp, vertical = 1.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(ChatCard)
+    ) {
+        if (showDivider) Box(Modifier.fillMaxWidth().padding(start = 74.dp).height(1.dp).background(ChatLine))
+        content()
+    }
+}
+
+@Composable
+private fun ContactEmptyState(
+    title: String,
+    body: String,
+    actionLabel: String? = null,
+    onAction: () -> Unit = {}
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 42.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(ChatCard.copy(alpha = 0.55f))
+            .border(1.dp, ChatLine.copy(alpha = 0.7f), RoundedCornerShape(20.dp))
+            .padding(horizontal = 20.dp, vertical = 28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(title, color = ChatInk, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+        Text(
+            body,
+            color = ChatMuted,
+            fontSize = 12.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 6.dp)
+        )
+        if (actionLabel != null) {
+            TextButton(onClick = onAction, modifier = Modifier.padding(top = 4.dp)) {
+                Text(actionLabel, color = ChatPurple, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun FriendContactRow(
+    friend: FriendUser,
+    showDivider: Boolean,
+    busy: Boolean,
+    onOpenChat: () -> Unit
+) {
+    ContactCard(showDivider) {
+        Row(
+            Modifier.fillMaxWidth().height(76.dp)
+                .clickable(role = Role.Button, onClickLabel = "Open chat with ${friend.name}", onClick = onOpenChat)
+                .padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Avatar(friend.name.take(1).uppercase(), 48, friend.avatar)
+            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        friend.name.ifBlank { friend.username },
+                        color = ChatInk,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (friend.isVerified) Text(" ✓", color = Color(0xFF7CC7FF), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+                Text(
+                    if (friend.username.isNotBlank()) "@${friend.username} · Level ${friend.level}" else "Level ${friend.level}",
+                    color = ChatMuted,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            if (busy) CircularProgressIndicator(Modifier.size(16.dp), color = ChatPurple, strokeWidth = 2.dp)
+            else Text("›", color = ChatMuted, fontSize = 25.sp)
+        }
+    }
+}
+
+@Composable
+private fun FriendRequestRow(
+    person: FriendUser,
+    showDivider: Boolean,
+    busy: Boolean,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit
+) {
+    ContactCard(showDivider) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Avatar(person.name.take(1).uppercase(), 48, person.avatar)
+            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                Text(
+                    person.name.ifBlank { person.username },
+                    color = ChatInk,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    if (person.username.isNotBlank()) "@${person.username}" else "Wants to connect",
+                    color = ChatMuted,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            if (busy) {
+                CircularProgressIndicator(Modifier.size(18.dp), color = ChatPurple, strokeWidth = 2.dp)
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        Modifier.clip(CircleShape).background(Color(0xFF1F7A4A))
+                            .clickable(role = Role.Button, onClickLabel = "Accept friend request from ${person.name}", onClick = onAccept)
+                            .padding(horizontal = 13.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Accept", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Text(
+                        "Decline",
+                        color = ChatMuted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clip(CircleShape).background(ChatPanel)
+                            .clickable(role = Role.Button, onClickLabel = "Decline friend request from ${person.name}", onClick = onDecline)
+                            .padding(horizontal = 11.dp, vertical = 8.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PersonContactRow(person: Host, showDivider: Boolean, onClick: () -> Unit) {
+    ContactCard(showDivider) {
+        Row(
+            Modifier.fillMaxWidth().height(76.dp)
+                .clickable(role = Role.Button, onClickLabel = "Open chat with ${person.name}", onClick = onClick)
+                .padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box {
+                Avatar(person.name.take(1).uppercase(), 48, person.avatar, person.activeCosmetics)
+                if (person.isOnline) Box(Modifier.align(Alignment.BottomEnd).size(12.dp).clip(CircleShape).background(Color(0xFF39C891)).border(2.dp, ChatCard, CircleShape))
+            }
+            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                Text(person.name, color = ChatInk, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    when {
+                        person.username.isNotBlank() -> "@${person.username}"
+                        person.isOnline -> "Online"
+                        else -> "Yugm member"
+                    },
+                    color = ChatMuted,
+                    fontSize = 12.sp
+                )
+            }
+            Text("›", color = ChatMuted, fontSize = 25.sp)
+        }
+    }
+}
+
+@Composable
+private fun ClanConversationRow(clan: Clan, lastMessage: ClanMessage?, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(ChatCard.copy(alpha = 0.92f))
+            .border(1.dp, ChatLine.copy(alpha = 0.7f), RoundedCornerShape(18.dp))
+            .clickable(role = Role.Button, onClickLabel = "Open clan chat for ${clan.name}", onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box {
+            Avatar(clan.name.take(1).uppercase(), 52, clan.avatar)
+            Box(
+                Modifier.align(Alignment.BottomEnd).size(18.dp).clip(RoundedCornerShape(6.dp))
+                    .background(ChatPurple).border(2.dp, ChatCard, RoundedCornerShape(6.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("👥", fontSize = 8.sp)
+            }
+        }
+        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    clan.name,
+                    color = ChatInk,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                val time = lastMessage?.createdAt?.let { conversationTimeLabel(it) }.orEmpty()
+                if (time.isNotBlank()) Text(time, color = ChatMuted, fontSize = 11.sp)
+            }
+            Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    buildClanPreview(lastMessage),
+                    color = ChatMuted,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GroupChatsEntryRow(onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(ChatCard)
+            .border(1.dp, ChatLine.copy(alpha = 0.7f), RoundedCornerShape(18.dp))
+            .clickable(role = Role.Button, onClickLabel = "Open group chats", onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier.size(52.dp).clip(CircleShape)
+                .background(Brush.linearGradient(listOf(ChatPurple.copy(alpha = 0.9f), Color(0xFFF6378B).copy(alpha = 0.9f)))),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Filled.Groups, contentDescription = null, tint = Color.White, modifier = Modifier.size(26.dp))
+        }
+        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+            Text("Group chats", color = ChatInk, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text("Bring several friends into one conversation", color = ChatMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Text("›", color = ChatMuted, fontSize = 25.sp)
+    }
+}
+
+private fun buildClanPreview(message: ClanMessage?): String {
+    if (message == null) return "Tap to start the clan conversation"
+    val sender = message.senderId?.name?.takeIf { it.isNotBlank() } ?: "Clan"
+    val body = message.message.lineSequence().lastOrNull { it.isNotBlank() } ?: "New message"
+    return "$sender: $body"
+}
+
+@Composable
 private fun LightChatRow(item: ConversationItem, currentUserId: String, unreadCount: Int, muted: Boolean, onClick: () -> Unit) {
     val preview = buildConversationPreview(item.lastMessage, currentUserId)
     val time = conversationTimeLabel(item.lastMessage.createdAt)
@@ -781,16 +1256,21 @@ private fun LightChatRow(item: ConversationItem, currentUserId: String, unreadCo
 private fun buildConversationPreview(message: DirectMessage, currentUserId: String): String {
     val minePrefix = if (currentUserId.isNotBlank() && message.senderId == currentUserId) "You: " else ""
     val forwardedPrefix = if (message.forwarded) "Forwarded · " else ""
-    val lower = message.message.lowercase()
-    val isCall = lower.contains("call started") || (lower.contains("private") && lower.contains("call")) || lower.contains("call")
+    val text = message.message.trim()
+    val lower = text.lowercase()
+    val callLabel = when {
+        lower.startsWith("private video call started") || lower.startsWith("video call started") -> "📹 Video call"
+        lower.startsWith("private voice call started") || lower.startsWith("voice call started") -> "📞 Voice call"
+        lower.contains("missed video call") -> "📹 Missed video call"
+        lower.contains("missed voice call") || lower.contains("missed call") -> "📞 Missed call"
+        else -> null
+    }
     val body = when {
         message.mediaType.equals("AUDIO", true) -> "🎤 Voice note"
         message.mediaType.equals("IMAGE", true) -> "📷 Photo"
         message.mediaType.equals("VIDEO", true) -> "🎬 Video"
-        isCall && lower.contains("video") -> "📹 Video call"
-        isCall && (lower.contains("voice") || lower.contains("audio")) -> "📞 Voice call"
-        isCall -> "📞 Call"
-        message.message.isNotBlank() -> if (message.isEdited) "${message.message} (edited)" else message.message
+        callLabel != null -> callLabel
+        text.isNotBlank() -> if (message.isEdited) "$text (edited)" else text
         else -> "New message"
     }
     return minePrefix + forwardedPrefix + body
