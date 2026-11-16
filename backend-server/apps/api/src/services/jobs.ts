@@ -248,7 +248,8 @@ export async function enqueuePushNotification(payload: PushPayload) {
     await runInlinePush(payload);
     return;
   }
-  await pushQueue.add("send", payload, { jobId: `${payload.userId}:${payload.data.notificationId ?? Date.now()}` });
+  const notificationId = payload.data.notificationId?.replace(/[^a-zA-Z0-9_-]/g, "_") || String(Date.now());
+  await pushQueue.add("send", payload, { jobId: `push_${payload.userId}_${notificationId}` });
 }
 
 export async function closeJobWorkers() {
