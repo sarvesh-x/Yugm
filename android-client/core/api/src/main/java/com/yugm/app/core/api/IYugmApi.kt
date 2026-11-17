@@ -89,6 +89,7 @@ import com.yugm.app.core.model.ModerationStatusResponse
 import com.yugm.app.core.model.MissionProgressResult
 import com.yugm.app.core.model.RoomMission
 import com.yugm.app.core.model.RoomPoll
+import com.yugm.app.core.model.RoomReaction
 import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.model.SavedGameScoreResult
 import com.yugm.app.core.model.SupportTicket
@@ -183,6 +184,7 @@ suspend fun leaderboard(): RoomLeaderboard
     suspend fun closePoll(token: String, roomId: String, pollId: String)
     suspend fun roomMissions(token: String, roomId: String): List<RoomMission>
     suspend fun reactToRoom(token: String, roomId: String, type: String)
+    suspend fun roomReactions(token: String? = null): List<RoomReaction>
     suspend fun inviteToRoom(token: String, roomId: String, userId: String)
     suspend fun roomDirectMessage(token: String, roomId: String, message: String, receiverId: String? = null)
     suspend fun endRoom(roomId: String, token: String)

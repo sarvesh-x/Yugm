@@ -97,6 +97,28 @@ data class RoomGiftEvent(
     val price: Int = 0
 )
 
+enum class RoomReactionAccess { EVERYONE, VIP_EXCLUSIVE }
+
+data class RoomReaction(
+    val id: String = "",
+    val label: String = "",
+    val assetUrl: String = "",
+    val assetKind: String = "STATIC",
+    val access: RoomReactionAccess = RoomReactionAccess.EVERYONE,
+    val sortOrder: Int = 0
+)
+
+data class RoomReactionEvent(
+    val type: String = "",
+    val reactionId: String = "",
+    val label: String = "",
+    val assetUrl: String = "",
+    val assetKind: String = "STATIC",
+    val access: RoomReactionAccess = RoomReactionAccess.EVERYONE,
+    val userId: String = "",
+    val userName: String = ""
+)
+
 data class RoomLeaderboard(
     val topRooms: List<Room> = emptyList(),
     val topHosts: List<Host> = emptyList()

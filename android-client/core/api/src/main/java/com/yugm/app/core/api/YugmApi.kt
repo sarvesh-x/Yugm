@@ -194,6 +194,7 @@ object YugmApi : IYugmApi {
     override suspend fun closePoll(token: String, roomId: String, pollId: String) = RoomApi.closePoll(token, roomId, pollId)
     override suspend fun roomMissions(token: String, roomId: String): List<RoomMission> = RoomApi.roomMissions(token, roomId)
     override suspend fun reactToRoom(token: String, roomId: String, type: String) = RoomApi.reactToRoom(token, roomId, type)
+    override suspend fun roomReactions(token: String?): List<com.yugm.app.core.model.RoomReaction> = RoomApi.roomReactions(token)
     override suspend fun inviteToRoom(token: String, roomId: String, userId: String) = RoomApi.inviteToRoom(token, roomId, userId)
     override suspend fun roomDirectMessage(token: String, roomId: String, message: String, receiverId: String?) = RoomApi.roomDirectMessage(token, roomId, message, receiverId)
     override suspend fun endRoom(roomId: String, token: String) = RoomApi.endRoom(roomId, token)

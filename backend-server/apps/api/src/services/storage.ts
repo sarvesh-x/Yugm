@@ -25,7 +25,7 @@ function assertS3Ready() {
   }
 }
 
-export async function persistUploadedFile(file: Express.Multer.File, folder: "avatars" | "covers" | "profile-media" | "trust-verification" | "stories" | "voice-notes" | "recordings") {
+export async function persistUploadedFile(file: Express.Multer.File, folder: "avatars" | "covers" | "profile-media" | "trust-verification" | "stories" | "voice-notes" | "recordings" | "reactions") {
   if (env.STORAGE_DRIVER !== "s3") {
     return {
       url: folder === "trust-verification" ? `/api/trust-verification/media/${file.filename}` : `/uploads/${file.filename}`,
@@ -73,6 +73,20 @@ export async function loadTrustVerificationFile(fileName: string) {
   const object = await getS3Client().send(new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: `trust-verification/${safeName}` }));
   if (!object.Body) throw new Error("Verification media not found");
   return { body: Buffer.from(await object.Body.transformToByteArray()), contentType: object.ContentType ?? "application/octet-stream" };
+}
+
+export async function deleteStoredFile(folder: "reactions", fileNameOrKey?: string) {
+  if (!fileNameOrKey) return;
+  const fileName = path.basename(fileNameOrKey);
+  if (!fileName) return;
+  if (env.STORAGE_DRIVER !== "s3") {
+    await fs.unlink(path.join(process.cwd(), "uploads", fileName)).catch(() => {});
+    return;
+  }
+  assertS3Ready();
+  const key = fileNameOrKey.includes("/") ? fileNameOrKey : `${folder}/${fileName}`;
+  const { DeleteObjectCommand } = await import("@aws-sdk/client-s3");
+  await getS3Client().send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: key })).catch(() => {});
 }
 
 export function safeUploadName(userId: string, originalName: string) {

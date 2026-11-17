@@ -351,6 +351,8 @@ fun NavGraphBuilder.roomNavGraph(
                 pkLiveEffect = roomViewModel.pkLiveEffect,
                 pkOpponentMedia = roomViewModel.pkOpponentMedia,
                 polls = roomViewModel.polls,
+                roomReactions = roomViewModel.roomReactions,
+                isCurrentUserVip = detail.participants.firstOrNull { it.user.id == currentUserIdProvider() }?.user?.isVip == true,
                 onBack = { roomViewModel.leaveAndDisconnect { navController.returnFromRoom() } },
                 onMinimize = { onMinimizeRoom(room, com.yugm.app.core.model.RoomType.Video) },
                 requestError = roomViewModel.actionError.orEmpty(),

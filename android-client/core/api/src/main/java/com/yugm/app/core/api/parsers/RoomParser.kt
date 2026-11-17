@@ -15,6 +15,9 @@ import com.yugm.app.core.model.RoomParticipant
 import com.yugm.app.core.model.RoomPoll
 import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.model.SpeakerRequest
+import com.yugm.app.core.model.RoomReaction
+import com.yugm.app.core.model.RoomReactionAccess
+import com.yugm.app.core.model.VoiceRoomPresence
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -58,7 +61,22 @@ fun JSONObject.toHost(): Host = Host(
     hobbies = optJSONArray("hobbies")?.let { arr -> List(arr.length()) { arr.optString(it) } } ?: emptyList(),
     isOnline = optBoolean("isOnline", false),
     isVerified = optBoolean("isVerified", false),
-    verificationLevel = optString("verificationLevel", "NONE")
+    verificationLevel = optString("verificationLevel", "NONE"),
+    voiceRoomPresence = (optJSONObject("voiceRoomPresence") ?: optJSONObject("voicePresence"))?.toVoiceRoomPresence()
+)
+
+fun JSONObject.toVoiceRoomPresence(): VoiceRoomPresence = VoiceRoomPresence(
+    isLive = optBoolean("isLive", false),
+    roomId = optString("roomId", optString("room_id", "")),
+    roomName = optString("roomName", optString("room_name", "")).takeIf { it.isNotBlank() },
+    canJoin = optBoolean("canJoin", true),
+    presenceVersion = optLong("presenceVersion", optLong("presence_version", 0L)),
+    expiresAt = optString("expiresAt", optString("expires_at", "")).takeIf { it.isNotBlank() },
+    membershipId = optString("membershipId", optString("membership_id", "")).takeIf { it.isNotBlank() },
+    role = optString("role").takeIf { it.isNotBlank() },
+    joinedAt = optString("joinedAt", optString("joined_at", "")).takeIf { it.isNotBlank() },
+    participantCount = optInt("participantCount", optInt("participants", 0)),
+    privacySetting = optString("privacySetting", "EVERYONE")
 )
 
 fun JSONArray.toHosts(): List<Host> = buildList {
@@ -204,6 +222,23 @@ fun JSONObject.toRoomActivityItem(): RoomActivityItem = RoomActivityItem(
 
 fun JSONArray.toRoomActivityItems(): List<RoomActivityItem> = buildList {
     for (index in 0 until length()) add(getJSONObject(index).toRoomActivityItem())
+}
+
+fun JSONObject.toRoomReaction(): RoomReaction = RoomReaction(
+    id = optString("id", optString("_id", optString("type", optString("reactionId", "")))).trim(),
+    label = optString("label", ""),
+    assetUrl = resolveMediaUrl(optString("assetUrl", "")) ?: optString("assetUrl", ""),
+    assetKind = optString("assetKind", "STATIC").ifBlank { "STATIC" }.uppercase(),
+    access = if (optString("access", "EVERYONE").equals("VIP_EXCLUSIVE", ignoreCase = true)) RoomReactionAccess.VIP_EXCLUSIVE else RoomReactionAccess.EVERYONE,
+    sortOrder = optInt("sortOrder", 0)
+)
+
+fun JSONArray.toRoomReactions(): List<RoomReaction> = buildList {
+    for (index in 0 until length()) {
+        val item = optJSONObject(index) ?: continue
+        val reaction = item.toRoomReaction()
+        if (reaction.id.isNotBlank()) add(reaction)
+    }
 }
 
 fun roomGradient(seed: String): List<Color> {

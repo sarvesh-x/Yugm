@@ -6,22 +6,26 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import kotlin.random.Random
-import androidx.compose.material3.Text
 
 data class FloatingEmoji(
     val id: String,
-    val emoji: String,
+    val emoji: String = "",
+    val assetUrl: String = "",
+    val label: String = "",
     val userName: String = ""
 )
 
@@ -45,7 +49,7 @@ private fun FloatingEmojiItem(emoji: FloatingEmoji) {
     val startX = remember { Random.nextInt(-100, 100) }
     val endX = startX + Random.nextInt(-40, 40)
     val driftY = remember { Random.nextInt(-180, -80) }
-    val textSize = remember { Random.nextInt(28, 48) }
+    val sizePx = remember { Random.nextInt(34, 52) }
 
     val progress = remember { Animatable(0f) }
 
@@ -67,15 +71,24 @@ private fun FloatingEmojiItem(emoji: FloatingEmoji) {
             }
             .graphicsLayer {
                 alpha = 1f - progress.value
-                scaleX = 1f - progress.value * 0.4f
-                scaleY = 1f - progress.value * 0.4f
-            }
+                scaleX = 1f - progress.value * 0.35f
+                scaleY = 1f - progress.value * 0.35f
+            },
+        contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = emoji.emoji,
-            fontSize = textSize.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.size((textSize + 8).dp)
-        )
+        if (emoji.assetUrl.isNotBlank()) {
+            AsyncImage(
+                model = emoji.assetUrl,
+                contentDescription = emoji.label.ifBlank { "Reaction" },
+                modifier = Modifier.size(sizePx.dp)
+            )
+        } else {
+            Text(
+                text = emoji.emoji,
+                fontSize = sizePx.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.size((sizePx + 8).dp)
+            )
+        }
     }
 }

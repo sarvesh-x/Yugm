@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yugm.app.core.model.ActiveCosmetics
+import com.yugm.app.core.model.VoiceRoomPresence
 import com.yugm.app.core.api.resolveMediaUrl
 import com.yugm.app.core.ui.theme.Gold
 import com.yugm.app.core.ui.theme.Ink
@@ -66,7 +67,9 @@ fun Avatar(
     isSpeaking: Boolean = false,
     isMuted: Boolean = false,
     showEntry: Boolean = false,
-    accessibilityLabel: String? = null
+    accessibilityLabel: String? = null,
+    voiceRoomPresence: VoiceRoomPresence? = null,
+    onLiveClick: (() -> Unit)? = null
 ) {
     val avatarAsset = avatarAssetUrl(cosmetics.avatarAsset)
     // Resolve relative upload paths centrally so avatars from every API-backed
@@ -223,6 +226,14 @@ fun Avatar(
             ) {
                 Text(voiceBadgeLabel(cosmetics.voiceBadge), color = Ink, fontSize = 7.sp, fontWeight = FontWeight.Black)
             }
+        }
+        if (voiceRoomPresence?.isLive == true) {
+            AvatarLiveIndicator(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .offset(y = 8.dp),
+                onClick = onLiveClick
+            )
         }
     }
 }

@@ -156,9 +156,14 @@ import com.yugm.app.core.model.RoomActivityItem
 import com.yugm.app.core.model.RoomMission
 import com.yugm.app.core.model.RoomParticipant
 import com.yugm.app.core.model.RoomPoll
+import com.yugm.app.core.model.RoomReaction
+import com.yugm.app.core.model.RoomReactionAccess
+import com.yugm.app.core.model.RoomReactionEvent
 import com.yugm.app.core.model.SpeakerRequest
 import com.yugm.app.core.ui.components.AuroraBackground
 import com.yugm.app.core.ui.components.Avatar
+import com.yugm.app.core.ui.components.FloatingEmoji
+import com.yugm.app.core.ui.components.FloatingEmojiOverlay
 import com.yugm.app.core.ui.components.GiftPanel
 import com.yugm.app.core.ui.components.GlassCard
 import com.yugm.app.core.ui.components.PkBattleHeader
@@ -284,9 +289,11 @@ fun ActiveVoiceRoomScreen(
     forcedMuteVersion: Int = 0,
     forcedRemoveVersion: Int = 0,
     roomEndedVersion: Int = 0,
-    roomReactionEvent: Triple<Int, String, String> = Triple(0, "", ""),
+    roomReactionEvent: Pair<Int, RoomReactionEvent?> = 0 to null,
     roomGiftEvent: Pair<Int, com.yugm.app.core.model.RoomGiftEvent?> = 0 to null,
     onOpenModes: (() -> Unit)? = null,
+    roomReactions: List<RoomReaction> = emptyList(),
+    isCurrentUserVip: Boolean = false,
     onOpenThemes: (() -> Unit)? = null,
     onEditRoom: (() -> Unit)? = null,
     canSpeak: Boolean = participants.any {
@@ -397,10 +404,11 @@ fun ActiveVoiceRoomScreen(
     var showLuckyWheelDialog by rememberSaveable { mutableStateOf(false) }
     var showRoomInfoSheet by rememberSaveable { mutableStateOf(false) }
     var chatMessageDraft by rememberSaveable { mutableStateOf("") }
-    val seatReactions = remember { mutableStateMapOf<Int, String>() }
+    val seatReactions = remember { mutableStateMapOf<Int, RoomReactionEvent>() }
     var activeGiftBanner by remember { mutableStateOf<Pair<String, GiftItem>?>(null) }
     var seenJoinActivityIds by remember(room.id) { mutableStateOf<Set<String>?>(null) }
     var activeEntranceActivity by remember(room.id) { mutableStateOf<com.yugm.app.core.model.RoomActivityItem?>(null) }
+    var floatingReaction by remember { mutableStateOf<RoomReactionEvent?>(null) }
     val scope = rememberCoroutineScope()
     val roomMusicPlaybackStatus by YugmMediaRoom.roomMusicStatus.collectAsState()
     val musicPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -523,24 +531,30 @@ fun ActiveVoiceRoomScreen(
         }
     }
 
-    // Show the selected reaction on the reacting user's seat.
-    var floatingReaction by remember { mutableStateOf("") }
+    // Show the selected reaction on the reacting user's seat or as floating overlay.
     LaunchedEffect(roomReactionEvent.first) {
-        val emoji = roomReactionEmoji(roomReactionEvent.second)
+        val event = roomReactionEvent.second ?: return@LaunchedEffect
         val reactionId = roomReactionEvent.first
-        if (reactionId > 0) {
-            val reactingParticipant = participants.firstOrNull { it.user.id == roomReactionEvent.third }
-            val seatIdx = reactingParticipant?.seatIndex
-            if (seatIdx != null) {
-                seatReactions[seatIdx] = emoji
-                scope.launch {
-                    delay(1800)
-                    if (seatReactions[seatIdx] == emoji) seatReactions.remove(seatIdx)
-                }
-            } else {
-                floatingReaction = emoji
+        if (reactionId <= 0) return@LaunchedEffect
+        val normalized = event.copy(
+            reactionId = event.reactionId.ifBlank { event.type },
+            label = event.label.ifBlank { event.reactionId.ifBlank { event.type } }
+        )
+        val reactingParticipant = participants.firstOrNull { it.user.id == normalized.userId }
+        val seatIdx = reactingParticipant?.seatIndex
+        if (seatIdx != null) {
+            seatReactions[seatIdx] = normalized
+            scope.launch {
                 delay(1800)
-                if (roomReactionEvent.first == reactionId) floatingReaction = ""
+                if (seatReactions[seatIdx]?.reactionId == normalized.reactionId && seatReactions[seatIdx]?.userId == normalized.userId) {
+                    seatReactions.remove(seatIdx)
+                }
+            }
+        } else {
+            floatingReaction = normalized
+            delay(1800)
+            if (floatingReaction?.reactionId == normalized.reactionId && floatingReaction?.userId == normalized.userId) {
+                floatingReaction = null
             }
         }
     }
@@ -655,7 +669,7 @@ fun ActiveVoiceRoomScreen(
                                 isCurrentMuted = speakers.firstOrNull { it.seatIndex == index }?.let { p ->
                                     (p.user.id == currentUserId && muted) || p.micEnabled == false || p.moderatorMuted
                                 } ?: false,
-                                reactionEmoji = seatReactions[index],
+                                reaction = seatReactions[index],
                                 modifier = Modifier.weight(1f),
                                 onClick = {
                                     val p = speakers.firstOrNull { it.seatIndex == index }
@@ -1058,13 +1072,18 @@ fun ActiveVoiceRoomScreen(
         }
     }
 
-        if (floatingReaction.isNotBlank()) {
-            Text(
-                text = floatingReaction,
-                fontSize = 48.sp,
-                modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).semantics {
-                    contentDescription = "Live room reaction $floatingReaction"
-                }
+        floatingReaction?.let { reaction ->
+            FloatingEmojiOverlay(
+                emojis = listOf(
+                    FloatingEmoji(
+                        id = "${roomReactionEvent.first}-${reaction.userId}-${reaction.reactionId}",
+                        emoji = if (reaction.assetUrl.isBlank()) roomReactionEmoji(reaction.reactionId.ifBlank { reaction.type }) else "",
+                        assetUrl = reaction.assetUrl,
+                        label = reaction.label.ifBlank { reaction.reactionId },
+                        userName = reaction.userName
+                    )
+                ),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 220.dp).height(260.dp).fillMaxWidth()
             )
         }
 
@@ -1205,7 +1224,7 @@ fun ActiveVoiceRoomScreen(
                     )
                     OutlinedButtonRoomMusic(
                         icon = Icons.Filled.QueueMusic,
-                        label = "Queue · ${roomMusicQueue.size}",
+                        label = "Queue ï¿½ ${roomMusicQueue.size}",
                         modifier = Modifier.weight(1f),
                         onClick = { showMusicQueue = !showMusicQueue }
                     )
@@ -1275,49 +1294,104 @@ fun ActiveVoiceRoomScreen(
                     .navigationBarsPadding()
             ) {
                 Text("Live Reactions", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
-                Text("Tap an emoji to react live on the stage", color = TextMuted, fontSize = 12.sp)
+                Text("React live on the stage", color = TextMuted, fontSize = 12.sp)
                 Spacer(modifier = Modifier.height(14.dp))
-                val reactions = listOf(
-                    "??" to "clap",
-                    "??" to "heart",
-                    "??" to "fire",
-                    "??" to "laugh",
-                    "??" to "wow",
-                    "??" to "crown",
-                    "?" to "stars",
-                    "??" to "party"
-                )
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(bottom = 16.dp)
-                ) {
-                    items(reactions) { (emoji, type) ->
-                        Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(Color(0xFF26203B))
-                                .clickable {
-                                    onReact(type)
-                                    val seatIdx = selfParticipant?.seatIndex
-                                    if (seatIdx != null) {
-                                        seatReactions[seatIdx] = emoji
-                                        scope.launch {
-                                            delay(1800)
-                                            if (seatReactions[seatIdx] == emoji) seatReactions.remove(seatIdx)
-                                        }
-                                    } else {
-                                        floatingReaction = emoji
-                                        scope.launch {
-                                            delay(1800)
-                                            if (floatingReaction == emoji) floatingReaction = ""
-                                        }
-                                    }
-                                    showReactionPicker = false
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(emoji, fontSize = 28.sp)
+
+                val fallback = listOf("heart", "fire", "laugh", "clap", "wow", "crown", "stars", "party")
+                val catalog = if (roomReactions.isNotEmpty()) roomReactions else fallback.mapIndexed { index, id ->
+                    RoomReaction(id = id, label = id.replaceFirstChar { it.uppercase() }, access = RoomReactionAccess.EVERYONE, sortOrder = index)
+                }
+                val everyone = catalog.filter { it.access == RoomReactionAccess.EVERYONE }
+                val vipOnly = catalog.filter { it.access == RoomReactionAccess.VIP_EXCLUSIVE }
+
+                fun sendReaction(reaction: RoomReaction) {
+                    val event = RoomReactionEvent(
+                        type = reaction.id,
+                        reactionId = reaction.id,
+                        label = reaction.label.ifBlank { reaction.id },
+                        assetUrl = reaction.assetUrl,
+                        assetKind = reaction.assetKind,
+                        access = reaction.access,
+                        userId = currentUserId,
+                        userName = selfParticipant?.user?.name.orEmpty()
+                    )
+                    onReact(reaction.id)
+                    val seatIdx = selfParticipant?.seatIndex
+                    if (seatIdx != null) {
+                        seatReactions[seatIdx] = event
+                        scope.launch {
+                            delay(1800)
+                            if (seatReactions[seatIdx]?.reactionId == event.reactionId && seatReactions[seatIdx]?.userId == event.userId) seatReactions.remove(seatIdx)
+                        }
+                    } else {
+                        floatingReaction = event
+                        scope.launch {
+                            delay(1800)
+                            if (floatingReaction?.reactionId == event.reactionId && floatingReaction?.userId == event.userId) floatingReaction = null
+                        }
+                    }
+                    showReactionPicker = false
+                }
+
+                @Composable
+                fun ReactionTile(reaction: RoomReaction, locked: Boolean) {
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(if (locked) Color(0xFF1C1828) else Color(0xFF26203B))
+                            .border(1.dp, if (locked) Color(0x33FFD66B) else RoomGlassBorder, RoundedCornerShape(16.dp))
+                            .clickable {
+                                if (locked) onToast("VIP exclusive reaction. Upgrade to VIP to use it.")
+                                else sendReaction(reaction)
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (reaction.assetUrl.isNotBlank()) {
+                            AsyncImage(
+                                model = reaction.assetUrl,
+                                contentDescription = reaction.label.ifBlank { reaction.id },
+                                modifier = Modifier.size(if (locked) 24.dp else 30.dp).alpha(if (locked) 0.45f else 1f)
+                            )
+                        } else {
+                            Text(
+                                text = roomReactionEmoji(reaction.id),
+                                fontSize = 26.sp,
+                                modifier = Modifier.alpha(if (locked) 0.45f else 1f)
+                            )
+                        }
+                        if (locked) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(4.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xCC171321))
+                                    .padding(3.dp)
+                            ) {
+                                Icon(Icons.Filled.Lock, contentDescription = "VIP only", tint = Gold, modifier = Modifier.size(10.dp))
+                            }
+                        }
+                    }
+                }
+
+                if (everyone.isNotEmpty()) {
+                    Text("Everyone", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
+                        items(everyone, key = { it.id }) { reaction ->
+                            ReactionTile(reaction, locked = false)
+                        }
+                    }
+                }
+
+                if (vipOnly.isNotEmpty()) {
+                    Text("VIP Exclusive", color = Gold, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
+                        items(vipOnly, key = { it.id }) { reaction ->
+                            val locked = !isCurrentUserVip
+                            ReactionTile(reaction, locked = locked)
                         }
                     }
                 }
@@ -1333,9 +1407,9 @@ fun ActiveVoiceRoomScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Spin the wheel for a chance to win exclusive room frames, badges, and coin boosts!", color = TextMuted, fontSize = 13.sp)
-                    Text("• Grand Prize: Legendary Electric Dragon Frame ??", color = RoomGoldAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Text("• Tier 2: Supreme Crown Frame ??", color = Color.White, fontSize = 12.sp)
-                    Text("• Tier 3: 500 Coins Bonus ??", color = Color(0xFF60A5FA), fontSize = 12.sp)
+                    Text("ï¿½ Grand Prize: Legendary Electric Dragon Frame ??", color = RoomGoldAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("ï¿½ Tier 2: Supreme Crown Frame ??", color = Color.White, fontSize = 12.sp)
+                    Text("ï¿½ Tier 3: 500 Coins Bonus ??", color = Color(0xFF60A5FA), fontSize = 12.sp)
                 }
             },
             confirmButton = {
@@ -1403,7 +1477,7 @@ fun ActiveVoiceRoomScreen(
                                 when {
                                     p.user.id == room.host?.id -> RoomRoleBadge("HOST", Color(0xFFFFC857), "?")
                                     p.isRoomAdmin -> RoomRoleBadge("ROOM ADMIN", Color(0xFFC8A2FF), "??")
-                                    p.role in listOf("SPEAKER", "MODERATOR") -> Text("Speaker · Mic on stage", color = TextMuted, fontSize = 11.sp)
+                                    p.role in listOf("SPEAKER", "MODERATOR") -> Text("Speaker ï¿½ Mic on stage", color = TextMuted, fontSize = 11.sp)
                                     else -> Text("Listener", color = TextMuted, fontSize = 11.sp)
                                 }
                             }
@@ -1495,7 +1569,7 @@ fun ActiveVoiceRoomScreen(
                 Text(
                     buildString {
                         append("ID: ${target.user.id.takeLast(10)}")
-                        if (target.user.city.isNotBlank()) append(" · ${target.user.city}")
+                        if (target.user.city.isNotBlank()) append(" ï¿½ ${target.user.city}")
                     },
                     color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp)
                 )
@@ -1817,7 +1891,7 @@ private fun VoiceSeatItem(
     isSpeaking: Boolean,
     isLocked: Boolean,
     isCurrentMuted: Boolean,
-    reactionEmoji: String? = null,
+    reaction: RoomReactionEvent? = null,
     onClick: () -> Unit
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
@@ -1876,7 +1950,7 @@ private fun VoiceSeatItem(
                 }
 
                 // Animated live reaction centered directly over the avatar!
-                if (!reactionEmoji.isNullOrBlank()) {
+                if (reaction != null) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.Center)
@@ -1886,7 +1960,15 @@ private fun VoiceSeatItem(
                             .padding(8.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(reactionEmoji, fontSize = 24.sp)
+                        if (reaction.assetUrl.isNotBlank()) {
+                            AsyncImage(
+                                model = reaction.assetUrl,
+                                contentDescription = reaction.label.ifBlank { reaction.reactionId },
+                                modifier = Modifier.size(28.dp)
+                            )
+                        } else {
+                            Text(roomReactionEmoji(reaction.reactionId.ifBlank { reaction.type }), fontSize = 24.sp)
+                        }
                     }
                 }
 
@@ -2346,7 +2428,7 @@ private fun RoomSettingsAndInfoSheet(
                 ) {
                     Icon(Icons.Filled.Groups, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(5.dp))
-                    Text("People · $participantCount", fontSize = 12.sp, maxLines = 1)
+                    Text("People ï¿½ $participantCount", fontSize = 12.sp, maxLines = 1)
                 }
             }
             Row(

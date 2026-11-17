@@ -23,12 +23,15 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.MoreVert
@@ -58,6 +61,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -71,18 +75,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.viewinterop.AndroidView
+import coil.compose.AsyncImage
 import com.yugm.app.core.api.YugmMediaRoom
 import com.yugm.app.core.model.ChatMessage
 import com.yugm.app.core.model.GiftItem
 import com.yugm.app.core.model.Host
 import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomParticipant
+import com.yugm.app.core.model.RoomReaction
+import com.yugm.app.core.model.RoomReactionAccess
 import com.yugm.app.core.model.SpeakerRequest
 import com.yugm.app.core.model.PkBattle
 import com.yugm.app.core.model.PkLeaderboardEntry
 import com.yugm.app.core.model.PkLiveEffect
 import com.yugm.app.core.model.PkMediaSession
 import com.yugm.app.core.model.PkMode
+import com.yugm.app.core.ui.theme.Gold
 import com.yugm.app.core.model.PkOpponent
 import com.yugm.app.core.model.PkSideType
 import com.yugm.app.core.model.PkStatus
@@ -118,6 +126,8 @@ fun VideoLivestreamScreen(
     pkLiveEffect: PkLiveEffect?,
     pkOpponentMedia: PkMediaSession?,
     polls: List<RoomPoll> = emptyList(),
+    roomReactions: List<RoomReaction> = emptyList(),
+    isCurrentUserVip: Boolean = false,
     onBack: () -> Unit,
     onMinimize: () -> Unit,
     requestError: String = "",
@@ -484,12 +494,54 @@ fun VideoLivestreamScreen(
         ModalBottomSheet(onDismissRequest = { reactionPickerOpen = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = Color(0xFF14151E)) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp).navigationBarsPadding()) {
                 Text("Live reactions", color = StreamInk, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                Row(Modifier.fillMaxWidth().padding(vertical = 18.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    listOf("🙌" to "clap", "😍" to "heart", "🔥" to "fire", "😂" to "laugh", "🤯" to "wow", "🎉" to "party").forEach { (emoji, reaction) ->
-                        Text(emoji, modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable {
-                            onReact(reaction)
-                            reactionPickerOpen = false
-                        }.padding(8.dp), fontSize = 25.sp)
+                val fallback = listOf("heart", "fire", "laugh", "clap", "wow", "crown", "stars", "party")
+                val catalog = if (roomReactions.isNotEmpty()) roomReactions else fallback.mapIndexed { index, id ->
+                    RoomReaction(id = id, label = id.replaceFirstChar { it.uppercase() }, access = RoomReactionAccess.EVERYONE, sortOrder = index)
+                }
+                val everyone = catalog.filter { it.access == RoomReactionAccess.EVERYONE }
+                val vipOnly = catalog.filter { it.access == RoomReactionAccess.VIP_EXCLUSIVE }
+
+                @Composable
+                fun ReactionTile(reaction: RoomReaction, locked: Boolean) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(if (locked) Color(0xFF1C1828) else Color(0xFF26203B))
+                            .border(1.dp, if (locked) Color(0x33FFD66B) else Color(0x33FFFFFF), RoundedCornerShape(14.dp))
+                            .clickable {
+                                if (locked) onToast("VIP exclusive reaction. Upgrade to VIP to use it.")
+                                else {
+                                    onReact(reaction.id)
+                                    reactionPickerOpen = false
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (reaction.assetUrl.isNotBlank()) {
+                            AsyncImage(model = reaction.assetUrl, contentDescription = reaction.label.ifBlank { reaction.id }, modifier = Modifier.size(if (locked) 22.dp else 28.dp).alpha(if (locked) 0.45f else 1f))
+                        } else {
+                            val emoji = when (reaction.id.lowercase()) {
+                                "heart" -> "❤️"; "fire" -> "🔥"; "laugh" -> "😂"; "clap" -> "👏"; "wow" -> "😮"; "crown" -> "👑"; "stars" -> "✨"; "party" -> "🎉"; else -> "✨"
+                            }
+                            Text(emoji, fontSize = 22.sp, modifier = Modifier.alpha(if (locked) 0.45f else 1f))
+                        }
+                        if (locked) {
+                            Icon(Icons.Filled.Lock, contentDescription = "VIP only", tint = Gold, modifier = Modifier.align(Alignment.BottomEnd).padding(3.dp).size(10.dp))
+                        }
+                    }
+                }
+
+                if (everyone.isNotEmpty()) {
+                    Text("Everyone", color = StreamMuted, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                    LazyRow(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        items(everyone, key = { it.id }) { reaction -> ReactionTile(reaction, locked = false) }
+                    }
+                }
+                if (vipOnly.isNotEmpty()) {
+                    Text("VIP Exclusive", color = Gold, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                    LazyRow(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        items(vipOnly, key = { it.id }) { reaction -> ReactionTile(reaction, locked = !isCurrentUserVip) }
                     }
                 }
             }

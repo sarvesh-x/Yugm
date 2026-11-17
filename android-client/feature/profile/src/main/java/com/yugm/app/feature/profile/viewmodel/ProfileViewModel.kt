@@ -6,6 +6,9 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yugm.app.core.api.IYugmApi
+import com.yugm.app.core.api.SocketManager
+import com.yugm.app.core.api.SocketEvent
+import com.yugm.app.core.api.VoiceRoomJoinCoordinator
 import com.yugm.app.core.model.Host
 import com.yugm.app.core.model.Clan
 import com.yugm.app.core.model.PkBattle
@@ -22,7 +25,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
-    private val yugmApi: IYugmApi
+    private val yugmApi: IYugmApi,
+    private val socketManager: SocketManager
 ) : ViewModel() {
 
     var profile by mutableStateOf<Host?>(null)
@@ -49,6 +53,59 @@ class ProfileViewModel @Inject constructor(
         private set
     var profileLoadError by mutableStateOf<String?>(null)
         private set
+    var isJoiningVoiceParty by mutableStateOf(false)
+        private set
+
+    init {
+        viewModelScope.launch {
+            socketManager.events.collect { event ->
+                when (event) {
+                    is SocketEvent.VoiceRoomPresenceUpdated -> {
+                        if (profile?.id == event.userId) {
+                            val currentVersion = profile?.voiceRoomPresence?.presenceVersion ?: 0L
+                            if (event.presence.presenceVersion >= currentVersion) {
+                                profile = profile?.copy(voiceRoomPresence = event.presence)
+                            }
+                        }
+                    }
+                    is SocketEvent.VoiceRoomPresenceEnded -> {
+                        if (profile?.id == event.userId) {
+                            profile = profile?.copy(voiceRoomPresence = null)
+                        }
+                    }
+                    else -> {}
+                }
+            }
+        }
+    }
+
+    fun joinVoiceParty(
+        context: android.content.Context,
+        token: String,
+        currentUserId: String,
+        onNavigateToRoom: (String) -> Unit,
+        onShowToast: (String) -> Unit = {}
+    ) {
+        val presence = profile?.voiceRoomPresence ?: return
+        val targetUserId = profile?.id ?: return
+        viewModelScope.launch {
+            if (isJoiningVoiceParty) return@launch
+            isJoiningVoiceParty = true
+            try {
+                VoiceRoomJoinCoordinator.joinVoiceParty(
+                    context = context,
+                    token = token,
+                    targetUserId = targetUserId,
+                    presence = presence,
+                    currentUserId = currentUserId,
+                    onNavigateToRoom = onNavigateToRoom,
+                    onShowToast = onShowToast
+                )
+            } finally {
+                isJoiningVoiceParty = false
+            }
+        }
+    }
 
     fun setOwnProfile(
         name: String,

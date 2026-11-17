@@ -6,6 +6,8 @@ import com.yugm.app.core.model.PkInvite
 import com.yugm.app.core.model.PkLiveEffect
 import com.yugm.app.core.model.ChatMessage
 import com.yugm.app.core.model.RoomGiftEvent
+import com.yugm.app.core.model.RoomReactionAccess
+import com.yugm.app.core.model.RoomReactionEvent
 import com.yugm.app.core.model.PkSideType
 import org.json.JSONObject
 import timber.log.Timber
@@ -25,7 +27,7 @@ object YugmSocket {
         onPkRefresh: () -> Unit = {},
         onPkLeadChanged: ((leader: String, leftScore: Int, rightScore: Int) -> Unit)? = null,
         onPkRematchRequested: ((previousBattleId: String) -> Unit)? = null,
-        onRoomReaction: ((emoji: String, userId: String, userName: String) -> Unit)? = null,
+        onRoomReaction: ((RoomReactionEvent) -> Unit)? = null,
         onSpeakerApproved: ((userId: String) -> Unit)? = null,
         onUserMuted: ((userId: String) -> Unit)? = null,
         onUserRemoved: ((userId: String) -> Unit)? = null,
@@ -133,10 +135,18 @@ object YugmSocket {
                 if (args.isNotEmpty() && onRoomReaction != null) {
                     try {
                         val data = args[0] as JSONObject
+                        val type = data.optString("reactionId", data.optString("type", ""))
                         onRoomReaction(
-                            data.optString("type", ""),
-                            data.optString("userId", ""),
-                            data.optString("name", "Someone")
+                            RoomReactionEvent(
+                                type = type,
+                                reactionId = type,
+                                label = data.optString("label", type),
+                                assetUrl = resolveMediaUrl(data.optString("assetUrl", "")) ?: data.optString("assetUrl", ""),
+                                assetKind = data.optString("assetKind", "STATIC").ifBlank { "STATIC" }.uppercase(),
+                                access = if (data.optString("access", "EVERYONE").equals("VIP_EXCLUSIVE", ignoreCase = true)) RoomReactionAccess.VIP_EXCLUSIVE else RoomReactionAccess.EVERYONE,
+                                userId = data.optString("userId", ""),
+                                userName = data.optString("name", "Someone")
+                            )
                         )
                     } catch (e: Exception) {
                         Timber.tag(TAG).e(e, "Error parsing room reaction")

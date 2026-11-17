@@ -2,6 +2,10 @@ package com.yugm.app
 
 import android.app.Application
 import android.os.Build
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
 import dagger.hilt.android.HiltAndroidApp
 import com.yugm.app.core.api.YugmMediaRoom
 import com.yugm.app.core.api.ApiConfig
@@ -16,7 +20,7 @@ import com.facebook.FacebookSdk
 import com.yugm.app.feature.auth.BuildConfig as AuthBuildConfig
 
 @HiltAndroidApp
-class YugmApplication : Application() {
+class YugmApplication : Application(), ImageLoaderFactory {
     @Suppress("DEPRECATION")
     override fun onCreate() {
         super.onCreate()
@@ -58,6 +62,16 @@ class YugmApplication : Application() {
         }
         if (BuildConfig.DEBUG) Timber.plant(Timber.DebugTree())
         YugmMediaRoom.initialize(this)
+    }
+
+    override fun newImageLoader(): ImageLoader {
+        return ImageLoader.Builder(this)
+            .components {
+                if (Build.VERSION.SDK_INT >= 28) add(ImageDecoderDecoder.Factory())
+                else add(GifDecoder.Factory())
+            }
+            .crossfade(true)
+            .build()
     }
 
     private fun isProbablyEmulator(): Boolean {

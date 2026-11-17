@@ -52,6 +52,17 @@ export async function adminApiWithMeta<T>(path: string, options: RequestOptions 
   return { data: payload.data as T, meta: payload.meta || {} };
 }
 
+export async function adminApiMultipart<T>(path: string, token: string, body: FormData, method = "POST"): Promise<T> {
+  const headers = new Headers();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(`${API_BASE}${path}`, { method, headers, body });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.success === false) {
+    throw new ApiError(response.status, payload.error?.message || `Request failed (${response.status})`);
+  }
+  return payload.data as T;
+}
+
 export function login(email: string, password: string) {
   return adminApi<Session>("/auth/login", {
     method: "POST",

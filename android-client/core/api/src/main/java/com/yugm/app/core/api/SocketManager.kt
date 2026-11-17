@@ -4,10 +4,12 @@ import com.yugm.app.core.api.parsers.toClan
 import com.yugm.app.core.api.parsers.toClanMessage
 import com.yugm.app.core.api.parsers.toDirectMessage
 import com.yugm.app.core.api.parsers.toNotificationItem
+import com.yugm.app.core.api.parsers.toVoiceRoomPresence
 import com.yugm.app.core.model.Clan
 import com.yugm.app.core.model.ClanMessage
 import com.yugm.app.core.model.DirectMessage
 import com.yugm.app.core.model.NotificationItem
+import com.yugm.app.core.model.VoiceRoomPresence
 import io.socket.client.IO
 import io.socket.client.Socket
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -36,6 +38,8 @@ sealed class SocketEvent {
     data class ClanDeleted(val clanId: String) : SocketEvent()
     data class ClanMembershipChanged(val clanId: String, val type: String, val userId: String, val clan: Clan?) : SocketEvent()
     data class ClanTypingUpdate(val clanId: String, val userId: String, val typing: Boolean) : SocketEvent()
+    data class VoiceRoomPresenceUpdated(val userId: String, val presence: VoiceRoomPresence) : SocketEvent()
+    data class VoiceRoomPresenceEnded(val userId: String) : SocketEvent()
     object Connected : SocketEvent()
     object Disconnected : SocketEvent()
 }
@@ -104,6 +108,31 @@ class SocketManager @Inject constructor() {
                 runCatching { item.toNotificationItem() }
                     .onSuccess { _events.tryEmit(SocketEvent.NotificationReceived(it)) }
                     .onFailure { Timber.tag("SocketManager").e(it, "Failed to parse notification") }
+            }
+            socket?.on("voice:room:presence:started") { args ->
+                val payload = args.firstOrNull() as? JSONObject ?: return@on
+                val userId = payload.optString("userId", payload.optString("user_id", ""))
+                val presenceObj = payload.optJSONObject("presence") ?: payload.optJSONObject("voiceRoomPresence") ?: payload
+                val presence = presenceObj.toVoiceRoomPresence()
+                if (userId.isNotBlank()) {
+                    _events.tryEmit(SocketEvent.VoiceRoomPresenceUpdated(userId, presence))
+                }
+            }
+            socket?.on("voice:room:presence:updated") { args ->
+                val payload = args.firstOrNull() as? JSONObject ?: return@on
+                val userId = payload.optString("userId", payload.optString("user_id", ""))
+                val presenceObj = payload.optJSONObject("presence") ?: payload.optJSONObject("voiceRoomPresence") ?: payload
+                val presence = presenceObj.toVoiceRoomPresence()
+                if (userId.isNotBlank()) {
+                    _events.tryEmit(SocketEvent.VoiceRoomPresenceUpdated(userId, presence))
+                }
+            }
+            socket?.on("voice:room:presence:ended") { args ->
+                val payload = args.firstOrNull() as? JSONObject ?: return@on
+                val userId = payload.optString("userId", payload.optString("user_id", ""))
+                if (userId.isNotBlank()) {
+                    _events.tryEmit(SocketEvent.VoiceRoomPresenceEnded(userId))
+                }
             }
             socket?.on("direct:reaction:new") { args ->
                 val payload = args.firstOrNull() as? JSONObject ?: return@on

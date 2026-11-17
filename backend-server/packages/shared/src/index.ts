@@ -9,6 +9,9 @@ export const roomStatuses = ["LIVE", "ENDED", "SCHEDULED"] as const;
 export const roomVisibilities = ["PUBLIC", "PRIVATE"] as const;
 export const roomParticipantRoles = ["HOST", "SPEAKER", "AUDIENCE", "MODERATOR"] as const;
 export const reactionTypes = ["heart", "fire", "laugh", "clap", "wow", "crown", "stars", "party"] as const;
+export const legacyReactionTypes = reactionTypes;
+export const reactionAccessLevels = ["EVERYONE", "VIP_EXCLUSIVE"] as const;
+export type ReactionAccess = (typeof reactionAccessLevels)[number];
 export const miniGameIds = ["vibe_tap", "memory_match", "reflex_ring"] as const;
 
 export type UserRole = (typeof roles)[number];
@@ -16,7 +19,7 @@ export type RoomType = (typeof roomTypes)[number];
 export type RoomStatus = (typeof roomStatuses)[number];
 export type RoomVisibility = (typeof roomVisibilities)[number];
 export type RoomParticipantRole = (typeof roomParticipantRoles)[number];
-export type ReactionType = (typeof reactionTypes)[number];
+export type ReactionType = string;
 export type MiniGameId = (typeof miniGameIds)[number];
 
 export const miniGames = [
@@ -682,7 +685,7 @@ export const verifyGooglePlayPurchaseSchema = z.object({
 });
 
 export const reactionSchema = z.object({
-  type: z.enum(reactionTypes)
+  type: z.string().trim().min(1).max(64).regex(/^[a-z0-9_-]+$/i, "Invalid reaction type")
 });
 
 export const createPollSchema = z.object({

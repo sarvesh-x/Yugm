@@ -25,7 +25,7 @@ import {
   Users,
   Wallet
 } from "lucide-react";
-import { Admin, adminApi, adminApiWithMeta, formatDate, formatNumber, login, refreshAdminSession, Session } from "./api";
+import { Admin, adminApi, adminApiMultipart, adminApiWithMeta, formatDate, formatNumber, login, refreshAdminSession, Session } from "./api";
 
 type ViewKey =
   | "dashboard"
@@ -42,6 +42,7 @@ type ViewKey =
   | "payments"
   | "gifts"
   | "cosmetics"
+  | "reactions"
   | "notifications"
   | "campaigns"
   | "growth"
@@ -72,6 +73,7 @@ const navItems: Array<{ key: ViewKey; label: string; icon: ReactNode; group: str
   { key: "payments", label: "Payments", icon: <Coins />, group: "Money" },
   { key: "gifts", label: "Gifts", icon: <Gift />, group: "Money" },
   { key: "cosmetics", label: "Cosmetics", icon: <Palette />, group: "Money" },
+  { key: "reactions", label: "Live Reactions", icon: <Sparkles />, group: "Money", requiredPermission: "cosmetics.write" },
   { key: "notifications", label: "Notifications", icon: <Bell />, group: "Operations" },
   { key: "campaigns", label: "Campaigns", icon: <Bell />, group: "Operations", requiredPermission: "notifications.send" },
   { key: "growth", label: "Growth OS", icon: <LineChart />, group: "Operations" },
@@ -333,6 +335,7 @@ function ViewRenderer({ view, session, setNotice, onLogout }: { view: ViewKey; s
   if (view === "payments") return <SimpleResource token={session.accessToken} title="Recharges" endpoint="/payments/recharges" columns={paymentColumns} />;
   if (view === "gifts") return <GiftsPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "cosmetics") return <CosmeticsPage token={session.accessToken} setNotice={setNotice} />;
+  if (view === "reactions") return <LiveReactionsPage token={session.accessToken} admin={session.admin} setNotice={setNotice} />;
   if (view === "notifications") return <NotificationsPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "campaigns") return <CampaignsPage token={session.accessToken} admin={session.admin} setNotice={setNotice} />;
   if (view === "growth") return <GrowthPage token={session.accessToken} />;
@@ -1089,6 +1092,178 @@ function CosmeticsPage({ token, setNotice }: { token: string; setNotice: (notice
           <label className="full">Asset URL<input value={form.assetUrl} onChange={(e) => setForm({ ...form, assetUrl: e.target.value })} placeholder="https://..." /></label>
         </div>
         <button className="primary-action compact" onClick={save} style={{ marginTop: "12px" }}>{selected ? "Update" : "Create"}</button>
+      </Drawer>
+    </div>
+  );
+}
+
+function LiveReactionsPage({ token, admin, setNotice }: { token: string; admin: Admin; setNotice: (notice: Notice) => void }) {
+  const [selected, setSelected] = useState<any>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const resource = useResource<any>("/reactions", token);
+  const reactions = resource.data?.reactions ?? resource.data?.data ?? [];
+
+  const [form, setForm] = useState({
+    id: "",
+    label: "",
+    access: "EVERYONE",
+    assetKind: "STATIC",
+    isActive: true,
+    sortOrder: 0
+  });
+  const [assetFile, setAssetFile] = useState<File | null>(null);
+
+  const canWrite = admin.isSuperAdmin || admin.permissions.includes("cosmetics.write");
+
+  const openNew = () => {
+    setSelected(null);
+    setForm({ id: "", label: "", access: "EVERYONE", assetKind: "STATIC", isActive: true, sortOrder: 0 });
+    setAssetFile(null);
+    setEditMode(true);
+  };
+
+  const openEdit = (reaction: any) => {
+    setSelected(reaction);
+    setForm({
+      id: reaction.id || reaction._id || "",
+      label: reaction.label || "",
+      access: reaction.access || "EVERYONE",
+      assetKind: reaction.assetKind || "STATIC",
+      isActive: reaction.isActive !== false,
+      sortOrder: Number(reaction.sortOrder || 0)
+    });
+    setAssetFile(null);
+    setEditMode(true);
+  };
+
+  const save = async () => {
+    if (!canWrite) return;
+    if (!form.label.trim()) { setNotice({ tone: "error", text: "Label is required" }); return; }
+    if (!selected && !assetFile) { setNotice({ tone: "error", text: "Please upload a reaction image/GIF" }); return; }
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      if (!selected && form.id.trim()) fd.append("id", form.id.trim().toLowerCase());
+      fd.append("label", form.label.trim());
+      fd.append("access", form.access);
+      fd.append("assetKind", form.assetKind);
+      fd.append("isActive", String(form.isActive));
+      fd.append("sortOrder", String(form.sortOrder || 0));
+      if (assetFile) fd.append("asset", assetFile);
+      if (selected) {
+        await adminApiMultipart(`/reactions/${selected.id || selected._id}`, token, fd, "PATCH");
+        setNotice({ tone: "success", text: "Reaction updated" });
+      } else {
+        await adminApiMultipart("/reactions", token, fd, "POST");
+        setNotice({ tone: "success", text: "Reaction created" });
+      }
+      setEditMode(false);
+      setSelected(null);
+      setAssetFile(null);
+      resource.refresh();
+    } catch (err: any) {
+      setNotice({ tone: "error", text: err.message || "Failed to save reaction" });
+    }
+    setBusy(false);
+  };
+
+  const remove = async (reaction: any) => {
+    if (!canWrite) return;
+    if (!window.confirm(`Delete reaction "${reaction.label || reaction.id}"?`)) return;
+    try {
+      await adminApi(`/reactions/${reaction.id || reaction._id}`, { token, method: "DELETE" });
+      setNotice({ tone: "success", text: "Reaction deleted" });
+      resource.refresh();
+    } catch (err: any) {
+      setNotice({ tone: "error", text: err.message || "Delete failed" });
+    }
+  };
+
+  const toggleActive = async (reaction: any) => {
+    if (!canWrite) return;
+    try {
+      const fd = new FormData();
+      fd.append("label", reaction.label || reaction.id);
+      fd.append("access", reaction.access || "EVERYONE");
+      fd.append("assetKind", reaction.assetKind || "STATIC");
+      fd.append("isActive", String(!(reaction.isActive !== false)));
+      fd.append("sortOrder", String(reaction.sortOrder || 0));
+      await adminApiMultipart(`/reactions/${reaction.id || reaction._id}`, token, fd, "PATCH");
+      resource.refresh();
+    } catch (err: any) {
+      setNotice({ tone: "error", text: err.message || "Update failed" });
+    }
+  };
+
+  return (
+    <div className="page-grid">
+      <div className="section-heading">
+        <div>
+          <h3>Live Reactions</h3>
+          <p>Global room reactions catalog. Upload image/GIF assets, set Everyone or VIP Exclusive access, and control visibility/order.</p>
+        </div>
+        <div className="action-row">
+          {canWrite && <button className="primary-action compact" onClick={openNew}>New reaction</button>}
+        </div>
+      </div>
+      <ResourceFrame title="" loading={resource.loading} error={resource.error} onRetry={resource.refresh}>
+        <DataTable
+          rows={reactions}
+          columns={[
+            { key: "id", label: "ID", render: (row) => row.id || row._id },
+            { key: "preview", label: "Preview", render: (row) => row.assetUrl ? <img src={row.assetUrl} alt={row.label || "reaction"} style={{ width: 36, height: 36, objectFit: "contain", borderRadius: 8, background: "rgba(255,255,255,0.06)" }} /> : <span>{row.label || row.id}</span> },
+            { key: "label", label: "Label" },
+            { key: "access", label: "Access", render: (row) => <StatusBadge value={row.access || "EVERYONE"} /> },
+            { key: "assetKind", label: "Kind", render: (row) => <StatusBadge value={row.assetKind || "STATIC"} /> },
+            { key: "isActive", label: "Active", render: (row) => <StatusBadge value={row.isActive === false ? "DISABLED" : "ACTIVE"} /> },
+            { key: "sortOrder", label: "Order", render: (row) => formatNumber(row.sortOrder || 0) }
+          ]}
+          actions={(row) => canWrite ? (
+            <div className="action-row">
+              <button className="ghost-button" onClick={() => openEdit(row)}>Edit</button>
+              <button className="ghost-button" onClick={() => toggleActive(row)}>{row.isActive === false ? "Enable" : "Disable"}</button>
+              <button className="soft danger" onClick={() => remove(row)}>Delete</button>
+            </div>
+          ) : null}
+        />
+      </ResourceFrame>
+
+      <Drawer open={editMode} title={selected ? "Edit live reaction" : "New live reaction"} onClose={() => { if (!busy) { setEditMode(false); setSelected(null); } }}>
+        <div className="form-grid">
+          {!selected && <label>ID (optional)<input value={form.id} onChange={(e) => setForm({ ...form, id: e.target.value })} placeholder="e.g. neon_heart" /></label>}
+          <label>Label<input value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="Display name" /></label>
+          <label>Access
+            <select value={form.access} onChange={(e) => setForm({ ...form, access: e.target.value })}>
+              <option value="EVERYONE">Everyone</option>
+              <option value="VIP_EXCLUSIVE">VIP Exclusive</option>
+            </select>
+          </label>
+          <label>Asset kind
+            <select value={form.assetKind} onChange={(e) => setForm({ ...form, assetKind: e.target.value })}>
+              <option value="STATIC">Static image</option>
+              <option value="ANIMATED">Animated GIF</option>
+            </select>
+          </label>
+          <label>Active
+            <select value={String(form.isActive)} onChange={(e) => setForm({ ...form, isActive: e.target.value === "true" })}>
+              <option value="true">Yes</option>
+              <option value="false">No</option>
+            </select>
+          </label>
+          <label>Sort order<input type="number" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })} /></label>
+          <label className="full">Reaction file {selected ? "(leave empty to keep current)" : "(required)"}
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(e) => setAssetFile(e.target.files?.[0] || null)} />
+          </label>
+          {(assetFile || selected?.assetUrl) && (
+            <div className="full" style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <img src={assetFile ? URL.createObjectURL(assetFile) : selected?.assetUrl} alt="Preview" style={{ width: 64, height: 64, objectFit: "contain", borderRadius: 12, background: "rgba(255,255,255,0.06)" }} />
+              <span style={{ opacity: 0.8 }}>{assetFile ? assetFile.name : "Current asset"}</span>
+            </div>
+          )}
+        </div>
+        {canWrite && <button className="primary-action compact" disabled={busy} onClick={save} style={{ marginTop: "12px" }}>{busy ? "Saving..." : (selected ? "Update" : "Create")}</button>}
+        {!canWrite && <p style={{ opacity: 0.7, marginTop: 12 }}>You need cosmetics.write permission to manage reactions.</p>}
       </Drawer>
     </div>
   );

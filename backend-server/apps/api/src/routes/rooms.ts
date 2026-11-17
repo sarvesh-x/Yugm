@@ -32,6 +32,7 @@ import { assertUsersCanInteract } from "../services/safety.js";
 import { autoModerate } from "../middleware/autoModerate.js";
 import { applyAutoModeration } from "../services/autoModeration.js";
 import { endRoom, recordRoomParticipantExit } from "../services/roomLifecycle.js";
+import { canUseRoomReaction, findActiveRoomReaction, normalizeReactionId, toPublicRoomReaction } from "../services/reactions.js";
 
 const patchSchema = z.object({
   title: z.string().min(1).max(100).optional(),
@@ -792,9 +793,29 @@ roomsRouter.post("/:id/reactions", requireAuth, requireNotChatRestricted, valida
   const room = await getRoomOrThrow(req.params.id);
   if (room.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
   await requireActiveParticipant(room._id, req.user!.id);
-  const payload = { type: req.body.type, userId: req.user!.id, name: req.user!.name, at: new Date().toISOString() };
+  const reactionId = normalizeReactionId(req.body.type);
+  const reaction = await findActiveRoomReaction(reactionId);
+  if (!reaction) throw new HttpError(404, "Reaction not found", ErrorCode.NOT_FOUND);
+  if (reaction.access === "VIP_EXCLUSIVE") {
+    const user = await User.findById(req.user!.id).select("vipExpiresAt").lean();
+    if (!canUseRoomReaction(reaction as any, user)) {
+      throw new HttpError(403, "This reaction is available for VIP members only", ErrorCode.FORBIDDEN);
+    }
+  }
+  const publicReaction = toPublicRoomReaction(reaction as any);
+  const payload = {
+    type: publicReaction.id,
+    reactionId: publicReaction.id,
+    label: publicReaction.label,
+    assetUrl: publicReaction.assetUrl,
+    assetKind: publicReaction.assetKind,
+    access: publicReaction.access,
+    userId: req.user!.id,
+    name: req.user!.name,
+    at: new Date().toISOString()
+  };
   emitRoom(req.params.id, socketEvents.roomReactionSend, payload);
-  await addActivity(req.params.id, "REACTION", `${req.user!.name} reacted with ${req.body.type}`, req.user!.id, payload);
+  await addActivity(req.params.id, "REACTION", `${req.user!.name} reacted with ${publicReaction.label || publicReaction.id}`, req.user!.id, payload);
   sendOk(res, { reaction: payload }, 201);
 }));
 

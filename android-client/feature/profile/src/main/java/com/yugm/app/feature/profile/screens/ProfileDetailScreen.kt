@@ -1,5 +1,6 @@
 package com.yugm.app.feature.profile.screens
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -201,17 +202,39 @@ fun ProfileDetailScreen(
         AuroraBackground(speed = 0.8f)
         Scaffold(
             topBar = {
-                if (!isOwnProfile) {
-                    YugmPageHeader(
-                        title = viewModel.profile?.name?.takeIf(String::isNotBlank) ?: "Profile",
-                        subtitle = viewModel.profile?.username?.takeIf(String::isNotBlank)?.let { "@$it" }.orEmpty(),
-                        onBack = onBack,
-                        trailing = {
-                            IconButton(onClick = { showReportDialog = true }) {
-                                Icon(Icons.Filled.MoreVert, contentDescription = "More profile options", tint = TextPrimary)
+                Column {
+                    val voicePresence = viewModel.profile?.voiceRoomPresence
+                    AnimatedVisibility(
+                        visible = voicePresence?.isLive == true,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        ProfileLiveVoiceBanner(
+                            displayName = viewModel.profile?.name.orEmpty(),
+                            roomName = voicePresence?.roomName,
+                            isJoining = viewModel.isJoiningVoiceParty,
+                            onClick = {
+                                viewModel.joinVoiceParty(
+                                    context = context,
+                                    token = token,
+                                    currentUserId = userId,
+                                    onNavigateToRoom = { roomId -> onOpenRoom(Room(id = roomId)) }
+                                )
                             }
-                        }
-                    )
+                        )
+                    }
+                    if (!isOwnProfile) {
+                        YugmPageHeader(
+                            title = viewModel.profile?.name?.takeIf(String::isNotBlank) ?: "Profile",
+                            subtitle = viewModel.profile?.username?.takeIf(String::isNotBlank)?.let { "@$it" }.orEmpty(),
+                            onBack = onBack,
+                            trailing = {
+                                IconButton(onClick = { showReportDialog = true }) {
+                                    Icon(Icons.Filled.MoreVert, contentDescription = "More profile options", tint = TextPrimary)
+                                }
+                            }
+                        )
+                    }
                 }
             },
             bottomBar = {
@@ -310,7 +333,15 @@ fun ProfileDetailScreen(
                             isOwnProfile = isOwnProfile,
                             onEditProfile = if (isOwnProfile) openProfileEditor else null,
                             onOpenSocialList = onOpenSocialList,
-                            onOpenWallet = onOpenWallet
+                            onOpenWallet = onOpenWallet,
+                            onJoinVoiceParty = {
+                                viewModel.joinVoiceParty(
+                                    context = context,
+                                    token = token,
+                                    currentUserId = userId,
+                                    onNavigateToRoom = { roomId -> onOpenRoom(Room(id = roomId)) }
+                                )
+                            }
                         )
                     }
                 }
@@ -591,8 +622,6 @@ fun ProfileDetailScreen(
                 }
             }
         }
-        }
-    }
     }
 
     if (showEditProfileScreen) {
@@ -786,6 +815,8 @@ fun ProfileDetailScreen(
             containerColor = SurfaceElevated
         )
     }
+}
+}
 }
 
 @Composable
@@ -992,7 +1023,8 @@ private fun ProfileHero(
     onEditProfile: (() -> Unit)? = null,
     onViewPublicProfile: (() -> Unit)? = null,
     onOpenSocialList: ((String) -> Unit)? = null,
-    onOpenWallet: (() -> Unit)? = null
+    onOpenWallet: (() -> Unit)? = null,
+    onJoinVoiceParty: (() -> Unit)? = null
 ) {
     val colors = LocalYugmColors.current
     val surface = colors.surface.copy(alpha = 0.96f)
@@ -1018,7 +1050,9 @@ private fun ProfileHero(
                     initial = profile.name.firstOrNull()?.toString() ?: "?",
                     size = 96,
                     imageUrl = profile.avatar,
-                    cosmetics = profile.activeCosmetics
+                    cosmetics = profile.activeCosmetics,
+                    voiceRoomPresence = profile.voiceRoomPresence,
+                    onLiveClick = onJoinVoiceParty
                 )
             }
         }

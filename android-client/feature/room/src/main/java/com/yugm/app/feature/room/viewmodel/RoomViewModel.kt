@@ -30,6 +30,8 @@ import com.yugm.app.core.model.RoomActivityItem
 import com.yugm.app.core.model.RoomDetail
 import com.yugm.app.core.model.RoomMission
 import com.yugm.app.core.model.RoomPoll
+import com.yugm.app.core.model.RoomReaction
+import com.yugm.app.core.model.RoomReactionEvent
 import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.model.SupportTicket
 import com.yugm.app.core.model.WatchParty
@@ -97,9 +99,12 @@ class RoomViewModel @Inject constructor(
         private set
     var roomEndedVersion by mutableStateOf(0)
         private set
-    var roomReactionEvent by mutableStateOf(Triple(0, "", ""))
+    var roomReactionEvent by mutableStateOf(0 to (null as RoomReactionEvent?))
         private set
     var roomGiftEvent by mutableStateOf(0 to (null as com.yugm.app.core.model.RoomGiftEvent?))
+        private set
+
+    var roomReactions by mutableStateOf<List<RoomReaction>>(emptyList())
         private set
 
     var roomState by mutableStateOf<UiState<RoomDetail>>(UiState.Idle)
@@ -126,6 +131,13 @@ class RoomViewModel @Inject constructor(
     var actionError by mutableStateOf<String?>(null)
         private set
 
+    fun loadRoomReactions() {
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { yugmApi.roomReactions(sessionManager.authToken.takeIf { it.isNotBlank() }) } }
+                .onSuccess { roomReactions = it }
+        }
+    }
+
     fun clearActionError() {
         actionError = null
     }
@@ -146,6 +158,7 @@ class RoomViewModel @Inject constructor(
         this.roomId = roomId
         this.currentUserId = userId
         this.isVideo = video
+        loadRoomReactions()
         refresh()
         videoParticipantRefreshJob?.cancel()
         if (video) {
@@ -333,8 +346,8 @@ class RoomViewModel @Inject constructor(
                             }
                         },
                         onPkRematchRequested = { refresh() },
-                        onRoomReaction = { type, userId, _ ->
-                            viewModelScope.launch { roomReactionEvent = Triple(roomReactionEvent.first + 1, type, userId) }
+                        onRoomReaction = { reaction ->
+                            viewModelScope.launch { roomReactionEvent = (roomReactionEvent.first + 1) to reaction }
                         },
                         onSpeakerApproved = { approvedUserId ->
                             if (approvedUserId == currentUserId) {
@@ -701,7 +714,7 @@ class RoomViewModel @Inject constructor(
             actionError = null
             withContext(Dispatchers.IO) {
                 runCatching { yugmApi.reactToRoom(authToken, roomId, type) }
-                    .onFailure { actionError = "Failed to react" }
+                    .onFailure { error -> actionError = error.message ?: "Failed to react" }
             }
             actionLoading = false
         }

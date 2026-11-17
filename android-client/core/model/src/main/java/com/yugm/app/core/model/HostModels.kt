@@ -34,7 +34,8 @@ data class Host(
     val hobbies: List<String> = emptyList(),
     val isOnline: Boolean = false,
     val isVerified: Boolean = false,
-    val verificationLevel: String = "NONE"
+    val verificationLevel: String = "NONE",
+    val voiceRoomPresence: VoiceRoomPresence? = null
 )
 
 data class ActiveCosmetics(

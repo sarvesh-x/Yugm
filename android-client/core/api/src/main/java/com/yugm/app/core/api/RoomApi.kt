@@ -11,8 +11,11 @@ import com.yugm.app.core.model.RoomLeaderboard
 import com.yugm.app.core.model.RoomMission
 import com.yugm.app.core.model.RoomParticipant
 import com.yugm.app.core.model.RoomPoll
+import com.yugm.app.core.model.RoomReaction
 import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.model.SpeakerRequest
+import com.yugm.app.core.model.VoiceRoomPresence
+import com.yugm.app.core.model.RoomJoinResult
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
@@ -139,6 +142,72 @@ object RoomApi {
         YugmHttpClient.post("/rooms/$roomId/join", token, JSONObject())
     }
 
+    suspend fun getUserVoicePresence(token: String?, userId: String): VoiceRoomPresence? {
+        val path = if (token.isNullOrBlank()) "/users/public/$userId/voice-presence" else "/users/$userId/voice-presence"
+        return try {
+            val data = YugmHttpClient.get(path, auth = token?.ifBlank { null }).getJSONObject("data")
+            (data.optJSONObject("voiceRoomPresence") ?: data.optJSONObject("voicePresence"))?.toVoiceRoomPresence()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun joinUserVoiceParty(
+        token: String,
+        targetUserId: String,
+        expectedRoomId: String? = null,
+        expectedPresenceVersion: Long? = null,
+        operationId: String? = null
+    ): RoomJoinResult {
+        val body = JSONObject().apply {
+            put("targetUserId", targetUserId)
+            if (!expectedRoomId.isNullOrBlank()) put("expectedRoomId", expectedRoomId)
+            if (expectedPresenceVersion != null && expectedPresenceVersion > 0) put("expectedPresenceVersion", expectedPresenceVersion)
+            if (!operationId.isNullOrBlank()) put("operationId", operationId)
+        }
+
+        return try {
+            val data = YugmHttpClient.post("/voice-rooms/join-user", token, body).getJSONObject("data")
+            RoomJoinResult(
+                success = data.optBoolean("success", true),
+                roomId = data.optString("roomId", expectedRoomId.orEmpty()),
+                membershipId = data.optString("membershipId", ""),
+                role = data.optString("role", "LISTENER"),
+                joinStatus = data.optString("joinStatus", "ADMITTED")
+            )
+        } catch (e: Exception) {
+            val rId = expectedRoomId.orEmpty()
+            val errorMsg = e.message.orEmpty()
+            if (errorMsg.contains("full", ignoreCase = true)) {
+                RoomJoinResult(success = false, errorMessage = "This voice party is currently full.")
+            } else if (errorMsg.contains("closed", ignoreCase = true) || errorMsg.contains("ended", ignoreCase = true)) {
+                RoomJoinResult(success = false, errorMessage = "This voice party has ended.")
+            } else if (errorMsg.contains("left", ignoreCase = true)) {
+                RoomJoinResult(success = false, errorMessage = "This user has left the voice party.")
+            } else if (errorMsg.contains("private", ignoreCase = true) || errorMsg.contains("invite", ignoreCase = true)) {
+                RoomJoinResult(success = false, errorMessage = "You need an invitation to join this room.")
+            } else if (errorMsg.contains("restricted", ignoreCase = true) || errorMsg.contains("blocked", ignoreCase = true)) {
+                RoomJoinResult(success = false, errorMessage = "You cannot join this voice party.")
+            } else if (rId.isNotBlank()) {
+                try {
+                    joinRoom(token, rId)
+                    RoomJoinResult(success = true, roomId = rId, role = "LISTENER", joinStatus = "ADMITTED")
+                } catch (fallbackEx: Exception) {
+                    val fMsg = fallbackEx.message.orEmpty()
+                    val userMsg = when {
+                        fMsg.contains("full", ignoreCase = true) -> "This voice party is currently full."
+                        fMsg.contains("closed", ignoreCase = true) -> "This voice party has ended."
+                        fMsg.contains("private", ignoreCase = true) -> "You need an invitation to join this room."
+                        else -> "Unable to connect. Please try again."
+                    }
+                    RoomJoinResult(success = false, errorMessage = userMsg)
+                }
+            } else {
+                RoomJoinResult(success = false, errorMessage = "Unable to connect. Please try again.")
+            }
+        }
+    }
+
     suspend fun leaveRoom(token: String, roomId: String) {
         YugmHttpClient.post("/rooms/$roomId/leave", token, JSONObject())
     }
@@ -216,6 +285,11 @@ object RoomApi {
 
     suspend fun reactToRoom(token: String, roomId: String, type: String) {
         YugmHttpClient.post("/rooms/$roomId/reactions", token, JSONObject().put("type", type))
+    }
+
+    suspend fun roomReactions(token: String? = null): List<RoomReaction> {
+        val data = YugmHttpClient.get("/reactions", token).getJSONObject("data")
+        return data.optJSONArray("reactions")?.toRoomReactions() ?: emptyList()
     }
 
     suspend fun inviteToRoom(token: String, roomId: String, userId: String) {
