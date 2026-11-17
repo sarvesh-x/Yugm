@@ -1235,7 +1235,7 @@ fun ActiveVoiceRoomScreen(
                     )
                     OutlinedButtonRoomMusic(
                         icon = Icons.Filled.QueueMusic,
-                        label = "Queue � ${roomMusicQueue.size}",
+                        label = "Queue • ${roomMusicQueue.size}",
                         modifier = Modifier.weight(1f),
                         onClick = { showMusicQueue = !showMusicQueue }
                     )
@@ -1446,9 +1446,9 @@ fun ActiveVoiceRoomScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Spin the wheel for a chance to win exclusive room frames, badges, and coin boosts!", color = TextMuted, fontSize = 13.sp)
-                    Text("� Grand Prize: Legendary Electric Dragon Frame ??", color = RoomGoldAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Text("� Tier 2: Supreme Crown Frame ??", color = Color.White, fontSize = 12.sp)
-                    Text("� Tier 3: 500 Coins Bonus ??", color = Color(0xFF60A5FA), fontSize = 12.sp)
+                    Text("• Grand Prize: Legendary Electric Dragon Frame ??", color = RoomGoldAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("• Tier 2: Supreme Crown Frame ??", color = Color.White, fontSize = 12.sp)
+                    Text("• Tier 3: 500 Coins Bonus ??", color = Color(0xFF60A5FA), fontSize = 12.sp)
                 }
             },
             confirmButton = {
@@ -1516,7 +1516,7 @@ fun ActiveVoiceRoomScreen(
                                 when {
                                     p.user.id == room.host?.id -> RoomRoleBadge("HOST", Color(0xFFFFC857), "?")
                                     p.isRoomAdmin -> RoomRoleBadge("ROOM ADMIN", Color(0xFFC8A2FF), "??")
-                                    p.role in listOf("SPEAKER", "MODERATOR") -> Text("Speaker � Mic on stage", color = TextMuted, fontSize = 11.sp)
+                                    p.role in listOf("SPEAKER", "MODERATOR") -> Text("Speaker • Mic on stage", color = TextMuted, fontSize = 11.sp)
                                     else -> Text("Listener", color = TextMuted, fontSize = 11.sp)
                                 }
                             }
@@ -1608,7 +1608,7 @@ fun ActiveVoiceRoomScreen(
                 Text(
                     buildString {
                         append("ID: ${target.user.id.takeLast(10)}")
-                        if (target.user.city.isNotBlank()) append(" � ${target.user.city}")
+                        if (target.user.city.isNotBlank()) append(" • ${target.user.city}")
                     },
                     color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp)
                 )
@@ -2453,7 +2453,7 @@ private fun RoomSettingsAndInfoSheet(
                 ) {
                     Icon(Icons.Filled.Groups, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(5.dp))
-                    Text("People � $participantCount", fontSize = 12.sp, maxLines = 1)
+                    Text("People • $participantCount", fontSize = 12.sp, maxLines = 1)
                 }
             }
             Row(

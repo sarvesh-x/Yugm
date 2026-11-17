@@ -392,7 +392,7 @@ fun ChatListScreen(
                                     ) {
                                         Text("No chats found", color = LocalYugmColors.current.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                                         Text(
-                                            "Nothing matches “$searchQuery”. Try a different name or word.",
+                                            "Nothing matches \"$searchQuery\". Try a different name or word.",
                                             color = LocalYugmColors.current.textSecondary,
                                             fontSize = 12.sp,
                                             textAlign = TextAlign.Center,
@@ -575,7 +575,7 @@ fun ChatListScreen(
                                                 body = if (searchQuery.isBlank()) {
                                                     "Accepted friend requests will appear here. Tap “Add friends” to find people."
                                                 } else {
-                                                    "Nothing matches “$searchQuery”."
+                                                    "Nothing matches \"$searchQuery\"."
                                                 },
                                                 actionLabel = if (searchQuery.isBlank()) "Find people" else null,
                                                 onAction = { showFindPeople = true }
@@ -618,7 +618,7 @@ fun ChatListScreen(
                                         } else if (filteredFollowers.isEmpty()) item {
                                             ContactEmptyState(
                                                 title = "No followers yet",
-                                                body = if (searchQuery.isBlank()) "People who follow you will appear here." else "Nothing matches “$searchQuery”."
+                                                body = if (searchQuery.isBlank()) "People who follow you will appear here." else "Nothing matches \"$searchQuery\"."
                                             )
                                         } else {
                                             itemsIndexed(filteredFollowers, key = { _, person -> "follower-${person.id}" }) { index, person ->
@@ -632,7 +632,7 @@ fun ChatListScreen(
                                         } else if (filteredFollowing.isEmpty()) item {
                                             ContactEmptyState(
                                                 title = "Not following anyone yet",
-                                                body = if (searchQuery.isBlank()) "People you follow will appear here." else "Nothing matches “$searchQuery”."
+                                                body = if (searchQuery.isBlank()) "People you follow will appear here." else "Nothing matches \"$searchQuery\"."
                                             )
                                         } else {
                                             itemsIndexed(filteredFollowing, key = { _, person -> "following-${person.id}" }) { index, person ->
@@ -1095,7 +1095,7 @@ private fun LightChatRow(
                 }
             }
             Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (muted) Text("🔕 ", fontSize = 11.sp)
+                if (muted) Text("🔇", fontSize = 11.sp)
                 Text(
                     preview,
                     color = if (hasUnread) LocalYugmColors.current.textPrimary.copy(alpha = 0.9f) else LocalYugmColors.current.textSecondary,
