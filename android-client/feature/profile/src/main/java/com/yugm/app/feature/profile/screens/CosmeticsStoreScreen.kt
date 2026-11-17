@@ -1,5 +1,7 @@
 package com.yugm.app.feature.profile.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -126,7 +128,7 @@ fun CosmeticsStoreScreen(
     var showBonusDialog by remember { mutableStateOf(false) }
     var showDiscountDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(token) {
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.GIFTS, SyncTopic.PROFILE), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) {
         viewModel.refresh(token)
     }
 

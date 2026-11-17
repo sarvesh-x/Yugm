@@ -37,6 +37,10 @@ fun NavGraphBuilder.chatNavGraph(
         LaunchedEffect(authTokenProvider(), currentUserIdProvider(), partnerId) {
             chatViewModel.connect(authTokenProvider(), currentUserIdProvider(), partnerId)
         }
+        com.yugm.app.core.ui.components.AutomaticSyncEffect(authTokenProvider(), currentUserIdProvider(), partnerId,
+            topics = setOf(com.yugm.app.core.api.SyncTopic.CHAT), enabled = authTokenProvider().isNotBlank(), isBusy = { chatViewModel.isLoading }) {
+            chatViewModel.refresh()
+        }
         ChatScreen(
             partner = chatViewModel.partner,
             currentUserId = currentUserIdProvider(),

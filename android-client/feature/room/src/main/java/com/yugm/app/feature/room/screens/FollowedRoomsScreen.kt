@@ -1,5 +1,7 @@
 package com.yugm.app.feature.room.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -86,7 +88,7 @@ fun FollowedRoomsScreen(
         }
     }
 
-    LaunchedEffect(token) { refresh() }
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.ROOMS), enabled = token.isNotBlank(), isBusy = { loading }) { refresh() }
 
     fun unfollow(room: Room) {
         if (busyRoomId != null) return
@@ -118,7 +120,6 @@ fun FollowedRoomsScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = colors.textPrimary)
                     }
                 },
-                actions = { TextButton(onClick = ::refresh, enabled = !loading) { Text("Refresh", color = colors.primary) } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.background)
             )
         }

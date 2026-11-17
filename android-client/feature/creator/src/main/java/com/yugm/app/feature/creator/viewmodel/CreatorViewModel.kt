@@ -36,7 +36,7 @@ class CreatorViewModel @Inject constructor() : ViewModel() {
         }
 
         viewModelScope.launch {
-            _uiState.value = CreatorUiState.Loading
+            if (_uiState.value !is CreatorUiState.Success) _uiState.value = CreatorUiState.Loading
             try {
                 val dashboard = runCatching { CreatorApi.creatorDashboard(token) }.getOrNull()
                 val experience = runCatching { CreatorApi.experienceHome(token) }.getOrNull()
@@ -48,7 +48,7 @@ class CreatorViewModel @Inject constructor() : ViewModel() {
                     withdrawal = withdrawal
                 )
             } catch (e: Exception) {
-                _uiState.value = CreatorUiState.Error(e.message ?: "Failed to load creator data")
+                if (_uiState.value !is CreatorUiState.Success) _uiState.value = CreatorUiState.Error(e.message ?: "Failed to load creator data")
             }
         }
     }

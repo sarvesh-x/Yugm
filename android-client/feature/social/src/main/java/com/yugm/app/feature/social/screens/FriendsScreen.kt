@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -59,7 +61,7 @@ fun FriendsScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     var busy by remember { mutableStateOf(false) }
 
-    LaunchedEffect(token) {
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.SOCIAL), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) {
         viewModel.load(token)
     }
 
@@ -74,7 +76,7 @@ fun FriendsScreen(
                 modifier = Modifier.padding(horizontal = 20.dp)
             )
 
-            if (viewModel.isLoading) {
+            if (viewModel.isLoading && (viewModel.friends.isEmpty() && viewModel.requests.isEmpty() && viewModel.sent.isEmpty())) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     LoadingState("Loading...")
                 }

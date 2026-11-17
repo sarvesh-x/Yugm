@@ -1,5 +1,7 @@
 package com.yugm.app.feature.wallet.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -35,7 +37,7 @@ fun VipPlansScreen(
     val vipViewModel: VipViewModel = hiltViewModel()
     val walletViewModel: WalletViewModel = hiltViewModel()
 
-    LaunchedEffect(token) {
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.WALLET), enabled = token.isNotBlank()) {
         vipViewModel.loadVip(token)
         walletViewModel.loadWallet(token)
     }

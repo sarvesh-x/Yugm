@@ -1,5 +1,7 @@
 package com.yugm.app.feature.settings.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -30,7 +32,7 @@ fun BlockedUsersScreen(
 ) {
     val viewModel: BlockedUsersViewModel = hiltViewModel()
 
-    LaunchedEffect(token) {
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.SETTINGS), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) {
         viewModel.load(token)
     }
 
@@ -48,7 +50,7 @@ fun BlockedUsersScreen(
         },
         containerColor = Background
     ) { innerPadding ->
-        if (viewModel.isLoading) {
+        if (viewModel.isLoading && (viewModel.blockedUsers.isEmpty())) {
             Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
                 LoadingState("Retrieving blocklist...")
             }

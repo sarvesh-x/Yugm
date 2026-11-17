@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -68,14 +70,14 @@ fun DailyQuestionScreen(
         isLoading = false
     }
 
-    LaunchedEffect(token) { load() }
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.SOCIAL), enabled = token.isNotBlank(), isBusy = { isLoading }) { load() }
 
     YugmAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
             Text("Daily Question", color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Black)
             Spacer(Modifier.height(16.dp))
 
-            if (isLoading) {
+            if (isLoading && (question == null)) {
                 com.yugm.app.core.ui.components.LoadingState("Loading...")
             } else {
                 question?.let { q ->

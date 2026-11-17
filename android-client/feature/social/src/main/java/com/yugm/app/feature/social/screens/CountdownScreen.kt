@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,7 +50,7 @@ fun CountdownScreen(
     var events by remember { mutableStateOf<List<CountdownEvent>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
-    LaunchedEffect(token) {
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.SOCIAL), enabled = token.isNotBlank(), isBusy = { isLoading }) {
         try { events = SocialApi.getCountdowns(token) } catch (_: Exception) { }
         isLoading = false
     }
@@ -58,7 +60,7 @@ fun CountdownScreen(
             Text("Countdowns", color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Black)
             Spacer(Modifier.height(16.dp))
 
-            if (isLoading) {
+            if (isLoading && (events.isEmpty())) {
                 com.yugm.app.core.ui.components.LoadingState("Loading...")
             } else if (events.isEmpty()) {
                 GlassCard {

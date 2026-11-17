@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -85,7 +87,7 @@ fun ClanDetailScreen(
     var settingsAvatar by remember { mutableStateOf("") }
     var settingsPrivate by remember { mutableStateOf(false) }
 
-    LaunchedEffect(clanId, token) {
+    AutomaticSyncEffect(clanId, token, topics = setOf(SyncTopic.CLANS), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) {
         viewModel.loadDetail(token, clanId)
         if (currentUserId.isNotBlank()) viewModel.loadInviteCandidates(token, currentUserId)
     }

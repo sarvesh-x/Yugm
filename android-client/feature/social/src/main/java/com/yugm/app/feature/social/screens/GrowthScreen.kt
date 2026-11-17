@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -72,7 +74,7 @@ fun GrowthScreen(
     val isLoading = viewModel.isLoading
     val error = viewModel.error
 
-    LaunchedEffect(token) { viewModel.load(token) }
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.TASKS), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) { viewModel.load(token) }
     LaunchedEffect(home) { home?.let { streakCount = it.streakCount } }
 
     LazyColumn(
@@ -91,7 +93,7 @@ fun GrowthScreen(
             }
         }
         when {
-            isLoading -> item { LoadingState("Loading growth cockpit...") }
+            isLoading && home == null -> item { LoadingState("Loading growth cockpit...") }
             error != null -> item { Text(error ?: "", color = colors.textSecondary) }
             home != null -> {
                 val payload = home!!

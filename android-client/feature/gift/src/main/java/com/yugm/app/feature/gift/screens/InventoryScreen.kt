@@ -1,5 +1,7 @@
 package com.yugm.app.feature.gift.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -72,7 +74,7 @@ fun InventoryScreen(
     var tab by remember { mutableStateOf(InventoryTab.GIFTS) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(token) { viewModel.loadInventory(token) }
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.GIFTS), enabled = token.isNotBlank(), isBusy = { state.isLoading }) { viewModel.loadInventory(token) }
 
     val visibleItems = state.inventory.filter { item ->
         val matchesQuery = query.isBlank() || item.gift?.name?.contains(query.trim(), ignoreCase = true) == true

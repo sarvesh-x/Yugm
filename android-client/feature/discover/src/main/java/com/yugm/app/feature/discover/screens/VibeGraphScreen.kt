@@ -1,5 +1,7 @@
 package com.yugm.app.feature.discover.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -69,7 +71,7 @@ fun VibeGraphScreen(
     onOpenProfile: (String) -> Unit,
     viewModel: VibeGraphViewModel = hiltViewModel()
 ) {
-    LaunchedEffect(token) {
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.SOCIAL), enabled = token.isNotBlank()) {
         viewModel.loadVibeData(token)
     }
 

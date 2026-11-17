@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -55,7 +57,7 @@ fun ScheduledCalendarScreen(
     var loading by remember { mutableStateOf(true) }
     var rooms by remember { mutableStateOf<List<Room>>(emptyList()) }
 
-    LaunchedEffect(token) {
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.ROOMS, SyncTopic.EVENTS), enabled = token.isNotBlank(), isBusy = { loading }) {
         loading = true
         runCatching {
             rooms = withContext(Dispatchers.IO) { YugmApi.scheduledRooms() }
@@ -72,7 +74,7 @@ fun ScheduledCalendarScreen(
             item {
                 YugmPageHeader("Scheduled Rooms", onBack = onBack)
             }
-            if (loading) {
+            if (loading && (rooms.isEmpty())) {
                 item { Box(Modifier.padding(horizontal = 20.dp)) { LoadingState("Loading scheduled rooms...") } }
             } else if (rooms.isEmpty()) {
                 item {

@@ -88,7 +88,7 @@ class MainViewModel @Inject constructor(
         sessionManager.balance = newBalance
     }
 
-    fun validateAndUpdate(user: com.yugm.app.core.model.YugmUser) {
+    fun validateAndUpdate(user: com.yugm.app.core.model.YugmUser, registerPush: Boolean = true) {
         userName = user.name
         username = user.username
         balance = user.walletBalance
@@ -99,7 +99,7 @@ class MainViewModel @Inject constructor(
         sessionManager.balance = user.walletBalance
         sessionManager.emailVerified = user.emailVerified
         sessionManager.profileCompleted = user.profileCompleted
-        syncPushToken()
+        if (registerPush) syncPushToken()
     }
 
     fun updateTokens(tokens: RefreshedSession) {

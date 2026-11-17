@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,7 +28,7 @@ fun SafetyScreen(
     onBack: () -> Unit,
     viewModel: SocialViewModel = hiltViewModel()
 ) {
-    LaunchedEffect(token) {
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.SETTINGS), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) {
         viewModel.loadSafetyCenter(token)
         viewModel.loadBlockedUsers(token)
     }

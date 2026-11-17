@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -64,7 +66,7 @@ fun ReferralScreen(
     var claimInput by remember { mutableStateOf("") }
     var claimMessage by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(token) { viewModel.loadReferral(token) }
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.TASKS), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) { viewModel.loadReferral(token) }
 
     YugmAmbientBackground {
         LazyColumn(
@@ -74,7 +76,7 @@ fun ReferralScreen(
         ) {
             item { YugmPageHeader("Referral", "Invite friends, earn coins", onBack = onBack) }
 
-            if (viewModel.isLoading) {
+            if (viewModel.isLoading && (viewModel.referralStats == null)) {
                 item { Box(Modifier.padding(horizontal = 20.dp)) { LoadingState("Loading referral stats…") } }
             } else {
                 item {

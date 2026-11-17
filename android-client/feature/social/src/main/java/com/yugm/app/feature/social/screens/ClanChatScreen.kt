@@ -145,18 +145,14 @@ fun ClanChatScreen(
         }
     }
 
-    LaunchedEffect(clanId) {
+    LaunchedEffect(token, clanId, currentUserId) {
         viewModel.connect(token, clanId, currentUserId)
-        viewModel.loadMessages(token, clanId)
-        viewModel.loadDetail(token, clanId)
     }
 
     // Fallback refresh in case the socket drops.
-    LaunchedEffect(clanId) {
-        while (true) {
-            delay(60_000)
-            viewModel.loadMessages(token, clanId)
-        }
+    com.yugm.app.core.ui.components.AutomaticSyncEffect(token, clanId, topics = setOf(com.yugm.app.core.api.SyncTopic.CLANS), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) {
+        viewModel.loadMessages(token, clanId).join()
+        viewModel.loadDetail(token, clanId).join()
     }
 
     // Emit typing status while the user is composing.

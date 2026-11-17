@@ -805,7 +805,7 @@ private fun GiftAdvisorTab(state: com.yugm.app.ui.viewmodel.WingmanState, viewMo
 private fun AnalyticsTab(state: com.yugm.app.ui.viewmodel.WingmanState, viewModel: WingmanViewModel) {
     val scrollState = rememberScrollState()
 
-    LaunchedEffect(Unit) {
+    com.yugm.app.core.ui.components.AutomaticSyncEffect(Unit, topics = setOf(com.yugm.app.core.api.SyncTopic.PROFILE), intervalMs = 60_000) {
         viewModel.onAction(WingmanAction.LoadAnalytics)
     }
 

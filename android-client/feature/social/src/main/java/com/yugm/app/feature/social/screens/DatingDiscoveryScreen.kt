@@ -70,7 +70,7 @@ fun DatingDiscoveryScreen(
     var discoveryMode by rememberSaveable { mutableIntStateOf(1) }
     var showFilters by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(token) {
+    com.yugm.app.core.ui.components.AutomaticSyncEffect(token, token, topics = setOf(com.yugm.app.core.api.SyncTopic.SOCIAL), enabled = token.isNotBlank()) {
         if (token.isNotBlank()) {
             viewModel.loadCandidates(token, discoveryMode)
         }
@@ -159,14 +159,7 @@ fun DatingDiscoveryScreen(
                             modifier = Modifier.fillMaxWidth()
                         )
                         Spacer(modifier = Modifier.height(18.dp))
-                        Button(
-                            onClick = { viewModel.loadCandidates(token, discoveryMode) },
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryPink),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Refresh Discovery", color = Color.White, fontWeight = FontWeight.Bold)
-                        }
+                        Text("New people will appear here automatically.", color = TextMuted, fontSize = 13.sp)
                     }
                 }
             } else {

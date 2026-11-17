@@ -38,7 +38,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -106,6 +105,13 @@ internal fun RoomMusicLibraryDialog(
     var query by remember { mutableStateOf("") }
     var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var scanVersion by remember { mutableStateOf(0) }
+    DisposableEffect(context, hasPermission) {
+        val observer = object : android.database.ContentObserver(android.os.Handler(android.os.Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) { scanVersion++ }
+        }
+        if (hasPermission) context.contentResolver.registerContentObserver(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, true, observer)
+        onDispose { context.contentResolver.unregisterContentObserver(observer) }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         hasPermission = granted
@@ -181,11 +187,6 @@ internal fun RoomMusicLibraryDialog(
                     Text("Add music", color = LibraryInk, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     Text("Choose one or more tracks for the queue", color = LibraryMuted, fontSize = 11.sp)
                 }
-                if (hasPermission) {
-                    TextButton(onClick = { scanVersion++ }, enabled = !loading) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Rescan audio", tint = LibraryPink, modifier = Modifier.size(18.dp))
-                    }
-                }
             }
 
             Row(
@@ -248,7 +249,7 @@ internal fun RoomMusicLibraryDialog(
                     AudioLibraryMessage("!", "Couldn't scan audio", loadError!!, "Try again") { scanVersion++ }
                 }
                 tracks.isEmpty() -> Box(Modifier.weight(1f).fillMaxWidth()) {
-                    AudioLibraryMessage("♫", "No audio files found", "Audio files stored on this device will appear here.", "Scan again") { scanVersion++ }
+                    AudioLibraryMessage("♫", "No audio files found", "Audio files stored on this device will appear here automatically.", null) { }
                 }
                 filteredTracks.isEmpty() -> Box(Modifier.weight(1f).fillMaxWidth()) {
                     AudioLibraryMessage("⌕", "No matching tracks", "Try another song, artist or album name.", "Clear search") { query = "" }
@@ -332,7 +333,7 @@ private fun AudioLibraryRow(track: RoomMusicLibraryTrack, selected: Boolean, onC
 }
 
 @Composable
-private fun AudioLibraryMessage(icon: String, title: String, message: String, action: String, onAction: () -> Unit) {
+private fun AudioLibraryMessage(icon: String, title: String, message: String, action: String?, onAction: () -> Unit) {
     Column(
         Modifier.fillMaxSize().padding(horizontal = 30.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -343,7 +344,7 @@ private fun AudioLibraryMessage(icon: String, title: String, message: String, ac
         }
         Text(title, color = LibraryInk, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp))
         Text(message, color = LibraryMuted, fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(top = 7.dp))
-        TextButton(onClick = onAction, modifier = Modifier.padding(top = 8.dp)) {
+        if (action != null) TextButton(onClick = onAction, modifier = Modifier.padding(top = 8.dp)) {
             Text(action, color = Color(0xFFFFA0CE), fontWeight = FontWeight.Bold)
         }
     }

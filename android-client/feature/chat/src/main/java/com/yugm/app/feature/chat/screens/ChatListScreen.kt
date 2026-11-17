@@ -77,7 +77,6 @@ import com.yugm.app.core.model.Host
 import com.yugm.app.core.ui.components.Avatar
 import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.core.ui.components.YugmBottomDock
-import com.yugm.app.core.ui.components.YugmPullToRefreshBox
 import com.yugm.app.core.ui.components.YugmDockTab
 import com.yugm.app.feature.chat.viewmodel.ChatListViewModel
 import com.yugm.app.feature.social.screens.ClanChatScreen
@@ -116,16 +115,8 @@ fun ChatListScreen(
         onClanTabActiveChanged(mainTab == 1)
     }
 
-    LaunchedEffect(token, currentUserId) { viewModel.load(token, currentUserId) }
+    com.yugm.app.core.ui.components.AutomaticSyncEffect(token, currentUserId, topics = setOf(com.yugm.app.core.api.SyncTopic.CHAT, com.yugm.app.core.api.SyncTopic.CLANS, com.yugm.app.core.api.SyncTopic.SOCIAL), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) { viewModel.load(token, currentUserId) }
     val listBottomPadding = if (showBottomDock) 120.dp else 100.dp
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, token, currentUserId) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) viewModel.load(token, currentUserId)
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
 
     val conversations = remember(viewModel.recentMessages, viewModel.matches, currentUserId) {
         viewModel.recentMessages.groupBy { if (it.senderId == currentUserId) it.receiverId else it.senderId }
@@ -338,11 +329,7 @@ fun ChatListScreen(
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (mainTab) {
                     0 -> {
-                        YugmPullToRefreshBox(
-                            isRefreshing = viewModel.isLoading,
-                            onRefresh = { viewModel.load(token, currentUserId) },
-                            modifier = Modifier.fillMaxSize()
-                        ) {
+                        Box(modifier = Modifier.fillMaxSize()) {
                             LazyColumn(
                                 modifier = Modifier.fillMaxSize(),
                                 contentPadding = PaddingValues(top = 10.dp, bottom = listBottomPadding),
@@ -522,11 +509,7 @@ fun ChatListScreen(
                         }
                     }
                     2 -> {
-                        YugmPullToRefreshBox(
-                            isRefreshing = viewModel.isLoading,
-                            onRefresh = { viewModel.load(token, currentUserId) },
-                            modifier = Modifier.fillMaxSize()
-                        ) {
+                        Box(modifier = Modifier.fillMaxSize()) {
                             LazyColumn(
                                 modifier = Modifier.fillMaxSize(),
                                 contentPadding = PaddingValues(top = 10.dp, bottom = listBottomPadding),
@@ -1084,7 +1067,7 @@ private fun LightChatRow(
             Modifier
                 .fillMaxWidth()
                 .clickable(role = Role.Button, onClickLabel = "Open conversation with ${item.partner.name}", onClick = onClick)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
         Box {

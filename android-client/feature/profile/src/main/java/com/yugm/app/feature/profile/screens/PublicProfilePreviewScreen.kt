@@ -1,5 +1,7 @@
 package com.yugm.app.feature.profile.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -41,7 +43,7 @@ fun PublicProfilePreviewScreen(
 ) {
     val viewModel: ProfileViewModel = hiltViewModel()
 
-    LaunchedEffect(userId, token) {
+    AutomaticSyncEffect(userId, token, topics = setOf(SyncTopic.PROFILE), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) {
         viewModel.loadProfile(token, userId, force = true)
     }
 
@@ -103,7 +105,7 @@ fun PublicProfilePreviewScreen(
         },
         containerColor = Background
     ) { innerPadding ->
-        if (viewModel.isLoading) {
+        if (viewModel.isLoading && (viewModel.profile == null)) {
             Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
                 LoadingState("Generating public preview...")
             }

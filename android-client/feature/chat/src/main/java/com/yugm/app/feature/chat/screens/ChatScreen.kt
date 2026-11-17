@@ -1698,7 +1698,8 @@ fun ChatScreen(
                 RoomReaction(id = "stars", label = "Stars", emoji = "\u2728", access = RoomReactionAccess.EVERYONE, sortOrder = 6),
                 RoomReaction(id = "party", label = "Party", emoji = "\uD83C\uDF89", access = RoomReactionAccess.EVERYONE, sortOrder = 7)
             )
-            val pickerReactions = if (reactionCatalog.isNotEmpty()) reactionCatalog.sortedBy { it.sortOrder } else fallbackCatalog
+            val pickerReactions = (if (reactionCatalog.isNotEmpty()) reactionCatalog.sortedBy { it.sortOrder } else fallbackCatalog)
+            .distinctBy { it.id.trim().lowercase() }
 
             Box(
                 modifier = Modifier

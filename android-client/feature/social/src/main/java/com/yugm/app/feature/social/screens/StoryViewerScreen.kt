@@ -55,7 +55,7 @@ fun StoryViewerScreen(
     var showControls by remember { mutableStateOf(true) }
     val viewModel: StoryViewModel = hiltViewModel()
 
-    LaunchedEffect(userId) {
+    com.yugm.app.core.ui.components.AutomaticSyncEffect(token, userId, topics = setOf(com.yugm.app.core.api.SyncTopic.SOCIAL), enabled = token.isNotBlank()) {
         viewModel.loadUserStories(token, userId)
     }
 

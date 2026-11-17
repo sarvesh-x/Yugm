@@ -2,6 +2,7 @@ import compression from "compression";
 import cors from "cors";
 import crypto from "node:crypto";
 import express from "express";
+import { syncInvalidation } from "./middleware/syncInvalidation.js";
 import helmet from "helmet";
 import mongoose from "mongoose";
 import path from "path";
@@ -202,6 +203,7 @@ export function createApp() {
   };
   app.get("/health", healthHandler);
   app.get("/api/health", healthHandler);
+  app.use("/api", syncInvalidation);
   app.use("/api/admin", adminVerificationRouter);
   app.use("/api/admin", adminDmReviewsRouter);
   app.use("/api/admin", adminRouter);

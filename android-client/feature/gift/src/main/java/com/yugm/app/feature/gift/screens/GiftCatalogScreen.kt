@@ -1,5 +1,7 @@
 package com.yugm.app.feature.gift.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -28,8 +30,8 @@ fun GiftCatalogScreen(
 ) {
     val state by viewModel.state.collectAsState()
 
-    LaunchedEffect(token) {
-        viewModel.loadGifts(token)
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.GIFTS), enabled = token.isNotBlank(), isBusy = { state.isLoading }) {
+        viewModel.loadGifts(token, state.selectedCategory, state.selectedRarity, state.currentPage)
         viewModel.loadCollections(token)
     }
 

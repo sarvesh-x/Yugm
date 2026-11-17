@@ -125,7 +125,7 @@ fun CreateRoomScreen(
     var selectedAmbience by remember { mutableStateOf("") }
     var vipOnly by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(token) {
+    com.yugm.app.core.ui.components.AutomaticSyncEffect(token, topics = setOf(com.yugm.app.core.api.SyncTopic.GIFTS), enabled = token.isNotBlank(), intervalMs = 60_000) {
         viewModel.loadCosmetics(token)
     }
     LaunchedEffect(viewModel.cosmeticCatalog) {

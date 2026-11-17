@@ -25,6 +25,7 @@ const { RoomFollow } = await import("../models/RoomFollow.js");
 const { roomsRouter } = await import("../routes/rooms.js");
 const { livekitRouter } = await import("../routes/livekit.js");
 const { mediaProvider } = await import("../services/livekit.js");
+const { syncInvalidation } = await import("../middleware/syncInvalidation.js");
 const { TrackSource } = await import("livekit-server-sdk");
 const { AuthSession } = await import("../models/AuthSession.js");
 const { UserSafetyStatus } = await import("../models/UserSafetyStatus.js");
@@ -57,6 +58,7 @@ before(async () => {
   const app = express();
   app.post("/webhook-test", express.raw({ type: "application/json" }), (req, res, next) => { void handlePaymentWebhook(req, res).catch(next); });
   app.use(express.json());
+  app.use("/api", syncInvalidation);
   app.use("/api/rooms", roomsRouter);
   app.use("/api/livekit", livekitRouter);
   app.use("/api/events", eventsRouter);

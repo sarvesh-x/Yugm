@@ -1,5 +1,7 @@
 package com.yugm.app.feature.events.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -70,7 +72,7 @@ fun EventsScreen(
     val colors = LocalYugmColors.current
     var selectedTab by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(selectedTab) {
+    AutomaticSyncEffect(token, selectedTab, topics = setOf(SyncTopic.EVENTS), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) {
         when (selectedTab) {
             0 -> viewModel.loadEvents(token)
             1 -> viewModel.loadMyEvents(token)
@@ -122,11 +124,11 @@ fun EventsScreen(
                 }
             }
 
-            if (viewModel.isLoading) {
+            if (viewModel.isLoading && (viewModel.events.isEmpty() && viewModel.myEvents == null)) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     LoadingState("Loading events...")
                 }
-            } else if (viewModel.error != null) {
+            } else if (viewModel.error != null && viewModel.events.isEmpty() && viewModel.myEvents == null) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(viewModel.error!!, color = colors.danger, modifier = Modifier.padding(24.dp))
                 }

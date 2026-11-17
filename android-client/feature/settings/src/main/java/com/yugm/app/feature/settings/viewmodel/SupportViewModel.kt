@@ -24,8 +24,8 @@ class SupportViewModel @Inject constructor(
     var currentTicketState by mutableStateOf<UiState<SupportTicket>>(UiState.Idle)
         private set
 
-    fun listTickets(token: String, status: String? = null, page: Int = 1, limit: Int = 20) {
-        viewModelScope.launch {
+    fun listTickets(token: String, status: String? = null, page: Int = 1, limit: Int = 20): kotlinx.coroutines.Job {
+        return viewModelScope.launch {
             ticketsState = UiState.Loading
             runCatching {
                 withContext(Dispatchers.IO) { yugmApi.listSupportTickets(token, status, page, limit).first }
@@ -37,8 +37,8 @@ class SupportViewModel @Inject constructor(
         }
     }
 
-    fun getTicket(token: String, ticketId: String) {
-        viewModelScope.launch {
+    fun getTicket(token: String, ticketId: String): kotlinx.coroutines.Job {
+        return viewModelScope.launch {
             currentTicketState = UiState.Loading
             runCatching {
                 withContext(Dispatchers.IO) { yugmApi.getSupportTicket(token, ticketId) }

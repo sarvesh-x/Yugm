@@ -20,7 +20,12 @@ class ApiProtocolException(message: String, cause: Throwable? = null) : IllegalS
 internal fun isSafeRetryMethod(method: String): Boolean = method.equals("GET", ignoreCase = true)
 
 object YugmHttpClient {
-    var isOnline = true
+    @Volatile var isOnline = true
+        set(value) {
+            val restored = value && !field
+            field = value
+            if (restored) AppSync.invalidate(SyncTopic.ALL)
+        }
     var onUnauthorized: ((rejectedToken: String) -> Unit)? = null
     /** Supplies the persisted session token when a navigation callback captured an empty token. */
     var authTokenProvider: (() -> String)? = null
@@ -75,6 +80,12 @@ object YugmHttpClient {
     suspend fun delete(path: String, auth: String?): JSONObject = request("DELETE", path, auth, null)
 
     private suspend fun request(method: String, path: String, auth: String?, body: JSONObject?, allowRefresh: Boolean = true): JSONObject = withContext(Dispatchers.IO) {
+        val expectedAccount = tokenAccount(auth?.takeIf(String::isNotBlank) ?: authTokenProvider?.invoke())
+        fun checkAccount(requestToken: String? = authTokenProvider?.invoke()) {
+            // Authentication can legitimately fetch /auth/me with new credentials
+            // before the account has been persisted to the session manager.
+            if (authTokenProvider != null && !path.startsWith("/auth/")) ensureRequestAccount(expectedAccount, requestToken)
+        }
         if (!isOnline) throw IllegalStateException("No internet connection")
         val canRetry = isSafeRetryMethod(method)
         val preferredBase = workingBaseUrl ?: baseCandidates.firstOrNull()
@@ -90,6 +101,7 @@ object YugmHttpClient {
         val attempts = if (canRetry) bases else listOfNotNull(preferredBase)
         for ((attempt, base) in attempts.withIndex()) {
             currentCoroutineContext().ensureActive()
+            checkAccount()
             var requestAuth: String? = null
             try {
                 if (attempt > 0) kotlinx.coroutines.delay(1000L * attempt)
@@ -104,6 +116,7 @@ object YugmHttpClient {
                     authTokenProvider?.invoke()?.takeIf(String::isNotBlank)
                         ?: auth?.takeIf(String::isNotBlank)
                 }
+                checkAccount(requestAuth)
                 if (requestAuth != null) builder.header("Authorization", "Bearer $requestAuth")
                 val appCheckRequired = path.startsWith("/auth/") || path.startsWith("/notifications/device-token")
                 if (appCheckRequired) {
@@ -149,9 +162,13 @@ throw ApiHttpException(response.code, errorContext)
                         throw ApiProtocolException("Invalid JSON response", error)
                     }
                     workingBaseUrl = base
+                    currentCoroutineContext().ensureActive()
+                    checkAccount()
+                    if (requestAuth == authTokenProvider?.invoke()) AppSync.onMutation(method, path)
                     return@withContext payload
                 }
             } catch (error: ApiHttpException) {
+                checkAccount()
                 val mayRefresh = !path.startsWith("/auth/") || path == "/auth/me"
                 if (error.statusCode == 401 && requestAuth != null && allowRefresh && mayRefresh) {
                     // A network failure during refresh is not evidence that the session
@@ -169,7 +186,9 @@ throw ApiHttpException(response.code, errorContext)
                     } catch (_: Exception) {
                         null
                     }
+                    checkAccount()
                     if (!renewed.isNullOrBlank() && renewed != requestAuth) {
+                        checkAccount(renewed)
                         return@withContext request(method, path, renewed, body, allowRefresh = false)
                     }
                     onUnauthorized?.let { callback ->
@@ -216,11 +235,18 @@ throw ApiHttpException(response.code, errorContext)
 
         // Profile routes can hold an older token snapshot after a refresh. Use the
         // persisted current token and apply the same single-refresh retry as JSON APIs.
+        val expectedAccount = tokenAccount(token)
+        fun checkUploadAccount() {
+            if (authTokenProvider != null) ensureRequestAccount(expectedAccount, authTokenProvider?.invoke())
+        }
+        checkUploadAccount()
         val requestToken = authTokenProvider?.invoke()?.takeIf(String::isNotBlank) ?: token
         var lastIoError: IOException? = null
         for (base in bases) {
             currentCoroutineContext().ensureActive()
             fun executeUpload(authToken: String): JSONObject {
+                checkUploadAccount()
+                ensureRequestAccount(expectedAccount, authToken)
                 val request = Request.Builder()
                     .url("$base$path")
                     .header("Authorization", "Bearer $authToken")
@@ -238,6 +264,8 @@ throw ApiHttpException(response.code, errorContext)
                         throw ApiProtocolException("Invalid JSON upload response", e)
                     }
                     workingBaseUrl = base
+                    checkUploadAccount()
+                    AppSync.onMutation("POST", path)
                     payload
                 }
             }

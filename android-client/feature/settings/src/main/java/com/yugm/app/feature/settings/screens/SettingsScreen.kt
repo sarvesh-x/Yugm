@@ -120,7 +120,7 @@ fun SettingsScreen(
         }
     }
 
-    LaunchedEffect(token) {
+    com.yugm.app.core.ui.components.AutomaticSyncEffect(token, token, topics = setOf(com.yugm.app.core.api.SyncTopic.SETTINGS), enabled = token.isNotBlank()) {
         if (token.isNotBlank()) {
             viewModel.loadBlocked(token)
             runCatching { withContext(Dispatchers.IO) { YugmApi.notificationPreferences(token) } }

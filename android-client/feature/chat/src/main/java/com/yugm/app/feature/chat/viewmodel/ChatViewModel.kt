@@ -330,6 +330,7 @@ class ChatViewModel @Inject constructor(
         val requestToken = authToken
         val requestPartner = partnerUserId
         val requestUser = currentUserId
+        val knownAtStart = messages.mapTo(mutableSetOf()) { it.id }
         val version = ++refreshVersion
         refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
@@ -354,11 +355,19 @@ class ChatViewModel @Inject constructor(
                     }
                     historyRequest.await()
                         .onSuccess { conversation ->
+                            val oldestIncoming = conversation.messages.minOfOrNull { it.createdAt }
+                            val hasOlderPages = oldestIncoming != null && messages.any { it.id in knownAtStart && !it.id.startsWith("local:") && it.createdAt < oldestIncoming }
+                            val reconciled = com.yugm.app.core.api.reconcileRecentSnapshot(messages.toList(), conversation.messages, knownAtStart,
+                                { it.id }, { it.createdAt }, { it.id.startsWith("local:") })
+                            messages.clear()
+                            messages.addAll(reconciled)
                             mergeMessages(conversation.messages)
                             relationship = conversation.relationship
                             isMuted = conversation.muted
-                            hasMoreHistory = conversation.hasMore
-                            nextBefore = conversation.nextBefore ?: conversation.messages.firstOrNull()?.createdAt
+                            if (!hasOlderPages) {
+                                hasMoreHistory = conversation.hasMore
+                                nextBefore = conversation.nextBefore ?: conversation.messages.firstOrNull()?.createdAt
+                            }
                         }
                         .onFailure { failure ->
                             if (failure is CancellationException) throw failure

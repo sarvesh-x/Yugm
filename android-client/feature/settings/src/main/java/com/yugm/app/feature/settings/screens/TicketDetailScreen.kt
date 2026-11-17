@@ -1,5 +1,7 @@
 package com.yugm.app.feature.settings.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -41,14 +43,14 @@ fun TicketDetailScreen(
     fun loadTicket() {
         scope.launch {
             isLoading = true
-            viewModel.getTicket(token, ticketId)
+            viewModel.getTicket(token, ticketId).join()
             ticket = (viewModel.currentTicketState as? UiState.Success)?.data
             if (ticket == null) errorMessage = "Failed to load ticket"
             isLoading = false
         }
     }
 
-    LaunchedEffect(ticketId) { loadTicket() }
+    AutomaticSyncEffect(token, ticketId, topics = setOf(SyncTopic.SETTINGS), enabled = token.isNotBlank(), isBusy = { isLoading }) { loadTicket() }
 
     Scaffold(
         topBar = {
@@ -77,7 +79,7 @@ fun TicketDetailScreen(
         containerColor = Background
     ) { innerPadding ->
         when {
-            isLoading -> Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
+            isLoading && (ticket == null) -> Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = PrimaryPink)
             }
             ticket == null -> Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {

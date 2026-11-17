@@ -1,5 +1,7 @@
 package com.yugm.app.feature.missions.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -71,7 +73,7 @@ fun BattlePassScreen(token: String, onBack: () -> Unit) {
             isLoading = false
         }
     }
-    LaunchedEffect(token) { reload() }
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.TASKS), enabled = token.isNotBlank(), isBusy = { isLoading }) { reload() }
 
     Column(Modifier.fillMaxSize().background(colors.background)) {
         Row(
@@ -80,7 +82,6 @@ fun BattlePassScreen(token: String, onBack: () -> Unit) {
         ) {
             TextButton(onClick = onBack, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("‹", color = colors.textPrimary, fontSize = 30.sp) }
             Text("Level & Rewards", color = colors.textPrimary, fontSize = 19.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
-            TextButton(onClick = ::reload, enabled = !isLoading) { Text("Refresh", color = colors.accent, fontSize = 12.sp) }
         }
 
         when {

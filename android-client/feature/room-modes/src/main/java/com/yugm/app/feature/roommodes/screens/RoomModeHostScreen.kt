@@ -22,7 +22,7 @@ fun RoomModeHostScreen(
         onDispose { viewModel.disconnectRoomUpdates() }
     }
 
-    LaunchedEffect(token, roomId) {
+    com.yugm.app.core.ui.components.AutomaticSyncEffect(token, roomId, topics = emptySet(), enabled = token.isNotBlank()) {
         viewModel.loadModes(token)
         viewModel.loadModeState(token, roomId)
     }

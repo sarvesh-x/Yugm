@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -60,7 +62,7 @@ fun NotificationsScreen(
     val colors = LocalYugmColors.current
     var filter by remember { mutableStateOf(NotificationFilter.ALL) }
 
-    LaunchedEffect(token) {
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.NOTIFICATIONS), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) {
         if (token.isNotBlank()) viewModel.load(token)
     }
 

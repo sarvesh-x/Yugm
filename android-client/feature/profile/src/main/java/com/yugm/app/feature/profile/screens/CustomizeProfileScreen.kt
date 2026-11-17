@@ -1,5 +1,7 @@
 package com.yugm.app.feature.profile.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -99,10 +101,10 @@ fun CustomizeProfileScreen(
     val profileVm: ProfileViewModel = hiltViewModel()
     var selectedCategory by remember { mutableStateOf("AVATAR_FRAME") }
 
-    LaunchedEffect(token, userId) {
+    AutomaticSyncEffect(token, userId, topics = setOf(SyncTopic.PROFILE), enabled = token.isNotBlank()) {
         cosmeticsVm.refresh(token)
         if (userId.isNotBlank()) {
-            profileVm.loadProfile(token, userId)
+            profileVm.loadProfile(token, userId, force = true)
         }
     }
 

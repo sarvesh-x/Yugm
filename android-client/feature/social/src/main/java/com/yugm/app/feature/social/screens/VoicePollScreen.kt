@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -77,10 +79,11 @@ fun VoicePollScreen(
                 if (showMine) {
                     myPolls = SocialApi.getMyVoicePolls(token)
                 } else {
-                    val resp = SocialApi.getActiveVoicePolls(token, page = targetPage, limit = 20)
-                    activeTotal = resp.total
-                    activePage = resp.page
-                    polls = if (refresh) resp.polls else (polls + resp.polls).distinctBy { it.id }
+                    val pages = if (refresh) (1..activePage.coerceAtLeast(1)).map { page -> SocialApi.getActiveVoicePolls(token, page = page, limit = 20) }
+                        else listOf(SocialApi.getActiveVoicePolls(token, page = targetPage, limit = 20))
+                    activeTotal = pages.last().total
+                    activePage = pages.last().page
+                    polls = if (refresh) pages.flatMap { it.polls }.distinctBy { it.id } else (polls + pages.last().polls).distinctBy { it.id }
                 }
             } catch (e: Exception) {
                 if (refresh) loadError = e.message ?: "Failed to load polls"
@@ -91,7 +94,7 @@ fun VoicePollScreen(
         }
     }
 
-    LaunchedEffect(token, showMine) { load(refresh = true) }
+    AutomaticSyncEffect(token, showMine, topics = setOf(SyncTopic.SOCIAL), enabled = token.isNotBlank(), isBusy = { isLoading }) { load(refresh = true) }
 
     YugmAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -107,12 +110,6 @@ fun VoicePollScreen(
                         height = 40.dp,
                         gradient = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Panel, Panel)),
                         onClick = { showMine = !showMine; showCreate = false }
-                    )
-                    GlassButton(
-                        text = "Refresh",
-                        height = 40.dp,
-                        gradient = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Panel, Panel)),
-                        onClick = { load(refresh = true) }
                     )
                     GlassButton(
                         text = if (showCreate) "Cancel" else "Create",
@@ -131,8 +128,8 @@ fun VoicePollScreen(
 
             Column(modifier = Modifier.weight(1f)) {
                 when {
-                    isLoading -> com.yugm.app.core.ui.components.LoadingState("Loading polls...")
-                    loadError != null -> {
+                    isLoading && (polls.isEmpty() && myPolls.isEmpty()) -> com.yugm.app.core.ui.components.LoadingState("Loading polls...")
+                    loadError != null && polls.isEmpty() && myPolls.isEmpty() -> {
                         GlassCard {
                             Text("Couldn't load polls", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
                             Text(loadError ?: "Unknown error", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))

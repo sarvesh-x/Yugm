@@ -1,5 +1,7 @@
 package com.yugm.app.feature.room.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -63,7 +65,7 @@ fun ThemeGalleryScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    LaunchedEffect(Unit) {
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.GIFTS), enabled = token.isNotBlank(), isBusy = { isLoading }) {
         try {
             val t = YugmApi.themes(token)
             val u = YugmApi.userThemes(token)
@@ -93,7 +95,7 @@ fun ThemeGalleryScreen(
                 )
             }
             when {
-                isLoading -> LoadingState("Loading themes...")
+                isLoading && (themes.isEmpty()) -> LoadingState("Loading themes...")
                 error != null -> Text(error ?: "", color = TextMuted, modifier = Modifier.padding(20.dp))
                 else -> LazyVerticalGrid(
                     columns = GridCells.Fixed(2),

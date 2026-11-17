@@ -206,7 +206,7 @@ class RoomViewModel @Inject constructor(
     private var isVideo: Boolean = false
     private var realtimeRefreshJob: Job? = null
     private val pendingRealtimeEvents = mutableSetOf<String>()
-    private var videoParticipantRefreshJob: Job? = null
+    private var roomRecoveryJob: Job? = null
 
     fun connect(token: String, roomId: String, userId: String, video: Boolean = false) {
         realtimeRefreshJob?.cancel()
@@ -221,17 +221,19 @@ class RoomViewModel @Inject constructor(
         this.isVideo = video
         loadRoomReactions(force = true)
         refresh()
-        videoParticipantRefreshJob?.cancel()
-        if (video) {
-            videoParticipantRefreshJob = viewModelScope.launch {
-                while (true) {
-                    delay(5_000)
-                    withContext(Dispatchers.IO) { runCatching { yugmApi.roomDetail(authToken, roomId) } }
-                        .onSuccess { detail ->
-                            roomDetail = detail
-                            roomState = UiState.Success(detail)
-                        }
-                }
+        roomRecoveryJob?.cancel()
+        roomRecoveryJob = viewModelScope.launch {
+            while (true) {
+                delay(15_000)
+                if (!com.yugm.app.core.api.YugmHttpClient.isOnline) continue
+                withContext(Dispatchers.IO) { runCatching { yugmApi.roomDetail(authToken, roomId) } }
+                    .onSuccess { detail ->
+                        roomDetail = detail
+                        roomState = UiState.Success(detail)
+                    }
+                refreshPollList()
+                withContext(Dispatchers.IO) { runCatching { yugmApi.roomMessages(roomId, authToken) } }.onSuccess(::mergeChat)
+                withContext(Dispatchers.IO) { runCatching { yugmApi.roomActivity(roomId, authToken) } }.onSuccess { activity = it }
             }
         }
     }
@@ -261,8 +263,8 @@ class RoomViewModel @Inject constructor(
     private suspend fun closeMediaConnections() {
         realtimeRefreshJob?.cancel()
         pendingRealtimeEvents.clear()
-        videoParticipantRefreshJob?.cancel()
-        videoParticipantRefreshJob = null
+        roomRecoveryJob?.cancel()
+        roomRecoveryJob = null
         withContext(Dispatchers.IO) {
             runCatching { YugmSocket.disconnect() }
             runCatching { YugmMediaRoom.disconnect() }
@@ -1097,15 +1099,28 @@ class RoomViewModel @Inject constructor(
         }
     }
 
+    private var roomListLoadJob: Job? = null
+    private var roomListLoadVersion = 0L
+    private var roomListType: RoomType? = null
+
     fun loadRooms(type: RoomType? = null) {
-        if (isRoomListLoading) return
-        viewModelScope.launch {
+        if (isRoomListLoading && roomListType == type) return
+        roomListLoadJob?.cancel()
+        roomListType = type
+        val version = ++roomListLoadVersion
+        roomListLoadJob = viewModelScope.launch {
             isRoomListLoading = true
             roomListError = null
-            runCatching { withContext(Dispatchers.IO) { yugmApi.rooms(type) } }
-                .onSuccess { rooms = it }
-                .onFailure { roomListError = it.message ?: "Couldn't load live rooms" }
-            isRoomListLoading = false
+            try {
+                val loaded = withContext(Dispatchers.IO) { yugmApi.rooms(type) }
+                if (version == roomListLoadVersion) rooms = loaded
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (version == roomListLoadVersion) roomListError = error.message ?: "Couldn't load live rooms"
+            } finally {
+                if (version == roomListLoadVersion) isRoomListLoading = false
+            }
         }
     }
 

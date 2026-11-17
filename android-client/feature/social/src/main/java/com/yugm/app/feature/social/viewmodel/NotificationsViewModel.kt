@@ -31,6 +31,8 @@ class NotificationsViewModel @Inject constructor(
         private set
     var isMarkingAllRead by mutableStateOf(false)
         private set
+    private var activeToken = ""
+    private var loadJob: kotlinx.coroutines.Job? = null
 
     init {
         viewModelScope.launch {
@@ -51,17 +53,26 @@ class NotificationsViewModel @Inject constructor(
     }
 
     fun load(token: String) {
-        viewModelScope.launch {
+        if (token.isBlank()) return
+        if (activeToken != token) {
+            notifications = emptyList()
+            unreadCount = 0
+        }
+        activeToken = token
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             isLoading = true
             error = null
             runCatching {
                 val (notifList, unread) = withContext(Dispatchers.IO) {
                     yugmApi.getNotifications(token)
                 }
-                notifications = (notifications + notifList).distinctBy { it.id }
+                // Fresh server read flags override cached entries with the same ID.
+                notifications = (notifList + notifications).distinctBy { it.id }
                     .sortedByDescending { it.createdAt }
-                unreadCount = maxOf(unread, notifications.count { !it.read })
+                unreadCount = unread
             }.onFailure {
+                if (it is kotlinx.coroutines.CancellationException) throw it
                 error = it.message ?: "Failed to load notifications"
             }
             isLoading = false

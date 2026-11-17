@@ -282,8 +282,8 @@ class ClanViewModel @Inject constructor(
         }
     }
 
-    fun loadDetail(token: String, clanId: String) {
-        viewModelScope.launch {
+    fun loadDetail(token: String, clanId: String): kotlinx.coroutines.Job {
+        return viewModelScope.launch {
             isLoading = true
             error = null
             runCatching {
@@ -295,14 +295,16 @@ class ClanViewModel @Inject constructor(
         }
     }
 
-    fun loadMessages(token: String, clanId: String) {
-        viewModelScope.launch {
+    fun loadMessages(token: String, clanId: String): kotlinx.coroutines.Job {
+        return viewModelScope.launch {
             isLoading = true
             error = null
+            val knownAtStart = messages.mapTo(mutableSetOf()) { it.id }
             runCatching {
                 val loaded = withContext(Dispatchers.IO) { yugmApi.getClanMessages(token, clanId) }
-                messages = loaded
-                hasMoreOlder = loaded.size >= 80
+                val hasOlderPages = loaded.firstOrNull()?.createdAt?.let { oldest -> messages.any { it.createdAt < oldest } } == true
+                messages = com.yugm.app.core.api.reconcileRecentSnapshot(messages, loaded, knownAtStart, { it.id }, { it.createdAt })
+                if (!hasOlderPages) hasMoreOlder = loaded.size >= 80
             }.onFailure {
                 error = it.message ?: "Failed to load messages"
             }

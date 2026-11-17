@@ -112,6 +112,14 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
             YugmTheme(darkTheme = darkTheme, dynamicColor = false) {
                 val navController = androidx.navigation.compose.rememberNavController()
                 val mainViewModel: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                com.yugm.app.core.ui.components.AutomaticSyncEffect(mainViewModel.currentUserId, mainViewModel.authToken,
+                    topics = setOf(com.yugm.app.core.api.SyncTopic.PROFILE, com.yugm.app.core.api.SyncTopic.WALLET, com.yugm.app.core.api.SyncTopic.TASKS),
+                    enabled = mainViewModel.authToken.isNotBlank()) {
+                    val accountId = mainViewModel.currentUserId
+                    runCatching { YugmApi.authMe(sessionManager.authToken) }.onSuccess { user ->
+                        if (accountId == mainViewModel.currentUserId && user.id == accountId) mainViewModel.validateAndUpdate(user, registerPush = false)
+                    }
+                }
                 val inAppNotification = mainViewModel.inAppNotification
                 LaunchedEffect(inAppNotification?.id) {
                     if (inAppNotification != null) {
@@ -210,14 +218,17 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                 // Register network callback
                 DisposableEffect(Unit) {
                     val cm = context.getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
-                    val callback = object : ConnectivityManager.NetworkCallback() {
-                        override fun onAvailable(network: Network) { YugmHttpClient.isOnline = true }
-                        override fun onLost(network: Network) { YugmHttpClient.isOnline = false }
+                    fun updateConnectivity() {
+                        val capabilities = cm.getNetworkCapabilities(cm.activeNetwork)
+                        YugmHttpClient.isOnline = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
                     }
-                    val request = NetworkRequest.Builder()
-                        .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                        .build()
-                    cm.registerNetworkCallback(request, callback)
+                    updateConnectivity()
+                    val callback = object : ConnectivityManager.NetworkCallback() {
+                        override fun onAvailable(network: Network) { updateConnectivity() }
+                        override fun onLost(network: Network) { updateConnectivity() }
+                        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) { updateConnectivity() }
+                    }
+                    cm.registerDefaultNetworkCallback(callback)
                     onDispose { cm.unregisterNetworkCallback(callback) }
                 }
 

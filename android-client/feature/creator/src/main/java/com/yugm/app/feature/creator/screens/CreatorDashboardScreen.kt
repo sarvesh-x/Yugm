@@ -1,5 +1,7 @@
 package com.yugm.app.feature.creator.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -57,7 +59,7 @@ fun CreatorDashboardScreen(
     onKyc: () -> Unit = {},
     viewModel: CreatorViewModel = hiltViewModel()
 ) {
-    LaunchedEffect(token) {
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.WALLET), enabled = token.isNotBlank()) {
         viewModel.loadData(token)
     }
 

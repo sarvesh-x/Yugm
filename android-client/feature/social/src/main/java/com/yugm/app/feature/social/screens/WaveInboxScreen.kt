@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -54,7 +56,7 @@ fun WaveInboxScreen(
     var isLoading by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(token) {
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.SOCIAL), enabled = token.isNotBlank(), isBusy = { isLoading }) {
         runCatching {
             waves = SocialApi.getWaves(token)
             unreadCount = SocialApi.getUnreadWaveCount(token)
@@ -76,7 +78,7 @@ fun WaveInboxScreen(
             }
             Spacer(Modifier.height(16.dp))
 
-            if (isLoading) {
+            if (isLoading && (waves.isEmpty())) {
                 com.yugm.app.core.ui.components.LoadingState("Loading waves...")
             } else if (waves.isEmpty()) {
                 GlassCard {

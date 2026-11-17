@@ -1,5 +1,7 @@
 package com.yugm.app.feature.settings.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -227,7 +229,7 @@ private fun MyTicketsTab(token: String, onTicketClick: (String) -> Unit, viewMod
             isLoading = true
             errorMessage = null
             runCatching {
-                viewModel.listTickets(token)
+                viewModel.listTickets(token).join()
                 tickets = (viewModel.ticketsState as? UiState.Success)?.data ?: emptyList()
             }.onFailure {
                 errorMessage = it.message ?: "Failed to load tickets"
@@ -236,10 +238,10 @@ private fun MyTicketsTab(token: String, onTicketClick: (String) -> Unit, viewMod
         }
     }
 
-    LaunchedEffect(Unit) { loadTickets() }
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.SETTINGS), enabled = token.isNotBlank(), isBusy = { isLoading }) { loadTickets() }
 
     when {
-        isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        isLoading && (tickets.isEmpty()) -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = PrimaryPink)
         }
         errorMessage != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

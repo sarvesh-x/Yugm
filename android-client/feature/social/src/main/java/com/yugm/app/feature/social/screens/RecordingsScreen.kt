@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -57,7 +59,7 @@ fun RecordingsScreen(
 ) {
     val viewModel: RecordingViewModel = hiltViewModel()
 
-    LaunchedEffect(token, roomId) {
+    AutomaticSyncEffect(token, roomId, topics = setOf(SyncTopic.SOCIAL), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) {
         if (roomId != null) {
             viewModel.loadRecordings(token, roomId)
         }
@@ -83,7 +85,7 @@ fun RecordingsScreen(
                     }
                 }
             }
-        } else if (viewModel.isLoading) {
+        } else if (viewModel.isLoading && (viewModel.recordings.isEmpty())) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 30.dp),

@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -51,7 +53,7 @@ fun HostsScreen(
 ) {
     val viewModel: SocialViewModel = hiltViewModel()
 
-    LaunchedEffect(token) { viewModel.loadHosts(token) }
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.SOCIAL), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) { viewModel.loadHosts(token) }
 
     YugmAmbientBackground {
         LazyColumn(
@@ -62,7 +64,7 @@ fun HostsScreen(
             item {
                 YugmPageHeader("Hosts", onBack = onBack)
             }
-            if (viewModel.isLoading) {
+            if (viewModel.isLoading && (viewModel.suggestedHosts.isEmpty())) {
                 item { Box(Modifier.padding(horizontal = 20.dp)) { LoadingState("Loading hosts...") } }
             } else if (viewModel.suggestedHosts.isEmpty()) {
                 item {

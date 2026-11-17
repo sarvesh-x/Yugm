@@ -1,5 +1,7 @@
 package com.yugm.app.feature.settings.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,8 +38,8 @@ fun SafetyScreen(
     var safetyChecklist by remember { mutableStateOf<List<Pair<String, Boolean>>>(emptyList()) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(token) {
-        if (token.isBlank()) return@LaunchedEffect
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.SETTINGS), enabled = token.isNotBlank(), isBusy = { isLoading }) {
+        if (token.isBlank()) return@AutomaticSyncEffect
         isLoading = true
         scope.launch {
             runCatching {

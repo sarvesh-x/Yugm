@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -68,7 +70,7 @@ fun GiftLeaderboardScreen(
     var selectedBoard by remember { mutableStateOf(0) }
     var selectedPeriod by remember { mutableStateOf("all") }
 
-    LaunchedEffect(token, selectedPeriod) { viewModel.loadLeaderboardHub(token, selectedPeriod) }
+    AutomaticSyncEffect(token, selectedPeriod, topics = setOf(SyncTopic.GIFTS), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) { viewModel.loadLeaderboardHub(token, selectedPeriod) }
 
     YugmAmbientBackground {
         LazyColumn(
@@ -116,7 +118,7 @@ fun GiftLeaderboardScreen(
                     }
                 }
             }
-            if (viewModel.isLoading) {
+            if (viewModel.isLoading && (viewModel.leaderboard == null)) {
                 item { Box(Modifier.padding(horizontal = 20.dp)) { LoadingState("Loading rankings...") } }
             } else when (selectedBoard) {
                 0 -> {

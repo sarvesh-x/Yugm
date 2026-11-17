@@ -37,7 +37,7 @@ class VibeGraphViewModel @Inject constructor() : ViewModel() {
         }
 
         viewModelScope.launch {
-            _uiState.value = VibeGraphUiState.Loading
+            if (_uiState.value !is VibeGraphUiState.Success) _uiState.value = VibeGraphUiState.Loading
             try {
                 val dimsRes = runCatching { VibeApi.dimensions(token) }.getOrNull()
                 val trendRes = runCatching { VibeApi.trend(token) }.getOrNull()
@@ -55,7 +55,7 @@ class VibeGraphViewModel @Inject constructor() : ViewModel() {
                     topMatches = topMatches
                 )
             } catch (e: Exception) {
-                _uiState.value = VibeGraphUiState.Error(e.message ?: "Failed to load Vibe Graph")
+                if (_uiState.value !is VibeGraphUiState.Success) _uiState.value = VibeGraphUiState.Error(e.message ?: "Failed to load Vibe Graph")
             }
         }
     }

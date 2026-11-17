@@ -1,5 +1,7 @@
 package com.yugm.app.feature.profile.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -45,7 +47,7 @@ fun ProfileSocialListScreen(
     var removeTarget by remember { mutableStateOf<Host?>(null) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(userId, selectedList, reloadKey) {
+    AutomaticSyncEffect(token, userId, selectedList, reloadKey, topics = setOf(SyncTopic.PROFILE, SyncTopic.SOCIAL), enabled = token.isNotBlank(), isBusy = { loading }) {
         loading = true
         error = null
         runCatching {
@@ -101,7 +103,7 @@ fun ProfileSocialListScreen(
                     }
                 }
                 when {
-                    loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Pink) }
+                    loading && (users.isEmpty()) -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Pink) }
                     error != null && users.isEmpty() -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text(error.orEmpty(), color = Danger)

@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -61,11 +63,12 @@ fun LevelLeaderboardScreen(
         scope.launch {
             loading = true
             error = null
-            runCatching { YugmApi.levelLeaderboardPage(token, page = 1) }
-                .onSuccess { result ->
+            runCatching {
+                (1..pageInfo.page.coerceAtLeast(1)).map { page -> YugmApi.levelLeaderboardPage(token, page = page, pageSize = pageInfo.pageSize) }
+            }.onSuccess { pages ->
                     entries.clear()
-                    entries.addAll(result.entries)
-                    pageInfo = result
+                    entries.addAll(pages.flatMap { it.entries }.distinctBy { it.user.id })
+                    pageInfo = pages.last()
                 }
                 .onFailure { error = it.message ?: "Could not load the leaderboard" }
             loading = false
@@ -88,7 +91,7 @@ fun LevelLeaderboardScreen(
         }
     }
 
-    LaunchedEffect(token) { refresh() }
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.TASKS), enabled = token.isNotBlank(), isBusy = { loading }) { refresh() }
 
     Scaffold(
         containerColor = colors.background,
@@ -101,7 +104,6 @@ fun LevelLeaderboardScreen(
                     }
                 },
                 navigationIcon = { TextButton(onClick = onBack) { Text("‹", color = colors.textPrimary, fontSize = 28.sp) } },
-                actions = { TextButton(onClick = ::refresh, enabled = !loading) { Text("Refresh", color = colors.primary) } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.background)
             )
         }

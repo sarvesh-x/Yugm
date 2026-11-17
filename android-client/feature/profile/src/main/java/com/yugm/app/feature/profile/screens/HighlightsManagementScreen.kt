@@ -1,5 +1,7 @@
 package com.yugm.app.feature.profile.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,13 +73,13 @@ fun HighlightsManagementScreen(
         }
     }
 
-    LaunchedEffect(token, userId) { loadHighlights() }
+    AutomaticSyncEffect(token, userId, topics = setOf(SyncTopic.PROFILE), enabled = token.isNotBlank(), isBusy = { isLoading }) { loadHighlights() }
 
     YugmAmbientBackground {
         Column(Modifier.fillMaxSize()) {
             YugmPageHeader("Highlights", onBack = onBack)
 
-            if (isLoading) {
+            if (isLoading && (highlights.isEmpty())) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     LoadingState("Loading highlights…")
                 }

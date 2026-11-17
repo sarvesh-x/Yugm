@@ -1,5 +1,7 @@
 package com.yugm.app.feature.wallet.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -83,7 +85,7 @@ fun WalletScreen(
         paymentChoiceFor = pack
     }
 
-    LaunchedEffect(token) { viewModel.loadWallet(token) }
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.WALLET), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) { viewModel.loadWallet(token) }
     LaunchedEffect(viewModel.razorpayCheckoutData) {
         viewModel.razorpayCheckoutData?.let(onRechargeOrderReady)
     }
@@ -112,7 +114,7 @@ fun WalletScreen(
                     modifier = Modifier.padding(horizontal = 20.dp)
                 )
             }
-            if (viewModel.isLoading) {
+            if (viewModel.isLoading && (viewModel.transactions.isEmpty() && viewModel.coinPacks.isEmpty())) {
                 item { Box(Modifier.padding(horizontal = 20.dp)) { LoadingState("Loading your wallet…") } }
             } else {
                 when (selectedTab) {

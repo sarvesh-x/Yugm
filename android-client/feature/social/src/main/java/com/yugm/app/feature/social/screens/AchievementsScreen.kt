@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -82,7 +84,7 @@ fun AchievementsScreen(token: String, onBack: () -> Unit) {
         }
     }
 
-    LaunchedEffect(token) { refresh() }
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.TASKS), enabled = token.isNotBlank(), isBusy = { loading }) { refresh() }
     val categories = listOf("All") + achievements.map { it.category }.filter { it.isNotBlank() }.distinct().sorted()
     val visible = achievements.filter { selectedCategory == "All" || it.category.equals(selectedCategory, true) }
     val claimable = achievements.count { it.canClaim }
@@ -98,7 +100,6 @@ fun AchievementsScreen(token: String, onBack: () -> Unit) {
                     }
                 },
                 navigationIcon = { TextButton(onClick = onBack) { Text("‹", color = colors.textPrimary, fontSize = 28.sp) } },
-                actions = { TextButton(onClick = ::refresh, enabled = !loading) { Text("Refresh", color = colors.primary) } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.background)
             )
         }

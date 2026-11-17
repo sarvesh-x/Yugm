@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -73,7 +75,7 @@ fun VoicePollDetailScreen(
         }
     }
 
-    LaunchedEffect(pollId, token) { loadPoll() }
+    AutomaticSyncEffect(pollId, token, topics = setOf(SyncTopic.SOCIAL), enabled = token.isNotBlank(), isBusy = { isLoading }) { loadPoll() }
 
     YugmAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -81,8 +83,8 @@ fun VoicePollDetailScreen(
             Spacer(Modifier.height(16.dp))
 
             when {
-                isLoading -> LoadingState("Loading poll...")
-                loadError != null -> {
+                isLoading && (poll == null) -> LoadingState("Loading poll...")
+                loadError != null && poll == null -> {
                     GlassCard {
                         Text("Couldn't load poll", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
                         Text(loadError ?: "Unknown error", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))

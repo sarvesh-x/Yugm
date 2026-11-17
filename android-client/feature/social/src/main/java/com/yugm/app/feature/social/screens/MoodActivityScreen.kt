@@ -74,7 +74,7 @@ fun MoodActivityScreen(
     var isLoading by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(token) {
+    com.yugm.app.core.ui.components.AutomaticSyncEffect(token, token, topics = setOf(com.yugm.app.core.api.SyncTopic.SOCIAL), enabled = token.isNotBlank()) {
         runCatching {
             val mood = SocialApi.getMood(token)
             if (mood.mood.isNotBlank()) currentMood = mood.mood to mood.emoji

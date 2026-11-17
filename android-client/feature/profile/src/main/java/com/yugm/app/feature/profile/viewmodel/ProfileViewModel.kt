@@ -160,7 +160,7 @@ class ProfileViewModel @Inject constructor(
                 runCatching { yugmApi.getUser(userId, token.ifBlank { null }) }
             }
             userResult.onFailure {
-                profile = null
+                if (it is kotlinx.coroutines.CancellationException) throw it
                 profileLoadError = it.message?.takeIf(String::isNotBlank) ?: "Couldn't load this profile. Check your connection and retry."
                 isLoading = false
             }.onSuccess { loadedProfile ->

@@ -1,5 +1,7 @@
 package com.yugm.app.feature.missions.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -31,7 +33,7 @@ fun MissionsScreen(token: String, onBack: () -> Unit, onBattlePass: () -> Unit) 
     val scope = rememberCoroutineScope()
     val colors = LocalYugmColors.current
 
-    LaunchedEffect(token, refreshKey) {
+    AutomaticSyncEffect(token, refreshKey, topics = setOf(SyncTopic.TASKS), enabled = token.isNotBlank(), isBusy = { loading }) {
         loading = true
         error = null
         runCatching { YugmApi.activeMissions(token) }

@@ -129,104 +129,106 @@ fun MainTabsScreen(
             beyondViewportPageCount = 1,
             userScrollEnabled = true
         ) { page ->
-            when (page) {
-                TAB_GAME_ZONE -> GamesScreen()
+            androidx.compose.runtime.CompositionLocalProvider(com.yugm.app.core.ui.components.LocalAutomaticSyncEnabled provides (pagerState.currentPage == page)) {
+                when (page) {
+                    TAB_GAME_ZONE -> GamesScreen()
 
-                TAB_PARTY -> VoiceRoomsScreen(
-                    token = token,
-                    onOpenRoom = ::openRoom,
-                    onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
-                    onDiscover = { goTo(TAB_DISCOVER) },
-                    onChat = { goTo(TAB_CHAT) },
-                    onWallet = { navController.navigate(Screen.Wallet.route) },
-                    onProfile = { openOwnProfileOrSetup() },
-                    onSearch = { navController.navigate(Screen.Search.route) },
-                    onEvents = { navController.navigate(Screen.Events.route) },
-                    onFollowedRooms = { navController.navigate(Screen.FollowedRooms.route) },
-                    onGameZone = { goTo(TAB_GAME_ZONE) },
-                    showBottomDock = false
-                )
+                    TAB_PARTY -> VoiceRoomsScreen(
+                        token = token,
+                        onOpenRoom = ::openRoom,
+                        onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
+                        onDiscover = { goTo(TAB_DISCOVER) },
+                        onChat = { goTo(TAB_CHAT) },
+                        onWallet = { navController.navigate(Screen.Wallet.route) },
+                        onProfile = { openOwnProfileOrSetup() },
+                        onSearch = { navController.navigate(Screen.Search.route) },
+                        onEvents = { navController.navigate(Screen.Events.route) },
+                        onFollowedRooms = { navController.navigate(Screen.FollowedRooms.route) },
+                        onGameZone = { goTo(TAB_GAME_ZONE) },
+                        showBottomDock = false
+                    )
 
-                TAB_DISCOVER -> DiscoverScreen(
-                    token = token,
-                    onOpenRoom = ::openRoom,
-                    onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) },
-                    onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
-                    onNotifications = { navController.navigate(Screen.Notifications.route) },
-                    onSearch = { navController.navigate(Screen.Search.route) },
-                    onGames = { goTo(TAB_GAME_ZONE) },
-                    onEvents = { navController.navigate(Screen.Events.route) },
-                    onDating = { navController.navigateTopLevel(Screen.DatingDiscovery.route) },
-                    onChat = { goTo(TAB_CHAT) },
-                    onWallet = { navController.navigate(Screen.Wallet.route) },
-                    onSelfProfile = { openOwnProfileOrSetup() },
-                    onVoiceRooms = { goTo(TAB_PARTY) },
-                    onJoinParty = ::joinPartyRoom,
-                    onOpenMatchedCall = { room -> navController.navigate(Screen.VoiceRoom.createRoute(room.id)) },
-                    onVibeGraph = { navController.navigate(Screen.VibeGraph.route) },
-                    onCreatorDashboard = { navController.navigate(Screen.CreatorDashboard.route) },
-                    onLeaderboards = { navController.navigate(Screen.GiftLeaderboard.route) },
-                    onClans = { navController.navigate(Screen.ClanList.route) },
-                    showBottomDock = false
-                )
+                    TAB_DISCOVER -> DiscoverScreen(
+                        token = token,
+                        onOpenRoom = ::openRoom,
+                        onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) },
+                        onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
+                        onNotifications = { navController.navigate(Screen.Notifications.route) },
+                        onSearch = { navController.navigate(Screen.Search.route) },
+                        onGames = { goTo(TAB_GAME_ZONE) },
+                        onEvents = { navController.navigate(Screen.Events.route) },
+                        onDating = { navController.navigateTopLevel(Screen.DatingDiscovery.route) },
+                        onChat = { goTo(TAB_CHAT) },
+                        onWallet = { navController.navigate(Screen.Wallet.route) },
+                        onSelfProfile = { openOwnProfileOrSetup() },
+                        onVoiceRooms = { goTo(TAB_PARTY) },
+                        onJoinParty = ::joinPartyRoom,
+                        onOpenMatchedCall = { room -> navController.navigate(Screen.VoiceRoom.createRoute(room.id)) },
+                        onVibeGraph = { navController.navigate(Screen.VibeGraph.route) },
+                        onCreatorDashboard = { navController.navigate(Screen.CreatorDashboard.route) },
+                        onLeaderboards = { navController.navigate(Screen.GiftLeaderboard.route) },
+                        onClans = { navController.navigate(Screen.ClanList.route) },
+                        showBottomDock = false
+                    )
 
-                TAB_CHAT -> ChatListScreen(
-                    token = token,
-                    currentUserId = currentUserId,
-                    onOpenChat = { partnerId -> navController.navigate(Screen.Chat.createRoute(partnerId)) },
-                    onDiscover = { goTo(TAB_DISCOVER) },
-                    onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
-                    onLive = { goTo(TAB_PARTY) },
-                    onWallet = { navController.navigate(Screen.Wallet.route) },
-                    onProfile = { openOwnProfileOrSetup() },
-                    onJoinClan = { navController.navigate(Screen.ClanList.route) },
-                    onOpenClanDetail = { clanId -> navController.navigate(Screen.ClanDetail.createRoute(clanId)) },
-                    onGameZone = { goTo(TAB_GAME_ZONE) },
-                    showBottomDock = false,
-                    onClanTabActiveChanged = { isClanChatActive = it },
-                    viewModel = chatListViewModel
-                )
+                    TAB_CHAT -> ChatListScreen(
+                        token = token,
+                        currentUserId = currentUserId,
+                        onOpenChat = { partnerId -> navController.navigate(Screen.Chat.createRoute(partnerId)) },
+                        onDiscover = { goTo(TAB_DISCOVER) },
+                        onCreateRoom = { navController.navigate(Screen.CreateRoom.route) },
+                        onLive = { goTo(TAB_PARTY) },
+                        onWallet = { navController.navigate(Screen.Wallet.route) },
+                        onProfile = { openOwnProfileOrSetup() },
+                        onJoinClan = { navController.navigate(Screen.ClanList.route) },
+                        onOpenClanDetail = { clanId -> navController.navigate(Screen.ClanDetail.createRoute(clanId)) },
+                        onGameZone = { goTo(TAB_GAME_ZONE) },
+                        showBottomDock = false,
+                        onClanTabActiveChanged = { isClanChatActive = it },
+                        viewModel = chatListViewModel
+                    )
 
-                TAB_PROFILE -> {
-                    val profileUserId = currentUserId
-                    if (profileUserId.isBlank()) {
-                        LaunchedEffect(Unit) {
-                            navController.navigate(Screen.ProfileSetup.route) { launchSingleTop = true }
+                    TAB_PROFILE -> {
+                        val profileUserId = currentUserId
+                        if (profileUserId.isBlank()) {
+                            LaunchedEffect(Unit) {
+                                navController.navigate(Screen.ProfileSetup.route) { launchSingleTop = true }
+                            }
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("Complete your profile to continue")
+                            }
+                        } else {
+                            ProfileDetailScreen(
+                                token = token,
+                                userId = profileUserId,
+                                onBack = { goTo(TAB_DISCOVER) },
+                                onMessage = { partnerId -> navController.navigate(Screen.Chat.createRoute(partnerId)) },
+                                onInviteToRoom = { /* handled in screen/nav elsewhere; tab context best-effort */ },
+                                onOpenRoom = ::openRoom,
+                                isOwnProfile = true,
+                                autoEdit = false,
+                                onOpenSocialList = { list -> navController.navigate(Screen.ProfileSocial.createRoute(profileUserId, list)) },
+                                onProfileUpdated = onProfileUpdated,
+                                onSettings = { navController.navigate(Screen.Settings.route) },
+                                onDiscover = { goTo(TAB_DISCOVER) },
+                                onParty = { goTo(TAB_PARTY) },
+                                onChatTab = { goTo(TAB_CHAT) },
+                                onOpenStore = { navController.navigate(Screen.Cosmetics.route) },
+                                onOpenCustomize = { navController.navigate(Screen.CustomizeProfile.route) },
+                                onOpenPublicProfile = { navController.navigate(Screen.PublicProfilePreview.createRoute(profileUserId)) },
+                                onOpenVip = { navController.navigate(Screen.Vip.route) },
+                                onOpenTasks = { navController.navigate(Screen.Growth.route) },
+                                onOpenAchievements = { navController.navigate(Screen.Achievements.route) },
+                                onOpenLevel = { navController.navigate(Screen.BattlePass.route) },
+                                onOpenWallet = { navController.navigate(Screen.Wallet.route) },
+                                onOpenPayments = { navController.navigate(Screen.WithdrawalEligibility.route) },
+                                onOpenInventory = { navController.navigate(Screen.Inventory.route) },
+                                onOpenClan = { clanId -> navController.navigate(Screen.ClanDetail.createRoute(clanId)) },
+                                onOpenClanList = { navController.navigate(Screen.ClanList.route) },
+                                onGameZone = { goTo(TAB_GAME_ZONE) },
+                                showBottomDock = false
+                            )
                         }
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("Complete your profile to continue")
-                        }
-                    } else {
-                        ProfileDetailScreen(
-                            token = token,
-                            userId = profileUserId,
-                            onBack = { goTo(TAB_DISCOVER) },
-                            onMessage = { partnerId -> navController.navigate(Screen.Chat.createRoute(partnerId)) },
-                            onInviteToRoom = { /* handled in screen/nav elsewhere; tab context best-effort */ },
-                            onOpenRoom = ::openRoom,
-                            isOwnProfile = true,
-                            autoEdit = false,
-                            onOpenSocialList = { list -> navController.navigate(Screen.ProfileSocial.createRoute(profileUserId, list)) },
-                            onProfileUpdated = onProfileUpdated,
-                            onSettings = { navController.navigate(Screen.Settings.route) },
-                            onDiscover = { goTo(TAB_DISCOVER) },
-                            onParty = { goTo(TAB_PARTY) },
-                            onChatTab = { goTo(TAB_CHAT) },
-                            onOpenStore = { navController.navigate(Screen.Cosmetics.route) },
-                            onOpenCustomize = { navController.navigate(Screen.CustomizeProfile.route) },
-                            onOpenPublicProfile = { navController.navigate(Screen.PublicProfilePreview.createRoute(profileUserId)) },
-                            onOpenVip = { navController.navigate(Screen.Vip.route) },
-                            onOpenTasks = { navController.navigate(Screen.Growth.route) },
-                            onOpenAchievements = { navController.navigate(Screen.Achievements.route) },
-                            onOpenLevel = { navController.navigate(Screen.BattlePass.route) },
-                            onOpenWallet = { navController.navigate(Screen.Wallet.route) },
-                            onOpenPayments = { navController.navigate(Screen.WithdrawalEligibility.route) },
-                            onOpenInventory = { navController.navigate(Screen.Inventory.route) },
-                            onOpenClan = { clanId -> navController.navigate(Screen.ClanDetail.createRoute(clanId)) },
-                            onOpenClanList = { navController.navigate(Screen.ClanList.route) },
-                            onGameZone = { goTo(TAB_GAME_ZONE) },
-                            showBottomDock = false
-                        )
                     }
                 }
             }

@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -94,7 +96,7 @@ fun SubscriptionsScreen(
         }
     }
 
-    LaunchedEffect(token, selectedTab) { loadSubscriptions() }
+    AutomaticSyncEffect(token, selectedTab, topics = setOf(SyncTopic.WALLET), enabled = token.isNotBlank(), isBusy = { isLoading }) { loadSubscriptions() }
 
     YugmAmbientBackground {
         Column(Modifier.fillMaxSize()) {
@@ -107,7 +109,7 @@ fun SubscriptionsScreen(
                 modifier = Modifier.padding(horizontal = 20.dp)
             )
 
-            if (isLoading) {
+            if (isLoading && (subscriptions.isEmpty() && subscriberList.isEmpty())) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     LoadingState("Loading...")
                 }

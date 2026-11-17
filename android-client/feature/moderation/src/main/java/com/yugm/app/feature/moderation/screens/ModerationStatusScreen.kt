@@ -32,7 +32,7 @@ fun ModerationStatusScreen(
     val state by viewModel.state.collectAsState()
     viewModel.setToken(token)
 
-    LaunchedEffect(Unit) {
+    com.yugm.app.core.ui.components.AutomaticSyncEffect(token, topics = setOf(com.yugm.app.core.api.SyncTopic.SETTINGS), enabled = token.isNotBlank()) {
         viewModel.onAction(ModerationAction.LoadStatus)
     }
 

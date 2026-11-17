@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -80,13 +82,13 @@ fun WatchPartyPlayerScreen(
         }
     }
 
-    LaunchedEffect(roomId) { loadWatchParty() }
+    AutomaticSyncEffect(token, roomId, topics = setOf(SyncTopic.ROOMS), enabled = token.isNotBlank(), isBusy = { isLoading }) { loadWatchParty() }
 
     YugmAmbientBackground {
         Column(Modifier.fillMaxSize()) {
             YugmPageHeader("Watch Party", "Synchronized playback", onBack = onBack)
 
-            if (isLoading) {
+            if (isLoading && (watchParty == null)) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     LoadingState("Loading watch party...")
                 }

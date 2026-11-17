@@ -90,7 +90,7 @@ fun NavGraphBuilder.eventsNavGraph(
         val context = androidx.compose.ui.platform.LocalContext.current
         var event by remember { mutableStateOf<com.yugm.app.core.model.YugmEvent?>(null) }
         var eventError by remember { mutableStateOf(false) }
-        LaunchedEffect(eventId) {
+        com.yugm.app.core.ui.components.AutomaticSyncEffect(authTokenProvider(), eventId, topics = setOf(com.yugm.app.core.api.SyncTopic.EVENTS), enabled = authTokenProvider().isNotBlank()) {
             runCatching { YugmApi.eventDetail(eventId, authTokenProvider()) }
                 .onSuccess { event = it }
                 .onFailure { eventError = true; android.widget.Toast.makeText(context, it.message ?: "Failed to load event", android.widget.Toast.LENGTH_SHORT).show() }

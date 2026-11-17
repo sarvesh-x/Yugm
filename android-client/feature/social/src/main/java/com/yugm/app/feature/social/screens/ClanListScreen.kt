@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -58,7 +60,7 @@ fun ClanListScreen(
     var searchQuery by remember { mutableStateOf("") }
     var selectedTab by remember { mutableStateOf(0) }
 
-    LaunchedEffect(token) {
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.CLANS), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) {
         viewModel.loadMyClan(token)
         viewModel.loadClans(token, searchQuery)
         viewModel.loadCommunity(token)
@@ -125,7 +127,7 @@ fun ClanListScreen(
                         placeholder = "Search clans…"
                     )
                 }
-                if (viewModel.isLoading) {
+                if (viewModel.isLoading && (viewModel.clans.isEmpty() && viewModel.myClan == null)) {
                     item { Box(Modifier.padding(horizontal = 20.dp)) { LoadingState("Loading clans…") } }
                 } else {
                     if (viewModel.clans.isEmpty() && searchQuery.isBlank()) {

@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -84,7 +86,7 @@ fun WishlistScreen(
     var isPublic by remember { mutableStateOf(true) }
     var adding by remember { mutableStateOf(false) }
 
-    LaunchedEffect(token) { viewModel.loadWishlist(token) }
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.GIFTS), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) { viewModel.loadWishlist(token) }
     LaunchedEffect(showForm, token, giftLoadAttempt) {
         if (showForm && gifts.isEmpty() && !giftsLoading) {
             giftsLoading = true
@@ -105,7 +107,7 @@ fun WishlistScreen(
             item {
                 YugmPageHeader(if (userId != null) "Wishlist" else "My Wishlist", onBack = onBack)
             }
-            if (viewModel.isLoading) {
+            if (viewModel.isLoading && (viewModel.wishlist.isEmpty())) {
                 item { Box(Modifier.padding(horizontal = 20.dp)) { LoadingState("Loading wishlist...") } }
             } else {
                 if (viewModel.wishlist.isEmpty()) {

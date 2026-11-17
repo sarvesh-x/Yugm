@@ -61,7 +61,6 @@ import com.yugm.app.core.api.YugmApi
 import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.core.ui.components.Avatar
 import com.yugm.app.core.ui.components.YugmBottomDock
-import com.yugm.app.core.ui.components.YugmPullToRefreshBox
 import com.yugm.app.core.ui.components.YugmDockTab
 import com.yugm.app.feature.room.viewmodel.RoomViewModel
 import coil.compose.AsyncImage
@@ -92,19 +91,6 @@ fun VoiceRoomsScreen(
     var selectedSection by remember { mutableStateOf(PartySection.Voice) }
     var followedRooms by remember { mutableStateOf<List<Room>>(emptyList()) }
     val scope = rememberCoroutineScope()
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, token) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME && token.isNotBlank()) {
-                scope.launch {
-                    runCatching { withContext(Dispatchers.IO) { YugmApi.followedRooms(token) } }
-                        .onSuccess { followedRooms = it }
-                }
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
     fun toggleRoomFollow(room: Room) {
         if (token.isBlank()) return
         val following = followedRooms.any { it.id == room.id }
@@ -113,25 +99,17 @@ fun VoiceRoomsScreen(
                 .onSuccess { followedRooms = if (following) followedRooms.filterNot { it.id == room.id } else followedRooms + room }
         }
     }
-    LaunchedEffect(selectedSection) {
+    com.yugm.app.core.ui.components.AutomaticSyncEffect(token, selectedSection, topics = setOf(com.yugm.app.core.api.SyncTopic.ROOMS), enabled = token.isNotBlank(), isBusy = { viewModel.isRoomListLoading }) {
         when (selectedSection) {
             PartySection.Voice -> viewModel.loadRooms(RoomType.Voice)
             PartySection.Video -> viewModel.loadRooms(RoomType.Video)
         }
+        runCatching { withContext(Dispatchers.IO) { YugmApi.followedRooms(token) } }.onSuccess { followedRooms = it }
     }
     val liveRooms = viewModel.rooms.filter { it.type == RoomType.Voice && it.status == "LIVE" }
     val liveVideoRooms = viewModel.rooms.filter { it.type == RoomType.Video && it.status == "LIVE" }
     Box(Modifier.fillMaxSize().background(LocalYugmColors.current.background)) {
-        YugmPullToRefreshBox(
-            isRefreshing = viewModel.isRoomListLoading,
-            onRefresh = {
-                when (selectedSection) {
-                    PartySection.Voice -> viewModel.loadRooms(RoomType.Voice)
-                    PartySection.Video -> viewModel.loadRooms(RoomType.Video)
-                }
-            },
-            modifier = Modifier.fillMaxSize()
-        ) {
+        Box(modifier = Modifier.fillMaxSize()) {
             LazyColumn(
                 contentPadding = PaddingValues(top = 14.dp, bottom = if (showBottomDock) 120.dp else 100.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -243,7 +221,7 @@ fun VoiceRoomsScreen(
                         PartyEmptyState(
                             title = if (viewModel.roomListError == null) "No live video parties yet" else "Couldn't load video parties",
                             message = viewModel.roomListError ?: "When a video party goes live, you’ll find it here.",
-                            action = if (viewModel.roomListError != null) "Try again" else "Refresh",
+                            action = if (viewModel.roomListError != null) "Try again" else null,
                             onAction = { viewModel.loadRooms(RoomType.Video) }
                         )
                     }
@@ -323,12 +301,12 @@ private fun PartyLoadingState(message: String) {
 }
 
 @Composable
-private fun PartyEmptyState(title: String, message: String, action: String, onAction: () -> Unit) {
+private fun PartyEmptyState(title: String, message: String, action: String?, onAction: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text("◉", color = LocalYugmColors.current.secondary, fontSize = 38.sp, fontWeight = FontWeight.Bold)
         Text(title, color = LocalYugmColors.current.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
         Text(message, color = LocalYugmColors.current.textSecondary, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
-        TextButton(onClick = onAction) { Text(action, color = LocalYugmColors.current.secondary, fontWeight = FontWeight.Bold) }
+        if (action != null) TextButton(onClick = onAction) { Text(action, color = LocalYugmColors.current.secondary, fontWeight = FontWeight.Bold) }
     }
 }
 

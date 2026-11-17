@@ -72,7 +72,7 @@ fun NavGraphBuilder.walletNavGraph(
         val scope = rememberCoroutineScope()
         val context = androidx.compose.ui.platform.LocalContext.current
         var prompt by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
-        LaunchedEffect(authTokenProvider()) {
+        com.yugm.app.core.ui.components.AutomaticSyncEffect(authTokenProvider(), topics = setOf(com.yugm.app.core.api.SyncTopic.WALLET), enabled = authTokenProvider().isNotBlank()) {
             runCatching { com.yugm.app.core.api.YugmApi.trustVoicePrompt(authTokenProvider()) }
                 .onSuccess { prompt = it }
                 .onFailure { android.widget.Toast.makeText(context, it.message ?: "Could not load voice prompt", android.widget.Toast.LENGTH_SHORT).show() }
@@ -95,14 +95,14 @@ fun NavGraphBuilder.walletNavGraph(
         val scope = rememberCoroutineScope()
         val context = androidx.compose.ui.platform.LocalContext.current
         var status by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(TrustVerificationStatus()) }
-        fun refreshStatus() {
+        fun refreshStatus(silent: Boolean = false) {
             scope.launch {
                 runCatching { com.yugm.app.core.api.YugmApi.trustVerificationStatus(authTokenProvider()) }
                     .onSuccess { status = it }
-                    .onFailure { android.widget.Toast.makeText(context, it.message ?: "Could not load verification status", android.widget.Toast.LENGTH_SHORT).show() }
+                    .onFailure { if (!silent) android.widget.Toast.makeText(context, it.message ?: "Could not load verification status", android.widget.Toast.LENGTH_SHORT).show() }
             }
         }
-        LaunchedEffect(authTokenProvider()) { refreshStatus() }
+        com.yugm.app.core.ui.components.AutomaticSyncEffect(authTokenProvider(), topics = setOf(com.yugm.app.core.api.SyncTopic.WALLET), enabled = authTokenProvider().isNotBlank()) { refreshStatus(silent = true) }
         TrustVerificationStatusScreen(
             status = status,
             onBack = { navController.popBackStack() },
@@ -168,7 +168,7 @@ fun NavGraphBuilder.walletNavGraph(
 
     composable(Screen.CreatorPayoutKycStatus.route) {
         var status by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(com.yugm.app.core.model.CreatorPayoutKycStatus()) }
-        LaunchedEffect(authTokenProvider()) {
+        com.yugm.app.core.ui.components.AutomaticSyncEffect(authTokenProvider(), topics = setOf(com.yugm.app.core.api.SyncTopic.WALLET), enabled = authTokenProvider().isNotBlank()) {
             runCatching { com.yugm.app.core.api.YugmApi.creatorPayoutKycStatus(authTokenProvider()) }
                 .onSuccess { status = it }
         }
@@ -179,14 +179,14 @@ fun NavGraphBuilder.walletNavGraph(
         val scope = rememberCoroutineScope()
         val context = androidx.compose.ui.platform.LocalContext.current
         var eligibility by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(com.yugm.app.core.model.WithdrawalEligibility()) }
-        fun refreshEligibility() {
+        fun refreshEligibility(silent: Boolean = false) {
             scope.launch {
                 runCatching { com.yugm.app.core.api.YugmApi.withdrawalEligibility(authTokenProvider()) }
                     .onSuccess { eligibility = it }
-                    .onFailure { android.widget.Toast.makeText(context, it.message ?: "Could not load withdrawals", android.widget.Toast.LENGTH_SHORT).show() }
+                    .onFailure { if (!silent) android.widget.Toast.makeText(context, it.message ?: "Could not load withdrawals", android.widget.Toast.LENGTH_SHORT).show() }
             }
         }
-        LaunchedEffect(authTokenProvider()) { refreshEligibility() }
+        com.yugm.app.core.ui.components.AutomaticSyncEffect(authTokenProvider(), topics = setOf(com.yugm.app.core.api.SyncTopic.WALLET), enabled = authTokenProvider().isNotBlank()) { refreshEligibility(silent = true) }
         WithdrawalEligibilityScreen(
             balance = eligibility.balance,
             payoutKyc = eligibility.payoutKyc,

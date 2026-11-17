@@ -24,6 +24,19 @@ import {
 } from "./redis.js";
 
 export let io: Server;
+const pendingPublicTopics = new Set<string>();
+let publicTopicTimer: NodeJS.Timeout | undefined;
+
+export function invalidatePublicTopics(...topics: string[]) {
+  topics.forEach(topic => pendingPublicTopics.add(topic));
+  if (publicTopicTimer) return;
+  publicTopicTimer = setTimeout(() => {
+    publicTopicTimer = undefined;
+    io?.emit("sync:invalidate", { topics: [...pendingPublicTopics] });
+    pendingPublicTopics.clear();
+  }, 500);
+  publicTopicTimer.unref?.();
+}
 
 export async function disconnectOtherUserSockets(userId: string, activeSessionId: string) {
   if (!io) return;
@@ -366,6 +379,7 @@ function toSocketPayload(payload: unknown) {
 }
 
 export function emitRoom(roomId: string, event: string, payload: unknown) {
+  if (event === socketEvents.roomParticipantUpdate || event === socketEvents.roomEnded) invalidatePublicTopics("ROOMS");
   io?.to(`room:${roomId}`).emit(event, toSocketPayload(payload));
 }
 
@@ -397,6 +411,9 @@ export async function getOnlineUserIds() {
 }
 
 export async function closeSocketInfrastructure() {
+  if (publicTopicTimer) clearTimeout(publicTopicTimer);
+  publicTopicTimer = undefined;
+  pendingPublicTopics.clear();
   if (presenceSnapshotTimer) clearInterval(presenceSnapshotTimer);
   if (inactiveRoomTimer) clearInterval(inactiveRoomTimer);
   roomExitTimers.forEach(clearTimeout);

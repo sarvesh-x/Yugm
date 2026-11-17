@@ -26,10 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Groups
@@ -75,7 +72,6 @@ import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.ui.components.Avatar
 import com.yugm.app.core.ui.components.YugmBottomDock
 import com.yugm.app.core.ui.components.YugmDockTab
-import com.yugm.app.core.ui.components.YugmPullToRefreshBox
 import com.yugm.app.core.ui.theme.Background
 import com.yugm.app.core.ui.theme.BorderColor
 import com.yugm.app.core.ui.theme.Danger
@@ -124,15 +120,8 @@ fun DiscoverScreen(
     showBottomDock: Boolean = true,
     viewModel: DiscoverViewModel = hiltViewModel()
 ) {
-    LaunchedEffect(token) {
+    com.yugm.app.core.ui.components.AutomaticSyncEffect(token, topics = setOf(com.yugm.app.core.api.SyncTopic.ROOMS, com.yugm.app.core.api.SyncTopic.NOTIFICATIONS, com.yugm.app.core.api.SyncTopic.PROFILE), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) {
         if (token.isNotBlank()) viewModel.refreshHome(token)
-    }
-    LaunchedEffect(token) {
-        if (token.isBlank()) return@LaunchedEffect
-        while (true) {
-            viewModel.refreshPresenceCount(token)
-            delay(15_000)
-        }
     }
 
     val rooms = remember(viewModel.recommendedRooms, viewModel.rooms) {
@@ -175,11 +164,7 @@ fun DiscoverScreen(
     }
 
     Box(Modifier.fillMaxSize().background(Background)) {
-        YugmPullToRefreshBox(
-            isRefreshing = viewModel.isLoading,
-            onRefresh = { viewModel.refreshHome(token) },
-            modifier = Modifier.fillMaxSize()
-        ) {
+        Box(modifier = Modifier.fillMaxSize()) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(top = 8.dp, bottom = if (showBottomDock) 120.dp else 32.dp),
@@ -518,26 +503,10 @@ private fun DiscoverSectionHeading(title: String, subtitle: String) {
 
 @Composable
 private fun FilterRail(selected: String, onSelected: (String) -> Unit) {
-    val horizontalScrollConsumer = remember {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                return if (available.x != 0f) Offset(available.x, 0f) else Offset.Zero
-            }
-
-            override fun onPostScroll(
-                consumed: Offset,
-                available: Offset,
-                source: NestedScrollSource
-            ): Offset {
-                return if (available.x != 0f) Offset(available.x, 0f) else Offset.Zero
-            }
-        }
-    }
     LazyRow(
         modifier = Modifier
             .fillMaxWidth()
-            .selectableGroup()
-            .nestedScroll(horizontalScrollConsumer),
+            .selectableGroup(),
         contentPadding = PaddingValues(horizontal = 18.dp),
         horizontalArrangement = Arrangement.spacedBy(9.dp)
     ) {

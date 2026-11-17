@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.api.SyncTopic
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -46,7 +48,7 @@ fun MatchesScreen(
 ) {
     var matches by remember { mutableStateOf<List<Host>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
-    LaunchedEffect(token) {
+    AutomaticSyncEffect(token, topics = setOf(SyncTopic.SOCIAL), enabled = token.isNotBlank(), isBusy = { isLoading }) {
         if (token.isNotBlank()) {
             isLoading = true
             runCatching {
@@ -81,7 +83,7 @@ fun MatchesScreen(
             )
         }
     ) { innerPadding ->
-        if (isLoading) {
+        if (isLoading && (matches.isEmpty())) {
             Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
                 LoadingState("Loading matches...")
             }
