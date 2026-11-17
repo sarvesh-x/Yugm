@@ -106,6 +106,12 @@ class RoomViewModel @Inject constructor(
 
     var roomReactions by mutableStateOf<List<RoomReaction>>(emptyList())
         private set
+    var isReactionCatalogLoading by mutableStateOf(false)
+        private set
+    var reactionCatalogError by mutableStateOf<String?>(null)
+        private set
+    private var reactionCatalogLoadedAt = 0L
+    private var reactionCatalogJob: Job? = null
 
     var roomState by mutableStateOf<UiState<RoomDetail>>(UiState.Idle)
         private set
@@ -131,12 +137,39 @@ class RoomViewModel @Inject constructor(
     var actionError by mutableStateOf<String?>(null)
         private set
 
-    fun loadRoomReactions() {
-        viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { yugmApi.roomReactions(sessionManager.authToken.takeIf { it.isNotBlank() }) } }
-                .onSuccess { roomReactions = it }
+    fun loadRoomReactions(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        // A catalog is global, so avoid refetching on every picker open. Force is used
+        // on room entry and from the picker's retry button.
+        val minIntervalMs = if (force) 4_000L else 45_000L
+        if (reactionCatalogJob?.isActive == true) return
+        if (roomReactions.isNotEmpty() && now - reactionCatalogLoadedAt < minIntervalMs) return
+        reactionCatalogJob = viewModelScope.launch {
+            isReactionCatalogLoading = true
+            reactionCatalogError = null
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    yugmApi.roomReactions(sessionManager.authToken.takeIf { it.isNotBlank() })
+                }
+            }
+                .onSuccess { catalog ->
+                    roomReactions = catalog
+                    reactionCatalogLoadedAt = System.currentTimeMillis()
+                    reactionCatalogError = null
+                }
+                .onFailure { error ->
+                    // Keep a previously loaded catalog on screen; only surface an error
+                    // when there is nothing usable to show.
+                    if (roomReactions.isEmpty()) {
+                        reactionCatalogError = error.message?.takeIf { it.isNotBlank() }
+                            ?: "Couldn't load reactions"
+                    }
+                }
+            isReactionCatalogLoading = false
         }
     }
+
+    fun reloadRoomReactions() = loadRoomReactions(force = true)
 
     fun clearActionError() {
         actionError = null
@@ -158,7 +191,7 @@ class RoomViewModel @Inject constructor(
         this.roomId = roomId
         this.currentUserId = userId
         this.isVideo = video
-        loadRoomReactions()
+        loadRoomReactions(force = true)
         refresh()
         videoParticipantRefreshJob?.cancel()
         if (video) {

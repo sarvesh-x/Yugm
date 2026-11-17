@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -84,6 +85,7 @@ import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomParticipant
 import com.yugm.app.core.model.RoomReaction
 import com.yugm.app.core.model.RoomReactionAccess
+import com.yugm.app.core.model.RoomReactionEvent
 import com.yugm.app.core.model.SpeakerRequest
 import com.yugm.app.core.model.PkBattle
 import com.yugm.app.core.model.PkLeaderboardEntry
@@ -128,6 +130,10 @@ fun VideoLivestreamScreen(
     polls: List<RoomPoll> = emptyList(),
     roomReactions: List<RoomReaction> = emptyList(),
     isCurrentUserVip: Boolean = false,
+    roomReactionEvent: Pair<Int, RoomReactionEvent?> = 0 to null,
+    reactionCatalogLoading: Boolean = false,
+    reactionCatalogError: String? = null,
+    onReloadReactions: () -> Unit = {},
     onBack: () -> Unit,
     onMinimize: () -> Unit,
     requestError: String = "",
@@ -186,8 +192,29 @@ fun VideoLivestreamScreen(
     var joined by rememberSaveable(room.id) { mutableStateOf(false) }
     var requestVoiceAfterPermission by rememberSaveable(room.id) { mutableStateOf(false) }
     var blockedPermission by remember(room.id) { mutableStateOf<String?>(null) }
+    var floatingReaction by remember { mutableStateOf<RoomReactionEvent?>(null) }
+    var reactionVisualVersion by remember { mutableStateOf(0) }
     val ownCameraGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
     val ownMicGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+
+    PrefetchReactionAssets(roomReactions.map { it.assetUrl })
+
+    LaunchedEffect(roomReactionEvent.first) {
+        val event = roomReactionEvent.second ?: return@LaunchedEffect
+        if (roomReactionEvent.first <= 0) return@LaunchedEffect
+        floatingReaction = event.copy(
+            reactionId = event.reactionId.ifBlank { event.type },
+            label = event.label.ifBlank { event.reactionId.ifBlank { event.type } }
+        )
+        reactionVisualVersion++
+    }
+
+    LaunchedEffect(reactionVisualVersion) {
+        if (reactionVisualVersion > 0) {
+            delay(1800)
+            floatingReaction = null
+        }
+    }
 
     val joinPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         val cameraAllowed = result[Manifest.permission.CAMERA] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
@@ -396,7 +423,10 @@ fun VideoLivestreamScreen(
                     }
                 }
                 IconButton(
-                    onClick = { reactionPickerOpen = true },
+                    onClick = {
+                        reactionPickerOpen = true
+                        onReloadReactions()
+                    },
                     modifier = Modifier.size(32.dp).clip(CircleShape).border(1.dp, Color(0x667E718D), CircleShape)
                         .semantics { contentDescription = "Open emoji reactions" }
                 ) { Icon(Icons.Filled.SentimentSatisfiedAlt, contentDescription = null, tint = StreamInk, modifier = Modifier.size(14.dp)) }
@@ -475,6 +505,25 @@ fun VideoLivestreamScreen(
                 Text(if (localRequestSent || hasPendingRequest) "Request sent" else "Join Call", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
         }
+
+        floatingReaction?.let { reaction ->
+            FloatingEmojiOverlay(
+                emojis = listOf(
+                    FloatingEmoji(
+                        id = "video-$reactionVisualVersion-${reaction.userId}-${reaction.reactionId}",
+                        emoji = reaction.emoji,
+                        assetUrl = reaction.assetUrl,
+                        label = reaction.label.ifBlank { reaction.reactionId },
+                        userName = reaction.userName
+                    )
+                ),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 150.dp)
+                    .height(260.dp)
+                    .fillMaxWidth()
+            )
+        }
     }
 
     if (moreActionsOpen) {
@@ -494,10 +543,7 @@ fun VideoLivestreamScreen(
         ModalBottomSheet(onDismissRequest = { reactionPickerOpen = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = Color(0xFF14151E)) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp).navigationBarsPadding()) {
                 Text("Live reactions", color = StreamInk, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                val fallback = listOf("heart", "fire", "laugh", "clap", "wow", "crown", "stars", "party")
-                val catalog = if (roomReactions.isNotEmpty()) roomReactions else fallback.mapIndexed { index, id ->
-                    RoomReaction(id = id, label = id.replaceFirstChar { it.uppercase() }, access = RoomReactionAccess.EVERYONE, sortOrder = index)
-                }
+                val catalog = roomReactions
                 val everyone = catalog.filter { it.access == RoomReactionAccess.EVERYONE }
                 val vipOnly = catalog.filter { it.access == RoomReactionAccess.VIP_EXCLUSIVE }
 
@@ -514,21 +560,63 @@ fun VideoLivestreamScreen(
                                 else {
                                     onReact(reaction.id)
                                     reactionPickerOpen = false
+                                    floatingReaction = RoomReactionEvent(
+                                        type = reaction.id,
+                                        reactionId = reaction.id,
+                                        label = reaction.label.ifBlank { reaction.id },
+                                        emoji = reaction.emoji,
+                                        assetUrl = reaction.assetUrl,
+                                        assetKind = reaction.assetKind,
+                                        access = reaction.access,
+                                        userId = currentUserId,
+                                        userName = participants.firstOrNull { it.user.id == currentUserId }?.user?.name.orEmpty()
+                                    )
+                                    reactionVisualVersion++
                                 }
                             },
                         contentAlignment = Alignment.Center
                     ) {
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.alpha(if (locked) 0.45f else 1f)) {
-                            if (reaction.emoji.isNotBlank() || reaction.assetUrl.isBlank()) {
-                                Text(reaction.emoji.ifBlank { reaction.label.take(2).ifBlank { "•" } }, fontSize = 22.sp)
-                            }
-                            if (reaction.assetUrl.isNotBlank()) {
-                                AsyncImage(model = reaction.assetUrl, contentDescription = reaction.label.ifBlank { reaction.id }, modifier = Modifier.size(if (locked) 22.dp else 28.dp))
-                            }
+                            ReactionArtwork(
+                                emoji = reaction.emoji,
+                                assetUrl = reaction.assetUrl,
+                                label = reaction.label.ifBlank { reaction.id },
+                                emojiSize = 22.sp,
+                                modifier = Modifier.size(if (locked) 26.dp else 32.dp)
+                            )
                         }
                         if (locked) {
                             Icon(Icons.Filled.Lock, contentDescription = "VIP only", tint = Gold, modifier = Modifier.align(Alignment.BottomEnd).padding(3.dp).size(10.dp))
                         }
+                    }
+                }
+
+                if (catalog.isEmpty()) {
+                    when {
+                        reactionCatalogLoading -> Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(top = 10.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = Gold
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text("Loading reactions…", color = StreamMuted, fontSize = 13.sp)
+                        }
+                        reactionCatalogError != null -> Column(modifier = Modifier.padding(top = 6.dp)) {
+                            Text("Couldn't load reactions.", color = Color(0xFFFF8098), fontSize = 13.sp)
+                            TextButton(onClick = onReloadReactions) {
+                                Text("Retry", color = Gold, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        else -> Text(
+                            "No reactions available yet. Check back soon.",
+                            color = StreamMuted,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(top = 10.dp)
+                        )
                     }
                 }
 
@@ -542,6 +630,15 @@ fun VideoLivestreamScreen(
                     Text("VIP Exclusive", color = Gold, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                     LazyRow(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(vipOnly, key = { it.id }) { reaction -> ReactionTile(reaction, locked = !isCurrentUserVip) }
+                    }
+                    if (!isCurrentUserVip) {
+                        Text(
+                            "Upgrade to VIP to unlock exclusive reactions.",
+                            color = Gold,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
                     }
                 }
             }

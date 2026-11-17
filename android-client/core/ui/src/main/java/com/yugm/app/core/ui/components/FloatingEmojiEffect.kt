@@ -6,7 +6,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
@@ -14,11 +13,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import kotlin.random.Random
 
 data class FloatingEmoji(
@@ -76,29 +73,12 @@ private fun FloatingEmojiItem(emoji: FloatingEmoji) {
             },
         contentAlignment = Alignment.Center
     ) {
-        if (emoji.assetUrl.isNotBlank()) {
-            Box(contentAlignment = Alignment.Center) {
-                if (emoji.emoji.isNotBlank()) {
-                    Text(
-                        text = emoji.emoji,
-                        fontSize = sizePx.sp,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.size((sizePx + 8).dp)
-                    )
-                }
-                AsyncImage(
-                    model = emoji.assetUrl,
-                    contentDescription = emoji.label.ifBlank { "Reaction" },
-                    modifier = Modifier.size(sizePx.dp)
-                )
-            }
-        } else {
-            Text(
-                text = emoji.emoji,
-                fontSize = sizePx.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.size((sizePx + 8).dp)
-            )
-        }
+        ReactionArtwork(
+            emoji = emoji.emoji,
+            assetUrl = emoji.assetUrl,
+            label = emoji.label,
+            emojiSize = sizePx.sp,
+            modifier = Modifier.size(sizePx.dp)
+        )
     }
 }

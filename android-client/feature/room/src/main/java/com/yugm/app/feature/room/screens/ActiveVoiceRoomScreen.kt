@@ -90,6 +90,7 @@ import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -179,6 +180,8 @@ import com.yugm.app.core.ui.components.PkSetupBottomSheet
 import com.yugm.app.core.ui.components.PkSideCard
 import com.yugm.app.core.ui.components.PkTeamSelector
 import com.yugm.app.core.ui.components.PkWaitingState
+import com.yugm.app.core.ui.components.PrefetchReactionAssets
+import com.yugm.app.core.ui.components.ReactionArtwork
 import com.yugm.app.core.ui.theme.Background
 import com.yugm.app.core.ui.theme.Gold
 import com.yugm.app.core.ui.theme.Pink
@@ -294,6 +297,9 @@ fun ActiveVoiceRoomScreen(
     onOpenModes: (() -> Unit)? = null,
     roomReactions: List<RoomReaction> = emptyList(),
     isCurrentUserVip: Boolean = false,
+    reactionCatalogLoading: Boolean = false,
+    reactionCatalogError: String? = null,
+    onReloadReactions: () -> Unit = {},
     onOpenThemes: (() -> Unit)? = null,
     onEditRoom: (() -> Unit)? = null,
     canSpeak: Boolean = participants.any {
@@ -304,6 +310,8 @@ fun ActiveVoiceRoomScreen(
         onJoin()
         onDispose { }
     }
+
+    PrefetchReactionAssets(roomReactions.map { it.assetUrl })
 
     var muted by rememberSaveable(room.id) { mutableStateOf(true) }
     var roomAudioMuted by rememberSaveable(room.id) { mutableStateOf(false) }
@@ -832,7 +840,10 @@ fun ActiveVoiceRoomScreen(
                         }
                     }
                     IconButton(
-                        onClick = { showReactionPicker = true },
+                        onClick = {
+                            showReactionPicker = true
+                            onReloadReactions()
+                        },
                         modifier = Modifier.size(32.dp).clip(CircleShape)
                             .border(1.dp, Color(0x667E718D), CircleShape)
                             .semantics { contentDescription = "Open emoji reactions" }
@@ -1068,6 +1079,7 @@ fun ActiveVoiceRoomScreen(
                     ToolGridItem("✨", "Reactions") {
                         showToolsSheet = false
                         showReactionPicker = true
+                        onReloadReactions()
                     }
                     ToolGridItem("🎨", "Themes") {
                         showToolsSheet = false
@@ -1296,10 +1308,7 @@ fun ActiveVoiceRoomScreen(
                 Text("React live on the stage", color = TextMuted, fontSize = 12.sp)
                 Spacer(modifier = Modifier.height(14.dp))
 
-                val fallback = listOf("heart", "fire", "laugh", "clap", "wow", "crown", "stars", "party")
-                val catalog = if (roomReactions.isNotEmpty()) roomReactions else fallback.mapIndexed { index, id ->
-                    RoomReaction(id = id, label = id.replaceFirstChar { it.uppercase() }, access = RoomReactionAccess.EVERYONE, sortOrder = index)
-                }
+                val catalog = roomReactions
                 val everyone = catalog.filter { it.access == RoomReactionAccess.EVERYONE }
                 val vipOnly = catalog.filter { it.access == RoomReactionAccess.VIP_EXCLUSIVE }
 
@@ -1308,6 +1317,7 @@ fun ActiveVoiceRoomScreen(
                         type = reaction.id,
                         reactionId = reaction.id,
                         label = reaction.label.ifBlank { reaction.id },
+                        emoji = reaction.emoji,
                         assetUrl = reaction.assetUrl,
                         assetKind = reaction.assetKind,
                         access = reaction.access,
@@ -1347,19 +1357,13 @@ fun ActiveVoiceRoomScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.alpha(if (locked) 0.45f else 1f)) {
-                            if (reaction.emoji.isNotBlank() || reaction.assetUrl.isBlank()) {
-                                Text(
-                                    text = reaction.emoji.ifBlank { reaction.label.take(2).ifBlank { "•" } },
-                                    fontSize = 26.sp
-                                )
-                            }
-                            if (reaction.assetUrl.isNotBlank()) {
-                                AsyncImage(
-                                    model = reaction.assetUrl,
-                                    contentDescription = reaction.label.ifBlank { reaction.id },
-                                    modifier = Modifier.size(if (locked) 24.dp else 30.dp)
-                                )
-                            }
+                            ReactionArtwork(
+                                emoji = reaction.emoji,
+                                assetUrl = reaction.assetUrl,
+                                label = reaction.label.ifBlank { reaction.id },
+                                emojiSize = 26.sp,
+                                modifier = Modifier.size(if (locked) 32.dp else 40.dp)
+                            )
                         }
                         if (locked) {
                             Box(
@@ -1376,6 +1380,31 @@ fun ActiveVoiceRoomScreen(
                     }
                 }
 
+                if (catalog.isEmpty()) {
+                    when {
+                        reactionCatalogLoading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = Gold
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text("Loading reactions…", color = TextMuted, fontSize = 13.sp)
+                        }
+                        reactionCatalogError != null -> Column {
+                            Text("Couldn't load reactions.", color = Color(0xFFFF8098), fontSize = 13.sp)
+                            TextButton(onClick = onReloadReactions) {
+                                Text("Retry", color = Gold, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        else -> Text(
+                            "No reactions available yet. Check back soon.",
+                            color = TextMuted,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+
                 if (everyone.isNotEmpty()) {
                     Text("Everyone", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                     Spacer(modifier = Modifier.height(8.dp))
@@ -1389,11 +1418,20 @@ fun ActiveVoiceRoomScreen(
                 if (vipOnly.isNotEmpty()) {
                     Text("VIP Exclusive", color = Gold, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                     Spacer(modifier = Modifier.height(8.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
                         items(vipOnly, key = { it.id }) { reaction ->
                             val locked = !isCurrentUserVip
                             ReactionTile(reaction, locked = locked)
                         }
+                    }
+                    if (!isCurrentUserVip) {
+                        Text(
+                            "Upgrade to VIP to unlock exclusive reactions.",
+                            color = Gold,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(bottom = 10.dp)
+                        )
                     }
                 }
             }
@@ -1949,18 +1987,13 @@ private fun VoiceSeatItem(
                             .padding(8.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            if (reaction.emoji.isNotBlank() || reaction.assetUrl.isBlank()) {
-                                Text(reaction.emoji.ifBlank { reaction.label.take(2).ifBlank { "•" } }, fontSize = 24.sp)
-                            }
-                            if (reaction.assetUrl.isNotBlank()) {
-                                AsyncImage(
-                                    model = reaction.assetUrl,
-                                    contentDescription = reaction.label.ifBlank { reaction.reactionId },
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
-                        }
+                        ReactionArtwork(
+                            emoji = reaction.emoji,
+                            assetUrl = reaction.assetUrl,
+                            label = reaction.label.ifBlank { reaction.reactionId },
+                            emojiSize = 24.sp,
+                            modifier = Modifier.size(32.dp)
+                        )
                     }
                 }
 
