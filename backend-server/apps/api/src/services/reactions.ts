@@ -33,17 +33,26 @@ export interface PublicRoomReaction {
   assetKind: "STATIC" | "ANIMATED";
   access: "EVERYONE" | "VIP_EXCLUSIVE";
   sortOrder: number;
+  usable: boolean;
+  lockedReason: "VIP" | null;
 }
 
-export function toPublicRoomReaction(reaction: Pick<RoomReactionDocument, "_id" | "label" | "emoji" | "assetUrl" | "assetKind" | "access" | "sortOrder">): PublicRoomReaction {
+export function toPublicRoomReaction(
+  reaction: Pick<RoomReactionDocument, "_id" | "label" | "emoji" | "assetUrl" | "assetKind" | "access" | "sortOrder">,
+  user?: { vipExpiresAt?: Date | string | null } | null
+): PublicRoomReaction {
+  const access = reaction.access ?? "EVERYONE";
+  const usable = canUseRoomReaction({ access } as any, user ?? null);
   return {
     id: String(reaction._id),
     label: reaction.label,
     emoji: reaction.emoji ?? "",
     assetUrl: reaction.assetUrl ?? "",
     assetKind: reaction.assetKind ?? "STATIC",
-    access: reaction.access ?? "EVERYONE",
-    sortOrder: reaction.sortOrder ?? 0
+    access,
+    sortOrder: reaction.sortOrder ?? 0,
+    usable,
+    lockedReason: usable ? null : (access === "VIP_EXCLUSIVE" ? "VIP" : null)
   };
 }
 
@@ -86,10 +95,10 @@ export function ensureDefaultRoomReactions(): Promise<void> {
   return defaultsPromise;
 }
 
-export async function listActiveRoomReactions(): Promise<PublicRoomReaction[]> {
+export async function listActiveRoomReactions(user?: { vipExpiresAt?: Date | string | null } | null): Promise<PublicRoomReaction[]> {
   await ensureDefaultRoomReactions();
   const reactions = await RoomReaction.find({ isActive: true }).sort({ sortOrder: 1, createdAt: 1, _id: 1 }).lean();
-  return reactions.map((reaction) => toPublicRoomReaction(reaction as any));
+  return reactions.map((reaction) => toPublicRoomReaction(reaction as any, user ?? null));
 }
 
 export async function findActiveRoomReaction(id: string) {

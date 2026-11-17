@@ -129,6 +129,8 @@ class MainViewModel @Inject constructor(
         runCatching { YugmSocket.disconnect() }
         runCatching { socketManager.disconnect() }
         YugmMediaRoom.disconnectAsync()
+        com.yugm.app.core.api.ReactionCatalogCache.clear()
+        com.yugm.app.feature.chat.cache.ChatConversationCache.clear()
         sessionManager.logout()
         authToken = ""
         currentUserId = ""

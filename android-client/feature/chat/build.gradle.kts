@@ -52,4 +52,5 @@ dependencies {
     implementation(libs.timber)
     implementation(libs.coil.compose)
     implementation(project(":feature:social"))
+    testImplementation(libs.junit)
 }

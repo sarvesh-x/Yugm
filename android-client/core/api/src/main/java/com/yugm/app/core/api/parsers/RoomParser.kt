@@ -231,7 +231,9 @@ fun JSONObject.toRoomReaction(): RoomReaction = RoomReaction(
     assetUrl = resolveMediaUrl(optString("assetUrl", "")) ?: optString("assetUrl", ""),
     assetKind = optString("assetKind", "STATIC").ifBlank { "STATIC" }.uppercase(),
     access = if (optString("access", "EVERYONE").equals("VIP_EXCLUSIVE", ignoreCase = true)) RoomReactionAccess.VIP_EXCLUSIVE else RoomReactionAccess.EVERYONE,
-    sortOrder = optInt("sortOrder", 0)
+    sortOrder = optInt("sortOrder", 0),
+    usable = if (has("usable")) optBoolean("usable", true) else !optString("access", "EVERYONE").equals("VIP_EXCLUSIVE", ignoreCase = true),
+    lockedReason = optString("lockedReason", "").takeIf { it.isNotBlank() }
 )
 
 fun JSONArray.toRoomReactions(): List<RoomReaction> = buildList {

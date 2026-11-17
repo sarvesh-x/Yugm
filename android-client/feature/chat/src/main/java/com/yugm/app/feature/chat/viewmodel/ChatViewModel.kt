@@ -9,18 +9,26 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yugm.app.core.api.IYugmApi
 import com.yugm.app.core.model.ActiveCosmetics
+import com.yugm.app.core.model.ChatReplyTo
+import com.yugm.app.core.model.Conversation
 import com.yugm.app.core.model.DirectMessage
+import com.yugm.app.core.model.DirectMessageReaction
 import com.yugm.app.core.model.Host
 import com.yugm.app.core.model.GiftItem
 import com.yugm.app.core.model.ModerationReportRequest
 import com.yugm.app.core.model.RelationshipStatus
 import com.yugm.app.core.model.Room
+import com.yugm.app.core.model.RoomReaction
 import com.yugm.app.core.model.RoomType
+import com.yugm.app.core.api.ReactionCatalogCache
 import com.yugm.app.core.api.SocketEvent
 import com.yugm.app.core.api.SocketManager
+import com.yugm.app.feature.chat.cache.CachedConversation
+import com.yugm.app.feature.chat.cache.ChatConversationCache
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.delay
@@ -36,6 +44,8 @@ class ChatViewModel @Inject constructor(
 ) : ViewModel() {
 
     val messages = mutableStateListOf<DirectMessage>()
+    val sendingMessageIds = mutableStateListOf<String>()
+    val failedMessageIds = mutableStateListOf<String>()
 
     var partner by mutableStateOf<Host?>(null)
         private set
@@ -53,6 +63,9 @@ class ChatViewModel @Inject constructor(
         private set
 
     var isSending by mutableStateOf(false)
+        private set
+
+    var isUploadingAttachment by mutableStateOf(false)
         private set
 
     var startingCallType by mutableStateOf<RoomType?>(null)
@@ -93,6 +106,18 @@ class ChatViewModel @Inject constructor(
     var forwardTargets by mutableStateOf<List<Host>>(emptyList())
         private set
 
+    var reactionCatalog by mutableStateOf<List<RoomReaction>>(emptyList())
+        private set
+    var isReactionCatalogLoading by mutableStateOf(false)
+        private set
+    var reactionCatalogError by mutableStateOf<String?>(null)
+        private set
+    private var reactionCatalogJob: Job? = null
+    private var reactionCatalogOwner = ""
+    private var refreshJob: Job? = null
+    private var refreshVersion = 0L
+    private val cacheScope get() = "$currentUserId|$authToken"
+
     var hasMoreHistory by mutableStateOf(false)
         private set
     var isLoadingMore by mutableStateOf(false)
@@ -111,7 +136,18 @@ class ChatViewModel @Inject constructor(
                 when (event) {
                     is SocketEvent.DirectMessageReceived -> {
                         if (event.message.belongsToConversation(currentUserId, partnerUserId)) {
-                            replaceOrAppendMessage(event.message)
+                            if (event.message.senderId == currentUserId) {
+                                val localId = messages.firstOrNull {
+                                    it.id.startsWith("local:") &&
+                                        it.senderId == currentUserId &&
+                                        it.receiverId == partnerUserId &&
+                                        it.message == event.message.message &&
+                                        it.mediaUrl == event.message.mediaUrl
+                                }?.id
+                                if (localId != null) replaceLocalMessage(localId, event.message) else replaceOrAppendMessage(event.message)
+                            } else {
+                                replaceOrAppendMessage(event.message)
+                            }
                             if (event.message.senderId == partnerUserId && event.message.receiverId == currentUserId && !event.message.read) {
                                 markConversationReadIfNeeded()
                             }
@@ -168,9 +204,26 @@ class ChatViewModel @Inject constructor(
     }
 
     fun connect(token: String, userId: String, partnerId: String) {
-        if (partnerUserId != partnerId || currentUserId != userId) {
+        val isNewConversation = partnerUserId != partnerId || currentUserId != userId
+        if (isNewConversation || authToken != token) {
+            refreshVersion++
+            refreshJob?.cancel()
+            reactionCatalogJob?.cancel()
+            myActiveCosmetics = ActiveCosmetics()
+            isCurrentUserVip = false
+            reactionCatalog = emptyList()
+        }
+        if (isNewConversation) {
             messages.clear()
             isMatched = false
+            relationship = null
+            partner = null
+            isMuted = false
+            isBlockedByMe = false
+            hasMoreHistory = false
+            nextBefore = null
+            sendingMessageIds.clear()
+            failedMessageIds.clear()
         }
         activeSearchQuery = ""
         searchResults = null
@@ -184,31 +237,120 @@ class ChatViewModel @Inject constructor(
             return
         }
 
+        if (isNewConversation) {
+            ChatConversationCache.get(cacheScope, partnerId)?.let { cached ->
+                messages.clear()
+                messages.addAll(cached.messages)
+                partner = cached.partner ?: partner
+                relationship = cached.relationship
+                isMuted = cached.isMuted
+                isBlockedByMe = cached.isBlockedByMe
+                isMatched = cached.isMatched
+                hasMoreHistory = cached.hasMoreHistory
+                nextBefore = cached.nextBefore
+                if (cached.myActiveCosmetics != ActiveCosmetics()) myActiveCosmetics = cached.myActiveCosmetics
+                if (cached.isCurrentUserVip) isCurrentUserVip = true
+                error = ""
+            }
+        }
+
         socketManager.connect(token)
+        reactionCatalog = ReactionCatalogCache.getAny(authToken).ifEmpty { reactionCatalog }
+        loadReactionCatalog()
         refresh()
     }
 
+    private fun snapshotConversationCache() {
+        val pid = partnerUserId
+        if (pid.isBlank()) return
+        val stableMessages = messages.filterNot { it.id.startsWith("local:") }
+        if (stableMessages.isEmpty() && partner == null) return
+        ChatConversationCache.put(
+            cacheScope, pid,
+            CachedConversation(
+                messages = stableMessages.takeLast(200),
+                partner = partner,
+                relationship = relationship,
+                isMuted = isMuted,
+                isBlockedByMe = isBlockedByMe,
+                isMatched = isMatched,
+                hasMoreHistory = hasMoreHistory,
+                nextBefore = nextBefore,
+                myActiveCosmetics = myActiveCosmetics,
+                isCurrentUserVip = isCurrentUserVip
+            )
+        )
+    }
+
+    fun loadReactionCatalog(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        val requestToken = authToken
+        if (reactionCatalogOwner != requestToken) {
+            reactionCatalogJob?.cancel()
+            reactionCatalog = emptyList()
+            reactionCatalogOwner = requestToken
+        }
+        val cachedFresh = ReactionCatalogCache.getIfFresh(requestToken, now)
+        if (!force && cachedFresh != null) {
+            reactionCatalog = cachedFresh
+            reactionCatalogError = null
+            return
+        }
+        val anyCached = ReactionCatalogCache.getAny(authToken)
+        if (anyCached.isNotEmpty() && reactionCatalog.isEmpty()) {
+            reactionCatalog = anyCached
+        }
+        val minIntervalMs = if (force) 4_000L else 45_000L
+        if (reactionCatalogJob?.isActive == true) return
+        if (!force && reactionCatalog.isNotEmpty() && now - ReactionCatalogCache.loadedAt(requestToken) < minIntervalMs) return
+        reactionCatalogJob = viewModelScope.launch {
+            isReactionCatalogLoading = true
+            reactionCatalogError = null
+            runCatching {
+                withContext(Dispatchers.IO) { yugmApi.roomReactions(requestToken.takeIf { it.isNotBlank() }) }
+            }.onSuccess { catalog ->
+                if (authToken != requestToken) return@launch
+                reactionCatalog = catalog
+                ReactionCatalogCache.put(requestToken, catalog)
+                reactionCatalogError = null
+            }.onFailure { e ->
+                if (reactionCatalog.isEmpty()) {
+                    reactionCatalogError = e.message?.takeIf { it.isNotBlank() } ?: "Couldn't load reactions"
+                }
+            }
+            isReactionCatalogLoading = false
+        }
+    }
+
+    fun reloadReactionCatalog() = loadReactionCatalog(force = true)
+
     fun refresh() {
         if (authToken.isBlank() || partnerUserId.isBlank()) return
-        viewModelScope.launch {
-            isLoading = true
-            error = ""
+        loadReactionCatalog()
+        val requestToken = authToken
+        val requestPartner = partnerUserId
+        val requestUser = currentUserId
+        val version = ++refreshVersion
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
+            val showBlockingLoader = messages.none { !it.id.startsWith("local:") }
+            if (showBlockingLoader) isLoading = true
             var loadError: Throwable? = null
             try {
                 supervisorScope {
                     val historyRequest = async(Dispatchers.IO) {
-                        runCatching { yugmApi.conversation(authToken, partnerUserId) }
+                        runCatching { yugmApi.conversation(requestToken, requestPartner) }
                     }
                     val partnerRequest = async(Dispatchers.IO) {
-                        runCatching { yugmApi.getUser(partnerUserId, authToken) }
+                        runCatching { yugmApi.getUser(requestPartner, requestToken) }
                     }
                     val myProfileRequest = async(Dispatchers.IO) {
-                        runCatching { yugmApi.authMe(authToken) }
+                        runCatching { yugmApi.authMe(requestToken) }
                     }
-                    val giftsRequest = async(Dispatchers.IO) { runCatching { yugmApi.gifts(authToken) } }
-                    val walletRequest = async(Dispatchers.IO) { runCatching { yugmApi.walletOverview(authToken) } }
+                    val giftsRequest = async(Dispatchers.IO) { runCatching { yugmApi.gifts(requestToken) } }
+                    val walletRequest = async(Dispatchers.IO) { runCatching { yugmApi.walletOverview(requestToken) } }
                     val matchesRequest = async(Dispatchers.IO) {
-                        runCatching { yugmApi.datingMatches(authToken) }.getOrDefault(emptyList())
+                        runCatching { yugmApi.datingMatches(requestToken) }.getOrDefault(emptyList())
                     }
                     historyRequest.await()
                         .onSuccess { conversation ->
@@ -229,48 +371,132 @@ class ChatViewModel @Inject constructor(
                             if (loadError == null) loadError = failure
                         }
                     myProfileRequest.await().onSuccess {
-                    myActiveCosmetics = it.activeCosmetics
-                    isCurrentUserVip = it.isVip
-                }
+                        myActiveCosmetics = it.activeCosmetics
+                        isCurrentUserVip = it.isVip
+                    }
                     giftsRequest.await().onSuccess { gifts = it }
                     walletRequest.await().onSuccess { walletBalance = it.balance }
                     isMatched = matchesRequest.await().any { it.id == partnerUserId }
-                    runCatching { yugmApi.getBlockedUsers(authToken) }
+                    runCatching { yugmApi.getBlockedUsers(requestToken) }
                         .onSuccess { blocked -> isBlockedByMe = blocked.any { it.id == partnerUserId } }
-                    val recentTargets = runCatching { yugmApi.getRecentMessages(authToken) }.getOrDefault(emptyList())
-                    val followedTargets = runCatching { yugmApi.getFollowing(currentUserId, authToken) }.getOrDefault(emptyList())
-                    forwardTargets = (recentTargets.flatMap { listOfNotNull(it.sender, it.receiver) } + followedTargets)
-                            .filter { it.id != currentUserId && it.id != partnerUserId }
-                            .distinctBy { it.id }
+                    val recentTargets = runCatching { yugmApi.getRecentMessages(requestToken) }.getOrDefault(emptyList())
+                    val followedTargets = runCatching { yugmApi.getFollowing(requestUser, requestToken) }.getOrDefault(emptyList())
+                    val friendTargets = runCatching { yugmApi.friendList(requestToken) }.getOrDefault(emptyList())
+                        .mapNotNull { friend ->
+                            val id = friend._id.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                            Host(
+                                id = id,
+                                name = friend.name,
+                                username = friend.username,
+                                avatar = friend.avatar
+                            )
+                        }
+                    forwardTargets = (recentTargets.flatMap { listOfNotNull(it.sender, it.receiver) } + followedTargets + friendTargets)
+                        .filter { it.id.isNotBlank() && it.id != currentUserId && it.id != partnerUserId }
+                        .distinctBy { it.id }
                 }
             } finally {
-                isLoading = false
+                if (version == refreshVersion) isLoading = false
             }
             markConversationReadIfNeeded()
-            error = loadError?.message.orEmpty()
+            if (loadError == null || messages.isNotEmpty()) snapshotConversationCache()
+            error = if (messages.isEmpty()) loadError?.message.orEmpty() else ""
+        }
+    }
+
+    private fun nowIso(): String = java.time.Instant.now().toString()
+
+    private fun optimisticMessage(
+        localId: String,
+        text: String,
+        replyTo: DirectMessage? = null,
+        mediaUrl: String = "",
+        mediaType: String = ""
+    ): DirectMessage = DirectMessage(
+        id = localId,
+        senderId = currentUserId,
+        receiverId = partnerUserId,
+        message = text,
+        createdAt = nowIso(),
+        read = false,
+        mediaUrl = mediaUrl,
+        mediaType = mediaType,
+        replyTo = replyTo?.let {
+            ChatReplyTo(
+                messageId = it.id,
+                author = it.sender?.name?.ifBlank { it.sender?.username.orEmpty() }.orEmpty().ifBlank { "Message" },
+                authorId = it.senderId,
+                text = it.message,
+                mediaUrl = it.mediaUrl.takeIf(String::isNotBlank)
+            )
+        }
+    )
+
+    private fun replaceLocalMessage(localId: String, serverMessage: DirectMessage) {
+        syncPartnerFromMessage(serverMessage)
+        val idx = messages.indexOfFirst { it.id == localId }
+        if (idx >= 0) {
+            messages[idx] = serverMessage
+        } else {
+            replaceOrAppendMessage(serverMessage)
+        }
+        sendingMessageIds.remove(localId)
+        failedMessageIds.remove(localId)
+    }
+
+    fun retrySend(localId: String) {
+        val msg = messages.firstOrNull { it.id == localId } ?: return
+        if (!localId.startsWith("local:") || msg.senderId != currentUserId) return
+        failedMessageIds.remove(localId)
+        if (localId !in sendingMessageIds) sendingMessageIds.add(localId)
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val replyId = msg.replyTo?.messageId?.takeIf { it.isNotBlank() && !it.startsWith("local:") }
+                    if (msg.mediaUrl.isNotBlank()) {
+                        yugmApi.sendDirectMediaMessage(authToken, partnerUserId, msg.mediaUrl, msg.mediaType, msg.message.takeIf { it != "Shared a photo" && it != "Shared a video" && it != "🎤 Voice note" } ?: "")
+                    } else if (replyId != null) {
+                        val replied = yugmApi.replyDirectMessage(authToken, partnerUserId, msg.message, replyId)
+                        Conversation(messages = listOf(replied))
+                    } else {
+                        yugmApi.sendDirectMessage(authToken, partnerUserId, msg.message)
+                    }
+                }
+            }
+            result.onSuccess { conversation ->
+                conversation.messages.forEach { replaceLocalMessage(localId, it) }
+                conversation.relationship?.let { relationship = it }
+                snapshotConversationCache()
+            }.onFailure {
+                sendingMessageIds.remove(localId)
+                if (localId !in failedMessageIds) failedMessageIds.add(localId)
+                error = it.message ?: "Message could not be sent"
+            }
         }
     }
 
     fun sendMessage(text: String, onSuccess: () -> Unit = {}, onFailure: (String) -> Unit = {}) {
         val normalized = text.trim()
-        if (normalized.isBlank() || isSending || authToken.isBlank() || partnerUserId.isBlank()) return
-
+        if (normalized.isBlank() || authToken.isBlank() || partnerUserId.isBlank()) return
+        val localId = "local:${java.util.UUID.randomUUID()}"
+        val optimistic = optimisticMessage(localId, normalized)
+        messages.add(optimistic)
+        sendingMessageIds.add(localId)
+        onSuccess()
         viewModelScope.launch {
-            isSending = true
-            error = ""
-            try {
-                val result = withContext(Dispatchers.IO) { yugmApi.sendDirectMessage(authToken, partnerUserId, normalized) }
-                result.messages.forEach(::appendMessage)
-                relationship = result.relationship ?: relationship
-                onSuccess()
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: Throwable) {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { yugmApi.sendDirectMessage(authToken, partnerUserId, normalized) }
+            }
+            result.onSuccess { conversation ->
+                conversation.messages.forEach { replaceLocalMessage(localId, it) }
+                conversation.relationship?.let { relationship = it }
+                snapshotConversationCache()
+            }.onFailure { failure ->
+                sendingMessageIds.remove(localId)
+                if (localId !in failedMessageIds) failedMessageIds.add(localId)
                 val message = failure.message ?: "Message could not be sent"
                 error = message
                 onFailure(message)
-            } finally {
-                isSending = false
             }
         }
     }
@@ -291,25 +517,36 @@ class ChatViewModel @Inject constructor(
     }
 
     fun sendAttachment(bytes: ByteArray, mimeType: String, fileName: String) {
-        if (bytes.isEmpty() || isSending || authToken.isBlank() || partnerUserId.isBlank()) return
+        if (bytes.isEmpty() || authToken.isBlank() || partnerUserId.isBlank()) return
         viewModelScope.launch {
-            isSending = true
+            isUploadingAttachment = true
             error = ""
+            val localId = "local:${java.util.UUID.randomUUID()}"
             try {
                 val (mediaUrl, mediaType) = withContext(Dispatchers.IO) {
                     yugmApi.uploadMessageMedia(authToken, bytes, mimeType, fileName)
                 }
-                val conversation = withContext(Dispatchers.IO) {
-                    yugmApi.sendDirectMediaMessage(authToken, partnerUserId, mediaUrl, mediaType)
+                val placeholder = optimisticMessage(localId, "", mediaUrl = mediaUrl, mediaType = mediaType)
+                messages.add(placeholder)
+                sendingMessageIds.add(localId)
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { yugmApi.sendDirectMediaMessage(authToken, partnerUserId, mediaUrl, mediaType) }
                 }
-                conversation.messages.forEach(::replaceOrAppendMessage)
-                conversation.relationship?.let { relationship = it }
+                result.onSuccess { conversation ->
+                    conversation.messages.forEach { replaceLocalMessage(localId, it) }
+                    conversation.relationship?.let { relationship = it }
+                    snapshotConversationCache()
+                }.onFailure { failure ->
+                    sendingMessageIds.remove(localId)
+                    if (localId !in failedMessageIds) failedMessageIds.add(localId)
+                    error = failure.message ?: "Media could not be sent"
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Throwable) {
-                error = failure.message ?: "Photo could not be sent"
+                error = failure.message ?: "Media could not be sent"
             } finally {
-                isSending = false
+                isUploadingAttachment = false
             }
         }
     }
@@ -321,21 +558,26 @@ class ChatViewModel @Inject constructor(
         onFailure: (String) -> Unit = {}
     ) {
         val normalized = text.trim()
-        if (normalized.isBlank() || replyTo.id.isBlank() || isSending || authToken.isBlank() || partnerUserId.isBlank()) return
+        if (normalized.isBlank() || replyTo.id.isBlank() || replyTo.id.startsWith("local:") || authToken.isBlank() || partnerUserId.isBlank()) return
+        val localId = "local:${java.util.UUID.randomUUID()}"
+        val optimistic = optimisticMessage(localId, normalized, replyTo = replyTo)
+        messages.add(optimistic)
+        sendingMessageIds.add(localId)
+        onSuccess()
         viewModelScope.launch {
-            isSending = true
-            error = ""
-            runCatching { withContext(Dispatchers.IO) { yugmApi.replyDirectMessage(authToken, partnerUserId, normalized, replyTo.id) } }
-                .onSuccess {
-                    appendMessage(it)
-                    onSuccess()
-                }
-                .onFailure {
-                    val message = it.message ?: "Reply could not be sent"
-                    error = message
-                    onFailure(message)
-                }
-            isSending = false
+            val result = withContext(Dispatchers.IO) {
+                runCatching { yugmApi.replyDirectMessage(authToken, partnerUserId, normalized, replyTo.id) }
+            }
+            result.onSuccess {
+                replaceLocalMessage(localId, it)
+                snapshotConversationCache()
+            }.onFailure {
+                sendingMessageIds.remove(localId)
+                if (localId !in failedMessageIds) failedMessageIds.add(localId)
+                val message = it.message ?: "Reply could not be sent"
+                error = message
+                onFailure(message)
+            }
         }
     }
 
@@ -345,9 +587,8 @@ class ChatViewModel @Inject constructor(
         onSuccess: () -> Unit = {},
         onFailure: (String) -> Unit = {}
     ) {
-        if (message.id.isBlank() || isSending || authToken.isBlank() || partnerUserId.isBlank()) return
+        if (message.id.isBlank() || message.id.startsWith("local:") || authToken.isBlank() || partnerUserId.isBlank()) return
         viewModelScope.launch {
-            isSending = true
             error = ""
             runCatching { withContext(Dispatchers.IO) { yugmApi.editDirectMessage(authToken, partnerUserId, message.id, text) } }
                 .onSuccess {
@@ -359,24 +600,69 @@ class ChatViewModel @Inject constructor(
                     error = msg
                     onFailure(msg)
                 }
-            isSending = false
         }
     }
 
-    fun forwardMessage(message: DirectMessage, targetUserId: String) {
+    fun forwardMessage(
+        message: DirectMessage,
+        targetUserIds: List<String>,
+        onSuccess: (String) -> Unit = {},
+        onFailure: (String) -> Unit = {}
+    ) {
+        val ids = targetUserIds.map { it.trim() }.filter { it.isNotBlank() }.distinct()
+        if (message.id.isBlank() || ids.isEmpty() || authToken.isBlank()) return
         viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { yugmApi.forwardDirectMessage(authToken, targetUserId, message.id) } }
-                .onFailure { error = it.message ?: "Message could not be forwarded" }
+            var sent = 0
+            val failures = mutableListOf<String>()
+            for (targetId in ids) {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { yugmApi.forwardDirectMessage(authToken, targetId, message.id) }
+                }
+                if (result.isSuccess) sent++ else failures += (result.exceptionOrNull()?.message ?: "Couldn't forward")
+            }
+            when {
+                failures.isEmpty() -> onSuccess(if (sent == 1) "Message forwarded" else "Forwarded to $sent chats")
+                sent > 0 -> {
+                    val msg = "Forwarded to $sent of ${ids.size} chats"
+                    error = msg
+                    onFailure(msg)
+                }
+                else -> {
+                    val msg = failures.firstOrNull() ?: "Message could not be forwarded"
+                    error = msg
+                    onFailure(msg)
+                }
+            }
         }
     }
 
     fun reactToMessage(message: DirectMessage, type: String = "heart") {
-        if (message.id.isBlank() || type.isBlank()) return
+        if (message.id.isBlank() || type.isBlank() || authToken.isBlank() || partnerUserId.isBlank()) return
+        val current = messages.firstOrNull { it.id == message.id } ?: message
+        val optimistic = optimisticReactionToggle(current, type)
+        if (optimistic != null) replaceOrAppendMessage(optimistic)
         viewModelScope.launch {
             runCatching { withContext(Dispatchers.IO) { yugmApi.reactToDirectMessage(authToken, partnerUserId, message.id, type) } }
                 .onSuccess(::replaceOrAppendMessage)
-                .onFailure { error = it.message ?: "Reaction could not be sent" }
+                .onFailure { e ->
+                    replaceOrAppendMessage(current)
+                    error = e.message ?: "Reaction could not be sent"
+                }
         }
+    }
+
+    private fun optimisticReactionToggle(message: DirectMessage, type: String): DirectMessage? {
+        val uid = currentUserId.takeIf { it.isNotBlank() } ?: return null
+        val normalizedType = type.trim().lowercase()
+        if (normalizedType.isBlank()) return null
+        val existingMine = message.reactions.firstOrNull { it.userId == uid }
+        val withoutMine = message.reactions.filterNot { it.userId == uid }
+        val nextReactions = if (existingMine?.type?.equals(normalizedType, ignoreCase = true) == true) {
+            withoutMine
+        } else {
+            withoutMine + DirectMessageReaction(userId = uid, type = normalizedType, createdAt = "")
+        }
+        return message.copy(reactions = nextReactions, reactionCount = nextReactions.size)
     }
 
     fun search(query: String) {
@@ -538,6 +824,7 @@ class ChatViewModel @Inject constructor(
                 }
                 hasMoreHistory = conversation.hasMore
                 nextBefore = conversation.nextBefore ?: older.minByOrNull { it.createdAt }?.createdAt ?: nextBefore
+                snapshotConversationCache()
             }.onFailure { failure ->
                 if (error.isBlank()) error = failure.message ?: "Couldn't load older messages"
             }
@@ -621,6 +908,8 @@ class ChatViewModel @Inject constructor(
 
     private fun removeMessages(ids: Set<String>) {
         messages.removeAll { it.id in ids }
+        sendingMessageIds.removeAll(ids)
+        failedMessageIds.removeAll(ids)
         searchResults = searchResults?.filterNot { it.id in ids }
     }
 
@@ -629,7 +918,7 @@ class ChatViewModel @Inject constructor(
         val partnerId = partnerUserId
         val userId = currentUserId
         if (token.isBlank() || partnerId.isBlank() || userId.isBlank() || isMarkingConversationRead) return
-        val hasUnreadIncoming = messages.any { it.senderId == partnerId && it.receiverId == userId && !it.read }
+        val hasUnreadIncoming = messages.any { it.senderId == partnerId && it.receiverId == userId && !it.read && !it.id.startsWith("local:") }
         if (!hasUnreadIncoming) return
         messages.indices.forEach { index ->
             val message = messages[index]

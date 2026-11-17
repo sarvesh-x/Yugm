@@ -106,7 +106,9 @@ data class RoomReaction(
     val assetUrl: String = "",
     val assetKind: String = "STATIC",
     val access: RoomReactionAccess = RoomReactionAccess.EVERYONE,
-    val sortOrder: Int = 0
+    val sortOrder: Int = 0,
+    val usable: Boolean = true,
+    val lockedReason: String? = null
 )
 
 data class RoomReactionEvent(

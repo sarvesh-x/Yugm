@@ -22,6 +22,7 @@ import { User, type IUser } from "../models/User.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId, sanitizeText } from "../utils/http.js";
 import { TrustVerification } from "../models/TrustVerification.js";
 import { createNotification } from "../services/notifications.js";
+import { canUseRoomReaction, findActiveRoomReaction, normalizeReactionId } from "../services/reactions.js";
 import { emitUser, getOnlineUserIds, isUserOnline } from "../services/socket.js";
 import { autoModerate } from "../middleware/autoModerate.js";
 import { getVipStatus } from "../services/vip.js";
@@ -1201,9 +1202,11 @@ usersRouter.post("/messages/:userId/:messageId/reactions", chatLimiter, validate
   const message = await DirectMessage.findOne(belongsToConversation).select("_id senderId receiverId reactions").lean();
   if (!message) throw new HttpError(404, "Message not found", ErrorCode.NOT_FOUND);
 
-  const requestedType = String(req.body.type || "");
+  const requestedType = normalizeReactionId(String(req.body.type || ""));
+  if (!requestedType) throw new HttpError(400, "Invalid reaction", ErrorCode.VALIDATION);
   const existingReaction = (message.reactions || []).find((reaction: any) => reaction?.userId?.toString?.() === req.user!.id);
-  const isRemoving = existingReaction?.type === requestedType;
+  const existingType = normalizeReactionId(String(existingReaction?.type || ""));
+  const isRemoving = Boolean(existingType) && existingType === requestedType;
 
   let updated;
   if (isRemoving) {
@@ -1215,6 +1218,11 @@ usersRouter.post("/messages/:userId/:messageId/reactions", chatLimiter, validate
       .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
       .lean();
   } else {
+    const catalogReaction = await findActiveRoomReaction(requestedType);
+    if (!catalogReaction) throw new HttpError(400, "Reaction is not available", ErrorCode.VALIDATION);
+    if (!canUseRoomReaction(catalogReaction as any, req.user as any)) {
+      throw new HttpError(403, "VIP membership required for this reaction", ErrorCode.FORBIDDEN);
+    }
     await DirectMessage.updateOne({ _id: req.params.messageId }, { $pull: { reactions: { userId: req.user!.id } } });
     updated = await DirectMessage.findByIdAndUpdate(
       req.params.messageId,

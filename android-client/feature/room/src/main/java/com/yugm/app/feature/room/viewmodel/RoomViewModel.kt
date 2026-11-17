@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yugm.app.core.api.IYugmApi
+import com.yugm.app.core.api.ReactionCatalogCache
 import com.yugm.app.core.api.YugmMediaRoom
 import com.yugm.app.core.api.YugmSocket
 import com.yugm.app.core.data.SessionManager
@@ -137,24 +138,48 @@ class RoomViewModel @Inject constructor(
     var actionError by mutableStateOf<String?>(null)
         private set
 
+    private var reactionCatalogOwner = ""
+
     fun loadRoomReactions(force: Boolean = false) {
+        val requestToken = sessionManager.authToken
+        if (reactionCatalogOwner != requestToken) {
+            reactionCatalogJob?.cancel()
+            roomReactions = emptyList()
+            reactionCatalogLoadedAt = 0L
+            reactionCatalogOwner = requestToken
+        }
         val now = System.currentTimeMillis()
         // A catalog is global, so avoid refetching on every picker open. Force is used
-        // on room entry and from the picker's retry button.
+        // on room entry and from the picker's retry button. Reuse shared process-wide cache
+        // (e.g. warmed by DMs) to avoid redundant network calls across features.
+        val cachedFresh = ReactionCatalogCache.getIfFresh(requestToken, now)
+        if (!force && cachedFresh != null) {
+            roomReactions = cachedFresh
+            reactionCatalogLoadedAt = ReactionCatalogCache.loadedAt(requestToken)
+            reactionCatalogError = null
+            return
+        }
+        val anyCached = ReactionCatalogCache.getAny(requestToken)
+        if (anyCached.isNotEmpty() && roomReactions.isEmpty()) {
+            roomReactions = anyCached
+            reactionCatalogLoadedAt = ReactionCatalogCache.loadedAt(requestToken)
+        }
         val minIntervalMs = if (force) 4_000L else 45_000L
         if (reactionCatalogJob?.isActive == true) return
-        if (roomReactions.isNotEmpty() && now - reactionCatalogLoadedAt < minIntervalMs) return
+        if (!force && roomReactions.isNotEmpty() && now - reactionCatalogLoadedAt < minIntervalMs) return
         reactionCatalogJob = viewModelScope.launch {
             isReactionCatalogLoading = true
             reactionCatalogError = null
             runCatching {
                 withContext(Dispatchers.IO) {
-                    yugmApi.roomReactions(sessionManager.authToken.takeIf { it.isNotBlank() })
+                    yugmApi.roomReactions(requestToken.takeIf { it.isNotBlank() })
                 }
             }
                 .onSuccess { catalog ->
+                    if (sessionManager.authToken != requestToken) return@launch
                     roomReactions = catalog
                     reactionCatalogLoadedAt = System.currentTimeMillis()
+                    ReactionCatalogCache.put(requestToken, catalog)
                     reactionCatalogError = null
                 }
                 .onFailure { error ->

@@ -14,6 +14,10 @@ import com.yugm.app.core.model.RazorpayCheckoutData
 import com.yugm.app.core.model.WalletOverview
 import com.yugm.app.core.model.WalletTransaction
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -48,24 +52,49 @@ class WalletViewModel @Inject constructor(
     var isClaimingReward by mutableStateOf(false)
         private set
 
+    private var walletLoadJob: Job? = null
+    private var walletLoadVersion = 0L
+    private var walletLoadToken = ""
+
     fun loadWallet(token: String) {
-        viewModelScope.launch {
+        val version = ++walletLoadVersion
+        walletLoadJob?.cancel()
+        if (walletLoadToken != token) {
+            overview = null
+            balance = 0
+            transactions = emptyList()
+            giftItems = emptyList()
+            coinPacks = emptyList()
+            dailyReward = DailyRewardStatus()
+        }
+        walletLoadToken = token
+        if (token.isBlank()) { isLoading = false; return }
+        walletLoadJob = viewModelScope.launch {
             isLoading = true
-            runCatching {
-                val ov = withContext(Dispatchers.IO) { yugmApi.walletOverview(token) }
-                val packs = withContext(Dispatchers.IO) { yugmApi.coinPacks(token) }
-                val gifts = withContext(Dispatchers.IO) { yugmApi.gifts(token) }
-                val tx = withContext(Dispatchers.IO) { yugmApi.walletTransactions(token) }
-                overview = ov
-                coinPacks = packs
-                giftItems = gifts
-                transactions = tx
-                balance = ov.balance
-                dailyReward = ov.dailyReward
-            }.onFailure {
-                error = it.message ?: "Failed to load wallet"
+            error = null
+            suspend fun <T> fetch(block: suspend () -> T): Result<T> = runCatching {
+                withContext(Dispatchers.IO) { block() }
+            }.onFailure { if (it is CancellationException) throw it }
+            try {
+                supervisorScope {
+                    val ov = async { fetch { yugmApi.walletOverview(token) } }
+                    val packs = async { fetch { yugmApi.coinPacks(token) } }
+                    val gifts = async { fetch { yugmApi.gifts(token) } }
+                    val tx = async { fetch { yugmApi.walletTransactions(token) } }
+                    ov.await().onSuccess {
+                        overview = it
+                        balance = it.balance
+                        dailyReward = it.dailyReward
+                    }.onFailure { error = it.message ?: "Failed to refresh wallet" }
+                    var partial = false
+                    packs.await().onSuccess { coinPacks = it }.onFailure { partial = true }
+                    gifts.await().onSuccess { giftItems = it }.onFailure { partial = true }
+                    tx.await().onSuccess { transactions = it }.onFailure { partial = true }
+                    if (partial && error == null) error = "Some wallet details couldn't refresh. Try again."
+                }
+            } finally {
+                if (version == walletLoadVersion) isLoading = false
             }
-            isLoading = false
         }
     }
 

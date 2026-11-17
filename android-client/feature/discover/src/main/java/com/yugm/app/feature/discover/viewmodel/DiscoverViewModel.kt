@@ -72,17 +72,19 @@ class DiscoverViewModel @Inject constructor(
 
     var discoverState by mutableStateOf<UiState<List<Room>>>(UiState.Idle)
         private set
+    private var roomLoadJob: Job? = null
 
     fun refreshRooms(type: RoomType? = null) {
-        viewModelScope.launch {
+        roomLoadJob?.cancel()
+        roomLoadJob = viewModelScope.launch {
             discoverState = UiState.Loading
-            rooms = emptyList()
             runCatching {
                 withContext(Dispatchers.IO) { yugmApi.rooms(type) }
             }.onSuccess {
                 rooms = it
                 discoverState = UiState.Success(it)
             }.onFailure {
+                if (it is CancellationException) throw it
                 discoverState = UiState.Error(it.message ?: "Failed to load rooms")
             }
         }
