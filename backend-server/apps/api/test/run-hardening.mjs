@@ -22,6 +22,7 @@ try {
     MONGODB_URI: replica.getUri(),
     MONGODB_DB_NAME: `yugm_hardening_${randomUUID().replaceAll("-", "")}`,
     JWT_SECRET: `isolated-hardening-${randomUUID()}`,
+    RAZORPAY_WEBHOOK_SECRET: "isolated-provider-fixture-secret",
     REDIS_URL: "",
     STORAGE_DRIVER: "local",
     LIVEKIT_URL: "ws://127.0.0.1:1"

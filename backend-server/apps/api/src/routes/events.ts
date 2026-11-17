@@ -6,6 +6,7 @@ import { createNotification } from "../services/notifications.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode } from "../utils/http.js";
 import { z } from "zod";
 import { validateBody } from "../middleware/validate.js";
+import { joinEvent, leaveEvent } from "../services/eventRegistration.js";
 
 export const eventsRouter = Router();
 
@@ -31,8 +32,8 @@ eventsRouter.post("/events", requireAuth, createLimiter, validateBody(createSche
 }));
 
 eventsRouter.get("/events", asyncHandler(async (req, res) => {
-  const page = Math.max(1, Number(req.query.page) || 1);
-  const limit = Math.min(Number(req.query.limit) || 20, 50);
+  const page = Math.max(1, Math.min(10000, Math.trunc(Number(req.query.page)) || 1));
+  const limit = Math.max(1, Math.min(Math.trunc(Number(req.query.limit)) || 20, 50));
   const skip = (page - 1) * limit;
   const status = String(req.query.status || "") || undefined;
   const type = String(req.query.type || "") || undefined;
@@ -54,7 +55,7 @@ eventsRouter.get("/events", asyncHandler(async (req, res) => {
 
   const [events, total] = await Promise.all([
     Event.find(filter)
-      .sort({ featured: -1, eventDate: 1 })
+      .sort({ featured: -1, eventDate: 1, _id: 1 })
       .skip(skip).limit(limit)
       .populate("hostId", "name username avatar")
       .lean(),
@@ -74,24 +75,12 @@ eventsRouter.get("/events/:eventId", asyncHandler(async (req, res) => {
 }));
 
 eventsRouter.post("/events/:eventId/join", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
-  const event = await Event.findById(req.params.eventId);
-  if (!event) throw new HttpError(404, "Event not found", ErrorCode.NOT_FOUND);
-  if (event.status !== "UPCOMING") throw new HttpError(400, "Event is not open for joining", ErrorCode.VALIDATION);
-  if (event.maxParticipants && event.participantIds.length >= event.maxParticipants) {
-    throw new HttpError(400, "Event is full", ErrorCode.VALIDATION);
+  const result = await joinEvent(req.params.eventId, req.user!.id);
+  if (!result.alreadyJoined) {
+    void createNotification(result.event.hostId.toString(), "SYSTEM", "New event participant", `${req.user!.name} joined your event "${result.event.title}"`, { eventId: result.event.id })
+      .catch(() => console.warn("Event registration notification failed after acceptance"));
   }
-
-  const uid = req.user!._id;
-  if (event.participantIds.some((p) => p.toString() === uid.toString())) {
-    return sendOk(res, { event, alreadyJoined: true });
-  }
-
-  event.participantIds.push(uid);
-  await event.save();
-
-  await createNotification(event.hostId.toString(), "SYSTEM", "New event participant", `${req.user!.name} joined your event "${event.title}"`, { eventId: event.id });
-
-  sendOk(res, { event, alreadyJoined: false });
+  sendOk(res, result);
 }));
 
 eventsRouter.post("/events/:eventId/cancel", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
@@ -103,11 +92,7 @@ eventsRouter.post("/events/:eventId/cancel", requireAuth, asyncHandler(async (re
 }));
 
 eventsRouter.post("/events/:eventId/leave", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
-  const event = await Event.findById(req.params.eventId);
-  if (!event) throw new HttpError(404, "Event not found", ErrorCode.NOT_FOUND);
-  const uid = req.user!._id;
-  event.participantIds = event.participantIds.filter((p) => p.toString() !== uid.toString());
-  await event.save();
+  const event = await leaveEvent(req.params.eventId, req.user!.id);
   sendOk(res, { event });
 }));
 

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHmac } from "node:crypto";
 import http from "node:http";
 import { after, before, beforeEach, test } from "node:test";
 import type { AddressInfo } from "node:net";
@@ -32,18 +32,27 @@ const { giftsRouter } = await import("../routes/gifts.js");
 const { walletRouter } = await import("../routes/wallet.js");
 const { roomThemesRouter } = await import("../routes/roomThemes.js");
 const { referralsRouter } = await import("../routes/referrals.js");
+const { eventsRouter } = await import("../routes/events.js");
+const { Event } = await import("../models/Event.js");
+const { Purchase } = await import("../models/Purchase.js");
+const { creditPurchase } = await import("../services/purchaseCredit.js");
+const { markPurchasePaid } = await import("../services/purchaseState.js");
+const { handlePaymentWebhook } = await import("../services/paymentWebhook.js");
 
 let server: http.Server;
 let baseUrl: string;
 before(async () => {
   await mongoose.connect(uri, { dbName, autoIndex: false, serverSelectionTimeoutMS: 5000 });
   // Real production schema indexes, applied only inside the owned test replica.
-  for (const model of [User, AuthSession, WalletTransaction, GiftTransaction, GiftInventory, Gift, Room, RoomParticipant, Referral, ImmersiveTheme, UserSafetyStatus]) {
+  for (const model of [User, AuthSession, WalletTransaction, GiftTransaction, GiftInventory, Gift, Room, RoomParticipant, Referral, ImmersiveTheme, UserSafetyStatus, Event, Purchase]) {
     await model.createCollection();
     await model.createIndexes();
   }
   const app = express();
+  app.post("/webhook-test", express.raw({ type: "application/json" }), (req, res, next) => { void handlePaymentWebhook(req, res).catch(next); });
   app.use(express.json());
+  app.use("/api/events", eventsRouter);
+  app.use("/api", eventsRouter);
   app.use("/api", giftsRouter, walletRouter, roomThemesRouter, referralsRouter);
   app.use((error: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     res.status(error.status ?? 500).json({ ok: false, error: { message: error.message, code: error.code } });
@@ -80,6 +89,84 @@ async function theme(coins = 100, diamonds = 0) {
 function httpStatus(status: number) {
   return (error: unknown) => typeof error === "object" && error !== null && "status" in error && error.status === status;
 }
+
+test("event endpoint aliases preserve Android paths and last-seat admission is atomic", async () => {
+  const host = await user();
+  const event = await Event.create({ title: "One seat", hostId: host._id, category: "test", type: "ROOM", eventDate: new Date(Date.now() + 3600000), maxParticipants: 1 });
+  for (const endpoint of ["/events", "/events/events"]) {
+    const result = await fetch(`${baseUrl}${endpoint}`);
+    assert.equal(result.status, 200);
+    assert.equal((await result.json() as any).data.events.length, 1);
+  }
+  const actors = await Promise.all(Array.from({ length: 20 }, () => user()));
+  const tokens = await Promise.all(actors.map(tokenFor));
+  const results = await Promise.all(tokens.map(token => post(`/events/${event.id}/join`, token, {})));
+  assert.equal(results.filter(result => result.status === 200).length, 1);
+  assert.equal(results.filter(result => result.status === 409).length, 19);
+  const winner = results.findIndex(result => result.status === 200);
+  const replay = await post(`/events/${event.id}/join`, tokens[winner], {});
+  assert.equal(replay.status, 200);
+  assert.equal(replay.body.data.alreadyJoined, true);
+  assert.equal((await Event.findById(event._id))?.participantIds.length, 1);
+  assert.equal((await post(`/events/${event.id}/cancel`, tokens[winner], {})).status, 404);
+  assert.equal((await post(`/events/${event.id}/cancel`, await tokenFor(host), {})).status, 200);
+  assert.equal((await post(`/events/${event.id}/join`, tokens[0], {})).status, 409);
+});
+
+test("concurrent event leave and joins preserve other memberships", async () => {
+  const [host, leaving, ...joining] = await Promise.all(Array.from({ length: 12 }, () => user()));
+  const event = await Event.create({ title: "Open event", hostId: host._id, category: "test", type: "PARTY", eventDate: new Date(Date.now() + 3600000), participantIds: [leaving._id] });
+  const leaveToken = await tokenFor(leaving);
+  const tokens = await Promise.all(joining.map(tokenFor));
+  await Promise.all([post(`/events/${event.id}/leave`, leaveToken, {}), ...tokens.map(token => post(`/events/${event.id}/join`, token, {}))]);
+  const saved = await Event.findById(event._id);
+  assert.deepEqual(saved?.participantIds.map(String).sort(), joining.map(actor => actor.id).sort());
+});
+
+test("purchase credit rejects unverified/refund states and concurrent paid replay grants once", async () => {
+  const actor = await user(0);
+  for (const status of ["PENDING", "FAILED", "REFUND_PENDING", "REFUNDED", "REFUND_FAILED"] as const) {
+    const purchase = await Purchase.create({ userId: actor._id, provider: "RAZORPAY", status, packId: "fixture", coinAmount: 100, amountInr: 10 });
+    await assert.rejects(creditPurchase(purchase.id, actor.id, {}), httpStatus(409));
+    if (status.startsWith("REFUND")) await assert.rejects(markPurchasePaid(purchase.id, actor.id), httpStatus(409));
+    assert.equal((await Purchase.findById(purchase._id))?.status, status);
+  }
+  const paid = await Purchase.create({ userId: actor._id, provider: "RAZORPAY", status: "PAID", packId: "fixture", coinAmount: 100, amountInr: 10 });
+  const results = await Promise.all(Array.from({ length: 30 }, () => creditPurchase(paid.id, actor.id, {})));
+  assert.equal(new Set(results.map(result => result.id)).size, 1);
+  assert.equal((await User.findById(actor._id))?.walletBalance, 100);
+  assert.equal(await WalletTransaction.countDocuments(), 1);
+});
+
+test("signed delayed capture and failure callbacks never reopen refund state", async () => {
+  const actor = await user(0);
+  for (const status of ["REFUND_PENDING", "REFUNDED", "REFUND_FAILED"] as const) {
+    const purchase = await Purchase.create({ userId: actor._id, provider: "RAZORPAY", status, packId: "fixture", coinAmount: 100, amountInr: 10, providerOrderId: randomUUID() });
+    for (const event of ["payment.captured", "payment.failed"]) {
+      const body = JSON.stringify({ event, payload: { payment: { entity: { id: randomUUID(), order_id: purchase.providerOrderId, amount: 1000, currency: "INR", status: event === "payment.captured" ? "captured" : "failed" } } } });
+      const signature = createHmac("sha256", process.env.RAZORPAY_WEBHOOK_SECRET!).update(body).digest("hex");
+      const result = await fetch(baseUrl.replace(/\/api$/, "/webhook-test"), { method: "POST", headers: { "content-type": "application/json", "x-razorpay-signature": signature }, body });
+      assert.equal(result.status, 200, await result.text());
+      assert.equal((await Purchase.findById(purchase._id))?.status, status);
+    }
+  }
+  assert.equal((await User.findById(actor._id))?.walletBalance, 0);
+  assert.equal(await WalletTransaction.countDocuments(), 0);
+});
+
+test("purchase ledger failure rolls back fulfillment and permits safe retry", async t => {
+  const actor = await user(0);
+  const purchase = await Purchase.create({ userId: actor._id, provider: "RAZORPAY", status: "PAID", packId: "fixture", coinAmount: 100, amountInr: 10 });
+  const injected = t.mock.method(WalletTransaction, "create", async () => { throw new Error("purchase journal unavailable"); });
+  try { await assert.rejects(creditPurchase(purchase.id, actor.id, {}), /purchase journal unavailable/); }
+  finally { injected.mock.restore(); }
+  assert.equal((await Purchase.findById(purchase._id))?.status, "PAID");
+  assert.equal((await User.findById(actor._id))?.walletBalance, 0);
+  assert.equal(await WalletTransaction.countDocuments(), 0);
+  await creditPurchase(purchase.id, actor.id, {});
+  assert.equal((await User.findById(actor._id))?.walletBalance, 100);
+  assert.equal(await WalletTransaction.countDocuments(), 1);
+});
 
 test("HTTP combo and trade reject forged consent with zero asset changes", async () => {
   const [actor, victim, other] = await Promise.all([user(), user(), user()]);

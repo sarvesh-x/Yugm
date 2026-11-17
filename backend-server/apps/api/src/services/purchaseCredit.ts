@@ -6,14 +6,19 @@ import { ErrorCode, HttpError } from "../utils/http.js";
 
 export async function creditPurchase(purchaseId: string, userId: string, metadata: Record<string, unknown>) {
   const session = await mongoose.startSession();
-  session.startTransaction();
   try {
+    return await session.withTransaction(async () => {
     const purchase = await Purchase.findOneAndUpdate(
-      { _id: purchaseId, userId, status: { $ne: "CREDITED" } },
+      { _id: purchaseId, userId, status: "PAID" },
       { $set: { status: "CREDITED", creditedAt: new Date() } },
       { new: true, session }
     );
-    if (!purchase) throw new HttpError(404, "Purchase not found", ErrorCode.NOT_FOUND);
+    if (!purchase) {
+      const current = await Purchase.findOne({ _id: purchaseId, userId }).session(session);
+      if (!current) throw new HttpError(404, "Purchase not found", ErrorCode.NOT_FOUND);
+      if (current.status === "CREDITED") return current;
+      throw new HttpError(409, "Only verified paid purchases can be credited", ErrorCode.CONFLICT);
+    }
 
     purchase.metadata = { ...(purchase.metadata ?? {}), ...metadata };
     const ledgerMetadata = {
@@ -43,14 +48,9 @@ export async function creditPurchase(purchaseId: string, userId: string, metadat
     }
 
     await purchase.save({ session });
-    await session.commitTransaction();
-    session.endSession();
     return purchase;
-  } catch (err) {
-    await session.abortTransaction();
-    session.endSession();
-    const alreadyCredited = await Purchase.findOne({ _id: purchaseId, userId, status: "CREDITED" });
-    if (alreadyCredited) return alreadyCredited;
-    throw err;
+    });
+  } finally {
+    await session.endSession();
   }
 }

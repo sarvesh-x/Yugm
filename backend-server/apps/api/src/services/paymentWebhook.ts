@@ -3,6 +3,7 @@ import { env } from "../config/env.js";
 import { Purchase } from "../models/Purchase.js";
 import { isValidRazorpayWebhook } from "./paymentSignatures.js";
 import { creditPurchase } from "./purchaseCredit.js";
+import { markPurchasePaid, payablePurchaseStates } from "./purchaseState.js";
 
 type RazorpayPaymentEntity = {
   id: string;
@@ -61,10 +62,13 @@ export async function handlePaymentWebhook(req: Request, res: Response) {
       return res.json({ ok: true, received: event.event, duplicate: true });
     }
 
-    purchase.providerPaymentId = payment.id;
-    purchase.status = "PAID";
-    purchase.metadata = { ...purchase.metadata, payment, webhook: true };
-    await purchase.save();
+    if (!payablePurchaseStates.includes(purchase.status)) {
+      return res.json({ ok: true, received: event.event, ignored: true, reason: "refund_state" });
+    }
+    // Conditional update also handles a refund starting after the initial read.
+    await markPurchasePaid(purchase.id, purchase.userId.toString(), {
+      providerPaymentId: payment.id, metadata: { ...purchase.metadata, payment, webhook: true }
+    });
 
     const credited = await creditPurchase(purchase.id, purchase.userId.toString(), {
       paymentId: payment.id,
@@ -75,7 +79,7 @@ export async function handlePaymentWebhook(req: Request, res: Response) {
 
   if (event.event === "payment.failed") {
     const failed = await Purchase.findOneAndUpdate(
-      { _id: purchase._id, status: { $nin: ["CREDITED", "REFUNDED"] } },
+      { _id: purchase._id, status: "PENDING" },
       { $set: { status: "FAILED", metadata: { ...purchase.metadata, payment, webhook: true } } },
       { new: true }
     );

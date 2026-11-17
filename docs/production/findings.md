@@ -1,5 +1,7 @@
 # Finding register
 
+Current remediation/verification status is recorded in [current progress](current-progress.md). This register preserves the original source evidence at its stated baseline.
+
 Baseline `300826a`, 17 November 2026. Every entry below is open. Evidence is static code inspection; **no exploit, financial mutation, datastore race, provider call, or process-death test was executed**. Reproduction descriptions are proposed isolated test cases, not claimed results. Severity describes the affected invariant. No affected production records have been inspected.
 
 Backend evidence paths start at `backend-server/apps/api/src/` unless otherwise stated. Owner names are proposed domain responsibilities, not assignments to individuals. Every fix must update this register with its actual test commands/results and remaining proof gaps.

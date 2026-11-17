@@ -1,5 +1,7 @@
 # Production blueprint: repository baseline
 
+**Current implementation status:** see [current progress](current-progress.md). The audit below is a historical snapshot at `300826a`; newer changes and validation supersede its open/closed assumptions.
+
 Audit date: 17 November 2026. Application baseline: `300826a` on `master`.
 
 The supplied [Yugm Production Implementation Blueprint v1.0](blueprint-v1.md) is a proposed engineering backlog. This directory records the first repository audit; it does **not** certify production readiness or implement the blueprint. No application behavior, production configuration, datastore, provider, or deployment was changed for this audit.

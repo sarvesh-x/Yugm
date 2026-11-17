@@ -262,9 +262,12 @@ async function creditVerifiedPurchase(purchaseId: string, adminId: string, metad
   try {
     const purchase: any = await Purchase.findOne({
       _id: purchaseId,
-      status: { $nin: ["CREDITED", "REFUND_PENDING", "REFUNDED"] }
+      status: { $in: ["PENDING", "PAID", "FAILED"] }
     }).session(session);
     if (!purchase) {
+      const current = await Purchase.findById(purchaseId).session(session);
+      if (!current) throw new HttpError(404, "Purchase not found", ErrorCode.NOT_FOUND);
+      if (current.status !== "CREDITED") throw new HttpError(409, "Purchase requires refund reconciliation", ErrorCode.CONFLICT);
       await session.commitTransaction();
       session.endSession();
       return { purchase: await Purchase.findById(purchaseId), transaction: null };
@@ -1301,12 +1304,14 @@ adminRouter.post("/payments/recharges/:orderId/verify", requirePermission("payme
     }
     purchase.metadata = { ...metadataOf(purchase), adminPaymentVerification: payment };
     if (payment.status !== "captured") {
-      purchase.status = payment.status === "failed" ? "FAILED" : "PAID";
-      await purchase.save();
+      await Purchase.updateOne(
+        { _id: purchase._id, status: "PENDING" },
+        { $set: { ...(payment.status === "failed" ? { status: "FAILED" } : {}), "metadata.adminPaymentVerification": payment } }
+      );
     } else if (purchase.status !== "CREDITED") {
       result = await creditVerifiedPurchase(purchase.id, req.admin!.id, { paymentId: payment.id, verifiedByAdmin: true });
     } else {
-      await purchase.save();
+      await Purchase.updateOne({ _id: purchase._id }, { $set: { "metadata.adminPaymentVerification": payment } });
     }
   } else {
     if (!purchase.productId || !purchase.purchaseToken) {
@@ -1315,14 +1320,12 @@ adminRouter.post("/payments/recharges/:orderId/verify", requirePermission("payme
     const product = await verifyGooglePlayProduct({ productId: purchase.productId, purchaseToken: purchase.purchaseToken });
     providerRecord = product;
     if (product.purchaseState !== 0) {
-      purchase.status = "FAILED";
-      purchase.metadata = { ...metadataOf(purchase), adminProductVerification: product };
-      await purchase.save();
+      await Purchase.updateOne({ _id: purchase._id, status: "PENDING" }, { $set: { status: "FAILED", "metadata.adminProductVerification": product } });
       throw new HttpError(402, "Google Play purchase is not completed", ErrorCode.VALIDATION);
     }
     purchase.googleOrderId = purchase.googleOrderId ?? product.orderId;
     purchase.metadata = { ...metadataOf(purchase), adminProductVerification: product };
-    await purchase.save();
+    await Purchase.updateOne({ _id: purchase._id }, { $set: { googleOrderId: purchase.googleOrderId, "metadata.adminProductVerification": product } });
     if (purchase.status !== "CREDITED") {
       result = await creditVerifiedPurchase(purchase.id, req.admin!.id, { productId: purchase.productId, googleOrderId: purchase.googleOrderId, verifiedByAdmin: true });
     }
@@ -1335,7 +1338,7 @@ adminRouter.post("/payments/recharges/:orderId/credit", requirePermission("payme
   const purchase: any = await findPurchaseByReference(req.params.orderId);
   if (!purchase) throw new HttpError(404, "Purchase not found", ErrorCode.NOT_FOUND);
   if (purchase.status === "CREDITED") return adminOk(res, { purchase });
-  if (["REFUND_PENDING", "REFUNDED"].includes(purchase.status)) {
+  if (["REFUND_PENDING", "REFUNDED", "REFUND_FAILED"].includes(purchase.status)) {
     throw new HttpError(409, "Refunded purchases cannot be manually credited", ErrorCode.CONFLICT);
   }
   const result = await creditVerifiedPurchase(purchase.id, req.admin!.id, { manualCredit: true, reason: req.body.reason });

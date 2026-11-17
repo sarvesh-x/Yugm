@@ -27,6 +27,7 @@ import { getLevelStatus, grantXp } from "../services/levels.js";
 import { grantRelationshipXp } from "../services/relationships.js";
 import { assertUsersCanInteract } from "../services/safety.js";
 import { creditPurchase } from "../services/purchaseCredit.js";
+import { markPurchasePaid } from "../services/purchaseState.js";
 import { assertDiamondsEnabled, creditDiamonds, debitDiamonds } from "../services/diamonds.js";
 import { assertRoomGiftReplayMatches, roomGiftLedgerKeys } from "../services/giftReplay.js";
 
@@ -387,18 +388,12 @@ walletRouter.post("/wallet/purchases/razorpay/verify", requireWalletNotFrozen, v
     throw new HttpError(400, "Razorpay payment details do not match purchase", ErrorCode.VALIDATION);
   }
   if (payment.status !== "captured") {
-    purchase.status = "PAID";
-    purchase.providerPaymentId = req.body.razorpay_payment_id;
-    purchase.providerSignature = req.body.razorpay_signature;
-    purchase.metadata = { ...purchase.metadata, payment };
-    await purchase.save();
     throw new HttpError(402, "Payment is not captured yet", ErrorCode.VALIDATION);
   }
-  purchase.providerPaymentId = req.body.razorpay_payment_id;
-  purchase.providerSignature = req.body.razorpay_signature;
-  purchase.status = "PAID";
-  purchase.metadata = { ...purchase.metadata, payment };
-  await purchase.save();
+  await markPurchasePaid(purchase.id, req.user!.id, {
+    providerPaymentId: req.body.razorpay_payment_id,
+    providerSignature: req.body.razorpay_signature, metadata: { ...purchase.metadata, payment }
+  });
   const credited = await creditPurchase(purchase.id, req.user!.id, { paymentId: payment.id });
   const user = await User.findById(req.user!.id).select("walletBalance").lean();
   sendOk(res, { purchase: credited, balance: user?.walletBalance ?? 0 });
@@ -450,15 +445,11 @@ walletRouter.post("/wallet/purchases/google-play/verify", requireWalletNotFrozen
     throw new HttpError(409, "This purchase has already been refunded", ErrorCode.CONFLICT);
   }
   if (purchase.status !== "CREDITED") {
-    purchase.status = "PAID";
-    purchase.assetCurrency = purchase.assetCurrency || "COINS";
-    purchase.coinAmount = purchase.coinAmount || pack.coinAmount;
-    purchase.diamondAmount = purchase.diamondAmount ?? 0;
-    purchase.productId = req.body.productId;
-    purchase.purchaseToken = req.body.purchaseToken;
-    purchase.googleOrderId = req.body.orderId ?? product.orderId ?? purchase.googleOrderId;
-    purchase.metadata = { ...(purchase.metadata ?? {}), product };
-    await purchase.save();
+    purchase = await markPurchasePaid(purchase.id, req.user!.id, {
+      productId: req.body.productId, purchaseToken: req.body.purchaseToken,
+      googleOrderId: req.body.orderId ?? product.orderId ?? purchase.googleOrderId,
+      metadata: { ...(purchase.metadata ?? {}), product }
+    });
   }
 
   const credited = purchase.status === "CREDITED"

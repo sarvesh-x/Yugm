@@ -212,7 +212,8 @@ export function createApp() {
   app.use("/api/clans", clansRouter);
   app.use("/api/creator", creatorRouter);
   app.use("/api/dating", datingRouter);
-  app.use("/api/events", eventsRouter);
+  app.use("/api/events", eventsRouter); // Preserve older double-prefixed clients.
+  app.use("/api", eventsRouter); // Android's canonical /api/events endpoints.
   app.use("/api/experience", experienceRouter);
   app.use("/api", feedRouter);
   app.use("/api", friendsRouter);

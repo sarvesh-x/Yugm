@@ -1,5 +1,7 @@
 # Requirement matrix at 300826a
 
+For the current implementation and remaining gates after the user's latest changes, see [current progress](current-progress.md). Preserve this table as the original audit snapshot rather than interpreting it as today's closure status.
+
 Status refers to the named requirement in inspected source. `VERIFIED` means the specific source fact is confirmed; it never implies an unexecuted runtime acceptance gate passed. There are no accepted milestone-level production guarantees in this audit.
 
 | Package / requirement | Status | Existing evidence | Gaps / required proof |
