@@ -23,7 +23,7 @@ livekitRouter.post("/token", validateBody(livekitTokenSchema), asyncHandler(asyn
   // Give every non-muted participant a separate screen-share-audio capability
   // for room music. Audience members still cannot publish microphone or camera.
   const canPublishRoomMusic = !participant.moderatorMuted;
-  const canPublishVideo = room.type === "VIDEO" && role === "HOST";
+  const canPublishVideo = room.type === "VIDEO" && ["HOST", "SPEAKER", "MODERATOR"].includes(role) && participant.cameraEnabled !== false && !participant.moderatorMuted;
   const publishSources = [
     ...(canPublishVideo ? [TrackSource.CAMERA] : []),
     ...(canSpeak ? [TrackSource.MICROPHONE] : []),

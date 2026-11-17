@@ -48,6 +48,7 @@ export async function recordRoomParticipantExit(roomId: string, userId: string, 
   );
   if (exited.modifiedCount === 0) return { changed: false, ended: false };
 
+  await SpeakerRequest.updateMany({ roomId, userId, status: "PENDING" }, { $set: { status: "REJECTED" } });
   await Room.updateOne({ _id: roomId, participantCount: { $gt: 0 } }, { $inc: { participantCount: -1 } });
   await invalidateCache("rooms:*");
 

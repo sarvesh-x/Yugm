@@ -205,9 +205,12 @@ class RoomViewModel @Inject constructor(
     private var currentUserId: String = ""
     private var isVideo: Boolean = false
     private var realtimeRefreshJob: Job? = null
+    private val pendingRealtimeEvents = mutableSetOf<String>()
     private var videoParticipantRefreshJob: Job? = null
 
     fun connect(token: String, roomId: String, userId: String, video: Boolean = false) {
+        realtimeRefreshJob?.cancel()
+        pendingRealtimeEvents.clear()
         // This ViewModel can outlive a room destination. Never carry one session's
         // cached chat into the next room entry (including rejoining the same room).
         chat.clear()
@@ -256,6 +259,8 @@ class RoomViewModel @Inject constructor(
     }
 
     private suspend fun closeMediaConnections() {
+        realtimeRefreshJob?.cancel()
+        pendingRealtimeEvents.clear()
         videoParticipantRefreshJob?.cancel()
         videoParticipantRefreshJob = null
         withContext(Dispatchers.IO) {
@@ -342,6 +347,9 @@ class RoomViewModel @Inject constructor(
                         runCatching {
                             val mediaSession = yugmApi.liveKitToken(authToken, roomId)
                             val isHostVideoRoom = isVideo && roomDetail?.room?.host?.id == currentUserId
+                            // An approved viewer was previously listening with mic off.
+                            // Apply their explicit permission choice before reconnecting.
+                            microphonePermissionGranted?.let { YugmMediaRoom.setMicEnabled(it) }
                             YugmMediaRoom.connect(
                                 mediaSession.token,
                                 mediaSession.url,
@@ -410,7 +418,9 @@ class RoomViewModel @Inject constructor(
                         onSpeakerApproved = { approvedUserId ->
                             if (approvedUserId == currentUserId) {
                                 scheduleRealtimeRefresh("room:speaker:approve")
-                                refreshMediaSession(enableMicrophone = true)
+                                // Video guests reconnect after the screen obtains
+                                // camera/microphone consent; avoid racing that session.
+                                if (!isVideo) refreshMediaSession(enableMicrophone = true)
                             }
                         },
                         onUserMuted = { targetId ->
@@ -648,27 +658,36 @@ class RoomViewModel @Inject constructor(
     private fun scheduleRealtimeRefresh(event: String) {
         viewModelScope.launch {
             if (event == "room:ended") {
+                realtimeRefreshJob?.cancel()
+                pendingRealtimeEvents.clear()
                 chat.clear()
                 activity = emptyList()
                 roomEndedVersion++
                 return@launch
             }
-            realtimeRefreshJob?.cancel()
+            // Joining/requesting also emits an activity event. Preserve the
+            // whole burst so that activity never cancels the roster refresh.
+            pendingRealtimeEvents.add(event)
+            if (realtimeRefreshJob?.isActive == true) return@launch
             realtimeRefreshJob = launch {
-                delay(180)
-                val shouldRefreshDetail = event in setOf(
-                    "room:participant:update", "room:speaker:request", "room:speaker:approve",
-                    "room:speaker:reject", "room:user:mute", "room:user:remove", "room:gift:send"
-                )
-                if (shouldRefreshDetail) {
-                    withContext(Dispatchers.IO) { runCatching { yugmApi.roomDetail(authToken, roomId) } }
-                        .onSuccess { roomDetail = it; roomState = UiState.Success(it) }
-                }
-                if (event.startsWith("room:poll:")) {
-                    withContext(Dispatchers.IO) { runCatching { yugmApi.roomPolls(authToken, roomId) } }.onSuccess { polls = it }
-                }
-                if (event == "room:activity:new" || event == "room:gift:send") {
-                    withContext(Dispatchers.IO) { runCatching { yugmApi.roomActivity(roomId, authToken) } }.onSuccess { activity = it }
+                while (pendingRealtimeEvents.isNotEmpty()) {
+                    delay(180)
+                    val events = pendingRealtimeEvents.toSet()
+                    pendingRealtimeEvents.clear()
+                    val shouldRefreshDetail = events.any { it in setOf(
+                        "room:participant:update", "room:speaker:request", "room:speaker:approve",
+                        "room:speaker:reject", "room:user:mute", "room:user:remove", "room:gift:send"
+                    ) }
+                    if (shouldRefreshDetail) {
+                        withContext(Dispatchers.IO) { runCatching { yugmApi.roomDetail(authToken, roomId) } }
+                            .onSuccess { roomDetail = it; roomState = UiState.Success(it) }
+                    }
+                    if (events.any { it.startsWith("room:poll:") }) {
+                        withContext(Dispatchers.IO) { runCatching { yugmApi.roomPolls(authToken, roomId) } }.onSuccess { polls = it }
+                    }
+                    if (events.any { it == "room:activity:new" || it == "room:gift:send" }) {
+                        withContext(Dispatchers.IO) { runCatching { yugmApi.roomActivity(roomId, authToken) } }.onSuccess { activity = it }
+                    }
                 }
             }
         }

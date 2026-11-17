@@ -14,8 +14,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -25,6 +27,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -56,8 +60,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -164,6 +170,7 @@ fun VideoLivestreamScreen(
     val context = LocalContext.current
     val ownRole = participants.firstOrNull { it.user.id == currentUserId }?.role.orEmpty()
     val isOnVoiceStage = isHost || ownRole in setOf("HOST", "SPEAKER", "MODERATOR")
+    val currentParticipants by rememberUpdatedState(participants)
     val hasPendingRequest = speakerRequests.any { it.user.id == currentUserId }
     var cameraOn by rememberSaveable(room.id) { mutableStateOf(isHost) }
     var micOn by rememberSaveable(room.id) { mutableStateOf(isHost) }
@@ -189,7 +196,7 @@ fun VideoLivestreamScreen(
     var message by rememberSaveable(room.id) { mutableStateOf("") }
     var feeds by remember { mutableStateOf<List<YugmMediaRoom.VideoFeed>>(emptyList()) }
     var opponentFeeds by remember { mutableStateOf<List<YugmMediaRoom.VideoFeed>>(emptyList()) }
-    var joined by rememberSaveable(room.id) { mutableStateOf(false) }
+    var joined by remember(room.id) { mutableStateOf(false) }
     var requestVoiceAfterPermission by rememberSaveable(room.id) { mutableStateOf(false) }
     var blockedPermission by remember(room.id) { mutableStateOf<String?>(null) }
     var floatingReaction by remember { mutableStateOf<RoomReactionEvent?>(null) }
@@ -219,9 +226,9 @@ fun VideoLivestreamScreen(
     val joinPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         val cameraAllowed = result[Manifest.permission.CAMERA] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         val micAllowed = result[Manifest.permission.RECORD_AUDIO] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        cameraOn = isHost && cameraAllowed
-        micOn = isHost && micAllowed
-        onJoin(cameraAllowed && isHost, micAllowed && isHost)
+        cameraOn = isOnVoiceStage && cameraAllowed
+        micOn = isOnVoiceStage && micAllowed
+        onJoin(cameraAllowed && isOnVoiceStage, micAllowed && isOnVoiceStage)
         if (isHost && (!cameraAllowed || !micAllowed)) {
             blockedPermission = when {
                 !cameraAllowed && !micAllowed -> "camera and microphone"
@@ -262,16 +269,24 @@ fun VideoLivestreamScreen(
     }
     RoomPermissionDialog(blockedPermission) { blockedPermission = null }
 
-    LaunchedEffect(room.id, isHost) {
+    LaunchedEffect(room.id, isHost, ownRole) {
         if (!joined) {
             joined = true
-            if (isHost && (!ownCameraGranted || !ownMicGranted)) {
+            if (isOnVoiceStage && (!ownCameraGranted || !ownMicGranted)) {
                 joinPermissionLauncher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO))
             } else {
-                cameraOn = isHost && ownCameraGranted
-                micOn = isHost && ownMicGranted
-                onJoin(isHost && ownCameraGranted, isHost && ownMicGranted)
+                cameraOn = isOnVoiceStage && ownCameraGranted
+                micOn = isOnVoiceStage && ownMicGranted
+                onJoin(cameraOn, micOn)
             }
+        } else if (!isHost && ownRole in setOf("SPEAKER", "MODERATOR")) {
+            localRequestSent = false
+            joinPermissionLauncher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO))
+        } else if (!isOnVoiceStage) {
+            micOn = false
+            cameraOn = false
+            YugmMediaRoom.setMicEnabled(false)
+            YugmMediaRoom.setCameraEnabled(false)
         }
     }
     LaunchedEffect(room.id) {
@@ -279,18 +294,16 @@ fun VideoLivestreamScreen(
             runCatching {
                 val allFeeds = YugmMediaRoom.videoFeeds()
                 feeds = allFeeds.filter { feed ->
-                    if (isHost) feed.isLocal && feed.identity == currentUserId
-                    else feed.identity == room.host?.id || feed.label == room.host?.name
-                }.take(1)
+                    currentParticipants.any { it.user.id == feed.identity && it.role in setOf("HOST", "SPEAKER", "MODERATOR") }
+                }.map { feed ->
+                    feed.copy(label = currentParticipants.firstOrNull { it.user.id == feed.identity }?.user?.name ?: feed.label)
+                }.sortedWith(compareBy<YugmMediaRoom.VideoFeed> { it.identity != room.host?.id }.thenBy { it.identity })
                 opponentFeeds = YugmMediaRoom.opponentVideoFeeds().filter { !it.isLocal }.take(1)
             }
             delay(700)
         }
     }
-    LaunchedEffect(ownRole, isHost) {
-        if (isHost || ownRole in setOf("SPEAKER", "MODERATOR")) micOn = true
-    }
-    LaunchedEffect(hasPendingRequest) { if (hasPendingRequest) localRequestSent = true }
+    LaunchedEffect(hasPendingRequest) { localRequestSent = hasPendingRequest }
     LaunchedEffect(requestError) {
         if (requestError.isNotBlank()) localRequestSent = false
     }
@@ -301,12 +314,25 @@ fun VideoLivestreamScreen(
         onDispose { }
     }
 
-    val hostFeed = feeds.firstOrNull()
+    val hostFeed = feeds.firstOrNull { it.identity == room.host?.id } ?: feeds.firstOrNull()
     Box(Modifier.fillMaxSize().background(Color(0xFF05060A))) {
         if (pkBattle?.status == PkStatus.ACTIVE && pkBattle.battleType.name == "VIDEO") {
             Box(Modifier.fillMaxSize().background(Color(0xFF07070B)))
+        } else if (feeds.size > 1) {
+            Column(Modifier.fillMaxSize()) {
+                feeds.chunked(2).forEach { row ->
+                    Row(Modifier.weight(1f).fillMaxWidth()) {
+                        row.forEach { feed ->
+                            Box(Modifier.weight(1f).fillMaxHeight()) {
+                                HostVideoStage(feed, Modifier.fillMaxSize(), mirror = feed.isLocal)
+                                Text(feed.label, color = StreamInk, fontSize = 12.sp, modifier = Modifier.align(Alignment.BottomStart).background(StreamPanel).padding(8.dp))
+                            }
+                        }
+                    }
+                }
+            }
         } else if (hostFeed != null) {
-            HostVideoStage(hostFeed, Modifier.fillMaxSize(), mirror = isHost)
+            HostVideoStage(hostFeed, Modifier.fillMaxSize(), mirror = hostFeed.isLocal)
         } else {
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF251642), Color(0xFF11121B), Color(0xFF05060A)))), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -344,6 +370,7 @@ fun VideoLivestreamScreen(
                     context.startActivity(Intent.createChooser(shareIntent, "Share room"))
                 },
                 onMore = { showHeaderInfo = true },
+                onRoomInfo = { showHeaderInfo = true },
                 onRankClick = { onToast("Room Ranking #1 in Live Video") },
                 onLeave = { if (isHost) showHostExit = true else showLeavePrompt = true }
             )
@@ -432,6 +459,14 @@ fun VideoLivestreamScreen(
                 ) { Icon(Icons.Filled.SentimentSatisfiedAlt, contentDescription = null, tint = StreamInk, modifier = Modifier.size(14.dp)) }
                 if (!isHost) {
                     val requested = localRequestSent || hasPendingRequest
+                    if (isOnVoiceStage) IconButton(onClick = {
+                        if (cameraOn) { cameraOn = false; YugmMediaRoom.setCameraEnabled(false) }
+                        else if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                            cameraOn = true; YugmMediaRoom.setCameraEnabled(true)
+                        } else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                    }) {
+                        Icon(Icons.Filled.Videocam, contentDescription = "Toggle your camera", tint = if (cameraOn) StreamPink else StreamInk)
+                    }
                     IconButton(
                         enabled = isOnVoiceStage,
                         onClick = {
@@ -478,7 +513,7 @@ fun VideoLivestreamScreen(
                     else if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) { cameraOn = true; YugmMediaRoom.setCameraEnabled(true) }
                     else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                 }
-                StreamIconControl(Icons.Filled.Groups, "Voice requests, ${speakerRequests.size} waiting", active = speakerRequests.isNotEmpty()) { requestQueueOpen = true }
+                StreamIconControl(Icons.Filled.Groups, "Call requests, ${speakerRequests.size} waiting", active = speakerRequests.isNotEmpty(), badgeCount = speakerRequests.size) { requestQueueOpen = true }
                 StreamIconControl(Icons.Filled.PersonAdd, "Invite to room") { inviteOpen = true }
                 if (pkBattle == null || pkBattle.status !in setOf(PkStatus.ACTIVE, PkStatus.INVITED, PkStatus.WAITING)) {
                     StreamIconControl(Icons.Filled.Bolt, "Start video PK") { showPkSetup = true }
@@ -493,16 +528,16 @@ fun VideoLivestreamScreen(
             ) {
                 Box(
                     Modifier.size(48.dp).clip(CircleShape).background(Color(0x884B225E)).border(1.dp, Color(0x88FFFFFF), CircleShape)
-                        .semantics { contentDescription = if (localRequestSent || hasPendingRequest) "Voice request sent" else "Request to join voice call" }
+                        .semantics { contentDescription = if (isOnVoiceStage) "On call" else if (localRequestSent || hasPendingRequest) "Call request sent" else "Request to join video call" }
                         .clickable(role = Role.Button) {
-                            if (!localRequestSent && !hasPendingRequest) {
+                            if (!isOnVoiceStage && !localRequestSent && !hasPendingRequest) {
                                 if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) { localRequestSent = true; onRequestSpeaker() }
                                 else { requestVoiceAfterPermission = true; microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }
                             }
                         },
                     contentAlignment = Alignment.Center
                 ) { Text(if (localRequestSent || hasPendingRequest) "✓" else "∞", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold) }
-                Text(if (localRequestSent || hasPendingRequest) "Request sent" else "Join Call", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text(if (isOnVoiceStage) "On call" else if (localRequestSent || hasPendingRequest) "Request sent" else "Join Call", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
         }
 
@@ -532,7 +567,7 @@ fun VideoLivestreamScreen(
                 Text("Livestream actions", color = StreamInk, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 TextButton(onClick = { moreActionsOpen = false; onReact("heart") }) { Text("♥  Send a like", color = StreamInk) }
                 if (!isHost) TextButton(onClick = { moreActionsOpen = false; onReportHost(room.host?.id.orEmpty()) }) { Text("⚑  Report host", color = StreamInk) }
-                if (isHost) TextButton(onClick = { moreActionsOpen = false; requestQueueOpen = true }) { Text("✋  Voice requests (${speakerRequests.size})", color = StreamInk) }
+                if (isHost) TextButton(onClick = { moreActionsOpen = false; requestQueueOpen = true }) { Text("✋  Call requests (${speakerRequests.size})", color = StreamInk) }
                 if (isHost) TextButton(onClick = { moreActionsOpen = false; showPollComposer = true }) { Text("📊  Create a room poll", color = StreamInk) }
                 Spacer(Modifier.height(12.dp))
             }
@@ -684,15 +719,15 @@ fun VideoLivestreamScreen(
 
     if (requestQueueOpen) {
         ModalBottomSheet(onDismissRequest = { requestQueueOpen = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = Color(0xFF14151E)) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Requests to join voice", color = StreamInk, fontSize = 20.sp, fontWeight = FontWeight.Black)
+            Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Requests to join the call", color = StreamInk, fontSize = 20.sp, fontWeight = FontWeight.Black)
                 if (speakerRequests.isEmpty()) Text("No one is waiting to join the conversation.", color = StreamMuted, modifier = Modifier.padding(vertical = 12.dp))
                 speakerRequests.forEach { request ->
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFF22232D)).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Avatar(request.user.name.take(1), 42, request.user.avatar, request.user.activeCosmetics)
                         Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                             Text(request.user.name, color = StreamInk, fontWeight = FontWeight.Bold)
-                            Text("Wants to join by voice", color = StreamMuted, fontSize = 11.sp)
+                            Text("Wants to join with camera and microphone", color = StreamMuted, fontSize = 11.sp)
                         }
                         TextButton(onClick = { onRejectSpeaker(request.user.id) }) { Text("Decline", color = StreamMuted) }
                         Button(onClick = { onApproveSpeaker(request.user.id) }, colors = ButtonDefaults.buttonColors(containerColor = StreamPink), shape = RoundedCornerShape(12.dp)) { Text("Allow", color = Color.White) }
@@ -740,7 +775,20 @@ fun VideoLivestreamScreen(
         AlertDialog(
             onDismissRequest = { showHeaderInfo = false },
             title = { Text(room.title.ifBlank { "Livestream details" }, color = StreamInk, fontWeight = FontWeight.Black) },
-            text = { Text("Room ID: ${room.id}\nHost: ${room.host?.name ?: "Host"}\n${room.participants} people watching", color = StreamMuted) },
+            text = {
+                Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Room ID: ${room.id}\nHost: ${room.host?.name ?: "Host"}\n${participants.size} people in room", color = StreamMuted)
+                    participants.forEach { participant ->
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Avatar(participant.user.name.take(1), 36, participant.user.avatar, participant.user.activeCosmetics)
+                            Column {
+                                Text(participant.user.name, color = StreamInk, fontWeight = FontWeight.SemiBold)
+                                Text(participant.role.lowercase().replaceFirstChar { it.uppercase() }, color = StreamMuted, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            },
             confirmButton = { TextButton(onClick = { showHeaderInfo = false }) { Text("Done", color = StreamPink) } },
             containerColor = Color(0xFF171821)
         )
@@ -791,6 +839,7 @@ private fun StreamIconControl(
     label: String,
     active: Boolean = false,
     danger: Boolean = false,
+    badgeCount: Int = 0,
     onClick: () -> Unit
 ) {
     val tint = when {
@@ -808,59 +857,68 @@ private fun StreamIconControl(
         contentAlignment = Alignment.Center
     ) {
         Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+        if (badgeCount > 0) {
+            Box(Modifier.align(Alignment.TopEnd).size(16.dp).clip(CircleShape).background(StreamPink), contentAlignment = Alignment.Center) {
+                Text(if (badgeCount > 9) "9+" else "$badgeCount", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }
 
 @Composable
 private fun HostVideoStage(feed: YugmMediaRoom.VideoFeed, modifier: Modifier, mirror: Boolean) {
-    var renderer by remember(feed.track) { mutableStateOf<SurfaceViewRenderer?>(null) }
-    DisposableEffect(feed.track) {
-        onDispose {
-            runCatching { renderer?.let { feed.track.removeRenderer(it); it.release() } }
-            renderer = null
-        }
-    }
-    AndroidView(
-        factory = { context ->
-            SurfaceViewRenderer(context).also { view ->
-                runCatching {
-                    YugmMediaRoom.initializeVideoRenderer(view)
-                    view.setMirror(mirror)
-                    feed.track.addRenderer(view)
-                    renderer = view
-                }
+    key(feed.track) {
+        var renderer by remember(feed.track) { mutableStateOf<SurfaceViewRenderer?>(null) }
+        DisposableEffect(feed.track) {
+            onDispose {
+                runCatching { renderer?.let { feed.track.removeRenderer(it); it.release() } }
+                renderer = null
             }
-        },
-        modifier = modifier.background(Color.Black).semantics {
-            contentDescription = "Live video stream from ${feed.label}"
         }
-    )
+        AndroidView(
+            factory = { context ->
+                SurfaceViewRenderer(context).also { view ->
+                    runCatching {
+                        YugmMediaRoom.initializeVideoRenderer(view)
+                        view.setMirror(mirror)
+                        feed.track.addRenderer(view)
+                        renderer = view
+                    }
+                }
+            },
+            modifier = modifier.background(Color.Black).semantics {
+                contentDescription = "Live video stream from ${feed.label}"
+            }
+        )
+    }
 }
 
 @Composable
 private fun OpponentVideoStage(feed: YugmMediaRoom.VideoFeed, modifier: Modifier) {
-    var renderer by remember(feed.track) { mutableStateOf<SurfaceViewRenderer?>(null) }
-    DisposableEffect(feed.track) {
-        onDispose {
-            runCatching { renderer?.let { feed.track.removeRenderer(it); it.release() } }
-            renderer = null
-        }
-    }
-    AndroidView(
-        factory = { context ->
-            SurfaceViewRenderer(context).also { view ->
-                runCatching {
-                    YugmMediaRoom.initializeOpponentVideoRenderer(view)
-                    view.setMirror(false)
-                    feed.track.addRenderer(view)
-                    renderer = view
-                }
+    key(feed.track) {
+        var renderer by remember(feed.track) { mutableStateOf<SurfaceViewRenderer?>(null) }
+        DisposableEffect(feed.track) {
+            onDispose {
+                runCatching { renderer?.let { feed.track.removeRenderer(it); it.release() } }
+                renderer = null
             }
-        },
-        modifier = modifier.background(Color.Black).semantics {
-            contentDescription = "Video PK stream from ${feed.label}"
         }
-    )
+        AndroidView(
+            factory = { context ->
+                SurfaceViewRenderer(context).also { view ->
+                    runCatching {
+                        YugmMediaRoom.initializeOpponentVideoRenderer(view)
+                        view.setMirror(false)
+                        feed.track.addRenderer(view)
+                        renderer = view
+                    }
+                }
+            },
+            modifier = modifier.background(Color.Black).semantics {
+                contentDescription = "Video PK stream from ${feed.label}"
+            }
+        )
+    }
 }
 
 @Composable

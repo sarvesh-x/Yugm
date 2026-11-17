@@ -20,6 +20,12 @@ const { GiftInventory } = await import("../models/GiftInventory.js");
 const { Gift } = await import("../models/Gift.js");
 const { Room } = await import("../models/Room.js");
 const { RoomParticipant } = await import("../models/RoomParticipant.js");
+const { SpeakerRequest } = await import("../models/SpeakerRequest.js");
+const { RoomFollow } = await import("../models/RoomFollow.js");
+const { roomsRouter } = await import("../routes/rooms.js");
+const { livekitRouter } = await import("../routes/livekit.js");
+const { mediaProvider } = await import("../services/livekit.js");
+const { TrackSource } = await import("livekit-server-sdk");
 const { AuthSession } = await import("../models/AuthSession.js");
 const { UserSafetyStatus } = await import("../models/UserSafetyStatus.js");
 const { Referral } = await import("../models/Referral.js");
@@ -44,13 +50,15 @@ let baseUrl: string;
 before(async () => {
   await mongoose.connect(uri, { dbName, autoIndex: false, serverSelectionTimeoutMS: 5000 });
   // Real production schema indexes, applied only inside the owned test replica.
-  for (const model of [User, AuthSession, WalletTransaction, GiftTransaction, GiftInventory, Gift, Room, RoomParticipant, Referral, ImmersiveTheme, UserSafetyStatus, Event, Purchase]) {
+  for (const model of [User, AuthSession, WalletTransaction, GiftTransaction, GiftInventory, Gift, Room, RoomParticipant, SpeakerRequest, RoomFollow, Referral, ImmersiveTheme, UserSafetyStatus, Event, Purchase]) {
     await model.createCollection();
     await model.createIndexes();
   }
   const app = express();
   app.post("/webhook-test", express.raw({ type: "application/json" }), (req, res, next) => { void handlePaymentWebhook(req, res).catch(next); });
   app.use(express.json());
+  app.use("/api/rooms", roomsRouter);
+  app.use("/api/livekit", livekitRouter);
   app.use("/api/events", eventsRouter);
   app.use("/api", eventsRouter);
   app.use("/api", giftsRouter, walletRouter, roomThemesRouter, referralsRouter);
@@ -89,6 +97,88 @@ async function theme(coins = 100, diamonds = 0) {
 function httpStatus(status: number) {
   return (error: unknown) => typeof error === "object" && error !== null && "status" in error && error.status === status;
 }
+
+async function get(route: string, token: string) {
+  const response = await fetch(`${baseUrl}${route}`, { headers: { authorization: `Bearer ${token}` } });
+  return { status: response.status, body: await response.json() as any };
+}
+
+test("public voice and video entry never requires following and membership counts track leave/rejoin", async () => {
+  const host = await user();
+  const guest = await user();
+  const token = await tokenFor(guest);
+  for (const type of ["VOICE", "VIDEO"]) {
+    const room = await Room.create({ title: "Open room", hostId: host._id, type, category: "test", language: "English", livekitRoomName: randomUUID(), participantCount: 1 });
+    await RoomParticipant.create({ roomId: room._id, userId: host._id, role: "HOST", seatIndex: 0 });
+    const path = `/rooms/${room.id}`;
+    assert.equal(await RoomFollow.countDocuments({ roomId: room._id, userId: guest._id }), 0);
+    assert.equal((await post(`${path}/join`, token, {})).status, 200);
+    assert.equal((await post(`${path}/join`, token, {})).status, 200);
+    const detail = await get(path, token);
+    assert.equal(detail.status, 200);
+    assert.equal(detail.body.data.participants.length, 2);
+    assert.equal(detail.body.data.room.participantCount, 2);
+    assert.ok(detail.body.data.participants.some((p: any) => p.userId._id === guest.id && p.role === "AUDIENCE"));
+    assert.equal((await post(`${path}/leave`, token, {})).status, 200);
+    assert.equal((await get(path, token)).body.data.participants.length, 1);
+    assert.equal((await Room.findById(room._id))?.participantCount, 1);
+    assert.equal((await post(`${path}/join`, token, {})).status, 200);
+    assert.equal((await get(path, token)).body.data.participants.length, 2);
+    assert.equal((await Room.findById(room._id))?.participantCount, 2);
+  }
+});
+
+test("video call approval grants camera/mic only to approved guests and rejection permits a new request", async t => {
+  const host = await user();
+  const guest = await user();
+  const rejected = await user();
+  const [hostToken, guestToken, rejectedToken] = await Promise.all([host, guest, rejected].map(tokenFor));
+  const room = await Room.create({ title: "Video call", hostId: host._id, type: "VIDEO", category: "test", language: "English", livekitRoomName: randomUUID(), participantCount: 1 });
+  await RoomParticipant.create({ roomId: room._id, userId: host._id, role: "HOST", seatIndex: 0 });
+  const path = `/rooms/${room.id}`;
+  const issued: { identity: string; publishSources?: number[] }[] = [];
+  t.mock.method(mediaProvider, "createToken", async (input: any) => {
+    issued.push(input);
+    return { token: "isolated-media-fixture", url: "ws://127.0.0.1:1" };
+  });
+  assert.equal((await post("/livekit/token", guestToken, { roomId: room.id })).status, 403);
+  for (const token of [guestToken, rejectedToken]) assert.equal((await post(`${path}/join`, token, {})).status, 200);
+  assert.equal((await post(`${path}/take-seat`, guestToken, {})).status, 403);
+  const viewerMedia = await post("/livekit/token", guestToken, { roomId: room.id });
+  assert.equal(viewerMedia.status, 200);
+  assert.equal(viewerMedia.body.data.canPublishMicrophone, false);
+  assert.equal(issued.at(-1)?.publishSources?.includes(TrackSource.CAMERA), false);
+  assert.equal(issued.at(-1)?.publishSources?.includes(TrackSource.MICROPHONE), false);
+  assert.equal((await post(`${path}/request-speaker`, guestToken, {})).status, 201);
+  assert.equal((await post(`${path}/request-speaker`, guestToken, {})).status, 409);
+  assert.equal((await get(path, hostToken)).body.data.speakerRequests.length, 1);
+  assert.equal((await post(`${path}/approve-speaker`, rejectedToken, { userId: guest.id })).status, 403);
+  assert.equal((await post(`${path}/approve-speaker`, hostToken, { userId: guest.id })).status, 200);
+  assert.equal((await get(path, hostToken)).body.data.speakerRequests.length, 0);
+  const media = await post("/livekit/token", guestToken, { roomId: room.id });
+  assert.equal(media.status, 200);
+  assert.equal(media.body.data.role, "SPEAKER");
+  assert.equal(media.body.data.canPublishMicrophone, true);
+  assert.ok(issued.at(-1)?.publishSources?.includes(TrackSource.CAMERA));
+  assert.ok(issued.at(-1)?.publishSources?.includes(TrackSource.MICROPHONE));
+  await RoomParticipant.updateOne({ roomId: room._id, userId: guest._id, leftAt: null }, { $set: { moderatorMuted: true } });
+  assert.equal((await post("/livekit/token", guestToken, { roomId: room.id })).body.data.canPublishMicrophone, false);
+  assert.equal(issued.at(-1)?.publishSources?.includes(TrackSource.CAMERA), false);
+  await RoomParticipant.updateOne({ roomId: room._id, userId: guest._id, leftAt: null }, { $set: { moderatorMuted: false } });
+  // The Android guest reconnect after permission must retain their approved role.
+  assert.equal((await post(`${path}/join`, guestToken, {})).status, 200);
+  assert.equal((await RoomParticipant.findOne({ roomId: room._id, userId: guest._id, leftAt: null }))?.role, "SPEAKER");
+  assert.equal((await Room.findById(room._id))?.participantCount, 3);
+  assert.equal((await post(`${path}/request-speaker`, rejectedToken, {})).status, 201);
+  assert.equal((await post(`${path}/reject-speaker`, guestToken, { userId: rejected.id })).status, 403);
+  assert.equal((await post(`${path}/reject-speaker`, hostToken, { userId: rejected.id })).status, 200);
+  assert.equal((await get(path, rejectedToken)).body.data.speakerRequests.length, 0);
+  assert.equal((await post("/livekit/token", rejectedToken, { roomId: room.id })).body.data.canPublishMicrophone, false);
+  assert.equal((await post(`${path}/request-speaker`, rejectedToken, {})).status, 201);
+  assert.equal((await post(`${path}/leave`, rejectedToken, {})).status, 200);
+  assert.equal((await get(path, hostToken)).body.data.speakerRequests.length, 0);
+  assert.equal((await post("/livekit/token", rejectedToken, { roomId: room.id })).status, 403);
+});
 
 test("event endpoint aliases preserve Android paths and last-seat admission is atomic", async () => {
   const host = await user();

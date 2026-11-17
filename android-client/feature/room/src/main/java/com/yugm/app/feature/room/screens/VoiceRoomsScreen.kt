@@ -195,7 +195,7 @@ fun VoiceRoomsScreen(
                 }
                 items(liveRooms, key = { it.id }) { room ->
                     val following = followedRooms.any { it.id == room.id }
-                    PartyRoomCard(room = room, following = following, onFollow = { toggleRoomFollow(room) }, onClick = { if (following) onOpenRoom(room) })
+                    PartyRoomCard(room = room, following = following, onFollow = { toggleRoomFollow(room) }, onClick = { onOpenRoom(room) })
                 }
             } else if (viewModel.isRoomListLoading) {
                 item {
@@ -233,7 +233,7 @@ fun VoiceRoomsScreen(
                             Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 rowRooms.forEach { room ->
                                     val following = followedRooms.any { it.id == room.id }
-                                    VideoPartyCard(room, Modifier.weight(1f), following, onFollow = { toggleRoomFollow(room) }) { if (following) onOpenRoom(room) }
+                                    VideoPartyCard(room, Modifier.weight(1f), following, onFollow = { toggleRoomFollow(room) }) { onOpenRoom(room) }
                                 }
                                 if (rowRooms.size == 1) Spacer(Modifier.weight(1f))
                             }
@@ -339,7 +339,7 @@ private fun VideoPartyCard(room: Room, modifier: Modifier = Modifier, following:
             .background(Brush.linearGradient(room.gradient.takeIf { it.size >= 2 } ?: listOf(Color(0xFF302054), Color(0xFF9B4CD0))))
             .border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(20.dp))
             .semantics { contentDescription = "Join video party ${room.title} hosted by ${room.host?.name.orEmpty()}" }
-            .then(if (following) Modifier.clickable(role = Role.Button, onClickLabel = "Join ${room.title}", onClick = onClick) else Modifier)
+            .clickable(role = Role.Button, onClickLabel = "Join ${room.title}", onClick = onClick)
     ) {
         val image = room.coverImage ?: room.host?.avatar
         if (!image.isNullOrBlank()) {
@@ -365,8 +365,13 @@ private fun VideoPartyCard(room: Room, modifier: Modifier = Modifier, following:
             }
             Text(room.title.ifBlank { "Video party" }, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(room.host?.name?.let { "Hosted by $it" } ?: "Join the party", color = Color.White.copy(alpha = 0.82f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            TextButton(onClick = if (following) onClick else onFollow, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
-                Text(if (following) "Open room →" else "＋ Follow to join", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+            Row {
+                TextButton(onClick = onFollow, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)) {
+                    Text(if (following) "Following" else "Follow", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                }
+                TextButton(onClick = onClick, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)) {
+                    Text("Join →", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                }
             }
         }
     }
@@ -394,7 +399,7 @@ private fun PartyRoomCard(room: Room, following: Boolean, onFollow: () -> Unit, 
             Text("◖ ${room.participants}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 TextButton(onClick = onFollow) { Text(if (following) "Following" else "Follow", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp) }
-                if (following) TextButton(onClick = onClick) { Text("Join", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
+                TextButton(onClick = onClick) { Text("Join", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
             }
         }
     }

@@ -79,7 +79,7 @@ internal fun SharedRoomHeader(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val host = room.host
-    val memberCount = room.participants.coerceAtLeast(participants.size)
+    val memberCount = participants.size
 
     Column(
         modifier = modifier
@@ -191,6 +191,7 @@ internal fun SharedRoomHeader(
                         .size(38.dp)
                         .clip(CircleShape)
                         .background(Color(0xFF7D6B82).copy(alpha = 0.55f))
+                        .clickable(onClick = onRoomInfo)
                         .semantics { contentDescription = "$memberCount people in room" },
                     contentAlignment = Alignment.Center
                 ) {

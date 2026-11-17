@@ -145,7 +145,7 @@ fun FollowedRoomsScreen(
                     Icon(Icons.Filled.Bookmark, contentDescription = null, tint = colors.primary, modifier = Modifier.size(30.dp))
                 }
                 Text("Your room list is ready", color = colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.padding(top = 14.dp))
-                Text("Follow rooms from Party to keep them here and unlock access when they go live.", color = colors.textSecondary, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
+                Text("Follow rooms from Party to keep your favorites here and find them when they go live.", color = colors.textSecondary, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
                 TextButton(onClick = onBack, modifier = Modifier.padding(top = 8.dp)) { Text("Explore Party", color = colors.primary, fontWeight = FontWeight.Bold) }
             }
             else -> LazyColumn(

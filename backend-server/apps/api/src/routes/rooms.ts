@@ -579,7 +579,7 @@ roomsRouter.post("/:id/approve-speaker", requireAuth, asyncHandler(async (req: A
   const request = await SpeakerRequest.findOneAndUpdate({ roomId: room._id, userId, status: "PENDING" }, { status: "APPROVED" }, { new: true });
   if (!request) throw new HttpError(404, "Pending speaker request not found", ErrorCode.NOT_FOUND);
   await Room.findByIdAndUpdate(room._id, { $addToSet: { speakerIds: userId } });
-  await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { role: "SPEAKER", micEnabled: true, moderatorMuted: false, seatIndex });
+  await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { role: "SPEAKER", micEnabled: true, cameraEnabled: true, moderatorMuted: false, seatIndex });
   emitRoom(room._id.toString(), socketEvents.roomSpeakerApprove, { userId, seatIndex });
   sendOk(res, { approved: true });
 }));
@@ -592,10 +592,11 @@ roomsRouter.post("/:id/take-seat", requireAuth, requireNotMuted, validateBody(z.
   const participant = await requireActiveParticipant(room._id, userId);
   if (!["AUDIENCE", "HOST", "SPEAKER", "MODERATOR"].includes(participant.role)) throw new HttpError(409, "You cannot change seats right now", ErrorCode.CONFLICT);
   const wasAudience = participant.role === "AUDIENCE";
+  if (room.type === "VIDEO" && wasAudience) throw new HttpError(403, "Ask the host to approve your call request", ErrorCode.FORBIDDEN);
   const seatIndex = await findOpenSeat(room, req.body.seatIndex, userId);
   if (wasAudience) {
     await Room.findByIdAndUpdate(room._id, { $addToSet: { speakerIds: userId } });
-    await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { role: "SPEAKER", micEnabled: true, moderatorMuted: false, seatIndex });
+    await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { role: "SPEAKER", micEnabled: true, cameraEnabled: true, moderatorMuted: false, seatIndex });
     await SpeakerRequest.updateOne({ roomId: room._id, userId, status: "PENDING" }, { status: "APPROVED" });
     emitRoom(room._id.toString(), socketEvents.roomSpeakerApprove, { userId, seatIndex });
   } else {
@@ -637,7 +638,7 @@ roomsRouter.post("/:id/invite-speaker", requireAuth, asyncHandler(async (req: Au
   if (participant.role !== "AUDIENCE") throw new HttpError(409, "User already has a speaker seat", ErrorCode.CONFLICT);
   const seatIndex = await findOpenSeat(room);
   await Room.findByIdAndUpdate(room._id, { $addToSet: { speakerIds: userId } });
-  await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { role: "SPEAKER", micEnabled: true, moderatorMuted: false, seatIndex });
+  await RoomParticipant.findOneAndUpdate({ roomId: room._id, userId, leftAt: null }, { role: "SPEAKER", micEnabled: true, cameraEnabled: true, moderatorMuted: false, seatIndex });
   await SpeakerRequest.updateOne({ roomId: room._id, userId, status: "PENDING" }, { status: "APPROVED" });
   emitRoom(room._id.toString(), socketEvents.roomSpeakerApprove, { userId, seatIndex });
   emitRoom(room._id.toString(), socketEvents.roomParticipantUpdate, { roomId: room.id, action: "speaker_invited", userId, seatIndex });
