@@ -1352,7 +1352,7 @@ private fun ProfileMenuCard(
     GlassCard(Modifier.fillMaxWidth()) {
         Text("Your Yugm", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Black)
         Text("Profile shortcuts", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp, bottom = 10.dp))
-        actions.chunked(2).forEach { rowActions ->
+        actions.chunked(5).forEach { rowActions ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 rowActions.forEach { (glyph, label, action) ->
                     Column(
@@ -1368,7 +1368,7 @@ private fun ProfileMenuCard(
                         Text(label, color = TextPrimary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                     }
                 }
-                repeat(2 - rowActions.size) { Spacer(Modifier.weight(1f)) }
+                repeat(5 - rowActions.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
