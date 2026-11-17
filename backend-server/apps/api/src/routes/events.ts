@@ -40,6 +40,7 @@ eventsRouter.get("/events", asyncHandler(async (req, res) => {
   const category = String(req.query.category || "") || undefined;
   const festival = String(req.query.festival || "") || undefined;
   const featured = req.query.featured === "true";
+  const roomId = String(req.query.roomId || "") || undefined;
   const upcoming = req.query.upcoming === "true";
 
   const filter: Record<string, unknown> = {};
@@ -48,6 +49,7 @@ eventsRouter.get("/events", asyncHandler(async (req, res) => {
   if (category) filter.category = category;
   if (festival) filter.festival = festival;
   if (featured) filter.featured = true;
+  if (roomId && /^[0-9a-fA-F]{24}$/.test(roomId)) filter.roomId = roomId;
   if (upcoming) {
     filter.eventDate = { $gte: new Date() };
     filter.status = { $in: ["UPCOMING", "LIVE"] };

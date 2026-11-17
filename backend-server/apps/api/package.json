@@ -14,6 +14,7 @@
     "seed:festivals": "tsx src/scripts/seed-festivals.ts",
     "seed:admin": "tsx src/scripts/seed-admin.ts",
     "migrate:progression:backfill": "tsx src/scripts/backfill-progression.ts",
+    "migrate:pk-gift-points": "tsx src/scripts/backfill-pk-gift-points.ts",
     "env:check": "tsx src/scripts/check-env.ts",
     "test": "tsx --test \"src/**/*.test.ts\"",
     "test:hardening": "node test/run-hardening.mjs",

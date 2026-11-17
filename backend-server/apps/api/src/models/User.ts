@@ -34,6 +34,8 @@ export interface IUser extends mongoose.Document {
   walletBalance: number;
   diamondBalance: number;
   xp: number;
+  wealthExp: number;
+  charmExp: number;
   level: number;
   levelTitle?: string;
   lastDailyCheckInAt?: Date;
@@ -72,8 +74,14 @@ export interface IUser extends mongoose.Document {
     roomAmbience?: string;
   };
   vipTier?: string;
+  vipLevel?: number;
+  vipExp?: number;
   vipStartedAt?: Date;
   vipExpiresAt?: Date;
+  vipFrozen?: boolean;
+  vipFreezeStartedAt?: Date;
+  mysteriousVisitors?: boolean;
+  vipChatPrivacy?: "EVERYONE" | "FOLLOWERS";
   moderationStrikes: number;
   mutedUntil?: Date;
   suspendedUntil?: Date;
@@ -136,6 +144,8 @@ const userSchema = new Schema<IUser>(
     walletBalance: { type: Number, default: 0 },
     diamondBalance: { type: Number, default: 0, min: 0 },
     xp: { type: Number, default: 0 },
+    wealthExp: { type: Number, default: 0, min: 0 },
+    charmExp: { type: Number, default: 0, min: 0 },
     level: { type: Number, default: 1 },
     levelTitle: { type: String, default: "New Vibe" },
     lastDailyCheckInAt: Date,
@@ -179,8 +189,14 @@ const userSchema = new Schema<IUser>(
       roomAmbience: String
     },
     vipTier: String,
+    vipLevel: { type: Number, default: 0, min: 0, max: 7 },
+    vipExp: { type: Number, default: 0 },
     vipStartedAt: Date,
     vipExpiresAt: Date,
+    vipFrozen: { type: Boolean, default: false },
+    vipFreezeStartedAt: Date,
+    mysteriousVisitors: { type: Boolean, default: false },
+    vipChatPrivacy: { type: String, enum: ["EVERYONE", "FOLLOWERS"], default: "EVERYONE" },
     moderationStrikes: { type: Number, default: 0 },
     mutedUntil: Date,
     suspendedUntil: Date,

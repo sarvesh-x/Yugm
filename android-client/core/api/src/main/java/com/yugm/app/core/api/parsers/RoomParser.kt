@@ -45,6 +45,7 @@ fun JSONObject.toHost(): Host = Host(
     avatar = if (has("avatar") && !isNull("avatar")) resolveMediaUrl(optString("avatar", "")) else null,
     isVip = optBoolean("isVip", false),
     vipTier = optString("vipTier", ""),
+    vipLevel = optInt("vipLevel", 0),
     level = optJSONObject("levelStatus")?.optInt("level", optInt("level", 1)) ?: optInt("level", 1),
     levelTitle = optJSONObject("levelStatus")?.optString("title", optString("levelTitle", "New Vibe")) ?: optString("levelTitle", "New Vibe"),
     xp = optJSONObject("levelStatus")?.optInt("xp", optInt("xp", 0)) ?: optInt("xp", 0),
@@ -140,6 +141,8 @@ fun JSONObject.toRoomChatMessage(): ChatMessage {
         author = sender.optString("name", optString("senderName", "User")),
         authorAvatar = sender.optString("avatar", "").ifBlank { null },
         text = optString("message", ""),
+        mediaUrl = optString("mediaUrl", "").ifBlank { null },
+        mediaType = optString("mediaType", "").ifBlank { null },
         createdAt = optString("createdAt", "")
     )
 }

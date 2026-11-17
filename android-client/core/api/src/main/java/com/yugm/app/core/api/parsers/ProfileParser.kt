@@ -15,6 +15,7 @@ import com.yugm.app.core.model.ProfileCosmetic
 import com.yugm.app.core.model.RelationshipStatus
 import com.yugm.app.core.model.TrustVerificationStatus
 import com.yugm.app.core.model.VipStatus
+import com.yugm.app.core.model.VipPrivacySettings
 import com.yugm.app.core.model.YugmUser
 import com.yugm.app.core.model.InventoryCosmetic
 import com.yugm.app.core.model.InventoryBadge
@@ -26,6 +27,7 @@ import com.yugm.app.core.model.LevelMilestoneInfo
 import com.yugm.app.core.model.XpEventInfo
 import com.yugm.app.core.model.StreakMilestoneInfo
 import com.yugm.app.core.model.LevelOverview
+import com.yugm.app.core.model.ProgressionTrackStatus
 import com.yugm.app.core.model.Host
 import org.json.JSONArray
 import org.json.JSONObject
@@ -63,9 +65,20 @@ fun JSONObject.toLevelStatus(): LevelStatus = LevelStatus(
 fun JSONObject.toVipStatus(): VipStatus = VipStatus(
     isVip = optBoolean("isVip", false),
     vipTier = optString("vipTier", ""),
+    vipLevel = optInt("vipLevel", 0),
+    vipExp = optInt("vipExp", 0),
+    vipExpRequired = optInt("vipExpRequired", 1000),
+    nextVipExpRequired = if (has("nextVipExpRequired") && !isNull("nextVipExpRequired")) optInt("nextVipExpRequired", 1000) else null,
     vipStartedAt = optString("vipStartedAt", ""),
     vipExpiresAt = optString("vipExpiresAt", ""),
-    daysRemaining = optInt("daysRemaining", 0)
+    daysRemaining = optInt("daysRemaining", 0),
+    frozen = optBoolean("frozen", false),
+    freezeDaysRemaining = optInt("freezeDaysRemaining", 0)
+)
+
+fun JSONObject.toVipPrivacySettings(): VipPrivacySettings = VipPrivacySettings(
+    mysteriousVisitors = optBoolean("mysteriousVisitors", false),
+    chatPrivacy = optString("chatPrivacy", "EVERYONE")
 )
 
 fun JSONObject.toActiveCosmetics(): ActiveCosmetics = ActiveCosmetics(
@@ -308,6 +321,8 @@ fun JSONObject.toLevelOverview(): LevelOverview {
 
     return LevelOverview(
         level = levelJson.toLevelStatus(),
+        wealthLevel = optJSONObject("wealthLevel")?.toProgressionTrackStatus() ?: ProgressionTrackStatus(),
+        charmLevel = optJSONObject("charmLevel")?.toProgressionTrackStatus() ?: ProgressionTrackStatus(),
         streak = streakJson.optInt("count", 0),
         canCheckIn = streakJson.optBoolean("canCheckIn", false),
         nextMilestone = if (streakJson.has("nextMilestone") && !streakJson.isNull("nextMilestone")) streakJson.optInt("nextMilestone") else null,
@@ -362,3 +377,13 @@ fun JSONObject.toLevelOverview(): LevelOverview {
         todayXpCap = optInt("todayXpCap", 0)
     )
 }
+
+private fun JSONObject.toProgressionTrackStatus() = ProgressionTrackStatus(
+    level = optInt("level", 0),
+    exp = optInt("exp", 0),
+    currentLevelExp = optInt("currentLevelExp", 0),
+    nextLevel = optInt("nextLevel", 1),
+    nextLevelExp = optInt("nextLevelExp", 500),
+    requiredExp = optInt("requiredExp", 500),
+    progress = optDouble("progress", 0.0).toFloat().coerceIn(0f, 1f)
+)

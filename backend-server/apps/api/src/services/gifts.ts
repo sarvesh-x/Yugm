@@ -7,6 +7,14 @@ import { GiftInventory } from "../models/GiftInventory.js";
 import { debitWallet, creditWallet, creatorShare } from "./wallet.js";
 import { grantXp } from "./levels.js";
 import { HttpError, ErrorCode } from "../utils/http.js";
+import { User } from "../models/User.js";
+import { getVipStatus } from "./vip.js";
+
+async function assertVipGiftAccess(userId: string, gift: { category?: string }) {
+  if (gift.category?.toLowerCase() !== "vip") return;
+  const user = await User.findById(userId).select("vipTier vipLevel vipExp vipFrozen vipFreezeStartedAt vipExpiresAt").lean();
+  if ((getVipStatus(user).vipLevel ?? 0) < 1) throw new HttpError(403, "VIP gifts unlock at VIP 1", ErrorCode.FORBIDDEN);
+}
 
 export async function getGiftsV2(category?: string, rarity?: string, page = 1, limit = 20) {
   const filter: Record<string, unknown> = { isActive: true, $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }] };
@@ -24,6 +32,7 @@ export async function getGiftsV2(category?: string, rarity?: string, page = 1, l
 export async function purchaseGift(userId: string, giftId: string) {
   const gift = await Gift.findOne({ _id: giftId, isActive: true }).lean();
   if (!gift) throw new HttpError(404, "Gift not found", ErrorCode.NOT_FOUND);
+  await assertVipGiftAccess(userId, gift);
   if (gift.coinPrice <= 0) throw new HttpError(400, "This gift cannot be purchased", ErrorCode.VALIDATION);
 
   const session = await mongoose.startSession();
@@ -77,6 +86,7 @@ export async function roomWideGift(roomId: string, giftId: string, senderId: str
 
   const gift = await Gift.findById(giftId).lean();
   if (!gift) throw new HttpError(404, "Gift not found", ErrorCode.NOT_FOUND);
+  await assertVipGiftAccess(senderId, gift);
 
   const totalCost = gift.coinPrice * receiverIds.length;
   const actionId = new mongoose.Types.ObjectId();
@@ -89,7 +99,7 @@ export async function roomWideGift(roomId: string, giftId: string, senderId: str
     const txns = [];
     for (const rid of receiverIds) {
       const share = Math.floor(creatorShare(gift.coinPrice));
-      await creditWallet(rid, share, "GIFT_RECEIVED", { giftId, roomId, type: "room_wide" }, session);
+      await creditWallet(rid, share, "GIFT_RECEIVED", { giftId, roomId, type: "room_wide", platformFee: gift.coinPrice - share }, session);
 
       const txn = await GiftTransaction.create([{
         roomId,

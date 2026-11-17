@@ -148,11 +148,13 @@ import com.yugm.app.core.api.YugmMediaRoom
 import com.yugm.app.core.api.resolveMediaUrl
 import com.yugm.app.core.model.ChatMessage
 import com.yugm.app.core.model.GiftItem
+import com.yugm.app.core.model.InventoryItem
 import com.yugm.app.core.model.Host
 import com.yugm.app.core.model.PkBattle
 import com.yugm.app.core.model.PkLeaderboardEntry
 import com.yugm.app.core.model.PkLiveEffect
 import com.yugm.app.core.model.PkMode
+import com.yugm.app.core.model.PkFormat
 import com.yugm.app.core.model.PkOpponent
 import com.yugm.app.core.model.PkSideType
 import com.yugm.app.core.model.PkStatus
@@ -160,6 +162,7 @@ import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomActivityItem
 import com.yugm.app.core.model.RoomMission
 import com.yugm.app.core.model.RoomParticipant
+import com.yugm.app.core.model.YugmEvent
 import com.yugm.app.core.model.RoomPoll
 import com.yugm.app.core.model.RoomReaction
 import com.yugm.app.core.model.RoomReactionAccess
@@ -172,6 +175,7 @@ import com.yugm.app.core.ui.components.FloatingEmojiOverlay
 import com.yugm.app.core.ui.components.GiftPanel
 import com.yugm.app.core.ui.components.GlassCard
 import com.yugm.app.core.ui.components.PkBattleHeader
+import com.yugm.app.core.ui.components.PkPreparationCard
 import com.yugm.app.core.ui.components.PkBattleScoreBar
 import com.yugm.app.core.ui.components.PkGiftPanel
 import com.yugm.app.core.ui.components.PkInviteCard
@@ -237,10 +241,17 @@ fun ActiveVoiceRoomScreen(
     onBack: () -> Unit,
     onSendMessage: (String) -> Unit,
     onGift: (GiftItem, String, String) -> Unit,
+    giftInventory: List<InventoryItem> = emptyList(),
+    onInventoryGift: (GiftItem, String, String) -> Unit = { _, _, _ -> },
     onToast: (String) -> Unit,
     onJoin: () -> Unit,
     participants: List<RoomParticipant> = emptyList(),
     inviteCandidates: List<Host> = emptyList(),
+    roomInviteFollowers: List<Host> = emptyList(),
+    inviteFriends: List<Host> = emptyList(),
+    roomEvents: List<YugmEvent> = emptyList(),
+    isFollowingRoom: Boolean = false,
+    onToggleRoomFollow: () -> Unit = {},
     pkBattle: PkBattle? = null,
     pkInviteId: String? = null,
     pkOpponents: List<PkOpponent> = emptyList(),
@@ -267,15 +278,19 @@ fun ActiveVoiceRoomScreen(
     onCreateCustomPoll: (String, List<String>, () -> Unit, (String) -> Unit) -> Unit = { _, _, _, _ -> },
     onVotePoll: (String, Int) -> Unit = { _, _ -> },
     onClosePoll: (String) -> Unit = {},
-    onInviteFriend: (String) -> Unit = {},
+    onInviteFriend: (List<String>) -> Unit = {},
     onDirectMessage: (String?) -> Unit = {},
     onOpenProfile: (String) -> Unit = {},
     onMinimize: () -> Unit = {},
     onReact: (String) -> Unit = {},
     onLoadPkOpponents: (String) -> Unit = {},
+    onCreateRoomPk: (List<String>, List<String>, PkFormat, PkMode, Int, String?) -> Unit = { _, _, _, _, _, _ -> },
+    onVotePk: (PkSideType) -> Unit = {},
+    onReadyPk: () -> Unit = {},
+    onClosePk: () -> Unit = {},
     onInvitePk: (PkOpponent, PkMode, Int, String) -> Unit = { _, _, _, _ -> },
     onAutoMatchPk: (PkMode, Int, String) -> Unit = { _, _, _ -> },
-    onSendPkGift: (GiftItem, PkSideType) -> Unit = { _, _ -> },
+    onSendPkGift: (GiftItem, PkSideType, Int) -> Unit = { _, _, _ -> },
     onSendPkReaction: (String, PkSideType) -> Unit = { _, _ -> },
     onAcceptPk: (String) -> Unit = {},
     onRejectPk: (String) -> Unit = {},
@@ -301,11 +316,14 @@ fun ActiveVoiceRoomScreen(
     onOpenModes: (() -> Unit)? = null,
     roomReactions: List<RoomReaction> = emptyList(),
     isCurrentUserVip: Boolean = false,
+    currentUserVipLevel: Int = 0,
+    onSendImage: (Uri) -> Unit = {},
     reactionCatalogLoading: Boolean = false,
     reactionCatalogError: String? = null,
     onReloadReactions: () -> Unit = {},
     onOpenThemes: (() -> Unit)? = null,
     onEditRoom: (() -> Unit)? = null,
+    onRefreshRoom: () -> Unit = {},
     canSpeak: Boolean = participants.any {
         it.user.id == currentUserId && it.role in listOf("HOST", "SPEAKER", "MODERATOR")
     }
@@ -376,7 +394,7 @@ fun ActiveVoiceRoomScreen(
     }
 
     LaunchedEffect(roomEndedVersion) {
-        if (roomEndedVersion > 0) {
+        if (roomEndedVersion > 0 && !isHost && !isRoomAdmin) {
             onToast("This room has ended")
             delay(500)
             onBack()
@@ -395,11 +413,21 @@ fun ActiveVoiceRoomScreen(
     var pkTitle by rememberSaveable { mutableStateOf("Late Night PK") }
     var pkSearch by rememberSaveable { mutableStateOf("") }
     var pkGiftSide by rememberSaveable { mutableStateOf(PkSideType.LEFT) }
+    var pkGiftQuantity by rememberSaveable { mutableStateOf(1) }
     var dismissedPkResultId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedParticipant by remember { mutableStateOf<RoomParticipant?>(null) }
     var selectedEmptySeat by remember { mutableStateOf<Int?>(null) }
     var showReactionPicker by rememberSaveable { mutableStateOf(false) }
     var showExitPrompt by rememberSaveable { mutableStateOf(false) }
+    var showFollowRoomPrompt by rememberSaveable(room.id) { mutableStateOf(false) }
+    val latestParticipants by androidx.compose.runtime.rememberUpdatedState(participants)
+    val latestRoomFollowState by androidx.compose.runtime.rememberUpdatedState(isFollowingRoom)
+    LaunchedEffect(room.id, currentUserId, isHost) {
+        if (!isHost && currentUserId.isNotBlank()) {
+            delay(10_000)
+            if (!latestRoomFollowState && latestParticipants.any { it.user.id == currentUserId }) showFollowRoomPrompt = true
+        }
+    }
     var showToolsSheet by rememberSaveable { mutableStateOf(false) }
     var showMusicSheet by rememberSaveable { mutableStateOf(false) }
     var showMusicLibrary by rememberSaveable { mutableStateOf(false) }
@@ -421,6 +449,7 @@ fun ActiveVoiceRoomScreen(
     var showLuckyWheelDialog by rememberSaveable { mutableStateOf(false) }
     var showRoomInfoSheet by rememberSaveable { mutableStateOf(false) }
     var chatMessageDraft by rememberSaveable { mutableStateOf("") }
+    val roomImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> uri?.let(onSendImage) }
     val seatReactions = remember { mutableStateMapOf<Int, RoomReactionEvent>() }
     var activeGiftBanner by remember { mutableStateOf<Pair<String, GiftItem>?>(null) }
     var seenJoinActivityIds by remember(room.id) { mutableStateOf<Set<String>?>(null) }
@@ -640,6 +669,10 @@ fun ActiveVoiceRoomScreen(
         gifts = gifts,
         balance = balance,
         diamondBalance = diamondBalance,
+        currentUserVipLevel = currentUserVipLevel,
+        participants = participants,
+        currentUserId = currentUserId,
+        inventory = giftInventory,
         onDismiss = { giftOpen = false },
         onSend = { gift ->
             onGift(gift, "COINS", giftRecipientId)
@@ -648,6 +681,29 @@ fun ActiveVoiceRoomScreen(
         onSendWithCurrency = { gift, currency ->
             onGift(gift, currency, giftRecipientId)
             giftRecipientId = room.host?.id.orEmpty()
+        },
+        onSendToRecipients = { gift, currency, recipientIds ->
+            recipientIds.forEach { recipientId -> onGift(gift, currency, recipientId) }
+            giftRecipientId = room.host?.id.orEmpty()
+        },
+        onSendInventory = { item, recipientIds ->
+            val inventoryGift = item.gift
+            if (inventoryGift != null && item.quantity >= recipientIds.size) {
+                val gift = GiftItem(
+                    id = inventoryGift.id,
+                    name = inventoryGift.name,
+                    price = inventoryGift.coinPrice,
+                    diamondPrice = inventoryGift.diamondPrice,
+                    icon = inventoryGift.icon,
+                    rarity = inventoryGift.rarity,
+                    category = inventoryGift.category,
+                    tradable = inventoryGift.tradable,
+                    upgradeable = inventoryGift.upgradeable
+                )
+                recipientIds.forEach { recipientId -> onInventoryGift(gift, recipientId, item.id) }
+            } else if (inventoryGift != null) {
+                onToast("You need one copy of this gift for each selected person")
+            }
         }
     )
 
@@ -664,16 +720,7 @@ fun ActiveVoiceRoomScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            Color(0x772B1055),
-                            Color(0x9952174A),
-                            Color(0xB31C132B),
-                            Color(0xF00A0915)
-                        )
-                    )
-                )
+                .background(Brush.verticalGradient(if (room.host?.isVip == true) listOf(Color(0x775B2B85), Color(0x9952174A), Color(0xB31C132B), Color(0xF00A0915)) else listOf(Color(0x772B1055), Color(0x9952174A), Color(0xB31C132B), Color(0xF00A0915))))
         )
 
         // Subtle aurora shimmer for extra polish
@@ -697,6 +744,9 @@ fun ActiveVoiceRoomScreen(
                     context.startActivity(Intent.createChooser(shareIntent, "Share room"))
                 },
                 onRoomInfo = { showRoomInfoSheet = true },
+                onViewListeners = { showListenersSheet = true },
+                isFollowingRoom = isFollowingRoom,
+                onToggleRoomFollow = onToggleRoomFollow,
                 onClearChat = onClearRoomChat,
                 onMuteAll = onMuteAllRoom,
                 onUnmuteAll = onUnmuteAllRoom,
@@ -755,7 +805,7 @@ fun ActiveVoiceRoomScreen(
                     .fillMaxWidth()
             ) {
                 // PK Battle Banner (if battle is active)
-                if (pkBattle != null && pkBattle.status == PkStatus.ACTIVE) {
+                if (pkBattle != null && pkBattle.status in listOf(PkStatus.ACTIVE, PkStatus.FINAL_CRUNCH)) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -763,16 +813,40 @@ fun ActiveVoiceRoomScreen(
                             .align(Alignment.TopCenter),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        PkBattleHeader(pkBattle, isHost = isHost, onEnd = onEndPk)
+                        PkBattleHeader(pkBattle, isHost = isHost || isRoomAdmin, onEnd = onEndPk)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             PkSideCard(pkBattle.left, PkSideType.LEFT, pkBattle.leader == PkSideType.LEFT, modifier = Modifier.weight(1f))
                             PkSideCard(pkBattle.right, PkSideType.RIGHT, pkBattle.leader == PkSideType.RIGHT, modifier = Modifier.weight(1f))
                         }
                         PkBattleScoreBar(pkBattle)
-                        PkTeamSelector(pkBattle, selectedSide = pkGiftSide, onSelect = { pkGiftSide = it })
+                        if (pkBattle.mode == PkMode.VOTE) {
+                            PkRoomVoteActions(pkBattle, onVote = onVotePk)
+                        } else if (pkBattle.selectedGiftId.isNotBlank()) {
+                            val pkGift = gifts.firstOrNull { it.id == pkBattle.selectedGiftId }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Surface(shape = RoundedCornerShape(14.dp), color = Color(0xFF242230)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+                                        Text("−", Modifier.clickable { pkGiftQuantity = (pkGiftQuantity - 1).coerceAtLeast(1) }, fontSize = 20.sp)
+                                        Text("$pkGiftQuantity", fontWeight = FontWeight.Bold)
+                                        Text("+", Modifier.clickable { pkGiftQuantity = (pkGiftQuantity + 1).coerceAtMost(99) }, fontSize = 20.sp)
+                                    }
+                                }
+                                listOf(PkSideType.LEFT, PkSideType.RIGHT).forEach { side ->
+                                    Button(
+                                        onClick = { if (pkGift != null) onSendPkGift(pkGift, side, pkGiftQuantity) },
+                                        enabled = pkGift != null && currentUserId != (if (side == PkSideType.LEFT) pkBattle.left.hostId else pkBattle.right.hostId),
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.buttonColors(containerColor = if (side == PkSideType.LEFT) Color(0xFFF4B942) else Color(0xFF299FE8)),
+                                        shape = RoundedCornerShape(16.dp)
+                                    ) { Text("Support ${if (side == PkSideType.LEFT) pkBattle.left.hostName else pkBattle.right.hostName}", maxLines = 1) }
+                                }
+                            }
+                        }
                         PkLiveEffectBurst(pkLiveEffect)
                     }
-                } else if (pkBattle != null && pkBattle.status == PkStatus.INVITED && isHost && pkBattle.right.roomId == room.id && !pkInviteId.isNullOrBlank()) {
+                } else if (pkBattle != null && pkBattle.status in listOf(PkStatus.PREPARING, PkStatus.READY, PkStatus.COUNTDOWN)) {
+                    PkPreparationCard(pkBattle, currentUserId, onReadyPk)
+                } else if (pkBattle != null && pkBattle.status == PkStatus.INVITED && (isHost || isRoomAdmin) && pkBattle.right.roomId == room.id && !pkInviteId.isNullOrBlank()) {
                     PkInviteCard(
                         battle = pkBattle,
                         inviterName = pkBattle.left.hostName,
@@ -824,6 +898,7 @@ fun ActiveVoiceRoomScreen(
                             label = item.label,
                             userName = item.userName,
                             avatarUrl = item.avatar,
+                            vipLevel = participants.firstOrNull { it.user.id == item.userId }?.user?.takeIf { it.isVip }?.vipLevel ?: 0,
                             onWelcomeClick = {
                                 onReact("clap")
                                 onToast("Welcomed to the room! ??")
@@ -833,25 +908,25 @@ fun ActiveVoiceRoomScreen(
 
                     // Chat messages
                     itemsIndexed(chat.takeLast(16), key = { index, msg -> "$index-${msg.author}-${msg.text.hashCode()}" }) { _, msg ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
+                        val vipAuthor = msg.authorId.isNotBlank() && participants.firstOrNull { it.user.id == msg.authorId }?.user?.isVip == true
+                        Column(
                             modifier = Modifier
+                                .widthIn(max = 280.dp)
                                 .clip(RoundedCornerShape(14.dp))
-                                .background(Color(0x88141424))
-                                .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(14.dp))
+                                .background(if (vipAuthor) Brush.linearGradient(listOf(Color(0xAA34233F), Color(0xAA17141F))) else Brush.linearGradient(listOf(Color(0x88141424), Color(0x88141424))))
+                                .border(1.dp, if (vipAuthor) Color(0x99EBC77D) else Color(0x1AFFFFFF), RoundedCornerShape(14.dp))
                                 .padding(horizontal = 10.dp, vertical = 6.dp)
                         ) {
-                            Text(
-                                text = "${msg.author}: ",
-                                color = if (msg.author == "System") Pink else Color(0xFFC084FC),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = msg.text,
-                                color = Color.White,
-                                fontSize = 12.sp
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(text = msg.author, color = if (msg.author == "System") Pink else Color(0xFFC084FC), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                if (vipAuthor) {
+                                    Text("  ✦ VIP frame", color = Color(0xFFFFD477), fontSize = 9.sp, fontWeight = FontWeight.Black)
+                                }
+                            }
+                            if (msg.mediaType == "IMAGE" && !msg.mediaUrl.isNullOrBlank()) {
+                                AsyncImage(model = resolveMediaUrl(msg.mediaUrl), contentDescription = "Room photo shared by ${msg.author}", contentScale = ContentScale.Crop, modifier = Modifier.padding(top = 6.dp).size(width = 190.dp, height = 130.dp).clip(RoundedCornerShape(10.dp)))
+                            }
+                            if (msg.text.isNotBlank() && msg.text != "Shared a photo") Text(msg.text, color = Color.White, fontSize = 12.sp)
                         }
                     }
                 }
@@ -867,8 +942,13 @@ fun ActiveVoiceRoomScreen(
                 Row(
                     modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(22.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    if (isCurrentUserVip && currentUserVipLevel >= 4) {
+                        IconButton(onClick = { roomImagePicker.launch("image/*") }, modifier = Modifier.size(38.dp).clip(CircleShape).background(Color(0x66201B2B)).semantics { contentDescription = "Share a room image" }) {
+                            Text("＋", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Medium)
+                        }
+                    }
                     Row(
                         modifier = Modifier.weight(1f).height(44.dp).clip(CircleShape)
                             .background(Color(0x66201B2B)).border(1.dp, Color(0x553C3154), CircleShape)
@@ -1034,11 +1114,15 @@ fun ActiveVoiceRoomScreen(
 
     // Room Info, Settings & Perks Sheet
     if (showRoomInfoSheet) {
-        RoomSettingsAndInfoSheet(
+        RoomOverviewTabsSheet(
             room = room,
             isHost = isHost,
             isRoomAdmin = isRoomAdmin,
             participantCount = participants.size,
+            roomFollowers = roomInviteFollowers,
+            events = roomEvents,
+            onFollowUser = onFollowUser,
+            onUnfollowUser = onUnfollowUser,
             onDismiss = { showRoomInfoSheet = false },
             onFollowHost = {
                 room.host?.let { h ->
@@ -1098,7 +1182,7 @@ fun ActiveVoiceRoomScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceAround
                 ) {
-                    ToolGridItem("ΓÜö∩╕Å", "PK Battle") {
+                    if (isHost || isRoomAdmin) ToolGridItem("⚔️", "PK Battle") {
                         showToolsSheet = false
                         showPkSetup = true
                     }
@@ -1121,7 +1205,7 @@ fun ActiveVoiceRoomScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceAround
                 ) {
-                    ToolGridItem("ΓÜÖ∩╕Å", "Settings") {
+                    if (isHost || isRoomAdmin) ToolGridItem("ΓÜÖ∩╕Å", "Settings") {
                         showToolsSheet = false
                         showRoomInfoSheet = true
                     }
@@ -1508,11 +1592,11 @@ fun ActiveVoiceRoomScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
                         items(vipOnly, key = { it.id }) { reaction ->
-                            val locked = !isCurrentUserVip
+                            val locked = currentUserVipLevel < 3
                             ReactionTile(reaction, locked = locked)
                         }
                     }
-                    if (!isCurrentUserVip) {
+                    if (currentUserVipLevel < 3) {
                         Text(
                             "Upgrade to VIP to unlock exclusive reactions.",
                             color = Gold,
@@ -1561,65 +1645,15 @@ fun ActiveVoiceRoomScreen(
 
     // 6. Audience / Listeners Sheet
     if (showListenersSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showListenersSheet = false },
-            containerColor = Color(0xFF141224)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 12.dp)
-                    .navigationBarsPadding()
-            ) {
-                Text("People in this room (${participants.size})", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
-                Text(
-                    "The host owns this room. Admins help manage mics and members; only the host can appoint admins or end it. A room closes when its host leaves or everyone is gone.",
-                    color = TextMuted,
-                    fontSize = 11.sp,
-                    lineHeight = 15.sp,
-                    modifier = Modifier.padding(top = 5.dp, bottom = 10.dp)
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 350.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(participants, key = { it.user.id }) { p ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    showListenersSheet = false
-                                    selectedParticipant = p
-                                }
-                                .padding(vertical = 4.dp)
-                        ) {
-                            Avatar(p.user.name.take(1), 38, p.user.avatar, p.user.activeCosmetics)
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(p.user.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                when {
-                                    p.user.id == room.host?.id -> RoomRoleBadge("HOST", Color(0xFFFFC857), "?")
-                                    p.isRoomAdmin -> RoomRoleBadge("ROOM ADMIN", Color(0xFFC8A2FF), "??")
-                                    p.role in listOf("SPEAKER", "MODERATOR") -> Text("Speaker ΓÇó Mic on stage", color = TextMuted, fontSize = 11.sp)
-                                    else -> Text("Listener", color = TextMuted, fontSize = 11.sp)
-                                }
-                            }
-                            if (p.user.id != currentUserId) {
-                                TextButton(onClick = {
-                                    if (p.user.isFollowing) onUnfollowUser(p.user.id) else onFollowUser(p.user.id)
-                                }) {
-                                    Text(if (p.user.isFollowing) "Following" else "+ Follow", color = RoomPurplePrimary, fontSize = 12.sp)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        OnlineUsersSheet(
+            participants = participants,
+            currentUserId = currentUserId,
+            hostId = room.host?.id.orEmpty(),
+            onDismiss = { showListenersSheet = false },
+            onRefresh = onRefreshRoom,
+            onFollow = onFollowUser,
+            onUnfollow = onUnfollowUser
+        )
     }
 
     // 7. Empty Seat Click BottomSheet
@@ -1775,10 +1809,14 @@ fun ActiveVoiceRoomScreen(
     if (showInvitePicker) {
         FriendInviteSheet(
             hosts = inviteCandidates,
+            roomFollowers = roomInviteFollowers,
+            friends = inviteFriends,
+            roomId = room.id,
+            roomTitle = room.title,
             onDismiss = { showInvitePicker = false },
-            onInvite = {
+            onInvite = { ids ->
                 showInvitePicker = false
-                onInviteFriend(it)
+                onInviteFriend(ids)
             }
         )
     }
@@ -1812,23 +1850,14 @@ fun ActiveVoiceRoomScreen(
     }
 
     // 11. PK Setup Sheets
-    if (showPkSetup) {
-        PkSetupBottomSheet(
+    if (showPkSetup && (isHost || isRoomAdmin)) {
+        RoomPkSetupSheet(
+            participants = participants,
+            gifts = gifts,
             onDismiss = { showPkSetup = false },
-            onContinue = { mode, duration, title ->
-                pkMode = mode
-                pkDuration = duration
-                pkTitle = title
+            onStart = { left, right, format, mode, duration, giftId ->
                 showPkSetup = false
-                showPkOpponents = true
-                onLoadPkOpponents("")
-            },
-            onAutoMatch = { mode, duration, title ->
-                showPkSetup = false
-                pkMode = mode
-                pkDuration = duration
-                pkTitle = title
-                onAutoMatchPk(mode, duration, title)
+                onCreateRoomPk(left, right, format, mode, duration, giftId)
             }
         )
     }
@@ -1851,8 +1880,12 @@ fun ActiveVoiceRoomScreen(
 
     PkResultDialog(
         battle = pkBattle?.takeUnless { it.id == dismissedPkResultId },
-        onDismiss = { dismissedPkResultId = pkBattle?.id },
+        onDismiss = {
+            if (isHost || isRoomAdmin) onClosePk()
+            dismissedPkResultId = pkBattle?.id
+        },
         onRematch = {
+            if (isHost || isRoomAdmin) onClosePk()
             dismissedPkResultId = pkBattle?.id
             showPkSetup = true
         }
@@ -1860,23 +1893,21 @@ fun ActiveVoiceRoomScreen(
 
     // 12. Exit Confirmation Prompt
     if (showExitPrompt) {
-        AlertDialog(
-            onDismissRequest = { showExitPrompt = false },
-            title = { Text(if (isHost) "Close this room?" else "Leave this room?", fontWeight = FontWeight.Black, color = Color.White) },
-            text = { Text("Keep the room active in floating bubble, or exit now.", color = TextMuted) },
-            confirmButton = {
-                Column(horizontalAlignment = Alignment.End) {
-                    TextButton(onClick = {
-                        showExitPrompt = false
-                        onMinimize()
-                    }) { Text("Minimize room", color = RoomPurplePrimary, fontWeight = FontWeight.Bold) }
-                    TextButton(onClick = {
-                        showExitPrompt = false
-                        if (isHost) onEndRoom() else onBack()
-                    }) { Text(if (isHost) "Close and exit" else "Leave and exit", color = Pink, fontWeight = FontWeight.Bold) }
-                }
-            },
-            containerColor = Color(0xFF171522)
+        RoomExitOverlay(
+            participants = participants,
+            currentUserId = currentUserId,
+            isHost = isHost,
+            onDismiss = { showExitPrompt = false },
+            onMinimize = { showExitPrompt = false; onMinimize() },
+            onCloseRoom = { showExitPrompt = false; if (isHost || isRoomAdmin) onEndRoom() else onBack() },
+            onFollow = onFollowUser
+        )
+    }
+    if (showFollowRoomPrompt) {
+        RoomFollowPromptDialog(
+            room = room,
+            onDismiss = { showFollowRoomPrompt = false },
+            onFollow = { showFollowRoomPrompt = false; onToggleRoomFollow() }
         )
     }
 }
@@ -2175,6 +2206,7 @@ private fun EntranceAnnouncementCard(
     label: String,
     userName: String = "",
     avatarUrl: String? = null,
+    vipLevel: Int = 0,
     onWelcomeClick: () -> Unit
 ) {
     val name = userName.ifBlank { label.substringBefore(" joined").substringBefore(" entered").ifBlank { label } }
@@ -2199,7 +2231,7 @@ private fun EntranceAnnouncementCard(
 
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Γ£¿", fontSize = 11.sp)
+                    Text(if (vipLevel >= 4) "🚘" else "✦", fontSize = 11.sp)
                     Spacer(modifier = Modifier.width(3.dp))
                     Text(
                         text = name,
@@ -2209,9 +2241,14 @@ private fun EntranceAnnouncementCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    if (vipLevel > 0) Text(" VIP$vipLevel", color = Color(0xFFFFD477), fontSize = 9.sp, fontWeight = FontWeight.Black)
                 }
                 Text(
-                    text = "entered the room",
+                    text = when {
+                        vipLevel >= 4 -> "arrived in a VIP car · ${name} joined the room"
+                        vipLevel >= 2 -> "${name} joined · VIP entrance"
+                        else -> "entered the room"
+                    },
                     color = RoomGoldAccent,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium
@@ -2236,6 +2273,129 @@ private fun EntranceAnnouncementCard(
 /**
  * Tool item in the 4-square grid sheet
  */
+@Composable
+private fun PkRoomVoteActions(battle: PkBattle, onVote: (PkSideType) -> Unit) {
+    val alreadyVoted = battle.myVote != null
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(PkSideType.LEFT, PkSideType.RIGHT).forEach { side ->
+            val contestant = if (side == PkSideType.LEFT) battle.left else battle.right
+            Button(
+                onClick = { onVote(side) },
+                enabled = !alreadyVoted,
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = if (side == PkSideType.LEFT) Color(0xFFF4B942) else Color(0xFF299FE8)),
+                shape = RoundedCornerShape(16.dp)
+            ) { Text(if (alreadyVoted) "Vote submitted" else "Vote ${contestant.hostName}", maxLines = 1) }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RoomPkSetupSheet(
+    participants: List<RoomParticipant>,
+    gifts: List<GiftItem>,
+    onDismiss: () -> Unit,
+    onStart: (List<String>, List<String>, PkFormat, PkMode, Int, String?) -> Unit
+) {
+    var format by remember { mutableStateOf(PkFormat.PLAYER) }
+    var mode by remember { mutableStateOf(PkMode.GIFT) }
+    var leftIds by remember { mutableStateOf<List<String>>(emptyList()) }
+    var rightIds by remember { mutableStateOf<List<String>>(emptyList()) }
+    var teamSize by remember { mutableStateOf(2) }
+    var duration by remember { mutableStateOf(180) }
+    var giftId by remember { mutableStateOf("") }
+    val micUsers = participants.filter { it.role in listOf("HOST", "SPEAKER", "MODERATOR") && it.seatIndex != null && it.micEnabled && !it.moderatorMuted }
+    val selectedGift = gifts.firstOrNull { it.id == giftId }
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF171522), contentColor = Color.White) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Text("Start a room PK", fontSize = 23.sp, fontWeight = FontWeight.Bold)
+            Text("Choose mic players for each side. Players lead their side; teams can have 2–5 members.", color = Color(0xFFB9B5C6), fontSize = 13.sp)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(PkFormat.PLAYER to "Player PK", PkFormat.TEAM to "Team PK").forEach { (value, label) ->
+                    Surface(onClick = { format = value; leftIds = emptyList(); rightIds = emptyList() }, shape = RoundedCornerShape(14.dp), color = if (format == value) Color(0xFF7548F4) else Color(0xFF292638), modifier = Modifier.weight(1f)) {
+                        Text(label, Modifier.padding(vertical = 11.dp), textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+            if (format == PkFormat.TEAM) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    (2..5).forEach { size ->
+                        Surface(onClick = { teamSize = size; leftIds = leftIds.take(size); rightIds = rightIds.take(size) }, shape = RoundedCornerShape(12.dp), color = if (teamSize == size) Color(0xFF514078) else Color(0xFF292638), modifier = Modifier.weight(1f)) {
+                            Text("${size}v$size", Modifier.padding(vertical = 9.dp), textAlign = TextAlign.Center, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(PkMode.GIFT to "Gift PK", PkMode.VOTE to "Vote PK").forEach { (value, label) ->
+                    val active = mode == value
+                    Surface(onClick = { mode = value }, shape = RoundedCornerShape(14.dp), color = if (active) Color(0xFF7548F4) else Color(0xFF292638), modifier = Modifier.weight(1f)) {
+                        Text(label, Modifier.padding(vertical = 12.dp), textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+            Text("Select players", fontWeight = FontWeight.SemiBold)
+            val playersPerSide = if (format == PkFormat.TEAM) teamSize else 1
+            if (micUsers.size < playersPerSide * 2) Text("${playersPerSide * 2} active mic users are needed for this format.", color = Color(0xFFFFB4A9))
+            LazyColumn(Modifier.heightIn(max = 185.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                items(micUsers) { participant ->
+                    val id = participant.user.id
+                    val leftSelected = id in leftIds
+                    val rightSelected = id in rightIds
+                    Surface(
+                        onClick = {
+                            when {
+                                leftSelected -> leftIds = leftIds - id
+                                rightSelected -> rightIds = rightIds - id
+                                leftIds.size < playersPerSide -> leftIds = leftIds + id
+                                rightIds.size < playersPerSide -> rightIds = rightIds + id
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        color = when { leftSelected -> Color(0xFF604819); rightSelected -> Color(0xFF173F5B); else -> Color(0xFF242230) }
+                    ) {
+                        Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            AsyncImage(model = participant.user.avatar?.let(::resolveMediaUrl), contentDescription = null, modifier = Modifier.size(38.dp).clip(CircleShape), contentScale = ContentScale.Crop)
+                            Text(participant.user.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(when { leftSelected -> "GOLD"; rightSelected -> "BLUE"; else -> "ON MIC" }, color = Color(0xFFE8C66D), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+            if (mode == PkMode.GIFT) {
+                Text("PK gift · only this gift scores", fontWeight = FontWeight.SemiBold)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(gifts.filter { it.pkPoints > 0 }.take(20)) { gift ->
+                        Surface(onClick = { giftId = gift.id }, shape = RoundedCornerShape(12.dp), color = if (giftId == gift.id) Color(0xFF473171) else Color(0xFF242230)) {
+                            Row(Modifier.padding(horizontal = 10.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                AsyncImage(model = gift.icon.takeIf { it.isNotBlank() }?.let(::resolveMediaUrl), contentDescription = null, modifier = Modifier.size(24.dp))
+                                Text("${gift.name} · ${gift.price} coins · ${gift.pkPoints} pts", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+                if (gifts.none { it.pkPoints > 0 }) Text("PK gift scoring is not configured for available gifts yet.", color = Color(0xFFFFB4A9))
+            }
+            Text("Duration", fontWeight = FontWeight.SemiBold)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                listOf(60, 180, 300, 600, 900).forEach { seconds ->
+                    val label = when (seconds) { 60 -> "1m"; 180 -> "3m"; 300 -> "5m"; 600 -> "10m"; else -> "15m" }
+                    Surface(onClick = { duration = seconds }, shape = RoundedCornerShape(12.dp), color = if (duration == seconds) Color(0xFF7548F4) else Color(0xFF292638), modifier = Modifier.weight(1f)) {
+                        Text(label, Modifier.padding(vertical = 10.dp), textAlign = TextAlign.Center, fontSize = 12.sp)
+                    }
+                }
+            }
+            Button(
+                onClick = { onStart(leftIds, rightIds, format, mode, duration, selectedGift?.id) },
+                enabled = leftIds.size == playersPerSide && rightIds.size == playersPerSide && (mode == PkMode.VOTE || selectedGift != null),
+                modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7548F4))
+            ) { Text("Start ${if (format == PkFormat.TEAM) "Team" else "Player"} ${if (mode == PkMode.GIFT) "Gift" else "Vote"} PK", fontWeight = FontWeight.Bold) }
+        }
+    }
+}
+
 @Composable
 private fun ToolGridItem(
     glyph: String,
@@ -2275,47 +2435,144 @@ private fun ToolGridItem(
 @Composable
 fun FriendInviteSheet(
     hosts: List<Host>,
+    roomFollowers: List<Host> = emptyList(),
+    friends: List<Host> = emptyList(),
+    roomId: String,
+    roomTitle: String,
     onDismiss: () -> Unit,
-    onInvite: (String) -> Unit
+    onInvite: (List<String>) -> Unit
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF141224)) {
-        Column(
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 8.dp)
-                .navigationBarsPadding()
-        ) {
-            Text("Invite Friends to Room", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Black)
-            if (hosts.isEmpty()) {
-                Text("Follow people first, then invite them into rooms from here.", color = TextMuted)
-            } else {
-                LazyColumn(
-                    modifier = Modifier.heightIn(max = 300.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(hosts.take(12), key = { it.id }) { host ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color(0x33FFFFFF))
-                                .clickable { onInvite(host.id) }
-                                .padding(10.dp)
-                        ) {
-                            Avatar(host.name.take(1), 38, host.avatar, host.activeCosmetics)
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(host.name, color = Color.White, fontWeight = FontWeight.Bold)
-                                Text("@${host.username}", color = TextMuted, fontSize = 11.sp)
-                            }
-                            Text("Invite", color = RoomPurplePrimary, fontWeight = FontWeight.Bold)
-                        }
+    val context = LocalContext.current
+    var selectedTab by remember { mutableStateOf(0) }
+    val selected = remember { androidx.compose.runtime.mutableStateListOf<String>() }
+    val tabs = listOf("Friends", "Following", "Room followers")
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White, contentColor = Color(0xFF171421)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Box(Modifier.align(Alignment.CenterHorizontally).width(44.dp).height(5.dp).clip(CircleShape).background(Color(0xFFB8C0CE)))
+            Text("Invite your friends", Modifier.align(Alignment.CenterHorizontally), color = Color(0xFF171421), fontSize = 23.sp, fontWeight = FontWeight.Bold)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                listOf("WhatsApp", "Instagram", "Facebook", "SMS").forEach { app ->
+                    TextButton(onClick = {
+                        val invite = "Join me in $roomTitle on Yugm! https://yugm.app/room/$roomId"
+                        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, invite)
+                        if (app == "SMS") context.startActivity(android.content.Intent(android.content.Intent.ACTION_SENDTO, android.net.Uri.parse("smsto:")).putExtra("sms_body", invite))
+                        else context.startActivity(android.content.Intent.createChooser(intent, "Share invite"))
+                    }) { Text(app, color = Color(0xFF7045F5), fontWeight = FontWeight.SemiBold) }
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                tabs.forEachIndexed { index, label ->
+                    TextButton(onClick = { selectedTab = index }) { Text(label, color = if (selectedTab == index) Color(0xFF7045F5) else Color.DarkGray, fontWeight = FontWeight.SemiBold) }
+                }
+            }
+            val people = when (selectedTab) { 0 -> friends; 1 -> hosts; else -> roomFollowers }
+            if (people.isEmpty()) Text(if (selectedTab == 2) "Room followers will appear here." else "No people to show yet.", color = Color.Gray, modifier = Modifier.padding(vertical = 22.dp))
+            LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                items(people, key = { it.id }) { host ->
+                    val checked = host.id in selected
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { if (checked) selected.remove(host.id) else selected.add(host.id) }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Avatar(host.name.take(1), 42, host.avatar, host.activeCosmetics)
+                        Column(Modifier.weight(1f).padding(start = 12.dp)) { Text(host.name, color = Color(0xFF171421), fontWeight = FontWeight.SemiBold); Text("@${host.username}", color = Color.Gray, fontSize = 12.sp) }
+                        androidx.compose.material3.Checkbox(checked, onCheckedChange = { if (it) selected.add(host.id) else selected.remove(host.id) })
                     }
                 }
             }
+            androidx.compose.material3.Button(onClick = { if (selected.isNotEmpty()) onInvite(selected.toList()) }, enabled = selected.isNotEmpty(), modifier = Modifier.fillMaxWidth(), colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFF7045F5))) { Text("Invite${if (selected.isEmpty()) "" else " (${selected.size})"}") }
+            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Cancel", color = Color.DarkGray) }
         }
+    }
+}
+
+@Composable
+fun RoomExitOverlay(
+    participants: List<RoomParticipant>,
+    currentUserId: String,
+    isHost: Boolean,
+    onDismiss: () -> Unit,
+    onMinimize: () -> Unit,
+    onCloseRoom: () -> Unit,
+    onFollow: (String) -> Unit
+) {
+    val guests = participants.filter { it.user.id.isNotBlank() && it.user.id != currentUserId }
+    val followedIds = remember(guests) {
+        androidx.compose.runtime.mutableStateListOf<String>().apply { addAll(guests.filter { it.user.isFollowing }.map { it.user.id }) }
+    }
+    val unfollowed = guests.filter { !it.user.isFollowing && it.user.id !in followedIds }
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            Modifier.fillMaxSize().background(Color(0xCC080713)).clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 26.dp).clickable { },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(15.dp)
+            ) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
+                    ExitAction("↙", "Minimize", Modifier.weight(1f), onMinimize)
+                    ExitAction("×", "Close", Modifier.weight(1f), onCloseRoom)
+                }
+                Text("Follow people and join next time", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth().padding(top = 5.dp))
+                if (guests.isEmpty()) {
+                    Text("No other people are in the room right now.", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 24.dp))
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(guests, key = { it.user.id }) { participant ->
+                            Row(
+                                    Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color.Black.copy(alpha = 0.30f)).padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(11.dp)
+                            ) {
+                                Avatar(participant.user.name.take(1), 44, participant.user.avatar, participant.user.activeCosmetics)
+                                Column(Modifier.weight(1f)) {
+                                    Text(participant.user.name.ifBlank { "Yugm user" }, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text("@${participant.user.username}", color = TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                if (participant.user.isFollowing || participant.user.id in followedIds) {
+                                    Text("Following", color = Color(0xFFB5AEC9), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                } else {
+                                    androidx.compose.material3.Button(
+                                        onClick = { followedIds.add(participant.user.id); onFollow(participant.user.id) },
+                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                                        shape = CircleShape,
+                                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFF168BF2))
+                                    ) { Text("Follow", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                                }
+                            }
+                        }
+                    }
+                }
+                androidx.compose.material3.Button(
+                    onClick = { unfollowed.forEach { followedIds.add(it.user.id); onFollow(it.user.id) } },
+                    enabled = unfollowed.isNotEmpty(),
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFF2188F5))
+                ) {
+                    Text(if (unfollowed.isEmpty()) "You're following everyone" else "Follow All", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+                if (!isHost) Text("Room host will close this room when they leave.", color = TextMuted, fontSize = 11.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExitAction(icon: String, label: String, modifier: Modifier, onClick: () -> Unit) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(
+            Modifier.size(82.dp).clip(CircleShape)
+                .background(Brush.linearGradient(listOf(Color(0xFF8046FF), Color(0xFF6236F5))))
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) { Text(icon, color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Light) }
+        Text(label, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -2576,6 +2833,273 @@ private fun RoomSettingsAndInfoSheet(
             }
 
             Spacer(modifier = Modifier.height(10.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RoomOverviewTabsSheet(
+    room: Room,
+    isHost: Boolean,
+    isRoomAdmin: Boolean,
+    participantCount: Int,
+    roomFollowers: List<Host>,
+    events: List<YugmEvent>,
+    onFollowUser: (String) -> Unit,
+    onUnfollowUser: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onFollowHost: () -> Unit,
+    onEditRoomSettings: () -> Unit,
+    onOpenTools: () -> Unit,
+    onViewListeners: () -> Unit,
+    onMinimize: () -> Unit,
+    onExit: () -> Unit,
+    onToast: (String) -> Unit
+) {
+    val context = LocalContext.current
+    var selectedTab by rememberSaveable(room.id) { mutableStateOf(0) }
+    var search by rememberSaveable(room.id) { mutableStateOf("") }
+    val followedIds = remember(roomFollowers) {
+        androidx.compose.runtime.mutableStateListOf<String>().apply { addAll(roomFollowers.filter { it.isFollowing }.map { it.id }) }
+    }
+    val filteredFollowers = roomFollowers.filter {
+        search.isBlank() || it.name.contains(search, true) || it.username.contains(search, true) || it.id.contains(search, true)
+    }
+    val white = Color.White
+    val ink = Color(0xFF171421)
+    val muted = Color(0xFF9290A0)
+    val purple = Color(0xFF7045F5)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = white,
+        contentColor = ink,
+        dragHandle = null,
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        modifier = Modifier.fillMaxHeight(0.94f)
+    ) {
+        Column(Modifier.fillMaxSize().navigationBarsPadding()) {
+            Row(Modifier.fillMaxWidth().height(58.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Filled.Close, contentDescription = "Close room details", tint = muted)
+                }
+                listOf("Profile", "Followers (${roomFollowers.size})", "Events").forEachIndexed { index, title ->
+                    Column(
+                        Modifier.weight(1f).fillMaxHeight().clickable { selectedTab = index },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(title, color = if (selectedTab == index) ink else Color(0xFF4F4D59), fontSize = 14.sp, fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Spacer(Modifier.height(7.dp))
+                        Box(Modifier.width(32.dp).height(3.dp).clip(CircleShape).background(if (selectedTab == index) purple else Color.Transparent))
+                    }
+                }
+                Spacer(Modifier.width(10.dp))
+            }
+            androidx.compose.material3.Divider(color = Color(0xFFF0EFF3))
+
+            when (selectedTab) {
+                0 -> {
+                    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Box(Modifier.size(100.dp).clip(RoundedCornerShape(20.dp)).background(Color(0xFFEDE8FF)), contentAlignment = Alignment.Center) {
+                                if (!room.coverImage.isNullOrBlank()) AsyncImage(model = room.coverImage, contentDescription = "Room cover", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                                else Icon(Icons.Filled.Mic, contentDescription = null, tint = purple, modifier = Modifier.size(38.dp))
+                            }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                Text(room.title.ifBlank { "Live room" }, color = ink, fontSize = 21.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("ID: ${room.id.takeLast(8)}", color = muted, fontSize = 13.sp)
+                                    Text("  Copy", color = purple, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, modifier = Modifier.clickable {
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        clipboard.setPrimaryClip(ClipData.newPlainText("Room ID", room.id))
+                                        onToast("Room ID copied")
+                                    })
+                                }
+                            }
+                        }
+                        RoomInfoLine("Level", room.host?.let { "LV.${it.level}" } ?: "—")
+                        RoomInfoLine("Tag", room.category.ifBlank { "Chat" })
+                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFFF7F6FA)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                            Text("Announcement", color = muted, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            Text(room.description.ifBlank { "Welcome to ${room.title.ifBlank { "this room" }}. Join the conversation and meet everyone." }, color = ink, fontSize = 14.sp, lineHeight = 20.sp)
+                        }
+                        RoomInfoLine("Followers", "${room.host?.followers ?: roomFollowers.size}")
+                        RoomInfoLine("People here", "$participantCount")
+                        room.host?.city?.takeIf(String::isNotBlank)?.let { RoomInfoLine("Location", it) }
+                        room.host?.let { host ->
+                            androidx.compose.material3.Button(onClick = onFollowHost, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp), colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = if (host.isFollowing) Color(0xFFF0EDF7) else purple)) {
+                                Text(if (host.isFollowing) "Following ${host.name}" else "Follow ${host.name}", color = if (host.isFollowing) ink else white, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        if (isHost || isRoomAdmin) {
+                            androidx.compose.material3.Button(onClick = onEditRoomSettings, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFFF0EDF7))) {
+                                Text("Room settings", color = purple, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        androidx.compose.material3.OutlinedButton(onClick = onOpenTools, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(15.dp)) { Text("Tools") }
+                        androidx.compose.material3.OutlinedButton(onClick = onViewListeners, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(15.dp)) { Text("People · $participantCount") }
+                        androidx.compose.material3.Button(onClick = onMinimize, modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(15.dp), colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = purple)) { Text("Minimize") }
+                    }
+                }
+                1 -> {
+                    Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
+                        OutlinedTextField(value = search, onValueChange = { search = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Search by username or ID", color = Color(0xFFADB7C4)) }, shape = CircleShape, colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Color(0xFFF4F5F7), focusedContainerColor = Color(0xFFF4F5F7), unfocusedBorderColor = Color.Transparent, focusedBorderColor = purple))
+                        if (filteredFollowers.isEmpty()) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(if (roomFollowers.isEmpty()) "No followers yet" else "No matching followers", color = muted) }
+                        } else LazyColumn(Modifier.weight(1f).padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            items(filteredFollowers, key = { it.id }) { follower ->
+                                Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Avatar(follower.name.take(1), 52, follower.avatar, follower.activeCosmetics)
+                                    Column(Modifier.weight(1f)) {
+                                        Text(follower.name.ifBlank { "Yugm user" }, color = ink, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text("@${follower.username}", color = muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    val following = follower.isFollowing || follower.id in followedIds
+                                    androidx.compose.material3.Button(onClick = {
+                                        if (following) { followedIds.remove(follower.id); onUnfollowUser(follower.id) }
+                                        else { followedIds.add(follower.id); onFollowUser(follower.id) }
+                                    }, shape = CircleShape, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp), colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = if (following) Color(0xFFF0EDF7) else purple)) {
+                                        Text(if (following) "Following" else "Follow", color = if (following) muted else white, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                                androidx.compose.material3.Divider(color = Color(0xFFF1F0F4), modifier = Modifier.padding(start = 62.dp))
+                            }
+                        }
+                    }
+                    androidx.compose.material3.Button(onClick = { roomFollowers.filterNot { it.isFollowing || it.id in followedIds }.forEach { followedIds.add(it.id); onFollowUser(it.id) } }, enabled = roomFollowers.any { !it.isFollowing && it.id !in followedIds }, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp).height(54.dp), shape = RoundedCornerShape(18.dp), colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = purple)) { Text("Follow All", fontWeight = FontWeight.Bold, fontSize = 16.sp) }
+                }
+                else -> {
+                    if (events.isEmpty()) {
+                        Column(Modifier.weight(1f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                            Text("No room events yet", color = ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Upcoming and past events for this room will show here.", color = muted, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
+                        }
+                    } else LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        items(events, key = { it.id }) { event ->
+                            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Color(0xFFF4F3F7))) {
+                                if (!event.coverImage.isNullOrBlank()) AsyncImage(model = event.coverImage, contentDescription = event.title, modifier = Modifier.fillMaxWidth().height(190.dp), contentScale = ContentScale.Crop)
+                                Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    Text(event.type.ifBlank { "Room event" }, color = purple, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text(event.title, color = ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                                    Text(event.description.orEmpty().ifBlank { event.eventDate.replace('T', ' ').take(16) }, color = muted, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                    Text("${event.status.lowercase().replaceFirstChar { it.uppercase() }} · ${event.participantIds.size} joined", color = muted, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RoomInfoLine(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = Color(0xFF8C8999), fontSize = 14.sp, modifier = Modifier.weight(1f))
+        Text(value, color = Color(0xFF25232C), fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun OnlineUsersSheet(
+    participants: List<RoomParticipant>,
+    currentUserId: String,
+    hostId: String,
+    onDismiss: () -> Unit,
+    onRefresh: () -> Unit,
+    onFollow: (String) -> Unit,
+    onUnfollow: (String) -> Unit
+) {
+    var query by rememberSaveable { mutableStateOf("") }
+    val followingIds = remember(participants) {
+        androidx.compose.runtime.mutableStateListOf<String>().apply {
+            addAll(participants.filter { it.user.isFollowing }.map { it.user.id })
+        }
+    }
+    val onlineUsers = participants.filter { participant ->
+        val user = participant.user
+        query.isBlank() || user.name.contains(query, true) || user.username.contains(query, true) || user.id.contains(query, true)
+    }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        contentColor = Color(0xFF171421),
+        dragHandle = null,
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        modifier = Modifier.fillMaxHeight(0.94f)
+    ) {
+        Column(Modifier.fillMaxSize().navigationBarsPadding()) {
+            Row(Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Filled.Close, contentDescription = "Close online users", tint = Color(0xFF8A8795))
+                }
+                Text("Online users · ${participants.size}", modifier = Modifier.weight(1f), color = Color(0xFF171421), fontSize = 17.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                TextButton(onClick = onRefresh) {
+                    Text("↻", color = Color(0xFF858292), fontSize = 25.sp, fontWeight = FontWeight.Medium)
+                }
+            }
+            androidx.compose.material3.Divider(color = Color(0xFFF0EFF3))
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp),
+                singleLine = true,
+                placeholder = { Text("Search people", color = Color(0xFFAEB7C3)) },
+                shape = CircleShape,
+                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                    unfocusedContainerColor = Color(0xFFF4F5F7),
+                    focusedContainerColor = Color(0xFFF4F5F7),
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedBorderColor = Color(0xFF7045F5)
+                )
+            )
+            if (onlineUsers.isEmpty()) {
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Text(if (participants.isEmpty()) "No one is in the room yet" else "No users match your search", color = Color(0xFF8C8999), fontSize = 14.sp)
+                }
+            } else LazyColumn(
+                Modifier.weight(1f).fillMaxWidth().padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                items(onlineUsers, key = { it.user.id.ifBlank { it.id } }) { participant ->
+                    val user = participant.user
+                    val isFollowing = user.isFollowing || user.id in followingIds
+                    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Avatar(user.name.firstOrNull()?.toString() ?: "?", 54, user.avatar, user.activeCosmetics)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(user.name.ifBlank { "Yugm user" }, color = Color(0xFF171421), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                when {
+                                    user.id == hostId -> "Room host · Lv.${user.level}"
+                                    participant.isRoomAdmin -> "Room admin · Lv.${user.level}"
+                                    participant.role == "SPEAKER" || participant.role == "MODERATOR" -> "Speaker · Lv.${user.level}"
+                                    else -> "Listener · Lv.${user.level}"
+                                },
+                                color = Color(0xFF898697), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
+                            )
+                            if (user.username.isNotBlank()) Text("@${user.username}", color = Color(0xFFAAA7B4), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        if (user.id != currentUserId && user.id.isNotBlank()) {
+                            androidx.compose.material3.Button(
+                                onClick = {
+                                    if (isFollowing) { followingIds.remove(user.id); onUnfollow(user.id) }
+                                    else { followingIds.add(user.id); onFollow(user.id) }
+                                },
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                                shape = CircleShape,
+                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = if (isFollowing) Color(0xFFF0EDF7) else Color(0xFF7045F5))
+                            ) { Text(if (isFollowing) "Following" else "Follow", color = if (isFollowing) Color(0xFF777383) else Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                        }
+                    }
+                    androidx.compose.material3.Divider(color = Color(0xFFF1F0F4), modifier = Modifier.padding(start = 66.dp))
+                }
+            }
+            Spacer(Modifier.height(10.dp))
         }
     }
 }

@@ -7,6 +7,8 @@ const pkParticipantSchema = new Schema(
     roomId: { type: Schema.Types.ObjectId, ref: "Room", required: true, index: true },
     side: { type: String, enum: ["LEFT", "RIGHT"], required: true },
     role: { type: String, enum: ["HOST", "SPEAKER", "AUDIENCE", "MODERATOR"], required: true },
+    isReady: { type: Boolean, default: false },
+    teamName: { type: String, enum: ["A", "B"] },
     joinedAt: { type: Date, default: Date.now },
     leftAt: { type: Date }
   },

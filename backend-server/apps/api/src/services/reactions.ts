@@ -1,5 +1,6 @@
 import { legacyReactionTypes } from "@yugm/shared";
 import { RoomReaction, type RoomReactionDocument } from "../models/RoomReaction.js";
+import { getVipStatus } from "./vip.js";
 
 export const legacyReactionLabels: Record<string, string> = {
   heart: "Heart",
@@ -106,13 +107,11 @@ export async function findActiveRoomReaction(id: string) {
   return RoomReaction.findOne({ _id: id.trim().toLowerCase(), isActive: true }).lean();
 }
 
-export function isActiveVip(user: { vipExpiresAt?: Date | string | null } | null | undefined) {
-  if (!user?.vipExpiresAt) return false;
-  const expires = user.vipExpiresAt instanceof Date ? user.vipExpiresAt : new Date(user.vipExpiresAt);
-  return Number.isFinite(expires.getTime()) && expires.getTime() > Date.now();
+export function isActiveVip(user: { vipExpiresAt?: Date | string | null; vipTier?: string | null; vipLevel?: number; vipExp?: number; vipFrozen?: boolean; vipFreezeStartedAt?: Date | string | null } | null | undefined) {
+  return getVipStatus(user).vipLevel >= 3;
 }
 
-export function canUseRoomReaction(reaction: { access: "EVERYONE" | "VIP_EXCLUSIVE" }, user: { vipExpiresAt?: Date | string | null } | null | undefined) {
+export function canUseRoomReaction(reaction: { access: "EVERYONE" | "VIP_EXCLUSIVE" }, user: { vipExpiresAt?: Date | string | null; vipTier?: string | null; vipLevel?: number; vipExp?: number; vipFrozen?: boolean; vipFreezeStartedAt?: Date | string | null } | null | undefined) {
   return reaction.access !== "VIP_EXCLUSIVE" || isActiveVip(user);
 }
 

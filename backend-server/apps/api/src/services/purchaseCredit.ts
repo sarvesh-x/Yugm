@@ -1,8 +1,10 @@
 import mongoose from "mongoose";
 import { Purchase } from "../models/Purchase.js";
+import { User } from "../models/User.js";
 import { creditWallet } from "./wallet.js";
 import { creditDiamonds } from "./diamonds.js";
 import { ErrorCode, HttpError } from "../utils/http.js";
+import { changeVipExp, vipExpForPurchase } from "./vip.js";
 
 export async function creditPurchase(purchaseId: string, userId: string, metadata: Record<string, unknown>) {
   const session = await mongoose.startSession();
@@ -21,6 +23,11 @@ export async function creditPurchase(purchaseId: string, userId: string, metadat
     }
 
     purchase.metadata = { ...(purchase.metadata ?? {}), ...metadata };
+    const user = await User.findById(userId).session(session);
+    if (user) {
+      changeVipExp(user, vipExpForPurchase(purchase.amountInr));
+      await user.save({ session });
+    }
     const ledgerMetadata = {
       purchaseId: purchase._id.toString(),
       packId: purchase.packId,

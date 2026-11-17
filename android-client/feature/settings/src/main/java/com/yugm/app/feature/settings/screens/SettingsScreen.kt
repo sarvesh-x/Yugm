@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -35,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,6 +55,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.yugm.app.core.api.YugmApi
 import kotlinx.coroutines.Dispatchers
@@ -104,6 +107,13 @@ fun SettingsScreen(
     var error by remember { mutableStateOf<String?>(null) }
     val viewModel: SettingsViewModel = hiltViewModel()
     val context = LocalContext.current
+    val appVersion = remember {
+        runCatching {
+            val info = context.packageManager.getPackageInfo(context.packageName, 0)
+            val code = if (android.os.Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
+            "v${info.versionName ?: "1.0"} ($code)"
+        }.getOrDefault("v1.0")
+    }
     val scope = rememberCoroutineScope()
     fun openLegalPage(path: String) {
         runCatching {
@@ -150,7 +160,19 @@ fun SettingsScreen(
         Box(Modifier.fillMaxSize().background(LocalYugmColors.current.background))
         Scaffold(
             topBar = {
-                TopAppBar(
+                if (pane == SettingsPane.About) {
+                    CenterAlignedTopAppBar(
+                        title = { Text("About", color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Bold) },
+                        navigationIcon = {
+                            TextButton(onClick = { pane = SettingsPane.Home }) {
+                                Box(Modifier.size(42.dp).clip(CircleShape).background(LocalYugmColors.current.surface), contentAlignment = Alignment.Center) {
+                                    Text("←", color = LocalYugmColors.current.textPrimary, fontSize = 24.sp)
+                                }
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = LocalYugmColors.current.background)
+                    )
+                } else TopAppBar(
                     title = { Text(paneTitle(pane), color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Black) },
                     navigationIcon = {
                         TextButton(onClick = { if (pane == SettingsPane.Home) onBack() else pane = SettingsPane.Home }) {
@@ -225,7 +247,13 @@ fun SettingsScreen(
                         }
                     }
                 )
-                SettingsPane.About, SettingsPane.Terms, SettingsPane.Privacy, SettingsPane.Guidelines -> DocumentPane(Modifier.padding(innerPadding), pane)
+                SettingsPane.About -> AboutPane(
+                    modifier = Modifier.padding(innerPadding),
+                    version = appVersion,
+                    onPrivacy = { openLegalPage("privacy") },
+                    onTerms = { openLegalPage("terms") }
+                )
+                SettingsPane.Terms, SettingsPane.Privacy, SettingsPane.Guidelines -> DocumentPane(Modifier.padding(innerPadding), pane)
             }
         }
     }
@@ -543,6 +571,83 @@ private fun DocumentPane(modifier: Modifier, pane: SettingsPane) {
             Text(paneTitle(pane), color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Black, fontSize = 24.sp)
             Text(docs[pane].orEmpty(), color = LocalYugmColors.current.textSecondary, fontWeight = FontWeight.Bold, lineHeight = 24.sp, modifier = Modifier.padding(top = 12.dp))
         }
+    }
+}
+
+@Composable
+private fun AboutPane(
+    modifier: Modifier,
+    version: String,
+    onPrivacy: () -> Unit,
+    onTerms: () -> Unit
+) {
+    val context = LocalContext.current
+    val colors = LocalYugmColors.current
+    val appIcon = remember {
+        runCatching { context.packageManager.getApplicationIcon(context.packageName) }.getOrNull()
+    }
+    Box(modifier.fillMaxSize().background(colors.background)) {
+        Box(
+            Modifier.align(Alignment.TopEnd).size(210.dp)
+                .background(Brush.radialGradient(listOf(Color(0xFFBCEAFF).copy(alpha = 0.16f), Color.Transparent)))
+        )
+        Box(
+            Modifier.align(Alignment.BottomStart).size(230.dp)
+                .background(Brush.radialGradient(listOf(Color(0xFFC6B0FF).copy(alpha = 0.18f), Color.Transparent)))
+        )
+        Column(
+            Modifier.fillMaxSize().padding(horizontal = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Column(
+                Modifier.weight(1f).fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Box(
+                    Modifier.size(104.dp).clip(RoundedCornerShape(28.dp))
+                        .background(Brush.linearGradient(listOf(Color(0xFF9E48F5), Color(0xFF5D38D8))))
+                        .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(28.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (appIcon != null) AsyncImage(model = appIcon, contentDescription = "Yugm app icon", modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(28.dp)))
+                    else Text("Y", color = Color.White, fontSize = 56.sp, fontWeight = FontWeight.Black)
+                }
+                Text("Yugm", color = colors.textPrimary, fontSize = 38.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(top = 18.dp))
+                Text("Current version $version", color = colors.textSecondary, fontSize = 14.sp, modifier = Modifier.padding(top = 7.dp))
+            }
+
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(colors.surface)) {
+                AboutLinkRow("Privacy policy", "♢", colors.textPrimary, colors.secondary, onPrivacy)
+                androidx.compose.material3.HorizontalDivider(color = colors.border, modifier = Modifier.padding(start = 64.dp))
+                AboutLinkRow("Terms of use", "▤", colors.textPrimary, colors.secondary, onTerms)
+            }
+            Text(
+                "Copyright © 2026 Yugm. All rights reserved.",
+                color = colors.textSecondary,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(top = 24.dp, bottom = 24.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+private fun AboutLinkRow(
+    label: String,
+    icon: String,
+    textColor: Color,
+    iconColor: Color,
+    onClick: () -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth().height(70.dp).clickable(role = Role.Button, onClickLabel = label, onClick = onClick).padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(icon, color = iconColor, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 10.dp).width(23.dp))
+        Text(label, color = textColor, fontSize = 17.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+        Text("›", color = LocalYugmColors.current.textSecondary, fontSize = 27.sp, modifier = Modifier.padding(horizontal = 10.dp))
     }
 }
 

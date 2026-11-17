@@ -5,6 +5,7 @@ import com.yugm.app.core.model.Conversation
 import com.yugm.app.core.model.DailyCheckInResult
 import com.yugm.app.core.model.DirectMessage
 import com.yugm.app.core.model.Host
+import com.yugm.app.core.model.VipPrivacySettings
 import com.yugm.app.core.model.LevelStatus
 import com.yugm.app.core.model.NotificationItem
 import com.yugm.app.core.model.NotificationPreferences
@@ -20,6 +21,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 object UserApi {
+    suspend fun getFriends(token: String): List<Host> {
+        val data = YugmHttpClient.get("/users/me/friends", token).getJSONObject("data")
+        return data.optJSONArray("users")?.toHosts() ?: emptyList()
+    }
     suspend fun updateProfile(
         token: String,
         name: String,
@@ -103,6 +108,24 @@ object UserApi {
         val data = YugmHttpClient.get("/users/$userId/following", auth = token).getJSONObject("data")
         return data.getJSONArray("following").toHosts()
     }
+
+    suspend fun getUserFriends(userId: String, token: String): List<Host> {
+        val data = YugmHttpClient.get("/users/$userId/friends", token).getJSONObject("data")
+        return data.getJSONArray("users").toHosts()
+    }
+
+    suspend fun getProfileVisitors(userId: String, token: String): List<Host> {
+        val data = YugmHttpClient.get("/users/$userId/visitors", token).getJSONObject("data")
+        return data.getJSONArray("users").toHosts()
+    }
+
+    suspend fun vipPrivacy(token: String): VipPrivacySettings = YugmHttpClient.get("/users/me/vip-privacy", token)
+        .getJSONObject("data").toVipPrivacySettings()
+
+    suspend fun updateVipPrivacy(token: String, settings: VipPrivacySettings): VipPrivacySettings = YugmHttpClient.patch(
+        "/users/me/vip-privacy", token,
+        JSONObject().put("mysteriousVisitors", settings.mysteriousVisitors).put("chatPrivacy", settings.chatPrivacy)
+    ).getJSONObject("data").toVipPrivacySettings()
 
     suspend fun followUser(token: String, userId: String) {
         YugmHttpClient.post("/users/$userId/follow", token, JSONObject())

@@ -7,6 +7,7 @@ import { requireWalletNotFrozen } from "../middleware/requireSafety.js";
 import { giftLimiter } from "../middleware/rateLimit.js";
 import { validateBody } from "../middleware/validate.js";
 import { Gift } from "../models/Gift.js";
+import { GiftInventory } from "../models/GiftInventory.js";
 import { GiftTransaction } from "../models/GiftTransaction.js";
 import { Purchase } from "../models/Purchase.js";
 import { Room } from "../models/Room.js";
@@ -22,7 +23,7 @@ import { assertRazorpayConfigured, consumeGooglePlayProduct, createRazorpayOrder
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId } from "../utils/http.js";
 import { env } from "../config/env.js";
 import { getCachedJson, setCachedJson } from "../services/redis.js";
-import { addVipDays, findVipPlan, getVipStatus } from "../services/vip.js";
+import { addVipDays, findVipPlan, getVipStatus, VIP_CYCLE_DAYS, VIP_LEVEL_REQUIREMENTS } from "../services/vip.js";
 import { activeCosmeticKey, ensureDefaultCosmetics, findProfileCosmetic, listPublicCosmetics, toPublicCosmetic } from "../services/cosmetics.js";
 import { getLevelStatus, grantXp } from "../services/levels.js";
 import { grantRelationshipXp } from "../services/relationships.js";
@@ -295,7 +296,7 @@ walletRouter.post("/wallet/cosmetics/transfer", requireWalletNotFrozen, validate
 }));
 
 walletRouter.get("/wallet/vip/plans", (req: AuthRequest, res) => {
-  sendOk(res, { plans: vipPlans, vip: getVipStatus(req.user), balance: req.user?.walletBalance ?? 0 });
+  sendOk(res, { plans: vipPlans, levels: VIP_LEVEL_REQUIREMENTS.slice(1).map((exp, index) => ({ level: index + 1, requiredExp: exp })), cycleDays: VIP_CYCLE_DAYS, vip: getVipStatus(req.user), balance: req.user?.walletBalance ?? 0 });
 });
 
 walletRouter.post("/wallet/vip/activate", requireWalletNotFrozen, validateBody(purchaseVipSchema), asyncHandler(async (req: AuthRequest, res) => {
@@ -310,7 +311,8 @@ walletRouter.post("/wallet/vip/activate", requireWalletNotFrozen, validateBody(p
 
     const [purchaseDebit] = await debitWallet(user.id, plan.coinPrice, "VIP_PURCHASE", { planId: plan.id, durationDays: plan.durationDays }, session);
     const expiresAt = addVipDays(user, plan.durationDays);
-    user.vipTier = "VIP";
+    user.vipLevel = Math.max(user.vipLevel ?? 0, 1);
+    user.vipTier = `VIP${user.vipLevel}`;
     user.vipStartedAt = user.vipStartedAt ?? new Date();
     user.vipExpiresAt = expiresAt;
     await user.save({ session });
@@ -477,6 +479,7 @@ walletRouter.post("/rooms/:id/send-gift", giftLimiter, requireWalletNotFrozen, v
   const room = await Room.findById(req.params.id).lean();
   const gift = await Gift.findOne({ _id: req.body.giftId, isActive: true }).lean();
   if (!room || !gift) throw new HttpError(404, "Room or gift not found", ErrorCode.NOT_FOUND);
+  if (gift.category?.toLowerCase() === "vip" && (getVipStatus(req.user).vipLevel ?? 0) < 1) throw new HttpError(403, "VIP gifts unlock at VIP 1", ErrorCode.FORBIDDEN);
   if (room.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
   if (req.body.receiverId === req.user!.id) throw new HttpError(400, "Cannot send gifts to yourself", ErrorCode.VALIDATION);
 
@@ -491,6 +494,8 @@ walletRouter.post("/rooms/:id/send-gift", giftLimiter, requireWalletNotFrozen, v
   await assertUsersCanInteract(req.user!.id, req.body.receiverId, "Cannot send gifts to this user");
 
   const currency = req.body.currency ?? "COINS";
+  const inventoryItemId = req.body.inventoryItemId as string | undefined;
+  if (inventoryItemId && currency !== "COINS") throw new HttpError(400, "Inventory gifts use the owned gift item", ErrorCode.VALIDATION);
   if (currency === "DIAMONDS") assertDiamondsEnabled();
   const intent = { senderId: req.user!.id, roomId: room._id.toString(), giftId: gift._id.toString(), receiverId: req.body.receiverId, currency };
   const idempotencyKey = req.body.idempotencyKey as string | undefined;
@@ -514,7 +519,7 @@ walletRouter.post("/rooms/:id/send-gift", giftLimiter, requireWalletNotFrozen, v
   try {
     await session.withTransaction(async () => {
     // Enforce limited-edition stock atomically for sent gifts.
-    if (gift.limitedEdition?.active) {
+    if (!inventoryItemId && gift.limitedEdition?.active) {
       const stockUpdate = await Gift.updateOne(
         { _id: gift._id, "limitedEdition.remaining": { $gt: 0 } },
         { $inc: { "limitedEdition.remaining": -1 } },
@@ -523,13 +528,22 @@ walletRouter.post("/rooms/:id/send-gift", giftLimiter, requireWalletNotFrozen, v
       if (stockUpdate.modifiedCount !== 1) throw new HttpError(409, "This limited-edition gift is sold out", ErrorCode.CONFLICT);
     }
 
-    const giftMetadata = { roomId: room._id.toString(), giftId: gift._id.toString(), currency, giftTransactionId: transferId.toHexString() };
+    const giftMetadata = { roomId: room._id.toString(), giftId: gift._id.toString(), currency, giftTransactionId: transferId.toHexString(), ...(inventoryItemId ? { source: "INVENTORY", inventoryItemId } : {}) };
+    if (inventoryItemId) {
+      const consumed = await GiftInventory.updateOne(
+        { _id: inventoryItemId, userId: req.user!.id, giftId: gift._id, quantity: { $gt: 0 } },
+        { $inc: { quantity: -1 } },
+        { session }
+      );
+      if (consumed.modifiedCount !== 1) throw new HttpError(409, "That gift is no longer in your backpack", ErrorCode.CONFLICT);
+      await GiftInventory.deleteOne({ _id: inventoryItemId, userId: req.user!.id, quantity: { $lte: 0 } }, { session });
+    }
     if (currency === "DIAMONDS") {
       await debitDiamonds(req.user!.id, giftAmount, "GIFT_SENT", { ...giftMetadata, idempotencyKey: ledgerKeys.debit }, { session, idempotencyKey: ledgerKeys.debit });
       const receiverCredit = creatorShare(giftAmount);
-      await creditDiamonds(req.body.receiverId, receiverCredit, "GIFT_RECEIVED", { ...giftMetadata, idempotencyKey: ledgerKeys.credit, senderId: req.user!.id }, { session, idempotencyKey: ledgerKeys.credit });
+      await creditDiamonds(req.body.receiverId, receiverCredit, "GIFT_RECEIVED", { ...giftMetadata, giftValue: giftAmount, idempotencyKey: ledgerKeys.credit, senderId: req.user!.id }, { session, idempotencyKey: ledgerKeys.credit });
     } else {
-      await debitWallet(req.user!.id, giftAmount, "GIFT_SENT", { ...giftMetadata, idempotencyKey: ledgerKeys.debit }, session);
+      if (!inventoryItemId) await debitWallet(req.user!.id, giftAmount, "GIFT_SENT", { ...giftMetadata, idempotencyKey: ledgerKeys.debit }, session);
       const receiverCredit = creatorShare(giftAmount);
       await creditWallet(req.body.receiverId, receiverCredit, "GIFT_RECEIVED", { ...giftMetadata, idempotencyKey: ledgerKeys.credit, senderId: req.user!.id, platformFee: platformFee(giftAmount) }, session);
     }
@@ -540,7 +554,7 @@ walletRouter.post("/rooms/:id/send-gift", giftLimiter, requireWalletNotFrozen, v
       senderId: req.user!.id,
       receiverId: req.body.receiverId,
       giftId: gift._id,
-      coinAmount: currency === "COINS" ? giftAmount : 0,
+      coinAmount: currency === "COINS" && !inventoryItemId ? giftAmount : 0,
       diamondAmount: currency === "DIAMONDS" ? giftAmount : 0,
       currency,
       totalValue: giftAmount,
@@ -607,6 +621,7 @@ walletRouter.post("/direct-send-gift", requireWalletNotFrozen, validateBody(send
   const gift = await Gift.findOne({ _id: giftId, isActive: true }).lean();
   const receiver = await User.findById(receiverId).lean();
   if (!gift || !receiver) throw new HttpError(404, "Gift or receiver not found", ErrorCode.NOT_FOUND);
+  if (gift.category?.toLowerCase() === "vip" && (getVipStatus(req.user).vipLevel ?? 0) < 1) throw new HttpError(403, "VIP gifts unlock at VIP 1", ErrorCode.FORBIDDEN);
   const giftAmount = currency === "DIAMONDS" ? (gift.diamondPrice || 0) : gift.coinPrice;
   if (!giftAmount || giftAmount <= 0) throw new HttpError(400, `This gift cannot be purchased with ${currency.toLowerCase()}`, ErrorCode.VALIDATION);
   if (currency === "DIAMONDS") assertDiamondsEnabled();
@@ -620,7 +635,7 @@ walletRouter.post("/direct-send-gift", requireWalletNotFrozen, validateBody(send
     if (currency === "DIAMONDS") {
       await debitDiamonds(req.user!.id, giftAmount, "GIFT_SENT_DM", { giftId: gift._id.toString() }, { session });
       const receiverCredit = creatorShare(giftAmount);
-      await creditDiamonds(receiverId, receiverCredit, "GIFT_RECEIVED", { giftId: gift._id.toString(), senderId: req.user!.id }, { session });
+      await creditDiamonds(receiverId, receiverCredit, "GIFT_RECEIVED", { giftId: gift._id.toString(), giftValue: giftAmount, senderId: req.user!.id }, { session });
     } else {
       await debitWallet(req.user!.id, giftAmount, "GIFT_SENT_DM", { giftId: gift._id.toString() }, session);
       const receiverCredit = creatorShare(giftAmount);

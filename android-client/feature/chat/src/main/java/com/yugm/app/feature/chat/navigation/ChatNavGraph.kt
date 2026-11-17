@@ -106,6 +106,7 @@ fun NavGraphBuilder.chatNavGraph(
             onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) },
             isCurrentUserVip = chatViewModel.isCurrentUserVip,
             onOpenVip = { navController.navigate(Screen.Vip.route) },
+            onOpenRoom = { roomId -> navController.navigate(Screen.RoomLobby.createRoute(roomId)) },
             onAudioCall = {
                 chatViewModel.startPrivateCall(RoomType.Voice, onSuccess = { room ->
                     navController.navigate(Screen.VoiceRoom.createRoute(room.id))

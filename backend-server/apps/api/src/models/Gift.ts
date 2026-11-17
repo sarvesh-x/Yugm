@@ -5,6 +5,7 @@ const giftSchema = new Schema(
     name: { type: String, required: true, unique: true },
     icon: { type: String, required: true },
     coinPrice: { type: Number, required: true, min: 1 },
+    pkPoints: { type: Number, min: 0, default: 0 },
     diamondPrice: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
     effect3d: { type: String, default: "" },
@@ -12,7 +13,7 @@ const giftSchema = new Schema(
   animationKey: { type: String, default: "" },
   expiresAt: { type: Date, default: null },
     comboMultiplier: { type: Number, default: 1 },
-    category: { type: String, default: "normal", enum: ["normal", "premium", "limited", "seasonal", "mythology", "space", "dragon", "luxury"] },
+    category: { type: String, default: "normal", enum: ["normal", "premium", "limited", "seasonal", "mythology", "space", "dragon", "luxury", "vip"] },
     theme: { type: String, default: "" },
     rarity: { type: String, default: "common", enum: ["common", "rare", "epic", "legendary", "mythic"] },
     limitedEdition: {

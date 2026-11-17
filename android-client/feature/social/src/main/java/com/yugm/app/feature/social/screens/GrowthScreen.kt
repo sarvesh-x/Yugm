@@ -4,6 +4,7 @@ import com.yugm.app.core.api.SyncTopic
 import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -66,6 +67,7 @@ fun GrowthScreen(
     val viewModel: GrowthViewModel = hiltViewModel()
     var checkInResult by remember { mutableStateOf<DailyCheckInResult?>(null) }
     var streakCount by rememberSaveable { mutableStateOf(0) }
+    var selectedLevelTrack by rememberSaveable { mutableStateOf("Active Level") }
 
     val home = viewModel.home
     val creator = viewModel.creator
@@ -129,27 +131,60 @@ fun GrowthScreen(
 
                 item {
                     val level = levelOverview?.level ?: payload.level
-                    val progress = if (level.requiredXp > 0) (level.progressXp.toFloat() / level.requiredXp).coerceIn(0f, 1f) else 1f
+                    val activeProgress = if (level.requiredXp > 0) (level.progressXp.toFloat() / level.requiredXp).coerceIn(0f, 1f) else 1f
+                    val track = when (selectedLevelTrack) {
+                        "Wealth Level" -> levelOverview?.wealthLevel
+                        "Charm Level" -> levelOverview?.charmLevel
+                        else -> null
+                    }
+                    val levelNumber = track?.level ?: level.level
+                    val exp = track?.exp ?: level.xp
+                    val nextExp = track?.nextLevelExp ?: (level.currentLevelXp + level.requiredXp)
+                    val nextLevel = track?.nextLevel ?: level.nextLevel
+                    val progress = track?.progress ?: activeProgress
+                    val trackTint = when (selectedLevelTrack) {
+                        "Wealth Level" -> androidx.compose.ui.graphics.Color(0xFFFF8746)
+                        "Charm Level" -> androidx.compose.ui.graphics.Color(0xFFE443D9)
+                        else -> colors.accent
+                    }
                     GlassCard(Modifier.fillMaxWidth()) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Column {
-                                Text("Level ${level.level} · ${level.title}", color = colors.accent, fontWeight = FontWeight.Black, fontSize = 18.sp)
-                                Text(if (level.nextLevel != null) "${level.requiredXp - level.progressXp} XP to Level ${level.nextLevel}" else "Max level reached", color = colors.textSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 3.dp))
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(trackTint.copy(alpha = .11f)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            listOf("Active Level", "Wealth Level", "Charm Level").forEach { label ->
+                                Box(Modifier.weight(1f).clip(RoundedCornerShape(18.dp)).background(if (selectedLevelTrack == label) trackTint else androidx.compose.ui.graphics.Color.Transparent)
+                                    .clickable { selectedLevelTrack = label }.padding(horizontal = 4.dp, vertical = 11.dp), contentAlignment = Alignment.Center) {
+                                    Text(label, color = if (selectedLevelTrack == label) androidx.compose.ui.graphics.Color.White else colors.textSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                }
                             }
-                            val reward = levelOverview?.milestones?.firstOrNull { it.level == level.nextLevel }?.coinReward ?: 0
-                            if (reward > 0) Text("+$reward coins", color = colors.accent, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                        Row(Modifier.fillMaxWidth().padding(top = 18.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("$selectedLevelTrack  ·  Level $levelNumber", color = trackTint, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                                Text("${exp.formatCompactNumber()} / ${nextExp.formatCompactNumber()} EXP", color = colors.textSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                            }
+                            Text("${(progress * 100).toInt()}%", color = trackTint, fontWeight = FontWeight.Black, fontSize = 18.sp)
                         }
                         LinearProgressIndicator(
                             progress = { progress },
-                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp).height(7.dp),
-                            color = colors.accent,
+                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp).height(8.dp),
+                            color = trackTint,
                             trackColor = colors.textSecondary.copy(alpha = 0.24f)
                         )
-                        Text("${level.progressXp} / ${level.requiredXp} XP", color = colors.textSecondary, fontSize = 11.sp, modifier = Modifier.padding(top = 5.dp))
-                        Text("${level.xp} total XP", color = colors.textSecondary, fontSize = 10.sp, modifier = Modifier.padding(top = 2.dp))
+                        Text(nextLevel?.let { "Next: Level $it" } ?: "Top level reached", color = colors.textSecondary, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
+                        Spacer(Modifier.height(14.dp))
+                        Text("Ways to level up", color = colors.textPrimary, fontWeight = FontWeight.Black, fontSize = 15.sp)
+                        Text(when (selectedLevelTrack) {
+                            "Wealth Level" -> "Spend diamonds in AChat. Each diamond spent earns 1 Wealth EXP."
+                            "Charm Level" -> "Receive gifts from other users. Gift value earns Charm EXP."
+                            else -> "Complete activities like joining rooms, chatting, missions, and daily check-ins."
+                        }, color = colors.textSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
+                        if (selectedLevelTrack == "Active Level") {
+                            val reward = levelOverview?.milestones?.firstOrNull { it.level == level.nextLevel }?.coinReward ?: 0
+                            if (reward > 0) Text("Next level reward: +$reward coins", color = trackTint, fontWeight = FontWeight.Bold, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                        }
                     }
                 }
                 levelOverview?.let { overview ->
+                    if (selectedLevelTrack == "Active Level") {
                     if (overview.milestones.isNotEmpty()) item {
                         Column {
                             SectionTitle("Level roadmap")
@@ -177,8 +212,10 @@ fun GrowthScreen(
                             }
                         }
                     }
+                    }
                 }
                 levelOverview?.let { overview ->
+                    if (selectedLevelTrack == "Active Level") {
                     val earningEvents = overview.xpEvents.sortedByDescending { it.cap != null }
                     if (earningEvents.isNotEmpty()) {
                         item {
@@ -231,6 +268,7 @@ fun GrowthScreen(
                                 }
                             }
                         }
+                    }
                     }
                 }
                 battlePass?.let { passResponse ->
@@ -425,6 +463,12 @@ fun GrowthScreen(
             }
         }
     }
+}
+
+private fun Int.formatCompactNumber(): String = when {
+    this >= 1_000_000 -> "${this / 1_000_000}.${(this % 1_000_000) / 100_000}M"
+    this >= 10_000 -> "${this / 1_000}K"
+    else -> toString()
 }
 
 @Composable

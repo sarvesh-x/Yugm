@@ -1,5 +1,14 @@
 package com.yugm.app.core.model
 
+data class RoomSessionSummary(
+    val durationMinutes: Int = 0,
+    val joined: Int = 0,
+    val messages: Int = 0,
+    val gifts: Int = 0,
+    val newFans: Int = 0,
+    val diamondGifts: Int = 0
+)
+
 data class ChatMessage(
     val author: String,
     val text: String,
@@ -90,6 +99,7 @@ data class NotificationItem(
     val actorId: String = "",
     val partnerId: String = "",
     val roomId: String = "",
+    val inviteId: String = "",
     val clanId: String = "",
     val achievementId: String = "",
     val actionType: String = "",

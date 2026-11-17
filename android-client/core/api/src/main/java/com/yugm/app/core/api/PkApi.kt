@@ -7,6 +7,7 @@ import com.yugm.app.core.model.PkInvite
 import com.yugm.app.core.model.PkLeaderboardEntry
 import com.yugm.app.core.model.PkMediaSession
 import com.yugm.app.core.model.PkMode
+import com.yugm.app.core.model.PkFormat
 import com.yugm.app.core.model.PkOpponent
 import com.yugm.app.core.model.PkSideType
 import com.yugm.app.core.model.PkStats
@@ -14,6 +15,32 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 object PkApi {
+    suspend fun startRoomPk(token: String, roomId: String, leftPlayerIds: List<String>, rightPlayerIds: List<String>, format: PkFormat, mode: PkMode, durationSeconds: Int, selectedGiftId: String?): PkBattle {
+        val body = JSONObject()
+            .put("roomId", roomId)
+            .put("leftPlayerId", leftPlayerIds.first())
+            .put("rightPlayerId", rightPlayerIds.first())
+            .put("leftPlayerIds", JSONArray(leftPlayerIds))
+            .put("rightPlayerIds", JSONArray(rightPlayerIds))
+            .put("format", format.name)
+            .put("mode", mode.name)
+            .put("durationSeconds", durationSeconds)
+        if (!selectedGiftId.isNullOrBlank()) body.put("selectedGiftId", selectedGiftId)
+        return YugmHttpClient.post("/pk/room-start", token, body).getJSONObject("data").getJSONObject("battle").toPkBattle()
+    }
+
+    suspend fun votePk(token: String, battleId: String, side: PkSideType): PkBattle =
+        YugmHttpClient.post("/pk/$battleId/vote", token, JSONObject().put("side", side.name))
+            .getJSONObject("data").getJSONObject("battle").toPkBattle()
+
+    suspend fun readyPk(token: String, battleId: String): PkBattle =
+        YugmHttpClient.post("/pk/$battleId/ready", token, JSONObject())
+            .getJSONObject("data").getJSONObject("battle").toPkBattle()
+
+    suspend fun closePk(token: String, battleId: String): PkBattle =
+        YugmHttpClient.post("/pk/$battleId/close", token, JSONObject())
+            .getJSONObject("data").getJSONObject("battle").toPkBattle()
+
     suspend fun activePk(token: String, roomId: String): PkBattle? {
         val data = YugmHttpClient.get("/pk/active/$roomId", token).getJSONObject("data")
         return data.optJSONObject("battle")?.toPkBattle()
@@ -109,13 +136,14 @@ object PkApi {
         return Pair(battle ?: PkBattle(), invite)
     }
 
-    suspend fun sendPkGift(token: String, battleId: String, giftId: String, side: PkSideType): PkBattle {
+    suspend fun sendPkGift(token: String, battleId: String, giftId: String, side: PkSideType, quantity: Int = 1): PkBattle {
         return YugmHttpClient.post(
             "/pk/$battleId/send-gift",
             token,
             JSONObject()
                 .put("giftId", giftId)
                 .put("side", side.name)
+                .put("quantity", quantity.coerceIn(1, 99))
                 .put("idempotencyKey", java.util.UUID.randomUUID().toString())
         ).getJSONObject("data").getJSONObject("battle").toPkBattle()
     }

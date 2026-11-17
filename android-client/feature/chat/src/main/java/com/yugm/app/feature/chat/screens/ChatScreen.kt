@@ -205,7 +205,8 @@ fun ChatScreen(
     reactionCatalogError: String? = null,
     onReloadReactions: () -> Unit = {},
     isCurrentUserVip: Boolean = false,
-    onOpenVip: () -> Unit = {}
+    onOpenVip: () -> Unit = {},
+    onOpenRoom: (String) -> Unit = {}
 ) {
     PrefetchReactionAssets(reactionCatalog.map { it.assetUrl })
     val reactionById = remember(reactionCatalog) { reactionCatalog.associateBy { it.id.lowercase() } }
@@ -421,7 +422,7 @@ fun ChatScreen(
         }
         val isInitial = !didInitialScroll
         val appended = visibleMessages.size > lastMessageCount
-        val nearBottom = !listState.canScrollForward || listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index?.let { it >= (listState.layoutInfo.totalItemsCount - 3).coerceAtLeast(0) } == true
+        val nearBottom = isNearBottom(listState)
         if (isInitial || (appended && (nearBottom || forceScrollOnAppend))) {
             val target = (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
             if (target >= 0) {
@@ -436,7 +437,7 @@ fun ChatScreen(
     }
     LaunchedEffect(isPartnerTyping) {
         if (!isPartnerTyping || searchQuery.isNotBlank()) return@LaunchedEffect
-        val nearBottom = !listState.canScrollForward || listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index?.let { it >= (listState.layoutInfo.totalItemsCount - 3).coerceAtLeast(0) } == true
+        val nearBottom = isNearBottom(listState)
         if (nearBottom) {
             val target = (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
             if (target >= 0) listState.animateScrollToItem(target)
@@ -1300,6 +1301,7 @@ fun ChatScreen(
                                                 }
                                             },
                                             onOpenImage = { url -> imageViewerUrl = url },
+                                            onOpenRoom = onOpenRoom,
                                             onToggleVoice = { toggleVoicePlayback(message) },
                                             onSeekVoice = { pos -> seekVoicePlayback(message.id, pos) },
                                             onAudioCall = gatedAudioCall,
@@ -2156,6 +2158,7 @@ private fun MessageBubble(
     onReact: (androidx.compose.ui.geometry.Rect) -> Unit,
     onLongPress: (androidx.compose.ui.geometry.Rect) -> Unit,
     onOpenImage: (String) -> Unit,
+    onOpenRoom: (String) -> Unit = {},
     onToggleVoice: () -> Unit,
     onSeekVoice: (Int) -> Unit,
     onAudioCall: () -> Unit = {},
@@ -2373,7 +2376,15 @@ private fun MessageBubble(
                         }
                         Spacer(Modifier.height(4.dp))
                     }
-                    if (message.message.isNotBlank()) {
+                    if (message.message.startsWith("ROOM_INVITE:")) {
+                        val inviteRoomId = message.message.substringAfter("ROOM_INVITE:").trim()
+                        RoomInviteMessageCard(
+                            roomId = inviteRoomId,
+                            inviterName = partner?.name ?: "A friend",
+                            onOpenRoom = onOpenRoom
+                        )
+                    }
+                    if (message.message.isNotBlank() && !message.message.startsWith("ROOM_INVITE:")) {
                         val lower = message.message.lowercase()
                         val isCallInvite = lower.contains("call started") || (lower.contains("private") && lower.contains("call"))
                         val callType = when {
@@ -2592,6 +2603,36 @@ private fun MessageBubble(
             }
         }
     }
+}
+
+@Composable
+private fun RoomInviteMessageCard(
+    roomId: String,
+    inviterName: String,
+    onOpenRoom: (String) -> Unit
+) {
+    Column(
+        Modifier.width(238.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Brush.verticalGradient(listOf(Color(0xFFFFD452), Color(0xFFF6A62B))))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp)
+    ) {
+        Text("You’re invited to chat", color = Color(0xFF281B15), fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Text("$inviterName invited you to their room", color = Color(0xFF493326), fontSize = 12.sp)
+        androidx.compose.material3.Button(
+            onClick = { if (roomId.isNotBlank()) onOpenRoom(roomId) },
+            modifier = Modifier.fillMaxWidth(),
+            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFF0798EE))
+        ) { Text("Join the room", color = Color.White) }
+    }
+}
+
+private fun isNearBottom(state: androidx.compose.foundation.lazy.LazyListState): Boolean {
+    if (!state.canScrollForward) return true
+    val lastVisibleIndex = state.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: return false
+    val lastContentIndex = (state.layoutInfo.totalItemsCount - 3).coerceAtLeast(0)
+    return lastVisibleIndex >= lastContentIndex
 }
 
 @Composable

@@ -1,7 +1,8 @@
 package com.yugm.app.core.model
 
-enum class PkStatus { INVITED, WAITING, ACTIVE, ENDED, CANCELLED, DECLINED, EXPIRED, FORCE_ENDED }
-enum class PkMode { GIFT, REACTION, MIXED }
+enum class PkStatus { INVITED, WAITING, PREPARING, READY, COUNTDOWN, ACTIVE, FINAL_CRUNCH, FINALIZING, COMPLETED, CLOSED, ABORTED, ENDED, CANCELLED, DECLINED, EXPIRED, FORCE_ENDED }
+enum class PkMode { GIFT, VOTE, REACTION, MIXED }
+enum class PkFormat { PLAYER, TEAM, ROOM, LIVESTREAM }
 enum class PkBattleType { VOICE, VIDEO }
 enum class PkSideType { LEFT, RIGHT, DRAW }
 
@@ -13,7 +14,16 @@ data class PkSide(
     val hostAvatar: String? = null,
     val score: Int = 0,
     val participantCount: Int = 0,
-    val activeCosmetics: ActiveCosmetics = ActiveCosmetics()
+    val activeCosmetics: ActiveCosmetics = ActiveCosmetics(),
+    val members: List<PkTeamMember> = emptyList()
+)
+
+data class PkTeamMember(
+    val userId: String = "",
+    val name: String = "",
+    val avatar: String? = null,
+    val isReady: Boolean = false,
+    val team: String = "A"
 )
 
 data class PkBattle(
@@ -22,13 +32,22 @@ data class PkBattle(
     val title: String = "",
     val status: PkStatus = PkStatus.INVITED,
     val mode: PkMode = PkMode.GIFT,
+    val format: PkFormat = PkFormat.ROOM,
+    val scope: String = "CROSS_ROOM",
+    val teamSize: Int = 1,
+    val selectedGiftId: String = "",
+    val myVote: PkSideType? = null,
+    val myReady: Boolean = false,
+    val stateVersion: Int = 1,
+    val countdownSecondsRemaining: Int = 0,
     val battleType: PkBattleType = PkBattleType.VOICE,
     val durationSeconds: Int = 180,
     val remainingSeconds: Int = 180,
     val left: PkSide = PkSide(),
     val right: PkSide = PkSide(),
     val leader: PkSideType? = null,
-    val winnerSide: PkSideType? = null
+    val winnerSide: PkSideType? = null,
+    val terminationReason: String = ""
 )
 
 data class PkStats(

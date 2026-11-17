@@ -123,10 +123,13 @@ fun VideoLivestreamScreen(
     balance: Int,
     diamondBalance: Int = 0,
     isHost: Boolean,
+    isRoomAdmin: Boolean = false,
     currentUserId: String,
     participants: List<RoomParticipant>,
     speakerRequests: List<SpeakerRequest>,
     inviteCandidates: List<Host>,
+    roomInviteFollowers: List<Host> = emptyList(),
+    inviteFriends: List<Host> = emptyList(),
     pkBattle: PkBattle?,
     pkInviteId: String?,
     pkOpponents: List<PkOpponent>,
@@ -150,17 +153,22 @@ fun VideoLivestreamScreen(
     onRequestSpeaker: () -> Unit,
     onApproveSpeaker: (String) -> Unit,
     onRejectSpeaker: (String) -> Unit,
-    onInviteFriend: (String) -> Unit,
+    onInviteFriend: (List<String>) -> Unit,
+    onFollowUser: (String) -> Unit = {},
+    isFollowingRoom: Boolean = false,
+    onToggleRoomFollow: () -> Unit = {},
     onReact: (String) -> Unit,
     onReportHost: (String) -> Unit,
     onLoadPkOpponents: (String) -> Unit,
     onInvitePk: (PkOpponent, PkMode, Int, String) -> Unit,
     onAutoMatchPk: (PkMode, Int, String) -> Unit,
-    onSendPkGift: (GiftItem, PkSideType) -> Unit,
+    onSendPkGift: (GiftItem, PkSideType, Int) -> Unit,
     onSendPkReaction: (String, PkSideType) -> Unit,
     onAcceptPk: (String) -> Unit,
     onRejectPk: (String) -> Unit,
     onEndPk: () -> Unit,
+    onReadyPk: () -> Unit = {},
+    onClosePk: () -> Unit = {},
     onCreatePoll: () -> Unit = {},
     onCreateCustomPoll: (String, List<String>, () -> Unit, (String) -> Unit) -> Unit = { _, _, _, _ -> },
     onVotePoll: (String, Int) -> Unit = { _, _ -> },
@@ -171,6 +179,7 @@ fun VideoLivestreamScreen(
     val ownRole = participants.firstOrNull { it.user.id == currentUserId }?.role.orEmpty()
     val isOnVoiceStage = isHost || ownRole in setOf("HOST", "SPEAKER", "MODERATOR")
     val currentParticipants by rememberUpdatedState(participants)
+    val latestRoomFollowState by rememberUpdatedState(isFollowingRoom)
     val hasPendingRequest = speakerRequests.any { it.user.id == currentUserId }
     var cameraOn by rememberSaveable(room.id) { mutableStateOf(isHost) }
     var micOn by rememberSaveable(room.id) { mutableStateOf(isHost) }
@@ -184,6 +193,7 @@ fun VideoLivestreamScreen(
     var confirmEnd by rememberSaveable(room.id) { mutableStateOf(false) }
     var showHostExit by rememberSaveable(room.id) { mutableStateOf(false) }
     var showLeavePrompt by rememberSaveable(room.id) { mutableStateOf(false) }
+    var showFollowRoomPrompt by rememberSaveable(room.id) { mutableStateOf(false) }
     var showPkSetup by rememberSaveable(room.id) { mutableStateOf(false) }
     var showPkOpponents by rememberSaveable(room.id) { mutableStateOf(false) }
     var showPollComposer by rememberSaveable(room.id) { mutableStateOf(false) }
@@ -203,6 +213,14 @@ fun VideoLivestreamScreen(
     var reactionVisualVersion by remember { mutableStateOf(0) }
     val ownCameraGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
     val ownMicGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+
+    LaunchedEffect(room.id, currentUserId, isHost) {
+        if (isHost) return@LaunchedEffect
+        delay(10_000)
+        if (!latestRoomFollowState && currentParticipants.any { it.user.id == currentUserId }) {
+            showFollowRoomPrompt = true
+        }
+    }
 
     PrefetchReactionAssets(roomReactions.map { it.assetUrl })
 
@@ -371,12 +389,14 @@ fun VideoLivestreamScreen(
                 },
                 onMore = { showHeaderInfo = true },
                 onRoomInfo = { showHeaderInfo = true },
+                isFollowingRoom = isFollowingRoom,
+                onToggleRoomFollow = onToggleRoomFollow,
                 onRankClick = { onToast("Room Ranking #1 in Live Video") },
                 onLeave = { if (isHost) showHostExit = true else showLeavePrompt = true }
             )
 
-            if (pkBattle?.status == PkStatus.ACTIVE && pkBattle.battleType.name == "VIDEO") {
-                PkBattleHeader(pkBattle, isHost = isHost, onEnd = onEndPk)
+            if (pkBattle != null && pkBattle.status in listOf(PkStatus.ACTIVE, PkStatus.FINAL_CRUNCH) && pkBattle.battleType.name == "VIDEO") {
+                PkBattleHeader(pkBattle, isHost = isHost || isRoomAdmin, onEnd = onEndPk)
                 PkBattleScoreBar(pkBattle)
                 Row(Modifier.fillMaxWidth().height(180.dp).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     hostFeed?.let { HostVideoStage(it, Modifier.weight(1f).fillMaxSize(), mirror = isHost) }
@@ -388,10 +408,12 @@ fun VideoLivestreamScreen(
                 }
                 PkLiveEffectBurst(pkLiveEffect)
                 PkTeamSelector(pkBattle, pkGiftSide) { pkGiftSide = it }
-                PkGiftPanel(gifts, balance, pkGiftSide, { pkGiftSide = it }) { gift, side -> onSendPkGift(gift, side) }
+                PkGiftPanel(gifts, balance, pkGiftSide, { pkGiftSide = it }) { gift, side -> onSendPkGift(gift, side, 1) }
                 PkReactionPanel(onSendPkReaction, pkGiftSide)
                 PkLeaderboard(pkLeaderboard)
-            } else if (pkBattle != null && pkBattle.status == PkStatus.INVITED && isHost && pkBattle.right.roomId == room.id && !pkInviteId.isNullOrBlank()) {
+            } else if (pkBattle != null && pkBattle.status in listOf(PkStatus.PREPARING, PkStatus.READY, PkStatus.COUNTDOWN)) {
+                PkPreparationCard(pkBattle, currentUserId, onReadyPk)
+            } else if (pkBattle != null && pkBattle.status == PkStatus.INVITED && (isHost || isRoomAdmin) && pkBattle.right.roomId == room.id && !pkInviteId.isNullOrBlank()) {
                 PkInviteCard(pkBattle, pkBattle.left.hostName, { onAcceptPk(pkInviteId) }, { onRejectPk(pkInviteId) })
             } else if (pkBattle?.status == PkStatus.WAITING || pkBattle?.status == PkStatus.INVITED) {
                 PkWaitingState(pkBattle)
@@ -738,7 +760,7 @@ fun VideoLivestreamScreen(
         }
     }
     if (inviteOpen) {
-        FriendInviteSheet(hosts = inviteCandidates, onDismiss = { inviteOpen = false }, onInvite = { inviteOpen = false; onInviteFriend(it) })
+        FriendInviteSheet(hosts = inviteCandidates, roomFollowers = roomInviteFollowers, friends = inviteFriends, roomId = room.id, roomTitle = room.title, onDismiss = { inviteOpen = false }, onInvite = { inviteOpen = false; onInviteFriend(it) })
     }
     if (showPkSetup) {
         PkSetupBottomSheet(
@@ -768,8 +790,8 @@ fun VideoLivestreamScreen(
     }
     PkResultDialog(
         battle = pkBattle?.takeUnless { it.id == dismissedPkResultId },
-        onDismiss = { dismissedPkResultId = pkBattle?.id },
-        onRematch = { dismissedPkResultId = pkBattle?.id; showPkSetup = true }
+        onDismiss = { if (isHost || isRoomAdmin) onClosePk(); dismissedPkResultId = pkBattle?.id },
+        onRematch = { if (isHost || isRoomAdmin) onClosePk(); dismissedPkResultId = pkBattle?.id; showPkSetup = true }
     )
     if (showHeaderInfo) {
         AlertDialog(
@@ -803,32 +825,26 @@ fun VideoLivestreamScreen(
             containerColor = Color(0xFF171821)
         )
     }
-    if (showHostExit) {
-        AlertDialog(
-            onDismissRequest = { showHostExit = false },
-            title = { Text("Leave livestream?", color = StreamInk, fontWeight = FontWeight.Black) },
-            text = { Text("Minimize the livestream to keep it active, or end it and leave.", color = StreamMuted) },
-            confirmButton = {
-                Column(horizontalAlignment = Alignment.End) {
-                    TextButton(onClick = { showHostExit = false; onMinimize() }) { Text("Minimize livestream", color = StreamInk, fontWeight = FontWeight.Bold) }
-                    TextButton(onClick = { showHostExit = false; onEndRoom() }) { Text("End and leave", color = StreamPink, fontWeight = FontWeight.Bold) }
-                }
+    if (showHostExit || showLeavePrompt) {
+        RoomExitOverlay(
+            participants = participants,
+            currentUserId = currentUserId,
+            isHost = isHost,
+            onDismiss = { showHostExit = false; showLeavePrompt = false },
+            onMinimize = { showHostExit = false; showLeavePrompt = false; onMinimize() },
+            onCloseRoom = {
+                showHostExit = false
+                showLeavePrompt = false
+                if (isHost || participants.any { it.user.id == currentUserId && it.isRoomAdmin }) onEndRoom() else onBack()
             },
-            containerColor = Color(0xFF171821)
+            onFollow = onFollowUser
         )
     }
-    if (showLeavePrompt) {
-        AlertDialog(
-            onDismissRequest = { showLeavePrompt = false },
-            title = { Text("Leave livestream?", color = StreamInk, fontWeight = FontWeight.Black) },
-            text = { Text("Minimize to keep watching in a floating room, or leave the livestream.", color = StreamMuted) },
-            confirmButton = {
-                Column(horizontalAlignment = Alignment.End) {
-                    TextButton(onClick = { showLeavePrompt = false; onMinimize() }) { Text("Minimize room", color = StreamInk, fontWeight = FontWeight.Bold) }
-                    TextButton(onClick = { showLeavePrompt = false; onBack() }) { Text("Leave room", color = StreamPink, fontWeight = FontWeight.Bold) }
-                }
-            },
-            containerColor = Color(0xFF171821)
+    if (showFollowRoomPrompt) {
+        RoomFollowPromptDialog(
+            room = room,
+            onDismiss = { showFollowRoomPrompt = false },
+            onFollow = { showFollowRoomPrompt = false; onToggleRoomFollow() }
         )
     }
 }

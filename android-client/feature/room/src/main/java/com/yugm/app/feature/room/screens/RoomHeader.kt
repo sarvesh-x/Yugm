@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -27,6 +28,10 @@ import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -51,6 +56,7 @@ import com.yugm.app.core.model.ActiveCosmetics
 import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomParticipant
 import com.yugm.app.core.ui.components.Avatar
+import coil.compose.AsyncImage
 
 private val HeaderText = Color.White
 private val HeaderMuted = Color(0xFFCBC5D5)
@@ -64,6 +70,9 @@ internal fun SharedRoomHeader(
     isRoomAdmin: Boolean = false,
     onShare: () -> Unit,
     onRoomInfo: () -> Unit = {},
+    isFollowingRoom: Boolean = false,
+    onToggleRoomFollow: () -> Unit = {},
+    onViewListeners: () -> Unit = {},
     onMore: () -> Unit = {},
     onClearChat: () -> Unit = {},
     onMuteAll: () -> Unit = {},
@@ -103,6 +112,19 @@ internal fun SharedRoomHeader(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(Icons.Filled.Mic, contentDescription = "Room avatar", tint = Color(0xFFD9B8FF), modifier = Modifier.size(21.dp))
+                    }
+                }
+                if (!isHost) {
+                    Box(
+                        Modifier.align(Alignment.BottomEnd).offset(x = 4.dp, y = 3.dp)
+                            .size(21.dp).clip(CircleShape)
+                            .background(if (isFollowingRoom) Color(0xFF29B77D) else Color(0xFF7045F5))
+                            .border(1.5.dp, Color.White, CircleShape)
+                            .clickable(onClick = onToggleRoomFollow)
+                            .semantics { contentDescription = if (isFollowingRoom) "Unfollow room" else "Follow room" },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(if (isFollowingRoom) "✓" else "+", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Black, lineHeight = 16.sp)
                     }
                 }
             }
@@ -191,7 +213,7 @@ internal fun SharedRoomHeader(
                         .size(38.dp)
                         .clip(CircleShape)
                         .background(Color(0xFF7D6B82).copy(alpha = 0.55f))
-                        .clickable(onClick = onRoomInfo)
+                        .clickable(onClick = onViewListeners)
                         .semantics { contentDescription = "$memberCount people in room" },
                     contentAlignment = Alignment.Center
                 ) {
@@ -211,4 +233,41 @@ private fun HeaderAction(icon: ImageVector, label: String, onClick: () -> Unit) 
     ) {
         Icon(icon, contentDescription = null, tint = HeaderText, modifier = Modifier.size(19.dp))
     }
+}
+
+@Composable
+fun RoomFollowPromptDialog(room: Room, onDismiss: () -> Unit, onFollow: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = null,
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Color(0xFFF0F8FF)).padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Box(Modifier.size(76.dp).clip(RoundedCornerShape(18.dp)).background(Brush.linearGradient(listOf(Color(0xFFBCEAFF), Color(0xFFDCD1FF)))), contentAlignment = Alignment.Center) {
+                        if (!room.coverImage.isNullOrBlank()) AsyncImage(model = room.coverImage, contentDescription = "Room cover", modifier = Modifier.fillMaxWidth().height(76.dp).clip(RoundedCornerShape(18.dp)))
+                        else Icon(Icons.Filled.Mic, contentDescription = null, tint = Color(0xFF7045F5), modifier = Modifier.size(30.dp))
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text(room.title.ifBlank { "Live room" }, color = Color(0xFF171421), fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text("ID:${room.id.takeLast(8)}", color = Color(0xFF8F91A0), fontSize = 13.sp)
+                    }
+                }
+                Text("Follow the room to receive party news!", color = Color(0xFF171421), fontSize = 19.sp, lineHeight = 25.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+        },
+        confirmButton = {
+            Button(onClick = onFollow, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(18.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3293F7))) {
+                Text("Follow", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Maybe later", color = Color(0xFF898697)) }
+        },
+        shape = RoundedCornerShape(28.dp),
+        containerColor = Color.White
+    )
 }

@@ -37,7 +37,7 @@ fun ProfileSocialListScreen(
     onOpenProfile: (String) -> Unit
 ) {
     var selectedList by remember(userId, initialList) {
-        mutableStateOf(if (initialList == "following") "following" else "followers")
+        mutableStateOf(initialList.takeIf { it in setOf("followers", "following", "friends", "visitors") } ?: "followers")
     }
     var users by remember(userId, selectedList) { mutableStateOf<List<Host>>(emptyList()) }
     var loading by remember(userId, selectedList) { mutableStateOf(true) }
@@ -52,8 +52,12 @@ fun ProfileSocialListScreen(
         error = null
         runCatching {
             withContext(Dispatchers.IO) {
-                if (selectedList == "followers") YugmApi.getFollowers(userId, token)
-                else YugmApi.getFollowing(userId, token)
+                when (selectedList) {
+                    "followers" -> YugmApi.getFollowers(userId, token)
+                    "following" -> YugmApi.getFollowing(userId, token)
+                    "friends" -> YugmApi.getUserFriends(userId, token)
+                    else -> YugmApi.getProfileVisitors(userId, token)
+                }
             }
         }.onSuccess { users = it }
             .onFailure { error = it.message ?: "Could not load this list." }
@@ -86,15 +90,21 @@ fun ProfileSocialListScreen(
             containerColor = Background,
             topBar = {
                 YugmPageHeader(
-                    title = if (selectedList == "followers") "Followers" else "Following",
+                    title = selectedList.replaceFirstChar { it.uppercase() },
                     subtitle = "${users.size} people",
                     onBack = onBack
                 )
             }
         ) { padding ->
             Column(Modifier.fillMaxSize().padding(padding)) {
-                TabRow(selectedTabIndex = if (selectedList == "followers") 0 else 1, containerColor = Background) {
-                    listOf("followers" to "Followers", "following" to "Following").forEachIndexed { index, (key, label) ->
+                val tabs = buildList {
+                    add("followers" to "Followers")
+                    add("following" to "Following")
+                    add("friends" to "Friends")
+                    if (isOwnProfile) add("visitors" to "Visitors")
+                }
+                TabRow(selectedTabIndex = tabs.indexOfFirst { it.first == selectedList }.coerceAtLeast(0), containerColor = Background) {
+                    tabs.forEachIndexed { _, (key, label) ->
                         Tab(
                             selected = selectedList == key,
                             onClick = { selectedList = key },
@@ -112,7 +122,7 @@ fun ProfileSocialListScreen(
                     }
                     users.isEmpty() -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("No ${if (selectedList == "followers") "followers" else "following"} yet", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            Text("No ${selectedList} yet", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                             Text("People you connect with will show up here.", color = TextMuted)
                         }
                     }
@@ -144,7 +154,7 @@ fun ProfileSocialListScreen(
                                     Text("@${person.username}", color = TextMuted, fontSize = 12.sp, maxLines = 1)
                                     Text("${person.followers} followers", color = TextMuted, fontSize = 11.sp)
                                 }
-                                if (isOwnProfile) {
+                                if (isOwnProfile && selectedList in setOf("followers", "following")) {
                                     OutlinedButton(
                                         onClick = { removeTarget = person },
                                         enabled = busyUserId == null,

@@ -6,7 +6,7 @@ import com.yugm.app.core.model.MyEvents
 import org.json.JSONObject
 
 object EventsApi {
-    suspend fun list(token: String? = null, page: Int = 1, limit: Int = 20, status: String? = null, type: String? = null, category: String? = null, upcoming: Boolean? = null, festival: String? = null, featured: Boolean? = null): Pair<List<YugmEvent>, EventPagination> {
+    suspend fun list(token: String? = null, page: Int = 1, limit: Int = 20, status: String? = null, type: String? = null, category: String? = null, upcoming: Boolean? = null, festival: String? = null, featured: Boolean? = null, roomId: String? = null): Pair<List<YugmEvent>, EventPagination> {
         val params = mutableListOf("page=$page", "limit=$limit")
         if (status != null) params.add("status=$status")
         if (type != null) params.add("type=$type")
@@ -14,6 +14,7 @@ object EventsApi {
         if (upcoming != null) params.add("upcoming=$upcoming")
         if (festival != null) params.add("festival=$festival")
         if (featured != null) params.add("featured=$featured")
+        if (!roomId.isNullOrBlank()) params.add("roomId=$roomId")
         val json = YugmHttpClient.get("/events?${params.joinToString("&")}", token)
         val data = json.getJSONObject("data")
         val paginationObj = data.optJSONObject("pagination") ?: JSONObject()

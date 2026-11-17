@@ -117,6 +117,9 @@ fun ProfileDetailScreen(
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val viewModel: ProfileViewModel = hiltViewModel()
+    LaunchedEffect(userId, isOwnProfile, viewModel.profile?.isVip) {
+        if (isOwnProfile && viewModel.profile?.isVip == true) viewModel.loadVisitors(token, userId)
+    }
     var liked by remember { mutableStateOf(false) }
     var vibeMatch by remember { mutableStateOf<com.yugm.app.core.model.VibeMatchResponse?>(null) }
     var showcasedBadges by remember { mutableStateOf<List<Achievement>>(emptyList()) }
@@ -314,6 +317,7 @@ fun ProfileDetailScreen(
                             profile = profile,
                             compatibilityScore = vibeMatch?.compatibility?.score?.takeUnless { isOwnProfile },
                             isOwnProfile = isOwnProfile,
+                            visitorsCount = viewModel.visitors.size,
                             onEditProfile = if (isOwnProfile) openProfileEditor else null,
                             onOpenSocialList = onOpenSocialList,
                             onOpenWallet = onOpenWallet,
@@ -1003,6 +1007,7 @@ private fun ProfileHero(
     profile: Host,
     compatibilityScore: Int?,
     isOwnProfile: Boolean = false,
+    visitorsCount: Int = 0,
     onEditProfile: (() -> Unit)? = null,
     onViewPublicProfile: (() -> Unit)? = null,
     onOpenSocialList: ((String) -> Unit)? = null,
@@ -1026,7 +1031,8 @@ private fun ProfileHero(
             }
             Box(
                 Modifier.align(Alignment.TopCenter).size(104.dp).clip(CircleShape)
-                    .background(colors.surfaceVariant).border(3.dp, colors.border, CircleShape),
+                    .background(colors.surfaceVariant)
+                    .border(if (profile.isVip) 4.dp else 3.dp, if (profile.isVip) Brush.sweepGradient(listOf(Color(0xFFFFD477), Color(0xFFB56BFF), Color(0xFFFFF0B2), Color(0xFFFFD477))) else Brush.linearGradient(listOf(colors.border, colors.border)), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Avatar(
@@ -1037,13 +1043,18 @@ private fun ProfileHero(
                     voiceRoomPresence = profile.voiceRoomPresence,
                     onLiveClick = onJoinVoiceParty
                 )
+                if (profile.isVip) {
+                    Box(Modifier.align(Alignment.BottomEnd).clip(RoundedCornerShape(10.dp)).background(Brush.linearGradient(listOf(Color(0xFFFFE7A1), Color(0xFFFFB84D)))).padding(horizontal = 7.dp, vertical = 3.dp)) {
+                        Text("VIP${profile.vipLevel.coerceAtLeast(1)}", color = Color(0xFF482A08), fontSize = 9.sp, fontWeight = FontWeight.Black)
+                    }
+                }
             }
         }
         Spacer(Modifier.height(30.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             StyledName(text = profile.name.ifBlank { "Yugm Member" }, nameStyle = profile.activeCosmetics.nameStyle, fontSize = 25, maxLines = 1)
             if (profile.isOnline) Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF22C55E)))
-            if (profile.isVip) ProfilePill("VIP", Gold)
+            if (profile.isVip) ProfilePill("✦ VIP${profile.vipLevel.coerceAtLeast(1)}", Gold)
         }
         Row(
             modifier = Modifier.padding(top = 7.dp),
@@ -1068,11 +1079,15 @@ private fun ProfileHero(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(colors.surfaceVariant).border(1.dp, colors.border, RoundedCornerShape(16.dp)).padding(vertical = 10.dp, horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            ProfileHeroStat("Friends", profile.friendsCount.toString(), Modifier.weight(1f), null)
+            ProfileHeroStat("Friends", profile.friendsCount.toString(), Modifier.weight(1f)) { onOpenSocialList?.invoke("friends") }
             Box(Modifier.width(1.dp).height(28.dp).background(colors.border))
             ProfileHeroStat("Following", profile.followingCount.toString(), Modifier.weight(1f)) { onOpenSocialList?.invoke("following") }
             Box(Modifier.width(1.dp).height(28.dp).background(colors.border))
             ProfileHeroStat("Followers", profile.followers.toString(), Modifier.weight(1f)) { onOpenSocialList?.invoke("followers") }
+            if (isOwnProfile && profile.isVip) {
+                Box(Modifier.width(1.dp).height(28.dp).background(colors.border))
+                ProfileHeroStat("Visitors", visitorsCount.toString(), Modifier.weight(1f)) { onOpenSocialList?.invoke("visitors") }
+            }
         }
         if (isOwnProfile) {
             Spacer(Modifier.height(9.dp))

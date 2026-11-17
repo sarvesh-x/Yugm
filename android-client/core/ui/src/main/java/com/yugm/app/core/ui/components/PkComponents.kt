@@ -101,7 +101,7 @@ fun PkBattleHeader(battle: PkBattle, isHost: Boolean, onEnd: () -> Unit) {
             Text("PK Battle", color = TextPrimary, fontWeight = FontWeight.Black)
             Text(formatPkTime(battle.remainingSeconds), color = Gold, fontWeight = FontWeight.Black)
             Spacer(Modifier.weight(1f))
-            if (isHost && battle.status == PkStatus.ACTIVE) {
+            if (isHost && battle.status in listOf(PkStatus.ACTIVE, PkStatus.FINAL_CRUNCH)) {
                 Text("End PK", color = Color(0xFFFF5B6E), fontWeight = FontWeight.Black, modifier = Modifier.clickable(onClick = onEnd))
             }
         }
@@ -214,6 +214,25 @@ fun PkWaitingState(battle: PkBattle?) {
 }
 
 @Composable
+fun PkPreparationCard(battle: PkBattle, currentUserId: String, onReady: () -> Unit) {
+    val isPlayer = battle.left.members.any { it.userId == currentUserId } || battle.right.members.any { it.userId == currentUserId }
+    GlassCard(Modifier.fillMaxWidth()) {
+        Text(if (battle.status == PkStatus.COUNTDOWN) "Battle begins in ${battle.countdownSecondsRemaining.coerceAtLeast(0)}" else "Preparation lobby", color = Gold, fontWeight = FontWeight.Black, fontSize = 18.sp)
+        Text("Gold · ${battle.left.members.joinToString { it.name }}  VS  Blue · ${battle.right.members.joinToString { it.name }}", color = TextPrimary, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 5.dp), maxLines = 2)
+        Text("Ready ${battle.left.members.count { it.isReady } + battle.right.members.count { it.isReady }}/${battle.left.members.size + battle.right.members.size}", color = TextMuted, fontSize = 11.sp)
+        Text("${battle.durationSeconds / 60} min · ${battle.mode.name.lowercase()} scoring", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+        if (battle.status == PkStatus.PREPARING || battle.status == PkStatus.READY) {
+            Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(if (battle.myReady) "You're ready" else if (isPlayer) "Confirm when you're ready" else "Waiting for players to ready up", color = TextMuted, fontSize = 12.sp)
+                if (isPlayer && !battle.myReady) Button(onClick = onReady, colors = ButtonDefaults.buttonColors(containerColor = Purple)) { Text("Ready", fontWeight = FontWeight.Bold) }
+            }
+        } else {
+            Text("Get ready…", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
+        }
+    }
+}
+
+@Composable
 fun PkInviteCard(battle: PkBattle, inviterName: String, onAccept: () -> Unit, onReject: () -> Unit) {
     AnimatedVisibility(visible = true, enter = fadeIn() + scaleIn()) {
         GlassCard(Modifier.fillMaxWidth()) {
@@ -233,14 +252,14 @@ fun PkInviteCard(battle: PkBattle, inviterName: String, onAccept: () -> Unit, on
 
 @Composable
 fun PkResultDialog(battle: PkBattle?, onDismiss: () -> Unit, onRematch: () -> Unit) {
-    if (battle == null || battle.status !in listOf(PkStatus.ENDED, PkStatus.FORCE_ENDED)) return
+    if (battle == null || battle.status !in listOf(PkStatus.ENDED, PkStatus.FORCE_ENDED, PkStatus.COMPLETED, PkStatus.CLOSED, PkStatus.ABORTED)) return
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("PK Result", color = TextPrimary, fontWeight = FontWeight.Black) },
+            title = { Text(if (battle.status == PkStatus.ABORTED) "PK ended early" else "PK Result", color = TextPrimary, fontWeight = FontWeight.Black) },
         text = {
             Column {
                 Text(
-                    when (battle.winnerSide) {
+                    if (battle.status == PkStatus.ABORTED && battle.terminationReason.isNotBlank()) battle.terminationReason else when (battle.winnerSide) {
                         PkSideType.LEFT -> "${battle.left.hostName} wins"
                         PkSideType.RIGHT -> "${battle.right.hostName} wins"
                         else -> "It's a draw"

@@ -6,8 +6,10 @@ import com.yugm.app.core.model.PkInvite
 import com.yugm.app.core.model.PkLeaderboardEntry
 import com.yugm.app.core.model.PkMediaSession
 import com.yugm.app.core.model.PkMode
+import com.yugm.app.core.model.PkFormat
 import com.yugm.app.core.model.PkOpponent
 import com.yugm.app.core.model.PkSide
+import com.yugm.app.core.model.PkTeamMember
 import com.yugm.app.core.model.PkSideType
 import com.yugm.app.core.model.PkStats
 import com.yugm.app.core.model.PkStatus
@@ -17,6 +19,7 @@ import org.json.JSONObject
 
 fun String.toPkStatus(): PkStatus = runCatching { PkStatus.valueOf(uppercase()) }.getOrDefault(PkStatus.INVITED)
 fun String.toPkMode(): PkMode = runCatching { PkMode.valueOf(uppercase()) }.getOrDefault(PkMode.GIFT)
+fun String.toPkFormat(): PkFormat = runCatching { PkFormat.valueOf(uppercase()) }.getOrDefault(PkFormat.ROOM)
 fun String.toPkBattleType(): PkBattleType = runCatching { PkBattleType.valueOf(uppercase()) }.getOrDefault(PkBattleType.VOICE)
 fun String.toPkSideTypeOrNull(): PkSideType? = runCatching { PkSideType.valueOf(uppercase()) }.getOrNull()
 
@@ -28,7 +31,8 @@ fun JSONObject.toPkSide(): PkSide = PkSide(
     hostAvatar = if (has("hostAvatar") && !isNull("hostAvatar")) optString("hostAvatar") else null,
     score = optInt("score", 0),
     participantCount = optInt("participantCount", 0),
-    activeCosmetics = optJSONObject("activeCosmetics")?.toActiveCosmetics() ?: ActiveCosmetics()
+    activeCosmetics = optJSONObject("activeCosmetics")?.toActiveCosmetics() ?: ActiveCosmetics(),
+    members = optJSONArray("members")?.let { items -> buildList { for (index in 0 until items.length()) { val item = items.getJSONObject(index); add(PkTeamMember(item.optString("userId"), item.optString("name"), item.optString("avatar").takeIf { it.isNotBlank() }, item.optBoolean("isReady"), item.optString("team", "A"))) } } } ?: emptyList()
 )
 
 fun JSONObject.toPkBattle(): PkBattle = PkBattle(
@@ -36,14 +40,23 @@ fun JSONObject.toPkBattle(): PkBattle = PkBattle(
     battleCode = optString("battleCode", ""),
     title = optString("title", ""),
     status = optString("status", "INVITED").toPkStatus(),
+    stateVersion = optInt("stateVersion", 1),
+    countdownSecondsRemaining = optInt("countdownSecondsRemaining", 0),
     mode = optString("mode", "GIFT").toPkMode(),
+    format = optString("format", "ROOM").toPkFormat(),
+    scope = optString("scope", "CROSS_ROOM"),
+    teamSize = optInt("teamSize", 1),
+    selectedGiftId = optString("selectedGiftId", ""),
+    myVote = optString("myVote", "").toPkSideTypeOrNull(),
+    myReady = optBoolean("myReady", false),
     battleType = optString("battleType", "VOICE").toPkBattleType(),
     durationSeconds = optInt("durationSeconds", 180),
     remainingSeconds = optInt("remainingSeconds", optInt("durationSeconds", 180)),
     left = optJSONObject("left")?.toPkSide() ?: PkSide(),
     right = optJSONObject("right")?.toPkSide() ?: PkSide(),
     leader = optString("leader", "").toPkSideTypeOrNull(),
-    winnerSide = optString("winnerSide", "").toPkSideTypeOrNull()
+    winnerSide = optString("winnerSide", "").toPkSideTypeOrNull(),
+    terminationReason = optString("terminationReason", "")
 )
 
 fun JSONObject.toPkStats(): PkStats = PkStats(

@@ -7,6 +7,7 @@ import { ClanInvite } from "../models/ClanInvite.js";
 import { Story } from "../models/Story.js";
 import { Room } from "../models/Room.js";
 import { User } from "../models/User.js";
+import { rollVipCycle } from "./vip.js";
 import { AuthSession } from "../models/AuthSession.js";
 import { DeviceToken } from "../models/DeviceToken.js";
 import { Follow } from "../models/Follow.js";
@@ -158,11 +159,18 @@ async function runMaintenanceTasks() {
   }
 
   try {
-    const expiredVip = await User.updateMany(
-      { vipExpiresAt: { $lte: new Date() }, vipTier: { $ne: null } },
-      { $set: { vipTier: null, vipStartedAt: null, vipExpiresAt: null } }
-    );
-    if (expiredVip.modifiedCount > 0) results.push(`Downgraded ${expiredVip.modifiedCount} expired VIP users`);
+    const now = new Date();
+    const dueVipUsers = await User.find({
+      $or: [
+        { vipExpiresAt: { $lte: now }, vipTier: { $ne: null } },
+        { vipFrozen: true, vipFreezeStartedAt: { $lte: new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000) } }
+      ]
+    }).limit(500);
+    for (const user of dueVipUsers) {
+      rollVipCycle(user, now);
+      await user.save();
+    }
+    if (dueVipUsers.length > 0) results.push(`Reviewed ${dueVipUsers.length} VIP cycles`);
   } catch (error) {
     results.push(`VIP expiry failed: ${error instanceof Error ? error.message : String(error)}`);
   }

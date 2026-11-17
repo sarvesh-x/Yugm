@@ -56,7 +56,8 @@ private enum class NotificationFilter { ALL, UNREAD }
 fun NotificationsScreen(
     token: String,
     onBack: () -> Unit,
-    onOpenTarget: (NotificationItem) -> Unit
+    onOpenTarget: (NotificationItem) -> Unit,
+    onJoinRoom: (String) -> Unit
 ) {
     val viewModel: NotificationsViewModel = hiltViewModel()
     val colors = LocalYugmColors.current
@@ -128,7 +129,11 @@ fun NotificationsScreen(
                 verticalArrangement = Arrangement.spacedBy(9.dp)
             ) {
                 items(visibleNotifications, key = { it.id }) { item ->
-                    NotificationRow(item) {
+                    NotificationRow(item, onAcceptInvite = {
+                        viewModel.respondToRoomInvite(token, item, true) { roomId -> if (!roomId.isNullOrBlank()) onJoinRoom(roomId) }
+                    }, onIgnoreInvite = {
+                        viewModel.respondToRoomInvite(token, item, false) { }
+                    }) {
                         if (!item.read) viewModel.markRead(token, item.id)
                         onOpenTarget(item)
                     }
@@ -178,7 +183,7 @@ private fun NotificationEmptyState(title: String, message: String, action: Strin
 }
 
 @Composable
-private fun NotificationRow(item: NotificationItem, onClick: () -> Unit) {
+private fun NotificationRow(item: NotificationItem, onAcceptInvite: () -> Unit, onIgnoreInvite: () -> Unit, onClick: () -> Unit) {
     val colors = LocalYugmColors.current
     val tint = when (item.type.uppercase()) {
         "MESSAGE" -> colors.secondary
@@ -217,6 +222,12 @@ private fun NotificationRow(item: NotificationItem, onClick: () -> Unit) {
                 }
                 Text(item.message, color = colors.textSecondary, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp))
                 Text(notificationDate(item.createdAt), color = colors.textSecondary.copy(alpha = 0.8f), fontSize = 11.sp, modifier = Modifier.padding(top = 7.dp))
+                if (item.type.equals("ROOM_INVITE", true) && item.inviteId.isNotBlank()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 10.dp)) {
+                        Button(onClick = onAcceptInvite, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp), colors = ButtonDefaults.buttonColors(containerColor = colors.primary)) { Text("Join") }
+                        TextButton(onClick = onIgnoreInvite) { Text("Ignore", color = colors.textSecondary) }
+                    }
+                }
             }
         }
     }

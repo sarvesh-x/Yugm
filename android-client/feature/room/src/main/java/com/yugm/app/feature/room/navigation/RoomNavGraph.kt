@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -17,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.Color
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavGraphBuilder
@@ -28,6 +31,7 @@ import com.yugm.app.core.navigation.Screen
 import com.yugm.app.core.navigation.navigateTopLevel
 import com.yugm.app.feature.room.screens.*
 import com.yugm.app.feature.room.viewmodel.RoomViewModel
+import com.yugm.app.core.model.RoomSessionSummary
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -109,7 +113,12 @@ fun NavGraphBuilder.roomNavGraph(
             roomViewModel.connect(authTokenProvider(), roomId, currentUserIdProvider())
         }
 
-        roomViewModel.roomDetail?.let { detail ->
+        val roomLoadState = roomViewModel.roomState
+        val loadedRoomDetail = roomViewModel.roomDetail ?: when (roomLoadState) {
+            is com.yugm.app.core.util.UiState.Success -> roomLoadState.data
+            else -> null
+        }
+        loadedRoomDetail?.let { detail ->
             EditRoomScreen(
                 token = authTokenProvider(),
                 room = detail.room,
@@ -198,18 +207,23 @@ fun NavGraphBuilder.roomNavGraph(
                 roomViewModel.clearActionError()
             }
         }
-
-        roomViewModel.roomDetail?.let { detail ->
+        val roomLoadState = roomViewModel.roomState
+        val loadedRoomDetail = roomViewModel.roomDetail ?: when (roomLoadState) {
+            is com.yugm.app.core.util.UiState.Success -> roomLoadState.data
+            else -> null
+        }
+        loadedRoomDetail?.let { detail ->
             val room = detail.room
             ActiveVoiceRoomScreen(
                 room = room,
                 chat = roomViewModel.chat,
                 gifts = roomViewModel.gifts,
+                giftInventory = roomViewModel.giftInventory,
                 balance = balanceProvider(),
                 diamondBalance = roomViewModel.diamondBalance,
                 isHost = room.host?.id == currentUserIdProvider(),
-                currentUserId = currentUserIdProvider(),
                 isRoomAdmin = detail.participants.any { it.user.id == currentUserIdProvider() && it.isRoomAdmin },
+                currentUserId = currentUserIdProvider(),
                 forcedMuteVersion = roomViewModel.forcedMuteVersion,
                 forcedRemoveVersion = roomViewModel.forcedRemoveVersion,
                 roomEndedVersion = roomViewModel.roomEndedVersion,
@@ -220,6 +234,11 @@ fun NavGraphBuilder.roomNavGraph(
                 },
                 participants = detail.participants,
                 inviteCandidates = roomViewModel.inviteCandidates,
+                roomInviteFollowers = roomViewModel.roomInviteFollowers,
+                inviteFriends = roomViewModel.inviteFriends,
+                roomEvents = roomViewModel.roomEvents,
+                isFollowingRoom = roomViewModel.isFollowingRoom,
+                onToggleRoomFollow = roomViewModel::toggleRoomFollow,
                 pkBattle = roomViewModel.pkBattle,
                 pkInviteId = roomViewModel.pkInviteId,
                 pkOpponents = roomViewModel.pkOpponents,
@@ -229,14 +248,30 @@ fun NavGraphBuilder.roomNavGraph(
                 polls = roomViewModel.polls,
                 roomReactions = roomViewModel.roomReactions,
                 isCurrentUserVip = detail.participants.firstOrNull { it.user.id == currentUserIdProvider() }?.user?.isVip == true,
+                currentUserVipLevel = detail.participants.firstOrNull { it.user.id == currentUserIdProvider() }?.user?.vipLevel ?: 0,
+                onSendImage = { uri ->
+                    scope.launch {
+                        runCatching {
+                            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Could not read image")
+                            val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+                            val (url, _) = com.yugm.app.core.api.YugmApi.uploadMessageMedia(authTokenProvider(), bytes, mime, "room-image.${mime.substringAfter('/', "jpg")}")
+                            roomViewModel.sendMessage("", url, "IMAGE")
+                        }.onFailure { android.widget.Toast.makeText(context, it.message ?: "Could not send image", android.widget.Toast.LENGTH_SHORT).show() }
+                    }
+                },
                 reactionCatalogLoading = roomViewModel.isReactionCatalogLoading,
                 reactionCatalogError = roomViewModel.reactionCatalogError,
                 onReloadReactions = roomViewModel::reloadRoomReactions,
                 missions = roomViewModel.missions,
                 activity = roomViewModel.activity,
-                onBack = { roomViewModel.leaveAndDisconnect { navController.returnFromRoom() } },
+                onBack = {
+                    val isHost = room.host?.id == currentUserIdProvider()
+                    if (isHost) roomViewModel.endRoomAndDisconnect()
+                    else roomViewModel.leaveAndDisconnect { navController.returnFromRoom() }
+                },
                 onSendMessage = roomViewModel::sendMessage,
                 onGift = { gift, currency, receiverId -> roomViewModel.sendGift(gift, receiverId.ifBlank { room.host?.id.orEmpty() }, currency) },
+                onInventoryGift = { gift, receiverId, inventoryItemId -> roomViewModel.sendGift(gift, receiverId, "COINS", inventoryItemId) },
                 onToast = { msg -> android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show() },
                 onRequestSpeaker = {
                     roomViewModel.requestSpeaker()
@@ -260,9 +295,10 @@ fun NavGraphBuilder.roomNavGraph(
                 },
                 onVotePoll = roomViewModel::votePoll,
                 onClosePoll = roomViewModel::closePoll,
-                onInviteFriend = { userId ->
-                    roomViewModel.inviteToRoom(userId)
-                    android.widget.Toast.makeText(context, "Invite sent", android.widget.Toast.LENGTH_SHORT).show()
+                onRefreshRoom = roomViewModel::refresh,
+                onInviteFriend = { userIds ->
+                    roomViewModel.inviteUsersToRoom(userIds)
+                    android.widget.Toast.makeText(context, "${userIds.size} invite${if (userIds.size == 1) "" else "s"} sent", android.widget.Toast.LENGTH_SHORT).show()
                 },
                 onDirectMessage = { receiverId ->
                     val targetId = receiverId ?: room.host?.id
@@ -276,6 +312,10 @@ fun NavGraphBuilder.roomNavGraph(
                 onMinimize = { onMinimizeRoom(room, com.yugm.app.core.model.RoomType.Voice) },
                 onReact = roomViewModel::reactToRoom,
                 onLoadPkOpponents = { search -> roomViewModel.loadPkOpponents(com.yugm.app.core.model.PkBattleType.VOICE, search) },
+                onCreateRoomPk = { left, right, format, mode, duration, giftId -> roomViewModel.startRoomPk(left, right, format, mode, duration, giftId) },
+                onVotePk = roomViewModel::votePk,
+                onReadyPk = roomViewModel::readyPk,
+                onClosePk = roomViewModel::closePk,
                 onInvitePk = { opponent, mode, duration, title ->
                     roomViewModel.invitePk(opponent, mode, duration, title)
                     android.widget.Toast.makeText(context, "PK invite sent", android.widget.Toast.LENGTH_SHORT).show()
@@ -284,15 +324,13 @@ fun NavGraphBuilder.roomNavGraph(
                     roomViewModel.autoMatchPk(mode, duration, title)
                     android.widget.Toast.makeText(context, "Auto-match invite sent", android.widget.Toast.LENGTH_SHORT).show()
                 },
-                onSendPkGift = { gift, side -> roomViewModel.sendPkGift(gift.id, side) },
+                onSendPkGift = { gift, side, quantity -> roomViewModel.sendPkGift(gift.id, side, quantity) },
                 onSendPkReaction = roomViewModel::sendPkReaction,
                 onAcceptPk = roomViewModel::acceptPk,
                 onRejectPk = roomViewModel::rejectPk,
                 onEndPk = roomViewModel::endPk,
                 onEndRoom = {
-                    navController.returnFromRoom()
-                    navController.returnFromRoom()
-                    roomViewModel.endRoomAndDisconnect { }
+                    roomViewModel.endRoomAndDisconnect()
                 },
                 onMuteUser = roomViewModel::muteUser,
                 onOwnMicStateChanged = roomViewModel::setOwnMicState,
@@ -314,9 +352,15 @@ fun NavGraphBuilder.roomNavGraph(
                     navController.navigate(Screen.EditRoom.createRoute(roomId))
                 }
             )
+            roomViewModel.roomEndSummary?.let { summary ->
+                RoomSessionSummaryDialog(summary) {
+                    roomViewModel.dismissRoomEndSummary()
+                    navController.returnFromRoom()
+                }
+            }
         } ?: RoomConnectionFallback(
-            isLoading = roomViewModel.roomState !is com.yugm.app.core.util.UiState.Error,
-            message = roomViewModel.roomError,
+            isLoading = roomViewModel.roomState is com.yugm.app.core.util.UiState.Loading || roomViewModel.roomState is com.yugm.app.core.util.UiState.Idle,
+            message = roomViewModel.roomError ?: "Room details are unavailable.",
             onRetry = roomViewModel::refresh,
             onExit = { navController.returnFromRoom() }
         )
@@ -340,8 +384,21 @@ fun NavGraphBuilder.roomNavGraph(
                 roomViewModel.clearActionError()
             }
         }
+        LaunchedEffect(roomViewModel.roomEndedVersion) {
+            if (roomViewModel.roomEndedVersion > 0) {
+                val current = roomViewModel.roomDetail?.room
+                val participant = roomViewModel.roomDetail?.participants?.firstOrNull { it.user.id == currentUserIdProvider() }
+                val hostOrAdmin = current?.host?.id == currentUserIdProvider() || participant?.isRoomAdmin == true
+                if (!hostOrAdmin) roomViewModel.leaveAndDisconnect { navController.returnFromRoom() }
+            }
+        }
 
-        roomViewModel.roomDetail?.let { detail ->
+        val roomLoadState = roomViewModel.roomState
+        val loadedRoomDetail = roomViewModel.roomDetail ?: when (roomLoadState) {
+            is com.yugm.app.core.util.UiState.Success -> roomLoadState.data
+            else -> null
+        }
+        loadedRoomDetail?.let { detail ->
             val room = detail.room
             VideoLivestreamScreen(
                 room = room,
@@ -350,10 +407,15 @@ fun NavGraphBuilder.roomNavGraph(
                 balance = balanceProvider(),
                 diamondBalance = roomViewModel.diamondBalance,
                 isHost = room.host?.id == currentUserIdProvider(),
+                isRoomAdmin = detail.participants.any { it.user.id == currentUserIdProvider() && it.isRoomAdmin },
                 currentUserId = currentUserIdProvider(),
                 participants = detail.participants,
                 speakerRequests = detail.speakerRequests,
                 inviteCandidates = roomViewModel.inviteCandidates,
+                roomInviteFollowers = roomViewModel.roomInviteFollowers,
+                inviteFriends = roomViewModel.inviteFriends,
+                isFollowingRoom = roomViewModel.isFollowingRoom,
+                onToggleRoomFollow = roomViewModel::toggleRoomFollow,
                 pkBattle = roomViewModel.pkBattle,
                 pkInviteId = roomViewModel.pkInviteId,
                 pkOpponents = roomViewModel.pkOpponents,
@@ -368,8 +430,9 @@ fun NavGraphBuilder.roomNavGraph(
                 reactionCatalogError = roomViewModel.reactionCatalogError,
                 onReloadReactions = roomViewModel::reloadRoomReactions,
                 onBack = {
-                    navController.returnFromRoom()
-                    roomViewModel.leaveAndDisconnect { }
+                    val isHost = room.host?.id == currentUserIdProvider()
+                    if (isHost) roomViewModel.endRoomAndDisconnect()
+                    else roomViewModel.leaveAndDisconnect { navController.returnFromRoom() }
                 },
                 onMinimize = { onMinimizeRoom(room, com.yugm.app.core.model.RoomType.Video) },
                 requestError = roomViewModel.actionError.orEmpty(),
@@ -380,20 +443,23 @@ fun NavGraphBuilder.roomNavGraph(
                 onRequestSpeaker = roomViewModel::requestSpeaker,
                 onApproveSpeaker = roomViewModel::approveSpeaker,
                 onRejectSpeaker = roomViewModel::rejectSpeaker,
-                onInviteFriend = { userId ->
-                    roomViewModel.inviteToRoom(userId)
-                    android.widget.Toast.makeText(context, "Invite sent", android.widget.Toast.LENGTH_SHORT).show()
+                onInviteFriend = { userIds ->
+                    roomViewModel.inviteUsersToRoom(userIds)
+                    android.widget.Toast.makeText(context, "${userIds.size} invite${if (userIds.size == 1) "" else "s"} sent", android.widget.Toast.LENGTH_SHORT).show()
                 },
+                onFollowUser = roomViewModel::followRoomUser,
                 onReact = roomViewModel::reactToRoom,
                 onReportHost = { reportedId -> roomViewModel.reportUser(reportedId) },
                 onLoadPkOpponents = { search -> roomViewModel.loadPkOpponents(com.yugm.app.core.model.PkBattleType.VIDEO, search) },
                 onInvitePk = { opponent, mode, duration, title -> roomViewModel.invitePk(opponent, mode, duration, title) },
                 onAutoMatchPk = { mode, duration, title -> roomViewModel.autoMatchPk(mode, duration, title) },
-                onSendPkGift = { gift, side -> roomViewModel.sendPkGift(gift.id, side) },
+                onSendPkGift = { gift, side, quantity -> roomViewModel.sendPkGift(gift.id, side, quantity) },
                 onSendPkReaction = roomViewModel::sendPkReaction,
                 onAcceptPk = roomViewModel::acceptPk,
                 onRejectPk = roomViewModel::rejectPk,
                 onEndPk = roomViewModel::endPk,
+                onReadyPk = roomViewModel::readyPk,
+                onClosePk = roomViewModel::closePk,
                 onCreatePoll = { roomViewModel.createPoll("What should we do?", listOf("Music", "Games")) },
                 onCreateCustomPoll = { question, options, onSuccess, onFailure ->
                     roomViewModel.createPoll(question, options, onSuccess, onFailure)
@@ -401,13 +467,18 @@ fun NavGraphBuilder.roomNavGraph(
                 onVotePoll = roomViewModel::votePoll,
                 onClosePoll = roomViewModel::closePoll,
                 onEndRoom = {
-                    navController.returnFromRoom()
                     roomViewModel.endRoomAndDisconnect { }
                 }
             )
+            roomViewModel.roomEndSummary?.let { summary ->
+                RoomSessionSummaryDialog(summary) {
+                    roomViewModel.dismissRoomEndSummary()
+                    navController.returnFromRoom()
+                }
+            }
         } ?: RoomConnectionFallback(
-            isLoading = roomViewModel.roomState !is com.yugm.app.core.util.UiState.Error,
-            message = roomViewModel.roomError,
+            isLoading = roomViewModel.roomState is com.yugm.app.core.util.UiState.Loading || roomViewModel.roomState is com.yugm.app.core.util.UiState.Idle,
+            message = roomViewModel.roomError ?: "Room details are unavailable.",
             onRetry = roomViewModel::refresh,
             onExit = { navController.returnFromRoom() }
         )
@@ -423,6 +494,66 @@ fun NavGraphBuilder.roomNavGraph(
             roomId = roomId,
             onBack = { navController.popBackStack() }
         )
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun RoomSessionSummaryDialog(summary: RoomSessionSummary, onDismiss: () -> Unit) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        androidx.compose.material3.Surface(
+            modifier = Modifier.fillMaxWidth(0.92f),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(26.dp),
+            color = Color.White,
+            shadowElevation = 16.dp
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Box(
+                    Modifier.padding(bottom = 14.dp).size(72.dp)
+                        .background(Color(0xFFE9DFFF), androidx.compose.foundation.shape.CircleShape),
+                    contentAlignment = Alignment.Center
+                ) { Text("🎙️", fontSize = 34.sp) }
+                Text("Session ended", color = Color(0xFF171421), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("Here’s how your live room went", color = Color(0xFF777487), fontSize = 13.sp, modifier = Modifier.padding(top = 5.dp, bottom = 24.dp))
+                androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SessionStat("◷", "${summary.durationMinutes} min", "Duration", Color(0xFF54B9EA), Modifier.weight(1f))
+                    SessionStat("●", "${summary.joined}", "Joined", Color(0xFF42C787), Modifier.weight(1f))
+                }
+                androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth().padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SessionStat("▣", "${summary.messages}", "Messages", Color(0xFFBD64DC), Modifier.weight(1f))
+                    SessionStat("◆", "${summary.gifts}", "Gifts", Color(0xFFEE6D9C), Modifier.weight(1f))
+                }
+                androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth().padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SessionStat("♥", "${summary.newFans}", "New fans", Color(0xFF40CDA5), Modifier.weight(1f))
+                    SessionStat("♦", "${summary.diamondGifts}", "Diamonds gift", Color(0xFF8E61E9), Modifier.weight(1f))
+                }
+                androidx.compose.material3.Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth().padding(top = 30.dp),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+                ) { Text("Done") }
+            }
+        }
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun SessionStat(icon: String, value: String, label: String, tint: Color, modifier: Modifier = Modifier) {
+    androidx.compose.foundation.layout.Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(9.dp)
+    ) {
+        Box(Modifier.size(34.dp).background(tint.copy(alpha = 0.18f), androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
+            Text(icon, color = tint, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        }
+        Column {
+            Text(value, color = Color(0xFF171421), fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text(label, color = Color(0xFF89879A), fontSize = 12.sp)
+        }
     }
 }
 

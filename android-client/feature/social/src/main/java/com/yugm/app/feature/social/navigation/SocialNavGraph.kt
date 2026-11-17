@@ -285,7 +285,8 @@ fun NavGraphBuilder.socialNavGraph(
                     notification.actorId.isNotBlank() -> navController.navigate(Screen.ProfileDetail.createRoute(notification.actorId))
                     else -> navController.navigate(Screen.MainTabs.createRoute("discover")) { launchSingleTop = true }
                 }
-            }
+            },
+            onJoinRoom = { roomId -> navController.navigate(Screen.RoomLobby.createRoute(roomId)) }
         )
     }
 

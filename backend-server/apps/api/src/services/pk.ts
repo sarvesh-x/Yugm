@@ -8,6 +8,7 @@ import { PkEvent } from "../models/PkEvent.js";
 import { PkInvite } from "../models/PkInvite.js";
 import { PkLeaderboardEntry } from "../models/PkLeaderboardEntry.js";
 import { PkParticipant } from "../models/PkParticipant.js";
+import { PkVote } from "../models/PkVote.js";
 import { Room } from "../models/Room.js";
 import { RoomActivity } from "../models/RoomActivity.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
@@ -16,6 +17,7 @@ import { createNotification } from "./notifications.js";
 import { emitRoom, emitUser } from "./socket.js";
 import { debitWallet } from "./wallet.js";
 import { rankPkOpponents } from "./pkMatch.js";
+import { assertPkTransition } from "./pkStateMachine.js";
 import { ErrorCode, HttpError, isValidObjectId, sanitizeText } from "../utils/http.js";
 
 export const pkSocketEvents = {
@@ -37,15 +39,16 @@ export const pkSocketEvents = {
   error: "pk:error"
 } as const;
 
-export const allowedPkDurations = [180, 300, 600];
-const activeStatuses = ["INVITED", "WAITING", "ACTIVE"];
+export const allowedPkDurations = [60, 180, 300, 600, 900];
+const activeStatuses = ["INVITED", "WAITING", "PREPARING", "READY", "COUNTDOWN", "ACTIVE", "FINAL_CRUNCH", "FINALIZING", "COMPLETED"];
 const reactionPoints: Record<string, number> = { heart: 1, clap: 1, fire: 2, wow: 2, laugh: 1, sparkle: 1 };
 const reactionBuckets = new Map<string, { points: number; resetAt: number }>();
 const giftCombos = new Map<string, { count: number; resetAt: number }>();
 const timers = new Map<string, NodeJS.Timeout>();
+const countdownTimers = new Map<string, NodeJS.Timeout>();
 
 type PkSide = "LEFT" | "RIGHT";
-type PkMode = "GIFT" | "REACTION" | "MIXED";
+type PkMode = "GIFT" | "VOTE" | "REACTION" | "MIXED";
 type PkBattleType = "VOICE" | "VIDEO";
 
 function battleCode() {
@@ -90,6 +93,7 @@ async function publicSide(battle: any, side: PkSide) {
     hostAvatar: host?.avatar,
     activeCosmetics: host?.activeCosmetics ?? {},
     score,
+    members: [] as Array<{ userId: string; name: string; avatar?: string; isReady?: boolean; team: string }>,
     participantCount: count || room?.participantCount || 0
   };
 }
@@ -99,21 +103,38 @@ export async function pkState(battleOrId: any) {
     ? await PkBattle.findById(objectId(battleOrId, "battleId")).lean()
     : battleOrId;
   if (!battle) throw new HttpError(404, "PK battle not found", ErrorCode.NOT_FOUND);
-  const [left, right] = await Promise.all([publicSide(battle, "LEFT"), publicSide(battle, "RIGHT")]);
+  const [left, right, members] = await Promise.all([
+    publicSide(battle, "LEFT"),
+    publicSide(battle, "RIGHT"),
+    PkParticipant.find({ battleId: battle._id, leftAt: null })
+      .populate("userId", "name username avatar")
+      .select("userId side teamName isReady")
+      .lean()
+  ]);
+  left.members = members.filter((entry: any) => entry.side === "LEFT").map((entry: any) => ({ userId: entry.userId?._id?.toString?.() ?? entry.userId?.toString?.(), name: entry.userId?.name ?? "Player", avatar: entry.userId?.avatar, isReady: entry.isReady, team: entry.teamName ?? "A" }));
+  right.members = members.filter((entry: any) => entry.side === "RIGHT").map((entry: any) => ({ userId: entry.userId?._id?.toString?.() ?? entry.userId?.toString?.(), name: entry.userId?.name ?? "Player", avatar: entry.userId?.avatar, isReady: entry.isReady, team: entry.teamName ?? "B" }));
   return {
     battleId: battle._id?.toString?.() ?? battle.id,
     id: battle._id?.toString?.() ?? battle.id,
     battleCode: battle.battleCode,
     title: battle.title ?? "",
     status: battle.status,
+    stateVersion: battle.stateVersion ?? 1,
     mode: battle.mode,
+    format: battle.format ?? "ROOM",
+    scope: battle.scope ?? "CROSS_ROOM",
+    teamSize: battle.teamSize ?? 1,
+    selectedGiftId: battle.selectedGiftId?.toString?.() ?? "",
     battleType: battle.battleType,
     durationSeconds: battle.durationSeconds,
     remainingSeconds: remainingSeconds(battle),
+    countdownEndsAt: battle.countdownEndsAt,
+    countdownSecondsRemaining: battle.countdownEndsAt ? Math.max(0, Math.ceil((new Date(battle.countdownEndsAt).getTime() - Date.now()) / 1000)) : 0,
     left,
     right,
     leader: leader(battle.leftScore ?? 0, battle.rightScore ?? 0),
     winnerSide: battle.winnerSide,
+    terminationReason: battle.terminationReason ?? "",
     startedAt: battle.startedAt,
     endedAt: battle.endedAt
   };
@@ -121,9 +142,90 @@ export async function pkState(battleOrId: any) {
 
 async function emitPkState(battle: any, event: string = pkSocketEvents.state) {
   const state = await pkState(battle);
-  emitRoom(state.left.roomId, event, state);
-  emitRoom(state.right.roomId, event, state);
+  for (const roomId of new Set([state.left.roomId, state.right.roomId])) emitRoom(roomId, event, state);
   return state;
+}
+
+export async function setPkReady(userId: string, battleId: string) {
+  objectId(battleId, "battleId");
+  const battle = await PkBattle.findById(battleId);
+  if (!battle || battle.status !== "PREPARING") throw new HttpError(409, "PK preparation is closed", ErrorCode.CONFLICT);
+  assertPkTransition(battle.status, "READY");
+  const participant = await PkParticipant.findOneAndUpdate(
+    { battleId: battle._id, userId, leftAt: null },
+    { $set: { isReady: true } },
+    { new: true }
+  );
+  if (!participant) throw new HttpError(403, "Only a PK participant can ready up", ErrorCode.FORBIDDEN);
+  await addPkEvent({ battleId: battle._id, roomId: participant.roomId, userId, eventType: "PK_READY", metadata: { side: participant.side } });
+  const [required, ready] = await Promise.all([
+    PkParticipant.countDocuments({ battleId: battle._id, leftAt: null }),
+    PkParticipant.countDocuments({ battleId: battle._id, leftAt: null, isReady: true })
+  ]);
+  if (required > 0 && ready === required) {
+    const readyBattle = await PkBattle.findOneAndUpdate(
+      { _id: battle._id, status: "PREPARING" },
+      { $set: { status: "READY" }, $inc: { stateVersion: 1 } },
+      { new: true }
+    );
+    if (readyBattle) {
+      await addPkEvent({ battleId: battle._id, eventType: "PK_READY", metadata: { participantsReady: ready } });
+      await emitPkState(readyBattle.toObject());
+      const countdownEndsAt = new Date(Date.now() + 3_000);
+      assertPkTransition("READY", "COUNTDOWN");
+      const countdown = await PkBattle.findOneAndUpdate(
+        { _id: battle._id, status: "READY" },
+        { $set: { status: "COUNTDOWN", countdownEndsAt }, $inc: { stateVersion: 1 } },
+        { new: true }
+      );
+      if (countdown) {
+        await addPkEvent({ battleId: battle._id, eventType: "PK_COUNTDOWN" });
+        await emitPkState(countdown.toObject());
+        schedulePkCountdown(battle.id);
+      }
+    }
+  } else {
+    await emitPkState(battle.toObject());
+  }
+  return { battle: { ...(await pkState(battleId)), myReady: true }, ready: true };
+}
+
+function stopPkCountdown(battleId: string) {
+  const timer = countdownTimers.get(battleId);
+  if (timer) clearTimeout(timer);
+  countdownTimers.delete(battleId);
+}
+
+function schedulePkCountdown(battleId: string) {
+  stopPkCountdown(battleId);
+  const tick = async () => {
+    const battle = await PkBattle.findById(battleId);
+    if (!battle || battle.status !== "COUNTDOWN" || !battle.countdownEndsAt) {
+      stopPkCountdown(battleId);
+      return;
+    }
+    const remaining = battle.countdownEndsAt.getTime() - Date.now();
+    if (remaining <= 0) {
+      const started = await PkBattle.findOneAndUpdate(
+        { _id: battle._id, status: "COUNTDOWN", countdownEndsAt: { $lte: new Date() } },
+        { $set: { status: "ACTIVE", startedAt: new Date() }, $unset: { countdownEndsAt: 1 }, $inc: { stateVersion: 1 } },
+        { new: true }
+      );
+      stopPkCountdown(battleId);
+      if (started) {
+        assertPkTransition("COUNTDOWN", "ACTIVE");
+        await addPkEvent({ battleId: battle._id, eventType: "PK_STARTED" });
+        await emitPkState(started.toObject(), pkSocketEvents.started);
+        startBattleTimer(battleId);
+      }
+      return;
+    }
+    await emitPkState(battle.toObject(), pkSocketEvents.timerTick);
+    const timer = setTimeout(() => { void tick(); }, Math.min(1000, remaining));
+    timer.unref?.();
+    countdownTimers.set(battleId, timer);
+  };
+  void tick();
 }
 
 async function addPkEvent(input: {
@@ -161,7 +263,10 @@ async function assertHost(userId: string, roomId: string) {
   const room = await Room.findById(roomId).lean();
   if (!room) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
   if (room.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
-  if (room.hostId.toString() !== userId) throw new HttpError(403, "Only room host can start PK", ErrorCode.FORBIDDEN);
+  const isManager = room.hostId.toString() === userId
+    || room.roomAdminIds?.some((id) => id.toString() === userId)
+    || await User.exists({ _id: userId, role: "ADMIN" });
+  if (!isManager) throw new HttpError(403, "Only the room host or an admin can manage PK", ErrorCode.FORBIDDEN);
   const host = await User.findById(userId).select("isBlocked mutedUntil suspendedUntil name").lean();
   if (!host || host.isBlocked || (host.suspendedUntil && host.suspendedUntil > new Date()) || (host.mutedUntil && host.mutedUntil > new Date())) {
     throw new HttpError(403, "Restricted hosts cannot start PK", ErrorCode.FORBIDDEN);
@@ -177,6 +282,103 @@ async function assertNoActivePk(roomId: string) {
   if (existing) throw new HttpError(409, "Room already has an active PK", ErrorCode.CONFLICT);
 }
 
+export async function createRoomPk(input: {
+  userId: string;
+  roomId: string;
+  leftPlayerId: string;
+  rightPlayerId: string;
+  leftPlayerIds?: string[];
+  rightPlayerIds?: string[];
+  format?: "PLAYER" | "TEAM";
+  mode: "GIFT" | "VOTE";
+  durationSeconds: number;
+  selectedGiftId?: string;
+}) {
+  assertPkTransition("DRAFT", "PREPARING");
+  objectId(input.roomId, "roomId");
+  const leftPlayerIds = input.leftPlayerIds?.length ? input.leftPlayerIds : [input.leftPlayerId];
+  const rightPlayerIds = input.rightPlayerIds?.length ? input.rightPlayerIds : [input.rightPlayerId];
+  if ([...leftPlayerIds, ...rightPlayerIds].some((id) => !isValidObjectId(id))) throw new HttpError(400, "Invalid player selection", ErrorCode.VALIDATION);
+  if (new Set([...leftPlayerIds, ...rightPlayerIds]).size !== leftPlayerIds.length + rightPlayerIds.length) throw new HttpError(400, "A player cannot be on both teams", ErrorCode.VALIDATION);
+  const format = input.format ?? "PLAYER";
+  if (format === "PLAYER" && (leftPlayerIds.length !== 1 || rightPlayerIds.length !== 1)) throw new HttpError(400, "Player PK requires one player per side", ErrorCode.VALIDATION);
+  if (format === "TEAM" && (leftPlayerIds.length < 2 || leftPlayerIds.length > 5 || rightPlayerIds.length !== leftPlayerIds.length)) throw new HttpError(400, "Team PK requires balanced teams of 2–5 players", ErrorCode.VALIDATION);
+  if (!allowedPkDurations.includes(input.durationSeconds)) throw new HttpError(400, "Invalid PK duration", ErrorCode.VALIDATION);
+  const room = await Room.findById(input.roomId).lean();
+  if (!room || room.status !== "LIVE") throw new HttpError(400, "Room must be live to start a PK", ErrorCode.VALIDATION);
+  await assertHost(input.userId, input.roomId);
+  const manager = await User.findById(input.userId).select("isBlocked mutedUntil suspendedUntil").lean();
+  if (!manager || manager.isBlocked || (manager.mutedUntil && manager.mutedUntil > new Date()) || (manager.suspendedUntil && manager.suspendedUntil > new Date())) {
+    throw new HttpError(403, "Restricted room managers cannot start PK", ErrorCode.FORBIDDEN);
+  }
+
+  const selectedPlayerIds = [...leftPlayerIds, ...rightPlayerIds];
+  const players = await RoomParticipant.find({
+    roomId: input.roomId,
+    userId: { $in: selectedPlayerIds },
+    leftAt: null,
+    role: { $in: ["HOST", "SPEAKER", "MODERATOR"] },
+    seatIndex: { $ne: null },
+    micEnabled: true,
+    moderatorMuted: false
+  }).select("userId").lean();
+  if (new Set(players.map((player) => player.userId.toString())).size !== selectedPlayerIds.length) {
+    throw new HttpError(400, "Both PK players must be on an active microphone seat", ErrorCode.VALIDATION);
+  }
+
+  let gift: any = null;
+  if (input.mode === "GIFT") {
+    if (!input.selectedGiftId) throw new HttpError(400, "Choose the PK gift", ErrorCode.VALIDATION);
+    gift = await Gift.findOne({ _id: objectId(input.selectedGiftId, "giftId"), isActive: true }).select("name pkPoints").lean();
+    if (!gift) throw new HttpError(404, "Selected PK gift is unavailable", ErrorCode.NOT_FOUND);
+    if (!(gift.pkPoints > 0)) throw new HttpError(400, "Selected gift has no PK point value; update gift PK points first", ErrorCode.VALIDATION);
+  }
+
+  const session = await mongoose.startSession();
+  let battle: any;
+  try {
+    await session.withTransaction(async () => {
+      const lockProbe = await Room.findOneAndUpdate(
+        { _id: input.roomId, status: "LIVE", $or: [{ activePkId: { $exists: false } }, { activePkId: null }] },
+        { $set: { activePkId: new mongoose.Types.ObjectId() } },
+        { new: true, session }
+      );
+      if (!lockProbe) throw new HttpError(409, "A PK is already active in this room", ErrorCode.CONFLICT);
+      const battleId = lockProbe.activePkId!;
+      const [created] = await PkBattle.create([{
+        _id: battleId,
+        battleCode: battleCode(),
+        title: gift ? `${gift.name} ${format === "TEAM" ? "Team" : "Player"} PK` : `${format === "TEAM" ? "Team" : "Player"} Vote PK`,
+        mode: input.mode,
+        format,
+        scope: "SAME_ROOM",
+        teamSize: leftPlayerIds.length,
+        status: "PREPARING",
+        battleType: room.type,
+        durationSeconds: input.durationSeconds,
+        startedByUserId: input.userId,
+        leftRoomId: input.roomId,
+        rightRoomId: input.roomId,
+        leftHostId: leftPlayerIds[0],
+        rightHostId: rightPlayerIds[0],
+        selectedGiftId: gift?._id,
+        inRoomBattle: true,
+        stateVersion: 1
+      }], { session });
+      battle = created;
+      await PkParticipant.create([
+        ...leftPlayerIds.map((userId) => ({ battleId, userId, roomId: input.roomId, side: "LEFT", role: "SPEAKER", isReady: false, teamName: "A" })),
+        ...rightPlayerIds.map((userId) => ({ battleId, userId, roomId: input.roomId, side: "RIGHT", role: "SPEAKER", isReady: false, teamName: "B" }))
+      ], { session, ordered: true });
+    });
+  } finally {
+    await session.endSession();
+  }
+  const state = await emitPkState(battle.toObject(), pkSocketEvents.state);
+  await addPkEvent({ battleId: battle._id, roomId: input.roomId, userId: input.userId, eventType: "PK_CREATED", metadata: { format, mode: input.mode, leftPlayerIds, rightPlayerIds } });
+  return { battle: state };
+}
+
 export async function createPkInvite(input: {
   userId: string;
   roomId: string;
@@ -190,6 +392,7 @@ export async function createPkInvite(input: {
   objectId(input.roomId, "roomId");
   objectId(input.opponentRoomId, "opponentRoomId");
   objectId(input.opponentHostId, "opponentHostId");
+  if (input.roomId === input.opponentRoomId) throw new HttpError(400, "Cross-room PK requires two different rooms", ErrorCode.VALIDATION);
   if (!allowedPkDurations.includes(input.durationSeconds)) throw new HttpError(400, "Invalid PK duration", ErrorCode.VALIDATION);
   const room = await assertHost(input.userId, input.roomId);
   const opponentRoom = await Room.findById(input.opponentRoomId).lean();
@@ -203,32 +406,53 @@ export async function createPkInvite(input: {
     ]
   });
   if (blocked) throw new HttpError(403, "Cannot invite this host", ErrorCode.FORBIDDEN);
-  await Promise.all([assertNoActivePk(input.roomId), assertNoActivePk(input.opponentRoomId)]);
-
-  const battle = await PkBattle.create({
-    battleCode: battleCode(),
-    title: sanitizeText(input.title ?? ""),
-    mode: input.mode,
-    status: "INVITED",
-    battleType: input.battleType,
-    durationSeconds: input.durationSeconds,
-    startedByUserId: input.userId,
-    leftRoomId: input.roomId,
-    rightRoomId: input.opponentRoomId,
-    leftHostId: input.userId,
-    rightHostId: input.opponentHostId
-  });
-  const invite = await PkInvite.create({
-    battleId: battle._id,
-    inviterUserId: input.userId,
-    inviteeUserId: input.opponentHostId,
-    inviterRoomId: input.roomId,
-    inviteeRoomId: input.opponentRoomId,
-    expiresAt: new Date(Date.now() + 60_000)
-  });
+  const battleId = new mongoose.Types.ObjectId();
+  const session = await mongoose.startSession();
+  let battle: any;
+  let invite: any;
+  try {
+    await session.withTransaction(async () => {
+      for (const roomId of [input.roomId, input.opponentRoomId].sort()) {
+        const locked = await Room.findOneAndUpdate(
+          { _id: roomId, status: "LIVE", $or: [{ activePkId: { $exists: false } }, { activePkId: null }] },
+          { $set: { activePkId: battleId } },
+          { new: true, session }
+        );
+        if (!locked) throw new HttpError(409, "One of the rooms is already in a PK", ErrorCode.CONFLICT);
+      }
+      [battle] = await PkBattle.create([{
+        _id: battleId,
+        battleCode: battleCode(),
+        title: sanitizeText(input.title ?? ""),
+        mode: input.mode,
+        format: input.battleType === "VIDEO" ? "LIVESTREAM" : "ROOM",
+        scope: "CROSS_ROOM",
+        status: "INVITED",
+        battleType: input.battleType,
+        durationSeconds: input.durationSeconds,
+        startedByUserId: input.userId,
+        leftRoomId: input.roomId,
+        rightRoomId: input.opponentRoomId,
+        leftHostId: input.userId,
+        rightHostId: input.opponentHostId
+      }], { session });
+      [invite] = await PkInvite.create([{
+        battleId: battle._id,
+        inviterUserId: input.userId,
+        inviteeUserId: input.opponentHostId,
+        inviterRoomId: input.roomId,
+        inviteeRoomId: input.opponentRoomId,
+        expiresAt: new Date(Date.now() + 60_000)
+      }], { session });
+      await PkEvent.create([
+        { battleId, roomId: input.roomId, userId: input.userId, eventType: "PK_CREATED" },
+        { battleId, roomId: input.opponentRoomId, userId: input.userId, eventType: "PK_INVITE_SENT" }
+      ], { session, ordered: true });
+    });
+  } finally {
+    await session.endSession();
+  }
   await Promise.all([
-    addPkEvent({ battleId: battle._id, roomId: input.roomId, userId: input.userId, eventType: "PK_CREATED" }),
-    addPkEvent({ battleId: battle._id, roomId: input.opponentRoomId, userId: input.userId, eventType: "PK_INVITE_SENT" }),
     createNotification(input.opponentHostId, "SYSTEM", "PK Battle Invite", `${room.title} invited you to a PK Battle`, { battleId: battle.id, inviteId: invite.id, roomId: input.opponentRoomId, inviterRoomId: input.roomId, type: "PK_INVITE" })
   ]);
   const state = await pkState(battle.toObject());
@@ -277,19 +501,34 @@ export async function acceptPkInvite(userId: string, inviteId: string) {
   if (!battle) throw new HttpError(404, "PK battle not found", ErrorCode.NOT_FOUND);
   const [leftRoom, rightRoom] = await Promise.all([Room.findById(battle.leftRoomId).lean(), Room.findById(battle.rightRoomId).lean()]);
   if (leftRoom?.status !== "LIVE" || rightRoom?.status !== "LIVE") throw new HttpError(400, "Both rooms must be live", ErrorCode.VALIDATION);
-  battle.status = "ACTIVE";
-  battle.startedAt = new Date();
-  await battle.save();
+  assertPkTransition(battle.status, "PREPARING");
+  const session = await mongoose.startSession();
+  let acceptedBattle: any;
+  try {
+    await session.withTransaction(async () => {
+      const acceptedInvite = await PkInvite.findOneAndUpdate(
+        { _id: invite._id, status: "PENDING", expiresAt: { $gt: new Date() } },
+        { $set: { status: "ACCEPTED", respondedAt: new Date() } },
+        { new: true, session }
+      );
+      if (!acceptedInvite) throw new HttpError(409, "Invitation was already answered or expired", ErrorCode.CONFLICT);
+      acceptedBattle = await PkBattle.findOneAndUpdate(
+        { _id: battle._id, status: "INVITED" },
+        { $set: { status: "PREPARING" }, $inc: { stateVersion: 1 } },
+        { new: true, session }
+      );
+      if (!acceptedBattle) throw new HttpError(409, "PK is no longer available", ErrorCode.CONFLICT);
+      await PkParticipant.updateOne({ battleId: battle._id, userId: battle.leftHostId }, { $set: { battleId: battle._id, userId: battle.leftHostId, roomId: battle.leftRoomId, side: "LEFT", role: "HOST", joinedAt: new Date(), isReady: false } }, { upsert: true, session });
+      await PkParticipant.updateOne({ battleId: battle._id, userId: battle.rightHostId }, { $set: { battleId: battle._id, userId: battle.rightHostId, roomId: battle.rightRoomId, side: "RIGHT", role: "HOST", joinedAt: new Date(), isReady: false } }, { upsert: true, session });
+    });
+  } finally {
+    await session.endSession();
+  }
   invite.status = "ACCEPTED";
   invite.respondedAt = new Date();
-  await invite.save();
-  await PkParticipant.updateOne({ battleId: battle._id, userId: battle.leftHostId }, { battleId: battle._id, userId: battle.leftHostId, roomId: battle.leftRoomId, side: "LEFT", role: "HOST", joinedAt: new Date() }, { upsert: true });
-  await PkParticipant.updateOne({ battleId: battle._id, userId: battle.rightHostId }, { battleId: battle._id, userId: battle.rightHostId, roomId: battle.rightRoomId, side: "RIGHT", role: "HOST", joinedAt: new Date() }, { upsert: true });
   await addPkEvent({ battleId: battle._id, userId, eventType: "PK_INVITE_ACCEPTED" });
-  await addPkEvent({ battleId: battle._id, eventType: "PK_STARTED" });
-  const state = await emitPkState(battle.toObject(), pkSocketEvents.started);
+  const state = await emitPkState(acceptedBattle.toObject(), pkSocketEvents.state);
   emitUser(battle.leftHostId.toString(), pkSocketEvents.inviteAccepted, state);
-  startBattleTimer(battle.id);
   return { battle: state, invite };
 }
 
@@ -303,12 +542,34 @@ export async function rejectPkInvite(userId: string, inviteId: string) {
     await expireInvite(invite.id);
     throw new HttpError(409, "PK invite expired", ErrorCode.CONFLICT);
   }
-  invite.status = "REJECTED";
-  invite.respondedAt = new Date();
-  await invite.save();
-  const battle = await PkBattle.findByIdAndUpdate(invite.battleId, { status: "DECLINED", endedAt: new Date() }, { new: true }).lean();
+  const session = await mongoose.startSession();
+  let battle: any;
+  try {
+    await session.withTransaction(async () => {
+      const changedInvite = await PkInvite.findOneAndUpdate(
+        { _id: invite._id, status: "PENDING", expiresAt: { $gt: new Date() } },
+        { $set: { status: "REJECTED", respondedAt: new Date() } },
+        { new: true, session }
+      );
+      if (!changedInvite) throw new HttpError(409, "Invitation was already answered or expired", ErrorCode.CONFLICT);
+      assertPkTransition("INVITED", "DECLINED");
+      battle = await PkBattle.findOneAndUpdate(
+        { _id: invite.battleId, status: "INVITED" },
+        { $set: { status: "DECLINED", endedAt: new Date() }, $inc: { stateVersion: 1 } },
+        { new: true, session }
+      );
+      if (!battle) throw new HttpError(409, "PK is no longer available", ErrorCode.CONFLICT);
+      await Room.updateMany({ _id: { $in: [battle.leftRoomId, battle.rightRoomId] }, activePkId: battle._id }, { $unset: { activePkId: 1 } }, { session });
+    });
+  } finally {
+    await session.endSession();
+  }
   await addPkEvent({ battleId: invite.battleId, userId, eventType: "PK_INVITE_REJECTED" });
-  if (battle) emitRoom(battle.leftRoomId.toString(), pkSocketEvents.inviteRejected, { battleId: battle._id.toString(), inviteId });
+  if (battle) {
+    const state = await pkState(battle);
+    emitRoom(battle.leftRoomId.toString(), pkSocketEvents.inviteRejected, { battleId: battle._id.toString(), inviteId });
+    for (const roomId of new Set([state.left.roomId, state.right.roomId])) emitRoom(roomId, pkSocketEvents.ended, state);
+  }
   return { rejected: true };
 }
 
@@ -316,13 +577,24 @@ export async function cancelPk(userId: string, battleId: string) {
   objectId(battleId, "battleId");
   const battle = await PkBattle.findById(battleId);
   if (!battle) throw new HttpError(404, "PK battle not found", ErrorCode.NOT_FOUND);
-  if (battle.leftHostId.toString() !== userId && battle.startedByUserId.toString() !== userId) throw new HttpError(403, "Cannot cancel this PK", ErrorCode.FORBIDDEN);
-  battle.status = "CANCELLED";
-  battle.endedAt = new Date();
-  await battle.save();
+  if (!["INVITED", "WAITING", "PREPARING", "READY", "COUNTDOWN"].includes(battle.status)) throw new HttpError(409, "An active PK must be ended, not cancelled", ErrorCode.CONFLICT);
+  if (battle.inRoomBattle) {
+    const room = await Room.findById(battle.leftRoomId).select("hostId roomAdminIds").lean();
+    const manager = room?.hostId.toString() === userId || room?.roomAdminIds?.some((id) => id.toString() === userId)
+      || Boolean(await User.exists({ _id: userId, role: "ADMIN" }));
+    if (!manager) throw new HttpError(403, "Only the room host or admin can cancel PK", ErrorCode.FORBIDDEN);
+  } else if (battle.leftHostId.toString() !== userId && battle.startedByUserId.toString() !== userId) {
+    throw new HttpError(403, "Cannot cancel this PK", ErrorCode.FORBIDDEN);
+  }
+  assertPkTransition(battle.status, "CANCELLED");
+  const cancelled = await PkBattle.findOneAndUpdate({ _id: battle._id, status: battle.status }, { $set: { status: "CANCELLED", endedAt: new Date() }, $inc: { stateVersion: 1 } }, { new: true });
+  if (!cancelled) throw new HttpError(409, "PK changed while cancelling", ErrorCode.CONFLICT);
   await PkInvite.updateMany({ battleId }, { status: "CANCELLED", respondedAt: new Date() });
-  await emitPkState(battle.toObject(), pkSocketEvents.ended);
+  await addPkEvent({ battleId: battle._id, userId, eventType: "PK_CANCELLED" });
+  await emitPkState(cancelled.toObject(), pkSocketEvents.ended);
+  await Room.updateMany({ _id: { $in: [battle.leftRoomId, battle.rightRoomId] }, activePkId: battle._id }, { $unset: { activePkId: 1 } });
   stopBattleTimer(battle.id);
+  stopPkCountdown(battle.id);
   return { cancelled: true };
 }
 
@@ -330,31 +602,123 @@ export async function endPkBattle(input: { userId?: string; battleId: string; fo
   objectId(input.battleId, "battleId");
   const battle = await PkBattle.findById(input.battleId);
   if (!battle) throw new HttpError(404, "PK battle not found", ErrorCode.NOT_FOUND);
-  if (!input.force && input.userId && ![battle.leftHostId.toString(), battle.rightHostId.toString(), battle.startedByUserId.toString()].includes(input.userId)) {
-    throw new HttpError(403, "Host control required", ErrorCode.FORBIDDEN);
+  if (!input.force && input.userId) {
+    const rooms = await Room.find({ _id: { $in: [battle.leftRoomId, battle.rightRoomId] } }).select("hostId roomAdminIds").lean();
+    const canManage = rooms.some((room) => room.hostId.toString() === input.userId || room.roomAdminIds?.some((id) => id.toString() === input.userId))
+      || Boolean(await User.exists({ _id: input.userId, role: "ADMIN" }));
+    if (!canManage) throw new HttpError(403, "Only a room host or admin can end PK", ErrorCode.FORBIDDEN);
   }
+  if (!["INVITED", "WAITING", "PREPARING", "READY", "COUNTDOWN", "ACTIVE", "FINAL_CRUNCH", "FINALIZING", "OVERTIME"].includes(battle.status)) return { battle: await pkState(battle) };
   const winnerSide = leader(battle.leftScore, battle.rightScore);
-  battle.status = input.force ? "FORCE_ENDED" : "ENDED";
-  battle.winnerSide = winnerSide;
-  battle.winnerUserId = winnerSide === "LEFT" ? battle.leftHostId : winnerSide === "RIGHT" ? battle.rightHostId : undefined;
-  battle.endedAt = new Date();
-  await battle.save();
+  const preStart = ["INVITED", "WAITING", "PREPARING", "READY", "COUNTDOWN"].includes(battle.status);
+  let finalizing = battle;
+  if (!input.force && !preStart && battle.status !== "FINALIZING") {
+    assertPkTransition(battle.status, "FINALIZING");
+    const changed = await PkBattle.findOneAndUpdate({ _id: battle._id, status: battle.status }, { $set: { status: "FINALIZING" }, $inc: { stateVersion: 1 } }, { new: true });
+    if (!changed) return { battle: await pkState(input.battleId) };
+    finalizing = changed;
+    await addPkEvent({ battleId: battle._id, eventType: "PK_FINALIZING" });
+    await emitPkState(changed.toObject());
+  }
+  const terminalStatus = input.force ? "ABORTED" : preStart ? "CANCELLED" : "COMPLETED";
+  assertPkTransition(finalizing.status, terminalStatus);
+  const finalized = await PkBattle.findOneAndUpdate(
+    { _id: battle._id, status: finalizing.status },
+    { $set: { status: terminalStatus, winnerSide, winnerUserId: winnerSide === "LEFT" ? battle.leftHostId : winnerSide === "RIGHT" ? battle.rightHostId : undefined, endedAt: new Date(), finalizedAt: new Date(), terminationReason: input.reason ?? "" }, $inc: { stateVersion: 1 } },
+    { new: true }
+  );
+  if (!finalized) return { battle: await pkState(input.battleId) };
   stopBattleTimer(battle.id);
+  stopPkCountdown(battle.id);
   await addPkEvent({
-    battleId: battle._id,
-    eventType: input.force ? "PK_FORCE_ENDED" : "PK_ENDED",
+    battleId: finalized._id,
+    eventType: input.force ? "PK_ABORTED" : preStart ? "PK_CANCELLED" : "PK_COMPLETED",
     side: winnerSide,
     metadata: { reason: input.reason }
   });
-  const state = await emitPkState(battle.toObject(), input.force ? pkSocketEvents.forceEnded : pkSocketEvents.ended);
+  const state = await emitPkState(finalized.toObject(), input.force ? pkSocketEvents.forceEnded : pkSocketEvents.ended);
+  await Room.updateMany({ _id: { $in: [battle.leftRoomId, battle.rightRoomId] }, activePkId: battle._id }, { $unset: { activePkId: 1 } });
+  if (input.force) await closePkBattle({ battleId: battle.id, force: true });
+  else schedulePkClose(battle.id);
   return { battle: state };
+}
+
+export async function closePkBattle(input: { battleId: string; userId?: string; force?: boolean }) {
+  objectId(input.battleId, "battleId");
+  const battle = await PkBattle.findById(input.battleId);
+  if (!battle) throw new HttpError(404, "PK battle not found", ErrorCode.NOT_FOUND);
+  if (!input.force && input.userId) {
+    const rooms = await Room.find({ _id: { $in: [battle.leftRoomId, battle.rightRoomId] } }).select("hostId roomAdminIds").lean();
+    const canManage = rooms.some((room) => room.hostId.toString() === input.userId || room.roomAdminIds?.some((id) => id.toString() === input.userId))
+      || Boolean(await User.exists({ _id: input.userId, role: "ADMIN" }));
+    if (!canManage) throw new HttpError(403, "Only a room host or admin can close PK", ErrorCode.FORBIDDEN);
+  }
+  if (battle.status === "CLOSED") return { battle: await pkState(battle) };
+  if (!["COMPLETED", "ABORTED", "CANCELLED", "DECLINED", "EXPIRED", "ENDED", "FORCE_ENDED"].includes(battle.status)) {
+    throw new HttpError(409, "Finalize or cancel PK before closing it", ErrorCode.CONFLICT);
+  }
+  assertPkTransition(battle.status === "ENDED" ? "ENDED" : battle.status, "CLOSED");
+  const closed = await PkBattle.findOneAndUpdate(
+    { _id: battle._id, status: battle.status },
+    { $set: { status: "CLOSED", closedAt: new Date() }, $inc: { stateVersion: 1 } },
+    { new: true }
+  );
+  if (!closed) return { battle: await pkState(input.battleId) };
+  stopBattleTimer(battle.id);
+  stopPkCountdown(battle.id);
+  await Room.updateMany({ _id: { $in: [battle.leftRoomId, battle.rightRoomId] }, activePkId: battle._id }, { $unset: { activePkId: 1 } });
+  await addPkEvent({ battleId: battle._id, eventType: "PK_CLOSED" });
+  const state = await emitPkState(closed.toObject(), pkSocketEvents.ended);
+  return { battle: state };
+}
+
+const closeTimers = new Map<string, NodeJS.Timeout>();
+function schedulePkClose(battleId: string) {
+  const existing = closeTimers.get(battleId);
+  if (existing) clearTimeout(existing);
+  const timer = setTimeout(() => { void closePkBattle({ battleId, force: true }).catch(() => {}); }, 60_000);
+  timer.unref?.();
+  closeTimers.set(battleId, timer);
+}
+
+export async function votePk(input: { userId: string; battleId: string; side: PkSide }) {
+  objectId(input.battleId, "battleId");
+  const battle = await PkBattle.findById(input.battleId);
+  if (!battle || !["ACTIVE", "FINAL_CRUNCH"].includes(battle.status) || remainingSeconds(battle) <= 0 || battle.mode !== "VOTE") {
+    throw new HttpError(409, "This vote PK is no longer accepting votes", ErrorCode.CONFLICT);
+  }
+  await requirePkParticipant(battle, input.userId);
+  const roomId = battle.leftRoomId.toString();
+  const session = await mongoose.startSession();
+  let updated: any;
+  try {
+    await session.withTransaction(async () => {
+      await PkVote.create([{ battleId: battle._id, voterId: input.userId, side: input.side, roomId }], { session });
+      updated = await PkBattle.findOneAndUpdate(
+        { _id: battle._id, status: { $in: ["ACTIVE", "FINAL_CRUNCH"] }, mode: "VOTE", startedAt: { $gt: new Date(Date.now() - battle.durationSeconds * 1000) } },
+        { $inc: { ...(input.side === "LEFT" ? { leftScore: 1 } : { rightScore: 1 }), stateVersion: 1, eventSequence: 1 } },
+        { new: true, session }
+      );
+      if (!updated) throw new HttpError(409, "PK has already ended", ErrorCode.CONFLICT);
+      await PkEvent.create([{ battleId: battle._id, roomId, userId: input.userId, eventType: "VOTE_CAST", side: input.side, points: 1, sequence: updated.eventSequence, stateVersion: updated.stateVersion }], { session });
+    });
+  } catch (error) {
+    if ((error as { code?: number })?.code === 11000 || (error as { code?: string })?.code === "11000") {
+      throw new HttpError(409, "You already voted in this PK", ErrorCode.CONFLICT);
+    }
+    throw error;
+  } finally {
+    await session.endSession();
+  }
+  const state = await emitPkState(updated.toObject(), pkSocketEvents.scoreUpdate);
+  return { battle: { ...state, myVote: input.side }, voted: true };
 }
 
 export async function requestPkRematch(userId: string, battleId: string) {
   objectId(battleId, "battleId");
   const oldBattle = await PkBattle.findById(battleId).lean();
   if (!oldBattle) throw new HttpError(404, "PK battle not found", ErrorCode.NOT_FOUND);
-  if (oldBattle.status !== "ENDED" && oldBattle.status !== "FORCE_ENDED") {
+  if (!["ENDED", "FORCE_ENDED", "COMPLETED", "CLOSED"].includes(oldBattle.status)) {
     throw new HttpError(400, "Can only rematch ended battles", ErrorCode.VALIDATION);
   }
   const isLeftHost = oldBattle.leftHostId.toString() === userId;
@@ -385,13 +749,13 @@ export async function requestPkRematch(userId: string, battleId: string) {
 export async function getActivePk(roomId: string) {
   objectId(roomId, "roomId");
   const battle = await PkBattle.findOne({
-    status: { $in: ["INVITED", "WAITING", "ACTIVE"] },
+    status: { $in: activeStatuses },
     $or: [{ leftRoomId: roomId }, { rightRoomId: roomId }]
   }).lean();
   return battle ? pkState(battle) : null;
 }
 
-export async function sendPkGift(input: { userId: string; battleId: string; giftId: string; side: PkSide; idempotencyKey?: string }) {
+export async function sendPkGift(input: { userId: string; battleId: string; giftId: string; side: PkSide; idempotencyKey: string; quantity?: number }) {
   objectId(input.battleId, "battleId");
   objectId(input.giftId, "giftId");
   if (input.idempotencyKey) {
@@ -405,11 +769,19 @@ export async function sendPkGift(input: { userId: string; battleId: string; gift
   }
   const battle = await PkBattle.findById(input.battleId);
   const gift = await Gift.findOne({ _id: input.giftId, isActive: true }).lean();
-  if (!battle || battle.status !== "ACTIVE") throw new HttpError(404, "Active PK not found", ErrorCode.NOT_FOUND);
+  if (!battle || !["ACTIVE", "FINAL_CRUNCH"].includes(battle.status) || remainingSeconds(battle) <= 0) throw new HttpError(404, "Active PK not found", ErrorCode.NOT_FOUND);
   if (!gift) throw new HttpError(404, "Gift not found", ErrorCode.NOT_FOUND);
+  if (battle.mode === "VOTE") throw new HttpError(400, "This PK accepts votes only", ErrorCode.VALIDATION);
+  if (battle.inRoomBattle && battle.selectedGiftId?.toString() !== input.giftId) throw new HttpError(400, "Only the selected PK gift counts toward this battle", ErrorCode.VALIDATION);
+  if (!(gift.pkPoints > 0)) throw new HttpError(400, "This gift has no configured PK point value", ErrorCode.VALIDATION);
   await requirePkParticipant(battle, input.userId);
   const receiverId = input.side === "LEFT" ? battle.leftHostId.toString() : battle.rightHostId.toString();
+  const senderTeam = await PkParticipant.findOne({ battleId: battle._id, userId: input.userId, leftAt: null }).select("side").lean();
+  if (senderTeam?.side === input.side) throw new HttpError(400, "Support the opposing side with PK gifts", ErrorCode.VALIDATION);
   if (receiverId === input.userId) throw new HttpError(400, "Cannot send gifts to yourself", ErrorCode.VALIDATION);
+  const quantity = Math.min(99, Math.max(1, Math.floor(input.quantity ?? 1)));
+  const totalPrice = gift.coinPrice * quantity;
+  const totalPoints = gift.pkPoints * quantity;
   const roomId = input.side === "LEFT" ? battle.leftRoomId.toString() : battle.rightRoomId.toString();
   const comboKey = `${input.battleId}:${input.userId}:${input.side}:gift`;
   const existingCombo = giftCombos.get(comboKey);
@@ -418,35 +790,46 @@ export async function sendPkGift(input: { userId: string; battleId: string; gift
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    await debitWallet(input.userId, gift.coinPrice, "GIFT_SENT", { pkBattleId: battle.id, giftId: gift._id.toString(), side: input.side, idempotencyKey: input.idempotencyKey }, session);
+    await debitWallet(input.userId, totalPrice, "GIFT_SENT", { pkBattleId: battle.id, giftId: gift._id.toString(), side: input.side, quantity, idempotencyKey: input.idempotencyKey }, session);
     const [giftTransaction] = await GiftTransaction.create([{
       roomId,
       senderId: input.userId,
       receiverId,
       giftId: gift._id,
-      coinAmount: gift.coinPrice,
-      metadata: { pkBattleId: battle.id, side: input.side, idempotencyKey: input.idempotencyKey }
+      coinAmount: totalPrice,
+      comboCount: quantity,
+      totalValue: totalPrice,
+      metadata: { pkBattleId: battle.id, side: input.side, quantity, idempotencyKey: input.idempotencyKey }
     }], { session, ordered: true });
-    const comboMultiplier = Math.min(combo, 5);
-    const effectivePoints = gift.coinPrice * comboMultiplier;
+    await User.updateOne({ _id: receiverId }, { $inc: { charmExp: totalPrice } }, { session });
+    const effectivePoints = totalPoints;
     const oldLeader = leader(battle.leftScore, battle.rightScore);
     const scoreUpdate = input.side === "LEFT" ? { $inc: { leftScore: effectivePoints } } : { $inc: { rightScore: effectivePoints } };
-    const updated = await PkBattle.findByIdAndUpdate(battle._id, scoreUpdate, { new: true, session });
+    const updated = await PkBattle.findOneAndUpdate(
+      { _id: battle._id, status: { $in: ["ACTIVE", "FINAL_CRUNCH"] }, startedAt: { $gt: new Date(Date.now() - battle.durationSeconds * 1000) } },
+      { ...scoreUpdate, $inc: { ...(scoreUpdate as any).$inc, stateVersion: 1, eventSequence: 1 } },
+      { new: true, session }
+    );
     if (!updated) throw new HttpError(500, "Failed to update PK battle", ErrorCode.INTERNAL);
     const newLeader = leader(updated.leftScore, updated.rightScore);
+    await PkLeaderboardEntry.updateOne(
+      { battleId: battle._id, userId: input.userId },
+      { $setOnInsert: { battleId: battle._id, userId: input.userId, side: input.side }, $inc: { totalPoints: totalPoints, totalGiftsSent: quantity } },
+      { upsert: true, session }
+    );
+    await PkEvent.create([{
+      battleId: battle._id, roomId, userId: input.userId, eventType: "GIFT_SENT", side: input.side,
+      points: totalPoints, sequence: updated.eventSequence, stateVersion: updated.stateVersion,
+      giftTransactionId: giftTransaction._id,
+      metadata: { giftId: gift._id.toString(), giftName: gift.name, quantity, unitPkPoints: gift.pkPoints, combo }
+    }], { session, ordered: true });
+    await session.commitTransaction();
+    session.endSession();
     if (newLeader !== oldLeader && newLeader !== "DRAW") {
       await addPkEvent({ battleId: battle._id, eventType: "LEAD_CHANGED", side: newLeader, metadata: { from: oldLeader } });
       emitRoom(updated.leftRoomId.toString(), pkSocketEvents.leadChanged, { battleId: battle.id, leader: newLeader, leftScore: updated.leftScore, rightScore: updated.rightScore });
-      emitRoom(updated.rightRoomId.toString(), pkSocketEvents.leadChanged, { battleId: battle.id, leader: newLeader, leftScore: updated.leftScore, rightScore: updated.rightScore });
+      if (updated.rightRoomId.toString() !== updated.leftRoomId.toString()) emitRoom(updated.rightRoomId.toString(), pkSocketEvents.leadChanged, { battleId: battle.id, leader: newLeader, leftScore: updated.leftScore, rightScore: updated.rightScore });
     }
-    await PkLeaderboardEntry.updateOne(
-      { battleId: battle._id, userId: input.userId },
-      { $setOnInsert: { battleId: battle._id, userId: input.userId, side: input.side }, $inc: { totalPoints: gift.coinPrice, totalGiftsSent: 1 } },
-      { upsert: true, session }
-    );
-    await session.commitTransaction();
-    session.endSession();
-    await addPkEvent({ battleId: battle._id, roomId, userId: input.userId, eventType: "GIFT_SENT", side: input.side, points: gift.coinPrice, giftTransactionId: giftTransaction._id, metadata: { giftId: gift._id.toString(), giftName: gift.name, combo } });
     await RoomActivity.create({ roomId, userId: input.userId, type: "GIFT", label: `PK gift: ${gift.name} +${gift.coinPrice}`, metadata: { pkBattleId: battle.id, side: input.side } });
     const state = await emitPkState(updated?.toObject() ?? battle.toObject(), pkSocketEvents.scoreUpdate);
     const payload = {
@@ -455,14 +838,15 @@ export async function sendPkGift(input: { userId: string; battleId: string; gift
       senderId: input.userId,
       giftId: gift._id.toString(),
       giftName: gift.name,
-      coinAmount: gift.coinPrice,
-      pointsAdded: gift.coinPrice,
+      coinAmount: totalPrice,
+      quantity,
+      pointsAdded: totalPoints,
       combo,
       leftScore: state.left.score,
       rightScore: state.right.score
     };
     emitRoom(state.left.roomId, pkSocketEvents.giftReceived, payload);
-    emitRoom(state.right.roomId, pkSocketEvents.giftReceived, payload);
+    if (state.right.roomId !== state.left.roomId) emitRoom(state.right.roomId, pkSocketEvents.giftReceived, payload);
     return { battle: state, giftTransaction };
   } catch (err) {
     await session.abortTransaction();
@@ -481,6 +865,7 @@ export async function sendPkReaction(input: { userId: string; battleId: string; 
   objectId(input.battleId, "battleId");
   const battle = await PkBattle.findById(input.battleId);
   if (!battle || battle.status !== "ACTIVE") throw new HttpError(404, "Active PK not found", ErrorCode.NOT_FOUND);
+  if (battle.inRoomBattle) throw new HttpError(400, "Room PK supports its configured gift or one-time votes", ErrorCode.VALIDATION);
   await requirePkParticipant(battle, input.userId);
   const sideHostId = input.side === "LEFT" ? battle.leftHostId.toString() : battle.rightHostId.toString();
   if (sideHostId === input.userId) throw new HttpError(400, "Cannot react for your own side", ErrorCode.VALIDATION);
@@ -508,7 +893,7 @@ export async function sendPkReaction(input: { userId: string; battleId: string; 
   await addPkEvent({ battleId: battle._id, userId: input.userId, eventType: "REACTION_SENT", side: input.side, points, metadata: { type: input.type } });
   const state = await emitPkState(updated?.toObject() ?? battle.toObject(), pkSocketEvents.scoreUpdate);
   emitRoom(state.left.roomId, pkSocketEvents.reactionReceived, { battleId: battle.id, side: input.side, type: input.type, pointsAdded: points, bucketRemaining: Math.max(0, 10 - (used + points)) });
-  emitRoom(state.right.roomId, pkSocketEvents.reactionReceived, { battleId: battle.id, side: input.side, type: input.type, pointsAdded: points, bucketRemaining: Math.max(0, 10 - (used + points)) });
+  if (state.right.roomId !== state.left.roomId) emitRoom(state.right.roomId, pkSocketEvents.reactionReceived, { battleId: battle.id, side: input.side, type: input.type, pointsAdded: points, bucketRemaining: Math.max(0, 10 - (used + points)) });
   return { battle: state };
 }
 
@@ -546,12 +931,33 @@ export async function availableOpponents(input: { userId: string; battleType?: s
 export async function expireInvite(inviteId: string) {
   const invite = await PkInvite.findById(inviteId);
   if (!invite || invite.status !== "PENDING") return { expired: false };
-  invite.status = "EXPIRED";
-  invite.respondedAt = new Date();
-  await invite.save();
-  const battle = await PkBattle.findByIdAndUpdate(invite.battleId, { status: "EXPIRED", endedAt: new Date() }, { new: true }).lean();
+  const session = await mongoose.startSession();
+  let battle: any;
+  try {
+    await session.withTransaction(async () => {
+      const changedInvite = await PkInvite.findOneAndUpdate(
+        { _id: invite._id, status: "PENDING", expiresAt: { $lte: new Date() } },
+        { $set: { status: "EXPIRED", respondedAt: new Date() } },
+        { new: true, session }
+      );
+      if (!changedInvite) return;
+      assertPkTransition("INVITED", "EXPIRED");
+      battle = await PkBattle.findOneAndUpdate(
+        { _id: invite.battleId, status: "INVITED" },
+        { $set: { status: "EXPIRED", endedAt: new Date() }, $inc: { stateVersion: 1 } },
+        { new: true, session }
+      );
+      if (!battle) throw new HttpError(409, "PK is no longer available", ErrorCode.CONFLICT);
+      await Room.updateMany({ _id: { $in: [battle.leftRoomId, battle.rightRoomId] }, activePkId: battle._id }, { $unset: { activePkId: 1 } }, { session });
+    });
+  } finally {
+    await session.endSession();
+  }
+  if (!battle) return { expired: false };
   if (battle) {
     await addPkEvent({ battleId: invite.battleId, userId: invite.inviteeUserId.toString(), eventType: "PK_INVITE_EXPIRED" });
+    const state = await pkState(battle);
+    for (const roomId of new Set([state.left.roomId, state.right.roomId])) emitRoom(roomId, pkSocketEvents.ended, state);
     emitRoom(battle.leftRoomId.toString(), pkSocketEvents.inviteExpired, { battleId: battle._id.toString(), inviteId });
     emitUser(invite.inviteeUserId.toString(), pkSocketEvents.inviteExpired, { battleId: battle._id.toString(), inviteId });
   }
@@ -572,13 +978,26 @@ export function startBattleTimer(battleId: string) {
   stopBattleTimer(battleId);
   const timer = setInterval(async () => {
     const battle = await PkBattle.findById(battleId).lean();
-    if (!battle || battle.status !== "ACTIVE") {
+    if (!battle || !["ACTIVE", "FINAL_CRUNCH"].includes(battle.status)) {
       stopBattleTimer(battleId);
       return;
     }
-    const state = await pkState(battle);
+    let currentBattle = battle;
+    if (battle.status === "ACTIVE" && remainingSeconds(battle) <= 10) {
+      const finalCrunch = await PkBattle.findOneAndUpdate(
+        { _id: battle._id, status: "ACTIVE" },
+        { $set: { status: "FINAL_CRUNCH" }, $inc: { stateVersion: 1 } },
+        { new: true }
+      );
+      if (finalCrunch) {
+        await addPkEvent({ battleId: battle._id, eventType: "PK_FINAL_CRUNCH" });
+        await emitPkState(finalCrunch.toObject());
+        currentBattle = finalCrunch.toObject();
+      }
+    }
+    const state = await pkState(currentBattle);
     emitRoom(state.left.roomId, pkSocketEvents.timerTick, state);
-    emitRoom(state.right.roomId, pkSocketEvents.timerTick, state);
+    if (state.right.roomId !== state.left.roomId) emitRoom(state.right.roomId, pkSocketEvents.timerTick, state);
     if (state.remainingSeconds <= 0) {
       stopBattleTimer(battleId);
       await endPkBattle({ battleId });
@@ -590,11 +1009,14 @@ export function startBattleTimer(battleId: string) {
 }
 
 export async function resumePkTimers() {
-  const battles = await PkBattle.find({ status: "ACTIVE" }).lean();
+  const battles = await PkBattle.find({ status: { $in: ["COUNTDOWN", "ACTIVE", "FINAL_CRUNCH"] } }).lean();
   await Promise.all(battles.map(async (battle) => {
-    if (remainingSeconds(battle) <= 0) await endPkBattle({ battleId: battle._id.toString() });
+    if (battle.status === "COUNTDOWN") schedulePkCountdown(battle._id.toString());
+    else if (remainingSeconds(battle) <= 0) await endPkBattle({ battleId: battle._id.toString() });
     else startBattleTimer(battle._id.toString());
   }));
+  const completed = await PkBattle.find({ status: "COMPLETED" }).select("_id").lean();
+  for (const battle of completed) schedulePkClose(battle._id.toString());
   const staleInvites = await PkInvite.find({ status: "PENDING", expiresAt: { $lte: new Date() } }).lean();
   await Promise.all(staleInvites.map((invite) => expireInvite(invite._id.toString())));
 }

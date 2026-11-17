@@ -26,6 +26,7 @@ fun JSONObject.toNotificationItem(): NotificationItem {
         actorId = data.optString("userId", data.optString("actorId", "")),
         partnerId = data.optString("partnerId", ""),
         roomId = data.optString("roomId", ""),
+        inviteId = data.optString("inviteId", ""),
         clanId = data.optString("clanId", ""),
         achievementId = data.optString("achievementId", ""),
         actionType = data.optString("type", ""),

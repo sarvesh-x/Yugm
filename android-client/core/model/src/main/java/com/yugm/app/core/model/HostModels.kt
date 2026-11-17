@@ -18,6 +18,7 @@ data class Host(
     val avatar: String? = null,
     val isVip: Boolean = false,
     val vipTier: String = "",
+    val vipLevel: Int = 0,
     val level: Int = 1,
     val levelTitle: String = "New Vibe",
     val xp: Int = 0,

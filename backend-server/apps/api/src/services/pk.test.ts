@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { rankPkOpponents } from "./pkMatch.js";
+import { canTransitionPk } from "./pkStateMachine.js";
 
 test("PK auto-match ranks same category and language first", () => {
   const ranked = rankPkOpponents(
@@ -28,4 +29,22 @@ test("PK auto-match excludes the caller room", () => {
   );
 
   assert.deepEqual(ranked.map((item) => item.roomId), ["room-b"]);
+});
+
+test("PK lifecycle supports preparation, synchronized start, finalization, and close", () => {
+  assert.equal(canTransitionPk("INVITED", "PREPARING"), true);
+  assert.equal(canTransitionPk("PREPARING", "READY"), true);
+  assert.equal(canTransitionPk("READY", "COUNTDOWN"), true);
+  assert.equal(canTransitionPk("COUNTDOWN", "ACTIVE"), true);
+  assert.equal(canTransitionPk("ACTIVE", "FINAL_CRUNCH"), true);
+  assert.equal(canTransitionPk("FINAL_CRUNCH", "FINALIZING"), true);
+  assert.equal(canTransitionPk("FINALIZING", "COMPLETED"), true);
+  assert.equal(canTransitionPk("COMPLETED", "CLOSED"), true);
+});
+
+test("PK lifecycle rejects client-driven starts, post-result scoring states, and terminal reopening", () => {
+  assert.equal(canTransitionPk("PREPARING", "ACTIVE"), false);
+  assert.equal(canTransitionPk("COMPLETED", "ACTIVE"), false);
+  assert.equal(canTransitionPk("CLOSED", "PREPARING"), false);
+  assert.equal(canTransitionPk("CANCELLED", "ACTIVE"), false);
 });

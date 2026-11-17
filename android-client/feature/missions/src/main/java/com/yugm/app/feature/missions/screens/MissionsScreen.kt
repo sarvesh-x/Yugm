@@ -1,27 +1,60 @@
 package com.yugm.app.feature.missions.screens
 
-import com.yugm.app.core.api.SyncTopic
-import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.yugm.app.core.api.SyncTopic
 import com.yugm.app.core.api.YugmApi
 import com.yugm.app.core.model.ActiveMissionsResponse
 import com.yugm.app.core.model.Mission
-import com.yugm.app.core.ui.theme.LocalYugmColors
+import com.yugm.app.core.ui.components.AutomaticSyncEffect
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+private val TasksBackground = Color(0xFFF7F7FB)
+private val TasksInk = Color(0xFF19182B)
+private val TasksMuted = Color(0xFF9298A9)
+private val TasksBlue = Color(0xFF2584ED)
+private val TasksPurple = Color(0xFF7045F5)
 
 @Composable
 fun MissionsScreen(token: String, onBack: () -> Unit, onBattlePass: () -> Unit) {
@@ -30,141 +63,204 @@ fun MissionsScreen(token: String, onBack: () -> Unit, onBattlePass: () -> Unit) 
     var error by remember { mutableStateOf<String?>(null) }
     var claimingId by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableIntStateOf(0) }
+    var signingIn by remember { mutableStateOf(false) }
+    var checkedIn by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val colors = LocalYugmColors.current
 
     AutomaticSyncEffect(token, refreshKey, topics = setOf(SyncTopic.TASKS), enabled = token.isNotBlank(), isBusy = { loading }) {
         loading = true
         error = null
         runCatching { YugmApi.activeMissions(token) }
             .onSuccess { missions = it }
-            .onFailure { error = it.message ?: "Couldn't load your missions." }
+            .onFailure { error = it.message ?: "Couldn't load your tasks." }
         loading = false
     }
 
-    val allMissions = listOfNotNull(missions?.daily, missions?.weekly, missions?.monthly, missions?.seasonal).flatten()
-    val completed = allMissions.count { it.completed }
-    val claimed = allMissions.count { it.claimed }
-
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(colors.background),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        modifier = Modifier.fillMaxSize().background(TasksBackground),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         item {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack, contentPadding = PaddingValues(horizontal = 0.dp)) {
-                    Text("‹  Back", color = colors.secondary, fontWeight = FontWeight.SemiBold)
+            Box(Modifier.fillMaxWidth().height(58.dp), contentAlignment = Alignment.Center) {
+                Box(
+                    Modifier.align(Alignment.CenterStart).size(42.dp).clip(CircleShape)
+                        .background(Color(0xFFEFEFF5)).clickable(onClick = onBack),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("‹", color = TasksInk, fontSize = 30.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(bottom = 4.dp))
                 }
-                Spacer(Modifier.weight(1f))
-                Text("TASKS & REWARDS", color = colors.textSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                Text("Tasks", color = TasksInk, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
         }
         item {
-            Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
-                    .background(Brush.linearGradient(listOf(colors.secondary, colors.primary)))
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text("Your next reward is close", color = colors.primaryOn, fontSize = 22.sp, fontWeight = FontWeight.Black)
-                Text("Complete small goals as you chat, join rooms and build your community.", color = colors.primaryOn.copy(alpha = 0.82f), fontSize = 13.sp, lineHeight = 19.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    RewardStat("${allMissions.size}", "Goals", Modifier.weight(1f))
-                    RewardStat("$completed", "Completed", Modifier.weight(1f))
-                    RewardStat("$claimed", "Claimed", Modifier.weight(1f))
+            CheckInBanner(
+                checkedIn = checkedIn,
+                loading = signingIn,
+                onSignIn = {
+                    if (signingIn || checkedIn) return@CheckInBanner
+                    scope.launch {
+                        signingIn = true
+                        runCatching { withContext(Dispatchers.IO) { YugmApi.checkIn(token) } }
+                            .onSuccess { checkedIn = it.claimed || it.alreadyClaimed }
+                            .onFailure { error = it.message ?: "Couldn't check in today." }
+                        signingIn = false
+                    }
                 }
-                OutlinedButton(onClick = onBattlePass, colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.primaryOn), border = ButtonDefaults.outlinedButtonBorder) {
-                    Text("Explore Battle Pass  →", fontWeight = FontWeight.Bold)
-                }
-            }
+            )
         }
-        if (loading && missions == null) item { Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = colors.secondary) } }
+        if (loading && missions == null) {
+            item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = TasksPurple) } }
+        }
         error?.let { message ->
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(message, color = colors.danger)
-                    TextButton(onClick = { refreshKey++ }) { Text("Try again", color = colors.secondary) }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(message, color = Color(0xFFB42336), modifier = Modifier.weight(1f), fontSize = 13.sp)
+                    TextButton(onClick = { refreshKey++ }) { Text("Retry", color = TasksBlue) }
                 }
             }
         }
         missions?.let { data ->
-            item { MissionSection("Today", "A fresh set of goals, renewed daily", data.daily, claimingId, onClaim = { mission ->
-                scope.launch {
-                    claimingId = mission.id
-                    runCatching { YugmApi.claimMission(token, mission.id) }
-                        .onSuccess { refreshKey++ }
-                        .onFailure { error = it.message ?: "Couldn't claim this reward." }
-                    claimingId = null
+            if (data.daily.isNotEmpty()) {
+                item {
+                    TaskGroup("Daily tasks", data.daily, claimingId) { mission ->
+                        scope.launch {
+                            claimingId = mission.id
+                            runCatching { withContext(Dispatchers.IO) { YugmApi.claimMission(token, mission.id) } }
+                                .onSuccess { refreshKey++ }
+                                .onFailure { error = it.message ?: "Couldn't claim this reward." }
+                            claimingId = null
+                        }
+                    }
                 }
-            }) }
-            item { MissionSection("This week", "Build momentum over the week", data.weekly, claimingId, onClaim = { mission ->
-                scope.launch { claimingId = mission.id; runCatching { YugmApi.claimMission(token, mission.id) }.onSuccess { refreshKey++ }.onFailure { error = it.message }; claimingId = null }
-            }) }
-            item { MissionSection("This month", "Longer goals with bigger progress", data.monthly, claimingId, onClaim = { mission ->
-                scope.launch { claimingId = mission.id; runCatching { YugmApi.claimMission(token, mission.id) }.onSuccess { refreshKey++ }.onFailure { error = it.message }; claimingId = null }
-            }) }
-            item { MissionSection("Seasonal", "Limited-time community challenges", data.seasonal, claimingId, onClaim = { mission ->
-                scope.launch { claimingId = mission.id; runCatching { YugmApi.claimMission(token, mission.id) }.onSuccess { refreshKey++ }.onFailure { error = it.message }; claimingId = null }
-            }) }
+            }
+            val milestones = listOf("This week" to data.weekly, "This month" to data.monthly, "Seasonal" to data.seasonal)
+                .filter { it.second.isNotEmpty() }
+            if (milestones.isNotEmpty()) {
+                item {
+                    Column(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Color.White)
+                            .border(1.dp, Color(0xFFECECF2), RoundedCornerShape(22.dp)).padding(horizontal = 16.dp, vertical = 18.dp),
+                        verticalArrangement = Arrangement.spacedBy(20.dp)
+                    ) {
+                        Text("Milestones", color = TasksInk, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        milestones.forEach { (title, items) ->
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                if (milestones.size > 1) Text(title, color = TasksMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                items.forEachIndexed { index, mission ->
+                                    MissionRow(mission, claimingId == mission.id) {
+                                        scope.launch {
+                                            claimingId = mission.id
+                                            runCatching { withContext(Dispatchers.IO) { YugmApi.claimMission(token, mission.id) } }
+                                                .onSuccess { refreshKey++ }
+                                                .onFailure { error = it.message ?: "Couldn't claim this reward." }
+                                            claimingId = null
+                                        }
+                                    }
+                                    if (index != items.lastIndex) Box(Modifier.fillMaxWidth().padding(start = 56.dp).height(1.dp).background(Color(0xFFF1F1F5)))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            TextButton(onClick = onBattlePass, modifier = Modifier.fillMaxWidth()) {
+                Text("Explore Battle Pass  ›", color = TasksPurple, fontWeight = FontWeight.SemiBold)
+            }
         }
     }
 }
 
 @Composable
-private fun RewardStat(value: String, label: String, modifier: Modifier = Modifier) {
-    val colors = LocalYugmColors.current
-    Column(modifier.clip(RoundedCornerShape(14.dp)).background(colors.primaryOn.copy(alpha = 0.12f)).padding(10.dp)) {
-        Text(value, color = colors.primaryOn, fontSize = 18.sp, fontWeight = FontWeight.Black)
-        Text(label, color = colors.primaryOn.copy(alpha = 0.78f), fontSize = 11.sp)
-    }
-}
-
-@Composable
-private fun MissionSection(title: String, subtitle: String, missions: List<Mission>, claimingId: String?, onClaim: (Mission) -> Unit) {
-    if (missions.isEmpty()) return
-    val colors = LocalYugmColors.current
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Column {
-            Text(title, color = colors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Black)
-            Text(subtitle, color = colors.textSecondary, fontSize = 12.sp)
-        }
-        missions.forEach { mission -> MissionCard(mission, claimingId == mission.id, onClaim) }
-    }
-}
-
-@Composable
-private fun MissionCard(mission: Mission, claiming: Boolean, onClaim: (Mission) -> Unit) {
-    val colors = LocalYugmColors.current
-    val target = mission.requirements.target.coerceAtLeast(1)
-    val progress = (mission.progress.toFloat() / target).coerceIn(0f, 1f)
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(colors.surface)
-            .border(1.dp, colors.border, RoundedCornerShape(18.dp)).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+private fun CheckInBanner(checkedIn: Boolean, loading: Boolean, onSignIn: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().height(132.dp).clip(RoundedCornerShape(22.dp))
+            .background(Brush.linearGradient(listOf(Color(0xFF21134D), Color(0xFF4C2678), Color(0xFF171337))))
+            .padding(horizontal = 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(colors.secondary.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-                Text(mission.icon.ifBlank { "✦" }, color = colors.secondary, fontWeight = FontWeight.Black)
-            }
-            Column(Modifier.weight(1f)) {
-                Text(mission.title, color = colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                if (mission.description.isNotBlank()) Text(mission.description, color = colors.textSecondary, fontSize = 12.sp, lineHeight = 17.sp)
-            }
-            if (mission.completed && !mission.claimed) {
-                Button(onClick = { onClaim(mission) }, enabled = !claiming, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)) {
-                    if (claiming) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                    else Text("Claim", fontWeight = FontWeight.Bold)
-                }
-            } else if (mission.claimed) Text("✓", color = colors.success, fontSize = 18.sp, fontWeight = FontWeight.Black)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text("DAILY REWARD", color = Color(0xFFD8C8FF), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+            Text("A little reward, every day", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text("Keep your streak going", color = Color(0xFFCEC8E0), fontSize = 12.sp)
         }
-        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(8.dp)), color = colors.secondary, trackColor = colors.surfaceVariant)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("${mission.progress.coerceAtMost(target)} / $target", color = colors.textSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (mission.rewards.xp > 0) Text("+${mission.rewards.xp} XP", color = colors.secondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                if (mission.rewards.coins > 0) Text("+${mission.rewards.coins} coins", color = colors.accent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.width(10.dp))
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Text("🎁", fontSize = 34.sp)
+            Box(
+                Modifier.clip(RoundedCornerShape(50)).background(if (checkedIn) Brush.horizontalGradient(listOf(Color(0xFF34334B), Color(0xFF34334B))) else Brush.linearGradient(listOf(Color(0xFFFFC642), Color(0xFFFF9B22))))
+                    .clickable(enabled = !loading && !checkedIn, onClick = onSignIn)
+                    .padding(horizontal = 20.dp, vertical = 9.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (loading) CircularProgressIndicator(Modifier.size(18.dp), color = TasksInk, strokeWidth = 2.dp)
+                else Text(if (checkedIn) "Checked in" else "Sign in", color = if (checkedIn) Color.White else Color(0xFF382200), fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
         }
+    }
+}
+
+@Composable
+private fun TaskGroup(title: String, missions: List<Mission>, claimingId: String?, onClaim: (Mission) -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Color.White)
+            .border(1.dp, Color(0xFFECECF2), RoundedCornerShape(22.dp)).padding(horizontal = 16.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(title, color = TasksInk, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        missions.forEachIndexed { index, mission ->
+            MissionRow(mission, claimingId == mission.id) { onClaim(mission) }
+            if (index != missions.lastIndex) Box(Modifier.fillMaxWidth().padding(start = 56.dp).height(1.dp).background(Color(0xFFF1F1F5)))
+        }
+    }
+}
+
+@Composable
+private fun MissionRow(mission: Mission, claiming: Boolean, onClaim: () -> Unit) {
+    val target = mission.requirements.target.coerceAtLeast(1)
+    val progress = mission.progress.coerceAtLeast(0).coerceAtMost(target)
+    val readyToClaim = mission.completed && !mission.claimed
+    Row(Modifier.fillMaxWidth().heightIn(min = 84.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier.size(52.dp).clip(RoundedCornerShape(18.dp)).background(Color(0xFFF3F4F8)),
+            contentAlignment = Alignment.Center
+        ) { Text(mission.icon.ifBlank { "✦" }, fontSize = 27.sp) }
+        Column(Modifier.weight(1f).padding(start = 12.dp, end = 8.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text(mission.title, color = TasksInk, fontSize = 14.sp, fontWeight = FontWeight.Medium, lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text("($progress/$target)", color = if (mission.completed) TasksPurple else Color(0xFFB1B7C4), fontSize = 11.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                if (mission.rewards.coins > 0) RewardLabel("💎", mission.rewards.coins)
+                if (mission.rewards.xp > 0) RewardLabel("✦", mission.rewards.xp, xp = true)
+            }
+        }
+        when {
+            mission.claimed -> Text("✓", color = Color(0xFF26A879), fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(70.dp))
+            readyToClaim -> ActionPill("Get", loading = claiming, get = true, onClick = onClaim)
+            else -> ActionPill("Go", onClick = {})
+        }
+    }
+}
+
+@Composable
+private fun RewardLabel(icon: String, amount: Int, xp: Boolean = false) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(icon, fontSize = 12.sp)
+        Text("x$amount", color = if (xp) TasksPurple else TasksMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun ActionPill(label: String, loading: Boolean = false, get: Boolean = false, onClick: () -> Unit) {
+    val background = if (get) Brush.horizontalGradient(listOf(Color(0xFFFF8A00), Color(0xFFFFC400))) else Brush.horizontalGradient(listOf(TasksBlue, TasksBlue))
+    Box(
+        Modifier.width(86.dp).height(42.dp).clip(RoundedCornerShape(50)).background(background)
+            .clickable(enabled = !loading, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        if (loading) CircularProgressIndicator(Modifier.size(17.dp), color = Color.White, strokeWidth = 2.dp)
+        else Text(label, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
     }
 }

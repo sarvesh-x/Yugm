@@ -223,8 +223,11 @@ object RoomApi {
         )
     }
 
-    suspend fun sendMessage(token: String, roomId: String, message: String): ChatMessage {
-        val data = YugmHttpClient.post("/rooms/$roomId/messages", token, JSONObject().put("message", message)).getJSONObject("data")
+    suspend fun sendMessage(token: String, roomId: String, message: String, mediaUrl: String? = null, mediaType: String? = null): ChatMessage {
+        val body = JSONObject().put("message", message)
+        if (!mediaUrl.isNullOrBlank()) body.put("mediaUrl", mediaUrl)
+        if (!mediaType.isNullOrBlank()) body.put("mediaType", mediaType)
+        val data = YugmHttpClient.post("/rooms/$roomId/messages", token, body).getJSONObject("data")
         return data.getJSONObject("message").toRoomChatMessage()
     }
 
@@ -296,14 +299,33 @@ object RoomApi {
         YugmHttpClient.post("/rooms/$roomId/invites", token, JSONObject().put("userId", userId))
     }
 
+    suspend fun inviteUsersToRoom(token: String, roomId: String, userIds: List<String>) {
+        YugmHttpClient.post("/rooms/$roomId/invites", token, JSONObject().put("userIds", JSONArray(userIds)))
+    }
+
+    suspend fun roomFollowers(token: String, roomId: String): List<com.yugm.app.core.model.Host> {
+        val data = YugmHttpClient.get("/rooms/$roomId/followers", token).getJSONObject("data")
+        return data.optJSONArray("users")?.toHosts() ?: emptyList()
+    }
+
+    suspend fun respondToRoomInvite(token: String, inviteId: String, accept: Boolean): String {
+        val data = YugmHttpClient.post("/rooms/invites/$inviteId/respond", token, JSONObject().put("accept", accept)).getJSONObject("data")
+        return data.optString("roomId")
+    }
+
     suspend fun roomDirectMessage(token: String, roomId: String, message: String, receiverId: String? = null) {
         val body = JSONObject().put("message", message)
         if (!receiverId.isNullOrBlank()) body.put("receiverId", receiverId)
         YugmHttpClient.post("/rooms/$roomId/messages/direct", token, body)
     }
 
-    suspend fun endRoom(roomId: String, token: String) {
-        YugmHttpClient.post("/rooms/$roomId/end", token, JSONObject())
+    suspend fun endRoom(roomId: String, token: String): com.yugm.app.core.model.RoomSessionSummary {
+        val data = YugmHttpClient.post("/rooms/$roomId/end", token, JSONObject()).getJSONObject("data").getJSONObject("summary")
+        return com.yugm.app.core.model.RoomSessionSummary(
+            durationMinutes = data.optInt("durationMinutes"), joined = data.optInt("joined"),
+            messages = data.optInt("messages"), gifts = data.optInt("gifts"),
+            newFans = data.optInt("newFans"), diamondGifts = data.optInt("diamondGifts")
+        )
     }
 
     suspend fun muteUser(roomId: String, userId: String, token: String) {

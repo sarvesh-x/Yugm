@@ -113,6 +113,7 @@ object WalletApi {
                     id = gid,
                     name = gname,
                     price = item.optInt("coinPrice", item.optInt("price", 0)),
+                    pkPoints = item.optInt("pkPoints", 0),
                     diamondPrice = item.optInt("diamondPrice", 0),
                     icon = item.optString("icon", ""),
                     rarity = item.optString("rarity", "common"),
@@ -149,8 +150,10 @@ object WalletApi {
         return data.toCosmeticCatalog()
     }
 
-    suspend fun sendGift(token: String, roomId: String, gift: GiftItem, receiverId: String, currency: String = "COINS") {
-        YugmHttpClient.post("/rooms/$roomId/send-gift", token, JSONObject().put("giftId", gift.id).put("receiverId", receiverId).put("currency", currency))
+    suspend fun sendGift(token: String, roomId: String, gift: GiftItem, receiverId: String, currency: String = "COINS", inventoryItemId: String? = null) {
+        val body = JSONObject().put("giftId", gift.id).put("receiverId", receiverId).put("currency", currency)
+        inventoryItemId?.let { body.put("inventoryItemId", it) }
+        YugmHttpClient.post("/rooms/$roomId/send-gift", token, body)
     }
 
     suspend fun devRecharge(token: String, amount: Int) {

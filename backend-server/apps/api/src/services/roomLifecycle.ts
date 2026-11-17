@@ -9,7 +9,7 @@ import { terminateLiveKitRoom } from "./livekit.js";
 export type RoomExitResult = { changed: boolean; ended: boolean };
 
 export async function endRoom(roomId: string, reason: string): Promise<boolean> {
-  const room = await Room.findById(roomId).select("status type livekitRoomName").lean();
+  const room = await Room.findById(roomId).select("status type livekitRoomName activePkId").lean();
   if (!room || room.status !== "LIVE" || isAlwaysOnOfficialVoiceRoom(room)) return false;
 
   const now = new Date();
@@ -19,7 +19,17 @@ export async function endRoom(roomId: string, reason: string): Promise<boolean> 
   );
   if (result.modifiedCount === 0) return false;
 
-  await Promise.all([
+  if (room.activePkId) {
+    const { endPkBattle } = await import("./pk.js");
+    await endPkBattle({ battleId: room.activePkId.toString(), force: true, reason: `Room ended: ${reason}` }).catch((error) => {
+      console.warn(`Could not broadcast PK end for room ${roomId}:`, error instanceof Error ? error.message : String(error));
+    });
+  }
+
+  // Marking LIVE -> ENDED is the synchronous close operation. Fan-out cleanup and
+  // LiveKit teardown continue in the background so hosts and listeners are
+  // released immediately instead of waiting on media-server timeouts.
+  void Promise.all([
     // Room chat is session-only data. Remove it as soon as the room is closed.
     ChatMessage.deleteMany({ roomId }),
     RoomParticipant.updateMany(
@@ -27,9 +37,11 @@ export async function endRoom(roomId: string, reason: string): Promise<boolean> 
       { $set: { leftAt: now, micEnabled: false, cameraEnabled: false }, $unset: { seatIndex: 1 } }
     ),
     SpeakerRequest.updateMany({ roomId, status: "PENDING" }, { $set: { status: "REJECTED" } }),
-    invalidateCache("rooms:*")
-  ]);
-  await terminateLiveKitRoom(room.livekitRoomName);
+    invalidateCache("rooms:*"),
+    terminateLiveKitRoom(room.livekitRoomName)
+  ]).catch((error) => {
+    console.warn(`Room cleanup failed for ${roomId}:`, error instanceof Error ? error.message : String(error));
+  });
   console.info(`Ended room ${roomId}: ${reason}`);
   return true;
 }

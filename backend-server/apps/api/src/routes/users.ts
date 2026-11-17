@@ -11,6 +11,7 @@ import { Block } from "../models/Block.js";
 import { DirectMessage } from "../models/DirectMessage.js";
 import { ConversationMute } from "../models/ConversationMute.js";
 import { Follow } from "../models/Follow.js";
+import { ProfileVisit } from "../models/ProfileVisit.js";
 import { Friendship } from "../models/Friendship.js";
 import { FriendMatchRequest } from "../models/FriendMatchRequest.js";
 import { PkBattle } from "../models/PkBattle.js";
@@ -27,6 +28,7 @@ import { emitUser, getOnlineUserIds, isUserOnline } from "../services/socket.js"
 import { autoModerate } from "../middleware/autoModerate.js";
 import { getVipStatus } from "../services/vip.js";
 import { dailyCheckInStart, dailyXpCaps, getLevelStatus, grantXp } from "../services/levels.js";
+import { getProgressionTrack } from "../services/progressionTracks.js";
 import { XpDailyCap } from "../models/XpDailyCap.js";
 import { creditWallet } from "../services/wallet.js";
 import { findRelationship, grantRelationshipXp } from "../services/relationships.js";
@@ -84,6 +86,14 @@ async function handlePublicProfile(identifier: string, isUsername: boolean, req:
   }
 
   const isSelf = req.user ? req.user.id === user._id.toString() : false;
+  const viewer: any = req.user;
+  if (viewer && !isSelf && !viewer.mysteriousVisitors) {
+    await ProfileVisit.updateOne(
+      { profileId: user._id, visitorId: viewer._id },
+      { $set: { lastVisitedAt: new Date() }, $setOnInsert: { profileId: user._id, visitorId: viewer._id } },
+      { upsert: true }
+    );
+  }
   sendOk(res, {
     user: publicUser({
       ...user,
@@ -121,6 +131,25 @@ const feedbackSchema = z.object({
   subject: z.string().min(3).max(120),
   message: z.string().min(5).max(1200)
 });
+const vipPrivacySchema = z.object({ mysteriousVisitors: z.boolean().optional(), chatPrivacy: z.enum(["EVERYONE", "FOLLOWERS"]).optional() })
+  .refine((data) => data.mysteriousVisitors !== undefined || data.chatPrivacy !== undefined, "A privacy setting is required");
+
+usersRouter.get("/me/vip-privacy", asyncHandler(async (req: AuthRequest, res) => {
+  if (!getVipStatus(req.user).isVip) throw new HttpError(403, "VIP membership required", ErrorCode.FORBIDDEN);
+  sendOk(res, { mysteriousVisitors: Boolean((req.user as any).mysteriousVisitors), chatPrivacy: (req.user as any).vipChatPrivacy ?? "EVERYONE" });
+}));
+
+usersRouter.patch("/me/vip-privacy", validateBody(vipPrivacySchema), asyncHandler(async (req: AuthRequest, res) => {
+  if (!getVipStatus(req.user).isVip) throw new HttpError(403, "VIP membership required", ErrorCode.FORBIDDEN);
+  const changes: Record<string, unknown> = {};
+  if (req.body.mysteriousVisitors !== undefined) changes.mysteriousVisitors = req.body.mysteriousVisitors;
+  if (req.body.chatPrivacy !== undefined) changes.vipChatPrivacy = req.body.chatPrivacy;
+  await User.findByIdAndUpdate(req.user!._id, { $set: changes });
+  sendOk(res, {
+    mysteriousVisitors: req.body.mysteriousVisitors ?? Boolean((req.user as any).mysteriousVisitors),
+    chatPrivacy: req.body.chatPrivacy ?? (req.user as any).vipChatPrivacy ?? "EVERYONE"
+  });
+}));
 
 const FRIEND_MATCH_WAIT_MS = 90_000;
 const FRIEND_MATCHED_TTL_MS = 5 * 60_000;
@@ -378,6 +407,15 @@ usersRouter.patch("/me", validateBody(profileSchema.partial().refine((data) => d
   sendOk(res, { user: publicUser(user), xpGrant });
 }));
 
+usersRouter.get("/me/friends", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
+  const rows = await Friendship.find({ $or: [{ userId: req.user!._id }, { friendId: req.user!._id }], status: "ACCEPTED" })
+    .populate("userId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .populate("friendId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .sort({ updatedAt: -1 }).limit(100).lean();
+  const users = rows.map((row: any) => row.userId?._id?.toString() === req.user!.id ? row.friendId : row.userId).filter(Boolean);
+  sendOk(res, { users });
+}));
+
 usersRouter.get("/me/close-friends", asyncHandler(async (req: AuthRequest, res) => {
   const user = await User.findById(req.user!.id)
     .populate("closeFriendIds", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
@@ -436,7 +474,7 @@ usersRouter.get("/me/level", (req: AuthRequest, res) => {
 
 usersRouter.get("/me/level-overview", asyncHandler(async (req: AuthRequest, res) => {
   const user = await User.findById(req.user!.id)
-    .select("name username avatar xp level levelTitle lastDailyCheckInAt streakCount walletBalance activeCosmetics")
+    .select("name username avatar xp level levelTitle lastDailyCheckInAt streakCount walletBalance activeCosmetics wealthExp charmExp")
     .lean();
   if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
 
@@ -479,6 +517,8 @@ usersRouter.get("/me/level-overview", asyncHandler(async (req: AuthRequest, res)
   sendOk(res, {
     schemaVersion: 1,
     level: levelStatus,
+    wealthLevel: getProgressionTrack(user.wealthExp),
+    charmLevel: getProgressionTrack(user.charmExp),
     streak: {
       count: streak,
       canCheckIn: levelStatus.canDailyCheckIn,
@@ -1053,6 +1093,12 @@ usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, requireNotCh
   });
   if (blocked) throw new HttpError(403, "Cannot message this user", ErrorCode.FORBIDDEN);
 
+  const recipientPrivacy = await User.findById(receiverId).select("vipChatPrivacy").lean();
+  const senderIsVip = getVipStatus(req.user).isVip;
+  if (recipientPrivacy?.vipChatPrivacy === "FOLLOWERS" && !senderIsVip && !await Follow.exists({ followerId: req.user!._id, followingId: receiverId })) {
+    throw new HttpError(403, "This user only accepts messages from followers", ErrorCode.FORBIDDEN);
+  }
+
   const messageText = String(req.body.message || "").trim();
   const mediaUrl = String(req.body.mediaUrl || "").trim();
   const mediaType = String(req.body.mediaType || "").toUpperCase();
@@ -1487,6 +1533,26 @@ usersRouter.get("/:id/following", asyncHandler(async (req: AuthRequest, res) => 
     .lean();
   const users = following.map(f => f.followingId).filter(Boolean);
   sendOk(res, { following: users, users });
+}));
+
+usersRouter.get("/:id/friends", asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
+  const rows = await Friendship.find({ status: "ACCEPTED", $or: [{ userId: req.params.id }, { friendId: req.params.id }] })
+    .populate("userId", "name username avatar city followersCount activeCosmetics vipTier vipLevel vipExp vipExpiresAt xp level levelTitle")
+    .populate("friendId", "name username avatar city followersCount activeCosmetics vipTier vipLevel vipExp vipExpiresAt xp level levelTitle")
+    .sort({ updatedAt: -1 }).limit(100).lean();
+  const friends = rows.map((row: any) => String(row.userId?._id ?? row.userId) === req.params.id ? row.friendId : row.userId).filter(Boolean);
+  sendOk(res, { users: friends });
+}));
+
+usersRouter.get("/:id/visitors", asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
+  if (req.params.id !== req.user!.id) throw new HttpError(403, "You can only view your own visitors", ErrorCode.FORBIDDEN);
+  if (!getVipStatus(req.user).isVip) throw new HttpError(403, "All Visitors is a VIP benefit", ErrorCode.FORBIDDEN);
+  const visits = await ProfileVisit.find({ profileId: req.params.id })
+    .populate("visitorId", "name username avatar city followersCount activeCosmetics vipTier vipLevel vipExp vipExpiresAt xp level levelTitle")
+    .sort({ lastVisitedAt: -1 }).limit(100).lean();
+  sendOk(res, { users: visits.map((visit: any) => ({ ...visit.visitorId, visitedAt: visit.lastVisitedAt })).filter((user: any) => user.id || user._id) });
 }));
 
 usersRouter.get("/:id/stats", asyncHandler(async (req: AuthRequest, res) => {

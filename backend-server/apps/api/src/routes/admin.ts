@@ -47,6 +47,7 @@ import { Season } from "../models/Season.js";
 import { BattlePass } from "../models/BattlePass.js";
 import { xpDailyCaps } from "@yugm/shared";
 import { UserSafetyStatus } from "../models/UserSafetyStatus.js";
+import { changeVipExp, vipExpForPurchase } from "../services/vip.js";
 import { WalletTransaction } from "../models/WalletTransaction.js";
 import { WithdrawalRequest } from "../models/WithdrawalRequest.js";
 import { verifyIdToken } from "../services/firebase.js";
@@ -283,6 +284,11 @@ async function creditVerifiedPurchase(purchaseId: string, adminId: string, metad
       ...metadata
     }, session);
     purchase.creditedTransactionId = transaction._id;
+    const vipUser = await User.findById(purchase.userId).session(session);
+    if (vipUser) {
+      changeVipExp(vipUser, vipExpForPurchase(purchase.amountInr));
+      await vipUser.save({ session });
+    }
     await purchase.save({ session });
     await session.commitTransaction();
     session.endSession();
@@ -377,6 +383,14 @@ async function finalizePurchaseRefund(purchaseId: string, input: { status: "REFU
     refundProviderResponse: input.providerResponse,
     refundFinalizedAt: input.status === "REFUNDED" ? new Date().toISOString() : undefined
   };
+  if (input.status === "REFUNDED" && !purchase.metadata.vipExpReversed) {
+    const vipUser = await User.findById(purchase.userId);
+    if (vipUser) {
+      changeVipExp(vipUser, -vipExpForPurchase(purchase.amountInr));
+      await vipUser.save();
+      purchase.metadata.vipExpReversed = true;
+    }
+  }
   await purchase.save();
   return purchase;
 }

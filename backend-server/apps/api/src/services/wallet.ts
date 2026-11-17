@@ -66,8 +66,12 @@ async function mutateWallet(
     const filter = type === "DEBIT"
       ? { _id: userId, walletBalance: { $gte: amount } }
       : { _id: userId, walletBalance: { $lte: Number.MAX_SAFE_INTEGER - amount } };
+    const increments: Record<string, number> = { walletBalance: type === "CREDIT" ? amount : -amount };
+    if (type === "CREDIT" && (source === "GIFT_RECEIVED" || source === "GIFT_RECEIVED_DM")) {
+      increments.charmExp = amount + Math.max(0, Math.floor(Number(metadata.platformFee) || 0));
+    }
     const after = await User.findOneAndUpdate(
-      filter, { $inc: { walletBalance: type === "CREDIT" ? amount : -amount } },
+      filter, { $inc: increments },
       { new: true, session: activeSession }
     );
     if (!after) {

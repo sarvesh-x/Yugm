@@ -11,6 +11,7 @@ import { ChatMessage } from "../models/ChatMessage.js";
 import { DirectMessage } from "../models/DirectMessage.js";
 import { Follow } from "../models/Follow.js";
 import { Friendship } from "../models/Friendship.js";
+import { GiftTransaction } from "../models/GiftTransaction.js";
 import { Poll } from "../models/Poll.js";
 import { PkBattle } from "../models/PkBattle.js";
 import { Room } from "../models/Room.js";
@@ -33,6 +34,7 @@ import { autoModerate } from "../middleware/autoModerate.js";
 import { applyAutoModeration } from "../services/autoModeration.js";
 import { endRoom, recordRoomParticipantExit } from "../services/roomLifecycle.js";
 import { canUseRoomReaction, findActiveRoomReaction, normalizeReactionId, toPublicRoomReaction } from "../services/reactions.js";
+import { getVipStatus } from "../services/vip.js";
 
 const patchSchema = z.object({
   title: z.string().min(1).max(100).optional(),
@@ -287,6 +289,19 @@ roomsRouter.get("/followed", requireAuth, asyncHandler(async (req: AuthRequest, 
   sendOk(res, { rooms: follows.map((follow: any) => follow.roomId).filter(Boolean) });
 }));
 
+roomsRouter.get("/:id/followers", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
+  const follows = await RoomFollow.find({ roomId: req.params.id })
+    .populate("userId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .sort({ createdAt: -1 }).limit(100).lean();
+  const userIds = follows.map((follow: any) => follow.userId?._id).filter(Boolean);
+  const followingIds = new Set((await Follow.find({ followerId: req.user!._id, followingId: { $in: userIds } }).distinct("followingId")).map((id) => id.toString()));
+  sendOk(res, { users: follows.map((follow: any) => {
+    const user = follow.userId;
+    return user ? { ...user, isFollowing: followingIds.has(user._id.toString()) } : null;
+  }).filter(Boolean) });
+}));
+
 roomsRouter.post("/:id/follow", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   const room = await Room.findById(req.params.id).select("_id visibility status").lean();
   if (!room || room.visibility !== "PUBLIC" || room.status === "ENDED") throw new HttpError(404, "Public room not found", ErrorCode.NOT_FOUND);
@@ -435,7 +450,7 @@ roomsRouter.post("/:id/join", requireAuth, requireNotRoomRestricted, requireNotS
   if (room.status === "SCHEDULED") throw new HttpError(400, "This room is scheduled for later", ErrorCode.VALIDATION);
   if (room.status !== "LIVE") throw new HttpError(400, "This room has ended", ErrorCode.VALIDATION);
   if (room.vipOnly && room.hostId.toString() !== req.user!.id) {
-    const user = await User.findById(req.user!.id).select("vipExpiresAt").lean();
+    const user = await User.findById(req.user!.id).select("vipTier vipLevel vipExp vipFrozen vipFreezeStartedAt vipExpiresAt").lean();
     const isVip = user?.vipExpiresAt && new Date(user.vipExpiresAt) > new Date();
     if (!isVip) throw new HttpError(403, "This room is for VIP members only", ErrorCode.FORBIDDEN);
   }
@@ -491,12 +506,32 @@ roomsRouter.post("/:id/leave", requireAuth, asyncHandler(async (req: AuthRequest
 }));
 
 roomsRouter.post("/:id/end", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
-  const room = await assertHost(req, req.params.id);
-
+  const { room } = await assertHostOrRoomAdmin(req, req.params.id);
+  if (room.status !== "LIVE") throw new HttpError(409, "Room has already ended", ErrorCode.CONFLICT);
+  const startedAt = room.startedAt ?? (room as typeof room & { createdAt?: Date }).createdAt ?? new Date();
+  const [joined, messages, gifts, newFans] = await Promise.all([
+    RoomParticipant.countDocuments({ roomId: room._id, joinedAt: { $gte: startedAt } }),
+    ChatMessage.countDocuments({ roomId: room._id, createdAt: { $gte: startedAt } }),
+    GiftTransaction.aggregate([
+      { $match: { roomId: room._id, createdAt: { $gte: startedAt } } },
+      { $group: { _id: null, count: { $sum: 1 }, diamonds: { $sum: "$diamondAmount" } } }
+    ]),
+    Follow.countDocuments({ followingId: room.hostId, createdAt: { $gte: startedAt } })
+  ]);
+  const endedAt = new Date();
   const ended = await endRoom(req.params.id, "host ended room");
+  if (!ended) throw new HttpError(409, "Room has already ended", ErrorCode.CONFLICT);
   if (ended) emitRoom(req.params.id, socketEvents.roomEnded, { roomId: req.params.id, reason: "host ended room" });
-  await addActivity(req.params.id, "MISSION", "Room ended");
-  sendOk(res, { room });
+  const giftStats = gifts[0] ?? { count: 0, diamonds: 0 };
+  const summary = {
+    durationMinutes: Math.max(0, Math.floor((endedAt.getTime() - new Date(startedAt).getTime()) / 60_000)),
+    joined,
+    messages,
+    gifts: giftStats.count,
+    newFans,
+    diamondGifts: giftStats.diamonds
+  };
+  sendOk(res, { roomId: req.params.id, summary });
 }));
 
 roomsRouter.patch("/:id", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
@@ -818,7 +853,7 @@ roomsRouter.post("/:id/reactions", requireAuth, requireNotChatRestricted, valida
   if (reaction.access === "VIP_EXCLUSIVE") {
     const user = await User.findById(req.user!.id).select("vipExpiresAt").lean();
     if (!canUseRoomReaction(reaction as any, user)) {
-      throw new HttpError(403, "This reaction is available for VIP members only", ErrorCode.FORBIDDEN);
+      throw new HttpError(403, "This reaction unlocks at VIP 3", ErrorCode.FORBIDDEN);
     }
   }
   const publicReaction = toPublicRoomReaction(reaction as any);
@@ -911,17 +946,40 @@ roomsRouter.post("/:id/polls/:pollId/close", requireAuth, asyncHandler(async (re
 roomsRouter.post("/:id/invites", requireAuth, requireNotMuted, validateBody(inviteSchema), asyncHandler(async (req: AuthRequest, res) => {
   const room = await getRoomOrThrow(req.params.id);
   if (room.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
-  if (req.body.userId === req.user!.id) throw new HttpError(400, "Cannot invite yourself", ErrorCode.VALIDATION);
   await requireActiveParticipant(room._id, req.user!.id);
-  await assertUsersCanInteract(req.user!.id, req.body.userId, "Cannot invite this user");
-  const invite = await RoomInvite.findOneAndUpdate(
-    { roomId: room._id, inviterId: req.user!.id, inviteeId: req.body.userId, status: "PENDING" },
-    { roomId: room._id, inviterId: req.user!.id, inviteeId: req.body.userId, status: "PENDING" },
-    { upsert: true, new: true }
-  );
-  await createNotification(req.body.userId, "ROOM_INVITE", "Room invite", `${req.user!.name} invited you to ${room.title}`, { roomId: room._id.toString() });
-  await addActivity(req.params.id, "INVITE", `${req.user!.name} invited a friend`, req.user!.id, { inviteeId: req.body.userId });
-  sendOk(res, { invite }, 201);
+  const userIds = [...new Set([...(req.body.userIds ?? []), ...(req.body.userId ? [req.body.userId] : [])])];
+  if (userIds.includes(req.user!.id)) throw new HttpError(400, "Cannot invite yourself", ErrorCode.VALIDATION);
+  await Promise.all(userIds.map((userId) => assertUsersCanInteract(req.user!.id, userId, "Cannot invite this user")));
+  const invites = await Promise.all(userIds.map(async (userId) => {
+    const invite = await RoomInvite.findOneAndUpdate(
+      { roomId: room._id, inviterId: req.user!._id, inviteeId: userId, status: "PENDING" },
+      { $set: { roomId: room._id, inviterId: req.user!._id, inviteeId: userId, status: "PENDING" } },
+      { upsert: true, new: true }
+    );
+    await createNotification(userId, "ROOM_INVITE", "Room invite", `${req.user!.name} invited you to ${room.title}`, { roomId: room._id.toString(), inviteId: invite._id.toString() });
+    const message = await DirectMessage.create({ senderId: req.user!._id, receiverId: userId, roomId: room._id, message: `ROOM_INVITE:${room._id}` });
+    emitUser(userId, socketEvents.directMessageNew, { message, partnerId: req.user!.id, roomId: room._id.toString() });
+    emitUser(req.user!.id, socketEvents.directMessageNew, { message, partnerId: userId, roomId: room._id.toString() });
+    return invite;
+  }));
+  await addActivity(req.params.id, "INVITE", `${req.user!.name} invited ${userIds.length} ${userIds.length === 1 ? "friend" : "friends"}`, req.user!.id, { inviteeIds: userIds });
+  sendOk(res, { invites }, 201);
+}));
+
+roomsRouter.post("/invites/:inviteId/respond", requireAuth, validateBody(z.object({ accept: z.boolean() })), asyncHandler(async (req: AuthRequest, res) => {
+  if (!isValidObjectId(req.params.inviteId)) throw new HttpError(400, "Invalid invite ID", ErrorCode.VALIDATION);
+  const invite = await RoomInvite.findOne({ _id: req.params.inviteId, inviteeId: req.user!._id, status: "PENDING" });
+  if (!invite) throw new HttpError(404, "Pending room invite not found", ErrorCode.NOT_FOUND);
+  if (req.body.accept) {
+    const room = await getRoomOrThrow(invite.roomId.toString());
+    invite.status = "ACCEPTED";
+    await invite.save();
+    sendOk(res, { roomId: room._id.toString(), accepted: true });
+  } else {
+    invite.status = "DECLINED";
+    await invite.save();
+    sendOk(res, { accepted: false });
+  }
 }));
 
 roomsRouter.get("/:id/missions", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
@@ -974,11 +1032,16 @@ roomsRouter.post("/:id/messages", requireAuth, requireNotMuted, requireNotChatRe
   if (room.status !== "LIVE") throw new HttpError(400, "Room is closed", ErrorCode.VALIDATION);
   const participant = await RoomParticipant.findOne({ roomId: req.params.id, userId: req.user!.id, leftAt: null }).lean();
   if (!participant) throw new HttpError(403, "You are not a participant in this room", ErrorCode.FORBIDDEN);
+  if (req.body.mediaUrl) {
+    const sender = await User.findById(req.user!.id).select("vipTier vipLevel vipExp vipFrozen vipFreezeStartedAt vipExpiresAt").lean();
+    if ((getVipStatus(sender).vipLevel ?? 0) < 4) throw new HttpError(403, "Room image sharing unlocks at VIP 4", ErrorCode.FORBIDDEN);
+  }
   const message = await ChatMessage.create({
     roomId: req.params.id,
     senderId: req.user!.id,
-    message: sanitizeText(req.body.message),
-    type: "TEXT"
+    message: sanitizeText(req.body.message || (req.body.mediaUrl ? "Shared a photo" : "")),
+    type: "TEXT",
+    ...(req.body.mediaUrl ? { mediaUrl: req.body.mediaUrl, mediaType: "IMAGE" } : {})
   });
   const populatedMessage = await message.populate("senderId", "name username avatar");
   // NOTE: emitRoom is called after the socket room join for consistent ordering

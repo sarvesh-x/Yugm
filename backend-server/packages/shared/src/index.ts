@@ -610,7 +610,11 @@ export const createRoomSchema = z.object({
 });
 
 export const chatMessageSchema = z.object({
-  message: z.string().min(1).max(500)
+  message: z.string().max(500).default(""),
+  mediaUrl: z.string().url().optional(),
+  mediaType: z.enum(["IMAGE"]).optional()
+}).refine((value) => value.message.trim().length > 0 || Boolean(value.mediaUrl), {
+  message: "A message or image is required"
 });
 
 const objectIdPattern = /^[0-9a-fA-F]{24}$/;
@@ -628,6 +632,7 @@ export const sendGiftSchema = z.object({
   giftId: z.string().regex(objectIdPattern, "Invalid giftId format"),
   receiverId: z.string().regex(objectIdPattern, "Invalid receiverId format"),
   currency: z.enum(["COINS", "DIAMONDS"]).optional(),
+  inventoryItemId: z.string().regex(objectIdPattern, "Invalid inventoryItemId format").optional(),
   idempotencyKey: z.string().min(8).max(128).optional()
 });
 
@@ -698,8 +703,9 @@ export const votePollSchema = z.object({
 });
 
 export const inviteSchema = z.object({
-  userId: z.string().regex(objectIdPattern, "Invalid userId format")
-});
+  userId: z.string().regex(objectIdPattern, "Invalid userId format").optional(),
+  userIds: z.array(z.string().regex(objectIdPattern, "Invalid userId format")).min(1).max(50).optional()
+}).refine((value) => Boolean(value.userId || value.userIds?.length), "At least one user is required");
 
 export const createGroupChatSchema = z.object({
   name: z.string().min(2).max(60),

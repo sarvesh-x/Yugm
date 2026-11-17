@@ -111,4 +111,17 @@ class NotificationsViewModel @Inject constructor(
             isMarkingAllRead = false
         }
     }
+
+    fun respondToRoomInvite(token: String, item: NotificationItem, accept: Boolean, onDone: (String?) -> Unit) {
+        if (item.inviteId.isBlank()) { onDone(null); return }
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { yugmApi.respondToRoomInvite(token, item.inviteId, accept) }
+            }
+            result.onSuccess { roomId ->
+                notifications = notifications.filterNot { it.id == item.id }
+                onDone(if (accept) roomId else null)
+            }.onFailure { error = it.message ?: "Couldn't respond to the room invite" }
+        }
+    }
 }

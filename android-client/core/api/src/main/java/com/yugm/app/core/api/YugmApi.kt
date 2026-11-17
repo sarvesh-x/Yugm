@@ -53,6 +53,7 @@ import com.yugm.app.core.model.CosmeticCatalog
 import com.yugm.app.core.model.CreatorPayoutKycStatus
 import com.yugm.app.core.model.DailyCheckInResult
 import com.yugm.app.core.model.DailyRewardClaimResult
+import com.yugm.app.core.model.VipPrivacySettings
 import com.yugm.app.core.model.DirectMessage
 import com.yugm.app.core.model.GameCatalog
 import com.yugm.app.core.model.GameChallenges
@@ -94,6 +95,7 @@ import com.yugm.app.core.model.PkInvite
 import com.yugm.app.core.model.PkLeaderboardEntry
 import com.yugm.app.core.model.PkMediaSession
 import com.yugm.app.core.model.PkMode
+import com.yugm.app.core.model.PkFormat
 import com.yugm.app.core.model.PkOpponent
 import com.yugm.app.core.model.PkSideType
 import com.yugm.app.core.model.PkStats
@@ -179,7 +181,7 @@ object YugmApi : IYugmApi {
     override suspend fun joinRoom(token: String, roomId: String) = RoomApi.joinRoom(token, roomId)
     override suspend fun leaveRoom(token: String, roomId: String) = RoomApi.leaveRoom(token, roomId)
     override suspend fun liveKitToken(token: String, roomId: String): MediaSession = RoomApi.liveKitToken(token, roomId)
-    override suspend fun sendMessage(token: String, roomId: String, message: String): ChatMessage = RoomApi.sendMessage(token, roomId, message)
+    override suspend fun sendMessage(token: String, roomId: String, message: String, mediaUrl: String?, mediaType: String?): ChatMessage = RoomApi.sendMessage(token, roomId, message, mediaUrl, mediaType)
     override suspend fun requestSpeaker(token: String, roomId: String) = RoomApi.requestSpeaker(token, roomId)
     override suspend fun approveSpeaker(token: String, roomId: String, userId: String) = RoomApi.approveSpeaker(token, roomId, userId)
     override suspend fun rejectSpeaker(token: String, roomId: String, userId: String) = RoomApi.rejectSpeaker(token, roomId, userId)
@@ -196,6 +198,8 @@ object YugmApi : IYugmApi {
     override suspend fun reactToRoom(token: String, roomId: String, type: String) = RoomApi.reactToRoom(token, roomId, type)
     override suspend fun roomReactions(token: String?): List<com.yugm.app.core.model.RoomReaction> = RoomApi.roomReactions(token)
     override suspend fun inviteToRoom(token: String, roomId: String, userId: String) = RoomApi.inviteToRoom(token, roomId, userId)
+    override suspend fun roomFollowers(token: String, roomId: String) = RoomApi.roomFollowers(token, roomId)
+    override suspend fun respondToRoomInvite(token: String, inviteId: String, accept: Boolean) = RoomApi.respondToRoomInvite(token, inviteId, accept)
     override suspend fun roomDirectMessage(token: String, roomId: String, message: String, receiverId: String?) = RoomApi.roomDirectMessage(token, roomId, message, receiverId)
     override suspend fun endRoom(roomId: String, token: String) = RoomApi.endRoom(roomId, token)
     override suspend fun muteUser(roomId: String, userId: String, token: String) = RoomApi.muteUser(roomId, userId, token)
@@ -226,7 +230,7 @@ object YugmApi : IYugmApi {
     override suspend fun purchaseCosmetic(token: String, cosmeticId: String): CosmeticCatalog = WalletApi.purchaseCosmetic(token, cosmeticId)
     override suspend fun purchaseCosmeticBundle(token: String, bundleId: String): CosmeticCatalog = WalletApi.purchaseCosmeticBundle(token, bundleId)
     override suspend fun equipCosmetic(token: String, cosmeticId: String, type: String): CosmeticCatalog = WalletApi.equipCosmetic(token, cosmeticId, type)
-    override suspend fun sendGift(token: String, roomId: String, gift: GiftItem, receiverId: String, currency: String) = WalletApi.sendGift(token, roomId, gift, receiverId, currency)
+    override suspend fun sendGift(token: String, roomId: String, gift: GiftItem, receiverId: String, currency: String, inventoryItemId: String?) = WalletApi.sendGift(token, roomId, gift, receiverId, currency, inventoryItemId)
     override suspend fun devRecharge(token: String, amount: Int) = WalletApi.devRecharge(token, amount)
     override suspend fun walletTransactions(token: String): List<WalletTransaction> = WalletApi.transactions(token)
     override suspend fun transferCosmetic(token: String, cosmeticId: String, receiverId: String) = WalletApi.transferCosmetic(token, cosmeticId, receiverId)
@@ -251,9 +255,13 @@ object YugmApi : IYugmApi {
     override suspend fun acceptPk(token: String, inviteId: String): PkBattle = PkApi.acceptPk(token, inviteId)
     override suspend fun rejectPk(token: String, inviteId: String) = PkApi.rejectPk(token, inviteId)
     override suspend fun endPk(token: String, battleId: String): PkBattle = PkApi.endPk(token, battleId)
+    override suspend fun startRoomPk(token: String, roomId: String, leftPlayerIds: List<String>, rightPlayerIds: List<String>, format: PkFormat, mode: PkMode, durationSeconds: Int, selectedGiftId: String?): PkBattle = PkApi.startRoomPk(token, roomId, leftPlayerIds, rightPlayerIds, format, mode, durationSeconds, selectedGiftId)
+    override suspend fun votePk(token: String, battleId: String, side: PkSideType): PkBattle = PkApi.votePk(token, battleId, side)
+    override suspend fun readyPk(token: String, battleId: String): PkBattle = PkApi.readyPk(token, battleId)
+    override suspend fun closePk(token: String, battleId: String): PkBattle = PkApi.closePk(token, battleId)
     override suspend fun cancelPk(token: String, battleId: String) = PkApi.cancelPk(token, battleId)
     override suspend fun requestRematch(token: String, battleId: String): Pair<PkBattle, Any?> = PkApi.requestRematch(token, battleId)
-    override suspend fun sendPkGift(token: String, battleId: String, giftId: String, side: PkSideType): PkBattle = PkApi.sendPkGift(token, battleId, giftId, side)
+    override suspend fun sendPkGift(token: String, battleId: String, giftId: String, side: PkSideType, quantity: Int): PkBattle = PkApi.sendPkGift(token, battleId, giftId, side, quantity)
     override suspend fun sendPkReaction(token: String, battleId: String, side: PkSideType, type: String): PkBattle = PkApi.sendPkReaction(token, battleId, side, type)
     override suspend fun pkLeaderboard(token: String, battleId: String): List<PkLeaderboardEntry> = PkApi.pkLeaderboard(token, battleId)
     override suspend fun pkMediaSession(token: String, battleId: String, roomId: String): PkMediaSession? = PkApi.pkMediaSession(token, battleId, roomId)
@@ -306,6 +314,11 @@ object YugmApi : IYugmApi {
     override suspend fun getUserRooms(userId: String, token: String?): List<Room> = UserApi.getUserRooms(userId, token)
     override suspend fun getFollowers(userId: String, token: String?): List<Host> = UserApi.getFollowers(userId, token)
     override suspend fun getFollowing(userId: String, token: String?): List<Host> = UserApi.getFollowing(userId, token)
+    override suspend fun getUserFriends(userId: String, token: String): List<Host> = UserApi.getUserFriends(userId, token)
+    override suspend fun getProfileVisitors(userId: String, token: String): List<Host> = UserApi.getProfileVisitors(userId, token)
+    override suspend fun vipPrivacy(token: String): VipPrivacySettings = UserApi.vipPrivacy(token)
+    override suspend fun updateVipPrivacy(token: String, settings: VipPrivacySettings): VipPrivacySettings = UserApi.updateVipPrivacy(token, settings)
+    override suspend fun getFriends(token: String): List<Host> = UserApi.getFriends(token)
     override suspend fun followUser(token: String, userId: String) = UserApi.followUser(token, userId)
     override suspend fun unfollowUser(token: String, userId: String) = UserApi.unfollowUser(token, userId)
     override suspend fun removeFollower(token: String, followerId: String) = UserApi.removeFollower(token, followerId)
@@ -407,7 +420,7 @@ object YugmApi : IYugmApi {
     override suspend fun viewRecording(token: String, recordingId: String): Int = RecordingsApi.view(token, recordingId)
 
     // Events
-    override suspend fun listEvents(token: String?, page: Int, limit: Int, status: String?, type: String?, category: String?, upcoming: Boolean?, festival: String?, featured: Boolean?): Pair<List<YugmEvent>, EventPagination> = EventsApi.list(token, page, limit, status, type, category, upcoming, festival, featured)
+    override suspend fun listEvents(token: String?, page: Int, limit: Int, status: String?, type: String?, category: String?, upcoming: Boolean?, festival: String?, featured: Boolean?, roomId: String?): Pair<List<YugmEvent>, EventPagination> = EventsApi.list(token, page, limit, status, type, category, upcoming, festival, featured, roomId)
     override suspend fun eventDetail(eventId: String, token: String?): YugmEvent = EventsApi.detail(eventId, token)
     override suspend fun createEvent(token: String, title: String, description: String?, coverImage: String?, category: String, type: String, eventDate: String, eventEndDate: String?, timezone: String?, roomId: String?, maxParticipants: Int?, tags: List<String>?, festival: String?): YugmEvent = EventsApi.create(token, title, description, coverImage, category, type, eventDate, eventEndDate, timezone, roomId, maxParticipants, tags, festival)
     override suspend fun joinEvent(token: String, eventId: String): YugmEvent = EventsApi.join(token, eventId)

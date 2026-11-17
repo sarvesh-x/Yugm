@@ -119,7 +119,11 @@ fun NavGraph(
             Screen.MainTabs.createRoute("discover")
         }
         navController.navigate(dest) {
-            popUpTo(Screen.Login.route) { inclusive = true }
+            // A successful sign-in establishes a new authenticated root. Clear
+            // onboarding and every auth destination so system Back cannot reveal
+            // the login flow behind Home/Discovery.
+            popUpTo(Screen.Onboarding.route) { inclusive = true }
+            launchSingleTop = true
         }
     }
 

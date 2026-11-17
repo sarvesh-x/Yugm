@@ -4,6 +4,7 @@ data class GiftItem(
     val id: String,
     val name: String,
     val price: Int,
+    val pkPoints: Int = 0,
     val diamondPrice: Int = 0,
     val icon: String = "",
     val rarity: String = "common",

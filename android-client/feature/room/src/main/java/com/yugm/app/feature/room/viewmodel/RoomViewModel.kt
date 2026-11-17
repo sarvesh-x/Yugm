@@ -15,6 +15,7 @@ import com.yugm.app.core.model.ChatMessage
 import com.yugm.app.core.model.CosmeticCatalog
 import com.yugm.app.core.model.FeedResponse
 import com.yugm.app.core.model.GiftItem
+import com.yugm.app.core.model.InventoryItem
 import com.yugm.app.core.model.Host
 import com.yugm.app.core.model.PkBattle
 import com.yugm.app.core.model.PkBattleType
@@ -24,6 +25,7 @@ import com.yugm.app.core.model.PkLeaderboardEntry
 import com.yugm.app.core.model.PkLiveEffect
 import com.yugm.app.core.model.PkMediaSession
 import com.yugm.app.core.model.PkMode
+import com.yugm.app.core.model.PkFormat
 import com.yugm.app.core.model.PkOpponent
 import com.yugm.app.core.model.PkSideType
 import com.yugm.app.core.model.PkStatus
@@ -34,6 +36,8 @@ import com.yugm.app.core.model.RoomPoll
 import com.yugm.app.core.model.RoomReaction
 import com.yugm.app.core.model.RoomReactionEvent
 import com.yugm.app.core.model.RoomType
+import com.yugm.app.core.model.RoomSessionSummary
+import com.yugm.app.core.model.YugmEvent
 import com.yugm.app.core.model.SupportTicket
 import com.yugm.app.core.model.WatchParty
 import com.yugm.app.core.util.UiState
@@ -68,10 +72,21 @@ class RoomViewModel @Inject constructor(
 
     val gifts = mutableStateListOf<GiftItem>()
 
+    var giftInventory by mutableStateOf<List<InventoryItem>>(emptyList())
+        private set
+
     var diamondBalance by mutableStateOf(0)
         private set
 
     var inviteCandidates by mutableStateOf<List<Host>>(emptyList())
+        private set
+    var roomInviteFollowers by mutableStateOf<List<Host>>(emptyList())
+        private set
+    var inviteFriends by mutableStateOf<List<Host>>(emptyList())
+        private set
+    var roomEvents by mutableStateOf<List<YugmEvent>>(emptyList())
+        private set
+    var isFollowingRoom by mutableStateOf(false)
         private set
 
     var pkBattle by mutableStateOf<PkBattle?>(null)
@@ -99,6 +114,8 @@ class RoomViewModel @Inject constructor(
     var forcedRemoveVersion by mutableStateOf(0)
         private set
     var roomEndedVersion by mutableStateOf(0)
+        private set
+    var roomEndSummary by mutableStateOf<RoomSessionSummary?>(null)
         private set
     var roomReactionEvent by mutableStateOf(0 to (null as RoomReactionEvent?))
         private set
@@ -207,10 +224,35 @@ class RoomViewModel @Inject constructor(
     private var realtimeRefreshJob: Job? = null
     private val pendingRealtimeEvents = mutableSetOf<String>()
     private var roomRecoveryJob: Job? = null
+    private var connectedRoomKey: String = ""
+    private var refreshGeneration: Long = 0L
+    private var refreshJob: Job? = null
 
     fun connect(token: String, roomId: String, userId: String, video: Boolean = false) {
+        val nextRoomKey = "$token:$roomId:$video"
+        // A ViewModel may be retained across a lobby and repeated entries to the
+        // same room. Consume no lifecycle signal from its previous screen session.
+        forcedMuteVersion = 0
+        forcedRemoveVersion = 0
+        roomEndedVersion = 0
+        if (connectedRoomKey == nextRoomKey && roomState !is UiState.Error) {
+            // Lobby and live-room destinations can share a retained ViewModel.
+            // Do not clear a valid snapshot or launch competing refreshes for the
+            // same room/session as navigation advances from preview to live.
+            if (roomDetail == null) refresh()
+            return
+        }
+        connectedRoomKey = nextRoomKey
         realtimeRefreshJob?.cancel()
         pendingRealtimeEvents.clear()
+        // Clear the previous destination's snapshot before loading this room;
+        // the retained ViewModel must never leave the new route in a false loading state.
+        roomDetail = null
+        roomError = null
+        roomState = UiState.Loading
+        // These are versioned socket signals consumed by the active-room UI.
+        // Reset them on each room session so a previous room's end/removal event
+        // cannot immediately navigate the user back out of a newly opened room.
         // This ViewModel can outlive a room destination. Never carry one session's
         // cached chat into the next room entry (including rejoining the same room).
         chat.clear()
@@ -219,8 +261,14 @@ class RoomViewModel @Inject constructor(
         this.roomId = roomId
         this.currentUserId = userId
         this.isVideo = video
+        isFollowingRoom = false
         loadRoomReactions(force = true)
         refresh()
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { yugmApi.followedRooms(authToken) }
+            }.onSuccess { rooms -> isFollowingRoom = rooms.any { it.id == roomId } }
+        }
         roomRecoveryJob?.cancel()
         roomRecoveryJob = viewModelScope.launch {
             while (true) {
@@ -252,11 +300,31 @@ class RoomViewModel @Inject constructor(
         }
     }
 
-    fun endRoomAndDisconnect(onComplete: () -> Unit) {
+    fun endRoomAndDisconnect(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { runCatching { yugmApi.endRoom(roomId, authToken) } }
+            val result = withContext(Dispatchers.IO) { runCatching { yugmApi.endRoom(roomId, authToken) } }
+            result.onSuccess { roomEndSummary = it }.onFailure { actionError = it.message ?: "Couldn't close room" }
             closeMediaConnections()
             onComplete()
+        }
+    }
+
+    fun dismissRoomEndSummary() { roomEndSummary = null }
+
+    fun toggleRoomFollow() {
+        val wasFollowing = isFollowingRoom
+        isFollowingRoom = !wasFollowing
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    if (wasFollowing) yugmApi.unfollowRoom(authToken, roomId)
+                    else yugmApi.followRoom(authToken, roomId)
+                }
+            }
+            result.onFailure {
+                isFollowingRoom = wasFollowing
+                actionError = it.message ?: "Couldn't update room follow"
+            }
         }
     }
 
@@ -273,15 +341,20 @@ class RoomViewModel @Inject constructor(
     }
 
     fun refresh() {
-        viewModelScope.launch {
-            roomState = UiState.Loading
+        val generation = ++refreshGeneration
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
+            if (roomDetail == null) roomState = UiState.Loading
             val detailResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomDetail(authToken, roomId) } }
+            // A canceled/older refresh must not replace the newest room's state.
+            if (generation != refreshGeneration) return@launch
             detailResult.onSuccess {
                 roomDetail = it
                 roomError = null
                 roomState = UiState.Success(it)
             }.onFailure { error ->
                 roomError = error.message ?: "Couldn't open this room."
+                android.util.Log.e("RoomViewModel", "Room detail load failed for $roomId", error)
                 roomState = UiState.Error(roomError!!, error)
             }
             val pollsResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomPolls(authToken, roomId) } }
@@ -290,6 +363,8 @@ class RoomViewModel @Inject constructor(
             missionsResult.onSuccess { missions = it }
             val activityResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomActivity(roomId, authToken) } }
             activityResult.onSuccess { activity = it }
+            runCatching { withContext(Dispatchers.IO) { yugmApi.listEvents(authToken, limit = 20, roomId = roomId).first } }
+                .onSuccess { roomEvents = it }
             val messagesResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomMessages(roomId, authToken) } }
             messagesResult.onSuccess {
                 mergeChat(it)
@@ -298,11 +373,17 @@ class RoomViewModel @Inject constructor(
             giftsResult.onSuccess {
                 gifts.clear(); gifts.addAll(it)
             }
+            runCatching { withContext(Dispatchers.IO) { yugmApi.inventory(authToken).items } }
+                .onSuccess { giftInventory = it.filter { item -> item.quantity > 0 && item.gift != null } }
             runCatching { withContext(Dispatchers.IO) { yugmApi.walletOverview(authToken).diamondBalance } }
                 .onSuccess { diamondBalance = it }
             if (currentUserId.isNotBlank()) {
                 val followingResult = withContext(Dispatchers.IO) { runCatching { yugmApi.getFollowing(currentUserId, authToken) } }
                 followingResult.onSuccess { inviteCandidates = it }
+                runCatching { withContext(Dispatchers.IO) { yugmApi.getFriends(authToken) } }
+                    .onSuccess { inviteFriends = it }
+                runCatching { withContext(Dispatchers.IO) { yugmApi.roomFollowers(authToken, roomId) } }
+                    .onSuccess { roomInviteFollowers = it }
             }
             val pkResult = withContext(Dispatchers.IO) { runCatching { yugmApi.activePkWithInvite(authToken, roomId) } }
             pkResult.onSuccess { (battle, invite) ->
@@ -376,7 +457,11 @@ class RoomViewModel @Inject constructor(
                         },
                         onPkState = { battle ->
                             viewModelScope.launch {
-                                pkBattle = battle
+                                val previous = pkBattle?.takeIf { it.id == battle.id }
+                                pkBattle = battle.copy(
+                                    myVote = battle.myVote ?: previous?.myVote,
+                                    myReady = battle.myReady || previous?.myReady == true
+                                )
                                 if (battle.status == PkStatus.ACTIVE) pkInviteId = null
                                 val leaderboardResult = withContext(Dispatchers.IO) { runCatching { yugmApi.pkLeaderboard(authToken, battle.id) } }
                                 leaderboardResult.onSuccess { pkLeaderboard = it }
@@ -494,13 +579,13 @@ class RoomViewModel @Inject constructor(
         }
     }
 
-    fun sendMessage(text: String) {
+    fun sendMessage(text: String, mediaUrl: String? = null, mediaType: String? = null) {
         viewModelScope.launch {
             actionLoading = true
             actionError = null
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    retryAfterJoin { yugmApi.sendMessage(authToken, roomId, text) }
+                    retryAfterJoin { yugmApi.sendMessage(authToken, roomId, text, mediaUrl, mediaType) }
                 }
             }
             result.onSuccess {
@@ -512,14 +597,14 @@ class RoomViewModel @Inject constructor(
         }
     }
 
-    fun sendGift(gift: GiftItem, receiverId: String, currency: String = "COINS") {
+    fun sendGift(gift: GiftItem, receiverId: String, currency: String = "COINS", inventoryItemId: String? = null) {
         viewModelScope.launch {
             actionLoading = true
             actionError = null
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     retryAfterJoin {
-                        yugmApi.sendGift(token = authToken, roomId = roomId, gift = gift, receiverId = receiverId, currency = currency)
+                        yugmApi.sendGift(token = authToken, roomId = roomId, gift = gift, receiverId = receiverId, currency = currency, inventoryItemId = inventoryItemId)
                     }
                 }
             }
@@ -530,6 +615,10 @@ class RoomViewModel @Inject constructor(
                         sessionManager.balance = overview.balance
                         diamondBalance = overview.diamondBalance
                     }
+                if (inventoryItemId != null) {
+                    runCatching { withContext(Dispatchers.IO) { yugmApi.inventory(authToken).items } }
+                        .onSuccess { giftInventory = it.filter { item -> item.quantity > 0 && item.gift != null } }
+                }
                 }
                 val receiverName = roomDetail?.participants
                     ?.firstOrNull { it.user.id == receiverId }
@@ -828,9 +917,16 @@ class RoomViewModel @Inject constructor(
     }
 
     fun inviteToRoom(userId: String) {
+        inviteUsersToRoom(listOf(userId))
+    }
+
+    fun inviteUsersToRoom(userIds: List<String>) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                runCatching { yugmApi.inviteToRoom(authToken, roomId, userId) }
+                userIds.distinct().forEach { userId ->
+                    runCatching { yugmApi.inviteToRoom(authToken, roomId, userId) }
+                        .onFailure { actionError = it.message ?: "Couldn't invite this user" }
+                }
             }
         }
     }
@@ -888,15 +984,58 @@ class RoomViewModel @Inject constructor(
         }
     }
 
-    fun sendPkGift(giftId: String, side: PkSideType) {
+    fun sendPkGift(giftId: String, side: PkSideType, quantity: Int = 1) {
         viewModelScope.launch {
             val battleId = pkBattle?.id ?: return@launch
             withContext(Dispatchers.IO) {
-                runCatching { yugmApi.sendPkGift(authToken, battleId, giftId, side) }
+                runCatching { yugmApi.sendPkGift(authToken, battleId, giftId, side, quantity) }
                     .onSuccess {
                         pkBattle = it
                         sessionManager.balance = yugmApi.wallet(authToken)
                     }
+            }
+        }
+    }
+
+    fun startRoomPk(leftPlayerIds: List<String>, rightPlayerIds: List<String>, format: PkFormat, mode: PkMode, durationSeconds: Int, selectedGiftId: String?) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { yugmApi.startRoomPk(authToken, roomId, leftPlayerIds, rightPlayerIds, format, mode, durationSeconds, selectedGiftId) }
+                    .onSuccess { pkBattle = it }
+                    .onFailure { actionError = it.message ?: "Couldn't start PK" }
+            }
+        }
+    }
+
+    fun votePk(side: PkSideType) {
+        viewModelScope.launch {
+            val battleId = pkBattle?.id ?: return@launch
+            withContext(Dispatchers.IO) {
+                runCatching { yugmApi.votePk(authToken, battleId, side) }
+                    .onSuccess { pkBattle = it.copy(myVote = side) }
+                    .onFailure { actionError = it.message ?: "Couldn't cast your vote" }
+            }
+        }
+    }
+
+    fun readyPk() {
+        viewModelScope.launch {
+            val battleId = pkBattle?.id ?: return@launch
+            withContext(Dispatchers.IO) {
+                runCatching { yugmApi.readyPk(authToken, battleId) }
+                    .onSuccess { pkBattle = it.copy(myReady = true) }
+                    .onFailure { actionError = it.message ?: "Couldn't confirm readiness" }
+            }
+        }
+    }
+
+    fun closePk() {
+        viewModelScope.launch {
+            val battleId = pkBattle?.id ?: return@launch
+            withContext(Dispatchers.IO) {
+                runCatching { yugmApi.closePk(authToken, battleId) }
+                    .onSuccess { pkBattle = it }
+                    .onFailure { actionError = it.message ?: "Couldn't close PK" }
             }
         }
     }

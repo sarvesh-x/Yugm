@@ -71,7 +71,9 @@ export async function creditDiamonds(
   const existing = await findIdempotent(options.idempotencyKey, options.session);
   if (existing) return [existing];
 
-  const after = await User.findByIdAndUpdate(userId, { $inc: { diamondBalance: amount } }, updateOptions(options.session));
+  const increments: Record<string, number> = { diamondBalance: amount };
+  if (source === "GIFT_RECEIVED") increments.charmExp = Math.max(amount, Math.floor(Number(metadata.giftValue) || amount));
+  const after = await User.findByIdAndUpdate(userId, { $inc: increments }, updateOptions(options.session));
   if (!after) throw new HttpError(404, "User not found");
 
   return record(userId, "CREDIT", source, amount, after.diamondBalance, metadata, options);
@@ -91,9 +93,11 @@ export async function debitDiamonds(
 
   if (source !== "ADMIN_ADJUSTMENT") await assertWalletNotFrozen(userId);
 
+  const increments: Record<string, number> = { diamondBalance: -amount };
+  if (source !== "ADMIN_ADJUSTMENT") increments.wealthExp = amount;
   const after = await User.findOneAndUpdate(
     options.allowNegative ? { _id: userId } : { _id: userId, diamondBalance: { $gte: amount } },
-    { $inc: { diamondBalance: -amount } },
+    { $inc: increments },
     updateOptions(options.session)
   );
   if (!after) throw new HttpError(402, "Insufficient diamonds", ErrorCode.INSUFFICIENT_FUNDS);

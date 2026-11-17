@@ -61,6 +61,7 @@ sealed class Screen(val route: String) {
     object Games : Screen("games")
     object GiftCatalog : Screen("gift_catalog")
     object Vip : Screen("vip")
+    object VipPrivacy : Screen("vip_privacy")
     object Cosmetics : Screen("cosmetics")
     object CustomizeProfile : Screen("customize_profile")
     object PublicProfilePreview : Screen("public_profile_preview/{userId}") {

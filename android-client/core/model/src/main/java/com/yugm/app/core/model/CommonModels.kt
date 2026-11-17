@@ -17,9 +17,20 @@ data class LevelStatus(
 data class VipStatus(
     val isVip: Boolean = false,
     val vipTier: String = "",
+    val vipLevel: Int = 0,
+    val vipExp: Int = 0,
+    val vipExpRequired: Int = 1000,
+    val nextVipExpRequired: Int? = 1000,
     val vipStartedAt: String = "",
     val vipExpiresAt: String = "",
-    val daysRemaining: Int = 0
+    val daysRemaining: Int = 0,
+    val frozen: Boolean = false,
+    val freezeDaysRemaining: Int = 0
+)
+
+data class VipPrivacySettings(
+    val mysteriousVisitors: Boolean = false,
+    val chatPrivacy: String = "EVERYONE"
 )
 
 data class ProfileCheck(
@@ -208,6 +219,8 @@ data class StreakMilestoneInfo(
 
 data class LevelOverview(
     val level: LevelStatus = LevelStatus(),
+    val wealthLevel: ProgressionTrackStatus = ProgressionTrackStatus(),
+    val charmLevel: ProgressionTrackStatus = ProgressionTrackStatus(),
     val streak: Int = 0,
     val canCheckIn: Boolean = false,
     val nextMilestone: Int? = null,
@@ -219,6 +232,16 @@ data class LevelOverview(
     val leaderboardRank: Int? = null,
     val todayXpEarned: Int = 0,
     val todayXpCap: Int = 0
+)
+
+data class ProgressionTrackStatus(
+    val level: Int = 0,
+    val exp: Int = 0,
+    val currentLevelExp: Int = 0,
+    val nextLevel: Int = 1,
+    val nextLevelExp: Int = 500,
+    val requiredExp: Int = 500,
+    val progress: Float = 0f
 )
 
 data class LevelLeaderboardEntry(

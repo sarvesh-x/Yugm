@@ -5,6 +5,8 @@ export interface IChatMessage extends mongoose.Document {
   senderId: mongoose.Types.ObjectId;
   message: string;
   type: "TEXT" | "SYSTEM" | "GIFT" | "REACTION";
+  mediaUrl?: string;
+  mediaType?: "IMAGE";
 }
 
 const chatMessageSchema = new Schema<IChatMessage>(
@@ -12,7 +14,9 @@ const chatMessageSchema = new Schema<IChatMessage>(
     roomId: { type: Schema.Types.ObjectId, ref: "Room", required: true, index: true },
     senderId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     message: { type: String, required: true },
-    type: { type: String, enum: ["TEXT", "SYSTEM", "GIFT", "REACTION"], default: "TEXT" }
+    type: { type: String, enum: ["TEXT", "SYSTEM", "GIFT", "REACTION"], default: "TEXT" },
+    mediaUrl: { type: String },
+    mediaType: { type: String, enum: ["IMAGE"] }
   },
   { timestamps: { createdAt: true, updatedAt: false } }
 );

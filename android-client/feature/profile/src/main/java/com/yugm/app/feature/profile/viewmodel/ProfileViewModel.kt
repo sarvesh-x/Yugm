@@ -37,6 +37,8 @@ class ProfileViewModel @Inject constructor(
         private set
     var following by mutableStateOf<List<Host>>(emptyList())
         private set
+    var visitors by mutableStateOf<List<Host>>(emptyList())
+        private set
     var pkStats by mutableStateOf<PkStats?>(null)
         private set
     var pkHistory by mutableStateOf<List<PkBattle>>(emptyList())
@@ -150,6 +152,7 @@ class ProfileViewModel @Inject constructor(
                 rooms = emptyList()
                 followers = emptyList()
                 following = emptyList()
+                visitors = emptyList()
                 pkStats = null
                 pkHistory = emptyList()
                 ownClan = null
@@ -185,6 +188,14 @@ class ProfileViewModel @Inject constructor(
                 }
                 isLoading = false
             }
+        }
+    }
+
+    fun loadVisitors(token: String, userId: String) {
+        if (token.isBlank()) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { runCatching { yugmApi.getProfileVisitors(userId, token) } }
+                .onSuccess { visitors = it }
         }
     }
 

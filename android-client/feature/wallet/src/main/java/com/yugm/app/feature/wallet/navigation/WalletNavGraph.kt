@@ -140,8 +140,14 @@ fun NavGraphBuilder.walletNavGraph(
     composable(Screen.Vip.route) {
         VipPlansScreen(
             token = authTokenProvider(),
-            onBack = { navController.popBackStack() }
+            onBack = { navController.popBackStack() },
+            onRecharge = { navController.navigate(Screen.Wallet.route) },
+            onPrivacySettings = { navController.navigate(Screen.VipPrivacy.route) }
         )
+    }
+
+    composable(Screen.VipPrivacy.route) {
+        VipPrivacyScreen(token = authTokenProvider(), onBack = { navController.popBackStack() })
     }
 
     composable(Screen.CreatorPayoutKycIntro.route) {

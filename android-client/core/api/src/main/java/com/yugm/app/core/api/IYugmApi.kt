@@ -64,6 +64,7 @@ import com.yugm.app.core.model.PkInvite
 import com.yugm.app.core.model.PkLeaderboardEntry
 import com.yugm.app.core.model.PkMediaSession
 import com.yugm.app.core.model.PkMode
+import com.yugm.app.core.model.PkFormat
 import com.yugm.app.core.model.PkOpponent
 import com.yugm.app.core.model.PkSideType
 import com.yugm.app.core.model.PkStats
@@ -105,6 +106,7 @@ import com.yugm.app.core.model.VibeMatchResponse
 import com.yugm.app.core.model.VibeTrendResponse
 import com.yugm.app.core.model.VibeUpdateResponse
 import com.yugm.app.core.model.VipPlan
+import com.yugm.app.core.model.VipPrivacySettings
 import com.yugm.app.core.model.WalletOverview
 import com.yugm.app.core.model.WalletProgressResult
 import com.yugm.app.core.model.VipStatus
@@ -169,7 +171,7 @@ suspend fun leaderboard(): RoomLeaderboard
     suspend fun joinRoom(token: String, roomId: String)
     suspend fun leaveRoom(token: String, roomId: String)
     suspend fun liveKitToken(token: String, roomId: String): MediaSession
-    suspend fun sendMessage(token: String, roomId: String, message: String): ChatMessage
+    suspend fun sendMessage(token: String, roomId: String, message: String, mediaUrl: String? = null, mediaType: String? = null): ChatMessage
     suspend fun requestSpeaker(token: String, roomId: String)
     suspend fun approveSpeaker(token: String, roomId: String, userId: String)
     suspend fun rejectSpeaker(token: String, roomId: String, userId: String)
@@ -186,8 +188,10 @@ suspend fun leaderboard(): RoomLeaderboard
     suspend fun reactToRoom(token: String, roomId: String, type: String)
     suspend fun roomReactions(token: String? = null): List<RoomReaction>
     suspend fun inviteToRoom(token: String, roomId: String, userId: String)
+    suspend fun roomFollowers(token: String, roomId: String): List<com.yugm.app.core.model.Host>
+    suspend fun respondToRoomInvite(token: String, inviteId: String, accept: Boolean): String
     suspend fun roomDirectMessage(token: String, roomId: String, message: String, receiverId: String? = null)
-    suspend fun endRoom(roomId: String, token: String)
+    suspend fun endRoom(roomId: String, token: String): com.yugm.app.core.model.RoomSessionSummary
     suspend fun muteUser(roomId: String, userId: String, token: String)
     suspend fun unmuteUser(roomId: String, userId: String, token: String)
     suspend fun clearRoomChat(roomId: String, token: String)
@@ -226,7 +230,7 @@ suspend fun leaderboard(): RoomLeaderboard
     suspend fun purchaseCosmetic(token: String, cosmeticId: String): CosmeticCatalog
     suspend fun purchaseCosmeticBundle(token: String, bundleId: String): CosmeticCatalog
     suspend fun equipCosmetic(token: String, cosmeticId: String, type: String): CosmeticCatalog
-    suspend fun sendGift(token: String, roomId: String, gift: GiftItem, receiverId: String, currency: String = "COINS")
+    suspend fun sendGift(token: String, roomId: String, gift: GiftItem, receiverId: String, currency: String = "COINS", inventoryItemId: String? = null)
     suspend fun devRecharge(token: String, amount: Int)
     suspend fun walletTransactions(token: String): List<WalletTransaction>
     suspend fun transferCosmetic(token: String, cosmeticId: String, receiverId: String)
@@ -249,9 +253,13 @@ suspend fun leaderboard(): RoomLeaderboard
     suspend fun acceptPk(token: String, inviteId: String): PkBattle
     suspend fun rejectPk(token: String, inviteId: String)
     suspend fun endPk(token: String, battleId: String): PkBattle
+    suspend fun startRoomPk(token: String, roomId: String, leftPlayerIds: List<String>, rightPlayerIds: List<String>, format: PkFormat, mode: PkMode, durationSeconds: Int, selectedGiftId: String?): PkBattle
+    suspend fun votePk(token: String, battleId: String, side: PkSideType): PkBattle
+    suspend fun readyPk(token: String, battleId: String): PkBattle
+    suspend fun closePk(token: String, battleId: String): PkBattle
     suspend fun cancelPk(token: String, battleId: String)
     suspend fun requestRematch(token: String, battleId: String): Pair<PkBattle, Any?>
-    suspend fun sendPkGift(token: String, battleId: String, giftId: String, side: PkSideType): PkBattle
+    suspend fun sendPkGift(token: String, battleId: String, giftId: String, side: PkSideType, quantity: Int = 1): PkBattle
     suspend fun sendPkReaction(token: String, battleId: String, side: PkSideType, type: String): PkBattle
     suspend fun pkLeaderboard(token: String, battleId: String): List<PkLeaderboardEntry>
     suspend fun pkMediaSession(token: String, battleId: String, roomId: String): PkMediaSession?
@@ -301,6 +309,11 @@ suspend fun leaderboard(): RoomLeaderboard
     suspend fun getUserRooms(userId: String, token: String? = null): List<Room>
     suspend fun getFollowers(userId: String, token: String? = null): List<Host>
     suspend fun getFollowing(userId: String, token: String? = null): List<Host>
+    suspend fun getUserFriends(userId: String, token: String): List<Host>
+    suspend fun getProfileVisitors(userId: String, token: String): List<Host>
+    suspend fun vipPrivacy(token: String): VipPrivacySettings
+    suspend fun updateVipPrivacy(token: String, settings: VipPrivacySettings): VipPrivacySettings
+    suspend fun getFriends(token: String): List<Host>
     suspend fun followUser(token: String, userId: String)
     suspend fun unfollowUser(token: String, userId: String)
     suspend fun removeFollower(token: String, followerId: String)
@@ -396,7 +409,7 @@ suspend fun leaderboard(): RoomLeaderboard
     suspend fun deleteRecording(token: String, recordingId: String)
     suspend fun viewRecording(token: String, recordingId: String): Int
 
-    suspend fun listEvents(token: String? = null, page: Int = 1, limit: Int = 20, status: String? = null, type: String? = null, category: String? = null, upcoming: Boolean? = null, festival: String? = null, featured: Boolean? = null): Pair<List<YugmEvent>, EventPagination>
+    suspend fun listEvents(token: String? = null, page: Int = 1, limit: Int = 20, status: String? = null, type: String? = null, category: String? = null, upcoming: Boolean? = null, festival: String? = null, featured: Boolean? = null, roomId: String? = null): Pair<List<YugmEvent>, EventPagination>
     suspend fun eventDetail(eventId: String, token: String? = null): YugmEvent
     suspend fun createEvent(token: String, title: String, description: String? = null, coverImage: String? = null, category: String, type: String, eventDate: String, eventEndDate: String? = null, timezone: String? = null, roomId: String? = null, maxParticipants: Int? = null, tags: List<String>? = null, festival: String? = null): YugmEvent
     suspend fun joinEvent(token: String, eventId: String): YugmEvent

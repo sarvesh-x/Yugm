@@ -61,7 +61,7 @@ test("getVipStatus calculates daysRemaining correctly", () => {
   const user = { vipExpiresAt: expiresAt, vipTier: "VIP" };
   const status = getVipStatus(user, now);
   assert.equal(status.isVip, true);
-  assert.equal(status.vipTier, "VIP");
+  assert.equal(status.vipTier, "VIP1");
   assert.equal(status.daysRemaining, 7);
 });
 

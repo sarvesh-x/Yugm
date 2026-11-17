@@ -16,10 +16,17 @@ import { MiniGameChallenge } from "../models/MiniGameChallenge.js";
 import { MiniGameScore } from "../models/MiniGameScore.js";
 import { Notification } from "../models/Notification.js";
 import { Purchase } from "../models/Purchase.js";
+import { ProfileVisit } from "../models/ProfileVisit.js";
 import { BattlePass } from "../models/BattlePass.js";
 import { BattlePassXpGrant } from "../models/BattlePassXpGrant.js";
 import { Season } from "../models/Season.js";
 import { PayoutReview } from "../models/PayoutReview.js";
+import { PkBattle } from "../models/PkBattle.js";
+import { PkEvent } from "../models/PkEvent.js";
+import { PkInvite } from "../models/PkInvite.js";
+import { PkLeaderboardEntry } from "../models/PkLeaderboardEntry.js";
+import { PkParticipant } from "../models/PkParticipant.js";
+import { PkVote } from "../models/PkVote.js";
 import { Relationship } from "../models/Relationship.js";
 import { Report } from "../models/Report.js";
 import { Room } from "../models/Room.js";
@@ -58,6 +65,7 @@ const indexedModels = [
   XpGrant,
   WalletTransaction,
   Purchase,
+  ProfileVisit,
   BattlePass,
   BattlePassXpGrant,
   Season,
@@ -69,7 +77,13 @@ const indexedModels = [
   VoiceVerificationSubmission,
   CreatorPayoutKyc,
   WithdrawalRequest,
-  PayoutReview
+  PayoutReview,
+  PkBattle,
+  PkEvent,
+  PkInvite,
+  PkLeaderboardEntry,
+  PkParticipant,
+  PkVote
 ];
 
 export async function ensureProductionIndexes() {

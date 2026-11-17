@@ -78,6 +78,8 @@ fun ActiveVideoRoomScreen(
     onJoin: () -> Unit,
     participants: List<RoomParticipant> = emptyList(),
     inviteCandidates: List<Host> = emptyList(),
+    roomInviteFollowers: List<Host> = emptyList(),
+    inviteFriends: List<Host> = emptyList(),
     pkBattle: PkBattle? = null,
     pkInviteId: String? = null,
     pkOpponents: List<PkOpponent> = emptyList(),
@@ -93,18 +95,21 @@ fun ActiveVideoRoomScreen(
     onCreateCustomPoll: (String, List<String>, () -> Unit, (String) -> Unit) -> Unit = { _, _, _, _ -> },
     onVotePoll: (String, Int) -> Unit = { _, _ -> },
     onClosePoll: (String) -> Unit = {},
-    onInviteFriend: (String) -> Unit = {},
+    onInviteFriend: (List<String>) -> Unit = {},
     onDirectMessage: (String?) -> Unit = {},
     onReact: (String) -> Unit = {},
     onLoadPkOpponents: (String) -> Unit = {},
     onInvitePk: (PkOpponent, PkMode, Int, String) -> Unit = { _, _, _, _ -> },
     onAutoMatchPk: (PkMode, Int, String) -> Unit = { _, _, _ -> },
-    onSendPkGift: (GiftItem, PkSideType) -> Unit = { _, _ -> },
+    onSendPkGift: (GiftItem, PkSideType, Int) -> Unit = { _, _, _ -> },
     onSendPkReaction: (String, PkSideType) -> Unit = { _, _ -> },
     onAcceptPk: (String) -> Unit = {},
     onRejectPk: (String) -> Unit = {},
     onEndPk: () -> Unit = {},
     isHost: Boolean = false,
+    isRoomAdmin: Boolean = false,
+    onReadyPk: () -> Unit = {},
+    onClosePk: () -> Unit = {},
     onEndRoom: () -> Unit = {},
     onMuteUser: (String) -> Unit = {},
     onRemoveUser: (String) -> Unit = {},
@@ -206,24 +211,24 @@ fun ActiveVideoRoomScreen(
                 if (onEditRoom != null) {
                     ControlButton("Edit room") { onEditRoom() }
                 }
-                if (pkBattle == null || pkBattle.status !in listOf(PkStatus.ACTIVE, PkStatus.INVITED, PkStatus.WAITING)) {
+                if ((isHost || isRoomAdmin) && (pkBattle == null || pkBattle.status !in listOf(PkStatus.ACTIVE, PkStatus.INVITED, PkStatus.WAITING, PkStatus.PREPARING, PkStatus.READY, PkStatus.COUNTDOWN, PkStatus.COMPLETED))) {
                     ControlButton("Start PK") { showPkSetup = true }
                 }
-                ControlButton("End", danger = true) { onEndRoom() }
+                if (isHost || isRoomAdmin) ControlButton("End", danger = true) { onEndRoom() }
                 if (guestId != null) {
                     ControlButton("Mute user") { onMuteUser(guestId) }
                     ControlButton("Remove user", danger = true) { onRemoveUser(guestId) }
                 }
             }
-            if (!isHost) room.host?.let { host ->
+            if (!isHost && !isRoomAdmin) room.host?.let { host ->
                 ControlButton("Report", danger = true) { onReportUser(host.id) }
             }
-            if (!isHost) ControlButton("Leave", danger = true) { onBack() }
+            if (!isHost && !isRoomAdmin) ControlButton("Leave", danger = true) { onBack() }
         }
     ) {
         AnimatedEntrance(delay = 200) {
-        if (pkBattle != null && pkBattle.status == PkStatus.ACTIVE) {
-            PkBattleHeader(pkBattle, isHost = isHost, onEnd = onEndPk)
+        if (pkBattle != null && pkBattle.status in listOf(PkStatus.ACTIVE, PkStatus.FINAL_CRUNCH)) {
+            PkBattleHeader(pkBattle, isHost = isHost || isRoomAdmin, onEnd = onEndPk)
             PkVideoStage(pkBattle, pkOpponentMedia)
             PkBattleScoreBar(pkBattle)
             PkTeamSelector(pkBattle, selectedSide = pkGiftSide, onSelect = { pkGiftSide = it })
@@ -242,7 +247,7 @@ fun ActiveVideoRoomScreen(
                     if (isHost && side == ownPkSide) {
                         onToast("Choose the opponent side for PK gifts")
                     } else {
-                        onSendPkGift(gift, side)
+                        onSendPkGift(gift, side, 1)
                     }
                 }
             )
@@ -257,7 +262,9 @@ fun ActiveVideoRoomScreen(
                 side = pkGiftSide
             )
             PkLeaderboard(pkLeaderboard)
-        } else if (pkBattle != null && pkBattle.status == PkStatus.INVITED && isHost && pkBattle.right.roomId == room.id && !pkInviteId.isNullOrBlank()) {
+        } else if (pkBattle != null && pkBattle.status in listOf(PkStatus.PREPARING, PkStatus.READY, PkStatus.COUNTDOWN)) {
+            PkPreparationCard(pkBattle, currentUserId, onReadyPk)
+        } else if (pkBattle != null && pkBattle.status == PkStatus.INVITED && (isHost || isRoomAdmin) && pkBattle.right.roomId == room.id && !pkInviteId.isNullOrBlank()) {
             PkInviteCard(
                 battle = pkBattle,
                 inviterName = pkBattle.left.hostName,
@@ -266,7 +273,7 @@ fun ActiveVideoRoomScreen(
             )
         } else if (pkBattle != null && pkBattle.status in listOf(PkStatus.INVITED, PkStatus.WAITING)) {
             PkWaitingState(pkBattle)
-        } else if (isHost) {
+        } else if (isHost || isRoomAdmin) {
             PkBattleButton { showPkSetup = true }
         }
         val overlayId = room.host?.activeCosmetics?.videoCallOverlay ?: ""
@@ -327,10 +334,14 @@ fun ActiveVideoRoomScreen(
     if (showInvitePicker) {
         FriendInviteSheet(
             hosts = inviteCandidates,
+            roomFollowers = roomInviteFollowers,
+            friends = inviteFriends,
+            roomId = room.id,
+            roomTitle = room.title,
             onDismiss = { showInvitePicker = false },
-            onInvite = {
+            onInvite = { ids ->
                 showInvitePicker = false
-                onInviteFriend(it)
+                onInviteFriend(ids)
             }
         )
     }
@@ -397,8 +408,9 @@ fun ActiveVideoRoomScreen(
     }
     PkResultDialog(
         battle = pkBattle?.takeUnless { it.id == dismissedPkResultId },
-        onDismiss = { dismissedPkResultId = pkBattle?.id },
+        onDismiss = { if (isHost || isRoomAdmin) onClosePk(); dismissedPkResultId = pkBattle?.id },
         onRematch = {
+            if (isHost || isRoomAdmin) onClosePk()
             dismissedPkResultId = pkBattle?.id
             showPkSetup = true
         }

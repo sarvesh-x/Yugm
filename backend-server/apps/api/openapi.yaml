@@ -820,6 +820,87 @@ paths:
         "200": { description: Leaderboard }
 
   # ─── PK BATTLES ────────────────────────────────────────
+  /pk/room-start:
+    post:
+      tags: [PK]
+      summary: Create a same-room player or balanced team Gift/Vote PK (host/admin)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201": { description: Preparation lobby created and broadcast to the room }
+        "403": { description: Caller is not a room manager }
+        "409": { description: Room already has a battle }
+  /pk/invite:
+    post:
+      tags: [PK]
+      summary: Invite another live room to a cross-room PK
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201": { description: Invite and room reservations created }
+  /pk/auto-match:
+    post:
+      tags: [PK]
+      summary: Find and invite a compatible live room
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201": { description: Opponent invite created }
+  /pk/accept:
+    post:
+      tags: [PK]
+      summary: Accept a pending PK invitation and enter preparation
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Invitation accepted atomically }
+  /pk/reject:
+    post:
+      tags: [PK]
+      summary: Reject a pending PK invitation
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Invitation rejected and room reservations released }
+  /pk/cancel:
+    post:
+      tags: [PK]
+      summary: Cancel a battle before it starts (host/admin)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Battle cancelled }
+  /pk/{battleId}/ready:
+    post:
+      tags: [PK]
+      summary: Mark a battle participant ready
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: battleId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Readiness snapshot and server countdown }
+  /pk/{battleId}/vote:
+    post:
+      tags: [PK]
+      summary: Cast the authenticated room participant's single vote
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: battleId, in: path, required: true, schema: { type: string } }
+      responses:
+        "201": { description: Vote recorded and score broadcast }
+        "409": { description: Already voted or battle has ended }
+  /pk/{battleId}/send-gift:
+    post:
+      tags: [PK]
+      summary: Send a catalog-scored PK gift with wallet debit and score in one transaction
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: battleId, in: path, required: true, schema: { type: string } }
+      responses:
+        "201": { description: Gift transaction committed and score broadcast }
+  /pk/{battleId}/close:
+    post:
+      tags: [PK]
+      summary: Close a finalized PK and restore room controls (host/admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: battleId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: PK closed }
   /pk/start:
     post:
       tags: [PK]
