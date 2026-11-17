@@ -160,7 +160,7 @@ function cleanupStaleConnections() {
     }
   }
 }
-setInterval(cleanupStaleConnections, 60_000).unref();
+if (env.YUGM_RUNTIME !== "cloudflare") setInterval(cleanupStaleConnections, 60_000).unref();
 
 async function refreshRedisPresenceSnapshot() {
   const ids = await getOnlinePresenceIds();
@@ -187,20 +187,24 @@ async function configureRedisAdapter(server: Server) {
   }
 }
 
-export async function initSocket(server: HttpServer) {
+export async function initSocket(server: HttpServer, options: { transports?: Array<"polling" | "websocket">; wsEngine?: any } = {}) {
   io = new Server(server, {
-    cors: { origin: env.CORS_ORIGIN === "*" ? "*" : env.CORS_ORIGIN.split(",") }
+    cors: { origin: env.CORS_ORIGIN === "*" ? "*" : env.CORS_ORIGIN.split(",") },
+    ...(options.transports ? { transports: options.transports } : {}),
+    ...(options.wsEngine ? { wsEngine: options.wsEngine } : {})
   });
   await configureRedisAdapter(io);
   await refreshRedisPresenceSnapshot();
-  presenceSnapshotTimer = setInterval(() => {
-    refreshRedisPresenceSnapshot().catch((err) => console.warn("Presence snapshot refresh failed:", err instanceof Error ? err.message : String(err)));
-  }, 15_000);
-  presenceSnapshotTimer.unref?.();
-  inactiveRoomTimer = setInterval(() => {
-    cleanupRoomsWithoutConnections().catch((err) => console.warn("Inactive room cleanup failed:", err instanceof Error ? err.message : String(err)));
-  }, 60_000);
-  inactiveRoomTimer.unref?.();
+  if (env.YUGM_RUNTIME !== "cloudflare") {
+    presenceSnapshotTimer = setInterval(() => {
+      refreshRedisPresenceSnapshot().catch((err) => console.warn("Presence snapshot refresh failed:", err instanceof Error ? err.message : String(err)));
+    }, 15_000);
+    presenceSnapshotTimer.unref?.();
+    inactiveRoomTimer = setInterval(() => {
+      cleanupRoomsWithoutConnections().catch((err) => console.warn("Inactive room cleanup failed:", err instanceof Error ? err.message : String(err)));
+    }, 60_000);
+    inactiveRoomTimer.unref?.();
+  }
 
   io.use(async (socket, next) => {
     const token = socket.handshake.auth?.token as string | undefined;
@@ -357,6 +361,12 @@ export async function initSocket(server: HttpServer) {
   });
 
   return io;
+}
+
+export async function runSocketMaintenance() {
+  cleanupStaleConnections();
+  await refreshRedisPresenceSnapshot();
+  await cleanupRoomsWithoutConnections();
 }
 
 function toSocketPayload(payload: unknown) {

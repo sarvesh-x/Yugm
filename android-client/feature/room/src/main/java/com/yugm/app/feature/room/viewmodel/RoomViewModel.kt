@@ -8,8 +8,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yugm.app.core.api.IYugmApi
 import com.yugm.app.core.api.ReactionCatalogCache
+import com.yugm.app.core.api.RoomSocketClient
 import com.yugm.app.core.api.YugmMediaRoom
-import com.yugm.app.core.api.YugmSocket
 import com.yugm.app.core.data.SessionManager
 import com.yugm.app.core.model.ChatMessage
 import com.yugm.app.core.model.CosmeticCatalog
@@ -42,6 +42,7 @@ import com.yugm.app.core.model.SupportTicket
 import com.yugm.app.core.model.WatchParty
 import com.yugm.app.core.util.UiState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -55,6 +56,11 @@ class RoomViewModel @Inject constructor(
     private val yugmApi: IYugmApi,
     private val sessionManager: SessionManager
 ) : ViewModel() {
+
+    // Room sockets belong to this ViewModel. Other room destinations (preview,
+    // edit, create) must never disconnect the live screen's socket on teardown.
+    private val roomSocket = RoomSocketClient()
+    private val mediaOwnerId = UUID.randomUUID().toString()
 
     var roomDetail by mutableStateOf<RoomDetail?>(null)
         private set
@@ -287,9 +293,7 @@ class RoomViewModel @Inject constructor(
     }
 
     fun disconnect() {
-        viewModelScope.launch {
-            closeMediaConnections()
-        }
+        stopRoomConnections()
     }
 
     fun leaveAndDisconnect(onComplete: () -> Unit) {
@@ -334,9 +338,19 @@ class RoomViewModel @Inject constructor(
         roomRecoveryJob?.cancel()
         roomRecoveryJob = null
         withContext(Dispatchers.IO) {
-            runCatching { YugmSocket.disconnect() }
-            runCatching { YugmMediaRoom.disconnect() }
+            runCatching { roomSocket.disconnect() }
+            runCatching { YugmMediaRoom.disconnect(mediaOwnerId) }
         }
+        isConnected = false
+    }
+
+    private fun stopRoomConnections() {
+        realtimeRefreshJob?.cancel()
+        pendingRealtimeEvents.clear()
+        roomRecoveryJob?.cancel()
+        roomRecoveryJob = null
+        roomSocket.disconnect()
+        YugmMediaRoom.disconnectAsync(mediaOwnerId)
         isConnected = false
     }
 
@@ -418,6 +432,7 @@ class RoomViewModel @Inject constructor(
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     yugmApi.joinRoom(authToken, roomId)
+                    YugmMediaRoom.claimRoom(mediaOwnerId)
                     // This may be a second entry through a retained destination.
                     // Treat every successful join as a fresh visible feed snapshot.
                     withContext(Dispatchers.Main) {
@@ -438,7 +453,8 @@ class RoomViewModel @Inject constructor(
                                 mediaSession.url,
                                 publishCamera = cameraPermissionGranted ?: isHostVideoRoom,
                                 publishMicrophone = microphonePermissionGranted ?: isHostVideoRoom,
-                                canPublishMicrophone = mediaSession.canPublishMicrophone
+                                canPublishMicrophone = mediaSession.canPublishMicrophone,
+                                ownerId = mediaOwnerId
                             )
                         }.onFailure { error ->
                             withContext(Dispatchers.Main) {
@@ -446,7 +462,7 @@ class RoomViewModel @Inject constructor(
                             }
                         }
                     }
-                    YugmSocket.connect(
+                    roomSocket.connect(
                         // API calls above may have rotated an expired access token.
                         // Read the session source of truth for Socket.IO too; the
                         // navigation argument can still hold the pre-refresh token.
@@ -815,7 +831,8 @@ class RoomViewModel @Inject constructor(
                     it.url,
                     publishCamera = isHostVideoRoom,
                     publishMicrophone = enableMicrophone || YugmMediaRoom.isMicEnabled(),
-                    canPublishMicrophone = it.canPublishMicrophone
+                    canPublishMicrophone = it.canPublishMicrophone,
+                    ownerId = mediaOwnerId
                 )
             }
                 .onFailure { actionError = it.message ?: "Could not enable room audio" }
@@ -1364,7 +1381,10 @@ class RoomViewModel @Inject constructor(
     }
 
     override fun onCleared() {
-        disconnect()
+        // onCleared cancels viewModelScope immediately after returning, so the
+        // cleanup must not be launched into that scope. Each resource is also
+        // owner-scoped to protect a newer room session from stale teardown.
+        stopRoomConnections()
         super.onCleared()
     }
 }

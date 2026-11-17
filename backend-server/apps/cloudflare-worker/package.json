@@ -1,0 +1,23 @@
+{
+  "name": "@yugm/cloudflare-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --config wrangler.jsonc",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.runtime.json",
+    "test:realtime": "node test/realtime.mjs",
+    "test:staging": "node test/staging-smoke.mjs --confirm-isolated-staging",
+    "test:staging-admin": "node test/staging-admin.mjs --confirm-isolated-staging",
+    "deploy:staging": "wrangler deploy --config wrangler.staging.jsonc",
+    "dry-run:staging": "wrangler deploy --dry-run --config wrangler.staging.jsonc",
+    "dry-run:production": "wrangler deploy --dry-run --config wrangler.production.jsonc"
+  },
+  "dependencies": {
+    "iconv-lite-worker": "npm:iconv-lite@^0.7.3",
+    "mongoose": "^8.24.1"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.1"
+  }
+}

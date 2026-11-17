@@ -58,11 +58,14 @@ import { wishlistRouter } from "./routes/wishlist.js";
 import { getJobHealth } from "./services/jobs.js";
 import { getMetricsSnapshot, recordHttpRequest } from "./services/metrics.js";
 import { getRedisHealth } from "./services/redis.js";
-import { getStorageHealth } from "./services/storage.js";
-import { ErrorCode, HttpError } from "./utils/http.js";
+import { getPublicMongoMedia, getStorageHealth } from "./services/storage.js";
+import { asyncHandler, ErrorCode, HttpError } from "./utils/http.js";
 import { requireAppCheck } from "./middleware/appCheck.js";
 
 function responseError(error: unknown) {
+  if (typeof error === "object" && error !== null && "code" in error && error.code === "LIMIT_FILE_SIZE") {
+    return { status: 413, message: "Uploaded file is too large", code: ErrorCode.VALIDATION };
+  }
   if (error instanceof HttpError) {
     return {
       status: error.status,
@@ -116,7 +119,9 @@ export function createApp() {
   app.set("trust proxy", env.TRUST_PROXY);
 
   app.use(helmet());
-  app.use(compression());
+  // Workers manage content encoding; applying Node compression here can
+  // return encoded bytes without matching headers through the HTTP bridge.
+  if (env.YUGM_RUNTIME !== "cloudflare") app.use(compression());
   // Request ID middleware for log correlation
   app.use((req, _res, next) => {
     (req as any).requestId = crypto.randomUUID();
@@ -150,17 +155,63 @@ export function createApp() {
     next();
   });
 
-  app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+  if (env.STORAGE_DRIVER === "mongodb") {
+    app.get("/uploads/:fileName", asyncHandler(async (req, res) => {
+      const media = await getPublicMongoMedia(req.params.fileName);
+      if (!media) throw new HttpError(404, "Media not found", ErrorCode.NOT_FOUND);
+      const { file, bucket } = media;
+      const size = file.length;
+      let start = 0;
+      let end = size - 1;
+      const range = req.headers.range;
+      if (range) {
+        const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+        if (!match || (!match[1] && !match[2]) || size === 0) {
+          res.setHeader("Content-Range", `bytes */${size}`);
+          return res.sendStatus(416);
+        }
+        if (!match[1]) {
+          const suffix = Number(match[2]);
+          if (!Number.isSafeInteger(suffix) || suffix <= 0) {
+            res.setHeader("Content-Range", `bytes */${size}`);
+            return res.sendStatus(416);
+          }
+          start = Math.max(0, size - suffix);
+        } else {
+          start = Number(match[1]);
+          if (match[2]) end = Number(match[2]);
+        }
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start >= size || end < start) {
+          res.setHeader("Content-Range", `bytes */${size}`);
+          return res.sendStatus(416);
+        }
+        end = Math.min(end, size - 1);
+        res.status(206).setHeader("Content-Range", `bytes ${start}-${end}/${size}`);
+      }
+      res.setHeader("Accept-Ranges", "bytes");
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      res.setHeader("Content-Type", file.metadata?.contentType ?? "application/octet-stream");
+      res.setHeader("Content-Length", size === 0 ? 0 : end - start + 1);
+      if (size === 0) return res.end();
+      const stream = bucket.openDownloadStream(file._id, { start, end: end + 1 });
+      stream.on("error", (error) => res.destroy(error));
+      stream.pipe(res);
+    }));
+  }
 
-  const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  app.use("/assets", express.static(path.resolve(__dirname, "../public")));
+  if (env.YUGM_RUNTIME !== "cloudflare") {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    if (env.STORAGE_DRIVER !== "mongodb") app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+    app.use("/assets", express.static(path.resolve(__dirname, "../public")));
 
-  // Serve the admin panel production build
-  const adminDist = path.resolve(__dirname, "../../admin/dist");
-  app.use("/admin", express.static(adminDist, { index: false }));
-  app.get("/admin/*", (_req, res) => {
-    res.sendFile(path.join(adminDist, "index.html"));
-  });
+    // The admin UI is hosted independently on Cloudflare Pages in the
+    // Workers deployment; keep the static mount for local Node development.
+    const adminDist = path.resolve(__dirname, "../../admin/dist");
+    app.use("/admin", express.static(adminDist, { index: false }));
+    app.get("/admin/*", (_req, res) => {
+      res.sendFile(path.join(adminDist, "index.html"));
+    });
+  }
 
   app.get("/", (_req, res) => res.json({ ok: true, service: "yugm-api", version: "0.1.0", health: "/health", api: "/api" }));
   app.use("/legal", legalRouter);

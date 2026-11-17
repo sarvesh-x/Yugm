@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import mongoose from "mongoose";
+import { env } from "../config/env.js";
 import { Block } from "../models/Block.js";
 import { Gift } from "../models/Gift.js";
 import { GiftTransaction } from "../models/GiftTransaction.js";
@@ -198,6 +199,8 @@ function stopPkCountdown(battleId: string) {
 
 function schedulePkCountdown(battleId: string) {
   stopPkCountdown(battleId);
+  // Workers use Durable Object alarms to recover deadlines after a restart.
+  if (env.YUGM_RUNTIME === "cloudflare") return;
   const tick = async () => {
     const battle = await PkBattle.findById(battleId);
     if (!battle || battle.status !== "COUNTDOWN" || !battle.countdownEndsAt) {
@@ -674,6 +677,7 @@ export async function closePkBattle(input: { battleId: string; userId?: string; 
 
 const closeTimers = new Map<string, NodeJS.Timeout>();
 function schedulePkClose(battleId: string) {
+  if (env.YUGM_RUNTIME === "cloudflare") return;
   const existing = closeTimers.get(battleId);
   if (existing) clearTimeout(existing);
   const timer = setTimeout(() => { void closePkBattle({ battleId, force: true }).catch(() => {}); }, 60_000);
@@ -965,6 +969,7 @@ export async function expireInvite(inviteId: string) {
 }
 
 export function scheduleInviteExpiry(inviteId: string) {
+  if (env.YUGM_RUNTIME === "cloudflare") return;
   setTimeout(() => expireInvite(inviteId).catch(() => {}), 61_000).unref?.();
 }
 
@@ -976,36 +981,101 @@ function stopBattleTimer(battleId: string) {
 
 export function startBattleTimer(battleId: string) {
   stopBattleTimer(battleId);
+  if (env.YUGM_RUNTIME === "cloudflare") return;
   const timer = setInterval(async () => {
-    const battle = await PkBattle.findById(battleId).lean();
-    if (!battle || !["ACTIVE", "FINAL_CRUNCH"].includes(battle.status)) {
-      stopBattleTimer(battleId);
-      return;
-    }
-    let currentBattle = battle;
-    if (battle.status === "ACTIVE" && remainingSeconds(battle) <= 10) {
-      const finalCrunch = await PkBattle.findOneAndUpdate(
-        { _id: battle._id, status: "ACTIVE" },
-        { $set: { status: "FINAL_CRUNCH" }, $inc: { stateVersion: 1 } },
-        { new: true }
-      );
-      if (finalCrunch) {
-        await addPkEvent({ battleId: battle._id, eventType: "PK_FINAL_CRUNCH" });
-        await emitPkState(finalCrunch.toObject());
-        currentBattle = finalCrunch.toObject();
-      }
-    }
-    const state = await pkState(currentBattle);
-    emitRoom(state.left.roomId, pkSocketEvents.timerTick, state);
-    if (state.right.roomId !== state.left.roomId) emitRoom(state.right.roomId, pkSocketEvents.timerTick, state);
-    if (state.remainingSeconds <= 0) {
-      stopBattleTimer(battleId);
-      await endPkBattle({ battleId });
-      return;
-    }
+    await tickBattle(battleId);
   }, 5000);
   timer.unref?.();
   timers.set(battleId, timer);
+}
+
+async function tickBattle(battleId: string) {
+  const battle = await PkBattle.findById(battleId).lean();
+  if (!battle || !["ACTIVE", "FINAL_CRUNCH"].includes(battle.status)) {
+    stopBattleTimer(battleId);
+    return;
+  }
+  let currentBattle = battle;
+  if (battle.status === "ACTIVE" && remainingSeconds(battle) <= 10) {
+    const finalCrunch = await PkBattle.findOneAndUpdate(
+      { _id: battle._id, status: "ACTIVE" },
+      { $set: { status: "FINAL_CRUNCH" }, $inc: { stateVersion: 1 } },
+      { new: true }
+    );
+    if (finalCrunch) {
+      await addPkEvent({ battleId: battle._id, eventType: "PK_FINAL_CRUNCH" });
+      await emitPkState(finalCrunch.toObject());
+      currentBattle = finalCrunch.toObject();
+    }
+  }
+  const state = await pkState(currentBattle);
+  emitRoom(state.left.roomId, pkSocketEvents.timerTick, state);
+  if (state.right.roomId !== state.left.roomId) emitRoom(state.right.roomId, pkSocketEvents.timerTick, state);
+  if (state.remainingSeconds <= 0) {
+    stopBattleTimer(battleId);
+    await endPkBattle({ battleId });
+  }
+}
+
+/** Process persisted PK deadlines in an awaited Worker alarm invocation. */
+export async function runPkDeadlines() {
+  const now = new Date();
+  const [ready, countdowns, active, completed, expiredInvites] = await Promise.all([
+    PkBattle.find({ status: "READY", updatedAt: { $lte: new Date(now.getTime() - 2000) } }).select("_id").lean(),
+    PkBattle.find({ status: "COUNTDOWN", countdownEndsAt: { $lte: now } }).lean(),
+    PkBattle.find({ status: { $in: ["ACTIVE", "FINAL_CRUNCH", "FINALIZING"] } }).select("_id status").lean(),
+    PkBattle.find({ status: "COMPLETED", endedAt: { $lte: new Date(now.getTime() - 60_000) } }).select("_id").lean(),
+    PkInvite.find({ status: "PENDING", expiresAt: { $lte: now } }).select("_id").lean()
+  ]);
+  // Recover if the process stopped between the READY and COUNTDOWN updates.
+  for (const battle of ready) {
+    const countdown = await PkBattle.findOneAndUpdate(
+      { _id: battle._id, status: "READY" },
+      { $set: { status: "COUNTDOWN", countdownEndsAt: new Date(Date.now() + 3000) }, $inc: { stateVersion: 1 } },
+      { new: true }
+    );
+    if (countdown) {
+      await addPkEvent({ battleId: countdown._id, eventType: "PK_COUNTDOWN" });
+      await emitPkState(countdown.toObject());
+    }
+  }
+  for (const battle of countdowns) {
+    const started = await PkBattle.findOneAndUpdate(
+      { _id: battle._id, status: "COUNTDOWN", countdownEndsAt: { $lte: now } },
+      { $set: { status: "ACTIVE", startedAt: battle.countdownEndsAt }, $unset: { countdownEndsAt: 1 }, $inc: { stateVersion: 1 } },
+      { new: true }
+    );
+    if (started) {
+      await addPkEvent({ battleId: started._id, eventType: "PK_STARTED" });
+      await emitPkState(started.toObject(), pkSocketEvents.started);
+      await tickBattle(started._id.toString());
+    }
+  }
+  for (const battle of active) {
+    if (battle.status === "FINALIZING") await endPkBattle({ battleId: battle._id.toString() });
+    else await tickBattle(battle._id.toString());
+  }
+  for (const battle of completed) await closePkBattle({ battleId: battle._id.toString(), force: true });
+  for (const invite of expiredInvites) await expireInvite(invite._id.toString());
+}
+
+/** Earliest persisted deadline; active battles need a five-second tick. */
+export async function nextPkDeadline(): Promise<number | undefined> {
+  const [active, ready, countdown, completed, invite] = await Promise.all([
+    PkBattle.exists({ status: { $in: ["ACTIVE", "FINAL_CRUNCH", "FINALIZING"] } }),
+    PkBattle.findOne({ status: "READY" }).sort({ updatedAt: 1 }).select("updatedAt").lean(),
+    PkBattle.findOne({ status: "COUNTDOWN", countdownEndsAt: { $exists: true } }).sort({ countdownEndsAt: 1 }).select("countdownEndsAt").lean(),
+    PkBattle.findOne({ status: "COMPLETED", endedAt: { $exists: true } }).sort({ endedAt: 1 }).select("endedAt").lean(),
+    PkInvite.findOne({ status: "PENDING" }).sort({ expiresAt: 1 }).select("expiresAt").lean()
+  ]);
+  const candidates = [
+    active ? Date.now() + 5000 : undefined,
+    ready?.updatedAt ? ready.updatedAt.getTime() + 2000 : undefined,
+    countdown?.countdownEndsAt?.getTime(),
+    completed?.endedAt ? completed.endedAt.getTime() + 60_000 : undefined,
+    invite?.expiresAt?.getTime()
+  ].filter((value): value is number => value !== undefined && Number.isFinite(value));
+  return candidates.length ? Math.min(...candidates) : undefined;
 }
 
 export async function resumePkTimers() {

@@ -33,6 +33,7 @@ import com.yugm.app.core.ui.components.YugmTextField
 import com.yugm.app.core.ui.theme.*
 import android.content.Intent
 import android.net.Uri
+import com.yugm.app.core.api.resolveMediaUrl
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import java.util.Locale
@@ -387,7 +388,7 @@ fun CreateProfileScreen(
                         Text("I agree to the Yugm Terms of Use and Community Guidelines.", color = TextMuted, fontSize = 13.sp)
                     }
                     TextButton(onClick = {
-                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://yugm.onrender.com/legal/terms"))) }
+                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(resolveMediaUrl("/legal/terms")))) }
                     }) {
                         Text("Read Terms of Use", color = Gold, fontWeight = FontWeight.Bold)
                     }

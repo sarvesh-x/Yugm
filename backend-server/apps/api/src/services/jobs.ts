@@ -68,7 +68,7 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
   ]);
 }
 
-async function runMaintenanceTasks() {
+export async function runMaintenanceTasks() {
   const results: string[] = [];
 
   try {
@@ -202,12 +202,12 @@ async function startCronWorker() {
   console.log("Cron maintenance worker started (15-minute interval)");
 }
 
-export async function startJobWorkers() {
+export async function startJobWorkers(options: { startLocalCron?: boolean } = {}) {
   const connection = bullConnectionOptions();
   if (!connection) {
     jobsMode = "inline";
     console.log("Background jobs disabled: REDIS_URL is empty; running jobs inline + cron locally");
-    await startCronWorker();
+    if (options.startLocalCron !== false) await startCronWorker();
     return;
   }
   try {
@@ -246,7 +246,7 @@ export async function startJobWorkers() {
     pushWorker = undefined;
     jobsMode = "inline";
   }
-  await startCronWorker();
+  if (options.startLocalCron !== false) await startCronWorker();
 }
 
 export async function enqueuePushNotification(payload: PushPayload) {

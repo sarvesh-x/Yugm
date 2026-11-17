@@ -25,6 +25,10 @@ jobs:
       - run: npm run test
       - name: Isolated financial and gift authorization regressions
         run: npm --workspace apps/api run test:hardening
+      - name: Bundle experimental Cloudflare Worker
+        run: npm --workspace apps/cloudflare-worker run dry-run:staging
+      - name: Exercise Worker room sockets against isolated MongoDB
+        run: npm --workspace apps/cloudflare-worker run test:realtime
 
   android:
     name: Android (lint + unit tests + debug build)

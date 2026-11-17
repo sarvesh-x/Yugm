@@ -2,6 +2,7 @@ package com.yugm.app.feature.auth.screens
 
 import android.content.Intent
 import android.net.Uri
+import com.yugm.app.core.api.resolveMediaUrl
 import android.util.Patterns
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -358,5 +359,5 @@ private fun FieldHint(text: String) {
 }
 
 private fun openLegal(context: android.content.Context, path: String) {
-    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://yugm.onrender.com/legal/$path"))) }
+    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(resolveMediaUrl("/legal/$path")))) }
 }

@@ -573,7 +573,7 @@ roomsRouter.post("/:id/chat/clean", requireAuth, asyncHandler(async (req: AuthRe
     ChatMessage.deleteMany({ roomId: room._id }),
     RoomActivity.deleteMany({ roomId: room._id })
   ]);
-  emitRoom(room._id.toString(), socketEvents.roomParticipantUpdate, { roomId: room.id, action: "chat_cleared" });
+  emitRoom(room._id.toString(), socketEvents.roomParticipantUpdate, { roomId: room._id.toString(), action: "chat_cleared" });
   sendOk(res, { cleared: true });
 }));
 

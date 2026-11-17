@@ -50,6 +50,7 @@ object YugmMediaRoom {
     private val mutableRoomMusicStatus = MutableStateFlow(RoomMusicPlaybackStatus())
     val roomMusicStatus = mutableRoomMusicStatus.asStateFlow()
     private var opponentRoom: Room? = null
+    @Volatile private var roomOwnerId: String? = null
     private var speakingObserver: Job? = null
     @Volatile private var connected = false
     private val microphoneIntent = RoomMicrophoneIntent()
@@ -65,18 +66,31 @@ object YugmMediaRoom {
         appContext = context.applicationContext
     }
 
+    /** Claims the process-wide LiveKit room for one active room ViewModel. */
+    fun claimRoom(ownerId: String) {
+        roomOwnerId = ownerId
+    }
+
     suspend fun connect(
         token: String,
         url: String,
         publishCamera: Boolean = false,
         publishMicrophone: Boolean = desiredMicEnabled,
-        canPublishMicrophone: Boolean = publishMicrophone
+        canPublishMicrophone: Boolean = publishMicrophone,
+        ownerId: String? = null
     ) {
+        // Owned callers claim the room before starting asynchronous credential
+        // requests. Do not claim again here: a stale connect coroutine could
+        // otherwise steal ownership back after a newer room has taken over.
+        if (ownerId == null) roomOwnerId = null
         val context = appContext ?: run {
             throw IllegalStateException("Media room was not initialized")
         }
         require(token.isNotBlank() && url.isNotBlank()) { "Live audio credentials are missing" }
         roomMutex.withLock {
+            // A newer room session may have claimed LiveKit while this connect
+            // waited for the mutex. Never let the stale session replace it.
+            if (ownerId != null && roomOwnerId != ownerId) return@withLock
             desiredCameraEnabled = publishCamera
             microphoneIntent.initialize(publishMicrophone)
             microphonePublishAllowed = canPublishMicrophone
@@ -332,8 +346,12 @@ object YugmMediaRoom {
         opponentRoomName = null
     }
 
-    suspend fun disconnect() {
+    suspend fun disconnect(ownerId: String? = null) {
         roomMutex.withLock {
+            // ViewModels can be cleared after navigation transitions. A stale
+            // one must not tear down the LiveKit room opened by a newer session.
+            if (ownerId != null && roomOwnerId != ownerId) return@withLock
+            roomOwnerId = null
             microphoneIntent.reset()
             desiredCameraEnabled = false
             microphonePublishAllowed = false
@@ -351,8 +369,8 @@ object YugmMediaRoom {
         }
     }
 
-    fun disconnectAsync() {
-        scope.launch { disconnect() }
+    fun disconnectAsync(ownerId: String? = null) {
+        scope.launch { disconnect(ownerId) }
     }
 
     fun isConnected(): Boolean = connected
