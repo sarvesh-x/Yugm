@@ -933,6 +933,64 @@ fun ActiveVoiceRoomScreen(
 
         RoomEntryCosmeticOverlay(activeEntranceActivity)
 
+        floatingReaction?.let { reaction ->
+            FloatingEmojiOverlay(
+                emojis = listOf(
+                    FloatingEmoji(
+                        id = "${roomReactionEvent.first}-${reaction.userId}-${reaction.reactionId}",
+                        emoji = if (reaction.assetUrl.isBlank()) roomReactionEmoji(reaction.reactionId.ifBlank { reaction.type }) else "",
+                        assetUrl = reaction.assetUrl,
+                        label = reaction.label.ifBlank { reaction.reactionId },
+                        userName = reaction.userName
+                    )
+                ),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 220.dp).height(260.dp).fillMaxWidth()
+            )
+        }
+
+        if (roomMusicLoaded) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
+                Surface(
+                    modifier = Modifier
+                        .offset { IntOffset(musicControlsOffset.x.toInt(), musicControlsOffset.y.toInt()) }
+                        .pointerInput(room.id) {
+                            detectDragGestures { change, dragAmount ->
+                                change.consume()
+                                musicControlsOffset += dragAmount
+                            }
+                        },
+                    color = Color(0xEE211C32),
+                    shape = RoundedCornerShape(28.dp),
+                    border = BorderStroke(1.dp, Color(0x667E718D)),
+                    shadowElevation = 12.dp
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp)) {
+                        IconButton(onClick = ::playPreviousRoomMusic) {
+                            Icon(Icons.Filled.SkipPrevious, "Previous track", tint = Color.White)
+                        }
+                        IconButton(onClick = {
+                            if (roomMusicPlaying) { roomMusicPlaying = false; YugmMediaRoom.pauseRoomMusic(true) }
+                            else if (roomMusicPlaybackStatus.state == com.yugm.app.core.api.RoomMusicPlaybackState.COMPLETED && roomMusicIndex >= 0) playRoomMusic(roomMusicIndex)
+                            else if (roomMusicLoaded) { YugmMediaRoom.pauseRoomMusic(false); roomMusicPlaying = true }
+                            else if (roomMusicIndex >= 0) playRoomMusic(roomMusicIndex)
+                        }) {
+                            Icon(if (roomMusicPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (roomMusicPlaying) "Pause room music" else "Play room music", tint = Color.White)
+                        }
+                        IconButton(onClick = ::playNextRoomMusic) {
+                            Icon(Icons.Filled.SkipNext, "Next track", tint = Color.White)
+                        }
+                        IconButton(onClick = {
+                            scope.launch { YugmMediaRoom.stopRoomMusic() }
+                            roomMusicPlaying = false
+                            roomMusicLoaded = false
+                            roomMusicIndex = -1
+                        }) {
+                            Icon(Icons.Filled.Close, "Stop and close music player", tint = Color(0xFFFF8DC3))
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // ================= ALL BOTTOM SHEETS & DIALOGS =================
@@ -1071,65 +1129,6 @@ fun ActiveVoiceRoomScreen(
             }
         }
     }
-
-        floatingReaction?.let { reaction ->
-            FloatingEmojiOverlay(
-                emojis = listOf(
-                    FloatingEmoji(
-                        id = "${roomReactionEvent.first}-${reaction.userId}-${reaction.reactionId}",
-                        emoji = if (reaction.assetUrl.isBlank()) roomReactionEmoji(reaction.reactionId.ifBlank { reaction.type }) else "",
-                        assetUrl = reaction.assetUrl,
-                        label = reaction.label.ifBlank { reaction.reactionId },
-                        userName = reaction.userName
-                    )
-                ),
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 220.dp).height(260.dp).fillMaxWidth()
-            )
-        }
-
-        if (roomMusicLoaded) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
-            Surface(
-                modifier = Modifier
-                    .offset { IntOffset(musicControlsOffset.x.toInt(), musicControlsOffset.y.toInt()) }
-                    .pointerInput(room.id) {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            musicControlsOffset += dragAmount
-                        }
-                    },
-                color = Color(0xEE211C32),
-                shape = RoundedCornerShape(28.dp),
-                border = BorderStroke(1.dp, Color(0x667E718D)),
-                shadowElevation = 12.dp
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp)) {
-                    IconButton(onClick = ::playPreviousRoomMusic) {
-                        Icon(Icons.Filled.SkipPrevious, "Previous track", tint = Color.White)
-                    }
-                    IconButton(onClick = {
-                        if (roomMusicPlaying) { roomMusicPlaying = false; YugmMediaRoom.pauseRoomMusic(true) }
-                        else if (roomMusicPlaybackStatus.state == com.yugm.app.core.api.RoomMusicPlaybackState.COMPLETED && roomMusicIndex >= 0) playRoomMusic(roomMusicIndex)
-                        else if (roomMusicLoaded) { YugmMediaRoom.pauseRoomMusic(false); roomMusicPlaying = true }
-                        else if (roomMusicIndex >= 0) playRoomMusic(roomMusicIndex)
-                    }) {
-                        Icon(if (roomMusicPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (roomMusicPlaying) "Pause room music" else "Play room music", tint = Color.White)
-                    }
-                    IconButton(onClick = ::playNextRoomMusic) {
-                        Icon(Icons.Filled.SkipNext, "Next track", tint = Color.White)
-                    }
-                    IconButton(onClick = {
-                        scope.launch { YugmMediaRoom.stopRoomMusic() }
-                        roomMusicPlaying = false
-                        roomMusicLoaded = false
-                        roomMusicIndex = -1
-                    }) {
-                        Icon(Icons.Filled.Close, "Stop and close music player", tint = Color(0xFFFF8DC3))
-                    }
-                }
-            }
-            }
-        }
 
     if (showMusicSheet) {
         ModalBottomSheet(
