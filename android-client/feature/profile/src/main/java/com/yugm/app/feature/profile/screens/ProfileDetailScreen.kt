@@ -106,6 +106,7 @@ fun ProfileDetailScreen(
     onOpenAchievements: () -> Unit = {},
     onOpenLevel: () -> Unit = {},
     onOpenWallet: () -> Unit = {},
+    onOpenPayments: () -> Unit = onOpenWallet,
     onOpenInventory: () -> Unit = {},
     onOpenClan: (String) -> Unit = {},
     onOpenClanList: () -> Unit = {},
@@ -348,6 +349,7 @@ fun ProfileDetailScreen(
                             onAchievements = onOpenAchievements,
                             onLevel = onOpenLevel,
                             onWallet = onOpenWallet,
+                            onPayments = onOpenPayments,
                             onInventory = onOpenInventory,
                             onSettings = onSettings
                         )
@@ -1336,18 +1338,21 @@ private fun ProfileMenuCard(
     onAchievements: () -> Unit,
     onLevel: () -> Unit,
     onWallet: () -> Unit,
+    onPayments: () -> Unit,
     onInventory: () -> Unit,
     onSettings: () -> Unit
 ) {
     val actions = listOf(
-        Triple("🎨", "Customize", onCustomize), Triple("🛍️", "Store", onStore), Triple("👑", "VIP", onVip),
-        Triple("✦", "Level", onLevel), Triple("✓", "Tasks & rewards", onTasks), Triple("🏆", "Achievements", onAchievements),
-        Triple("◈", "Wallet", onWallet), Triple("🎒", "Inventory", onInventory), Triple("⚙", "Settings", onSettings)
+        Triple("🎨", "Customize", onCustomize), Triple("🛍️", "Store", onStore),
+        Triple("👑", "VIP", onVip), Triple("✦", "Level", onLevel),
+        Triple("✓", "Tasks & rewards", onTasks), Triple("🏆", "Achievements", onAchievements),
+        Triple("◈", "Wallet", onWallet), Triple("💳", "Payments", onPayments),
+        Triple("🎒", "Inventory", onInventory), Triple("⚙", "Settings", onSettings)
     )
     GlassCard(Modifier.fillMaxWidth()) {
         Text("Your Yugm", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Black)
         Text("Profile shortcuts", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp, bottom = 10.dp))
-        actions.chunked(3).forEach { rowActions ->
+        actions.chunked(2).forEach { rowActions ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 rowActions.forEach { (glyph, label, action) ->
                     Column(
@@ -1363,7 +1368,7 @@ private fun ProfileMenuCard(
                         Text(label, color = TextPrimary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                     }
                 }
-                repeat(3 - rowActions.size) { Spacer(Modifier.weight(1f)) }
+                repeat(2 - rowActions.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }

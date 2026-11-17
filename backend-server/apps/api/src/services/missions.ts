@@ -121,7 +121,7 @@ export async function claimMission(userId: string, missionId: string) {
     );
     if (!claimed) throw new HttpError(409, "Mission already claimed", ErrorCode.CONFLICT);
     if (mission.rewards.coins > 0) {
-      await creditWallet(userId, mission.rewards.coins, "MISSION_REWARD", { missionId, idempotencyKey: `mission:${userId}:${missionId}` }, session);
+      await creditWallet(userId, mission.rewards.coins, "MISSION_REWARD", { missionId, idempotencyKey: `mission:${userId}:${missionId}:coins` }, session);
       rewards.coins = mission.rewards.coins;
     }
     await session.commitTransaction();

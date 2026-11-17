@@ -33,6 +33,7 @@ fun NavGraphBuilder.profileNavGraph(
     onOpenAchievements: () -> Unit = { navController.navigate(Screen.Achievements.route) },
     onOpenLevel: () -> Unit = {},
     onOpenWallet: () -> Unit = {},
+    onOpenPayments: () -> Unit = onOpenWallet,
     onOpenInventory: () -> Unit = {},
     onOpenClan: (String) -> Unit = { navController.navigate(Screen.ClanDetail.createRoute(it)) },
     onOpenClanList: () -> Unit = { navController.navigate(Screen.ClanList.route) },
@@ -102,6 +103,7 @@ fun NavGraphBuilder.profileNavGraph(
             onOpenAchievements = onOpenAchievements,
             onOpenLevel = onOpenLevel,
             onOpenWallet = onOpenWallet,
+            onOpenPayments = onOpenPayments,
             onOpenInventory = onOpenInventory,
             onOpenClan = onOpenClan,
             onOpenClanList = onOpenClanList

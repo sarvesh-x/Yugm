@@ -6,7 +6,7 @@ import { Room } from "../models/Room.js";
 import { User } from "../models/User.js";
 import { ImmersiveTheme, themeSeeds } from "../models/ImmersiveTheme.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId } from "../utils/http.js";
-import { debitWallet } from "../services/wallet.js";
+import { assertThemeEntitlement, isFreeTheme, purchaseTheme } from "../services/themePurchase.js";
 
 export const roomThemesRouter = Router();
 
@@ -19,12 +19,6 @@ const equipThemeSchema = z.object({
   themeKey: z.string().min(1).max(64).nullable()
 });
 
-async function getThemeOrThrow(key: string) {
-  const theme = await ImmersiveTheme.findOne({ key, available: true }).lean();
-  if (!theme) throw new HttpError(404, "Theme not found", ErrorCode.NOT_FOUND);
-  return theme;
-}
-
 roomThemesRouter.get("/themes", requireAuth, asyncHandler(async (_req: AuthRequest, res) => {
   let themes = await ImmersiveTheme.find({ available: true }).lean();
   if (themes.length === 0) {
@@ -35,20 +29,13 @@ roomThemesRouter.get("/themes", requireAuth, asyncHandler(async (_req: AuthReque
 }));
 
 roomThemesRouter.post("/themes/purchase", requireAuth, validateBody(z.object({ themeKey: z.string().min(1).max(64) })), asyncHandler(async (req: AuthRequest, res) => {
-  const theme = await getThemeOrThrow(req.body.themeKey);
-  if (theme.price.coins > 0) {
-    await debitWallet(req.user!.id, theme.price.coins, "COSMETIC_PURCHASE", { cosmeticId: theme.key });
-  }
-  await User.findByIdAndUpdate(req.user!.id, {
-    $addToSet: { ownedCosmeticIds: theme.key }
-  });
-  sendOk(res, { theme });
+  const result = await purchaseTheme(req.user!.id, req.body.themeKey);
+  sendOk(res, { theme: result.theme });
 }));
 
 roomThemesRouter.post("/rooms/:id/theme", requireAuth, validateBody(setRoomThemeSchema), asyncHandler(async (req: AuthRequest, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
-  await getThemeOrThrow(req.body.themeKey);
   const room = await Room.findById(id).lean();
   if (!room) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
   const isHost = room.hostId.toString() === req.user!.id;
@@ -56,6 +43,7 @@ roomThemesRouter.post("/rooms/:id/theme", requireAuth, validateBody(setRoomTheme
   if (!isHost && !isCoHost && req.user!.role !== "ADMIN") {
     throw new HttpError(403, "Host or co-host control required", ErrorCode.FORBIDDEN);
   }
+  await assertThemeEntitlement(req.user!.id, req.body.themeKey);
   const updated = await Room.findByIdAndUpdate(id, { $set: { theme: req.body.themeKey } }, { new: true }).lean();
   sendOk(res, { room: updated });
 }));
@@ -74,9 +62,7 @@ roomThemesRouter.get("/user/themes", requireAuth, asyncHandler(async (req: AuthR
 
 roomThemesRouter.post("/user/themes/equip", requireAuth, validateBody(equipThemeSchema), asyncHandler(async (req: AuthRequest, res) => {
   const { slot, themeKey } = req.body;
-  if (themeKey !== null) {
-    await getThemeOrThrow(themeKey);
-  }
+  const theme = themeKey !== null ? await assertThemeEntitlement(req.user!.id, themeKey) : null;
   const fieldMap: Record<string, string> = {
     room: "activeCosmetics.roomTheme",
     profile: "activeCosmetics.profileTheme",
@@ -86,8 +72,12 @@ roomThemesRouter.post("/user/themes/equip", requireAuth, validateBody(equipTheme
   if (!field) throw new HttpError(400, "Invalid slot", ErrorCode.VALIDATION);
   const update: Record<string, unknown> = {};
   update[field] = themeKey;
-  const user = await User.findByIdAndUpdate(req.user!.id, { $set: update }, { new: true }).select("ownedCosmeticIds activeCosmetics").lean();
-  if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+  const user = await User.findOneAndUpdate(
+    { _id: req.user!.id, ...(theme && !isFreeTheme(theme) ? { ownedCosmeticIds: theme.key } : {}) },
+    { $set: update },
+    { new: true }
+  ).select("ownedCosmeticIds activeCosmetics").lean();
+  if (!user) throw new HttpError(403, "Theme is no longer available for this account", ErrorCode.FORBIDDEN);
   const equipped = {
     room: user.activeCosmetics?.roomTheme ?? null,
     profile: user.activeCosmetics?.profileTheme ?? null,

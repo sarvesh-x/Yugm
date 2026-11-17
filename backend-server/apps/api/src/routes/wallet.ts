@@ -28,6 +28,7 @@ import { grantRelationshipXp } from "../services/relationships.js";
 import { assertUsersCanInteract } from "../services/safety.js";
 import { creditPurchase } from "../services/purchaseCredit.js";
 import { assertDiamondsEnabled, creditDiamonds, debitDiamonds } from "../services/diamonds.js";
+import { assertRoomGiftReplayMatches, roomGiftLedgerKeys } from "../services/giftReplay.js";
 
 export const walletRouter = Router();
 walletRouter.use(requireAuth);
@@ -498,21 +499,28 @@ walletRouter.post("/rooms/:id/send-gift", giftLimiter, requireWalletNotFrozen, v
   await assertUsersCanInteract(req.user!.id, req.body.receiverId, "Cannot send gifts to this user");
 
   const currency = req.body.currency ?? "COINS";
-  const giftAmount = currency === "DIAMONDS" ? gift.diamondPrice : gift.coinPrice;
-  if (currency === "DIAMONDS") {
-    assertDiamondsEnabled();
-    if (!giftAmount || giftAmount <= 0) throw new HttpError(400, "This gift cannot be purchased with diamonds", ErrorCode.VALIDATION);
-  }
+  if (currency === "DIAMONDS") assertDiamondsEnabled();
+  const intent = { senderId: req.user!.id, roomId: room._id.toString(), giftId: gift._id.toString(), receiverId: req.body.receiverId, currency };
   const idempotencyKey = req.body.idempotencyKey as string | undefined;
   if (idempotencyKey) {
     const existing = await GiftTransaction.findOne({ senderId: req.user!.id, "metadata.idempotencyKey": idempotencyKey }).lean();
-    if (existing) return sendOk(res, { giftTransaction: existing }, 200);
+    if (existing) {
+      assertRoomGiftReplayMatches(existing, intent);
+      return sendOk(res, { giftTransaction: existing }, 200);
+    }
   }
 
+  const giftAmount = currency === "DIAMONDS" ? gift.diamondPrice : gift.coinPrice;
+  if (currency === "DIAMONDS" && (!giftAmount || giftAmount <= 0)) {
+    throw new HttpError(400, "This gift cannot be purchased with diamonds", ErrorCode.VALIDATION);
+  }
+
+  const transferId = new mongoose.Types.ObjectId();
+  const ledgerKeys = roomGiftLedgerKeys(transferId.toHexString());
   const session = await mongoose.startSession();
-  session.startTransaction();
   let createdGiftTransaction: any;
   try {
+    await session.withTransaction(async () => {
     // Enforce limited-edition stock atomically for sent gifts.
     if (gift.limitedEdition?.active) {
       const stockUpdate = await Gift.updateOne(
@@ -523,18 +531,19 @@ walletRouter.post("/rooms/:id/send-gift", giftLimiter, requireWalletNotFrozen, v
       if (stockUpdate.modifiedCount !== 1) throw new HttpError(409, "This limited-edition gift is sold out", ErrorCode.CONFLICT);
     }
 
-    const giftMetadata = { roomId: room._id.toString(), giftId: gift._id.toString(), currency, ...(idempotencyKey ? { idempotencyKey } : {}) };
+    const giftMetadata = { roomId: room._id.toString(), giftId: gift._id.toString(), currency, giftTransactionId: transferId.toHexString() };
     if (currency === "DIAMONDS") {
-      await debitDiamonds(req.user!.id, giftAmount, "GIFT_SENT", giftMetadata, { session });
+      await debitDiamonds(req.user!.id, giftAmount, "GIFT_SENT", { ...giftMetadata, idempotencyKey: ledgerKeys.debit }, { session, idempotencyKey: ledgerKeys.debit });
       const receiverCredit = creatorShare(giftAmount);
-      await creditDiamonds(req.body.receiverId, receiverCredit, "GIFT_RECEIVED", { ...giftMetadata, senderId: req.user!.id }, { session });
+      await creditDiamonds(req.body.receiverId, receiverCredit, "GIFT_RECEIVED", { ...giftMetadata, idempotencyKey: ledgerKeys.credit, senderId: req.user!.id }, { session, idempotencyKey: ledgerKeys.credit });
     } else {
-      await debitWallet(req.user!.id, giftAmount, "GIFT_SENT", giftMetadata, session);
+      await debitWallet(req.user!.id, giftAmount, "GIFT_SENT", { ...giftMetadata, idempotencyKey: ledgerKeys.debit }, session);
       const receiverCredit = creatorShare(giftAmount);
-      await creditWallet(req.body.receiverId, receiverCredit, "GIFT_RECEIVED", { ...giftMetadata, senderId: req.user!.id, platformFee: platformFee(giftAmount) }, session);
+      await creditWallet(req.body.receiverId, receiverCredit, "GIFT_RECEIVED", { ...giftMetadata, idempotencyKey: ledgerKeys.credit, senderId: req.user!.id, platformFee: platformFee(giftAmount) }, session);
     }
 
     const [giftTransaction] = await GiftTransaction.create([{
+      _id: transferId,
       roomId: room._id,
       senderId: req.user!.id,
       receiverId: req.body.receiverId,
@@ -543,20 +552,22 @@ walletRouter.post("/rooms/:id/send-gift", giftLimiter, requireWalletNotFrozen, v
       diamondAmount: currency === "DIAMONDS" ? giftAmount : 0,
       currency,
       totalValue: giftAmount,
-      metadata: idempotencyKey ? { idempotencyKey } : {}
+      metadata: { command: "ROOM_GIFT", ...(idempotencyKey ? { idempotencyKey } : {}) }
     }], { session, ordered: true });
 
-    await session.commitTransaction();
     createdGiftTransaction = giftTransaction;
+    });
   } catch (err) {
-    await session.abortTransaction();
     if (idempotencyKey && (err as { code?: number })?.code === 11000) {
       const existing = await GiftTransaction.findOne({ senderId: req.user!.id, "metadata.idempotencyKey": idempotencyKey }).lean();
-      if (existing) return sendOk(res, { giftTransaction: existing }, 200);
+      if (existing) {
+        assertRoomGiftReplayMatches(existing, intent);
+        return sendOk(res, { giftTransaction: existing }, 200);
+      }
     }
     throw err;
   } finally {
-    session.endSession();
+    await session.endSession();
   }
 
   const senderXpGrant = await runWalletSideEffect("sender gift XP", () => grantXp(req.user!.id, "GIFT_SENT", { roomId: room._id.toString(), giftId: gift._id.toString(), idempotencyKey: `gift:${createdGiftTransaction._id}:sent` }));

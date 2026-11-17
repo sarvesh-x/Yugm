@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { calculateLevel, getLevelStatus } from "./levels.js";
+import { getLevelMilestone } from "@yugm/shared";
 
 test("calculateLevel returns first milestone for 0 XP", () => {
   const result = calculateLevel(0);
@@ -16,9 +17,11 @@ test("calculateLevel progresses through milestones", () => {
   assert.ok(level5.level >= 5);
 });
 
-test("calculateLevel returns last milestone for very high XP", () => {
+test("calculateLevel continues beyond level 50 and brackets high XP correctly", () => {
   const result = calculateLevel(1_000_000);
-  assert.equal(result.level, 50);
+  assert.ok(result.level > 50);
+  assert.ok(result.requiredXp <= 1_000_000);
+  assert.ok(getLevelMilestone(result.level + 1).requiredXp > 1_000_000);
   assert.equal(result.title, "Yugm Vanguard");
 });
 

@@ -70,7 +70,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.yugm.app.core.api.YugmApi
 import com.yugm.app.core.model.Clan
-import com.yugm.app.core.model.ClanMessage
 import com.yugm.app.core.model.DirectMessage
 import com.yugm.app.core.model.FriendRequest
 import com.yugm.app.core.model.FriendUser
@@ -100,7 +99,6 @@ fun ChatListScreen(
     onLive: () -> Unit = {},
     onWallet: () -> Unit = {},
     onProfile: () -> Unit = {},
-    onOpenClan: (String, String) -> Unit = { _, _ -> },
     onJoinClan: () -> Unit = {},
     onOpenClanDetail: (String) -> Unit = {},
     onGameZone: () -> Unit = {},
@@ -192,13 +190,6 @@ fun ChatListScreen(
         else viewModel.following.filter {
             it.name.lowercase().contains(normalizedQuery) || it.username.lowercase().contains(normalizedQuery)
         }
-    }
-    val clanMatchesSearch = remember(viewModel.myClan, normalizedQuery) {
-        val clan = viewModel.myClan
-        normalizedQuery.isBlank() || (clan != null && (
-            clan.name.lowercase().contains(normalizedQuery) ||
-                clan.familyLabel.lowercase().contains(normalizedQuery)
-            ))
     }
     val contactCount = when (contactTab) {
         0 -> filteredFriends.size
@@ -396,15 +387,6 @@ fun ChatListScreen(
                                         }
                                     }
                                 }
-                                viewModel.myClan?.takeIf { clanMatchesSearch }?.let { clan ->
-                                    item(key = "clan-conversation") {
-                                        ClanConversationRow(
-                                            clan = clan,
-                                            lastMessage = viewModel.clanLastMessage,
-                                            onClick = { onOpenClan(clan.id, clan.name) }
-                                        )
-                                    }
-                                }
                                 item {
                                     Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                                         Text("Chatlist", color = LocalYugmColors.current.textPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -456,21 +438,15 @@ fun ChatListScreen(
                                     }
                                 } else {
                                     itemsIndexed(filteredConversations, key = { _, item -> "conversation-${item.partner.id}" }) { index, item ->
-                                        Column(
-                                            Modifier.padding(horizontal = 16.dp, vertical = 1.dp)
-                                                .clip(RoundedCornerShape(18.dp))
-                                                .background(LocalYugmColors.current.surface)
-                                        ) {
-                                            if (index > 0) Box(Modifier.fillMaxWidth().padding(start = 82.dp).height(1.dp).background(LocalYugmColors.current.border))
-                                            val isMutedConversation = item.partner.id in viewModel.mutedPartnerIds
-                                            LightChatRow(
-                                                item,
-                                                currentUserId = currentUserId,
-                                                unreadCount = viewModel.unreadCounts[item.partner.id]
-                                                    ?: if (viewModel.unreadCounts.isEmpty() && !item.lastMessage.read && item.lastMessage.receiverId == currentUserId) 1 else 0,
-                                                muted = isMutedConversation
-                                            ) { onOpenChat(item.partner.id) }
-                                        }
+                                        val isMutedConversation = item.partner.id in viewModel.mutedPartnerIds
+                                        LightChatRow(
+                                            item,
+                                            currentUserId = currentUserId,
+                                            unreadCount = viewModel.unreadCounts[item.partner.id]
+                                                ?: if (viewModel.unreadCounts.isEmpty() && !item.lastMessage.read && item.lastMessage.receiverId == currentUserId) 1 else 0,
+                                            muted = isMutedConversation,
+                                            showDivider = index > 0
+                                        ) { onOpenChat(item.partner.id) }
                                     }
                                     if (viewModel.hasMoreRecent) {
                                         item {
@@ -1094,80 +1070,34 @@ private fun PersonContactRow(person: Host, showDivider: Boolean, onClick: () -> 
 }
 
 @Composable
-private fun ClanConversationRow(clan: Clan, lastMessage: ClanMessage?, onClick: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(LocalYugmColors.current.surface.copy(alpha = 0.92f))
-            .border(1.dp, LocalYugmColors.current.border.copy(alpha = 0.7f), RoundedCornerShape(18.dp))
-            .clickable(role = Role.Button, onClickLabel = "Open clan chat for ${clan.name}", onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box {
-            Avatar(clan.name.take(1).uppercase(), 52, clan.avatar)
-            Box(
-                Modifier.align(Alignment.BottomEnd).size(18.dp).clip(RoundedCornerShape(6.dp))
-                    .background(LocalYugmColors.current.secondary).border(2.dp, LocalYugmColors.current.surface, RoundedCornerShape(6.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("👥", fontSize = 8.sp)
-            }
-        }
-        Column(Modifier.weight(1f).padding(start = 12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    clan.name,
-                    color = LocalYugmColors.current.textPrimary,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                val time = lastMessage?.createdAt?.let { conversationTimeLabel(it) }.orEmpty()
-                if (time.isNotBlank()) Text(time, color = LocalYugmColors.current.textSecondary, fontSize = 11.sp)
-            }
-            Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    buildClanPreview(lastMessage),
-                    color = LocalYugmColors.current.textSecondary,
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun buildClanPreview(message: ClanMessage?): String {
-    if (message == null) return "Tap to start the clan conversation"
-    val sender = message.senderId?.name?.takeIf { it.isNotBlank() } ?: "Clan"
-    val body = message.message.lineSequence().lastOrNull { it.isNotBlank() } ?: "New message"
-    return "$sender: $body"
-}
-
-@Composable
-private fun LightChatRow(item: ConversationItem, currentUserId: String, unreadCount: Int, muted: Boolean, onClick: () -> Unit) {
+private fun LightChatRow(
+    item: ConversationItem,
+    currentUserId: String,
+    unreadCount: Int,
+    muted: Boolean,
+    showDivider: Boolean = false,
+    onClick: () -> Unit
+) {
     val preview = buildConversationPreview(item.lastMessage, currentUserId)
     val time = conversationTimeLabel(item.lastMessage.createdAt)
     val hasUnread = unreadCount > 0
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(if (hasUnread) LocalYugmColors.current.surface.copy(alpha = 0.98f) else LocalYugmColors.current.surface.copy(alpha = 0.78f))
-            .border(1.dp, if (hasUnread) LocalYugmColors.current.secondary.copy(alpha = 0.28f) else LocalYugmColors.current.border.copy(alpha = 0.7f), RoundedCornerShape(18.dp))
-            .clickable(role = Role.Button, onClickLabel = "Open conversation with ${item.partner.name}", onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Column(Modifier.fillMaxWidth()) {
+        if (showDivider) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 82.dp, end = 16.dp)
+                    .height(1.dp)
+                    .background(LocalYugmColors.current.border.copy(alpha = 0.55f))
+            )
+        }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(role = Role.Button, onClickLabel = "Open conversation with ${item.partner.name}", onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
         Box {
             Avatar(item.partner.name.take(1), 52, item.partner.avatar, item.partner.activeCosmetics)
             if (item.partner.isOnline) Box(Modifier.align(Alignment.BottomEnd).size(13.dp).clip(CircleShape).background(Color(0xFF39C891)).border(2.dp, LocalYugmColors.current.surface, CircleShape))
@@ -1218,6 +1148,7 @@ private fun LightChatRow(item: ConversationItem, currentUserId: String, unreadCo
                 }
             }
         }
+    }
     }
 }
 

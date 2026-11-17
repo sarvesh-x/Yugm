@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -30,23 +29,13 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
@@ -111,27 +100,19 @@ fun ClanChatScreen(
 ) {
     val viewModel: ClanViewModel = hiltViewModel()
     var input by remember { mutableStateOf("") }
-    var search by remember { mutableStateOf("") }
-    var searchOpen by remember { mutableStateOf(false) }
-    var menuOpen by remember { mutableStateOf(false) }
     var actionMessage by remember { mutableStateOf<ClanMessage?>(null) }
     var deleteMessage by remember { mutableStateOf<ClanMessage?>(null) }
-    var cleanConfirm by remember { mutableStateOf(false) }
     var replyTo by remember { mutableStateOf<ClanMessage?>(null) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
     val clan = viewModel.clanDetail
 
-    val visibleMessages = remember(viewModel.messages, search) {
-        if (search.isBlank()) viewModel.messages else viewModel.messages.filter { it.message.contains(search, ignoreCase = true) }
-    }
-
-    val chatItems = remember(visibleMessages, currentUserId) {
+    val chatItems = remember(viewModel.messages, currentUserId) {
         val result = mutableListOf<ChatItem>()
         var lastDate = ""
         var lastSender: String? = null
-        visibleMessages.forEach { msg ->
+        viewModel.messages.forEach { msg ->
             val date = msgDateLabel(msg.createdAt)
             if (date != lastDate) {
                 result.add(ChatItem.DateHeader(date))
@@ -171,8 +152,7 @@ fun ClanChatScreen(
     }
 
     // Fallback refresh in case the socket drops.
-    LaunchedEffect(clanId, searchOpen) {
-        if (searchOpen) return@LaunchedEffect
+    LaunchedEffect(clanId) {
         while (true) {
             delay(60_000)
             viewModel.loadMessages(token, clanId)
@@ -190,8 +170,8 @@ fun ClanChatScreen(
         }
     }
 
-    LaunchedEffect(chatItems.size, search) {
-        if (search.isBlank() && chatItems.isNotEmpty() && isAtBottom) {
+    LaunchedEffect(chatItems.size) {
+        if (chatItems.isNotEmpty() && isAtBottom) {
             listState.animateScrollToItem(chatItems.lastIndex)
         }
     }
@@ -209,21 +189,6 @@ fun ClanChatScreen(
                 }) { Text("Delete", color = LocalYugmColors.current.primary) }
             },
             dismissButton = { TextButton(onClick = { deleteMessage = null }) { Text("Cancel", color = LocalYugmColors.current.textSecondary) } }
-        )
-    }
-
-    cleanConfirm.let { show ->
-        if (show) AlertDialog(
-            onDismissRequest = { cleanConfirm = false },
-            containerColor = LocalYugmColors.current.surfaceElevated,
-            title = { Text("Clean chat?", color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Bold) },
-            text = { Text("This removes all messages for everyone in the clan. This cannot be undone.", color = LocalYugmColors.current.textSecondary) },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.cleanChat(token, clanId) { cleanConfirm = false }
-                }) { Text("Clean", color = LocalYugmColors.current.primary) }
-            },
-            dismissButton = { TextButton(onClick = { cleanConfirm = false }) { Text("Cancel", color = LocalYugmColors.current.textSecondary) } }
         )
     }
 
@@ -299,66 +264,7 @@ fun ClanChatScreen(
         )
     }
 
-    Column(Modifier.fillMaxSize().background(LocalYugmColors.current.background).statusBarsPadding().imePadding()) {
-        // Header
-        Row(
-            Modifier.fillMaxWidth().background(LocalYugmColors.current.surface).padding(start = 6.dp, end = 8.dp, top = 8.dp, bottom = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = LocalYugmColors.current.textPrimary) }
-            Avatar((clanName.ifBlank { clan?.name ?: "C" }).take(1).uppercase(), 44, clan?.avatar)
-            Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                Text(clanName.ifBlank { clan?.name ?: "Clan chat" }, color = LocalYugmColors.current.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${clan?.memberCount ?: 0} members", color = LocalYugmColors.current.textSecondary, fontSize = 11.sp, maxLines = 1)
-            }
-            Box {
-                IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "More clan chat options", tint = LocalYugmColors.current.textPrimary) }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    DropdownMenuItem(
-                        text = { Text("Refresh messages") }, leadingIcon = { Icon(Icons.Filled.Refresh, null) },
-                        onClick = { menuOpen = false; viewModel.loadMessages(token, clanId) }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Clan details") }, leadingIcon = { Icon(Icons.Filled.Groups, null) },
-                        onClick = { menuOpen = false; onClanDetails() }
-                    )
-                    if (clan?.canModerate == true) {
-                        DropdownMenuItem(
-                            text = { Text("Clean chat", color = LocalYugmColors.current.primary) }, leadingIcon = { Icon(Icons.Filled.DeleteOutline, null, tint = LocalYugmColors.current.primary) },
-                            onClick = { menuOpen = false; cleanConfirm = true }
-                        )
-                    }
-                }
-            }
-        }
-
-        if (searchOpen) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp).clip(RoundedCornerShape(16.dp))
-                    .background(LocalYugmColors.current.surface).border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 11.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                BasicTextField(
-                    value = search,
-                    onValueChange = { search = it.take(100) },
-                    modifier = Modifier.weight(1f), singleLine = true,
-                    textStyle = TextStyle(color = LocalYugmColors.current.textPrimary, fontSize = 14.sp),
-                    cursorBrush = SolidColor(LocalYugmColors.current.primary),
-                    decorationBox = { inner -> Box { if (search.isBlank()) Text("Search in clan chat…", color = LocalYugmColors.current.textSecondary); inner() } }
-                )
-                if (search.isNotBlank()) IconButton(onClick = { search = "" }, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Filled.Close, contentDescription = "Clear search", tint = LocalYugmColors.current.textSecondary)
-                }
-            }
-            if (search.isNotBlank()) {
-                Text(
-                    "${visibleMessages.size} result${if (visibleMessages.size == 1) "" else "s"}",
-                    color = LocalYugmColors.current.textSecondary, fontSize = 11.sp,
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp)
-                )
-            }
-        }
-
+    Column(Modifier.fillMaxSize().background(LocalYugmColors.current.background).imePadding()) {
         if (viewModel.error != null) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(viewModel.error.orEmpty(), color = LocalYugmColors.current.primary, fontSize = 12.sp, modifier = Modifier.weight(1f))
@@ -377,7 +283,7 @@ fun ClanChatScreen(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 16.dp)
                 ) {
-                    if (viewModel.hasMoreOlder && search.isBlank()) item {
+                    if (viewModel.hasMoreOlder) item {
                         Box(Modifier.fillMaxWidth().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
                             if (viewModel.isLoadingOlder) {
                                 CircularProgressIndicator(color = LocalYugmColors.current.secondary, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -391,8 +297,8 @@ fun ClanChatScreen(
                     if (chatItems.isEmpty()) item {
                         Column(Modifier.fillMaxWidth().padding(vertical = 55.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Avatar((clanName.ifBlank { "C" }).take(1).uppercase(), 58, clan?.avatar)
-                            Text(if (search.isBlank()) "Start your clan conversation" else "No messages found", color = LocalYugmColors.current.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                            Text(if (search.isBlank()) "Say hello and bring everyone together." else "Try another word or phrase.", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp)
+                            Text("Start your clan conversation", color = LocalYugmColors.current.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                            Text("Say hello and bring everyone together.", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp)
                         }
                     }
                     items(chatItems, key = { item ->

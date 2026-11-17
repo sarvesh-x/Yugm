@@ -9,7 +9,6 @@ import com.yugm.app.core.api.IYugmApi
 import com.yugm.app.core.api.SocketManager
 import com.yugm.app.core.api.SocketEvent
 import com.yugm.app.core.model.Clan
-import com.yugm.app.core.model.ClanMessage
 import com.yugm.app.core.model.DirectMessage
 import com.yugm.app.core.model.FriendRequest
 import com.yugm.app.core.model.FriendUser
@@ -53,8 +52,6 @@ class ChatListViewModel @Inject constructor(
     var friendActionBusyId by mutableStateOf<String?>(null)
         private set
     var myClan by mutableStateOf<Clan?>(null)
-        private set
-    var clanLastMessage by mutableStateOf<ClanMessage?>(null)
         private set
     var isLoading by mutableStateOf(false)
         private set
@@ -237,13 +234,7 @@ class ChatListViewModel @Inject constructor(
                         }
                     }
                     recentMessages = mergedRecent
-                    val clan = runCatching { yugmApi.myClan(token) }.getOrNull()
-                    myClan = clan
-                    clanLastMessage = if (clan != null) {
-                        runCatching { yugmApi.getClanMessages(token, clan.id).lastOrNull() }.getOrNull()
-                    } else {
-                        null
-                    }
+                    myClan = runCatching { yugmApi.myClan(token) }.getOrNull()
                 }
             }.onFailure {
                 error = it.message ?: "Failed to load messages"

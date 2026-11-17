@@ -22,11 +22,14 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Groups
@@ -515,8 +518,26 @@ private fun DiscoverSectionHeading(title: String, subtitle: String) {
 
 @Composable
 private fun FilterRail(selected: String, onSelected: (String) -> Unit) {
+    val horizontalScrollConsumer = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                return if (available.x != 0f) Offset(available.x, 0f) else Offset.Zero
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                return if (available.x != 0f) Offset(available.x, 0f) else Offset.Zero
+            }
+        }
+    }
     LazyRow(
-        modifier = Modifier.fillMaxWidth().selectableGroup(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectableGroup()
+            .nestedScroll(horizontalScrollConsumer),
         contentPadding = PaddingValues(horizontal = 18.dp),
         horizontalArrangement = Arrangement.spacedBy(9.dp)
     ) {

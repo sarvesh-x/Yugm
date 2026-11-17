@@ -1,4 +1,5 @@
 import mongoose, { Schema } from "mongoose";
+import { walletSources } from "@yugm/shared";
 
 const walletTransactionSchema = new Schema(
   {
@@ -6,7 +7,7 @@ const walletTransactionSchema = new Schema(
     type: { type: String, enum: ["CREDIT", "DEBIT"], required: true },
     source: {
       type: String,
-      enum: ["RECHARGE", "GIFT_SENT", "GIFT_RECEIVED", "GIFT_SENT_DM", "GIFT_RECEIVED_DM", "VIP_PURCHASE", "PROFILE_COSMETIC_PURCHASE", "COSMETIC_BUNDLE_PURCHASE", "COSMETIC_GIFT_SENT", "COSMETIC_GIFT_RECEIVED", "LEVEL_REWARD", "STREAK_BONUS", "DAILY_REWARD", "ADMIN_ADJUSTMENT", "RAZORPAY_PURCHASE", "GOOGLE_PLAY_PURCHASE", "PAYMENT_REFUND", "REFERRAL_BONUS", "STORY_REWARD", "SUBSCRIPTION", "SURPRISE_BOX", "GIFT_UPGRADE", "GIFT_PURCHASE", "BATTLE_PASS_PURCHASE", "BATTLE_PASS_REWARD"],
+      enum: walletSources,
       required: true
     },
     amount: { type: Number, required: true, min: 1 },

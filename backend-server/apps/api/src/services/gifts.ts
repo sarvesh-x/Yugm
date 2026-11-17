@@ -59,66 +59,14 @@ export async function getCollections() {
   return { collections };
 }
 
-export async function comboGift(roomId: string, giftId: string, participants: string[], senderId: string) {
-  const gift = await Gift.findById(giftId).lean();
-  if (!gift) throw new HttpError(404, "Gift not found", ErrorCode.NOT_FOUND);
-  if (!gift.isActive) throw new HttpError(400, "Gift is not active", ErrorCode.VALIDATION);
-
-  const comboCount = participants.length;
-  const multi = gift.comboMultiplier ?? 1;
-  const totalValue = gift.coinPrice * comboCount * multi;
-  const perPersonCost = Math.ceil(totalValue / comboCount);
-
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  const actionId = new mongoose.Types.ObjectId();
-
-  try {
-    for (const pid of participants) {
-      const meta = { giftId: giftId, roomId, comboCount };
-      if (pid === senderId) {
-        const reduced = Math.floor(perPersonCost * 0.5);
-        await debitWallet(pid, reduced, "GIFT_SENT", meta, session);
-      } else {
-        await debitWallet(pid, perPersonCost, "GIFT_SENT", meta, session);
-      }
-    }
-
-    for (const pid of participants) {
-      const share = Math.floor(creatorShare(totalValue) / comboCount);
-      await creditWallet(pid, share, "GIFT_RECEIVED", { giftId, roomId, comboCount }, session);
-    }
-
-    const transaction = await GiftTransaction.create([{
-      _id: actionId,
-      roomId,
-      senderId,
-      receiverId: participants[0],
-      giftId,
-      coinAmount: totalValue,
-      type: "combo",
-      comboCount,
-      totalValue,
-      effect: "combo_bonus",
-      metadata: { idempotencyKey: `combo:${actionId}` }
-    }], { session, ordered: true });
-
-    await session.commitTransaction();
-    const xpGrants: Array<Record<string, unknown> | undefined> = [];
-    for (const pid of participants) {
-      const receipt = await grantXp(pid, "GIFT_SENT", { giftId, roomId, comboCount, idempotencyKey: `combo:${actionId}:${pid}` }).catch((error) => {
-        console.warn("Combo gift XP grant failed:", error instanceof Error ? error.message : String(error));
-        return undefined;
-      });
-      xpGrants.push(receipt as Record<string, unknown> | undefined);
-    }
-    return { comboCount, totalValue, perPersonCost, multiplier: multi, transaction: transaction[0], xpGrants };
-  } catch (err) {
-    await session.abortTransaction();
-    throw err;
-  } finally {
-    session.endSession();
-  }
+// The legacy request names payers but contains no authenticated participant approvals.
+// Reject at the service boundary so alternative callers cannot bypass this policy.
+export async function comboGift(_roomId: string, _giftId: string, _participants: string[], _senderId: string): Promise<never> {
+  throw new HttpError(
+    409,
+    "Combo gifts require approval from every payer and are currently unavailable. Send an individual gift instead.",
+    ErrorCode.CONFLICT
+  );
 }
 
 export async function roomWideGift(roomId: string, giftId: string, senderId: string, receiverIds: string[]) {
@@ -275,69 +223,12 @@ export async function getInventory(userId: string) {
   })) };
 }
 
-export async function tradeGift(userId: string, targetUserId: string, offerItems: string[], requestItems: string[]) {
-  if (userId === targetUserId) throw new HttpError(400, "Cannot trade with yourself", ErrorCode.VALIDATION);
-
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
-  try {
-    const offerInvs = await GiftInventory.find({ _id: { $in: offerItems }, userId }).session(session).lean();
-    if (offerInvs.length !== offerItems.length) throw new HttpError(404, "Some offer items not found", ErrorCode.NOT_FOUND);
-    if (offerInvs.some((i) => !i.tradable)) throw new HttpError(400, "Some offer items are not tradable", ErrorCode.VALIDATION);
-
-    const requestInvs = await GiftInventory.find({ _id: { $in: requestItems }, userId: targetUserId }).session(session).lean();
-    if (requestInvs.length !== requestItems.length) throw new HttpError(404, "Some request items not found", ErrorCode.NOT_FOUND);
-    if (requestInvs.some((i) => !i.tradable)) throw new HttpError(400, "Some request items are not tradable", ErrorCode.VALIDATION);
-
-    for (const inv of offerInvs) {
-      if (inv.quantity > 1) {
-        await GiftInventory.findByIdAndUpdate(inv._id, { $inc: { quantity: -1 } }, { session });
-        await GiftInventory.findOneAndUpdate(
-          { userId: targetUserId, giftId: inv.giftId },
-          { $inc: { quantity: 1 }, $setOnInsert: { userId: targetUserId, giftId: inv.giftId, source: "trade", tradable: true } },
-          { upsert: true, session }
-        );
-      } else {
-        await GiftInventory.findByIdAndUpdate(inv._id, { userId: targetUserId }, { session });
-      }
-      await GiftTransaction.create([{
-        senderId: userId,
-        receiverId: targetUserId,
-        giftId: inv.giftId,
-        coinAmount: 0,
-        type: "trade",
-        metadata: { tradeType: "offer" }
-      }], { session, ordered: true });
-    }
-
-    for (const inv of requestInvs) {
-      if (inv.quantity > 1) {
-        await GiftInventory.findByIdAndUpdate(inv._id, { $inc: { quantity: -1 } }, { session });
-        await GiftInventory.findOneAndUpdate(
-          { userId, giftId: inv.giftId },
-          { $inc: { quantity: 1 }, $setOnInsert: { userId, giftId: inv.giftId, source: "trade", tradable: true } },
-          { upsert: true, session }
-        );
-      } else {
-        await GiftInventory.findByIdAndUpdate(inv._id, { userId }, { session });
-      }
-      await GiftTransaction.create([{
-        senderId: targetUserId,
-        receiverId: userId,
-        giftId: inv.giftId,
-        coinAmount: 0,
-        type: "trade",
-        metadata: { tradeType: "request" }
-      }], { session, ordered: true });
-    }
-
-    await session.commitTransaction();
-    return { traded: true, offeredCount: offerItems.length, receivedCount: requestItems.length };
-  } catch (err) {
-    await session.abortTransaction();
-    throw err;
-  } finally {
-    session.endSession();
-  }
+// Immediate bilateral transfers have no target acceptance record. Keep the legacy
+// endpoint fail-closed until an authenticated offer/accept workflow is available.
+export async function tradeGift(_userId: string, _targetUserId: string, _offerItems: string[], _requestItems: string[]): Promise<never> {
+  throw new HttpError(
+    409,
+    "Inventory trades require acceptance from both users and are currently unavailable. Your items have not moved.",
+    ErrorCode.CONFLICT
+  );
 }

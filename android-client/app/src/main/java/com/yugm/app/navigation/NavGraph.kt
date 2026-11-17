@@ -193,6 +193,7 @@ fun NavGraph(
             onOpenAchievements = { navController.navigate(Screen.Achievements.route) },
             onOpenLevel = { navController.navigate(Screen.BattlePass.route) },
             onOpenWallet = { navController.navigate(Screen.Wallet.route) },
+            onOpenPayments = { navController.navigate(Screen.WithdrawalEligibility.route) },
             onOpenInventory = { navController.navigate(Screen.Inventory.route) }
         )
         socialNavGraph(

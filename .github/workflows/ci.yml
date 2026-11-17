@@ -23,6 +23,8 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run test
+      - name: Isolated financial and gift authorization regressions
+        run: npm --workspace apps/api run test:hardening
 
   android:
     name: Android (lint + unit tests + debug build)

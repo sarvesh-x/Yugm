@@ -319,14 +319,9 @@ async function reservePurchaseRefund(purchaseId: string, adminId: string, reason
         }, session);
       } catch (error) {
         if (!(error instanceof HttpError) || error.status !== 402) throw error;
-        const [debtTx] = await debitWallet(purchase.userId.toString(), purchase.coinAmount, "PAYMENT_REFUND_DEBT", {
-          purchaseId: purchase.id,
-          provider: purchase.provider,
-          adminId,
-          reason,
-          debtShortfall: true
-        }, session);
-        transaction = debtTx;
+        // Debt creation is not an authorized wallet policy. Reject before the
+        // provider refund instead of retrying an unsupported ledger source.
+        throw new HttpError(409, "Refund requires balance reconciliation before proceeding", ErrorCode.CONFLICT);
       }
       purchase.refundTransactionId = transaction._id;
     }
