@@ -17,12 +17,12 @@ fun RoomModeHostScreen(
     onJoinRoom: () -> Unit,
     viewModel: RoomModesViewModel = hiltViewModel()
 ) {
-    DisposableEffect(roomId) {
+    DisposableEffect(token, roomId) {
         viewModel.connectRoomUpdates(token, roomId)
         onDispose { viewModel.disconnectRoomUpdates() }
     }
 
-    LaunchedEffect(roomId) {
+    LaunchedEffect(token, roomId) {
         viewModel.loadModes(token)
         viewModel.loadModeState(token, roomId)
     }

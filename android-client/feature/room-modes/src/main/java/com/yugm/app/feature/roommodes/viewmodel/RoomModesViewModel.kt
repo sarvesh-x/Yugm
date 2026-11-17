@@ -6,7 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yugm.app.core.api.IYugmApi
-import com.yugm.app.core.api.YugmSocket
+import com.yugm.app.core.api.RoomSocketClient
 import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomModeInfo
 import com.yugm.app.core.model.RoomModeState
@@ -20,6 +20,7 @@ import javax.inject.Inject
 class RoomModesViewModel @Inject constructor(
     private val yugmApi: IYugmApi
 ) : ViewModel() {
+    private val modeUpdates = RoomSocketClient()
 
     var availableModes by mutableStateOf<List<RoomModeInfo>>(emptyList())
         private set
@@ -37,13 +38,20 @@ class RoomModesViewModel @Inject constructor(
     fun clearError() { error = null }
 
     fun connectRoomUpdates(token: String, roomId: String) {
-        YugmSocket.connect(token = token, roomId = roomId, onMessage = {}, onRoomDataChanged = { event ->
+        modeUpdates.connect(token = token, roomId = roomId, onMessage = {}, onRoomJoined = {
+            loadModeState(token, roomId)
+        }, onRoomDataChanged = { event ->
             if (event.startsWith("room:mode:")) loadModeState(token, roomId)
         })
     }
 
     fun disconnectRoomUpdates() {
-        YugmSocket.disconnect()
+        modeUpdates.disconnect()
+    }
+
+    override fun onCleared() {
+        disconnectRoomUpdates()
+        super.onCleared()
     }
 
     fun loadModes(token: String) {

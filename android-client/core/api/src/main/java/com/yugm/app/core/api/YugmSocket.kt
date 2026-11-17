@@ -12,8 +12,13 @@ import com.yugm.app.core.model.PkSideType
 import org.json.JSONObject
 import timber.log.Timber
 
-object YugmSocket {
-    private const val TAG = "YugmSocket"
+/** A lifecycle-owned room connection. Closing one owner cannot close another. */
+open class RoomSocketClient(
+    private val socketFactory: (String, io.socket.client.IO.Options) -> io.socket.client.Socket = { url, options ->
+        io.socket.client.IO.socket(url, options)
+    }
+) {
+    private val TAG = "YugmSocket"
     private var socket: io.socket.client.Socket? = null
     private val lock = Any()
 
@@ -48,13 +53,17 @@ object YugmSocket {
                 }
             }.distinct()
             val targetUrl = candidates.firstOrNull() ?: throw IllegalStateException("SOCKET_BASE_URL is not configured for this build")
-            socket = io.socket.client.IO.socket(targetUrl, io.socket.client.IO.Options().apply {
+            val connection = socketFactory(targetUrl, io.socket.client.IO.Options().apply {
                 this.auth = mapOf("token" to token)
                 transports = arrayOf("websocket")
+                forceNew = true
             })
+            socket = connection
             socket?.on(io.socket.client.Socket.EVENT_CONNECT) {
+                if (socket !== connection) return@on
                 Timber.tag(TAG).d("Socket connected; joining room %s", roomId)
-                socket?.emit("room:join", JSONObject().put("roomId", roomId), io.socket.client.Ack { ackArgs ->
+                connection.emit("room:join", JSONObject().put("roomId", roomId), io.socket.client.Ack { ackArgs ->
+                    if (socket !== connection) return@Ack
                     val result = ackArgs.firstOrNull() as? JSONObject
                     if (result?.optBoolean("joined") == true) {
                         Timber.tag(TAG).d("Joined room socket channel %s", roomId)
@@ -250,8 +259,13 @@ object YugmSocket {
     }
 
     fun disconnect() {
+        synchronized(lock) {
         socket?.disconnect()
         socket?.off()
         socket = null
+        }
     }
 }
+
+/** Existing active-room callers retain their original singleton owner. */
+object YugmSocket : RoomSocketClient()
