@@ -155,16 +155,22 @@ function roomObjectIdListIncludes(values: unknown[] | undefined, userId: string)
 
 function privateRoomRole(room: any, userId: string) {
   if (room.hostId?.toString?.() === userId) return "HOST";
-  if (roomObjectIdListIncludes(room.moderatorIds, userId)) return "MODERATOR";
+  if (roomObjectIdListIncludes(room.moderatorIds, userId) || roomObjectIdListIncludes(room.coHostIds, userId)) return "MODERATOR";
   if (roomObjectIdListIncludes(room.speakerIds, userId)) return "SPEAKER";
   return undefined;
 }
 
-function assertPrivateRoomAccess(room: any, userId?: string) {
+async function assertPrivateRoomAccess(room: any, userId?: string) {
   if (room.visibility !== "PRIVATE") return;
-  if (!userId || !privateRoomRole(room, userId)) {
-    throw new HttpError(403, "This private room is invite only", ErrorCode.FORBIDDEN);
-  }
+  if (userId && (privateRoomRole(room, userId) || roomObjectIdListIncludes(room.roomAdminIds, userId))) return;
+  // Invited users must be able to open and join a private room; otherwise an
+  // invite could never be redeemed because room detail is gated as well.
+  if (userId && await RoomInvite.exists({
+    roomId: room._id,
+    inviteeId: userId,
+    status: { $in: ["PENDING", "ACCEPTED"] }
+  })) return;
+  throw new HttpError(403, "This private room is invite only", ErrorCode.FORBIDDEN);
 }
 
 function escapeRegex(value: string) {
@@ -394,7 +400,7 @@ roomsRouter.get("/:id", requireAuth, asyncHandler(async (req: AuthRequest, res) 
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
   const rawRoom = await Room.findById(req.params.id).lean();
   if (!rawRoom) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
-  assertPrivateRoomAccess(rawRoom, req.user!.id);
+  await assertPrivateRoomAccess(rawRoom, req.user!.id);
   const room = await Room.findById(req.params.id).populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle").populate("coHostIds", "name username avatar").lean();
   if (!room) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
   const participants = await RoomParticipant.find({ roomId: req.params.id, leftAt: null }).populate("userId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle").lean();
@@ -425,12 +431,10 @@ roomsRouter.get("/:id", requireAuth, asyncHandler(async (req: AuthRequest, res) 
 
 roomsRouter.post("/:id/join", requireAuth, requireNotRoomRestricted, requireNotShadowBanned, asyncHandler(async (req: AuthRequest, res) => {
   const room = await getRoomOrThrow(req.params.id);
-  assertPrivateRoomAccess(room, req.user!.id);
-  if (room.hostId.toString() !== req.user!.id && !(await RoomFollow.exists({ roomId: room._id, userId: req.user!._id }))) {
-    throw new HttpError(403, "Follow this room before joining", ErrorCode.FORBIDDEN);
-  }
+  await assertPrivateRoomAccess(room, req.user!.id);
   if (room.status === "SCHEDULED") throw new HttpError(400, "This room is scheduled for later", ErrorCode.VALIDATION);
-  if (room.vipOnly) {
+  if (room.status !== "LIVE") throw new HttpError(400, "This room has ended", ErrorCode.VALIDATION);
+  if (room.vipOnly && room.hostId.toString() !== req.user!.id) {
     const user = await User.findById(req.user!.id).select("vipExpiresAt").lean();
     const isVip = user?.vipExpiresAt && new Date(user.vipExpiresAt) > new Date();
     if (!isVip) throw new HttpError(403, "This room is for VIP members only", ErrorCode.FORBIDDEN);
@@ -443,7 +447,10 @@ roomsRouter.post("/:id/join", requireAuth, requireNotRoomRestricted, requireNotS
   const newlyJoined = !existingParticipant;
   let xpGrant: Awaited<ReturnType<typeof grantRoomXp>> = undefined;
   if (existingParticipant) {
-    existingParticipant.role = role;
+    // Preserve an existing seat/role on re-entry (speaker, moderator, co-host);
+    // only upgrade when the room itself grants a higher role.
+    const preferredRole = privateRoomRole(room, req.user!.id);
+    if (preferredRole) existingParticipant.role = preferredRole;
     await existingParticipant.save();
   } else {
     const participant = await RoomParticipant.create({ roomId: room._id, userId: req.user!.id, role });
@@ -452,6 +459,12 @@ roomsRouter.post("/:id/join", requireAuth, requireNotRoomRestricted, requireNotS
     xpGrant = await grantRoomXp(req.user!.id, "ROOM_JOIN", { roomId: room._id.toString(), idempotencyKey: `room-join:${participant._id}` });
   }
   // NOTE: emitRoom is called after the socket room join for consistent ordering
+  if (room.visibility === "PRIVATE") {
+    await RoomInvite.updateOne(
+      { roomId: room._id, inviteeId: req.user!._id, status: "PENDING" },
+      { $set: { status: "ACCEPTED" } }
+    ).catch(() => undefined);
+  }
   emitRoom(room._id.toString(), socketEvents.roomParticipantUpdate, { userId: req.user!.id, action: "join" });
   if (newlyJoined) await addActivity(
     room._id.toString(), "JOIN", `${req.user!.name} joined`, req.user!.id,
@@ -770,22 +783,24 @@ roomsRouter.post("/:id/report", requireAuth, reportLimiter, validateBody(reportB
 roomsRouter.get("/:id/messages", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
   const room = await getRoomOrThrow(req.params.id);
-  assertPrivateRoomAccess(room, req.user!.id);
+  await assertPrivateRoomAccess(room, req.user!.id);
   const participant = await RoomParticipant.findOne({ roomId: req.params.id, userId: req.user!.id, leftAt: null }).lean();
-  if (!participant) throw new HttpError(403, "Join the room to view its chat", ErrorCode.FORBIDDEN);
   const limit = Math.min(Number(req.query.limit) || 80, 200);
-  const messages = room.status === "LIVE" ? await ChatMessage.find({ roomId: req.params.id, createdAt: { $gte: participant.joinedAt } }).populate("senderId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle").sort({ createdAt: -1 }).limit(limit).lean() : [];
+  const messages = room.status === "LIVE" && participant
+    ? await ChatMessage.find({ roomId: req.params.id, createdAt: { $gte: participant.joinedAt } }).populate("senderId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle").sort({ createdAt: -1 }).limit(limit).lean()
+    : [];
   sendOk(res, { messages: messages.reverse() });
 }));
 
 roomsRouter.get("/:id/activity", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
   const room = await getRoomOrThrow(req.params.id);
-  assertPrivateRoomAccess(room, req.user!.id);
+  await assertPrivateRoomAccess(room, req.user!.id);
   const participant = await RoomParticipant.findOne({ roomId: req.params.id, userId: req.user!._id, leftAt: null }).lean();
-  if (!participant) throw new HttpError(403, "Join the room to view its activity", ErrorCode.FORBIDDEN);
   const limit = Math.min(Number(req.query.limit) || 40, 100);
-  const activity = room.status === "LIVE" ? await RoomActivity.find({ roomId: req.params.id, createdAt: { $gte: participant.joinedAt } }).sort({ createdAt: -1 }).limit(limit).lean() : [];
+  const activity = room.status === "LIVE" && participant
+    ? await RoomActivity.find({ roomId: req.params.id, createdAt: { $gte: participant.joinedAt } }).sort({ createdAt: -1 }).limit(limit).lean()
+    : [];
   sendOk(res, { activity: activity.reverse() });
 }));
 
@@ -822,8 +837,10 @@ roomsRouter.post("/:id/reactions", requireAuth, requireNotChatRestricted, valida
 
 roomsRouter.get("/:id/polls", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
-  await requireActiveParticipant(req.params.id, req.user!.id);
-  const polls = await Poll.find({ roomId: req.params.id }).sort({ createdAt: -1 }).limit(10).lean();
+  const room = await getRoomOrThrow(req.params.id);
+  await assertPrivateRoomAccess(room, req.user!.id);
+  const participant = await RoomParticipant.exists({ roomId: req.params.id, userId: req.user!.id, leftAt: null });
+  const polls = participant ? await Poll.find({ roomId: req.params.id }).sort({ createdAt: -1 }).limit(10).lean() : [];
   sendOk(res, { polls });
 }));
 

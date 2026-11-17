@@ -417,10 +417,36 @@ class RoomViewModel @Inject constructor(
                     )
                 }
             }
+            val joinFailure = result.exceptionOrNull()
             if (result.isSuccess) {
                 isConnected = true
+                refresh()
+            } else if (joinFailure != null) {
+                // Join can legitimately be rejected (ended, scheduled, VIP-only,
+                // invite-only, blocked, restricted). Surface it instead of leaving
+                // the user in a half-joined room where chat and reactions later
+                // fail with "You are not a participant in this room".
+                actionError = joinFailure.message ?: "Couldn't join this room"
+                refresh()
             }
-            refresh()
+        }
+    }
+
+    private fun isNotParticipantFailure(error: Throwable): Boolean =
+        error.message?.contains("not a participant", ignoreCase = true) == true
+
+    /**
+     * Participant-gated actions can race the room join (the screen mounts and
+     * the user acts before POST /rooms/:id/join finishes). Re-join once and
+     * retry instead of surfacing "You are not a participant in this room".
+     */
+    private suspend fun <T> retryAfterJoin(block: suspend () -> T): T {
+        return try {
+            block()
+        } catch (error: Throwable) {
+            if (!isNotParticipantFailure(error)) throw error
+            yugmApi.joinRoom(authToken, roomId)
+            block()
         }
     }
 
@@ -430,7 +456,7 @@ class RoomViewModel @Inject constructor(
             actionError = null
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    yugmApi.sendMessage(authToken, roomId, text)
+                    retryAfterJoin { yugmApi.sendMessage(authToken, roomId, text) }
                 }
             }
             result.onSuccess {
@@ -448,7 +474,9 @@ class RoomViewModel @Inject constructor(
             actionError = null
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    yugmApi.sendGift(token = authToken, roomId = roomId, gift = gift, receiverId = receiverId, currency = currency)
+                    retryAfterJoin {
+                        yugmApi.sendGift(token = authToken, roomId = roomId, gift = gift, receiverId = receiverId, currency = currency)
+                    }
                 }
             }
             result.onSuccess {
@@ -470,7 +498,7 @@ class RoomViewModel @Inject constructor(
     fun requestSpeaker() {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                runCatching { yugmApi.requestSpeaker(authToken, roomId) }
+                runCatching { retryAfterJoin { yugmApi.requestSpeaker(authToken, roomId) } }
                     .onSuccess {
                         actionError = null
                         scheduleRealtimeRefresh("room:speaker:request")
@@ -484,7 +512,7 @@ class RoomViewModel @Inject constructor(
         viewModelScope.launch {
             actionError = null
             withContext(Dispatchers.IO) {
-                runCatching { yugmApi.takeRoomSeat(authToken, roomId, seatIndex) }
+                runCatching { retryAfterJoin { yugmApi.takeRoomSeat(authToken, roomId, seatIndex) } }
                     .onSuccess { scheduleRealtimeRefresh("room:speaker:approve") }
                     .onFailure { actionError = it.message ?: "Could not take the seat" }
             }
@@ -746,7 +774,7 @@ class RoomViewModel @Inject constructor(
             actionLoading = true
             actionError = null
             withContext(Dispatchers.IO) {
-                runCatching { yugmApi.reactToRoom(authToken, roomId, type) }
+                runCatching { retryAfterJoin { yugmApi.reactToRoom(authToken, roomId, type) } }
                     .onFailure { error -> actionError = error.message ?: "Failed to react" }
             }
             actionLoading = false
