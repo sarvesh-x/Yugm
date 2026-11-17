@@ -52,8 +52,8 @@ object YugmMediaRoom {
     private var opponentRoom: Room? = null
     private var speakingObserver: Job? = null
     @Volatile private var connected = false
-    @Volatile private var desiredMicEnabled = false
-    @Volatile private var micPreferenceVersion = 0L
+    private val microphoneIntent = RoomMicrophoneIntent()
+    private val desiredMicEnabled: Boolean get() = microphoneIntent.snapshot().enabled
     @Volatile private var microphonePublishAllowed = false
     @Volatile private var desiredCameraEnabled = false
     @Volatile private var roomAudioMuted = false
@@ -78,7 +78,7 @@ object YugmMediaRoom {
         require(token.isNotBlank() && url.isNotBlank()) { "Live audio credentials are missing" }
         roomMutex.withLock {
             desiredCameraEnabled = publishCamera
-            if (micPreferenceVersion == 0L) desiredMicEnabled = publishMicrophone
+            microphoneIntent.initialize(publishMicrophone)
             microphonePublishAllowed = canPublishMicrophone
             connected = false
             RoomAudioForegroundService.start(context, desiredMicEnabled && microphonePublishAllowed)
@@ -89,7 +89,7 @@ object YugmMediaRoom {
                 mutableSpeakingIdentities.value = emptySet()
                 room?.let { stopRoomMusicLocked(it) }
                 room?.disconnect()
-                val nextRoom = LiveKit.create(context)
+                val nextRoom = LiveKit.create(context, RoomVoiceAudio.roomOptions(), RoomVoiceAudio.overrides())
                 connectingRoom = nextRoom
                 nextRoom.connect(url, token)
                 room = nextRoom
@@ -121,10 +121,11 @@ object YugmMediaRoom {
     }
 
     fun setMicEnabled(enabled: Boolean) {
-        micPreferenceVersion++
-        desiredMicEnabled = enabled
+        val request = microphoneIntent.request(enabled)
         scope.launch {
             roomMutex.withLock {
+                // A delayed unmute must never undo a newer mute (or vice versa).
+                if (microphoneIntent.snapshot() != request) return@withLock
                 if (enabled && !microphonePublishAllowed) {
                     Timber.tag(TAG).d("Microphone enable is waiting for an authorized room token")
                     return@withLock
@@ -338,8 +339,7 @@ object YugmMediaRoom {
 
     suspend fun disconnect() {
         roomMutex.withLock {
-            desiredMicEnabled = false
-            micPreferenceVersion = 0L
+            microphoneIntent.reset()
             desiredCameraEnabled = false
             microphonePublishAllowed = false
             roomAudioMuted = false
