@@ -717,7 +717,7 @@ fun ActiveVoiceRoomScreen(
                 }
 
                 val visiblePoll = polls.firstOrNull { it.isActive }
-                if (visiblePoll != null || isHost) {
+                if (visiblePoll != null) {
                     Box(
                         Modifier.align(Alignment.TopEnd).padding(
                             top = if (pkBattle?.status == PkStatus.ACTIVE) 210.dp else 8.dp,
@@ -730,7 +730,7 @@ fun ActiveVoiceRoomScreen(
                             currentUserId = currentUserId,
                             onCreate = { showPollComposer = true },
                             onVote = onVotePoll,
-                            onClose = { visiblePoll?.id?.let(onClosePoll) }
+                            onClose = { visiblePoll.id.let(onClosePoll) }
                         )
                     }
                 }
@@ -1061,19 +1061,19 @@ fun ActiveVoiceRoomScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceAround
                 ) {
-                    ToolGridItem("??", "PK Battle") {
+                    ToolGridItem("⚔️", "PK Battle") {
                         showToolsSheet = false
                         showPkSetup = true
                     }
-                    ToolGridItem("??", "Reactions") {
+                    ToolGridItem("✨", "Reactions") {
                         showToolsSheet = false
                         showReactionPicker = true
                     }
-                    ToolGridItem("??", "Themes") {
+                    ToolGridItem("🎨", "Themes") {
                         showToolsSheet = false
                         onOpenThemes?.invoke()
                     }
-                    ToolGridItem("??", "Poll") {
+                    ToolGridItem("📊", "Poll") {
                         showToolsSheet = false
                         showPollComposer = true
                     }
@@ -1083,19 +1083,19 @@ fun ActiveVoiceRoomScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceAround
                 ) {
-                    ToolGridItem("??", "Settings") {
+                    ToolGridItem("⚙️", "Settings") {
                         showToolsSheet = false
                         showRoomInfoSheet = true
                     }
-                    ToolGridItem("??", "Invite") {
+                    ToolGridItem("📨", "Invite") {
                         showToolsSheet = false
                         showInvitePicker = true
                     }
-                    ToolGridItem("??", "DM Host") {
+                    ToolGridItem("💬", "DM Host") {
                         showToolsSheet = false
                         onDirectMessage(room.host?.id)
                     }
-                    ToolGridItem("??", "Modes") {
+                    ToolGridItem("🎭", "Modes") {
                         showToolsSheet = false
                         onOpenModes?.invoke()
                     }
@@ -1105,21 +1105,21 @@ fun ActiveVoiceRoomScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceAround
                 ) {
-                    ToolGridItem("??", "Lucky wheel") {
+                    ToolGridItem("🎡", "Lucky wheel") {
                         showToolsSheet = false
                         showLuckyWheelDialog = true
                     }
-                    ToolGridItem(if (roomAudioMuted) "??" else "??", "Room audio") {
+                    ToolGridItem(if (roomAudioMuted) "🔇" else "🔊", "Room audio") {
                         roomAudioMuted = !roomAudioMuted
                         YugmMediaRoom.setRoomAudioMuted(roomAudioMuted)
                         onToast(if (roomAudioMuted) "Room audio muted" else "Room audio unmuted")
                         showToolsSheet = false
                     }
-                    ToolGridItem("??", "Music player") {
+                    ToolGridItem("🎵", "Music player") {
                         showToolsSheet = false
                         showMusicSheet = true
                     }
-                    ToolGridItem("??", "Minimize") {
+                    ToolGridItem("⬇️", "Minimize") {
                         showToolsSheet = false
                         onMinimize()
                     }
@@ -1934,7 +1934,7 @@ private fun VoiceSeatItem(
                             .border(1.dp, if (participant.role == "HOST") Color(0xFFFFD66B) else Color(0xFFD5B8FF), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(if (participant.role == "HOST") "?" else "A", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                        Text(if (participant.role == "HOST") "H" else "A", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Black)
                     }
                 }
 
@@ -2071,7 +2071,7 @@ private fun EntranceAnnouncementCard(
 
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("???", fontSize = 11.sp)
+                    Text("✨", fontSize = 11.sp)
                     Spacer(modifier = Modifier.width(3.dp))
                     Text(
                         text = name,
@@ -2100,7 +2100,7 @@ private fun EntranceAnnouncementCard(
                 .padding(horizontal = 14.dp, vertical = 6.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text("??", fontSize = 16.sp)
+            Text("👏", fontSize = 16.sp)
         }
     }
 }
@@ -2352,17 +2352,17 @@ private fun RoomSettingsAndInfoSheet(
             ) {
                 Text("Room Perks & Privileges", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Black)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("??", fontSize = 13.sp)
+                    Text("💎", fontSize = 13.sp)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("1.5x Intimacy & Room XP on all gifts", color = Color.White, fontSize = 12.sp)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("?", fontSize = 13.sp)
+                    Text("🎧", fontSize = 13.sp)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("High-Fidelity Spatial Audio Active", color = Color.White, fontSize = 12.sp)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("??", fontSize = 13.sp)
+                    Text("👑", fontSize = 13.sp)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("VIP Stage Frame priority unlocked", color = Color.White, fontSize = 12.sp)
                 }
