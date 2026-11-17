@@ -212,7 +212,8 @@ fun NavGraphBuilder.roomNavGraph(
             is com.yugm.app.core.util.UiState.Success -> roomLoadState.data
             else -> null
         }
-        loadedRoomDetail?.let { detail ->
+        if (loadedRoomDetail != null) {
+            val detail = loadedRoomDetail
             val room = detail.room
             ActiveVoiceRoomScreen(
                 room = room,
@@ -358,12 +359,14 @@ fun NavGraphBuilder.roomNavGraph(
                     navController.returnFromRoom()
                 }
             }
-        } ?: RoomConnectionFallback(
-            isLoading = roomViewModel.roomState is com.yugm.app.core.util.UiState.Loading || roomViewModel.roomState is com.yugm.app.core.util.UiState.Idle,
-            message = roomViewModel.roomError ?: "Room details are unavailable.",
-            onRetry = roomViewModel::refresh,
-            onExit = { navController.returnFromRoom() }
-        )
+        } else {
+            RoomConnectionFallback(
+                isLoading = roomLoadState is com.yugm.app.core.util.UiState.Loading || roomLoadState is com.yugm.app.core.util.UiState.Idle,
+                message = roomViewModel.roomError ?: "Room details are unavailable.",
+                onRetry = roomViewModel::refresh,
+                onExit = { navController.returnFromRoom() }
+            )
+        }
     }
 
     composable(
@@ -398,7 +401,8 @@ fun NavGraphBuilder.roomNavGraph(
             is com.yugm.app.core.util.UiState.Success -> roomLoadState.data
             else -> null
         }
-        loadedRoomDetail?.let { detail ->
+        if (loadedRoomDetail != null) {
+            val detail = loadedRoomDetail
             val room = detail.room
             VideoLivestreamScreen(
                 room = room,
@@ -476,12 +480,14 @@ fun NavGraphBuilder.roomNavGraph(
                     navController.returnFromRoom()
                 }
             }
-        } ?: RoomConnectionFallback(
-            isLoading = roomViewModel.roomState is com.yugm.app.core.util.UiState.Loading || roomViewModel.roomState is com.yugm.app.core.util.UiState.Idle,
-            message = roomViewModel.roomError ?: "Room details are unavailable.",
-            onRetry = roomViewModel::refresh,
-            onExit = { navController.returnFromRoom() }
-        )
+        } else {
+            RoomConnectionFallback(
+                isLoading = roomLoadState is com.yugm.app.core.util.UiState.Loading || roomLoadState is com.yugm.app.core.util.UiState.Idle,
+                message = roomViewModel.roomError ?: "Room details are unavailable.",
+                onRetry = roomViewModel::refresh,
+                onExit = { navController.returnFromRoom() }
+            )
+        }
     }
 
     composable(

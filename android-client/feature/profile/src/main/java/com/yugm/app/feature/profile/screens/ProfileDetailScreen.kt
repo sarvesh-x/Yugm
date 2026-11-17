@@ -1538,7 +1538,7 @@ private fun ProfileCompletionCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        if (isComplete) "Ã°Å¸Å’Å¸ 100% Vibe Master" else "Vibe Profile Strength",
+                        if (isComplete) "🌟 100% Vibe Master" else "Vibe Profile Strength",
                         color = if (isComplete) Gold else colors.textPrimary,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Black

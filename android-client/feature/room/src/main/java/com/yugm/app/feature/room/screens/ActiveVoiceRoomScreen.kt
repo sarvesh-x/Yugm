@@ -901,7 +901,7 @@ fun ActiveVoiceRoomScreen(
                             vipLevel = participants.firstOrNull { it.user.id == item.userId }?.user?.takeIf { it.isVip }?.vipLevel ?: 0,
                             onWelcomeClick = {
                                 onReact("clap")
-                                onToast("Welcomed to the room! ??")
+                                onToast("Welcomed to the room! 👏")
                             }
                         )
                     }
@@ -1186,16 +1186,16 @@ fun ActiveVoiceRoomScreen(
                         showToolsSheet = false
                         showPkSetup = true
                     }
-                    ToolGridItem("Γ£¿", "Reactions") {
+                    ToolGridItem("✨", "Reactions") {
                         showToolsSheet = false
                         showReactionPicker = true
                         onReloadReactions()
                     }
-                    ToolGridItem("≡ƒÄ¿", "Themes") {
+                    ToolGridItem("🎨", "Themes") {
                         showToolsSheet = false
                         onOpenThemes?.invoke()
                     }
-                    ToolGridItem("≡ƒôè", "Poll") {
+                    ToolGridItem("📊", "Poll") {
                         showToolsSheet = false
                         showPollComposer = true
                     }
@@ -1205,19 +1205,19 @@ fun ActiveVoiceRoomScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceAround
                 ) {
-                    if (isHost || isRoomAdmin) ToolGridItem("ΓÜÖ∩╕Å", "Settings") {
+                    if (isHost || isRoomAdmin) ToolGridItem("⚙️", "Settings") {
                         showToolsSheet = false
                         showRoomInfoSheet = true
                     }
-                    ToolGridItem("≡ƒô¿", "Invite") {
+                    ToolGridItem("📨", "Invite") {
                         showToolsSheet = false
                         showInvitePicker = true
                     }
-                    ToolGridItem("≡ƒÆ¼", "DM Host") {
+                    ToolGridItem("💬", "DM Host") {
                         showToolsSheet = false
                         onDirectMessage(room.host?.id)
                     }
-                    ToolGridItem("≡ƒÄ¡", "Modes") {
+                    ToolGridItem("🎭", "Modes") {
                         showToolsSheet = false
                         onOpenModes?.invoke()
                     }
@@ -1227,21 +1227,21 @@ fun ActiveVoiceRoomScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceAround
                 ) {
-                    ToolGridItem("≡ƒÄí", "Lucky wheel") {
+                    ToolGridItem("🎡", "Lucky wheel") {
                         showToolsSheet = false
                         showLuckyWheelDialog = true
                     }
-                    ToolGridItem(if (roomAudioMuted) "≡ƒöç" else "≡ƒöè", "Room audio") {
+                    ToolGridItem(if (roomAudioMuted) "🔇" else "🔊", "Room audio") {
                         roomAudioMuted = !roomAudioMuted
                         YugmMediaRoom.setRoomAudioMuted(roomAudioMuted)
                         onToast(if (roomAudioMuted) "Room audio muted" else "Room audio unmuted")
                         showToolsSheet = false
                     }
-                    ToolGridItem("≡ƒÄ╡", "Music player") {
+                    ToolGridItem("🎵", "Music player") {
                         showToolsSheet = false
                         showMusicSheet = true
                     }
-                    ToolGridItem("Γ¼ç∩╕Å", "Minimize") {
+                    ToolGridItem("⬇️", "Minimize") {
                         showToolsSheet = false
                         onMinimize()
                     }
@@ -1407,7 +1407,7 @@ fun ActiveVoiceRoomScreen(
                     )
                     OutlinedButtonRoomMusic(
                         icon = Icons.Filled.QueueMusic,
-                        label = "Queue ΓÇó ${roomMusicQueue.size}",
+                        label = "Queue • ${roomMusicQueue.size}",
                         modifier = Modifier.weight(1f),
                         onClick = { showMusicQueue = !showMusicQueue }
                     )
@@ -1561,7 +1561,7 @@ fun ActiveVoiceRoomScreen(
                                 color = Gold
                             )
                             Spacer(modifier = Modifier.width(10.dp))
-                            Text("Loading reactionsΓÇª", color = TextMuted, fontSize = 13.sp)
+                            Text("Loading reactions…", color = TextMuted, fontSize = 13.sp)
                         }
                         reactionCatalogError != null -> Column {
                             Text("Couldn't load reactions.", color = Color(0xFFFF8098), fontSize = 13.sp)
@@ -1614,20 +1614,20 @@ fun ActiveVoiceRoomScreen(
     if (showLuckyWheelDialog) {
         AlertDialog(
             onDismissRequest = { showLuckyWheelDialog = false },
-            title = { Text("?? Lucky Draw & Mini-Games", color = Color.White, fontWeight = FontWeight.Black) },
+            title = { Text("🦁 Lucky Draw & Mini-Games", color = Color.White, fontWeight = FontWeight.Black) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Spin the wheel for a chance to win exclusive room frames, badges, and coin boosts!", color = TextMuted, fontSize = 13.sp)
-                    Text("ΓÇó Grand Prize: Legendary Electric Dragon Frame ??", color = RoomGoldAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Text("ΓÇó Tier 2: Supreme Crown Frame ??", color = Color.White, fontSize = 12.sp)
-                    Text("ΓÇó Tier 3: 500 Coins Bonus ??", color = Color(0xFF60A5FA), fontSize = 12.sp)
+                    Text("• Grand Prize: Legendary Electric Dragon Frame 🐉", color = RoomGoldAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("• Tier 2: Supreme Crown Frame 👑", color = Color.White, fontSize = 12.sp)
+                    Text("• Tier 3: 500 Coins Bonus 💎", color = Color(0xFF60A5FA), fontSize = 12.sp)
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         showLuckyWheelDialog = false
-                        onToast("Spinning wheel... You won 50 Bonus Coins! ??")
+                        onToast("Spinning wheel... You won 50 Bonus Coins! 🎉")
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = RoomPurplePrimary)
                 ) {
@@ -1730,14 +1730,14 @@ fun ActiveVoiceRoomScreen(
                 Text(
                     buildString {
                         append("ID: ${target.user.id.takeLast(10)}")
-                        if (target.user.city.isNotBlank()) append(" ΓÇó ${target.user.city}")
+                        if (target.user.city.isNotBlank()) append(" • ${target.user.city}")
                     },
                     color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp)
                 )
                 Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     ProfileInfoChip("Lv.${target.user.level}", Color(0xFF547BB8))
                     if (target.user.isVip) ProfileInfoChip(target.user.vipTier.ifBlank { "VIP" }, Gold.copy(alpha = .85f))
-                    if (target.isRoomAdmin && !targetIsHost) RoomRoleBadge("ROOM ADMIN", Color(0xFFC8A2FF), "??")
+                    if (target.isRoomAdmin && !targetIsHost) RoomRoleBadge("ROOM ADMIN", Color(0xFFC8A2FF), "🛡")
                     else ProfileInfoChip(if (targetIsHost) "Host" else target.role.lowercase().replaceFirstChar { it.uppercase() }, PrimaryPurple.copy(alpha = .8f))
                     target.seatIndex?.let { ProfileInfoChip("Mic ${it + 1}", Pink.copy(alpha = .75f)) }
                 }
@@ -1751,7 +1751,7 @@ fun ActiveVoiceRoomScreen(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp))
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                    if (!isSelf) ProfileActionButton(if (target.user.isFollowing) "? Following" else "?  Follow", listOf(Color(0xFF08AEEA), Color(0xFF297DE2)), Modifier.weight(1f)) {
+                    if (!isSelf) ProfileActionButton(if (target.user.isFollowing) "✓ Following" else "♡  Follow", listOf(Color(0xFF08AEEA), Color(0xFF297DE2)), Modifier.weight(1f)) {
                         if (target.user.isFollowing) onUnfollowUser(target.user.id) else onFollowUser(target.user.id)
                         selectedParticipant = target.copy(user = target.user.copy(isFollowing = !target.user.isFollowing))
                     }
@@ -1768,7 +1768,7 @@ fun ActiveVoiceRoomScreen(
                     }
                 }
                 if (!isSelf) {
-                    ProfileActionButton("??  Send gifts", listOf(Color(0xFFEA477D), Color(0xFFC72F9F)), Modifier.fillMaxWidth().padding(top = 10.dp)) {
+                    ProfileActionButton("🎁  Send gifts", listOf(Color(0xFFEA477D), Color(0xFFC72F9F)), Modifier.fillMaxWidth().padding(top = 10.dp)) {
                         giftRecipientId = target.user.id
                         giftOpen = true
                         selectedParticipant = null
@@ -1974,23 +1974,23 @@ private fun GiftCelebrationArtwork(gift: GiftItem, modifier: Modifier = Modifier
 private fun getGiftEmoji(name: String, icon: String): String {
     val query = "$name $icon".lowercase()
     return when {
-        query.contains("diya", true) -> "??"
-        query.contains("rose", true) -> "??"
-        query.contains("crown", true) -> "??"
-        query.contains("lotus", true) -> "??"
-        query.contains("heart", true) -> "??"
-        query.contains("ring", true) -> "??"
-        query.contains("car", true) -> "???"
-        query.contains("diamond", true) -> "??"
-        query.contains("fire", true) -> "??"
-        query.contains("rocket", true) -> "??"
-        query.contains("mic", true) -> "??"
-        query.contains("cake", true) -> "??"
-        query.contains("bear", true) -> "??"
-        query.contains("star", true) -> "?"
+        query.contains("diya", true) -> "🪔"
+        query.contains("rose", true) -> "🌹"
+        query.contains("crown", true) -> "👑"
+        query.contains("lotus", true) -> "🪷"
+        query.contains("heart", true) -> "❤️"
+        query.contains("ring", true) -> "💍"
+        query.contains("car", true) -> "🏎️"
+        query.contains("diamond", true) -> "💎"
+        query.contains("fire", true) -> "🔥"
+        query.contains("rocket", true) -> "🚀"
+        query.contains("mic", true) -> "🎤"
+        query.contains("cake", true) -> "🎂"
+        query.contains("bear", true) -> "🧸"
+        query.contains("star", true) -> "⭐"
         else -> {
             if (icon.isNotBlank() && icon.length <= 4 && !icon.any { it.isLetterOrDigit() }) icon
-            else "??"
+            else "🎁"
         }
     }
 }
@@ -2265,7 +2265,7 @@ private fun EntranceAnnouncementCard(
                 .padding(horizontal = 14.dp, vertical = 6.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text("≡ƒæÅ", fontSize = 16.sp)
+            Text("👏", fontSize = 16.sp)
         }
     }
 }
@@ -2718,7 +2718,7 @@ private fun RoomSettingsAndInfoSheet(
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text(
-                        text = if (host.isFollowing) "Following Room Host ?" else "+ Follow Room Host (${host.name})",
+                        text = if (host.isFollowing) "Following Room Host ✓" else "+ Follow Room Host (${host.name})",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp
@@ -2737,17 +2737,17 @@ private fun RoomSettingsAndInfoSheet(
             ) {
                 Text("Room Perks & Privileges", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Black)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("≡ƒÆÄ", fontSize = 13.sp)
+                    Text("💎", fontSize = 13.sp)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("1.5x Intimacy & Room XP on all gifts", color = Color.White, fontSize = 12.sp)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("≡ƒÄº", fontSize = 13.sp)
+                    Text("🎧", fontSize = 13.sp)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("High-Fidelity Spatial Audio Active", color = Color.White, fontSize = 12.sp)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("≡ƒææ", fontSize = 13.sp)
+                    Text("👑", fontSize = 13.sp)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("VIP Stage Frame priority unlocked", color = Color.White, fontSize = 12.sp)
                 }
@@ -2805,7 +2805,7 @@ private fun RoomSettingsAndInfoSheet(
                 ) {
                     Icon(Icons.Filled.Groups, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(5.dp))
-                    Text("People ΓÇó $participantCount", fontSize = 12.sp, maxLines = 1)
+                    Text("People • $participantCount", fontSize = 12.sp, maxLines = 1)
                 }
             }
             Row(

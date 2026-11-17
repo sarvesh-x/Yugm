@@ -202,7 +202,7 @@ fun PollCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(if (poll.isActive) "LIVE POLL" else "POLL", color = colors.accent, fontSize = 9.sp, fontWeight = FontWeight.Black)
                 Spacer(Modifier.weight(1f))
-                Text(if (!poll.isActive) "Ended ΓÇó $voteTotal votes" else "$voteTotal votes", color = colors.textSecondary, fontSize = 10.sp)
+                Text(if (!poll.isActive) "Ended • $voteTotal votes" else "$voteTotal votes", color = colors.textSecondary, fontSize = 10.sp)
                 if (isHost && poll.isActive) {
                     Text(
                         if (closeRequested) "  Closing..." else "  Close",
