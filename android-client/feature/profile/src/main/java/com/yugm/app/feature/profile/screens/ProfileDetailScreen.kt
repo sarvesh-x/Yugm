@@ -261,7 +261,7 @@ fun ProfileDetailScreen(
                                 if (!liked) viewModel.like(token, profile.id) { liked = it }
                         }
                         ProfileAction(Icons.Filled.ChatBubbleOutline, "Message") { onMessage(profile.id) }
-                        ProfileAction(if (viewModel.isFollowing) Icons.Filled.PersonRemove else Icons.Filled.PersonAdd, if (viewModel.followBusy) "Updating" else if (viewModel.isFollowing) "Unfollow" else "Follow", highlight = true, enabled = !viewModel.followBusy, isLoading = viewModel.followBusy) {
+                        ProfileAction(if (viewModel.isFollowing) Icons.Filled.PersonRemove else Icons.Filled.PersonAdd, if (viewModel.followBusy) "Updating..." else if (viewModel.isFollowing) "Unfollow" else "Follow", highlight = true, enabled = !viewModel.followBusy, isLoading = viewModel.followBusy) {
                                 if (!viewModel.followBusy) {
                                     if (viewModel.isFollowing) viewModel.unfollow(token, profile.id) else viewModel.follow(token, profile.id)
                                 }
@@ -407,7 +407,7 @@ fun ProfileDetailScreen(
                                     Avatar(clan.name.take(1).uppercase(), 58, clan.avatar)
                                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                         Text(clan.name, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text("${clan.familyLabel.ifBlank { "Clan" }} Ã‚Â· ${clan.memberCount} members", color = TextMuted, fontSize = 12.sp)
+                                        Text("${clan.familyLabel.ifBlank { "Clan" }} • ${clan.memberCount} members", color = TextMuted, fontSize = 12.sp)
                                     }
                                 }
                                 Spacer(Modifier.height(10.dp))
@@ -427,7 +427,7 @@ fun ProfileDetailScreen(
                                 Text("Compatibility Score", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        "Ã¢â„¢Â¥ ${match.compatibility.score}%",
+                                        "✨ ${match.compatibility.score}%",
                                         color = Pink,
                                         fontSize = 27.sp,
                                         fontWeight = FontWeight.Black
@@ -455,7 +455,7 @@ fun ProfileDetailScreen(
                                     )
                                 }
                                 if (match.compatibility.sameCity) {
-                                    Text("Ã°Å¸â€œÂ Same city", color = Success, fontSize = 12.sp)
+                                    Text("📍 Same city", color = Success, fontSize = 12.sp)
                                 }
                             }
                         }
@@ -531,7 +531,7 @@ fun ProfileDetailScreen(
                     item {
                         GlassCard(Modifier.fillMaxWidth()) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("Ã°Å¸â€˜â€˜", fontSize = 18.sp)
+                                Text("👑", fontSize = 18.sp)
                                 Column {
                                     Text("Premium VIP Member", color = Gold, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                     Text("This user has active profile boost and cosmetics priority.", color = TextMuted, fontSize = 12.sp)
@@ -571,7 +571,7 @@ fun ProfileDetailScreen(
                                 .clickable { onOpenRoom(room) }
                         ) {
                             Text(room.title, color = Color.White, fontWeight = FontWeight.Bold)
-                            Text("${room.participants} people live Ã¢â‚¬Â¢ ${room.category}", color = TextMuted, fontSize = 12.sp)
+                            Text("${room.participants} people live • ${room.category}", color = TextMuted, fontSize = 12.sp)
                         }
                     }
                 }
@@ -709,7 +709,7 @@ fun ProfileDetailScreen(
                             accountBusy = false
                         }
                     }
-                ) { Text(if (accountBusy) "UpdatingÃ¢â‚¬Â¦" else "Update password", color = Gold) }
+                ) { Text(if (accountBusy) "Updating..." else "Update password", color = Gold) }
             },
             dismissButton = { TextButton(enabled = !accountBusy, onClick = { showPasswordDialog = false }) { Text("Close", color = TextMuted) } },
             containerColor = SurfaceElevated
@@ -845,7 +845,7 @@ private fun EditProfilePage(
                 shape = CircleShape,
                 contentPadding = PaddingValues(horizontal = 17.dp, vertical = 8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = colors.primary, disabledContainerColor = colors.surfaceVariant)
-            ) { Text(if (isBusy) "SavingÃ¢â‚¬Â¦" else "Save", color = Color.White, fontWeight = FontWeight.Bold) }
+            ) { Text(if (isBusy) "Saving..." else "Save", color = Color.White, fontWeight = FontWeight.Bold) }
         }
 
         Column(
@@ -870,7 +870,7 @@ private fun EditProfilePage(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(colors.primary.copy(alpha = 0.08f)).border(1.dp, colors.primary.copy(alpha = 0.2f), RoundedCornerShape(16.dp)).padding(13.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Ã¢â€œËœ", color = colors.primary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("←", color = colors.primary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Text("Make your profile yours. Add a little detail so people can find a reason to connect.", color = colors.textPrimary, fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(start = 10.dp))
             }
 
@@ -904,7 +904,7 @@ private fun EditProfilePage(
             EditProfileSection("INTERESTS & PASSIONS") {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     PresetInterests.forEach { item -> ProfileEditChip(item, interests.contains(item)) { onInterestsChange(if (interests.contains(item)) interests - item else interests + item) } }
-                    interests.filterNot(PresetInterests::contains).forEach { item -> ProfileEditChip("$item  Ãƒâ€”", true) { onInterestsChange(interests - item) } }
+                    interests.filterNot(PresetInterests::contains).forEach { item -> ProfileEditChip("$item  ✕", true) { onInterestsChange(interests - item) } }
                 }
                 EditProfileAddRow("Add an interest", customInterest, onCustomInterestChange) {
                     val value = customInterest.trim()
@@ -916,7 +916,7 @@ private fun EditProfilePage(
             EditProfileSection("HOBBIES & PASTIMES") {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     PresetHobbies.forEach { item -> ProfileEditChip(item, hobbies.contains(item), accent = Color(0xFFFFB84D)) { onHobbiesChange(if (hobbies.contains(item)) hobbies - item else hobbies + item) } }
-                    hobbies.filterNot(PresetHobbies::contains).forEach { item -> ProfileEditChip("$item  Ãƒâ€”", true, accent = Color(0xFFFFB84D)) { onHobbiesChange(hobbies - item) } }
+                    hobbies.filterNot(PresetHobbies::contains).forEach { item -> ProfileEditChip("$item  ✕", true, accent = Color(0xFFFFB84D)) { onHobbiesChange(hobbies - item) } }
                 }
                 EditProfileAddRow("Add a hobby", customHobby, onCustomHobbyChange, accent = Color(0xFFFFB84D)) {
                     val value = customHobby.trim()
@@ -1051,7 +1051,7 @@ private fun ProfileHero(
             horizontalArrangement = Arrangement.spacedBy(7.dp)
         ) {
             Text("ID: ${profile.id.takeLast(9)}", color = colors.textSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-            Text("Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³", fontSize = 14.sp)
+            Text("↗", fontSize = 14.sp)
             Box(Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFF9AD968)).padding(horizontal = 8.dp, vertical = 2.dp)) {
                 Text("Lv.${profile.level}", color = Color(0xFF18240E), fontSize = 10.sp, fontWeight = FontWeight.Black)
             }
@@ -1077,8 +1077,8 @@ private fun ProfileHero(
         if (isOwnProfile) {
             Spacer(Modifier.height(9.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ProfileBalanceTile("Ã°Å¸Âªâ„¢", profile.walletBalance.toString(), "Coins", Modifier.weight(1f), onOpenWallet)
-                ProfileBalanceTile("Ã°Å¸â€™Å½", profile.diamondBalance.toString(), "Diamonds", Modifier.weight(1f), onOpenWallet)
+                ProfileBalanceTile("🪙", profile.walletBalance.toString(), "Coins", Modifier.weight(1f), onOpenWallet)
+                ProfileBalanceTile("💎", profile.diamondBalance.toString(), "Diamonds", Modifier.weight(1f), onOpenWallet)
             }
         }
     }
@@ -1246,8 +1246,8 @@ private fun ProfileHeroLegacy(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         val genderLabel = profile.gender.trim().ifBlank { "Not set" }
-                        ProfilePill("Gender Ã‚Â· $genderLabel", Color(0xFFC4B5FD))
-                        ProfilePill("Age Ã‚Â· ${profile.age.takeIf { it > 0 }?.toString() ?: "Not set"}", Gold)
+                        ProfilePill("Gender • $genderLabel", Color(0xFFC4B5FD))
+                        ProfilePill("Age • ${profile.age.takeIf { it > 0 }?.toString() ?: "Not set"}", Gold)
                     }
 
                     // Headline or Vibe Line / Role
@@ -1293,7 +1293,7 @@ private fun ProfileHeroLegacy(
                                 ProfilePill(it, Color(0xFFC4B5FD))
                             }
                             profile.hobbies.take(2).forEach {
-                                ProfilePill("Ã°Å¸Å½Â¸ $it", Gold.copy(alpha = 0.88f))
+                                ProfilePill(it, Gold.copy(alpha = 0.88f))
                             }
                         }
                     }

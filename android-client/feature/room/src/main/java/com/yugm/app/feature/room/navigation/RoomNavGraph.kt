@@ -290,7 +290,9 @@ fun NavGraphBuilder.roomNavGraph(
                 onRejectPk = roomViewModel::rejectPk,
                 onEndPk = roomViewModel::endPk,
                 onEndRoom = {
-                    roomViewModel.endRoomAndDisconnect { navController.returnFromRoom() }
+                    navController.returnFromRoom()
+                    navController.returnFromRoom()
+                    roomViewModel.endRoomAndDisconnect { }
                 },
                 onMuteUser = roomViewModel::muteUser,
                 onOwnMicStateChanged = roomViewModel::setOwnMicState,
@@ -362,7 +364,10 @@ fun NavGraphBuilder.roomNavGraph(
                 reactionCatalogLoading = roomViewModel.isReactionCatalogLoading,
                 reactionCatalogError = roomViewModel.reactionCatalogError,
                 onReloadReactions = roomViewModel::reloadRoomReactions,
-                onBack = { roomViewModel.leaveAndDisconnect { navController.returnFromRoom() } },
+                onBack = {
+                    navController.returnFromRoom()
+                    roomViewModel.leaveAndDisconnect { }
+                },
                 onMinimize = { onMinimizeRoom(room, com.yugm.app.core.model.RoomType.Video) },
                 requestError = roomViewModel.actionError.orEmpty(),
                 onJoin = roomViewModel::joinVideo,
@@ -393,7 +398,8 @@ fun NavGraphBuilder.roomNavGraph(
                 onVotePoll = roomViewModel::votePoll,
                 onClosePoll = roomViewModel::closePoll,
                 onEndRoom = {
-                    roomViewModel.endRoomAndDisconnect { navController.returnFromRoom() }
+                    navController.returnFromRoom()
+                    roomViewModel.endRoomAndDisconnect { }
                 }
             )
         } ?: RoomConnectionFallback(

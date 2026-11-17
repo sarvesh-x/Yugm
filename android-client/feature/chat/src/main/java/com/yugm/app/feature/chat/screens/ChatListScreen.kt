@@ -526,11 +526,12 @@ fun ChatListScreen(
                                                 "Following"
                                             ).forEachIndexed { index, label ->
                                                 val selected = contactTab == index
-                                                Box(Modifier.weight(1f).height(46.dp).clip(RoundedCornerShape(15.dp)).background(if (selected) Color(0xFF28243A) else Color.Transparent)
+                                                Box(Modifier.weight(1f).height(46.dp).clip(RoundedCornerShape(15.dp)).background(if (selected) LocalYugmColors.current.secondary.copy(alpha = 0.16f) else Color.Transparent)
+                                                    .border(1.dp, if (selected) LocalYugmColors.current.secondary.copy(alpha = 0.35f) else Color.Transparent, RoundedCornerShape(15.dp))
                                                     .clickable(role = Role.Tab) { contactTab = index }, contentAlignment = Alignment.Center) {
                                                     Text(
                                                         label,
-                                                        color = if (selected) LocalYugmColors.current.secondary else if (index == 1 && requestCount > 0) Color(0xFFFF7AAE) else LocalYugmColors.current.textSecondary,
+                                                        color = if (selected) LocalYugmColors.current.textPrimary else if (index == 1 && requestCount > 0) Color(0xFFFF7AAE) else LocalYugmColors.current.textSecondary,
                                                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                                                         fontSize = 12.sp,
                                                         maxLines = 1

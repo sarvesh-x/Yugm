@@ -45,16 +45,20 @@ fun VipPlansScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("VIP Lounge", color = Color.White, fontWeight = FontWeight.Bold) },
+                title = { Text("VIP Lounge", color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     TextButton(onClick = onBack) {
-                        Text("Back", color = Gold, fontWeight = FontWeight.Bold)
+                        Text("Back", color = LocalYugmColors.current.primary, fontWeight = FontWeight.Bold)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = LocalYugmColors.current.background,
+                    titleContentColor = LocalYugmColors.current.textPrimary,
+                    navigationIconContentColor = LocalYugmColors.current.primary
+                )
             )
         },
-        containerColor = Background
+        containerColor = LocalYugmColors.current.background
     ) { innerPadding ->
         val vipState = vipViewModel.vipState
         LaunchedEffect(vipState) {
@@ -89,13 +93,13 @@ fun VipPlansScreen(
                                 Text("👑", fontSize = 38.sp)
                                 Spacer(modifier = Modifier.height(8.dp))
                                 if (vipStatus?.isVip == true) {
-                                    Text("VIP Active", color = Gold, fontSize = 20.sp, fontWeight = FontWeight.Black)
-                                    Text("Expires: ${vipStatus.vipExpiresAt?.take(10).orEmpty()}", color = TextMuted, fontSize = 12.sp)
-                                    Text("${vipStatus.daysRemaining} days remaining", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    Text("Your VIP benefits stay active until this date. Buying another plan extends your membership.", color = TextMuted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
+                                    Text("VIP Active", color = LocalYugmColors.current.primary, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                                    Text("Expires: ${vipStatus.vipExpiresAt?.take(10).orEmpty()}", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
+                                    Text("${vipStatus.daysRemaining} days remaining", color = LocalYugmColors.current.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text("Your VIP benefits stay active until this date. Buying another plan extends your membership.", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
                                 } else {
-                                    Text("Upgrade to Yugm VIP", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
-                                    Text("Choose a plan to unlock its listed benefits.", color = TextMuted, fontSize = 12.sp, textAlign = TextAlign.Center)
+                                    Text("Upgrade to Yugm VIP", color = LocalYugmColors.current.textPrimary, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                                    Text("Choose a plan to unlock its listed benefits.", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp, textAlign = TextAlign.Center)
                                 }
                             }
                         }
@@ -107,19 +111,19 @@ fun VipPlansScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Your Coins", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Text("${walletViewModel.balance} Coins", color = Gold, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                            Text("Your Coins", color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("${walletViewModel.balance} Coins", color = LocalYugmColors.current.primary, fontWeight = FontWeight.Black, fontSize = 16.sp)
                         }
                     }
 
                     item {
-                        Text("Select a Subscription Plan", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("Select a Subscription Plan", color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
 
                     items(vipPlans) { plan ->
                         Card(
-                            colors = CardDefaults.cardColors(containerColor = SurfaceElevated),
-                            border = BorderStroke(1.dp, Color(0x1AFFFFFF)),
+                            colors = CardDefaults.cardColors(containerColor = LocalYugmColors.current.surfaceElevated),
+                            border = BorderStroke(1.dp, LocalYugmColors.current.border),
                             shape = RoundedCornerShape(16.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -129,8 +133,8 @@ fun VipPlansScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(plan.name, color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
-                                    Text("${plan.durationDays} days · ${plan.coinPrice} coins", color = TextMuted, fontSize = 12.sp)
+                                    Text(plan.name, color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                                    Text("${plan.durationDays} days • ${plan.coinPrice} coins", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
                                 }
                                 Button(
                                     onClick = {
@@ -139,19 +143,19 @@ fun VipPlansScreen(
                                         }
                                     },
                                     enabled = walletViewModel.balance >= plan.coinPrice,
-                                    colors = ButtonDefaults.buttonColors(containerColor = Gold),
+                                    colors = ButtonDefaults.buttonColors(containerColor = LocalYugmColors.current.primary),
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    Text(if (vipStatus?.isVip == true) "Extend" else "Buy", color = Background, fontWeight = FontWeight.Black)
+                                    Text(if (vipStatus?.isVip == true) "Extend" else "Buy", color = Color.White, fontWeight = FontWeight.Black)
                                 }
                             }
                             if (walletViewModel.balance < plan.coinPrice) {
-                                Text("You need ${plan.coinPrice - walletViewModel.balance} more coins", color = TextMuted, fontSize = 11.sp, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 8.dp))
+                                Text("You need ${plan.coinPrice - walletViewModel.balance} more coins", color = LocalYugmColors.current.textSecondary, fontSize = 11.sp, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 8.dp))
                             }
                             if (plan.benefits.isNotEmpty()) {
                                 Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                     plan.benefits.forEach { benefit ->
-                                        Text("• $benefit", color = TextMuted, fontSize = 12.sp)
+                                        Text("• $benefit", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
                                     }
                                 }
                             }

@@ -373,7 +373,6 @@ fun ChatScreen(
         if (isBlockedByMe) index += 1
         if (messages.isEmpty()) index += 1
         if (showSafety) index += 1
-        if (relationship != null) index += 1
         if (searchQuery.isBlank() && messages.isNotEmpty() && hasMoreHistory) index += 1
         if (error.isNotBlank()) index += 1
         messages.forEach { msg ->
@@ -1076,6 +1075,12 @@ fun ChatScreen(
                     }
                 }
 
+                relationship?.let { bond ->
+                    Box(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp)) {
+                        BondStrip(bond)
+                    }
+                }
+
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     if (loading && visibleMessages.isEmpty()) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1116,7 +1121,6 @@ fun ChatScreen(
                                     safetyKey?.let { safetyPrefs.edit().putBoolean(it, true).apply() }
                                 })
                             }
-                            relationship?.let { bond -> item { BondStrip(bond) } }
                             if (searchQuery.isBlank() && visibleMessages.isNotEmpty() && hasMoreHistory) item {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                                     Text(
@@ -1915,19 +1919,14 @@ private fun LightChatAction(
                 Box(
                     Modifier
                         .align(Alignment.BottomEnd)
-                        .offset(x = 2.dp, y = 2.dp)
-                        .size(16.dp)
+                        .offset(x = 4.dp, y = 4.dp)
+                        .size(18.dp)
                         .clip(CircleShape)
-                        .background(LocalYugmColors.current.surface)
-                        .border(1.dp, LocalYugmColors.current.border, CircleShape),
+                        .background(Color(0xFF1F2937))
+                        .border(1.dp, Color(0xFFFFD166).copy(alpha = 0.9f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        Icons.Filled.Lock,
-                        contentDescription = null,
-                        tint = Color(0xFFFFD166),
-                        modifier = Modifier.size(10.dp)
-                    )
+                    Text("VIP", color = Color(0xFFFFD166), fontSize = 7.sp, fontWeight = FontWeight.Black)
                 }
             }
         }

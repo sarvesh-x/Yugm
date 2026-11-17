@@ -56,6 +56,8 @@ const upsertSchema = z.object({
   id: z.string().trim().min(1).max(64).regex(/^[a-z0-9_-]+$/i).optional(),
   label: z.string().trim().min(1).max(60),
   emoji: z.string().trim().max(16).optional(),
+  assetUrl: z.string().trim().url().max(2048).optional(),
+  imageUrl: z.string().trim().url().max(2048).optional(),
   access: z.enum(["EVERYONE", "VIP_EXCLUSIVE"]).default("EVERYONE"),
   assetKind: z.enum(["STATIC", "ANIMATED"]).default("STATIC"),
   isActive: z.coerce.boolean().optional(),
@@ -86,8 +88,10 @@ adminReactionsRouter.post("/reactions", reactionUpload.single("asset"), asyncHan
   const parsed = upsertSchema.parse({ ...req.body, isActive: req.body.isActive ?? "true" });
   const file = req.file;
   const emoji = (parsed.emoji ?? "").trim();
-  if (!file && !emoji) throw new HttpError(400, "Provide a reaction image file or an emoji");
+  const externalAssetUrl = (parsed.assetUrl ?? parsed.imageUrl ?? "").trim();
+  if (!file && !emoji && !externalAssetUrl) throw new HttpError(400, "Provide a reaction image file, image URL, or an emoji");
   if (file && !hasImageSignature(file.path)) { fs.unlink(file.path, () => {}); throw new HttpError(400, "Invalid image file"); }
+  if (externalAssetUrl && !/^https?:\/\//i.test(externalAssetUrl)) throw new HttpError(400, "Reaction image URL must start with http:// or https://");
   const id = normalizeReactionId(parsed.id || (file ? path.parse(file.originalname).name.replace(/[^a-z0-9_-]+/gi, "_") : "") || `reaction_${Date.now()}`);
   const existing = await RoomReaction.findById(id).lean();
   if (existing) { if (file) fs.unlink(file.path, () => {}); throw new HttpError(409, "A reaction with this id already exists"); }
@@ -101,12 +105,12 @@ adminReactionsRouter.post("/reactions", reactionUpload.single("asset"), asyncHan
     assetKind: parsed.assetKind,
     isActive: parsed.isActive ?? true,
     sortOrder: parsed.sortOrder ?? 0,
-    assetUrl: stored?.url ?? "",
+    assetUrl: stored?.url ?? externalAssetUrl,
     assetStorageKey: stored ? ((stored as any).key ?? path.basename(stored.url)) : "",
     mimeType: file?.mimetype ?? "",
     createdBy: req.admin!._id
   });
-  await AdminAuditLog.create({ adminId: req.admin!._id, action: "CREATE_REACTION", entityType: "RoomReaction", entityId: reaction._id, metadata: { access: reaction.access, assetKind: reaction.assetKind, hasAsset: Boolean(file), hasEmoji: Boolean(emoji) } });
+  await AdminAuditLog.create({ adminId: req.admin!._id, action: "CREATE_REACTION", entityType: "RoomReaction", entityId: reaction._id, metadata: { access: reaction.access, assetKind: reaction.assetKind, hasAsset: Boolean(file || externalAssetUrl), hasEmoji: Boolean(emoji), assetSource: file ? "upload" : externalAssetUrl ? "url" : "emoji" } });
   adminOk(res, { reaction: { ...toPublicRoomReaction(reaction), isActive: reaction.isActive } }, {}, 201);
 }));
 
@@ -128,6 +132,15 @@ adminReactionsRouter.patch("/reactions/:id", reactionUpload.single("asset"), asy
   }
   if (parsed.label !== undefined) reaction.label = parsed.label;
   if (parsed.emoji !== undefined) reaction.emoji = parsed.emoji.trim();
+  const externalAssetUrl = (parsed.assetUrl ?? parsed.imageUrl ?? "").trim();
+  if (!file && externalAssetUrl) {
+    if (!/^https?:\/\//i.test(externalAssetUrl)) throw new HttpError(400, "Reaction image URL must start with http:// or https://");
+    const oldKey = reaction.assetStorageKey || reaction.assetUrl;
+    await deleteStoredFile("reactions", oldKey);
+    reaction.assetUrl = externalAssetUrl;
+    reaction.assetStorageKey = "";
+    reaction.mimeType = "";
+  }
   if (parsed.access !== undefined) reaction.access = parsed.access;
   if (parsed.assetKind !== undefined) reaction.assetKind = parsed.assetKind;
   if (parsed.isActive !== undefined) reaction.isActive = parsed.isActive;
