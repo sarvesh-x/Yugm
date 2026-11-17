@@ -77,11 +77,21 @@ private fun FloatingEmojiItem(emoji: FloatingEmoji) {
         contentAlignment = Alignment.Center
     ) {
         if (emoji.assetUrl.isNotBlank()) {
-            AsyncImage(
-                model = emoji.assetUrl,
-                contentDescription = emoji.label.ifBlank { "Reaction" },
-                modifier = Modifier.size(sizePx.dp)
-            )
+            Box(contentAlignment = Alignment.Center) {
+                if (emoji.emoji.isNotBlank()) {
+                    Text(
+                        text = emoji.emoji,
+                        fontSize = sizePx.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.size((sizePx + 8).dp)
+                    )
+                }
+                AsyncImage(
+                    model = emoji.assetUrl,
+                    contentDescription = emoji.label.ifBlank { "Reaction" },
+                    modifier = Modifier.size(sizePx.dp)
+                )
+            }
         } else {
             Text(
                 text = emoji.emoji,

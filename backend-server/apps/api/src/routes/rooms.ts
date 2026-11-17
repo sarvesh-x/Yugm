@@ -807,6 +807,7 @@ roomsRouter.post("/:id/reactions", requireAuth, requireNotChatRestricted, valida
     type: publicReaction.id,
     reactionId: publicReaction.id,
     label: publicReaction.label,
+    emoji: publicReaction.emoji,
     assetUrl: publicReaction.assetUrl,
     assetKind: publicReaction.assetKind,
     access: publicReaction.access,

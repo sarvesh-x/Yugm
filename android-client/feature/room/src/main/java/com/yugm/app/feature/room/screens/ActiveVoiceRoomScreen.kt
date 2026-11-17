@@ -938,7 +938,7 @@ fun ActiveVoiceRoomScreen(
                 emojis = listOf(
                     FloatingEmoji(
                         id = "${roomReactionEvent.first}-${reaction.userId}-${reaction.reactionId}",
-                        emoji = if (reaction.assetUrl.isBlank()) roomReactionEmoji(reaction.reactionId.ifBlank { reaction.type }) else "",
+                        emoji = reaction.emoji,
                         assetUrl = reaction.assetUrl,
                         label = reaction.label.ifBlank { reaction.reactionId },
                         userName = reaction.userName
@@ -1346,18 +1346,20 @@ fun ActiveVoiceRoomScreen(
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        if (reaction.assetUrl.isNotBlank()) {
-                            AsyncImage(
-                                model = reaction.assetUrl,
-                                contentDescription = reaction.label.ifBlank { reaction.id },
-                                modifier = Modifier.size(if (locked) 24.dp else 30.dp).alpha(if (locked) 0.45f else 1f)
-                            )
-                        } else {
-                            Text(
-                                text = roomReactionEmoji(reaction.id),
-                                fontSize = 26.sp,
-                                modifier = Modifier.alpha(if (locked) 0.45f else 1f)
-                            )
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.alpha(if (locked) 0.45f else 1f)) {
+                            if (reaction.emoji.isNotBlank() || reaction.assetUrl.isBlank()) {
+                                Text(
+                                    text = reaction.emoji.ifBlank { reaction.label.take(2).ifBlank { "•" } },
+                                    fontSize = 26.sp
+                                )
+                            }
+                            if (reaction.assetUrl.isNotBlank()) {
+                                AsyncImage(
+                                    model = reaction.assetUrl,
+                                    contentDescription = reaction.label.ifBlank { reaction.id },
+                                    modifier = Modifier.size(if (locked) 24.dp else 30.dp)
+                                )
+                            }
                         }
                         if (locked) {
                             Box(
@@ -1854,18 +1856,6 @@ private fun ProfileActionButton(
     }
 }
 
-private fun roomReactionEmoji(type: String): String = when (type.lowercase()) {
-    "heart" -> "??"
-    "fire" -> "??"
-    "laugh" -> "??"
-    "clap" -> "??"
-    "wow" -> "??"
-    "crown" -> "??"
-    "stars" -> "?"
-    "party" -> "??"
-    else -> "?"
-}
-
 @Composable
 private fun RoomHeaderAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
     Box(
@@ -1959,14 +1949,17 @@ private fun VoiceSeatItem(
                             .padding(8.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (reaction.assetUrl.isNotBlank()) {
-                            AsyncImage(
-                                model = reaction.assetUrl,
-                                contentDescription = reaction.label.ifBlank { reaction.reactionId },
-                                modifier = Modifier.size(28.dp)
-                            )
-                        } else {
-                            Text(roomReactionEmoji(reaction.reactionId.ifBlank { reaction.type }), fontSize = 24.sp)
+                        Box(contentAlignment = Alignment.Center) {
+                            if (reaction.emoji.isNotBlank() || reaction.assetUrl.isBlank()) {
+                                Text(reaction.emoji.ifBlank { reaction.label.take(2).ifBlank { "•" } }, fontSize = 24.sp)
+                            }
+                            if (reaction.assetUrl.isNotBlank()) {
+                                AsyncImage(
+                                    model = reaction.assetUrl,
+                                    contentDescription = reaction.label.ifBlank { reaction.reactionId },
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
                         }
                     }
                 }

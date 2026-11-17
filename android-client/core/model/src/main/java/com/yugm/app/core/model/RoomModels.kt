@@ -102,6 +102,7 @@ enum class RoomReactionAccess { EVERYONE, VIP_EXCLUSIVE }
 data class RoomReaction(
     val id: String = "",
     val label: String = "",
+    val emoji: String = "",
     val assetUrl: String = "",
     val assetKind: String = "STATIC",
     val access: RoomReactionAccess = RoomReactionAccess.EVERYONE,
@@ -112,6 +113,7 @@ data class RoomReactionEvent(
     val type: String = "",
     val reactionId: String = "",
     val label: String = "",
+    val emoji: String = "",
     val assetUrl: String = "",
     val assetKind: String = "STATIC",
     val access: RoomReactionAccess = RoomReactionAccess.EVERYONE,

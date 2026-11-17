@@ -437,15 +437,14 @@ fun ChatListScreen(
                                         }
                                     }
                                 } else {
-                                    itemsIndexed(filteredConversations, key = { _, item -> "conversation-${item.partner.id}" }) { index, item ->
+                                    itemsIndexed(filteredConversations, key = { _, item -> "conversation-${item.partner.id}" }) { _, item ->
                                         val isMutedConversation = item.partner.id in viewModel.mutedPartnerIds
                                         LightChatRow(
                                             item,
                                             currentUserId = currentUserId,
                                             unreadCount = viewModel.unreadCounts[item.partner.id]
                                                 ?: if (viewModel.unreadCounts.isEmpty() && !item.lastMessage.read && item.lastMessage.receiverId == currentUserId) 1 else 0,
-                                            muted = isMutedConversation,
-                                            showDivider = index > 0
+                                            muted = isMutedConversation
                                         ) { onOpenChat(item.partner.id) }
                                     }
                                     if (viewModel.hasMoreRecent) {
@@ -1075,22 +1074,12 @@ private fun LightChatRow(
     currentUserId: String,
     unreadCount: Int,
     muted: Boolean,
-    showDivider: Boolean = false,
     onClick: () -> Unit
 ) {
     val preview = buildConversationPreview(item.lastMessage, currentUserId)
     val time = conversationTimeLabel(item.lastMessage.createdAt)
     val hasUnread = unreadCount > 0
     Column(Modifier.fillMaxWidth()) {
-        if (showDivider) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(start = 82.dp, end = 16.dp)
-                    .height(1.dp)
-                    .background(LocalYugmColors.current.border.copy(alpha = 0.55f))
-            )
-        }
         Row(
             Modifier
                 .fillMaxWidth()

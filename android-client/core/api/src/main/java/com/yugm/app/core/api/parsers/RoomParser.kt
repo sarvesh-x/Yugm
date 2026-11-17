@@ -227,6 +227,7 @@ fun JSONArray.toRoomActivityItems(): List<RoomActivityItem> = buildList {
 fun JSONObject.toRoomReaction(): RoomReaction = RoomReaction(
     id = optString("id", optString("_id", optString("type", optString("reactionId", "")))).trim(),
     label = optString("label", ""),
+    emoji = optString("emoji", ""),
     assetUrl = resolveMediaUrl(optString("assetUrl", "")) ?: optString("assetUrl", ""),
     assetKind = optString("assetKind", "STATIC").ifBlank { "STATIC" }.uppercase(),
     access = if (optString("access", "EVERYONE").equals("VIP_EXCLUSIVE", ignoreCase = true)) RoomReactionAccess.VIP_EXCLUSIVE else RoomReactionAccess.EVERYONE,

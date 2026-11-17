@@ -5,6 +5,7 @@ export type RoomReactionAssetKind = "STATIC" | "ANIMATED";
 
 export interface RoomReactionDocument extends Document<string> {
   label: string;
+  emoji?: string;
   assetUrl?: string;
   assetStorageKey?: string;
   assetKind: RoomReactionAssetKind;
@@ -21,6 +22,7 @@ const roomReactionSchema = new Schema<RoomReactionDocument>(
   {
     _id: { type: String, required: true, trim: true, lowercase: true },
     label: { type: String, required: true, trim: true, maxlength: 60 },
+    emoji: { type: String, trim: true, maxlength: 16, default: "" },
     assetUrl: { type: String, trim: true, maxlength: 1000 },
     assetStorageKey: { type: String, trim: true, maxlength: 500 },
     assetKind: { type: String, enum: ["STATIC", "ANIMATED"], default: "STATIC" },

@@ -12,21 +12,34 @@ export const legacyReactionLabels: Record<string, string> = {
   party: "Party"
 };
 
+export const legacyReactionEmojis: Record<string, string> = {
+  heart: "❤️",
+  fire: "🔥",
+  laugh: "😂",
+  clap: "👏",
+  wow: "😮",
+  crown: "👑",
+  stars: "✨",
+  party: "🎉"
+};
+
 let defaultsPromise: Promise<void> | null = null;
 
 export interface PublicRoomReaction {
   id: string;
   label: string;
+  emoji: string;
   assetUrl: string;
   assetKind: "STATIC" | "ANIMATED";
   access: "EVERYONE" | "VIP_EXCLUSIVE";
   sortOrder: number;
 }
 
-export function toPublicRoomReaction(reaction: Pick<RoomReactionDocument, "_id" | "label" | "assetUrl" | "assetKind" | "access" | "sortOrder">): PublicRoomReaction {
+export function toPublicRoomReaction(reaction: Pick<RoomReactionDocument, "_id" | "label" | "emoji" | "assetUrl" | "assetKind" | "access" | "sortOrder">): PublicRoomReaction {
   return {
     id: String(reaction._id),
     label: reaction.label,
+    emoji: reaction.emoji ?? "",
     assetUrl: reaction.assetUrl ?? "",
     assetKind: reaction.assetKind ?? "STATIC",
     access: reaction.access ?? "EVERYONE",
@@ -35,22 +48,31 @@ export function toPublicRoomReaction(reaction: Pick<RoomReactionDocument, "_id" 
 }
 
 export async function syncDefaultRoomReactions(): Promise<number> {
-  const ops = legacyReactionTypes.map((id, index) => ({
-    updateOne: {
-      filter: { _id: id },
-      update: {
-        $setOnInsert: {
-          label: legacyReactionLabels[id] ?? id,
-          access: "EVERYONE" as const,
-          isActive: true,
-          sortOrder: index,
-          assetKind: "STATIC" as const
-        }
-      },
-      upsert: true
+  const ops = legacyReactionTypes.flatMap((id, index) => ([
+    {
+      updateOne: {
+        filter: { _id: id },
+        update: {
+          $setOnInsert: {
+            label: legacyReactionLabels[id] ?? id,
+            emoji: legacyReactionEmojis[id] ?? "",
+            access: "EVERYONE" as const,
+            isActive: true,
+            sortOrder: index,
+            assetKind: "STATIC" as const
+          }
+        },
+        upsert: true
+      }
+    },
+    {
+      updateOne: {
+        filter: { _id: id, $or: [{ emoji: { $exists: false } }, { emoji: "" }, { emoji: null }] },
+        update: { $set: { emoji: legacyReactionEmojis[id] ?? "" } }
+      }
     }
-  }));
-  const result = await RoomReaction.bulkWrite(ops, { ordered: false });
+  ]));
+  const result = await RoomReaction.bulkWrite(ops as any, { ordered: false });
   return result.upsertedCount ?? 0;
 }
 

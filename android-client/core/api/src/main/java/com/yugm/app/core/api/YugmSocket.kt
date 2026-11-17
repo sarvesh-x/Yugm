@@ -141,6 +141,7 @@ object YugmSocket {
                                 type = type,
                                 reactionId = type,
                                 label = data.optString("label", type),
+                                emoji = data.optString("emoji", ""),
                                 assetUrl = resolveMediaUrl(data.optString("assetUrl", "")) ?: data.optString("assetUrl", ""),
                                 assetKind = data.optString("assetKind", "STATIC").ifBlank { "STATIC" }.uppercase(),
                                 access = if (data.optString("access", "EVERYONE").equals("VIP_EXCLUSIVE", ignoreCase = true)) RoomReactionAccess.VIP_EXCLUSIVE else RoomReactionAccess.EVERYONE,

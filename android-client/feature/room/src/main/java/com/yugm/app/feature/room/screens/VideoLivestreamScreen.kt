@@ -518,13 +518,13 @@ fun VideoLivestreamScreen(
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        if (reaction.assetUrl.isNotBlank()) {
-                            AsyncImage(model = reaction.assetUrl, contentDescription = reaction.label.ifBlank { reaction.id }, modifier = Modifier.size(if (locked) 22.dp else 28.dp).alpha(if (locked) 0.45f else 1f))
-                        } else {
-                            val emoji = when (reaction.id.lowercase()) {
-                                "heart" -> "❤️"; "fire" -> "🔥"; "laugh" -> "😂"; "clap" -> "👏"; "wow" -> "😮"; "crown" -> "👑"; "stars" -> "✨"; "party" -> "🎉"; else -> "✨"
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.alpha(if (locked) 0.45f else 1f)) {
+                            if (reaction.emoji.isNotBlank() || reaction.assetUrl.isBlank()) {
+                                Text(reaction.emoji.ifBlank { reaction.label.take(2).ifBlank { "•" } }, fontSize = 22.sp)
                             }
-                            Text(emoji, fontSize = 22.sp, modifier = Modifier.alpha(if (locked) 0.45f else 1f))
+                            if (reaction.assetUrl.isNotBlank()) {
+                                AsyncImage(model = reaction.assetUrl, contentDescription = reaction.label.ifBlank { reaction.id }, modifier = Modifier.size(if (locked) 22.dp else 28.dp))
+                            }
                         }
                         if (locked) {
                             Icon(Icons.Filled.Lock, contentDescription = "VIP only", tint = Gold, modifier = Modifier.align(Alignment.BottomEnd).padding(3.dp).size(10.dp))

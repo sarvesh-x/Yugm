@@ -1107,6 +1107,7 @@ function LiveReactionsPage({ token, admin, setNotice }: { token: string; admin: 
   const [form, setForm] = useState({
     id: "",
     label: "",
+    emoji: "",
     access: "EVERYONE",
     assetKind: "STATIC",
     isActive: true,
@@ -1118,7 +1119,7 @@ function LiveReactionsPage({ token, admin, setNotice }: { token: string; admin: 
 
   const openNew = () => {
     setSelected(null);
-    setForm({ id: "", label: "", access: "EVERYONE", assetKind: "STATIC", isActive: true, sortOrder: 0 });
+    setForm({ id: "", label: "", emoji: "", access: "EVERYONE", assetKind: "STATIC", isActive: true, sortOrder: 0 });
     setAssetFile(null);
     setEditMode(true);
   };
@@ -1128,6 +1129,7 @@ function LiveReactionsPage({ token, admin, setNotice }: { token: string; admin: 
     setForm({
       id: reaction.id || reaction._id || "",
       label: reaction.label || "",
+      emoji: reaction.emoji || "",
       access: reaction.access || "EVERYONE",
       assetKind: reaction.assetKind || "STATIC",
       isActive: reaction.isActive !== false,
@@ -1140,12 +1142,13 @@ function LiveReactionsPage({ token, admin, setNotice }: { token: string; admin: 
   const save = async () => {
     if (!canWrite) return;
     if (!form.label.trim()) { setNotice({ tone: "error", text: "Label is required" }); return; }
-    if (!selected && !assetFile) { setNotice({ tone: "error", text: "Please upload a reaction image/GIF" }); return; }
+    if (!selected && !assetFile && !form.emoji.trim()) { setNotice({ tone: "error", text: "Provide an emoji or upload a reaction image/GIF" }); return; }
     setBusy(true);
     try {
       const fd = new FormData();
       if (!selected && form.id.trim()) fd.append("id", form.id.trim().toLowerCase());
       fd.append("label", form.label.trim());
+      fd.append("emoji", form.emoji.trim());
       fd.append("access", form.access);
       fd.append("assetKind", form.assetKind);
       fd.append("isActive", String(form.isActive));
@@ -1185,6 +1188,7 @@ function LiveReactionsPage({ token, admin, setNotice }: { token: string; admin: 
     try {
       const fd = new FormData();
       fd.append("label", reaction.label || reaction.id);
+      fd.append("emoji", reaction.emoji || "");
       fd.append("access", reaction.access || "EVERYONE");
       fd.append("assetKind", reaction.assetKind || "STATIC");
       fd.append("isActive", String(!(reaction.isActive !== false)));
@@ -1212,8 +1216,9 @@ function LiveReactionsPage({ token, admin, setNotice }: { token: string; admin: 
           rows={reactions}
           columns={[
             { key: "id", label: "ID", render: (row) => row.id || row._id },
-            { key: "preview", label: "Preview", render: (row) => row.assetUrl ? <img src={row.assetUrl} alt={row.label || "reaction"} style={{ width: 36, height: 36, objectFit: "contain", borderRadius: 8, background: "rgba(255,255,255,0.06)" }} /> : <span>{row.label || row.id}</span> },
+            { key: "preview", label: "Preview", render: (row) => row.assetUrl ? <img src={row.assetUrl} alt={row.label || "reaction"} style={{ width: 36, height: 36, objectFit: "contain", borderRadius: 8, background: "rgba(255,255,255,0.06)" }} /> : <span style={{ fontSize: 22 }}>{row.emoji || "•"}</span> },
             { key: "label", label: "Label" },
+            { key: "emoji", label: "Emoji", render: (row) => <span style={{ fontSize: 18 }}>{row.emoji || "—"}</span> },
             { key: "access", label: "Access", render: (row) => <StatusBadge value={row.access || "EVERYONE"} /> },
             { key: "assetKind", label: "Kind", render: (row) => <StatusBadge value={row.assetKind || "STATIC"} /> },
             { key: "isActive", label: "Active", render: (row) => <StatusBadge value={row.isActive === false ? "DISABLED" : "ACTIVE"} /> },
@@ -1233,6 +1238,7 @@ function LiveReactionsPage({ token, admin, setNotice }: { token: string; admin: 
         <div className="form-grid">
           {!selected && <label>ID (optional)<input value={form.id} onChange={(e) => setForm({ ...form, id: e.target.value })} placeholder="e.g. neon_heart" /></label>}
           <label>Label<input value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="Display name" /></label>
+          <label>Emoji (from DB)<input value={form.emoji} onChange={(e) => setForm({ ...form, emoji: e.target.value })} placeholder="e.g. ❤️" /></label>
           <label>Access
             <select value={form.access} onChange={(e) => setForm({ ...form, access: e.target.value })}>
               <option value="EVERYONE">Everyone</option>
@@ -1252,13 +1258,17 @@ function LiveReactionsPage({ token, admin, setNotice }: { token: string; admin: 
             </select>
           </label>
           <label>Sort order<input type="number" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })} /></label>
-          <label className="full">Reaction file {selected ? "(leave empty to keep current)" : "(required)"}
+          <label className="full">Reaction file {selected ? "(leave empty to keep current)" : "(optional if emoji set)"}
             <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(e) => setAssetFile(e.target.files?.[0] || null)} />
           </label>
-          {(assetFile || selected?.assetUrl) && (
+          {(assetFile || selected?.assetUrl || form.emoji.trim()) && (
             <div className="full" style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <img src={assetFile ? URL.createObjectURL(assetFile) : selected?.assetUrl} alt="Preview" style={{ width: 64, height: 64, objectFit: "contain", borderRadius: 12, background: "rgba(255,255,255,0.06)" }} />
-              <span style={{ opacity: 0.8 }}>{assetFile ? assetFile.name : "Current asset"}</span>
+              {assetFile || selected?.assetUrl ? (
+                <img src={assetFile ? URL.createObjectURL(assetFile) : selected?.assetUrl} alt="Preview" style={{ width: 64, height: 64, objectFit: "contain", borderRadius: 12, background: "rgba(255,255,255,0.06)" }} />
+              ) : (
+                <span style={{ fontSize: 40, width: 64, height: 64, display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: 12, background: "rgba(255,255,255,0.06)" }}>{form.emoji}</span>
+              )}
+              <span style={{ opacity: 0.8 }}>{assetFile ? assetFile.name : (selected?.assetUrl ? "Current asset" : "Emoji-only reaction")}</span>
             </div>
           )}
         </div>
