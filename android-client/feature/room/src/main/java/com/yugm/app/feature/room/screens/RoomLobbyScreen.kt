@@ -518,8 +518,9 @@ fun RoomLobbyScreen(
                         }
                     }
 
-                    // Extra host controls if own room
-                    if (host?.id == currentUserId && onEdit != null) {
+                    // Host or room admin can edit room settings
+                    val canEditRoomSettings = host?.id == currentUserId || (detail?.participants?.any { it.user.id == currentUserId && it.isRoomAdmin } == true)
+                    if (canEditRoomSettings && onEdit != null) {
                         item {
                             Button(
                                 onClick = { onEdit(roomId) },

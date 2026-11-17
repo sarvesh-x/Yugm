@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal class RoomMusicPcmDecoder(
     private val context: Context,
     uri: Uri,
+    private val seekToMs: Long = 0L,
     private val onCompleted: () -> Unit,
     private val onError: (String) -> Unit
 ) : AudioBufferCallback {
@@ -82,6 +83,9 @@ internal class RoomMusicPcmDecoder(
                 }
             }
             val format = audioFormat ?: throw IllegalArgumentException("This file has no playable audio track")
+            if (seekToMs > 0) {
+                runCatching { extractor.seekTo(seekToMs * 1000, MediaExtractor.SEEK_TO_PREVIOUS_SYNC) }
+            }
             val sourceRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
             val sourceChannels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
             codec = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!).apply {

@@ -202,7 +202,7 @@ fun PollCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(if (poll.isActive) "LIVE POLL" else "POLL", color = colors.accent, fontSize = 9.sp, fontWeight = FontWeight.Black)
                 Spacer(Modifier.weight(1f))
-                Text(if (!poll.isActive) "Ended • $voteTotal votes" else "$voteTotal votes", color = colors.textSecondary, fontSize = 10.sp)
+                Text(if (!poll.isActive) "Ended ΓÇó $voteTotal votes" else "$voteTotal votes", color = colors.textSecondary, fontSize = 10.sp)
                 if (isHost && poll.isActive) {
                     Text(
                         if (closeRequested) "  Closing..." else "  Close",
@@ -226,10 +226,6 @@ fun PollCard(
                         .clip(RoundedCornerShape(12.dp))
                         .background(colors.surfaceVariant)
                         .border(1.dp, colors.border, RoundedCornerShape(12.dp))
-                        .clickable(enabled = canVote) {
-                            pendingVoteIndex = index
-                            onVote(poll.id, index)
-                        }
                 ) {
                     Box(
                         Modifier
@@ -242,7 +238,20 @@ fun PollCard(
                         when {
                             pendingVoteIndex == index -> Text("…", color = colors.secondary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                             !poll.isActive || hasVoted -> Text("$pct%", color = colors.secondary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                            else -> Text("Vote", color = colors.textSecondary, fontSize = 10.sp)
+                            else -> Text(
+                                "Vote",
+                                color = Color.White,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .background(PrimaryPurple.copy(alpha = 0.9f))
+                                    .clickable(enabled = canVote) {
+                                        pendingVoteIndex = index
+                                        onVote(poll.id, index)
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
                         }
                     }
                 }

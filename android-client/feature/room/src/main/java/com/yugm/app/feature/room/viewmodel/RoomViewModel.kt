@@ -439,7 +439,14 @@ class RoomViewModel @Inject constructor(
                             }
                         },
                         onRoomParticipantChanged = { action, targetId ->
-                            scheduleRealtimeRefresh("room:participant:update")
+                            if (action == "chat_cleared") {
+                                viewModelScope.launch {
+                                    chat.clear()
+                                    activity = emptyList()
+                                }
+                            } else {
+                                scheduleRealtimeRefresh("room:participant:update")
+                            }
                             if (action == "removed" && targetId == currentUserId) {
                                 viewModelScope.launch { forcedRemoveVersion++ }
                             }
@@ -524,6 +531,19 @@ class RoomViewModel @Inject constructor(
                         diamondBalance = overview.diamondBalance
                     }
                 }
+                val receiverName = roomDetail?.participants
+                    ?.firstOrNull { it.user.id == receiverId }
+                    ?.user?.name
+                    ?: roomDetail?.room?.host?.name
+                    ?: ""
+                roomGiftEvent = (roomGiftEvent.first + 1) to com.yugm.app.core.model.RoomGiftEvent(
+                    giftName = gift.name,
+                    giftIcon = gift.icon,
+                    senderName = sessionManager.userName,
+                    receiverName = receiverName,
+                    giftId = gift.id,
+                    price = gift.price
+                )
                 gifts.add(gift)
             }.onFailure {
                 actionError = it.message ?: "Failed to send gift"
@@ -659,12 +679,12 @@ class RoomViewModel @Inject constructor(
 
     private fun scheduleRealtimeRefresh(event: String) {
         viewModelScope.launch {
-            if (event == "room:ended") {
+            if (event == "room:ended" || event == "room:chat:cleared") {
                 realtimeRefreshJob?.cancel()
                 pendingRealtimeEvents.clear()
                 chat.clear()
                 activity = emptyList()
-                roomEndedVersion++
+                if (event == "room:ended") roomEndedVersion++
                 return@launch
             }
             // Joining/requesting also emits an activity event. Preserve the
@@ -1006,8 +1026,8 @@ class RoomViewModel @Inject constructor(
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 runCatching { yugmApi.clearRoomChat(roomId, authToken) }
+                    .onFailure { actionError = it.message ?: "Could not clear chat" }
             }
-            chat.clear()
         }
     }
 

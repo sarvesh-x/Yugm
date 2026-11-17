@@ -166,7 +166,7 @@ object YugmMediaRoom {
         }
     }
 
-    suspend fun startRoomMusic(uri: Uri): Boolean = roomMutex.withLock {
+    suspend fun startRoomMusic(uri: Uri, seekToMs: Long = 0L): Boolean = roomMutex.withLock {
         val activeRoom = room ?: return@withLock false
         stopRoomMusicLocked(activeRoom)
         val context = appContext ?: return@withLock false
@@ -176,6 +176,7 @@ object YugmMediaRoom {
             val decoder = RoomMusicPcmDecoder(
                 context,
                 uri,
+                seekToMs = seekToMs,
                 onCompleted = {
                     scope.launch {
                         if (mutableRoomMusicStatus.value.generation == generation && mutableRoomMusicStatus.value.state == RoomMusicPlaybackState.PLAYING) {
@@ -205,15 +206,9 @@ object YugmMediaRoom {
             decoder.setVolume(roomMusicVolume)
             roomMusicDecoder = decoder
             roomMusicTrack = track
-            roomMusicPreview = runCatching {
-                MediaPlayer().apply {
-                    setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
-                    setVolume(roomMusicVolume, roomMusicVolume)
-                    setDataSource(context, uri)
-                    setOnPreparedListener { player -> runCatching { player.setVolume(roomMusicVolume, roomMusicVolume); player.start() } }
-                    prepareAsync()
-                }
-            }.getOrNull()
+            // Local preview playback can interfere with voice capture in communication mode on some devices.
+            // The track is streamed to the room via LiveKit; skip local MediaPlayer preview to keep mic reliable.
+            roomMusicPreview = null
             val published = activeRoom.localParticipant.publishAudioTrack(
                 track,
                 AudioTrackPublishOptions(name = "room-music", audioBitrate = 96_000, source = Track.Source.SCREEN_SHARE_AUDIO)

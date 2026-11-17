@@ -166,10 +166,9 @@ class ProfileViewModel @Inject constructor(
             }.onSuccess { loadedProfile ->
                 profile = loadedProfile
                 isFollowing = loadedProfile.isFollowing
-                isLoading = false
 
-                // The profile shell is useful as soon as its primary request returns.
-                // Load optional sections in parallel without keeping the whole page blocked.
+                // Load optional sections in parallel before revealing the full profile to avoid
+                // random pop-in/layout shifts when switching to the profile tab.
                 coroutineScope {
                     val roomsRequest = async(Dispatchers.IO) { runCatching { yugmApi.getUserRooms(userId, token.ifBlank { null }) } }
                     val followersRequest = async(Dispatchers.IO) { runCatching { yugmApi.getFollowers(userId, token.ifBlank { null }) } }
@@ -184,6 +183,7 @@ class ProfileViewModel @Inject constructor(
                     historyRequest.await().onSuccess { pkHistory = it }
                     if (clanRequest != null) clanRequest.await().onSuccess { ownClan = it }
                 }
+                isLoading = false
             }
         }
     }

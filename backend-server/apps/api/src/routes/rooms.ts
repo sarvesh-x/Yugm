@@ -534,7 +534,10 @@ roomsRouter.post("/:id/unmute-user", requireAuth, validateBody(z.object({ userId
 
 roomsRouter.post("/:id/chat/clean", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   const { room } = await assertHostOrRoomAdmin(req, req.params.id);
-  await ChatMessage.deleteMany({ roomId: room._id });
+  await Promise.all([
+    ChatMessage.deleteMany({ roomId: room._id }),
+    RoomActivity.deleteMany({ roomId: room._id })
+  ]);
   emitRoom(room._id.toString(), socketEvents.roomParticipantUpdate, { roomId: room.id, action: "chat_cleared" });
   sendOk(res, { cleared: true });
 }));
@@ -856,6 +859,21 @@ roomsRouter.post("/:id/polls", requireAuth, validateBody(createPollSchema), asyn
   });
   emitRoom(req.params.id, socketEvents.roomPollNew, { poll });
   await addActivity(req.params.id, "POLL", `${req.user!.name} started a poll`, req.user!.id, { pollId: poll.id });
+  // Auto-close polls so they don't stay open indefinitely.
+  setTimeout(async () => {
+    try {
+      const closed = await Poll.findOneAndUpdate(
+        { _id: poll._id, roomId: room._id, isActive: true },
+        { $set: { isActive: false } },
+        { new: true }
+      ).lean();
+      if (closed) {
+        emitRoom(req.params.id, socketEvents.roomPollClosed, { poll: closed });
+      }
+    } catch {
+      // best effort
+    }
+  }, 45_000);
   sendOk(res, { poll }, 201);
 }));
 

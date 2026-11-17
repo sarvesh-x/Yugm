@@ -10,6 +10,7 @@ import { Gift } from "../models/Gift.js";
 import { GiftTransaction } from "../models/GiftTransaction.js";
 import { Purchase } from "../models/Purchase.js";
 import { Room } from "../models/Room.js";
+import { ChatMessage } from "../models/ChatMessage.js";
 import { RoomActivity } from "../models/RoomActivity.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
 import { User } from "../models/User.js";
@@ -573,12 +574,24 @@ walletRouter.post("/rooms/:id/send-gift", giftLimiter, requireWalletNotFrozen, v
     receiverName: receiver.name,
     animation: gift.name.toLowerCase()
   });
+  const giftChatMessage = await runWalletSideEffect("gift chat message", async () => {
+    const message = await ChatMessage.create({
+      roomId: room._id,
+      senderId: req.user!.id,
+      message: `sent ${gift.name} to ${receiver.name}`,
+      type: "GIFT"
+    });
+    return message.populate("senderId", "name username avatar");
+  });
+  if (giftChatMessage) {
+    emitRoom(room._id.toString(), socketEvents.roomChatMessage, { message: giftChatMessage });
+  }
   const activity = await runWalletSideEffect("gift activity", () => RoomActivity.create({
     roomId: room._id,
     userId: req.user!.id,
     type: "GIFT",
-    label: `${req.user!.name} sent ${gift.name}`,
-    metadata: { giftId: gift._id.toString(), receiverId: req.body.receiverId, price: giftAmount, currency }
+    label: `${req.user!.name} sent ${gift.name} to ${receiver.name}`,
+    metadata: { giftId: gift._id.toString(), receiverId: req.body.receiverId, receiverName: receiver.name, price: giftAmount, currency }
   }));
   if (activity) emitRoom(room._id.toString(), socketEvents.roomActivityNew, { activity });
   sendOk(res, { giftTransaction: createdGiftTransaction, xpGrant: { sent: senderXpGrant, received: receiverXpGrant } }, 201);

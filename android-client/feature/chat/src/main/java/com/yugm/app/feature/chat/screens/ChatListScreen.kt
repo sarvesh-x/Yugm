@@ -362,7 +362,10 @@ fun ChatListScreen(
                                     }
                                 }
                                 if (viewModel.matches.isNotEmpty() && searchQuery.isBlank()) item {
-                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Column(
+                                        modifier = Modifier.padding(top = 16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
                                         Text("People you may know", color = LocalYugmColors.current.textPrimary, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp))
                                         LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                                             items(viewModel.matches.take(20), key = { "match-${it.id}" }) { user ->
@@ -375,7 +378,7 @@ fun ChatListScreen(
                                     }
                                 }
                                 item {
-                                    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                                         Text("Chatlist", color = LocalYugmColors.current.textPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                                         Spacer(Modifier.weight(1f))
                                         if (unread > 0) Text("Mark read", color = LocalYugmColors.current.secondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,

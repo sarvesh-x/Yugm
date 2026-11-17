@@ -80,12 +80,16 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
 import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -405,6 +409,11 @@ fun ActiveVoiceRoomScreen(
     var roomMusicPlaying by rememberSaveable(room.id) { mutableStateOf(false) }
     var roomMusicLoaded by rememberSaveable(room.id) { mutableStateOf(false) }
     var roomMusicVolume by rememberSaveable(room.id) { mutableStateOf(0.8f) }
+    var roomMusicShuffle by rememberSaveable(room.id) { mutableStateOf(false) }
+    var roomMusicRepeatMode by rememberSaveable(room.id) { mutableStateOf("OFF") } // OFF, ALL, ONE
+    var roomMusicDurationMs by remember(room.id) { mutableStateOf(0L) }
+    var roomMusicPositionMs by remember(room.id) { mutableStateOf(0L) }
+    var roomMusicUserSeeking by remember { mutableStateOf(false) }
     var musicControlsOffset by remember(room.id) { mutableStateOf(Offset.Zero) }
     var pendingMusicUri by remember { mutableStateOf<Uri?>(null) }
     var pendingMusicIndex by remember { mutableStateOf(-1) }
@@ -438,7 +447,19 @@ fun ActiveVoiceRoomScreen(
             onToast("Microphone access is needed to stream music to the room")
         }
     }
-    fun playRoomMusic(index: Int) {
+    fun queryMusicDurationMs(uri: Uri): Long = runCatching {
+        val retriever = android.media.MediaMetadataRetriever()
+        try {
+            context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                retriever.setDataSource(pfd.fileDescriptor)
+            } ?: retriever.setDataSource(context, uri)
+            retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }.getOrDefault(0L)
+
+    fun playRoomMusic(index: Int, seekToMs: Long = 0L) {
         val item = roomMusicQueue.getOrNull(index) ?: return
         if (micMutedByRoomAdmin) {
             onToast("Music sharing is unavailable while your audio is restricted")
@@ -451,21 +472,51 @@ fun ActiveVoiceRoomScreen(
             return
         }
         scope.launch {
-            val started = runCatching { YugmMediaRoom.startRoomMusic(item.uri) }.getOrDefault(false)
+            val duration = if (index == roomMusicIndex && roomMusicDurationMs > 0 && seekToMs > 0) roomMusicDurationMs else queryMusicDurationMs(item.uri)
+            val started = runCatching { YugmMediaRoom.startRoomMusic(item.uri, seekToMs) }.getOrDefault(false)
             if (started) {
                 roomMusicIndex = index
                 roomMusicPlaying = true
                 roomMusicLoaded = true
+                if (duration > 0) roomMusicDurationMs = duration
+                roomMusicPositionMs = seekToMs.coerceAtLeast(0L)
             } else onToast("Could not share this track. Try another audio file or reconnect to the room.")
         }
     }
 
-    fun playNextRoomMusic() {
-        if (roomMusicQueue.isNotEmpty()) playRoomMusic((roomMusicIndex + 1).mod(roomMusicQueue.size))
+    fun playNextRoomMusic(auto: Boolean = false) {
+        if (roomMusicQueue.isEmpty()) return
+        if (auto && roomMusicRepeatMode == "ONE" && roomMusicIndex >= 0) {
+            playRoomMusic(roomMusicIndex, 0L)
+            return
+        }
+        val nextIndex = when {
+            roomMusicShuffle && roomMusicQueue.size > 1 -> {
+                val candidates = roomMusicQueue.indices.filter { it != roomMusicIndex }
+                if (candidates.isEmpty()) roomMusicIndex else candidates.random()
+            }
+            roomMusicIndex >= roomMusicQueue.lastIndex -> {
+                if (roomMusicRepeatMode == "ALL" || !auto) 0 else -1
+            }
+            else -> roomMusicIndex + 1
+        }
+        if (nextIndex >= 0) playRoomMusic(nextIndex) else {
+            roomMusicPlaying = false
+            roomMusicPositionMs = roomMusicDurationMs
+        }
     }
 
     fun playPreviousRoomMusic() {
-        if (roomMusicQueue.isNotEmpty()) playRoomMusic(if (roomMusicIndex <= 0) roomMusicQueue.lastIndex else roomMusicIndex - 1)
+        if (roomMusicQueue.isEmpty()) return
+        if (roomMusicPositionMs > 3000 && roomMusicIndex >= 0) {
+            playRoomMusic(roomMusicIndex, 0L)
+            return
+        }
+        val prevIndex = when {
+            roomMusicIndex <= 0 -> if (roomMusicRepeatMode == "ALL") roomMusicQueue.lastIndex else 0
+            else -> roomMusicIndex - 1
+        }
+        playRoomMusic(prevIndex.coerceAtLeast(0))
     }
 
     fun removeRoomMusic(index: Int) {
@@ -493,34 +544,42 @@ fun ActiveVoiceRoomScreen(
     LaunchedEffect(roomMusicPlaybackStatus) {
         when (roomMusicPlaybackStatus.state) {
             com.yugm.app.core.api.RoomMusicPlaybackState.COMPLETED -> {
-                if (roomMusicIndex in 0 until roomMusicQueue.lastIndex) playRoomMusic(roomMusicIndex + 1)
-                else roomMusicPlaying = false
+                roomMusicPositionMs = roomMusicDurationMs
+                playNextRoomMusic(auto = true)
             }
             com.yugm.app.core.api.RoomMusicPlaybackState.ERROR -> {
                 roomMusicPlaying = false
                 roomMusicLoaded = false
+                roomMusicPositionMs = 0L
                 scope.launch { YugmMediaRoom.stopRoomMusic() }
                 onToast(roomMusicPlaybackStatus.error.ifBlank { "This audio file could not be played. Try another track." })
             }
             else -> Unit
         }
     }
+    LaunchedEffect(roomMusicPlaying, roomMusicLoaded, roomMusicUserSeeking, room.id) {
+        while (roomMusicPlaying && roomMusicLoaded && !roomMusicUserSeeking) {
+            kotlinx.coroutines.delay(500)
+            if (!roomMusicPlaying || roomMusicUserSeeking) break
+            val next = roomMusicPositionMs + 500
+            roomMusicPositionMs = if (roomMusicDurationMs > 0) next.coerceAtMost(roomMusicDurationMs) else next
+        }
+    }
 
     BackHandler { showExitPrompt = true }
 
-    // Live gift payloads carry the image URL; activity labels are intentionally
-    // not used to reconstruct artwork because they only contain text.
+    // Live gift payloads carry the image URL; show only gift image (simple fade).
     LaunchedEffect(roomGiftEvent.first) {
         val event = roomGiftEvent.second ?: return@LaunchedEffect
         val catalogGift = gifts.firstOrNull { it.id == event.giftId || it.name.equals(event.giftName, ignoreCase = true) }
         val gift = catalogGift?.copy(icon = event.giftIcon.ifBlank { catalogGift.icon })
-            ?: GiftItem(id = event.giftId, name = event.giftName, price = event.price, icon = event.giftIcon.ifBlank { "??" })
+            ?: GiftItem(id = event.giftId, name = event.giftName, price = event.price, icon = event.giftIcon.ifBlank { "🎁" })
         activeGiftBanner = event.senderName.ifBlank { "Someone" } to gift
     }
 
     LaunchedEffect(activeGiftBanner) {
         if (activeGiftBanner != null) {
-            delay(3200)
+            delay(1800)
             activeGiftBanner = null
         }
     }
@@ -899,50 +958,17 @@ fun ActiveVoiceRoomScreen(
             }
         }
 
-        // Full-Room Gift Celebratory Animation Overlay
+        // Gift animation: image only, simple fade in/out
         AnimatedVisibility(
             visible = activeGiftBanner != null,
-            enter = scaleIn(initialScale = 0.6f) + fadeIn() + slideInVertically { -it / 3 },
-            exit = scaleOut(targetScale = 1.2f) + fadeOut() + slideOutVertically { -it },
+            enter = fadeIn(animationSpec = tween(220)),
+            exit = fadeOut(animationSpec = tween(260)),
             modifier = Modifier.align(Alignment.Center)
         ) {
-            activeGiftBanner?.let { (sender, gift) ->
-                Box(
-                    modifier = Modifier
-                        .padding(horizontal = 24.dp)
-                        .clip(RoundedCornerShape(26.dp))
-                        .background(
-                            Brush.radialGradient(
-                                listOf(Color(0xF54A154B), Color(0xF7130B29))
-                            )
-                        )
-                        .border(2.dp, Brush.linearGradient(listOf(Gold, Pink)), RoundedCornerShape(26.dp))
-                        .padding(horizontal = 28.dp, vertical = 20.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        GiftCelebrationArtwork(gift, Modifier.size(76.dp))
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "$sender sent ${gift.name}!",
-                            color = Gold,
-                            fontSize = 19.sp,
-                            fontWeight = FontWeight.Black,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "? Room Intimacy Boosted +100 ?",
-                            color = Color.White.copy(alpha = 0.85f),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
+            activeGiftBanner?.let { (_, gift) ->
+                GiftCelebrationArtwork(gift, Modifier.size(140.dp))
             }
         }
-
-        RoomEntryCosmeticOverlay(activeEntranceActivity)
 
         floatingReaction?.let { reaction ->
             FloatingEmojiOverlay(
@@ -1020,9 +1046,9 @@ fun ActiveVoiceRoomScreen(
                     onToast(if (h.isFollowing) "Unfollowed room host" else "Following room host")
                 }
             },
-            onOpenThemes = {
+            onEditRoomSettings = {
                 showRoomInfoSheet = false
-                onOpenThemes?.invoke()
+                onEditRoom?.invoke()
             },
             onOpenTools = {
                 scope.launch {
@@ -1072,20 +1098,20 @@ fun ActiveVoiceRoomScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceAround
                 ) {
-                    ToolGridItem("⚔️", "PK Battle") {
+                    ToolGridItem("ΓÜö∩╕Å", "PK Battle") {
                         showToolsSheet = false
                         showPkSetup = true
                     }
-                    ToolGridItem("✨", "Reactions") {
+                    ToolGridItem("Γ£¿", "Reactions") {
                         showToolsSheet = false
                         showReactionPicker = true
                         onReloadReactions()
                     }
-                    ToolGridItem("🎨", "Themes") {
+                    ToolGridItem("≡ƒÄ¿", "Themes") {
                         showToolsSheet = false
                         onOpenThemes?.invoke()
                     }
-                    ToolGridItem("📊", "Poll") {
+                    ToolGridItem("≡ƒôè", "Poll") {
                         showToolsSheet = false
                         showPollComposer = true
                     }
@@ -1095,19 +1121,19 @@ fun ActiveVoiceRoomScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceAround
                 ) {
-                    ToolGridItem("⚙️", "Settings") {
+                    ToolGridItem("ΓÜÖ∩╕Å", "Settings") {
                         showToolsSheet = false
                         showRoomInfoSheet = true
                     }
-                    ToolGridItem("📨", "Invite") {
+                    ToolGridItem("≡ƒô¿", "Invite") {
                         showToolsSheet = false
                         showInvitePicker = true
                     }
-                    ToolGridItem("💬", "DM Host") {
+                    ToolGridItem("≡ƒÆ¼", "DM Host") {
                         showToolsSheet = false
                         onDirectMessage(room.host?.id)
                     }
-                    ToolGridItem("🎭", "Modes") {
+                    ToolGridItem("≡ƒÄ¡", "Modes") {
                         showToolsSheet = false
                         onOpenModes?.invoke()
                     }
@@ -1117,21 +1143,21 @@ fun ActiveVoiceRoomScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceAround
                 ) {
-                    ToolGridItem("🎡", "Lucky wheel") {
+                    ToolGridItem("≡ƒÄí", "Lucky wheel") {
                         showToolsSheet = false
                         showLuckyWheelDialog = true
                     }
-                    ToolGridItem(if (roomAudioMuted) "🔇" else "🔊", "Room audio") {
+                    ToolGridItem(if (roomAudioMuted) "≡ƒöç" else "≡ƒöè", "Room audio") {
                         roomAudioMuted = !roomAudioMuted
                         YugmMediaRoom.setRoomAudioMuted(roomAudioMuted)
                         onToast(if (roomAudioMuted) "Room audio muted" else "Room audio unmuted")
                         showToolsSheet = false
                     }
-                    ToolGridItem("🎵", "Music player") {
+                    ToolGridItem("≡ƒÄ╡", "Music player") {
                         showToolsSheet = false
                         showMusicSheet = true
                     }
-                    ToolGridItem("⬇️", "Minimize") {
+                    ToolGridItem("Γ¼ç∩╕Å", "Minimize") {
                         showToolsSheet = false
                         onMinimize()
                     }
@@ -1166,39 +1192,101 @@ fun ActiveVoiceRoomScreen(
                 }
 
                 Surface(color = Color(0xFF211C32), shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, Color(0x337E718D))) {
-                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF302344)), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Filled.MusicNote, null, tint = Color(0xFFFF8DC3), modifier = Modifier.size(24.dp))
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFF302344)), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Filled.MusicNote, null, tint = Color(0xFFFF8DC3), modifier = Modifier.size(24.dp))
+                            }
+                            Column(Modifier.weight(1f)) {
+                                Text(roomMusicQueue.getOrNull(roomMusicIndex)?.title ?: "Choose a track", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                                Text(
+                                    when {
+                                        roomMusicPlaying -> "Streaming to everyone in the room"
+                                        roomMusicLoaded -> "Paused"
+                                        else -> "Pick a track and let the room listen"
+                                    },
+                                    color = Color(0xFFAAA6B8), fontSize = 11.sp, maxLines = 1
+                                )
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = ::playPreviousRoomMusic, modifier = Modifier.size(34.dp)) {
+                                    Icon(Icons.Filled.SkipPrevious, "Previous track", tint = Color(0xFFD4CDDE), modifier = Modifier.size(20.dp))
+                                }
+                                IconButton(
+                                    onClick = {
+                                        if (roomMusicPlaying) {
+                                            roomMusicPlaying = false
+                                            YugmMediaRoom.pauseRoomMusic(true)
+                                        } else if (roomMusicIndex >= 0) {
+                                            if (roomMusicPlaybackStatus.state == com.yugm.app.core.api.RoomMusicPlaybackState.COMPLETED) {
+                                                playRoomMusic(roomMusicIndex)
+                                            } else if (roomMusicLoaded) {
+                                                YugmMediaRoom.pauseRoomMusic(false)
+                                                roomMusicPlaying = true
+                                            } else playRoomMusic(roomMusicIndex)
+                                        } else showMusicLibrary = true
+                                    },
+                                    modifier = Modifier.size(40.dp).clip(CircleShape).background(Color(0xFFE83E91))
+                                ) {
+                                    Icon(if (roomMusicPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = if (roomMusicPlaying) "Pause room music" else "Play room music", tint = Color.White)
+                                }
+                                IconButton(onClick = { playNextRoomMusic() }, modifier = Modifier.size(34.dp)) {
+                                    Icon(Icons.Filled.SkipNext, "Next track", tint = Color(0xFFD4CDDE), modifier = Modifier.size(20.dp))
+                                }
+                                IconButton(onClick = { roomMusicShuffle = !roomMusicShuffle }, modifier = Modifier.size(32.dp)) {
+                                    Icon(
+                                        Icons.Filled.Shuffle,
+                                        contentDescription = if (roomMusicShuffle) "Shuffle on" else "Shuffle off",
+                                        tint = if (roomMusicShuffle) Color(0xFFFF79BC) else Color(0xFFD4CDDE),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                IconButton(onClick = {
+                                    roomMusicRepeatMode = when (roomMusicRepeatMode) {
+                                        "OFF" -> "ALL"
+                                        "ALL" -> "ONE"
+                                        else -> "OFF"
+                                    }
+                                }, modifier = Modifier.size(32.dp)) {
+                                    Icon(
+                                        if (roomMusicRepeatMode == "ONE") Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                                        contentDescription = when (roomMusicRepeatMode) { "ALL" -> "Repeat all"; "ONE" -> "Repeat one"; else -> "Repeat off" },
+                                        tint = if (roomMusicRepeatMode == "OFF") Color(0xFFD4CDDE) else Color(0xFFFF79BC),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
                         }
-                        Column(Modifier.weight(1f)) {
-                            Text(roomMusicQueue.getOrNull(roomMusicIndex)?.title ?: "Choose a track", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                            Text(if (roomMusicPlaying) "Streaming to everyone in the room" else "Pick a track and let the room listen", color = Color(0xFFAAA6B8), fontSize = 11.sp, maxLines = 1)
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = ::playPreviousRoomMusic) {
-                            Icon(Icons.Filled.SkipPrevious, "Previous track", tint = Color(0xFFD4CDDE), modifier = Modifier.size(24.dp))
-                        }
-                        IconButton(
-                            onClick = {
-                                if (roomMusicPlaying) {
-                                    roomMusicPlaying = false
-                                    YugmMediaRoom.pauseRoomMusic(true)
-                                } else if (roomMusicIndex >= 0) {
-                                    if (roomMusicPlaybackStatus.state == com.yugm.app.core.api.RoomMusicPlaybackState.COMPLETED) {
-                                        playRoomMusic(roomMusicIndex)
-                                    } else if (roomMusicLoaded) {
-                                        YugmMediaRoom.pauseRoomMusic(false)
-                                        roomMusicPlaying = true
-                                    } else playRoomMusic(roomMusicIndex)
-                                } else showMusicLibrary = true
-                            },
-                            modifier = Modifier.size(44.dp).clip(CircleShape).background(Color(0xFFE83E91))
-                        ) {
-                            Icon(if (roomMusicPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = if (roomMusicPlaying) "Pause room music" else "Play room music", tint = Color.White)
-                        }
-                        IconButton(onClick = ::playNextRoomMusic) {
-                            Icon(Icons.Filled.SkipNext, "Next track", tint = Color(0xFFD4CDDE), modifier = Modifier.size(24.dp))
-                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Slider(
+                                value = if (roomMusicDurationMs > 0) roomMusicPositionMs.coerceIn(0L, roomMusicDurationMs).toFloat() else 0f,
+                                onValueChange = { value ->
+                                    roomMusicUserSeeking = true
+                                    roomMusicPositionMs = value.toLong()
+                                },
+                                onValueChangeFinished = {
+                                    val seekTo = roomMusicPositionMs.coerceAtLeast(0L)
+                                    roomMusicUserSeeking = false
+                                    if (roomMusicIndex >= 0 && (roomMusicLoaded || roomMusicPlaying)) {
+                                        playRoomMusic(roomMusicIndex, seekTo)
+                                    }
+                                },
+                                valueRange = 0f..(roomMusicDurationMs.coerceAtLeast(1L).toFloat()),
+                                enabled = roomMusicIndex >= 0 && (roomMusicLoaded || roomMusicPlaying),
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = SliderDefaults.colors(
+                                    thumbColor = Color(0xFFFF79BC),
+                                    activeTrackColor = Color(0xFFE83E91),
+                                    inactiveTrackColor = Color(0xFF41384F),
+                                    disabledThumbColor = Color(0xFF6B6478),
+                                    disabledActiveTrackColor = Color(0xFF5A4A63),
+                                    disabledInactiveTrackColor = Color(0xFF41384F)
+                                )
+                            )
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(formatRoomMusicTime(roomMusicPositionMs), color = Color(0xFFAAA6B8), fontSize = 11.sp)
+                                Text(formatRoomMusicTime(roomMusicDurationMs), color = Color(0xFFAAA6B8), fontSize = 11.sp)
+                            }
                         }
                     }
                 }
@@ -1235,7 +1323,7 @@ fun ActiveVoiceRoomScreen(
                     )
                     OutlinedButtonRoomMusic(
                         icon = Icons.Filled.QueueMusic,
-                        label = "Queue • ${roomMusicQueue.size}",
+                        label = "Queue ΓÇó ${roomMusicQueue.size}",
                         modifier = Modifier.weight(1f),
                         onClick = { showMusicQueue = !showMusicQueue }
                     )
@@ -1389,7 +1477,7 @@ fun ActiveVoiceRoomScreen(
                                 color = Gold
                             )
                             Spacer(modifier = Modifier.width(10.dp))
-                            Text("Loading reactions…", color = TextMuted, fontSize = 13.sp)
+                            Text("Loading reactionsΓÇª", color = TextMuted, fontSize = 13.sp)
                         }
                         reactionCatalogError != null -> Column {
                             Text("Couldn't load reactions.", color = Color(0xFFFF8098), fontSize = 13.sp)
@@ -1446,9 +1534,9 @@ fun ActiveVoiceRoomScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Spin the wheel for a chance to win exclusive room frames, badges, and coin boosts!", color = TextMuted, fontSize = 13.sp)
-                    Text("• Grand Prize: Legendary Electric Dragon Frame ??", color = RoomGoldAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Text("• Tier 2: Supreme Crown Frame ??", color = Color.White, fontSize = 12.sp)
-                    Text("• Tier 3: 500 Coins Bonus ??", color = Color(0xFF60A5FA), fontSize = 12.sp)
+                    Text("ΓÇó Grand Prize: Legendary Electric Dragon Frame ??", color = RoomGoldAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("ΓÇó Tier 2: Supreme Crown Frame ??", color = Color.White, fontSize = 12.sp)
+                    Text("ΓÇó Tier 3: 500 Coins Bonus ??", color = Color(0xFF60A5FA), fontSize = 12.sp)
                 }
             },
             confirmButton = {
@@ -1516,7 +1604,7 @@ fun ActiveVoiceRoomScreen(
                                 when {
                                     p.user.id == room.host?.id -> RoomRoleBadge("HOST", Color(0xFFFFC857), "?")
                                     p.isRoomAdmin -> RoomRoleBadge("ROOM ADMIN", Color(0xFFC8A2FF), "??")
-                                    p.role in listOf("SPEAKER", "MODERATOR") -> Text("Speaker • Mic on stage", color = TextMuted, fontSize = 11.sp)
+                                    p.role in listOf("SPEAKER", "MODERATOR") -> Text("Speaker ΓÇó Mic on stage", color = TextMuted, fontSize = 11.sp)
                                     else -> Text("Listener", color = TextMuted, fontSize = 11.sp)
                                 }
                             }
@@ -1608,7 +1696,7 @@ fun ActiveVoiceRoomScreen(
                 Text(
                     buildString {
                         append("ID: ${target.user.id.takeLast(10)}")
-                        if (target.user.city.isNotBlank()) append(" • ${target.user.city}")
+                        if (target.user.city.isNotBlank()) append(" ΓÇó ${target.user.city}")
                     },
                     color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp)
                 )
@@ -1894,6 +1982,13 @@ private fun ProfileActionButton(
     }
 }
 
+private fun formatRoomMusicTime(ms: Long): String {
+    val totalSeconds = (ms.coerceAtLeast(0L) / 1000L)
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return "%d:%02d".format(minutes, seconds)
+}
+
 @Composable
 private fun RoomHeaderAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
     Box(
@@ -2104,7 +2199,7 @@ private fun EntranceAnnouncementCard(
 
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("✨", fontSize = 11.sp)
+                    Text("Γ£¿", fontSize = 11.sp)
                     Spacer(modifier = Modifier.width(3.dp))
                     Text(
                         text = name,
@@ -2133,7 +2228,7 @@ private fun EntranceAnnouncementCard(
                 .padding(horizontal = 14.dp, vertical = 6.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text("👏", fontSize = 16.sp)
+            Text("≡ƒæÅ", fontSize = 16.sp)
         }
     }
 }
@@ -2253,7 +2348,7 @@ private fun RoomSettingsAndInfoSheet(
     participantCount: Int,
     onDismiss: () -> Unit,
     onFollowHost: () -> Unit,
-    onOpenThemes: () -> Unit,
+    onEditRoomSettings: () -> Unit,
     onOpenTools: () -> Unit,
     onViewListeners: () -> Unit,
     onMinimize: () -> Unit,
@@ -2385,17 +2480,17 @@ private fun RoomSettingsAndInfoSheet(
             ) {
                 Text("Room Perks & Privileges", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Black)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("💎", fontSize = 13.sp)
+                    Text("≡ƒÆÄ", fontSize = 13.sp)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("1.5x Intimacy & Room XP on all gifts", color = Color.White, fontSize = 12.sp)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("🎧", fontSize = 13.sp)
+                    Text("≡ƒÄº", fontSize = 13.sp)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("High-Fidelity Spatial Audio Active", color = Color.White, fontSize = 12.sp)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("👑", fontSize = 13.sp)
+                    Text("≡ƒææ", fontSize = 13.sp)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("VIP Stage Frame priority unlocked", color = Color.White, fontSize = 12.sp)
                 }
@@ -2420,12 +2515,12 @@ private fun RoomSettingsAndInfoSheet(
 
             if (isHost || isRoomAdmin) {
                 Button(
-                    onClick = onOpenThemes,
+                    onClick = onEditRoomSettings,
                     modifier = Modifier.fillMaxWidth().height(44.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B2D60)),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("Customize Room Themes & Ambience", color = Gold, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("Edit Room Settings", color = Gold, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
             }
 
@@ -2453,7 +2548,7 @@ private fun RoomSettingsAndInfoSheet(
                 ) {
                     Icon(Icons.Filled.Groups, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(5.dp))
-                    Text("People • $participantCount", fontSize = 12.sp, maxLines = 1)
+                    Text("People ΓÇó $participantCount", fontSize = 12.sp, maxLines = 1)
                 }
             }
             Row(

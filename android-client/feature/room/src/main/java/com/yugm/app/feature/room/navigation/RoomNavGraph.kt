@@ -309,6 +309,9 @@ fun NavGraphBuilder.roomNavGraph(
                 },
                 onOpenThemes = {
                     navController.navigate(Screen.ThemeGallery.createRoute(roomId))
+                },
+                onEditRoom = {
+                    navController.navigate(Screen.EditRoom.createRoute(roomId))
                 }
             )
         } ?: RoomConnectionFallback(

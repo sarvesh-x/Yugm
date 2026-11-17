@@ -65,12 +65,6 @@ fun MainTabsScreen(
     }
     var isClanChatActive by remember { mutableStateOf(false) }
 
-    LaunchedEffect(pagerState.currentPage) {
-        if (pagerState.currentPage != TAB_CHAT) {
-            isClanChatActive = false
-        }
-    }
-
     LaunchedEffect(initialTab) {
         // Apply the route's initial tab only once for this destination instance so returning
         // from pushed screens preserves the user's last selected tab.

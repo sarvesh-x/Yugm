@@ -1,11 +1,14 @@
 package com.yugm.app.navigation
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.VectorConverter
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,8 +30,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.material3.Text
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.viewinterop.AndroidView
@@ -53,6 +58,7 @@ import com.yugm.app.core.ui.components.Avatar
 import livekit.org.webrtc.SurfaceViewRenderer
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.round
 import com.yugm.app.core.navigation.Screen
@@ -259,7 +265,8 @@ fun NavGraph(
           }
       }
       minimizedRoom?.let { room ->
-          var dragOffset by remember(room.id) { mutableStateOf(IntOffset.Zero) }
+          val dragOffset = remember(room.id) { Animatable(Offset.Zero, Offset.VectorConverter) }
+          val dragScope = rememberCoroutineScope()
           BoxWithConstraints(Modifier.fillMaxSize()) {
               val density = LocalDensity.current
               val bubbleWidth = with(density) { (if (minimizedRoomType == RoomType.Video) 128.dp else 68.dp).roundToPx() }
@@ -268,6 +275,13 @@ fun NavGraph(
               val bottomInset = with(density) { 94.dp.toPx().toInt() }
               val maxLeft = (constraints.maxWidth - bubbleWidth - endInset).coerceAtLeast(0)
               val maxUp = (constraints.maxHeight - bubbleHeight - bottomInset).coerceAtLeast(0)
+              val snapToEdge: () -> Unit = {
+                  dragScope.launch {
+                      val targetX = if (dragOffset.value.x <= -maxLeft / 2f) -maxLeft.toFloat() else 0f
+                      val targetY = dragOffset.value.y.coerceIn(-maxUp.toFloat(), 0f)
+                      dragOffset.animateTo(Offset(targetX, targetY))
+                  }
+              }
               RoomMinimizedBubble(
                   room = room,
                   isVideo = minimizedRoomType == RoomType.Video,
@@ -275,14 +289,21 @@ fun NavGraph(
                   modifier = Modifier
                       .align(Alignment.BottomEnd)
                       .padding(end = 14.dp, bottom = 94.dp)
-                      .offset { dragOffset }
+                      .offset { IntOffset(dragOffset.value.x.roundToInt(), dragOffset.value.y.roundToInt()) }
                       .pointerInput(room.id, maxLeft, maxUp) {
-                          detectDragGestures { change, amount ->
+                          detectDragGestures(
+                              onDragEnd = { snapToEdge() },
+                              onDragCancel = { snapToEdge() }
+                          ) { change, amount ->
                               change.consume()
-                              dragOffset = IntOffset(
-                                  (dragOffset.x + amount.round().x).coerceIn(-maxLeft, 0),
-                                  (dragOffset.y + amount.round().y).coerceIn(-maxUp, 0)
-                              )
+                              dragScope.launch {
+                                  dragOffset.snapTo(
+                                      Offset(
+                                          (dragOffset.value.x + amount.x).coerceIn(-maxLeft.toFloat(), 0f),
+                                          (dragOffset.value.y + amount.y).coerceIn(-maxUp.toFloat(), 0f)
+                                      )
+                                  )
+                              }
                           }
                       }
                       .clickable(role = Role.Button) {
