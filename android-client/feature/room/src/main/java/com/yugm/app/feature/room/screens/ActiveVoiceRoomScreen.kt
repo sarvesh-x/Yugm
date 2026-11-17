@@ -374,9 +374,9 @@ fun ActiveVoiceRoomScreen(
     // Dialog & bottom sheet states
     var giftOpen by rememberSaveable { mutableStateOf(false) }
     var giftRecipientId by remember(room.id) { mutableStateOf(room.host?.id.orEmpty()) }
-    var showInvitePicker by rememberSaveable { mutableStateOf(false) }
-    var showPollComposer by rememberSaveable { mutableStateOf(false) }
-    var showPkSetup by rememberSaveable { mutableStateOf(false) }
+    var showInvitePicker by rememberSaveable(room.id) { mutableStateOf(false) }
+    var showPollComposer by rememberSaveable(room.id) { mutableStateOf(false) }
+    var showPkSetup by rememberSaveable(room.id) { mutableStateOf(false) }
     var showPkOpponents by rememberSaveable { mutableStateOf(false) }
     var pkMode by rememberSaveable { mutableStateOf(PkMode.GIFT) }
     var pkDuration by rememberSaveable { mutableStateOf(180) }
