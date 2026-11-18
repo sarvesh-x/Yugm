@@ -1,11 +1,8 @@
-import { createRequire } from "node:module";
 import type * as adminType from "firebase-admin";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import { DeviceToken } from "../models/DeviceToken.js";
 
-const require = createRequire(import.meta.url);
-const firebaseAdmin = require("firebase-admin") as typeof adminType;
 let admin: typeof adminType | undefined;
 interface VerifiedFirebaseIdToken extends jwt.JwtPayload {
   uid: string;
@@ -78,14 +75,18 @@ async function verifyFirebaseIdTokenWithoutServiceAccount(idToken: string): Prom
   return { ...payload, uid: payload.sub } as VerifiedFirebaseIdToken;
 }
 
-function fb() {
-  if (!admin) admin = firebaseAdmin;
-  return admin!;
+async function fb() {
+  if (!admin) {
+    // firebase-admin is CommonJS: Node's dynamic import exposes the Admin
+    // namespace on `default`, rather than as ESM named exports.
+    const firebaseAdmin = await import("firebase-admin");
+    admin = firebaseAdmin.default as typeof adminType;
+  }
+  return admin;
 }
 
-export function initFirebase() {
-  const firebase = fb();
-  if (firebase.apps.length) return;
+export async function initFirebase() {
+  if (admin?.apps.length) return;
   const projectId = env.FCM_PROJECT_ID;
   const clientEmail = env.FCM_CLIENT_EMAIL;
   const rawKey = env.FCM_PRIVATE_KEY;
@@ -93,6 +94,7 @@ export function initFirebase() {
     console.log("Firebase Admin service account is not configured; ID-token verification will use Firebase public signing keys and push notifications are disabled.");
     return;
   }
+  const firebase = await fb();
   const privateKey = rawKey.includes("-----BEGIN") && rawKey.includes("\n")
     ? rawKey
     : rawKey.replace(/\\n/g, "\n");
@@ -107,8 +109,8 @@ export function initFirebase() {
 }
 
 export async function verifyIdToken(idToken: string): Promise<VerifiedFirebaseIdToken> {
-  const firebase = fb();
-  if (!firebase.apps.length) return verifyFirebaseIdTokenWithoutServiceAccount(idToken);
+  if (!admin?.apps.length) return verifyFirebaseIdTokenWithoutServiceAccount(idToken);
+  const firebase = await fb();
   try {
     return await firebase.auth().verifyIdToken(idToken) as VerifiedFirebaseIdToken;
   } catch (err: any) {
@@ -118,16 +120,16 @@ export async function verifyIdToken(idToken: string): Promise<VerifiedFirebaseId
 }
 
 export async function verifyAppCheckToken(token: string) {
-  const firebase = fb();
-  if (!firebase.apps.length) {
+  if (!admin?.apps.length) {
     throw new Error("App Check enforcement requires FCM_CLIENT_EMAIL and FCM_PRIVATE_KEY for Firebase Admin verification");
   }
+  const firebase = await fb();
   return firebase.appCheck().verifyToken(token, { consume: true });
 }
 
 export async function notifyUser(userId: string, title: string, body: string, data: Record<string, string> = {}) {
-  const firebase = fb();
-  if (!firebase.apps.length) return;
+  if (!admin?.apps.length) return;
+  const firebase = await fb();
   const tokens = await DeviceToken.find({ userId }).select("token");
   if (!tokens.length) return;
   const response = await firebase.messaging().sendEachForMulticast({

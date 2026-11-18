@@ -13,6 +13,7 @@ import { resumePkTimers } from "./services/pk.js";
 import { connectRedis } from "./services/redis.js";
 import { closeSocketInfrastructure, initSocket } from "./services/socket.js";
 import { ensureOfficialRooms } from "./services/officialRooms.js";
+import { ensureMongoMediaIndexes } from "./services/storage.js";
 
 process.on("unhandledRejection", (err) => {
   console.error("Unhandled rejection:", err);
@@ -24,6 +25,7 @@ process.on("uncaughtException", (err) => {
 
 async function bootstrap() {
   await connectDatabase();
+  await ensureMongoMediaIndexes();
   await ensureAuthIndexes();
   await ensureProductionIndexes();
   await runMigrations();
@@ -31,7 +33,7 @@ async function bootstrap() {
   await seedAchievements();
   await connectRedis();
   await ensureOfficialRooms();
-  initFirebase();
+  await initFirebase();
   await startJobWorkers();
   const app = createApp();
   const server = http.createServer(app);

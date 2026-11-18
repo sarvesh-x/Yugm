@@ -32,7 +32,8 @@ const keys: EnvKey[] = [
   { key: "GOOGLE_PLAY_PRIVATE_KEY", group: "payments", required: false, note: "required for Google Play purchases" },
   { key: "PAYOUT_KYC_ENCRYPTION_KEY", group: "payout-kyc", required: false, note: "strong key for encrypted PAN/UPI/bank fields" },
   { key: "REDIS_URL", group: "cache", required: false, note: "leave blank to disable Redis locally" },
-  { key: "STORAGE_DRIVER", group: "storage", required: false, note: "local or s3; defaults to local" },
+  { key: "STORAGE_DRIVER", group: "storage", required: false, note: "local, mongodb or s3; defaults to local" },
+  { key: "MONGODB_MEDIA_MAX_BYTES", group: "storage", required: false, note: "MongoDB media quota in bytes; defaults to 128 MiB" },
   { key: "S3_BUCKET", group: "storage", required: false, note: "required when STORAGE_DRIVER=s3" },
   { key: "S3_REGION", group: "storage", required: false, note: "required when STORAGE_DRIVER=s3" },
   { key: "S3_ENDPOINT", group: "storage", required: false, note: "optional S3-compatible endpoint" },
@@ -88,8 +89,8 @@ if (isProduction) {
   if (!process.env.REDIS_URL) {
     productionErrors.push("REDIS_URL must be set in production for socket fan-out, queues, rate limits, and cache");
   }
-  if (process.env.STORAGE_DRIVER !== "s3") {
-    productionErrors.push("STORAGE_DRIVER=s3 is recommended for production media storage");
+  if (!["mongodb", "s3"].includes(process.env.STORAGE_DRIVER ?? "local")) {
+    productionErrors.push("STORAGE_DRIVER must be mongodb or s3 for durable production media storage");
   }
   if (process.env.STORAGE_DRIVER === "s3") {
     for (const key of ["S3_BUCKET", "S3_REGION"]) {

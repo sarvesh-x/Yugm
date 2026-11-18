@@ -1,7 +1,11 @@
 try {
   // Prefer native TensorFlow backend in Node for performance and to avoid tfjs plain-JS warnings.
-  // @ts-ignore - optional native backend dependency; may not be installed in all environments
-  await import("@tensorflow/tfjs-node");
+  // Use a runtime-only specifier so Cloudflare's bundle does not try to include
+  // the native Node binary. The pure JS TensorFlow backend remains the fallback.
+  if (process.env.YUGM_RUNTIME !== "cloudflare") {
+    const nativeBackend = "@tensorflow/" + "tfjs-node";
+    await import(nativeBackend);
+  }
 } catch {
   // Optional dependency; fall back to default tfjs backend if unavailable.
 }

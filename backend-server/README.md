@@ -10,12 +10,10 @@ cp apps/api/.env.example apps/api/.env
 npm run dev
 ```
 
-## Deploy to Render
+## Cloudflare migration
 
-The repository includes a Render Blueprint at [`../render.yaml`](../render.yaml). Create a Blueprint in Render from this repository and provide `MONGODB_URI` when prompted. The Blueprint generates persistent JWT and payout-encryption secrets, builds the admin panel and API, and checks `/health` after deployment.
+The target is Cloudflare Workers and Pages on the free plan. The API Worker is an experimental compatibility scaffold and is not ready for production; see the [migration audit](../docs/cloudflare-migration/audit.md) for the remaining work and acceptance gates. The [Pages admin guide](apps/admin/CLOUDFLARE_PAGES.md) describes the separate staging and production builds.
 
-The API can start without Redis or third-party credentials; those features stay unavailable until their environment variables are configured. The default local upload storage is ephemeral on Render, so configure `STORAGE_DRIVER=s3` and the `S3_*` variables before relying on uploaded media in production.
-
-Render uses the Node range declared in `package.json` (`>=22.18.0 <25`). The lower bound includes Node's built-in TypeScript stripping support used by the shared workspace package.
+The existing hosting configuration is retained solely for the current deployment and rollback until the replacement has passed staging and the cutover is approved. Do not use the Worker scaffold with production data or switch DNS yet.
 
 See the repository [README](../README.md) and `docs/` for configuration and architecture details.

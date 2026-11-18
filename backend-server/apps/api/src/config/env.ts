@@ -1,24 +1,26 @@
-import "dotenv/config";
 import crypto from "node:crypto";
 import { z } from "zod";
+
+// Cloudflare supplies runtime configuration through bindings, not a .env file.
+// Keep dotenv available for local Node scripts without importing it in Workers.
+if (process.env.YUGM_RUNTIME !== "cloudflare") {
+  const dotenvConfig = "dotenv/" + "config";
+  await import(dotenvConfig);
+}
 
 const PLACEHOLDER_SECRETS = new Set(["replace-me", "replace-me-admin-access", "replace-me-admin-refresh"]);
 
 function resolveJwtSecret(value: string | undefined, nodeEnv: string): string {
   if (value && value.length >= 16 && !PLACEHOLDER_SECRETS.has(value)) return value;
   if (nodeEnv === "production") {
-    const generated = crypto.randomBytes(32).toString("hex");
-    console.warn(
-      "WARNING: JWT_SECRET is not set. Generated an ephemeral secret; auth tokens will be invalidated on the next restart. " +
-        "Set JWT_SECRET as a persistent environment variable (e.g. Render: Environment > Env Vars, or generateValue in render.yaml)."
-    );
-    return generated;
+    throw new Error("JWT_SECRET must be configured as a persistent secret in production; refusing to invalidate tokens on restart");
   }
   return "dev-only-jwt-secret-do-not-use-in-production";
 }
 
 const envSchema = z.object({
   NODE_ENV: z.string().default("development"),
+  YUGM_RUNTIME: z.enum(["node", "cloudflare"]).default("node"),
   PORT: z.coerce.number().default(4000),
   MONGODB_URI: z.string().min(1, "MONGODB_URI is required"),
   MONGODB_DB_NAME: z.string().min(1).default("Yugm"),
@@ -64,7 +66,8 @@ const envSchema = z.object({
   GOOGLE_PLAY_PUBSUB_SERVICE_ACCOUNT: z.string().optional(),
   MONETIZATION_DIAMONDS_ENABLED: z.preprocess((v) => v === true || v === "true" || v === "1", z.boolean()).default(false),
   PAYOUT_KYC_ENCRYPTION_KEY: z.string().min(24).optional(),
-  STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
+  STORAGE_DRIVER: z.enum(["local", "s3", "mongodb"]).default("local"),
+  MONGODB_MEDIA_MAX_BYTES: z.coerce.number().int().min(1).default(128 * 1024 * 1024),
   S3_BUCKET: z.string().optional(),
   S3_REGION: z.string().optional(),
   S3_ENDPOINT: z.string().optional(),
@@ -74,7 +77,7 @@ const envSchema = z.object({
 });
 
 const parsed = envSchema.parse(process.env);
-if (parsed.NODE_ENV === "production" && (!parsed.LIVEKIT_URL.startsWith("wss://") || !parsed.LIVEKIT_API_KEY || !parsed.LIVEKIT_API_SECRET)) {
+if (parsed.NODE_ENV === "production" && parsed.YUGM_RUNTIME !== "cloudflare" && (!parsed.LIVEKIT_URL.startsWith("wss://") || !parsed.LIVEKIT_API_KEY || !parsed.LIVEKIT_API_SECRET)) {
   console.warn("LiveKit is not fully configured; the API will start, but voice/video room tokens will be unavailable.");
 }
 const jwtSecret = resolveJwtSecret(parsed.JWT_SECRET, parsed.NODE_ENV);

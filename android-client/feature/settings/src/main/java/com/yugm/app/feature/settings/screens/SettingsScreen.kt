@@ -1,5 +1,7 @@
 package com.yugm.app.feature.settings.screens
 
+import com.yugm.app.core.api.resolveMediaUrl
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -117,7 +119,7 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     fun openLegalPage(path: String) {
         runCatching {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://yugm.onrender.com/legal/$path")))
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(resolveMediaUrl("/legal/$path"))))
         }.onFailure { error = "Could not open the Yugm legal page." }
     }
 

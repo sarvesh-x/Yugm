@@ -5,6 +5,12 @@ import { SpeakerRequest } from "../models/SpeakerRequest.js";
 import { invalidateCache } from "./redis.js";
 import { isAlwaysOnOfficialVoiceRoom } from "./officialRooms.js";
 import { terminateLiveKitRoom } from "./livekit.js";
+import { env } from "../config/env.js";
+
+let trackBackground: ((work: Promise<unknown>) => void) | undefined;
+export function setRoomBackgroundTracker(tracker: (work: Promise<unknown>) => void) {
+  trackBackground = tracker;
+}
 
 export type RoomExitResult = { changed: boolean; ended: boolean };
 
@@ -29,7 +35,7 @@ export async function endRoom(roomId: string, reason: string): Promise<boolean> 
   // Marking LIVE -> ENDED is the synchronous close operation. Fan-out cleanup and
   // LiveKit teardown continue in the background so hosts and listeners are
   // released immediately instead of waiting on media-server timeouts.
-  void Promise.all([
+  const cleanup = Promise.all([
     // Room chat is session-only data. Remove it as soon as the room is closed.
     ChatMessage.deleteMany({ roomId }),
     RoomParticipant.updateMany(
@@ -37,11 +43,22 @@ export async function endRoom(roomId: string, reason: string): Promise<boolean> 
       { $set: { leftAt: now, micEnabled: false, cameraEnabled: false }, $unset: { seatIndex: 1 } }
     ),
     SpeakerRequest.updateMany({ roomId, status: "PENDING" }, { $set: { status: "REJECTED" } }),
-    invalidateCache("rooms:*"),
-    terminateLiveKitRoom(room.livekitRoomName)
+    invalidateCache("rooms:*")
   ]).catch((error) => {
     console.warn(`Room cleanup failed for ${roomId}:`, error instanceof Error ? error.message : String(error));
   });
+  const mediaCleanup = terminateLiveKitRoom(room.livekitRoomName).catch((error) => {
+    console.warn(`LiveKit cleanup failed for ${roomId}:`, error instanceof Error ? error.message : String(error));
+  });
+  if (env.YUGM_RUNTIME === "cloudflare") {
+    // Commit participant removal before the request ends; keep the slower
+    // media-server request alive without delaying the host's response.
+    trackBackground?.(mediaCleanup);
+    await cleanup;
+  } else {
+    void cleanup;
+    void mediaCleanup;
+  }
   console.info(`Ended room ${roomId}: ${reason}`);
   return true;
 }

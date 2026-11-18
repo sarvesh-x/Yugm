@@ -14,16 +14,36 @@ export interface MediaProvider {
   createToken(input: MediaTokenRequest): Promise<{ token: string; url: string }>;
 }
 
+interface LiveKitConfig {
+  apiKey?: string;
+  apiSecret?: string;
+  url: string;
+}
+
+let configuration: LiveKitConfig = {
+  apiKey: env.LIVEKIT_API_KEY,
+  apiSecret: env.LIVEKIT_API_SECRET,
+  url: env.LIVEKIT_URL
+};
+
+export function configureLiveKit(config: LiveKitConfig) {
+  configuration = config;
+  if (!config.apiKey || !config.apiSecret || !config.url.startsWith("wss://")) {
+    console.warn("LiveKit is not fully configured; voice/video room tokens will be unavailable.");
+  }
+}
+
 export class LiveKitMediaProvider implements MediaProvider {
   async createToken(input: MediaTokenRequest) {
-    if (!env.LIVEKIT_API_KEY || !env.LIVEKIT_API_SECRET) {
+    const { apiKey, apiSecret, url } = configuration;
+    if (!apiKey || !apiSecret) {
       throw new HttpError(503, "LiveKit credentials are not configured");
     }
-    if (!env.LIVEKIT_URL.trim() || (env.NODE_ENV === "production" && !env.LIVEKIT_URL.startsWith("wss://"))) {
+    if (!url.trim() || (env.NODE_ENV === "production" && !url.startsWith("wss://"))) {
       throw new HttpError(503, "LiveKit URL is not configured for production");
     }
 
-    const token = new AccessToken(env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET, {
+    const token = new AccessToken(apiKey, apiSecret, {
       identity: input.identity,
       ttl: "2h"
     });
@@ -36,17 +56,18 @@ export class LiveKitMediaProvider implements MediaProvider {
       canSubscribe: input.canSubscribe
     });
 
-    return { token: await token.toJwt(), url: env.LIVEKIT_URL };
+    return { token: await token.toJwt(), url };
   }
 }
 
 export const mediaProvider = new LiveKitMediaProvider();
 
 export async function terminateLiveKitRoom(roomName: string) {
-  if (!roomName || !env.LIVEKIT_API_KEY || !env.LIVEKIT_API_SECRET || !env.LIVEKIT_URL.trim()) return;
-  const host = env.LIVEKIT_URL.trim().replace(/^wss:\/\//, "https://").replace(/^ws:\/\//, "http://");
+  const { apiKey, apiSecret, url } = configuration;
+  if (!roomName || !apiKey || !apiSecret || !url.trim()) return;
+  const host = url.trim().replace(/^wss:\/\//, "https://").replace(/^ws:\/\//, "http://");
   try {
-    await new RoomServiceClient(host, env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET).deleteRoom(roomName);
+    await new RoomServiceClient(host, apiKey, apiSecret).deleteRoom(roomName);
   } catch (error) {
     // LiveKit may already have removed an empty room; room state in Mongo remains authoritative.
     console.warn("LiveKit room termination failed:", error instanceof Error ? error.message : String(error));

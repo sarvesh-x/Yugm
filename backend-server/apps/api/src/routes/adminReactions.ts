@@ -10,14 +10,21 @@ import { RoomReaction } from "../models/RoomReaction.js";
 import { AdminAuditLog } from "../models/AdminAuditLog.js";
 import { deleteStoredFile, persistUploadedFile, safeUploadName } from "../services/storage.js";
 import { ensureDefaultRoomReactions, normalizeReactionId, toPublicRoomReaction } from "../services/reactions.js";
+import { env } from "../config/env.js";
 
 export const adminReactionsRouter = Router();
 
-const UPLOAD_DIR = path.join(process.cwd(), "uploads");
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+const UPLOAD_DIR = env.YUGM_RUNTIME === "cloudflare" ? "/tmp/yugm-uploads" : path.join(process.cwd(), "uploads");
 
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+  destination: (_req, _file, cb) => {
+    try {
+      fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+      cb(null, UPLOAD_DIR);
+    } catch (error) {
+      cb(error instanceof Error ? error : new Error(String(error)), UPLOAD_DIR);
+    }
+  },
   filename: (req, file, cb) => cb(null, safeUploadName((req as AdminAuthRequest).admin!.id?.toString?.() ?? "admin", file.originalname))
 });
 

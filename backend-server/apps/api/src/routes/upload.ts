@@ -6,16 +6,29 @@ import fsp from "fs/promises";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode } from "../utils/http.js";
 import { persistUploadedFile, safeUploadName } from "../services/storage.js";
+import { env } from "../config/env.js";
 
 export const uploadRouter = Router();
 
-const UPLOAD_DIR = path.join(process.cwd(), "uploads");
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-const TRUST_UPLOAD_DIR = path.join(process.cwd(), "private-uploads", "trust-verification");
-if (!fs.existsSync(TRUST_UPLOAD_DIR)) fs.mkdirSync(TRUST_UPLOAD_DIR, { recursive: true });
+// Workers provide only request-scoped temporary disk; persisted files must be
+// copied to durable storage before the request ends. Keep the staging limit
+// conservative until large uploads are moved to a streaming/chunked design.
+const UPLOAD_DIR = env.YUGM_RUNTIME === "cloudflare" ? "/tmp/yugm-uploads" : path.join(process.cwd(), "uploads");
+const TRUST_UPLOAD_DIR = env.YUGM_RUNTIME === "cloudflare" ? "/tmp/yugm-trust-uploads" : path.join(process.cwd(), "private-uploads", "trust-verification");
+const workerUploadLimit = 10 * 1024 * 1024;
+const uploadLimit = (bytes: number) => env.YUGM_RUNTIME === "cloudflare" ? Math.min(bytes, workerUploadLimit) : bytes;
+
+function uploadDestination(directory: string, cb: (error: Error | null, destination: string) => void) {
+  try {
+    fs.mkdirSync(directory, { recursive: true });
+    cb(null, directory);
+  } catch (error) {
+    cb(error instanceof Error ? error : new Error(String(error)), directory);
+  }
+}
 
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+  destination: (_req, _file, cb) => uploadDestination(UPLOAD_DIR, cb),
   filename: (req, file, cb) => {
     cb(null, safeUploadName((req as AuthRequest).user!.id, file.originalname));
   },
@@ -35,7 +48,7 @@ const upload = multer({
 
 const profileMediaUpload = multer({
   storage,
-  limits: { fileSize: 25 * 1024 * 1024 },
+  limits: { fileSize: uploadLimit(25 * 1024 * 1024) },
   fileFilter: (_req, file, cb) => {
     const allowed = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".mov", ".m4v", ".webm"];
     const ext = path.extname(file.originalname).toLowerCase();
@@ -46,13 +59,13 @@ const profileMediaUpload = multer({
 });
 
 const trustStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, TRUST_UPLOAD_DIR),
+  destination: (_req, _file, cb) => uploadDestination(TRUST_UPLOAD_DIR, cb),
   filename: (req, file, cb) => cb(null, safeUploadName((req as AuthRequest).user!.id, file.originalname))
 });
 
 const trustVerificationUpload = multer({
   storage: trustStorage,
-  limits: { fileSize: 30 * 1024 * 1024 },
+  limits: { fileSize: uploadLimit(30 * 1024 * 1024) },
   fileFilter: (req, file, cb) => {
     const purpose = String(req.body.purpose || "").toUpperCase();
     const ext = path.extname(file.originalname).toLowerCase();
@@ -235,7 +248,7 @@ uploadRouter.post("/upload/voice-note", requireAuth, voiceNoteUpload.single("med
 
 const recordingUpload = multer({
   storage,
-  limits: { fileSize: 200 * 1024 * 1024 },
+  limits: { fileSize: uploadLimit(200 * 1024 * 1024) },
   fileFilter: (_req, file, cb) => {
     const allowed = [".mp3", ".m4a", ".aac", ".wav", ".webm", ".ogg", ".mp4", ".mov", ".m4v"];
     const ext = path.extname(file.originalname).toLowerCase();

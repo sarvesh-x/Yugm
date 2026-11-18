@@ -22,9 +22,17 @@ jobs:
           cache-dependency-path: backend-server/package-lock.json
       - run: npm ci
       - run: npm run typecheck
-      - run: npm run test
+      - name: Run backend unit tests
+        env:
+          NODE_ENV: test
+          MONGODB_URI: mongodb://127.0.0.1:1/yugm_unit_tests
+        run: npm run test
       - name: Isolated financial and gift authorization regressions
         run: npm --workspace apps/api run test:hardening
+      - name: Bundle experimental Cloudflare Worker
+        run: npm --workspace apps/cloudflare-worker run dry-run:staging
+      - name: Exercise Worker room sockets against isolated MongoDB
+        run: npm --workspace apps/cloudflare-worker run test:realtime
 
   android:
     name: Android (lint + unit tests + debug build)

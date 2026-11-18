@@ -24,6 +24,8 @@ android-client/app/release/
 .cxx
 local.properties
 node_modules
+.wrangler/
+.dev.vars*
 .env
 dist
 backend-server/apps/api/dist

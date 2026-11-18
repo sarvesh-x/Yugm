@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.yugm.app.core.api.YugmApi
+import com.yugm.app.core.api.resolveMediaUrl
 import com.yugm.app.core.model.Session
 import com.yugm.app.core.ui.theme.Danger
 import com.yugm.app.core.ui.components.AuthShell
@@ -235,7 +236,7 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 }
 
 private fun openPhoneLegal(context: Context, path: String) {
-    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://yugm.onrender.com/legal/$path"))) }
+    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(resolveMediaUrl("/legal/$path")))) }
 }
 
 private fun phoneAuthError(error: Throwable): String {

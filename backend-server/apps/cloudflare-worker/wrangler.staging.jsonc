@@ -1,0 +1,27 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "yugm-api-staging",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-04",
+  "compatibility_flags": ["nodejs_compat"],
+  "alias": {
+    "iconv-lite": "iconv-lite-worker",
+    "mongoose": "mongoose/index.js"
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "API_SERVICE", "class_name": "YugmApi" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["YugmApi"] }],
+  "vars": {
+    "YUGM_STAGE": "staging",
+    "NODE_ENV": "production",
+    "YUGM_RUNTIME": "cloudflare",
+    "PORT": "8787",
+    "MONGODB_DB_NAME": "YugmStaging",
+    "STORAGE_DRIVER": "mongodb",
+    "GOOGLE_PLAY_PACKAGE_NAME": "com.yugm.app",
+    "GOOGLE_PLAY_SUBS_ENABLED": "false",
+    "MONETIZATION_DIAMONDS_ENABLED": "false",
+    "CORS_ORIGIN": "https://yugm-admin-staging.pages.dev"
+  }
+}
