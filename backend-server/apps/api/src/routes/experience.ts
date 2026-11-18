@@ -258,7 +258,7 @@ experienceRouter.get("/home", asyncHandler(async (req: AuthRequest, res) => {
 
   const now = new Date();
   const earned = achievementsList.flatMap(item => item.currentTier ? [{ badgeId: item.id, tier: item.currentTier, earnedAt: now }] : []);
-  if (user && earned.length) await syncBadgeState(userId, await catalog, earned, now);
+  if (user && earned.length) void syncBadgeState(userId, await catalog, earned, now).catch(() => undefined);
 
   sendOk(res, {
     schemaVersion: 1,
