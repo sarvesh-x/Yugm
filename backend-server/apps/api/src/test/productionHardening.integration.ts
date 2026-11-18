@@ -14,6 +14,13 @@ if (process.env.YUGM_HARDENING_TEST !== "1" || !/^yugm_hardening_[a-f0-9]{32}$/.
 }
 
 const { User } = await import("../models/User.js");
+const { Bond, BondRequest, BondPoint, BondReward, BondRankingSnapshot } = await import("../models/Bond.js");
+const { Friendship } = await import("../models/Friendship.js");
+const { Block } = await import("../models/Block.js");
+const { bondsRouter } = await import("../routes/bonds.js");
+const { blockBondPair, endUnavailableBonds, expireBondRequests, setBondPreferences } = await import("../services/bonds.js");
+const { runBondMaintenance, expireBondRewards } = await import("../services/bondProgress.js");
+const { dayMs, weeklyPeriod } = await import("../services/bondRules.js");
 const { WalletTransaction } = await import("../models/WalletTransaction.js");
 const { GiftTransaction } = await import("../models/GiftTransaction.js");
 const { GiftInventory } = await import("../models/GiftInventory.js");
@@ -59,7 +66,7 @@ let baseUrl: string;
 before(async () => {
   await mongoose.connect(uri, { dbName, autoIndex: false, serverSelectionTimeoutMS: 5000 });
   // Real production schema indexes, applied only inside the owned test replica.
-  for (const model of [User, AuthSession, WalletTransaction, GiftTransaction, GiftInventory, Gift, Room, RoomParticipant, SpeakerRequest, RoomFollow, Referral, ImmersiveTheme, UserSafetyStatus, Event, Purchase, Achievement, AdminUser, AdminAuditLog]) {
+  for (const model of [User, AuthSession, WalletTransaction, GiftTransaction, GiftInventory, Gift, Room, RoomParticipant, SpeakerRequest, RoomFollow, Referral, ImmersiveTheme, UserSafetyStatus, Event, Purchase, Achievement, AdminUser, AdminAuditLog, Bond, BondRequest, BondPoint, BondReward, BondRankingSnapshot, Friendship, Block]) {
     await model.createCollection();
     await model.createIndexes();
   }
@@ -68,6 +75,7 @@ before(async () => {
   app.use(express.json());
   app.use("/api", syncInvalidation);
   app.use("/api/rooms", roomsRouter);
+  app.use("/api/bonds", bondsRouter);
   app.use("/api", reactionsRouter);
   app.use("/api/livekit", livekitRouter);
   app.use("/api/experience", experienceRouter);
@@ -675,4 +683,148 @@ test("HTTP room theme updates require both host role and paid theme ownership", 
   assert.equal((await post(endpoint, hostToken, { themeKey: free.key })).status, 200);
   assert.equal((await Room.findById(room._id))?.theme, free.key);
   assert.equal(await WalletTransaction.countDocuments(), 0);
+});
+
+async function bondParticipant(balance = 500) {
+  const actor = await user(balance, { age: 25 });
+  return { id: actor.id, token: await tokenFor(actor) };
+}
+type BondParticipant = Awaited<ReturnType<typeof bondParticipant>>;
+async function connectFriends(first: BondParticipant, second: BondParticipant) {
+  await Friendship.create({ userId: first.id, friendId: second.id, status: "ACCEPTED" });
+}
+async function inviteBond(sender: BondParticipant, recipient: BondParticipant, slot = 1, giftId?: string, kind = "BESTIE", key = randomUUID()) {
+  return post("/bonds/invitations", sender.token, { recipient: recipient.id, slot, kind, giftId, key });
+}
+const bondRequest = (actor: BondParticipant, id: string, action: string) => post(`/bonds/invitations/${id}/${action}`, actor.token, {});
+const bondBalance = async (actor: BondParticipant) => (await User.findById(actor.id).orFail().lean()).walletBalance;
+
+test("Bonds holds and settles one gift, requires recipient consent, and preserves bilateral privacy", async () => {
+  const a = await bondParticipant();
+  const b = await bondParticipant();
+  const stranger = await bondParticipant();
+  await connectFriends(a, b);
+  const gift = await Gift.create({ name: "Test bestie gift", icon: "Gift", category: "bonds", bondPurpose: "INVITATION", bondKind: "BESTIE", coinPrice: 50, bondPoints: 20 });
+  const key = randomUUID();
+  const create = await Promise.all([inviteBond(a, b, 1, gift.id, "BESTIE", key), inviteBond(a, b, 1, gift.id, "BESTIE", key)]);
+  assert.ok(create.every(result => result.status === 201), JSON.stringify(create));
+  const id = create[0].body.data.id;
+  assert.equal(create[1].body.data.id, id);
+  assert.equal(await bondBalance(a), 450);
+  assert.equal(await bondBalance(b), 500);
+  assert.equal((await bondRequest(stranger, id, "accept")).status, 403);
+  assert.equal(await Bond.countDocuments({ status: "ACTIVE" }), 0);
+  const accepted = await Promise.all([bondRequest(b, id, "accept"), bondRequest(b, id, "accept")]);
+  assert.ok(accepted.every(result => result.body.data?.status === "ACCEPTED"), JSON.stringify(accepted));
+  const bondId = accepted[0].body.data.bondId;
+  assert.equal(await Bond.countDocuments({ status: "ACTIVE" }), 1);
+  assert.equal(await GiftTransaction.countDocuments({ senderId: a.id, giftId: gift.id }), 1);
+  assert.equal(await bondBalance(a), 450);
+  assert.equal(await bondBalance(b), 545);
+  assert.equal((await get(`/bonds/${bondId}`, stranger.token)).status, 404);
+  assert.equal((await get(`/bonds/profile/${a.id}`, stranger.token)).body.data.bonds.length, 0);
+  await setBondPreferences(bondId, a.id, { visibility: "PUBLIC" });
+  assert.equal((await get(`/bonds/profile/${a.id}`, stranger.token)).body.data.bonds.length, 0);
+  await setBondPreferences(bondId, b.id, { visibility: "PUBLIC", showLevel: false });
+  const cards = (await get(`/bonds/profile/${a.id}`, stranger.token)).body.data.bonds;
+  assert.equal(cards.length, 1);
+  assert.equal(cards[0].level, undefined);
+
+  const progression = await Gift.create({ name: "Test points gift", icon: "Gift", category: "bonds", bondPurpose: "PROGRESSION", coinPrice: 10, bondPoints: 80 });
+  const purchase = { giftId: progression.id, key: randomUUID() };
+  for (let retry = 0; retry < 2; retry++) assert.equal((await post(`/bonds/${bondId}/gifts`, a.token, purchase)).status, 200);
+  for (const actor of [a, b, b]) assert.equal((await post(`/bonds/${bondId}/check-in`, actor.token, {})).status, 200);
+  const detail = (await get(`/bonds/${bondId}`, a.token)).body.data;
+  assert.equal(detail.points, 110);
+  assert.equal(detail.level, 2);
+  assert.equal(await GiftTransaction.countDocuments({ senderId: a.id }), 2);
+
+  const conversion = await post(`/bonds/${bondId}/type-change`, b.token, { kind: "SOULMATE", key: randomUUID() });
+  assert.equal(conversion.status, 201);
+  assert.equal((await bondRequest(a, conversion.body.data.id, "accept")).body.data.bondId, bondId);
+  assert.equal((await Bond.findById(bondId).orFail().lean()).kind, "SOULMATE");
+  assert.equal((await post(`/bonds/${bondId}/end`, a.token, {})).status, 200);
+  assert.equal((await post(`/bonds/${bondId}/end`, b.token, {})).status, 200);
+  assert.equal(await bondBalance(a), 440);
+  assert.equal(await bondBalance(b), 554);
+  assert.equal((await get(`/bonds/profile/${a.id}`, stranger.token)).body.data.bonds.length, 0);
+});
+
+test("Bonds releases paid holds on decline, cancel, expiration, block and account removal", async () => {
+  const sender = await bondParticipant(50);
+  const gift = await Gift.create({ name: "Test soulmate gift", icon: "Gift", category: "bonds", bondPurpose: "INVITATION", bondKind: "SOULMATE", coinPrice: 50, bondPoints: 20 });
+  for (const action of ["decline", "cancel", "expire", "block", "delete"]) {
+    const recipient = await bondParticipant();
+    await connectFriends(sender, recipient);
+    const invite = await inviteBond(sender, recipient, 1, gift.id, "SOULMATE");
+    assert.equal(invite.status, 201, JSON.stringify(invite));
+    const id = invite.body.data.id;
+    assert.equal(await bondBalance(sender), 0);
+    if (action === "expire") {
+      await expireBondRequests(undefined, new Date(Date.now() + dayMs + 1000));
+      assert.equal((await bondRequest(recipient, id, "accept")).body.data.status, "EXPIRED");
+    } else if (action === "block") {
+      await blockBondPair(recipient.id, sender.id);
+      assert.equal((await bondRequest(recipient, id, "accept")).body.data.status, "INVALIDATED");
+    } else if (action === "delete") {
+      await endUnavailableBonds(recipient.id, "TERMINATED_BY_ACCOUNT_REMOVAL");
+      assert.equal((await bondRequest(recipient, id, "accept")).body.data.status, "INVALIDATED");
+    } else {
+      const result = await bondRequest(action === "cancel" ? sender : recipient, id, action);
+      assert.equal(result.status, 200);
+    }
+    assert.equal(await bondBalance(sender), 50);
+    assert.equal(await GiftTransaction.countDocuments({ senderId: sender.id }), 0);
+    assert.equal(await BondRequest.countDocuments({ senderId: sender.id, status: "PENDING" }), 0);
+  }
+  const unfunded = await bondParticipant(0);
+  await connectFriends(unfunded, sender);
+  assert.equal((await inviteBond(unfunded, sender, 1, gift.id, "SOULMATE")).status, 402);
+  assert.equal(await BondRequest.countDocuments({ senderId: unfunded.id }), 0);
+});
+
+test("Bonds serializes opposite requests and accepts at most three slots under contention", async () => {
+  const hub = await bondParticipant();
+  const partners = await Promise.all(Array.from({ length: 5 }, () => bondParticipant()));
+  for (const partner of partners) await connectFriends(hub, partner);
+  const reversed = await Promise.all([inviteBond(hub, partners[4]), inviteBond(partners[4], hub)]);
+  assert.deepEqual(reversed.map(row => row.status).sort(), [201, 409]);
+  const winner = reversed[0].status === 201 ? { acting: hub, result: reversed[0] } : { acting: partners[4], result: reversed[1] };
+  assert.equal((await bondRequest(winner.acting, winner.result.body.data.id, "cancel")).status, 200);
+  const all = await Promise.all(partners.slice(0, 4).map(partner => inviteBond(partner, hub)));
+  assert.ok(all.every(row => row.status === 201), JSON.stringify(all));
+  const accepted = await Promise.all(all.map(row => bondRequest(hub, row.body.data.id, "accept")));
+  assert.deepEqual(accepted.map(row => row.status).sort(), [200, 200, 200, 409]);
+  const active = await Bond.find({ users: hub.id, status: "ACTIVE" }).lean();
+  assert.equal(active.length, 3);
+  assert.equal(new Set(active.map(row => row.slots[row.users.findIndex(id => id.toString() === hub.id)])).size, 3);
+});
+
+test("Bonds creates milestone and ranking rewards once", async () => {
+  const a = await bondParticipant();
+  const b = await bondParticipant();
+  await connectFriends(a, b);
+  const invite = await inviteBond(a, b);
+  const { body } = await bondRequest(b, invite.body.data.id, "accept");
+  const id = body.data.bondId;
+  for (const actor of [a, b]) await setBondPreferences(id, actor.id, { visibility: "PUBLIC", leaderboard: true });
+  const now = new Date();
+  const prior = weeklyPeriod(new Date(weeklyPeriod(now).start.getTime() - 1));
+  const start = new Date(Math.min(now.getTime() - 8 * dayMs, prior.start.getTime()));
+  await Bond.updateOne({ _id: id }, { $set: { activatedAt: start, nextMilestoneAt: new Date(start.getTime() + dayMs) } });
+  await BondPoint.collection.insertOne({ bondId: new mongoose.Types.ObjectId(id), kind: "ACTIVITY", key: "previous-activity", points: 10, support: 0, createdAt: prior.start });
+  await runBondMaintenance(now);
+  await runBondMaintenance(now);
+  assert.equal(await BondRankingSnapshot.countDocuments({ period: prior.id }), 3);
+  assert.equal(await BondReward.countDocuments({ bondId: id, key: `rank:${prior.id}:ACTIVITY` }), 2);
+  assert.equal(await BondReward.countDocuments({ bondId: id, key: "milestone:7" }), 2);
+  assert.equal(await BondPoint.countDocuments({ bondId: id, kind: "MILESTONE" }), 2);
+  assert.deepEqual((await Bond.findById(id).orFail().lean()).milestoneDays, [1, 7]);
+  assert.ok((await User.findById(a.id).orFail().lean()).ownedCosmeticIds.includes("bond_weekly_frame"));
+  await expireBondRewards(new Date(now.getTime() + 8 * dayMs));
+  const owned = (await User.findById(a.id).orFail().lean()).ownedCosmeticIds;
+  assert.ok(!owned.includes("bond_weekly_frame"));
+  assert.ok(owned.includes("bond_memory_badge"));
+  await blockBondPair(a.id, b.id);
+  assert.equal((await Bond.findById(id).orFail().lean()).status, "TERMINATED_BY_BLOCK");
 });

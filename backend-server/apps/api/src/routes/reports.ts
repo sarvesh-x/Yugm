@@ -1,3 +1,4 @@
+import { endUnavailableBonds } from "../services/bonds.js";
 import { Router } from "express";
 import { z } from "zod";
 import { moderationActionSchema, reportSchema } from "@yugm/shared";
@@ -87,6 +88,7 @@ reportsRouter.post("/admin/moderation/actions", requireAuth, requireRole("ADMIN"
     req.body.reportId ? Report.findByIdAndUpdate(req.body.reportId, { status: "ACTION_TAKEN", reviewedBy: req.user!.id, reviewedAt: now }) : Promise.resolve()
   ]);
 
+  if (req.body.action === "BAN") await endUnavailableBonds(target.id, "TERMINATED_BY_MODERATION");
   await createNotification(target.id, "SYSTEM", "Moderation action", `${req.body.action}: ${req.body.reason}`, { actionId: action._id.toString() });
   const user = await User.findById(target.id).select("name username role isBlocked mutedUntil suspendedUntil moderationStrikes moderationReason").lean();
   sendOk(res, { action, user }, 201);

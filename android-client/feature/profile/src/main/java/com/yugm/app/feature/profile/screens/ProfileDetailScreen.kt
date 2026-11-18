@@ -112,7 +112,9 @@ fun ProfileDetailScreen(
     onOpenClan: (String) -> Unit = {},
     onOpenClanList: () -> Unit = {},
     onGameZone: () -> Unit = {},
-    showBottomDock: Boolean = true
+    showBottomDock: Boolean = true,
+    onOpenBonds: (String) -> Unit = {},
+    onBondPartnerProfile: (String) -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -331,6 +333,10 @@ fun ProfileDetailScreen(
                             }
                         )
                     }
+                }
+
+                item {
+                    com.yugm.app.feature.profile.bonds.ProfileBondsSection(token, userId, isOwnProfile, onOpenBonds, onBondPartnerProfile)
                 }
 
                 if (isOwnProfile || showcasedBadges.isNotEmpty()) item {

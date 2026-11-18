@@ -18,7 +18,7 @@ async function assertVipGiftAccess(userId: string, gift: { category?: string }) 
 
 export async function getGiftsV2(category?: string, rarity?: string, page = 1, limit = 20) {
   const filter: Record<string, unknown> = { isActive: true, $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }] };
-  if (category) filter.category = category;
+  filter.category = category && category !== "bonds" ? category : { $ne: "bonds" };
   if (rarity) filter.rarity = rarity;
 
   const [gifts, total] = await Promise.all([
@@ -30,7 +30,7 @@ export async function getGiftsV2(category?: string, rarity?: string, page = 1, l
 }
 
 export async function purchaseGift(userId: string, giftId: string) {
-  const gift = await Gift.findOne({ _id: giftId, isActive: true }).lean();
+  const gift = await Gift.findOne({ _id: giftId, isActive: true, category: { $ne: "bonds" } }).lean();
   if (!gift) throw new HttpError(404, "Gift not found", ErrorCode.NOT_FOUND);
   await assertVipGiftAccess(userId, gift);
   if (gift.coinPrice <= 0) throw new HttpError(400, "This gift cannot be purchased", ErrorCode.VALIDATION);
@@ -84,7 +84,7 @@ export async function roomWideGift(roomId: string, giftId: string, senderId: str
     throw new HttpError(400, `Cannot send room-wide gift to more than ${MAX_RECEIVERS} recipients`, ErrorCode.VALIDATION);
   }
 
-  const gift = await Gift.findById(giftId).lean();
+  const gift = await Gift.findOne({ _id: giftId, category: { $ne: "bonds" } }).lean();
   if (!gift) throw new HttpError(404, "Gift not found", ErrorCode.NOT_FOUND);
   await assertVipGiftAccess(senderId, gift);
 
@@ -150,7 +150,7 @@ export async function surpriseBox(userId: string, tier: "basic" | "premium" | "l
 
   const allowedRarities = rarities[tier];
 
-  const pool = await Gift.find({ rarity: { $in: allowedRarities }, isActive: true }).lean();
+  const pool = await Gift.find({ rarity: { $in: allowedRarities }, isActive: true, category: { $ne: "bonds" } }).lean();
   if (pool.length === 0) throw new HttpError(500, "No gifts available in this tier");
 
   const randomGift = pool[randomInt(0, pool.length)];

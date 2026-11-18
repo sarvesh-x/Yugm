@@ -34,7 +34,8 @@ fun ProfileSocialListScreen(
     initialList: String,
     isOwnProfile: Boolean,
     onBack: () -> Unit,
-    onOpenProfile: (String) -> Unit
+    onOpenProfile: (String) -> Unit,
+    onOpenBonds: ((String) -> Unit)? = null
 ) {
     var selectedList by remember(userId, initialList) {
         mutableStateOf(initialList.takeIf { it in setOf("followers", "following", "friends", "visitors") } ?: "followers")
@@ -154,7 +155,9 @@ fun ProfileSocialListScreen(
                                     Text("@${person.username}", color = TextMuted, fontSize = 12.sp, maxLines = 1)
                                     Text("${person.followers} followers", color = TextMuted, fontSize = 11.sp)
                                 }
-                                if (isOwnProfile && selectedList in setOf("followers", "following")) {
+                                if (isOwnProfile && selectedList == "friends" && onOpenBonds != null) {
+                                    TextButton(onClick = { onOpenBonds(person.id) }) { Text("Bonds") }
+                                } else if (isOwnProfile && selectedList in setOf("followers", "following")) {
                                     OutlinedButton(
                                         onClick = { removeTarget = person },
                                         enabled = busyUserId == null,

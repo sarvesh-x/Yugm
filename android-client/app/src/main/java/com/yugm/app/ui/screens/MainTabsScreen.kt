@@ -213,6 +213,8 @@ fun MainTabsScreen(
                                 onOpenVip = { navController.navigate(Screen.Vip.route) },
                                 onOpenTasks = { navController.navigate(Screen.Growth.route) },
                                 onOpenAchievements = { navController.navigate(Screen.Achievements.route) },
+                                onOpenBonds = { id -> navController.navigate(Screen.Bonds.createRoute(id)) },
+                                onBondPartnerProfile = { id -> navController.navigate(Screen.ProfileDetail.createRoute(id)) },
                                 onOpenLevel = { navController.navigate(Screen.BattlePass.route) },
                                 onOpenWallet = { navController.navigate(Screen.Wallet.route) },
                                 onOpenPayments = { navController.navigate(Screen.WithdrawalEligibility.route) },

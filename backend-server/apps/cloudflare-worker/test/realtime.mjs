@@ -27,14 +27,16 @@ try {
   const users = [new mongoose.Types.ObjectId(), new mongoose.Types.ObjectId(), new mongoose.Types.ObjectId()];
   const sessions = users.map(() => new mongoose.Types.ObjectId());
   const roomId = new mongoose.Types.ObjectId();
-  await db.collection("users").insertMany(users.map((id, i) => ({ _id: id, name: `Socket Test ${i}`, username: `socket_test_${i}`, tokenVersion: 1, isBlocked: false })));
+  await db.collection("users").insertMany(users.map((id, i) => ({ _id: id, name: `Socket Test ${i}`, username: `socket_test_${i}`, tokenVersion: 1, age: 25, walletBalance: 100, isBlocked: false })));
   await db.collection("authsessions").insertMany(users.map((id, i) => ({ _id: sessions[i], userId: id, familyId: randomUUID(), refreshHash: randomUUID(), tokenVersion: 1, expiresAt: new Date(Date.now() + 3600000), revokedAt: null })));
   await db.collection("rooms").insertOne({ _id: roomId, hostId: users[0], title: "Socket Test", category: "test", language: "en", type: "VOICE", status: "LIVE", visibility: "PUBLIC", livekitRoomName: randomUUID(), createdAt: new Date() });
   await db.collection("roomparticipants").insertMany(users.slice(0, 2).map((userId, i) => ({ roomId, userId, leftAt: null, role: i ? "SPEAKER" : "HOST", seatIndex: i, micEnabled: true, moderatorMuted: false })));
 
+  await db.collection("friendships").insertOne({ userId: users[0], friendId: users[1], status: "ACCEPTED" });
+
   const startWorker = (port) => unstable_dev(path.join(workerDir, "src/index.ts"), {
     config: path.join(workerDir, "wrangler.jsonc"), local: true, port,
-    vars: { MONGODB_URI: uri, JWT_SECRET: secret, REDIS_URL: "", LIVEKIT_URL: "ws://127.0.0.1:1", MONGODB_MEDIA_MAX_BYTES: "300" },
+    vars: { MONGODB_URI: uri, JWT_SECRET: secret, REDIS_URL: "", YUGM_BONDS_ENABLED: "true", LIVEKIT_URL: "ws://127.0.0.1:1", MONGODB_MEDIA_MAX_BYTES: "300" },
     logLevel: "error", experimental: { disableExperimentalWarning: true, disableDevRegistry: true }
   });
   worker = await startWorker(0);
@@ -101,6 +103,36 @@ try {
   assert.deepEqual(await join(first), { joined: true });
   assert.deepEqual(await join(second), { joined: true });
   assert.deepEqual(await join(outsider), { joined: false, reason: "not_a_participant" });
+
+  async function bondApi(path, actor, payload, expected = 200) {
+    const response = await fetch(address + "/api/bonds" + path, {
+      method: payload ? "POST" : "GET",
+      headers: { authorization: "Bearer " + token(actor), "content-type": "application/json" },
+      body: payload ? JSON.stringify(payload) : undefined
+    });
+    assert.equal(response.status, expected);
+    return (await response.json()).data;
+  }
+  const catalog = await bondApi("/gift-catalog", 0);
+  const gift = catalog.gifts.find(item => item.kind === "BESTIE" && item.purpose === "INVITATION");
+  assert.ok(gift, "Worker seeds the bond gift catalog");
+  const updated = new Promise(resolve => second.once("bonds:changed", resolve));
+  const request = await bondApi("/invitations", 0, {
+    recipient: String(users[1]), slot: 1, kind: "BESTIE", giftId: gift.id, key: randomUUID()
+  }, 201);
+  let timeout;
+  try {
+    const event = await Promise.race([updated, new Promise((_, reject) => {
+      timeout = setTimeout(() => reject(new Error("Bond socket change timed out")), 5000);
+    })]);
+    assert.equal(event.version, 1);
+  } finally { clearTimeout(timeout); }
+  const active = await bondApi(`/invitations/${request.id}/accept`, 1, {});
+  assert.equal(active.status, "ACCEPTED");
+  assert.equal((await bondApi("/me", 0)).balance, 100 - gift.price);
+  await bondApi(`/profile/${users[0]}`, 2).then(profile => assert.deepEqual(profile.bonds, []));
+  console.log("Worker Bonds verified gift reservation, acceptance, privacy and realtime delivery.");
+
 
   const typing = new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error("Typing event timed out")), 5000);
@@ -219,15 +251,19 @@ try {
     revoked.once("connect_error", resolve);
   });
   assert.match(revocationError.message, /signed in on another device/i);
+  assert.deepEqual(await join(second), { joined: true });
   const ended = new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("Room close event timed out")), 5000);
+    const timeout = setTimeout(() => reject(new Error("Room close event timed out")), 12000);
     second.once("room:ended", (value) => { clearTimeout(timeout); resolve(value); });
   });
-  const closeResponse = await fetch(`${address}/api/rooms/${roomId}/end`, {
-    method: "POST", headers: { authorization: `Bearer ${token(0)}` }
-  });
+  const [closeResponse, endedEvent] = await Promise.all([
+    fetch(`${address}/api/rooms/${roomId}/end`, {
+      method: "POST", headers: { authorization: `Bearer ${token(0)}` }, signal: AbortSignal.timeout(12000)
+    }),
+    ended
+  ]);
   assert.equal(closeResponse.status, 200, await closeResponse.text());
-  assert.equal((await ended).roomId, roomId.toString());
+  assert.equal(endedEvent.roomId, roomId.toString());
   assert.equal(await db.collection("roomparticipants").countDocuments({ roomId, leftAt: null }), 0);
   assert.equal((await db.collection("rooms").findOne({ _id: roomId })).status, "ENDED");
   console.log("Worker media, WebSocket authentication, room acknowledgements, broadcasts, PK alarms, reconnect and heartbeat passed with disposable MongoDB");

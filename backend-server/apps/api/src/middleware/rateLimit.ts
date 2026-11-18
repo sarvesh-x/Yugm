@@ -61,6 +61,15 @@ export const giftLimiter = rateLimit({
   legacyHeaders: false
 });
 
+export const bondLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 90,
+  keyGenerator: userOrIpKey,
+  store: new ResilientRedisRateLimitStore("bonds"),
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 export const reportLimiter = rateLimit({
   windowMs: 60_000,
   max: 5,

@@ -1,0 +1,9 @@
+<resources>
+    <string name="bonds_title">My Bonds</string>
+    <string name="bonds_center">Relationship Center</string>
+    <string name="bonds_close_friends">Close friends</string>
+    <string name="bonds_rankings">Bond rankings</string>
+    <string name="bonds_help">About Bonds</string>
+    <string name="bonds_invite">Invite</string>
+    <string name="bonds_manage">Manage</string>
+</resources>

@@ -1,3 +1,4 @@
+import { blockBondPair, endUnavailableBonds } from "../services/bonds.js";
 import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
@@ -365,6 +366,7 @@ usersRouter.delete("/me", asyncHandler(async (req: AuthRequest, res) => {
     DirectMessage.distinct("senderId", { receiverId: req.user!._id })
   ]);
   await User.updateOne({ _id: req.user!._id }, { $set: { deletionRequestedAt: requestedAt }, $inc: { tokenVersion: 1 } });
+  await endUnavailableBonds(req.user!.id, "TERMINATED_BY_ACCOUNT_REMOVAL");
   await Promise.all([
     revokeAllForUser(req.user!.id),
     DeviceToken.deleteMany({ userId: req.user!._id })
@@ -1485,12 +1487,7 @@ usersRouter.delete("/me/followers/:id", asyncHandler(async (req: AuthRequest, re
 usersRouter.post("/:id/block", asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
   if (req.params.id === req.user!.id) throw new HttpError(400, "You cannot block yourself", ErrorCode.VALIDATION);
-  await Block.updateOne(
-    { blockerId: req.user!.id, blockedUserId: req.params.id },
-    { $setOnInsert: { blockerId: req.user!.id, blockedUserId: req.params.id } },
-    { upsert: true }
-  );
-  await User.findByIdAndUpdate(req.user!.id, { $pull: { closeFriendIds: req.params.id } });
+  await blockBondPair(req.user!.id, req.params.id);
   sendOk(res, { blocked: true });
 }));
 

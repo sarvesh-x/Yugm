@@ -100,8 +100,8 @@ export async function findProfileCosmetic(cosmeticId: string) {
   return Cosmetic.findById(cosmeticId).lean();
 }
 
-export async function listPublicCosmetics(): Promise<PublicCosmetic[]> {
-  const cosmetics = await Cosmetic.find({ isActive: true })
+export async function listPublicCosmetics(ownedIds: string[] = []): Promise<PublicCosmetic[]> {
+  const cosmetics = await Cosmetic.find({ isActive: true, $or: [{ rewardOnly: { $ne: true } }, { _id: { $in: ownedIds } }] })
     .sort({ type: 1, coinPrice: 1, name: 1 })
     .lean();
   return cosmetics.map((cosmetic) => toPublicCosmetic(cosmetic as unknown as RawCosmetic));

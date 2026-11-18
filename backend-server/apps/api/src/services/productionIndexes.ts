@@ -1,3 +1,4 @@
+import { Bond, BondRequest, BondPoint, BondRankingSnapshot, BondReward } from "../models/Bond.js";
 import { Block } from "../models/Block.js";
 import { ChatMessage } from "../models/ChatMessage.js";
 import { Clan } from "../models/Clan.js";
@@ -42,6 +43,7 @@ import { WalletTransaction } from "../models/WalletTransaction.js";
 import { WithdrawalRequest } from "../models/WithdrawalRequest.js";
 
 const indexedModels = [
+  Bond, BondRequest, BondPoint, BondRankingSnapshot, BondReward,
   User,
   Room,
   RoomFollow,

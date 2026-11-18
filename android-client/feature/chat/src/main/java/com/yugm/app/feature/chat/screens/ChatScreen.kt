@@ -200,6 +200,7 @@ fun ChatScreen(
     onLoadMoreSearch: () -> Unit = {},
     onMute: (Boolean) -> Unit = {},
     onOpenProfile: (String) -> Unit = {},
+    onOpenBonds: (String) -> Unit = {},
     reactionCatalog: List<RoomReaction> = emptyList(),
     isReactionCatalogLoading: Boolean = false,
     reactionCatalogError: String? = null,
@@ -1003,6 +1004,7 @@ fun ChatScreen(
                             isBlockedByMe = isBlockedByMe,
                             onExpandedChange = { showMore = it },
                             onProfile = { partner?.id?.takeIf(String::isNotBlank)?.let(onOpenProfile) },
+                            onBonds = { partner?.id?.takeIf(String::isNotBlank)?.let(onOpenBonds) },
                             onSearch = {
                                 if (searchVisible) { searchVisible = false; searchQuery = "" } else searchVisible = true
                             },
@@ -1943,6 +1945,7 @@ private fun ConversationOptionsMenu(
     isBlockedByMe: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     onProfile: () -> Unit,
+    onBonds: () -> Unit,
     onSearch: () -> Unit,
     onMute: () -> Unit,
     onReport: () -> Unit,
@@ -1965,6 +1968,11 @@ private fun ConversationOptionsMenu(
                 text = { Text("Profile", color = colors.textPrimary) },
                 enabled = isProfileEnabled,
                 onClick = { onExpandedChange(false); onProfile() }
+            )
+            DropdownMenuItem(
+                text = { Text("Bonds", color = colors.textPrimary) },
+                enabled = isProfileEnabled && !isBlockedByMe,
+                onClick = { onExpandedChange(false); onBonds() }
             )
             DropdownMenuItem(
                 text = { Text("Search in chat", color = colors.textPrimary) },

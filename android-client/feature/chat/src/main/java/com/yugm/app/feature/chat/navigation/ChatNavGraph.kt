@@ -1,6 +1,10 @@
 package com.yugm.app.feature.chat.navigation
 
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
@@ -29,11 +33,25 @@ fun NavGraphBuilder.chatNavGraph(
 
     composable(
         route = Screen.Chat.route,
-        arguments = listOf(navArgument("partnerId") { type = NavType.StringType })
+        arguments = listOf(navArgument("partnerId") { type = NavType.StringType }, navArgument("call") { type = NavType.StringType; defaultValue = "" })
     ) { backStackEntry ->
         val partnerId = backStackEntry.arguments?.getString("partnerId") ?: ""
         val chatViewModel: ChatViewModel = hiltViewModel(backStackEntry)
         val context = LocalContext.current
+        var callOpened by rememberSaveable { mutableStateOf(false) }
+        val call = backStackEntry.arguments?.getString("call").orEmpty()
+        val isReady = chatViewModel.partner?.id == partnerId && !chatViewModel.isLoading
+        LaunchedEffect(call, isReady) {
+            if (!callOpened && call in listOf("VOICE", "VIDEO") && isReady) {
+                callOpened = true
+                val type = if (call == "VIDEO") RoomType.Video else RoomType.Voice
+                chatViewModel.startPrivateCall(type, onSuccess = { room ->
+                    navController.navigate(if (type == RoomType.Video) Screen.VideoRoom.createRoute(room.id) else Screen.VoiceRoom.createRoute(room.id))
+                }, onFailure = { message ->
+                    android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+                })
+            }
+        }
         LaunchedEffect(authTokenProvider(), currentUserIdProvider(), partnerId) {
             chatViewModel.connect(authTokenProvider(), currentUserIdProvider(), partnerId)
         }
@@ -104,6 +122,7 @@ fun NavGraphBuilder.chatNavGraph(
             onAttachmentSelected = chatViewModel::sendAttachment,
             onTyping = chatViewModel::sendTypingStatus,
             onOpenProfile = { userId -> navController.navigate(Screen.ProfileDetail.createRoute(userId)) },
+            onOpenBonds = { userId -> navController.navigate(Screen.Bonds.createRoute(userId)) },
             isCurrentUserVip = chatViewModel.isCurrentUserVip,
             onOpenVip = { navController.navigate(Screen.Vip.route) },
             onOpenRoom = { roomId -> navController.navigate(Screen.RoomLobby.createRoute(roomId)) },

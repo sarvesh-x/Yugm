@@ -23,9 +23,12 @@ sealed class Screen(val route: String) {
         fun createRoute(userId: String, list: String) = "profile_social/$userId/${Uri.encode(list)}"
     }
     object Matches : Screen("matches")
+    object Bonds : Screen("bonds?partner={partner}&center={center}") {
+        fun createRoute(partner: String = "", center: Boolean = false) = "bonds?partner=${Uri.encode(partner)}&center=$center"
+    }
     object ChatList : Screen("chat_list")
-    object Chat : Screen("chat/{partnerId}") {
-        fun createRoute(partnerId: String) = "chat/$partnerId"
+    object Chat : Screen("chat/{partnerId}?call={call}") {
+        fun createRoute(partnerId: String, call: String = "") = if (call.isBlank()) "chat/$partnerId" else "chat/$partnerId?call=${Uri.encode(call)}"
     }
     object VoiceRooms : Screen("voice_rooms")
     object RoomLobby : Screen("room_lobby/{roomId}/{roomType}") {

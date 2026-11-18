@@ -58,6 +58,13 @@ export async function createNotification(
   data?: Record<string, unknown>
 ) {
   const notification = await Notification.create({ userId, type, title, body, data });
+  await dispatchNotification(notification);
+  return notification;
+}
+
+export async function dispatchNotification(notification: INotification) {
+  const { type, title, body, data } = notification;
+  const userId = notification.userId.toString();
   const preferenceKey = preferenceForNotification(type, title, body, data);
   const user = preferenceKey
     ? await User.findById(userId).select("notificationPreferences").lean().catch(() => null)
@@ -67,6 +74,10 @@ export async function createNotification(
 
   emitUser(userId, socketEvents.notificationNew, { notification });
 
+  if (data?.type === "BONDS") {
+    const bondUser = await User.findById(userId).select("bondNotifications").lean();
+    if (bondUser?.bondNotifications === false) return notification;
+  }
   const tokens = await DeviceToken.find({ userId }).lean();
   if (tokens.length > 0) {
     try {

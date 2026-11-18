@@ -481,7 +481,7 @@ export const diamondSourceLabels = {
 } as const satisfies Record<(typeof diamondSources)[number], string>;
 
 export const walletSources = [
-  "RECHARGE", "GIFT_SENT", "GIFT_RECEIVED", "GIFT_SENT_DM", "GIFT_RECEIVED_DM", "VIP_PURCHASE",
+  "BOND_HOLD", "BOND_RELEASE", "RECHARGE", "GIFT_SENT", "GIFT_RECEIVED", "GIFT_SENT_DM", "GIFT_RECEIVED_DM", "VIP_PURCHASE",
   "PROFILE_COSMETIC_PURCHASE", "COSMETIC_BUNDLE_PURCHASE", "COSMETIC_GIFT_SENT", "COSMETIC_GIFT_RECEIVED",
   "LEVEL_REWARD", "STREAK_BONUS", "DAILY_REWARD", "ADMIN_ADJUSTMENT", "RAZORPAY_PURCHASE",
   "GOOGLE_PLAY_PURCHASE", "PAYMENT_REFUND", "REFERRAL_BONUS", "STORY_REWARD", "SUBSCRIPTION",
@@ -499,6 +499,8 @@ export const walletSourceLabels = {
   GIFT_RECEIVED: "Gift received",
   GIFT_SENT_DM: "Direct gift sent",
   GIFT_RECEIVED_DM: "Direct gift received",
+  BOND_HOLD: "Bond invitation gift hold",
+  BOND_RELEASE: "Bond invitation gift returned",
   VIP_PURCHASE: "VIP membership",
   PROFILE_COSMETIC_PURCHASE: "Profile cosmetic",
   COSMETIC_BUNDLE_PURCHASE: "Cosmetic bundle",

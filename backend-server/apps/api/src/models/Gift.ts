@@ -13,7 +13,12 @@ const giftSchema = new Schema(
   animationKey: { type: String, default: "" },
   expiresAt: { type: Date, default: null },
     comboMultiplier: { type: Number, default: 1 },
-    category: { type: String, default: "normal", enum: ["normal", "premium", "limited", "seasonal", "mythology", "space", "dragon", "luxury", "vip"] },
+    category: { type: String, default: "normal", enum: ["normal", "premium", "limited", "seasonal", "mythology", "space", "dragon", "luxury", "vip", "bonds"] },
+    bondPurpose: { type: String, enum: ["INVITATION", "PROGRESSION", "ANNIVERSARY", "COSMETIC"] },
+    bondKind: String,
+    bondPoints: { type: Number, min: 0, default: 0 },
+    bondMinimumDays: { type: Number, min: 0, default: 0 },
+    bondCosmeticId: String,
     theme: { type: String, default: "" },
     rarity: { type: String, default: "common", enum: ["common", "rare", "epic", "legendary", "mythic"] },
     limitedEdition: {

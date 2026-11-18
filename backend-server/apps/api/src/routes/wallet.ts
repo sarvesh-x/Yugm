@@ -81,7 +81,7 @@ async function consumeGooglePurchaseIfNeeded(purchase: any, productId: string, p
 walletRouter.get("/gifts", asyncHandler(async (_req, res) => {
   const cached = await getCachedJson<{ gifts: unknown[] }>("gifts:list");
   if (cached) return sendOk(res, cached);
-  const gifts = await Gift.find({ isActive: true, $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }] }).sort({ coinPrice: 1 }).lean();
+  const gifts = await Gift.find({ isActive: true, category: { $ne: "bonds" }, $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }] }).sort({ coinPrice: 1 }).lean();
   const payload = { gifts };
   await setCachedJson("gifts:list", payload, 300);
   sendOk(res, payload);
@@ -212,7 +212,7 @@ walletRouter.get("/wallet/packs", (_req: AuthRequest, res) => sendOk(res, { pack
 walletRouter.get("/wallet/cosmetics", asyncHandler(async (req: AuthRequest, res) => {
   await ensureDefaultCosmetics();
   sendOk(res, {
-    cosmetics: await listPublicCosmetics(),
+    cosmetics: await listPublicCosmetics(req.user!.ownedCosmeticIds),
     ownedCosmeticIds: req.user!.ownedCosmeticIds ?? [],
     activeCosmetics: req.user!.activeCosmetics ?? {}
   });
@@ -221,6 +221,7 @@ walletRouter.get("/wallet/cosmetics", asyncHandler(async (req: AuthRequest, res)
 walletRouter.post("/wallet/cosmetics/purchase", requireWalletNotFrozen, validateBody(purchaseProfileCosmeticSchema), asyncHandler(async (req: AuthRequest, res) => {
   await ensureDefaultCosmetics();
   const cosmetic = await findProfileCosmetic(req.body.cosmeticId);
+  if (cosmetic?.rewardOnly) throw new HttpError(403, "This cosmetic is earned through Bonds", ErrorCode.FORBIDDEN);
   if (!cosmetic || !cosmetic.isActive) throw new HttpError(400, "Invalid profile cosmetic", ErrorCode.VALIDATION);
   if ((req.user!.ownedCosmeticIds ?? []).includes(req.body.cosmeticId)) {
     return sendOk(res, { cosmetic: toPublicCosmetic(cosmetic), ownedCosmeticIds: req.user!.ownedCosmeticIds, activeCosmetics: req.user!.activeCosmetics, balance: req.user!.walletBalance, cosmetics: await listPublicCosmetics() });
@@ -284,6 +285,7 @@ walletRouter.post("/wallet/cosmetics/transfer", requireWalletNotFrozen, validate
   await ensureDefaultCosmetics();
   const cosmetic = await findProfileCosmetic(req.body.cosmeticId);
   if (!cosmetic) throw new HttpError(404, "Cosmetic not found", ErrorCode.NOT_FOUND);
+  if (cosmetic.rewardOnly) throw new HttpError(403, "Bond rewards cannot be transferred", ErrorCode.FORBIDDEN);
   if (!(req.user!.ownedCosmeticIds ?? []).includes(req.body.cosmeticId)) throw new HttpError(403, "You don't own this cosmetic", ErrorCode.FORBIDDEN);
   const [receiver] = await Promise.all([
     User.findById(req.body.receiverId).select("_id").lean(),
@@ -477,7 +479,7 @@ walletRouter.post("/rooms/:id/send-gift", giftLimiter, requireWalletNotFrozen, v
   if (!isValidObjectId(req.body.receiverId)) throw new HttpError(400, "Invalid receiver ID", ErrorCode.VALIDATION);
 
   const room = await Room.findById(req.params.id).lean();
-  const gift = await Gift.findOne({ _id: req.body.giftId, isActive: true }).lean();
+  const gift = await Gift.findOne({ _id: req.body.giftId, isActive: true, category: { $ne: "bonds" } }).lean();
   if (!room || !gift) throw new HttpError(404, "Room or gift not found", ErrorCode.NOT_FOUND);
   if (gift.category?.toLowerCase() === "vip" && (getVipStatus(req.user).vipLevel ?? 0) < 1) throw new HttpError(403, "VIP gifts unlock at VIP 1", ErrorCode.FORBIDDEN);
   if (room.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
@@ -618,7 +620,7 @@ walletRouter.post("/direct-send-gift", requireWalletNotFrozen, validateBody(send
   }
   if (receiverId === req.user!.id) throw new HttpError(400, "Cannot send gifts to yourself", ErrorCode.VALIDATION);
   const currency = req.body.currency ?? "COINS";
-  const gift = await Gift.findOne({ _id: giftId, isActive: true }).lean();
+  const gift = await Gift.findOne({ _id: giftId, isActive: true, category: { $ne: "bonds" } }).lean();
   const receiver = await User.findById(receiverId).lean();
   if (!gift || !receiver) throw new HttpError(404, "Gift or receiver not found", ErrorCode.NOT_FOUND);
   if (gift.category?.toLowerCase() === "vip" && (getVipStatus(req.user).vipLevel ?? 0) < 1) throw new HttpError(403, "VIP gifts unlock at VIP 1", ErrorCode.FORBIDDEN);

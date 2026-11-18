@@ -7,6 +7,7 @@ export interface CosmeticDocument extends Document<string> {
   rarity: string;
   preview: string;
   isActive: boolean;
+  rewardOnly?: boolean;
   assetKind?: string;
   assetUrl?: string;
   createdAt: Date;
@@ -22,6 +23,7 @@ const cosmeticSchema = new Schema<CosmeticDocument>(
     rarity: { type: String, enum: ["COMMON", "RARE", "EPIC", "LEGENDARY"], default: "COMMON" },
     preview: { type: String, default: "" },
     isActive: { type: Boolean, default: true },
+    rewardOnly: { type: Boolean, default: false },
     assetKind: { type: String },
     assetUrl: { type: String }
   },

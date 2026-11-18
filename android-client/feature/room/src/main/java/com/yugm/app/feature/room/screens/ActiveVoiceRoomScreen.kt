@@ -330,7 +330,8 @@ fun ActiveVoiceRoomScreen(
     canSpeak: Boolean = participants.any {
         it.user.id == currentUserId && it.role in listOf("HOST", "SPEAKER", "MODERATOR")
     },
-    badgeToken: String = ""
+    badgeToken: String = "",
+    onOpenBonds: ((String) -> Unit)? = null
 ) {
     DisposableEffect(room.id) {
         onJoin()
@@ -684,6 +685,7 @@ fun ActiveVoiceRoomScreen(
         currentUserId = currentUserId,
         inventory = giftInventory,
         onDismiss = { giftOpen = false },
+        onOpenBondGifts = onOpenBonds?.let { open -> { target -> giftOpen = false; open(target) } },
         onSend = { gift ->
             onGift(gift, "COINS", giftRecipientId)
             giftRecipientId = room.host?.id.orEmpty()
@@ -1523,6 +1525,10 @@ fun ActiveVoiceRoomScreen(
                         onOpenProfile(target.user.id); selectedParticipant = null
                     }
                 }
+                if (onOpenBonds != null) TextButton(onClick = {
+                    selectedParticipant = null
+                    onOpenBonds(if (isSelf) "" else target.user.id)
+                }) { Text("Bonds", color = RoomSheetAccent) }
                 if (isSelf && target.role in listOf("HOST", "SPEAKER", "MODERATOR")) {
                     ProfileActionButton("Leave microphone", listOf(Color(0xFF6C334B), Color(0xFF3D2336)), Modifier.fillMaxWidth().padding(top = 10.dp)) {
                         onLeaveSeat(); selectedParticipant = null; onToast("You left the mic and returned to the audience")

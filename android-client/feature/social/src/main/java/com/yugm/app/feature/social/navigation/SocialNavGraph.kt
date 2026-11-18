@@ -276,6 +276,7 @@ fun NavGraphBuilder.socialNavGraph(
             onOpenTarget = { notification ->
                 when {
                         notification.actionType == "ACHIEVEMENT_UNLOCKED" || notification.achievementId.isNotBlank() -> navController.navigate(Screen.Achievements.route)
+                        notification.actionType == "BONDS" -> navController.navigate(Screen.Bonds.createRoute(center = true))
                         notification.actionType == "LEVEL_UP" -> navController.navigate(Screen.Growth.route)
                         notification.callType.equals("VIDEO", true) && notification.roomId.isNotBlank() -> navController.navigate(Screen.VideoRoom.createRoute(notification.roomId))
                         notification.callType.equals("VOICE", true) && notification.roomId.isNotBlank() -> navController.navigate(Screen.VoiceRoom.createRoute(notification.roomId))

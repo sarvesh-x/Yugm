@@ -278,6 +278,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                                 .fillMaxWidth().clickable {
                                     mainViewModel.dismissInAppNotification()
                                     when {
+                                        notification.actionType == "BONDS" -> navController.navigate(Screen.Bonds.createRoute(center = true))
                                         notification.callType.equals("VIDEO", true) && notification.roomId.isNotBlank() -> navController.navigate(Screen.VideoRoom.createRoute(notification.roomId))
                                         notification.callType.equals("VOICE", true) && notification.roomId.isNotBlank() -> navController.navigate(Screen.VoiceRoom.createRoute(notification.roomId))
                                         notification.clanId.isNotBlank() -> navController.navigate(Screen.ClanDetail.createRoute(notification.clanId))
@@ -338,6 +339,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
     }
 
     private fun routeFromPushIntent(intent: Intent?): String? {
+        if (intent?.getStringExtra("type") == "BONDS") return Screen.Bonds.createRoute(center = true)
         val roomId = intent?.getStringExtra("roomId")
         val callType = intent?.getStringExtra("callType").orEmpty()
         val clanId = intent?.getStringExtra("clanId")

@@ -19,6 +19,7 @@
     "PORT": "8787",
     "MONGODB_DB_NAME": "YugmStaging",
     "STORAGE_DRIVER": "mongodb",
+    "YUGM_BONDS_ENABLED": "true",
     "GOOGLE_PLAY_PACKAGE_NAME": "com.yugm.app",
     "GOOGLE_PLAY_SUBS_ENABLED": "false",
     "MONETIZATION_DIAMONDS_ENABLED": "false",

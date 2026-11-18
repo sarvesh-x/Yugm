@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-enum class SyncTopic { ALL, ROOMS, CHAT, CLANS, PROFILE, WALLET, GIFTS, TASKS, NOTIFICATIONS, EVENTS, SOCIAL, SETTINGS }
+enum class SyncTopic { ALL, ROOMS, CHAT, CLANS, PROFILE, WALLET, GIFTS, TASKS, NOTIFICATIONS, EVENTS, SOCIAL, SETTINGS, BONDS }
 
 /** Invalidations contain no user data. Screens re-read the authorized API. */
 object AppSync {
@@ -42,11 +42,12 @@ object AppSync {
             "missions", "battle-pass", "achievements", "referrals" -> SyncTopic.TASKS
             "events" -> SyncTopic.EVENTS
             "notifications" -> SyncTopic.NOTIFICATIONS
+            "bonds" -> SyncTopic.BONDS
             "support", "settings", "moderation", "safety", "trust-verification" -> SyncTopic.SETTINGS
             else -> SyncTopic.SOCIAL
         }
         invalidate(topic, SyncTopic.PROFILE, SyncTopic.TASKS)
-        if (topic == SyncTopic.GIFTS) invalidate(SyncTopic.WALLET)
+        if (topic == SyncTopic.GIFTS || topic == SyncTopic.BONDS) invalidate(SyncTopic.WALLET)
     }
 }
 

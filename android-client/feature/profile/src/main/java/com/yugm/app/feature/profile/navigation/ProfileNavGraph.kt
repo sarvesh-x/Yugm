@@ -10,6 +10,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.yugm.app.core.navigation.Screen
+import com.yugm.app.feature.profile.bonds.BondsScreen
 import com.yugm.app.core.navigation.navigateTopLevel
 import com.yugm.app.feature.profile.screens.CosmeticsStoreScreen
 import com.yugm.app.feature.profile.screens.CustomizeProfileScreen
@@ -42,6 +43,19 @@ fun NavGraphBuilder.profileNavGraph(
         if (!navController.popBackStack()) {
             navController.navigateTopLevel(Screen.Discover.route)
         }
+    }
+    composable(Screen.Bonds.route, arguments = listOf(
+        navArgument("partner") { type = NavType.StringType; defaultValue = "" },
+        navArgument("center") { type = NavType.BoolType; defaultValue = false }
+    )) { entry ->
+        BondsScreen(
+            token = authTokenProvider(), initialPartner = entry.arguments?.getString("partner").orEmpty(),
+            initialCenter = entry.arguments?.getBoolean("center") == true, onBack = onProfileBack,
+            onProfile = { id -> navController.navigate(Screen.ProfileDetail.createRoute(id)) },
+            onChat = { id -> navController.navigate(Screen.Chat.createRoute(id)) },
+            onCall = { id, video -> navController.navigate(Screen.Chat.createRoute(id, if (video) "VIDEO" else "VOICE")) },
+            onBackpack = onOpenInventory
+        )
     }
     composable(
         route = Screen.ProfileDetail.route,
@@ -106,7 +120,9 @@ fun NavGraphBuilder.profileNavGraph(
             onOpenPayments = onOpenPayments,
             onOpenInventory = onOpenInventory,
             onOpenClan = onOpenClan,
-            onOpenClanList = onOpenClanList
+            onOpenClanList = onOpenClanList,
+            onOpenBonds = { id -> navController.navigate(Screen.Bonds.createRoute(id)) },
+            onBondPartnerProfile = { id -> navController.navigate(Screen.ProfileDetail.createRoute(id)) }
         )
     }
 
@@ -125,7 +141,8 @@ fun NavGraphBuilder.profileNavGraph(
             initialList = list,
             isOwnProfile = userId == currentUserIdProvider(),
             onBack = onProfileBack,
-            onOpenProfile = { targetId -> navController.navigate(Screen.ProfileDetail.createRoute(targetId)) }
+            onOpenProfile = { targetId -> navController.navigate(Screen.ProfileDetail.createRoute(targetId)) },
+            onOpenBonds = { targetId -> navController.navigate(Screen.Bonds.createRoute(targetId)) }
         )
     }
 

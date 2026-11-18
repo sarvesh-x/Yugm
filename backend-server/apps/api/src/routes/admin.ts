@@ -1,3 +1,4 @@
+import { endUnavailableBonds } from "../services/bonds.js";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import { Router } from "express";
@@ -859,6 +860,7 @@ adminRouter.post("/users/:userId/suspend", requirePermission("users.suspend"), v
 adminRouter.post("/users/:userId/ban", requireTwoFactor, requirePermission("users.ban"), validateBody(reasonSchema), asyncHandler(async (req: AdminAuthRequest, res) => {
   const user = await User.findByIdAndUpdate(req.params.userId, { isBlocked: true, moderationReason: req.body.reason, $inc: { moderationStrikes: 1, tokenVersion: 1 } }, { new: true }).lean();
   if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+  await endUnavailableBonds(req.params.userId, "TERMINATED_BY_MODERATION");
   await createModerationAction(req, "USER_BANNED", { targetType: "USER", targetId: req.params.userId, targetUserId: req.params.userId, reason: req.body.reason });
   await refreshUserSafetyStatus(req.params.userId, req.admin!.id);
   adminOk(res, { user });
@@ -1088,7 +1090,10 @@ adminRouter.post("/reports/:reportId/action", requirePermission("reports.resolve
   const queue = await ensureQueueForReport(report);
   if (req.body.action === "WARNING" && report.targetUserId) await createNotification(report.targetUserId.toString(), "SYSTEM", "Community warning", req.body.reason, { reportId: req.params.reportId });
   if (req.body.action === "SUSPEND_USER" && report.targetUserId) await User.findByIdAndUpdate(report.targetUserId, { suspendedUntil: new Date(Date.now() + (req.body.durationHours ?? 24) * 60 * 60 * 1000), moderationReason: req.body.reason, $inc: { moderationStrikes: 1 } });
-  if (req.body.action === "BAN_USER" && report.targetUserId) await User.findByIdAndUpdate(report.targetUserId, { isBlocked: true, moderationReason: req.body.reason, $inc: { moderationStrikes: 1, tokenVersion: 1 } });
+  if (req.body.action === "BAN_USER" && report.targetUserId) {
+    await User.findByIdAndUpdate(report.targetUserId, { isBlocked: true, moderationReason: req.body.reason, $inc: { moderationStrikes: 1, tokenVersion: 1 } });
+    await endUnavailableBonds(String(report.targetUserId), "TERMINATED_BY_MODERATION");
+  }
   if (req.body.action === "END_ROOM" && report.roomId) {
     const roomId = report.roomId.toString();
     const ended = await endRoom(roomId, req.body.reason);

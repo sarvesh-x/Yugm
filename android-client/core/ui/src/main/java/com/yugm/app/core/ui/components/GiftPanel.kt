@@ -33,6 +33,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -74,7 +75,8 @@ fun GiftPanel(
     inventory: List<InventoryItem> = emptyList(),
     onSendToRecipients: ((GiftItem, String, List<String>) -> Unit)? = null,
     onSendInventory: ((InventoryItem, List<String>) -> Unit)? = null,
-    currentUserVipLevel: Int = 0
+    currentUserVipLevel: Int = 0,
+    onOpenBondGifts: ((String) -> Unit)? = null
 ) {
     if (!open) return
     var currency by remember { mutableStateOf("COINS") }
@@ -175,7 +177,13 @@ fun GiftPanel(
                 }
             }
 
-            if (tab == "Backpack") {
+            if (tab == "Intimacy" && onOpenBondGifts != null) {
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    TextButton(onClick = { onOpenBondGifts(selectedRecipientIds.singleOrNull().orEmpty()) }) {
+                        Text("Open Bond gifts", color = GiftInk)
+                    }
+                }
+            } else if (tab == "Backpack") {
                 if (inventory.isEmpty()) {
                     Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(7.dp)) {

@@ -95,12 +95,14 @@ class SocketManager @Inject constructor() {
                 SyncTopic.CHAT to listOf("direct:message:new", "direct:reaction:new", "direct:message:deleted", "direct:conversation:deleted"),
                 SyncTopic.CLANS to listOf("clan:message:new", "clan:message:updated", "clan:message:deleted", "clan:chat:cleaned", "clan:updated", "clan:deleted", "clan:member:joined", "clan:member:left", "clan:member:removed", "clan:member:role_updated", "clan:ownership:transferred"),
                 SyncTopic.ROOMS to listOf("voice:room:presence:started", "voice:room:presence:updated", "voice:room:presence:ended"),
-                SyncTopic.NOTIFICATIONS to listOf("notification:new")
+                SyncTopic.NOTIFICATIONS to listOf("notification:new"),
+                SyncTopic.BONDS to listOf("bonds:changed")
             ).forEach { (topic, events) ->
                 events.forEach { event ->
                     socket?.on(event) {
                         if (socket !== connection) return@on
                         AppSync.invalidate(topic)
+                        if (topic == SyncTopic.BONDS) AppSync.invalidate(SyncTopic.WALLET, SyncTopic.PROFILE)
                         if (topic == SyncTopic.NOTIFICATIONS) AppSync.invalidate(SyncTopic.PROFILE, SyncTopic.WALLET, SyncTopic.GIFTS, SyncTopic.TASKS, SyncTopic.SOCIAL)
                     }
                 }

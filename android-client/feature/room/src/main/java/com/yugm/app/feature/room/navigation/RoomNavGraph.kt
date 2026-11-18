@@ -311,6 +311,7 @@ fun NavGraphBuilder.roomNavGraph(
                     if (!targetId.isNullOrBlank()) navController.navigate(Screen.Chat.createRoute(targetId))
                 },
                 onOpenProfile = { targetId -> navController.navigate(Screen.ProfileDetail.createRoute(targetId)) },
+                onOpenBonds = { targetId -> navController.navigate(Screen.Bonds.createRoute(targetId)) },
                 onMinimize = { onMinimizeRoom(room, com.yugm.app.core.model.RoomType.Voice) },
                 onReact = roomViewModel::reactToRoom,
                 onLoadPkOpponents = { search -> roomViewModel.loadPkOpponents(com.yugm.app.core.model.PkBattleType.VOICE, search) },

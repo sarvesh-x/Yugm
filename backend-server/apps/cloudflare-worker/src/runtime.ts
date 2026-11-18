@@ -9,7 +9,7 @@ class WorkerUpgradeServer { close() {} }
 export async function startApiRuntime(bindings: Record<string, unknown>, trackBackground: (work: Promise<unknown>) => void): Promise<void> {
   if (initialized) return;
 
-  const [db, appModule, authIndexes, firebase, jobs, achievementSeeder, cosmetics, productionIndexes, migration, redis, socket, officialRooms, storage, roomLifecycle, livekit] = await Promise.all([
+  const [db, appModule, authIndexes, firebase, jobs, achievementSeeder, cosmetics, productionIndexes, migration, redis, socket, officialRooms, storage, roomLifecycle, livekit, bonds] = await Promise.all([
     import("../../api/src/config/db.js"),
     import("../../api/src/app.js"),
     import("../../api/src/services/authIndexes.js"),
@@ -24,7 +24,8 @@ export async function startApiRuntime(bindings: Record<string, unknown>, trackBa
     import("../../api/src/services/officialRooms.js"),
     import("../../api/src/services/storage.js"),
     import("../../api/src/services/roomLifecycle.js"),
-    import("../../api/src/services/livekit.js")
+    import("../../api/src/services/livekit.js"),
+    import("../../api/src/services/bonds.js")
   ]);
 
   // Read media credentials directly from Durable Object bindings.
@@ -36,6 +37,7 @@ export async function startApiRuntime(bindings: Record<string, unknown>, trackBa
 
   await db.connectDatabase();
   roomLifecycle.setRoomBackgroundTracker(trackBackground);
+  bonds.setBondBackgroundTracker(trackBackground);
   await storage.ensureMongoMediaIndexes();
   await authIndexes.ensureAuthIndexes();
   await productionIndexes.ensureProductionIndexes();

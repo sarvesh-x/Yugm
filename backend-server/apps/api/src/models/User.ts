@@ -10,6 +10,9 @@ export interface IUser extends mongoose.Document {
   avatar?: string;
   gender?: string;
   age?: number;
+  bondVersion?: number;
+  bondInvitations?: boolean;
+  bondNotifications?: boolean;
   city?: string;
   state?: string;
   bio?: string;
@@ -122,6 +125,9 @@ const userSchema = new Schema<IUser>(
     avatar: String,
     gender: String,
     age: Number,
+    bondVersion: { type: Number, default: 0, select: false },
+    bondInvitations: { type: Boolean, default: true },
+    bondNotifications: { type: Boolean, default: true },
     city: String,
     state: String,
     bio: String,

@@ -71,6 +71,12 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
 export async function runMaintenanceTasks() {
   const results: string[] = [];
   try {
+    const { runBondMaintenance } = await import("./bondProgress.js");
+    await runBondMaintenance();
+  } catch (error) {
+    results.push(`Bond maintenance failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  try {
     const { awardWeeklyHonors } = await import("./badges.js");
     await awardWeeklyHonors();
   } catch (error) {
@@ -82,6 +88,8 @@ export async function runMaintenanceTasks() {
     const deletedUsers = await User.find({ deletionRequestedAt: { $lte: expiredDeletionCutoff } }).select("_id").limit(100).lean();
     for (const user of deletedUsers) {
       const userId = user._id;
+      const { endUnavailableBonds } = await import("./bonds.js");
+      await endUnavailableBonds(String(userId), "TERMINATED_BY_ACCOUNT_REMOVAL");
       const ownedRoomIds = await Room.distinct("_id", { hostId: userId });
       const ownedClans = await Clan.find({ ownerId: userId }).select("_id memberIds").lean();
       await Promise.all([

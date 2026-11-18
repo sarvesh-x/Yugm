@@ -1,3 +1,4 @@
+import { bondsRouter } from "./routes/bonds.js";
 import compression from "compression";
 import cors from "cors";
 import crypto from "node:crypto";
@@ -270,6 +271,7 @@ export function createApp() {
   app.use("/api/dating", datingRouter);
   app.use("/api/events", eventsRouter); // Preserve older double-prefixed clients.
   app.use("/api", eventsRouter); // Android's canonical /api/events endpoints.
+  app.use("/api/bonds", bondsRouter);
   app.use("/api/experience", experienceRouter);
   app.use("/api", feedRouter);
   app.use("/api", friendsRouter);

@@ -19,6 +19,8 @@ function resolveJwtSecret(value: string | undefined, nodeEnv: string): string {
 }
 
 const envSchema = z.object({
+  YUGM_BONDS_ENABLED: z.enum(['true', 'false']).transform(value => value === 'true').optional(),
+  YUGM_BOND_SLOTS: z.coerce.number().int().min(1).max(12).default(3),
   NODE_ENV: z.string().default("development"),
   YUGM_RUNTIME: z.enum(["node", "cloudflare"]).default("node"),
   PORT: z.coerce.number().default(4000),
