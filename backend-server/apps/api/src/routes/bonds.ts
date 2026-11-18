@@ -7,8 +7,10 @@ import { bondLimiter } from "../middleware/rateLimit.js";
 import { validateBody } from "../middleware/validate.js";
 import { Bond, BondPoint, BondRankingSnapshot, BondRequest, type BondRecord } from "../models/Bond.js";
 import { Block } from "../models/Block.js";
+import { Clan } from "../models/Clan.js";
 import { Friendship } from "../models/Friendship.js";
 import { User } from "../models/User.js";
+import { UserSafetyStatus } from "../models/UserSafetyStatus.js";
 import { asyncHandler, ErrorCode, HttpError, sendOk } from "../utils/http.js";
 import {
   bondCheckIn, bondPeopleFields, bondPreferences, describeBond, endBond, expireBondRequests, listBondGifts,
@@ -43,6 +45,24 @@ function person(user?: { _id: unknown; name: string; username?: string; avatar?:
   return user ? { id: String(user._id), name: user.name, username: user.username, avatar: user.avatar } : null;
 }
 const partnerId = (bond: BondRecord, user: string) => bond.users.map(String).find(id => id !== user) ?? "";
+
+async function usersWithOpenSlots(ids: string[], now = new Date()) {
+  if (!ids.length) return new Set<string>();
+  const [active, sent, restricted] = await Promise.all([
+    Bond.find({ users: { $in: ids }, status: "ACTIVE" }).select("users").lean(),
+    BondRequest.find({ senderId: { $in: ids }, status: "PENDING", bondId: null, expiresAt: { $gt: now } }).select("senderId").lean(),
+    UserSafetyStatus.find({ userId: { $in: ids }, $or: [{ isShadowBanned: true }, { isChatRestricted: true }] }).select("userId").lean()
+  ]);
+  const usage = new Map(ids.map(id => [id, 0]));
+  const occupy = (id: string) => {
+    const current = usage.get(id);
+    if (current !== undefined) usage.set(id, current + 1);
+  };
+  active.forEach(bond => bond.users.forEach(id => occupy(String(id))));
+  sent.forEach(request => occupy(String(request.senderId)));
+  restricted.forEach(row => usage.delete(String(row.userId)));
+  return new Set([...usage].filter(([, count]) => count < bondConfig.capacity).map(([id]) => id));
+}
 
 export const bondsRouter = Router();
 bondsRouter.use(requireAuth, (_req, _res, next) => next(bondEnabled() ? undefined : new HttpError(404, "Bonds is unavailable")), bondLimiter);
@@ -79,6 +99,7 @@ bondsRouter.get("/gift-catalog", asyncHandler(async (_req, res) => sendOk(res, {
 
 bondsRouter.get("/eligible-friends", asyncHandler(async (req: AuthRequest, res) => {
   const id = req.user!.id;
+  if (!memberAvailable(req.user!)) return sendOk(res, { friends: [] });
   const search = String(req.query.q ?? "").trim().slice(0, 60).toLowerCase();
   const [friends, blocks, bonds, invitations] = await Promise.all([
     Friendship.find({ status: "ACCEPTED", $or: [{ userId: id }, { friendId: id }] }).select("userId friendId").limit(500).lean(),
@@ -91,7 +112,8 @@ bondsRouter.get("/eligible-friends", asyncHandler(async (req: AuthRequest, res) 
   const candidates = await people(friends.flatMap(row => [String(row.userId), String(row.friendId)]).filter(value => !unavailable.has(value)));
   const eligible = [...candidates.values()].filter(user => memberAvailable(user) && user.bondInvitations !== false &&
     (!search || `${user.name} ${user.username ?? ""}`.toLowerCase().includes(search)));
-  sendOk(res, { friends: eligible.slice(0, 100).map(person) });
+  const open = await usersWithOpenSlots([id, ...eligible.map(user => String(user._id))]);
+  sendOk(res, { friends: open.has(id) ? eligible.filter(user => open.has(String(user._id))).slice(0, 100).map(person) : [] });
 }));
 
 bondsRouter.get("/profile/:id", asyncHandler(async (req: AuthRequest, res) => {
@@ -135,10 +157,11 @@ bondsRouter.get("/profile/:id", asyncHandler(async (req: AuthRequest, res) => {
       ...(showRank ? { weeklyRank: rank } : {}) });
   }
   const pair = [owner, viewer].sort().join(":");
-  const canInvite = viewer !== owner && memberAvailable(users.get(viewer) ?? null) && users.get(owner)?.bondInvitations !== false &&
+  const mayInvite = viewer !== owner && memberAvailable(users.get(viewer) ?? null) && users.get(owner)?.bondInvitations !== false &&
     !entries.some(bond => bond.pairKey === pair) &&
     !await BondRequest.exists({ pairKey: pair, status: "PENDING", expiresAt: { $gt: new Date() } }) &&
     !!await Friendship.exists({ status: "ACCEPTED", $or: [{ userId: owner, friendId: viewer }, { userId: viewer, friendId: owner }] });
+  const canInvite = mayInvite && (await usersWithOpenSlots([owner, viewer])).size === 2;
   sendOk(res, { bonds: cards, canInvite });
 }));
 
@@ -146,6 +169,19 @@ bondsRouter.get("/leaderboards", asyncHandler(async (req: AuthRequest, res) => {
   const category = z.enum(rankingCategories).catch("ACTIVITY").parse(req.query.category);
   const window = z.enum(rankingWindows).catch("WEEK").parse(req.query.window);
   const kindFilter = kind.optional().catch(undefined).parse(req.query.kind);
+  const scope = z.enum(["GLOBAL", "FRIENDS", "COMMUNITY"]).catch("GLOBAL").parse(req.query.scope);
+  const viewer = req.user!.id;
+  let network: Set<string> | undefined;
+  if (scope === "FRIENDS") {
+    const friendships = await Friendship.find({
+      status: "ACCEPTED", $or: [{ userId: viewer }, { friendId: viewer }]
+    }).select("userId friendId").lean();
+    network = new Set(friendships.map(row => String(String(row.userId) === viewer ? row.friendId : row.userId)));
+  } else if (scope === "COMMUNITY") {
+    const clan = await Clan.findOne({ memberIds: viewer }).select("memberIds").lean();
+    network = new Set(clan?.memberIds.map(String));
+    network.delete(viewer);
+  }
   const now = new Date();
   const current = rankingPeriod(now, window);
   const finalized = req.query.period === "previous";
@@ -155,15 +191,17 @@ bondsRouter.get("/leaderboards", asyncHandler(async (req: AuthRequest, res) => {
   const data = await Bond.find({ _id: { $in: ranked.map(entry => entry.bondId) }, status: "ACTIVE" }).lean();
   const byId = new Map(data.map(bond => [String(bond._id), bond]));
   const participants = await people(data.flatMap(bond => bond.users.map(String)));
+  const visibleNetwork = network;
   const entries = [];
   for (const rank of ranked) {
     const bond = byId.get(String(rank.bondId));
-    if (!bond || (kindFilter && bond.kind !== kindFilter) || !await optedIn(bond)) continue;
+    if (!bond || (kindFilter && bond.kind !== kindFilter)) continue;
     const ids = bond.users.map(String);
-    if (await Block.exists({ $or: [{ blockerId: req.user!.id, blockedUserId: { $in: ids } }, { blockerId: { $in: ids }, blockedUserId: req.user!.id }] })) continue;
+    if ((visibleNetwork && !ids.some(id => visibleNetwork.has(id))) || !await optedIn(bond)) continue;
+    if (await Block.exists({ $or: [{ blockerId: viewer, blockedUserId: { $in: ids } }, { blockerId: { $in: ids }, blockedUserId: viewer }] })) continue;
     entries.push({ rank: rank.rank, score: rank.score, kind: bond.kind, people: ids.map(id => person(participants.get(id))) });
   }
-  sendOk(res, { category, window, period, finalized: !!snapshot, entries });
+  sendOk(res, { category, window, scope, period, finalized: !!snapshot, entries });
 }));
 
 bondsRouter.put("/invitation-settings", validateBody(invitationSettings), asyncHandler(async (req: AuthRequest, res) => {

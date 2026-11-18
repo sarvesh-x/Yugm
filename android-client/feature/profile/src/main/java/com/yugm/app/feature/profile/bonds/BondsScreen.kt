@@ -158,8 +158,8 @@ internal fun BondsScreen(
                     if (detail != null) BondDetailsScreen(detail, home, state, token, viewModel, onProfile, onChat, onCall)
                     else CircularProgressIndicator(Modifier.align(Alignment.Center))
                 }
-                BondsPage.Rankings -> BondRankings(state.ranking, state.busy) { category, previous, window, kind ->
-                    viewModel.rankings(token, category, previous, window, kind)
+                BondsPage.Rankings -> BondRankings(state.ranking, state.busy) { category, previous, window, kind, scope ->
+                    viewModel.rankings(token, category, previous, window, kind, scope)
                 }
             }
         }

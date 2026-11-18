@@ -5,7 +5,7 @@ import { Block } from "../models/Block.js";
 import { User } from "../models/User.js";
 import { Notification } from "../models/Notification.js";
 import { addBondReward, bondDays, bondPeopleFields, bondPreferences, expireBondRequests, memberAvailable, pairBlockFilter, publishBonds } from "./bonds.js";
-import { bondConfig, bondRewardItems, dayMs, ensureBondCatalog, milestones, rankingPeriod, rankingWindows, type RankingWindow } from "./bondRules.js";
+import { anniversaryLeadMs, bondConfig, bondRewardItems, dayMs, ensureBondCatalog, milestones, nextAnniversary, rankingPeriod, rankingWindows, type RankingWindow } from "./bondRules.js";
 
 export const rankingCategories = ["SUPPORT", "ACTIVITY", "LONGEST"] as const;
 export type RankingCategory = typeof rankingCategories[number];
@@ -51,11 +51,12 @@ async function finalizeBondPeriod(now: Date, window: RankingWindow) {
     const existing = await BondRankingSnapshot.exists({ period: prior.id, category });
     if (existing) continue;
     const entries = await rankBonds(category, prior, prior.end);
-    await mongoose.connection.transaction(async session => {
+    const delivery = await mongoose.connection.transaction(async session => {
       const snapshot = await BondRankingSnapshot.updateOne({ period: prior.id, category }, {
         $setOnInsert: { entries, finalizedAt: now }
       }, { session, upsert: true });
-      if (!snapshot.upsertedCount) return;
+      if (!snapshot.upsertedCount) return [];
+      const notes = [];
       // Cosmetic rewards recognize reciprocal activity rather than spending.
       if (category === "ACTIVITY") {
         for (const entry of entries.slice(0, window === "WEEK" ? 3 : 1)) {
@@ -65,10 +66,45 @@ async function finalizeBondPeriod(now: Date, window: RankingWindow) {
             return settings.visibility === "PUBLIC" && settings.leaderboard;
           })) {
             await addBondReward(bond, `rank:${prior.id}:ACTIVITY`, bondRewardItems.weekly, now, session, new Date(now.getTime() + 7 * dayMs));
+            notes.push(...await Notification.create(bond.users.map(userId => ({
+              userId, type: "SYSTEM", title: "Bond ranking reward unlocked",
+              body: "Your Bonds Champion frame is available in Backpack for seven days.",
+              data: { type: "BONDS", kind: "RANK_REWARD", bondId: String(bond._id) }
+            })), { session, ordered: true }));
           }
         }
       }
+      return notes;
     });
+    if (delivery.length) publishBonds(delivery.map(note => String(note.userId)), undefined, undefined, delivery);
+  }
+}
+
+export async function sendBondAnniversaryReminders(now: Date) {
+  const due = await Bond.find({
+    status: "ACTIVE",
+    $or: [{ anniversaryReminderAt: { $lte: now } }, { anniversaryReminderAt: { $exists: false } }]
+  }).select("_id").limit(100).lean();
+  for (const item of due) {
+    const delivery = await mongoose.connection.transaction(async session => {
+      const bond = await Bond.findOne({ _id: item._id, status: "ACTIVE",
+        $or: [{ anniversaryReminderAt: { $lte: now } }, { anniversaryReminderAt: { $exists: false } }]
+      }).session(session).lean();
+      if (!bond) return [];
+      const anniversary = nextAnniversary(bond.activatedAt, now);
+      const remind = anniversary.getTime() - now.getTime() <= anniversaryLeadMs;
+      const next = remind ? nextAnniversary(bond.activatedAt, anniversary) : anniversary;
+      await Bond.updateOne({ _id: bond._id }, {
+        $set: { anniversaryReminderAt: new Date(next.getTime() - anniversaryLeadMs) }
+      }, { session });
+      if (!remind) return [];
+      return Notification.create(bond.users.filter(id => bondPreferences(bond, String(id)).reminders).map(userId => ({
+        userId, type: "SYSTEM", title: "A bond anniversary is coming up",
+        body: "See your upcoming anniversary in My Bonds.",
+        data: { type: "BONDS", kind: "ANNIVERSARY_REMINDER", bondId: String(bond._id) }
+      })), { session, ordered: true });
+    });
+    if (delivery.length) publishBonds(delivery.map(note => String(note.userId)), undefined, undefined, delivery);
   }
 }
 
@@ -123,5 +159,6 @@ export async function runBondMaintenance(now = new Date()) {
     if (result) publishBonds(result.ids, undefined, undefined, result.notes);
   }
   for (const window of rankingWindows) await finalizeBondPeriod(now, window);
+  await sendBondAnniversaryReminders(now);
 }
 

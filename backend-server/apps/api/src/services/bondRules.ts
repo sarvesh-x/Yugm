@@ -3,6 +3,17 @@ import { Gift } from "../models/Gift.js";
 import { Cosmetic } from "../models/Cosmetic.js";
 
 export const dayMs = 86_400_000;
+export const anniversaryLeadMs = 7 * dayMs;
+
+export function nextAnniversary(activatedAt: Date, after: Date) {
+  for (let year = Math.max(activatedAt.getUTCFullYear() + 1, after.getUTCFullYear()); ; year++) {
+    const next = new Date(activatedAt.getTime());
+    const month = activatedAt.getUTCMonth();
+    const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    next.setUTCFullYear(year, month, Math.min(activatedAt.getUTCDate(), lastDay));
+    if (next > after) return next;
+  }
+}
 export const bondKinds = {
   BESTIE: { name: "Bestie", description: "A close friendship you both choose.", icon: "🤝" },
   SOULMATE: { name: "Soulmate", description: "A special connection you define together.", icon: "💞" }

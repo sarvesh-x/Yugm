@@ -35,7 +35,9 @@ Endpoints are under `/api/bonds`. Responses use Yugm’s standard envelope. Only
 | POST `/:id/gifts` | Send an eligible progression gift using `giftId` and an idempotency `key` |
 | POST `/:id/type-change` | Request a new type with `kind` and `key`, then use invitation resolution |
 | POST `/:id/end` | Either participant can end immediately |
-| GET `/leaderboards` | Filter by `category` (ACTIVITY, SUPPORT, LONGEST), `window` (WEEK, MONTH, SEASON), `period` (current, previous), and optional `kind` |
+| GET `/leaderboards` | Filter by `category` (ACTIVITY, SUPPORT, LONGEST), `window` (WEEK, MONTH, SEASON), `period` (current, previous), optional `kind`, and `scope` (GLOBAL, FRIENDS, COMMUNITY). Network scopes preserve global rank. |
+
+Private anniversary reminders run within the final seven days before each UTC anniversary. The schedule advances transactionally, so a retry does not send a second reminder. For bonds activated on a leap day, the anniversary is February 28 in other years.
 
 The server emits `bonds:changed` to authorized participants only. It carries a timestamp and may carry an event ID and state version. It is an invalidation, so clients fetch scoped state rather than replaying private response bodies. Android refreshes on reconnect and app resume. Durable notifications are created with the transaction, and delivery happens after commit. Push and in-app notification taps open Relationship Center. Disabling bond push preserves the private in-app request and notification.
 

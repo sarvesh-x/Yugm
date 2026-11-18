@@ -19,7 +19,8 @@ const { Friendship } = await import("../models/Friendship.js");
 const { Block } = await import("../models/Block.js");
 const { bondsRouter } = await import("../routes/bonds.js");
 const { blockBondPair, endUnavailableBonds, expireBondRequests, setBondPreferences } = await import("../services/bonds.js");
-const { runBondMaintenance, expireBondRewards } = await import("../services/bondProgress.js");
+const { runBondMaintenance, expireBondRewards, sendBondAnniversaryReminders } = await import("../services/bondProgress.js");
+const { Notification } = await import("../models/Notification.js");
 const { dayMs, weeklyPeriod } = await import("../services/bondRules.js");
 const { WalletTransaction } = await import("../models/WalletTransaction.js");
 const { GiftTransaction } = await import("../models/GiftTransaction.js");
@@ -798,6 +799,8 @@ test("Bonds serializes opposite requests and accepts at most three slots under c
   const active = await Bond.find({ users: hub.id, status: "ACTIVE" }).lean();
   assert.equal(active.length, 3);
   assert.equal(new Set(active.map(row => row.slots[row.users.findIndex(id => id.toString() === hub.id)])).size, 3);
+  assert.equal((await get(`/bonds/profile/${hub.id}`, partners[4].token)).body.data.canInvite, false);
+  assert.deepEqual((await get("/bonds/eligible-friends", partners[4].token)).body.data.friends, []);
 });
 
 test("Bonds creates milestone and ranking rewards once", async () => {
@@ -816,6 +819,13 @@ test("Bonds creates milestone and ranking rewards once", async () => {
   await runBondMaintenance(now);
   await runBondMaintenance(now);
   assert.equal(await BondRankingSnapshot.countDocuments({ period: prior.id }), 3);
+  const viewer = await bondParticipant();
+  const ranks = (scope: string) => get(`/bonds/leaderboards?period=previous&scope=${scope}`, viewer.token);
+  assert.equal((await ranks("GLOBAL")).body.data.entries.length, 1);
+  assert.equal((await ranks("FRIENDS")).body.data.entries.length, 0);
+  assert.equal((await ranks("COMMUNITY")).body.data.entries.length, 0);
+  await connectFriends(viewer, a);
+  assert.equal((await ranks("FRIENDS")).body.data.entries[0].rank, 1);
   assert.equal(await BondReward.countDocuments({ bondId: id, key: `rank:${prior.id}:ACTIVITY` }), 2);
   assert.equal(await BondReward.countDocuments({ bondId: id, key: "milestone:7" }), 2);
   assert.equal(await BondPoint.countDocuments({ bondId: id, kind: "MILESTONE" }), 2);
@@ -827,4 +837,21 @@ test("Bonds creates milestone and ranking rewards once", async () => {
   assert.ok(owned.includes("bond_memory_badge"));
   await blockBondPair(a.id, b.id);
   assert.equal((await Bond.findById(id).orFail().lean()).status, "TERMINATED_BY_BLOCK");
+});
+
+test("Bond anniversary reminders honor individual preferences and expire their schedule once", async () => {
+  const a = await bondParticipant();
+  const b = await bondParticipant();
+  await connectFriends(a, b);
+  const invite = await inviteBond(a, b);
+  const { body } = await bondRequest(b, invite.body.data.id, "accept");
+  const id = body.data.bondId;
+  await setBondPreferences(id, a.id, { reminders: false });
+  const activatedAt = new Date("2025-06-10T12:00:00Z");
+  const date = new Date("2026-06-04T12:00:00Z");
+  await Bond.updateOne({ _id: id }, { $set: { activatedAt, anniversaryReminderAt: new Date("2026-06-03T12:00:00Z") } });
+  await Promise.all([sendBondAnniversaryReminders(date), sendBondAnniversaryReminders(date)]);
+  const notes = await Notification.find({ "data.bondId": id, "data.kind": "ANNIVERSARY_REMINDER" }).lean();
+  assert.deepEqual(notes.map(note => String(note.userId)), [b.id]);
+  assert.equal((await Bond.findById(id).orFail().lean()).anniversaryReminderAt?.toISOString(), "2027-06-03T12:00:00.000Z");
 });

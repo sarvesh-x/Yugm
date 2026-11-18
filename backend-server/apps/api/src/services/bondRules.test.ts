@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bondLevel, rankingPeriod } from "./bondRules.js";
+import { bondLevel, nextAnniversary, rankingPeriod } from "./bondRules.js";
 
 test("bond levels unlock exactly at configured thresholds", () => {
   assert.equal(bondLevel(0).level, 1);
@@ -9,6 +9,12 @@ test("bond levels unlock exactly at configured thresholds", () => {
   assert.equal(bondLevel(100).level, 2);
   assert.equal(bondLevel(1499).level, 3);
   assert.equal(bondLevel(50000).nextThreshold, null);
+});
+
+test("anniversaries use February 28 in non-leap years and retain their UTC time", () => {
+  const activated = new Date("2024-02-29T16:15:00Z");
+  assert.equal(nextAnniversary(activated, new Date("2027-02-24T00:00:00Z")).toISOString(), "2027-02-28T16:15:00.000Z");
+  assert.equal(nextAnniversary(activated, new Date("2027-02-28T16:15:00Z")).toISOString(), "2028-02-29T16:15:00.000Z");
 });
 
 test("ranking resets are deterministic across week, month, quarter and year boundaries", () => {

@@ -14,6 +14,7 @@ const bondSchema = new Schema({
   version: { type: Number, default: 1 },
   milestoneDays: { type: [Number], default: [] },
   nextMilestoneAt: Date,
+  anniversaryReminderAt: Date,
   preferences: { type: Map, of: new Schema({
     visibility: { type: String, enum: ["PRIVATE", "FRIENDS", "PUBLIC"], default: "PRIVATE" },
     showDuration: { type: Boolean, default: true },
@@ -29,6 +30,7 @@ const bondSchema = new Schema({
 bondSchema.index({ pairKey: 1 }, { unique: true, partialFilterExpression: { status: "ACTIVE" } });
 bondSchema.index({ users: 1, status: 1, activatedAt: -1 });
 bondSchema.index({ status: 1, nextMilestoneAt: 1 });
+bondSchema.index({ status: 1, anniversaryReminderAt: 1 });
 
 const requestSchema = new Schema({
   pairKey: { type: String, required: true },

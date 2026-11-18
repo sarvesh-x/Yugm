@@ -206,6 +206,7 @@ internal fun BondDetailsScreen(detail: BondDetail, home: BondsHome, state: Bonds
         item {
             BondSection("Milestones") {
                 Text(if (card.milestones.isEmpty()) "Your first milestone unlocks after one day together." else card.milestones.joinToString { "$it days" })
+                if (active && card.nextAnniversaryAt.isNotBlank()) Text("Next anniversary · ${bondDate(card.nextAnniversaryAt)}")
             }
         }
         if (detail.activity.isNotEmpty()) item {
@@ -284,13 +285,14 @@ internal fun BondDetailsScreen(detail: BondDetail, home: BondsHome, state: Bonds
 }
 
 @Composable
-internal fun BondRankings(data: BondRanks?, busy: Boolean, load: (String, Boolean, String, String) -> Unit) {
+internal fun BondRankings(data: BondRanks?, busy: Boolean, load: (String, Boolean, String, String, String) -> Unit) {
     var category by rememberSaveable { mutableIntStateOf(0) }
     var prior by rememberSaveable { mutableStateOf(false) }
     var window by rememberSaveable { mutableStateOf("WEEK") }
     var kind by rememberSaveable { mutableStateOf("") }
+    var scope by rememberSaveable { mutableStateOf("GLOBAL") }
     val types = listOf("ACTIVITY", "SUPPORT", "LONGEST")
-    LaunchedEffect(category, prior, window, kind) { load(types[category], prior, window, kind) }
+    LaunchedEffect(category, prior, window, kind, scope) { load(types[category], prior, window, kind, scope) }
     Column {
         TabRow(selectedTabIndex = category) {
             listOf("Activity", "Gift support", "Longest").forEachIndexed { index, title ->
@@ -311,12 +313,18 @@ internal fun BondRankings(data: BondRanks?, busy: Boolean, load: (String, Boolea
                 FilterChip(selected = kind == id, onClick = { kind = id }, enabled = !busy, label = { Text(label) })
             }
         }
+        Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("GLOBAL" to "Global", "FRIENDS" to "Friends", "COMMUNITY" to "Community").forEach { (id, label) ->
+                FilterChip(selected = scope == id, onClick = { scope = id }, enabled = !busy, label = { Text(label) })
+            }
+        }
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
             item {
                 BondSection(if (prior) "Finalized ranking" else "Current ranking") {
                     Text(if (category == 1) "Confirmed gift support, measured in coins." else if (category == 2) "Days together for public, opted-in bonds." else "Points from shared check-ins.")
                     if (!prior && data != null) Text("Resets ${timeOfReset(data.resetsAt)}")
+                    if (scope != "GLOBAL") Text("Shows global positions for people in your ${if (scope == "FRIENDS") "friends list" else "clan"}.")
                     if (data?.entries.isNullOrEmpty() && !busy) Text("No eligible bonds in this period.")
                 }
             }

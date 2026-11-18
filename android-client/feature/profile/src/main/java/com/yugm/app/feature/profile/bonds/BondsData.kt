@@ -20,7 +20,8 @@ internal data class BondGift(val id: String, val name: String, val icon: String,
 internal data class BondCard(
     val id: String, val kind: String, val kindName: String, val partner: BondPerson, val slot: Int,
     val status: String, val days: Int, val points: Int, val level: Int, val levelName: String,
-    val levelStart: Int, val nextThreshold: Int?, val activatedAt: String, val endedAt: String, val milestones: List<Int>
+    val levelStart: Int, val nextThreshold: Int?, val activatedAt: String, val endedAt: String, val milestones: List<Int>,
+    val nextAnniversaryAt: String
 )
 internal data class BondInvitation(
     val id: String, val kind: String, val partner: BondPerson, val slot: Int, val incoming: Boolean,
@@ -49,7 +50,8 @@ private fun JSONObject.card() = BondCard(
     string("id"), string("kind"), string("kindName"), person("partner"), optInt("slot"),
     string("status"), optInt("days"), optInt("points"), optInt("level"), string("levelName"), optInt("levelStart"),
     optInt("nextThreshold").takeIf { !isNull("nextThreshold") }, string("activatedAt"), string("endedAt"),
-    optJSONArray("milestoneDays")?.let { days -> (0 until days.length()).map { days.getInt(it) } }.orEmpty()
+    optJSONArray("milestoneDays")?.let { days -> (0 until days.length()).map { days.getInt(it) } }.orEmpty(),
+    string("nextAnniversaryAt")
 )
 
 internal object BondsApi {
@@ -84,8 +86,8 @@ internal object BondsApi {
                 it.optBoolean("showBadge"), it.optInt("weeklyRank").takeIf { rank -> rank > 0 })
         }, row.optBoolean("canInvite"))
     }
-    suspend fun rankings(token: String, category: String, previous: Boolean, window: String, kind: String): BondRanks {
-        val row = read(token, "/leaderboards?category=$category&period=${if (previous) "previous" else "current"}&window=$window&kind=$kind")
+    suspend fun rankings(token: String, category: String, previous: Boolean, window: String, kind: String, scope: String): BondRanks {
+        val row = read(token, "/leaderboards?category=$category&period=${if (previous) "previous" else "current"}&window=$window&kind=$kind&scope=$scope")
         return BondRanks(row.optJSONArray("entries").objects().map {
             BondRank(it.optInt("rank"), it.optInt("score"), it.optJSONArray("people").objects().map { actor -> actor.string("name") }, it.string("kind"))
         }, row.optJSONObject("period")?.string("end").orEmpty())
@@ -130,8 +132,8 @@ internal class BondsViewModel @Inject constructor() : ViewModel() {
         mutable.update { it.copy(gifts = gifts, friends = friends) }
     }
 
-    fun rankings(token: String, type: String, previous: Boolean, window: String, kind: String) = runAction {
-        val ranks = BondsApi.rankings(token, type, previous, window, kind)
+    fun rankings(token: String, type: String, previous: Boolean, window: String, kind: String, scope: String) = runAction {
+        val ranks = BondsApi.rankings(token, type, previous, window, kind, scope)
         mutable.update { it.copy(ranking = ranks) }
     }
 

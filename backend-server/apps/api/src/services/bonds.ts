@@ -13,7 +13,7 @@ import { assertWalletNotFrozen, creditWallet, creatorShare, debitWallet } from "
 import { dispatchNotification } from "./notifications.js";
 import { emitUser } from "./socket.js";
 import { relationshipPairKey } from "./relationships.js";
-import { bondDefaults, bondConfig, bondKinds, bondLevel, dayMs, ensureBondCatalog, milestones, type BondKind } from "./bondRules.js";
+import { anniversaryLeadMs, bondDefaults, bondConfig, bondKinds, bondLevel, dayMs, ensureBondCatalog, nextAnniversary, type BondKind } from "./bondRules.js";
 
 type Outcome = "ACCEPTED" | "DECLINED" | "CANCELLED" | "EXPIRED" | "INVALIDATED";
 type EndStatus = "ENDED" | "TERMINATED_BY_BLOCK" | "TERMINATED_BY_MODERATION" | "TERMINATED_BY_ACCOUNT_REMOVAL";
@@ -289,7 +289,8 @@ export async function resolveBondRequest(id: string, actor: string, action: "ACC
       if (await Bond.exists({ pairKey: request.pairKey, status: "ACTIVE" }).session(session)) fail("This bond is already active");
       const [created] = await Bond.create([{
         pairKey: request.pairKey, users: [sender, recipient], slots: [request.slot, recipientSlot],
-        kind: request.kind, activatedAt: now, nextMilestoneAt: new Date(now.getTime() + dayMs)
+        kind: request.kind, activatedAt: now, nextMilestoneAt: new Date(now.getTime() + dayMs),
+        anniversaryReminderAt: new Date(nextAnniversary(now, now).getTime() - anniversaryLeadMs)
       }], { session, ordered: true });
       bond = created;
       if (request.giftId && request.price > 0) {
@@ -420,7 +421,8 @@ export function describeBond(bond: BondRecord) {
     id: String(bond._id), kind: bond.kind, kindName: bondKinds[bond.kind as BondKind]?.name ?? bond.kind,
     status: bond.status, activatedAt: bond.activatedAt, endedAt: bond.endedAt, days: bondDays(bond),
     points: bond.points, version: bond.version, ...bondLevel(bond.points),
-    milestoneDays: bond.milestoneDays, nextMilestoneAt: bond.nextMilestoneAt
+    milestoneDays: bond.milestoneDays, nextMilestoneAt: bond.nextMilestoneAt,
+    nextAnniversaryAt: bond.status === "ACTIVE" ? nextAnniversary(bond.activatedAt, new Date()) : null
   };
 }
 
