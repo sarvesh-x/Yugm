@@ -105,6 +105,7 @@ class ChatViewModel @Inject constructor(
 
     var forwardTargets by mutableStateOf<List<Host>>(emptyList())
         private set
+    private var forwardTargetsLoading = false
 
     var reactionCatalog by mutableStateOf<List<RoomReaction>>(emptyList())
         private set
@@ -225,6 +226,8 @@ class ChatViewModel @Inject constructor(
             nextBefore = null
             sendingMessageIds.clear()
             failedMessageIds.clear()
+            forwardTargets = emptyList()
+            forwardTargetsLoading = false
         }
         activeSearchQuery = ""
         searchResults = null
@@ -385,8 +388,8 @@ class ChatViewModel @Inject constructor(
                 // below only decorate optional sheets and must not hold the loader.
                 if (version == refreshVersion) isLoading = false
             }
-            // These six calls only feed the gift picker, wallet chip and forward
-            // sheet. Load them in the background instead of delaying the thread.
+            // Gifts/wallet/matches/block state decorate the composer and actions.
+            // Forward recipients are loaded lazily when the forward sheet opens.
             launch {
                 supervisorScope {
                     val giftsRequest = async(Dispatchers.IO) { runCatching { yugmApi.gifts(requestToken) } }
@@ -394,33 +397,55 @@ class ChatViewModel @Inject constructor(
                     val matchesRequest = async(Dispatchers.IO) {
                         runCatching { yugmApi.datingMatches(requestToken) }.getOrDefault(emptyList())
                     }
+                    val blockedRequest = async(Dispatchers.IO) { runCatching { yugmApi.getBlockedUsers(requestToken) }.getOrDefault(emptyList()) }
                     giftsRequest.await().onSuccess { gifts = it }
                     walletRequest.await().onSuccess { walletBalance = it.balance }
                     val matched = matchesRequest.await().any { it.id == partnerUserId }
-                    if (version == refreshVersion) isMatched = matched
-                    runCatching { yugmApi.getBlockedUsers(requestToken) }
-                        .onSuccess { blocked -> if (version == refreshVersion) isBlockedByMe = blocked.any { it.id == partnerUserId } }
-                    val recentTargets = runCatching { yugmApi.getRecentMessages(requestToken) }.getOrDefault(emptyList())
-                    val followedTargets = runCatching { yugmApi.getFollowing(requestUser, requestToken) }.getOrDefault(emptyList())
-                    val friendTargets = runCatching { yugmApi.friendList(requestToken) }.getOrDefault(emptyList())
-                        .mapNotNull { friend ->
-                            val id = friend._id.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                            Host(
-                                id = id,
-                                name = friend.name,
-                                username = friend.username,
-                                avatar = friend.avatar
-                            )
-                        }
-                    val targets = (recentTargets.flatMap { listOfNotNull(it.sender, it.receiver) } + followedTargets + friendTargets)
-                        .filter { it.id.isNotBlank() && it.id != currentUserId && it.id != partnerUserId }
-                        .distinctBy { it.id }
-                    if (version == refreshVersion) forwardTargets = targets
+                    val blocked = blockedRequest.await().any { it.id == partnerUserId }
+                    if (version == refreshVersion) {
+                        isMatched = matched
+                        isBlockedByMe = blocked
+                    }
                 }
             }
             markConversationReadIfNeeded()
             if (loadError == null || messages.isNotEmpty()) snapshotConversationCache()
             error = if (messages.isEmpty()) loadError?.message.orEmpty() else ""
+        }
+    }
+
+    fun ensureForwardTargetsLoaded() {
+        val token = authToken
+        val user = currentUserId
+        val partnerId = partnerUserId
+        if (token.isBlank() || user.isBlank() || partnerId.isBlank() || forwardTargetsLoading) return
+        if (forwardTargets.isNotEmpty()) return
+        forwardTargetsLoading = true
+        viewModelScope.launch {
+            try {
+                coroutineScope {
+                    val recentRequest = async(Dispatchers.IO) { runCatching { yugmApi.getRecentMessages(token) }.getOrDefault(emptyList()) }
+                    val followedRequest = async(Dispatchers.IO) { runCatching { yugmApi.getFollowing(user, token) }.getOrDefault(emptyList()) }
+                    val friendsRequest = async(Dispatchers.IO) { runCatching { yugmApi.friendList(token) }.getOrDefault(emptyList()) }
+                    val recentTargets = recentRequest.await()
+                    val followedTargets = followedRequest.await()
+                    val friendTargets = friendsRequest.await().mapNotNull { friend ->
+                        val id = friend._id.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                        Host(
+                            id = id,
+                            name = friend.name,
+                            username = friend.username,
+                            avatar = friend.avatar
+                        )
+                    }
+                    val targets = (recentTargets.flatMap { listOfNotNull(it.sender, it.receiver) } + followedTargets + friendTargets)
+                        .filter { it.id.isNotBlank() && it.id != user && it.id != partnerId }
+                        .distinctBy { it.id }
+                    if (partnerUserId == partnerId) forwardTargets = targets
+                }
+            } finally {
+                forwardTargetsLoading = false
+            }
         }
     }
 

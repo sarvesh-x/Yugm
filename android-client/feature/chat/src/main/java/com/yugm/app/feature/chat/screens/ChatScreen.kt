@@ -198,6 +198,7 @@ fun ChatScreen(
     onForward: (DirectMessage, List<String>, (String) -> Unit, (String) -> Unit) -> Unit = { _, _, _, _ -> },
     onSearch: (String) -> Unit = {},
     onLoadMoreSearch: () -> Unit = {},
+    onEnsureForwardTargets: () -> Unit = {},
     onMute: (Boolean) -> Unit = {},
     onOpenProfile: (String) -> Unit = {},
     onOpenBonds: (String) -> Unit = {},
@@ -221,6 +222,9 @@ fun ChatScreen(
     var showDeleteSelected by remember(partner?.id) { mutableStateOf(false) }
     var selectedMessageIds by remember(partner?.id) { mutableStateOf<Set<String>>(emptySet()) }
     var forwardMessage by remember(partner?.id) { mutableStateOf<DirectMessage?>(null) }
+    LaunchedEffect(forwardMessage != null) {
+        if (forwardMessage != null) onEnsureForwardTargets()
+    }
     var infoMessage by remember(partner?.id) { mutableStateOf<DirectMessage?>(null) }
     var reactDialogTarget by remember(partner?.id) { mutableStateOf<DirectMessage?>(null) }
     var optionsDialogTarget by remember(partner?.id) { mutableStateOf<DirectMessage?>(null) }

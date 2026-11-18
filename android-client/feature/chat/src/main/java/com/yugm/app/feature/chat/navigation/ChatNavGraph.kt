@@ -114,6 +114,7 @@ fun NavGraphBuilder.chatNavGraph(
             onForward = { message, targetIds, onSuccess, onFailure -> chatViewModel.forwardMessage(message, targetIds, onSuccess, onFailure) },
             onSearch = chatViewModel::search,
             onLoadMoreSearch = chatViewModel::loadMoreSearchResults,
+            onEnsureForwardTargets = chatViewModel::ensureForwardTargetsLoaded,
             onMute = chatViewModel::mute,
             onToggleBlock = chatViewModel::toggleBlock,
             onSend = { text, onSuccess, onFailure -> chatViewModel.sendMessage(text, onSuccess, onFailure) },
