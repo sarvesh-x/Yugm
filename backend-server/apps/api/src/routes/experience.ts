@@ -207,8 +207,13 @@ async function loadBadgeGallery(userId: string, user: Pick<IUser, "name" | "avat
   };
 }
 
+const homeResponseCache = new Map<string, { payload: unknown; expiresAt: number }>();
+const HOME_CACHE_TTL_MS = 20_000;
+
 experienceRouter.get("/home", asyncHandler(async (req: AuthRequest, res) => {
   const userId = req.user!.id;
+  const cached = homeResponseCache.get(userId);
+  if (cached && cached.expiresAt > Date.now()) return sendOk(res, cached.payload);
   const user = await User.findById(userId).lean();
   const hiddenIds = await blockedIdsFor(userId);
   const followingRows = await Follow.find({ followerId: userId }).lean();
@@ -260,7 +265,7 @@ experienceRouter.get("/home", asyncHandler(async (req: AuthRequest, res) => {
   const earned = achievementsList.flatMap(item => item.currentTier ? [{ badgeId: item.id, tier: item.currentTier, earnedAt: now }] : []);
   if (user && earned.length) void syncBadgeState(userId, await catalog, earned, now).catch(() => undefined);
 
-  sendOk(res, {
+  const payload = {
     schemaVersion: 1,
     user: publicUser(user),
     profileCompletion: profileCompletion(user),
@@ -287,7 +292,13 @@ experienceRouter.get("/home", asyncHandler(async (req: AuthRequest, res) => {
       { id: "earnings", title: "Creator dashboard", route: "/(tabs)/grow" },
       { id: "safety", title: "Safety center", route: "/(tabs)/grow" }
     ]
-  });
+  };
+  homeResponseCache.set(userId, { payload, expiresAt: Date.now() + HOME_CACHE_TTL_MS });
+  if (homeResponseCache.size > 500) {
+    const oldest = homeResponseCache.keys().next().value;
+    if (oldest) homeResponseCache.delete(oldest);
+  }
+  sendOk(res, payload);
 }));
 
 experienceRouter.get("/creator-dashboard", asyncHandler(async (req: AuthRequest, res) => {
