@@ -392,7 +392,10 @@ class ChatViewModel @Inject constructor(
             // Forward recipients are loaded lazily when the forward sheet opens.
             launch {
                 supervisorScope {
-                    val giftsRequest = async(Dispatchers.IO) { runCatching { yugmApi.gifts(requestToken) } }
+                    val giftsRequest = async(Dispatchers.IO) {
+                        val current = gifts
+                        if (current.isNotEmpty()) Result.success(current.toList()) else runCatching { yugmApi.gifts(requestToken) }
+                    }
                     val walletRequest = async(Dispatchers.IO) { runCatching { yugmApi.walletOverview(requestToken) } }
                     val matchesRequest = async(Dispatchers.IO) {
                         runCatching { yugmApi.datingMatches(requestToken) }.getOrDefault(emptyList())
