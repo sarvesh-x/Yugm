@@ -214,11 +214,14 @@ experienceRouter.get("/home", asyncHandler(async (req: AuthRequest, res) => {
   const userId = req.user!.id;
   const cached = homeResponseCache.get(userId);
   if (cached && cached.expiresAt > Date.now()) return sendOk(res, cached.payload);
-  const user = await User.findById(userId).lean();
-  const hiddenIds = await blockedIdsFor(userId);
-  const followingRows = await Follow.find({ followerId: userId }).lean();
+  const [user, hiddenIds, followingRows, catalogDefs] = await Promise.all([
+    User.findById(userId).lean(),
+    blockedIdsFor(userId),
+    Follow.find({ followerId: userId }).lean(),
+    badgeCatalog()
+  ]);
   const followingIds = followingRows.map((row) => row.followingId);
-  const catalog = badgeCatalog();
+  const catalog = Promise.resolve(catalogDefs);
 
   const [
     recommendedRooms,
@@ -263,7 +266,7 @@ experienceRouter.get("/home", asyncHandler(async (req: AuthRequest, res) => {
 
   const now = new Date();
   const earned = achievementsList.flatMap(item => item.currentTier ? [{ badgeId: item.id, tier: item.currentTier, earnedAt: now }] : []);
-  if (user && earned.length) void syncBadgeState(userId, await catalog, earned, now).catch(() => undefined);
+  if (user && earned.length) void syncBadgeState(userId, catalogDefs, earned, now).catch(() => undefined);
 
   const payload = {
     schemaVersion: 1,
