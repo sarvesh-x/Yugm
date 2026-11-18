@@ -85,7 +85,14 @@ class SocketManager @Inject constructor() {
                 if (socket !== connection) return@on
                 Timber.tag("SocketManager").d("Connected to $targetUrl")
                 _events.tryEmit(SocketEvent.Connected)
-                AppSync.invalidate(SyncTopic.ALL)
+                // Reconnected sockets may have missed targeted sync events; refresh
+                // active topics without relying on the ALL sentinel.
+                AppSync.invalidate(
+                    SyncTopic.CHAT, SyncTopic.ROOMS, SyncTopic.NOTIFICATIONS,
+                    SyncTopic.PROFILE, SyncTopic.SOCIAL, SyncTopic.WALLET,
+                    SyncTopic.CLANS, SyncTopic.BONDS, SyncTopic.GIFTS,
+                    SyncTopic.TASKS, SyncTopic.EVENTS, SyncTopic.SETTINGS
+                )
             }
             socket?.on("sync:invalidate") { args ->
                 if (socket !== connection) return@on
