@@ -50,33 +50,18 @@ fun AuroraBackground(
     speed: Float = 1f,
     colors: List<Color> = auroraGradient,
 ) {
-    // Pager neighbours stay composed. Keep their backdrop static instead of
-    // animating a 60 fps canvas off-screen.
-    val phase = if (LocalMotionEnabled.current && LocalAutomaticSyncEnabled.current) {
-        val infiniteTransition = rememberInfiniteTransition(label = "aurora-background")
-        val animatedPhase by infiniteTransition.animateFloat(
-            initialValue = 0f,
-            targetValue = 360f,
-            animationSpec = infiniteRepeatable(
-                // A full orbit should feel like a slow ambient drift, not a loading spinner.
-                animation = tween((24000 / speed.coerceAtLeast(0.1f)).toInt(), easing = LinearEasing),
-                repeatMode = RepeatMode.Restart
-            ),
-            label = "aurora-phase"
-        )
-        animatedPhase
-    } else 0f
+    // Static backdrop: the animated aurora caused continuous redraw/composition
+    // cost on room/profile/discover screens. Keep a lightweight fixed render.
     Canvas(modifier = modifier.fillMaxSize()) {
         val w = size.width
         val h = size.height
         val cx = w / 2
         val cy = h / 2
         val maxR = kotlin.math.sqrt(w * w + h * h) / 2
-        val rad = phase * (PI.toFloat() / 180f)
         for (i in colors.indices) {
             val offset = i * 120f * (PI.toFloat() / 180f)
-            val rx = cx + maxR * 0.6f * cos(rad + offset)
-            val ry = cy + maxR * 0.6f * sin(rad + offset * 0.7f)
+            val rx = cx + maxR * 0.6f * cos(offset)
+            val ry = cy + maxR * 0.6f * sin(offset * 0.7f)
             drawCircle(
                 color = colors[i].copy(alpha = 0.08f),
                 radius = maxR * 0.55f,
@@ -88,19 +73,7 @@ fun AuroraBackground(
 
 @Composable
 fun AuroraShimmer(speed: Float = 1f) {
-    val progress = if (LocalMotionEnabled.current) {
-        val infiniteTransition = rememberInfiniteTransition(label = "aurora-shimmer")
-        val animatedProgress by infiniteTransition.animateFloat(
-            initialValue = -1f,
-            targetValue = 2f,
-            animationSpec = infiniteRepeatable(
-                animation = tween((2000 / speed).toInt(), easing = LinearEasing),
-                repeatMode = RepeatMode.Restart
-            ),
-            label = "shimmer-progress"
-        )
-        animatedProgress
-    } else 0.5f
+    // Static shimmer: removes continuous background animation work.
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -111,8 +84,8 @@ fun AuroraShimmer(speed: Float = 1f) {
                         Color.White.copy(alpha = 0.03f),
                         Color.Transparent
                     ),
-                    start = Offset(progress * 2000f, 0f),
-                    end = Offset(progress * 2000f + 800f, 800f)
+                    start = Offset(200f, 0f),
+                    end = Offset(1000f, 800f)
                 )
             )
     )

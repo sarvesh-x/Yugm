@@ -14,7 +14,6 @@ import { connectRedis } from "./services/redis.js";
 import { closeSocketInfrastructure, initSocket } from "./services/socket.js";
 import { ensureOfficialRooms } from "./services/officialRooms.js";
 import { ensureMongoMediaIndexes } from "./services/storage.js";
-import { preloadToxicityModel } from "./services/aiModeration.js";
 
 process.on("unhandledRejection", (err) => {
   console.error("Unhandled rejection:", err);
@@ -50,8 +49,7 @@ async function bootstrap() {
       ["achievement seed", seedAchievements],
       ["official rooms", ensureOfficialRooms],
       ["job workers", startJobWorkers],
-      ["pk timers", resumePkTimers],
-      ["toxicity model", preloadToxicityModel]
+      ["pk timers", resumePkTimers]
     ];
     for (const [label, step] of maintenanceSteps) {
       try {
