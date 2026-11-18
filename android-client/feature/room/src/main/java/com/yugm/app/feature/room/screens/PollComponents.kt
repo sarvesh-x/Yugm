@@ -10,15 +10,25 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -44,7 +54,6 @@ import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.core.ui.theme.TextMuted
 import com.yugm.app.core.ui.theme.TextPrimary
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PollComposerSheet(
     onDismiss: () -> Unit,
@@ -58,26 +67,41 @@ fun PollComposerSheet(
     val trimmed = options.map { it.trim() }.filter { it.isNotBlank() }
     val canCreate = !isSubmitting && question.trim().isNotBlank() && trimmed.size in 2..6
 
-    val colors = LocalYugmColors.current
-    ModalBottomSheet(
-        onDismissRequest = { if (!isSubmitting) onDismiss() },
-        containerColor = colors.surfaceElevated
-    ) {
+    val inputColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = RoomSheetText,
+        unfocusedTextColor = RoomSheetText,
+        focusedLabelColor = RoomSheetAccent,
+        unfocusedLabelColor = RoomSheetMuted,
+        focusedBorderColor = RoomSheetAccent,
+        unfocusedBorderColor = RoomSheetBorder,
+        focusedContainerColor = RoomSheetTile,
+        unfocusedContainerColor = RoomSheetTile,
+        cursorColor = RoomSheetAccent
+    )
+    val inputShape = RoundedCornerShape(14.dp)
+
+    VoiceRoomSheet(onDismiss = onDismiss, canDismiss = !isSubmitting) {
         Column(
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 8.dp)
-                .navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, end = 16.dp, bottom = 18.dp)
         ) {
-            Text("Create Room Poll", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Black)
+            VoiceRoomSheetHeader("Create a poll", Icons.Filled.BarChart, subtitle = "Add 2 to 6 options for the room to vote on") {
+                IconButton(onClick = onDismiss, enabled = !isSubmitting) {
+                    Icon(Icons.Filled.Close, contentDescription = "Close poll composer", tint = RoomSheetMuted)
+                }
+            }
             OutlinedTextField(
                 value = question,
                 onValueChange = { if (!isSubmitting) question = it.take(120) },
-                label = { Text("Poll Question") },
+                label = { Text("Question") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                enabled = !isSubmitting
+                enabled = !isSubmitting,
+                colors = inputColors,
+                shape = inputShape
             )
             options.forEachIndexed { index, value ->
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -91,40 +115,48 @@ fun PollComposerSheet(
                         label = { Text("Option ${index + 1}") },
                         modifier = Modifier.weight(1f),
                         singleLine = true,
-                        enabled = !isSubmitting
+                        enabled = !isSubmitting,
+                        colors = inputColors,
+                        shape = inputShape
                     )
                     if (options.size > 2) {
-                        Text(
-                            "Remove",
-                            color = if (isSubmitting) TextMuted.copy(alpha = 0.5f) else TextMuted,
-                            fontSize = 12.sp,
-                            modifier = if (isSubmitting) Modifier else Modifier.clickable {
-                                options = options.toMutableList().also { it.removeAt(index) }
-                            }
-                        )
+                        IconButton(
+                            onClick = { options = options.toMutableList().also { it.removeAt(index) } },
+                            enabled = !isSubmitting
+                        ) {
+                            Icon(Icons.Filled.Close, contentDescription = "Remove option ${index + 1}", tint = RoomSheetMuted)
+                        }
                     }
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (options.size < 6) {
-                    Button(
-                        onClick = { if (!isSubmitting) options = options + "" },
-                        enabled = !isSubmitting,
-                colors = ButtonDefaults.buttonColors(containerColor = colors.surfaceVariant)
-                    ) { Text("+ Add option", color = TextPrimary) }
+            if (options.size < 6) {
+                TextButton(onClick = { options = options + "" }, enabled = !isSubmitting) {
+                    Icon(Icons.Filled.Add, contentDescription = null, tint = RoomSheetAccent, modifier = Modifier.size(18.dp))
+                    Text("Add option", color = RoomSheetAccent, modifier = Modifier.padding(start = 5.dp))
                 }
-                Text("${trimmed.size}/6 options", color = TextMuted, fontSize = 12.sp)
             }
             if (!errorMessage.isNullOrBlank()) {
-                Text(errorMessage, color = Pink, fontSize = 12.sp)
+                Text(errorMessage, color = Color(0xFFFFA8B9), fontSize = 13.sp)
             }
             Button(
                 onClick = { if (canCreate) onCreate(question.trim(), trimmed) },
                 enabled = canCreate,
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = colors.secondary)
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = RoomSheetAction,
+                    contentColor = Color.White,
+                    disabledContentColor = RoomSheetMuted,
+                    disabledContainerColor = RoomSheetTile
+                )
             ) {
-                Text(if (isSubmitting) "Creating..." else "Launch Poll", color = Color.White, fontWeight = FontWeight.Black)
+                if (isSubmitting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.padding(end = 8.dp).size(16.dp),
+                        color = RoomSheetAccent,
+                        strokeWidth = 2.dp
+                    )
+                }
+                Text(if (isSubmitting) "Launching…" else "Launch poll", fontWeight = FontWeight.Bold)
             }
         }
     }

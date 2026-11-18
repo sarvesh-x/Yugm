@@ -1,4 +1,4 @@
-import { Achievement } from "../models/Achievement.js";
+import { Achievement, type IAchievement } from "../models/Achievement.js";
 
 const baseAchievementDefs = [
   { id: "profile_complete", title: "Profile Spark", description: "Complete more of your profile to unlock each tier", category: "CONTENT" as const, icon: "sparkles", order: 1, tiers: [
@@ -59,7 +59,13 @@ const baseAchievementDefs = [
 ];
 
 export async function seedAchievements() {
-  const result = await Achievement.bulkWrite(baseAchievementDefs.map((def, i) => ({
+  const honorActivity: Pick<IAchievement, "id" | "title" | "description" | "icon" | "metric" | "weeklyTarget">[] = [
+    { id: "weekly_host", title: "Room Spotlight", description: "Host 5 live rooms in a week.", icon: "radio", metric: "host_3", weeklyTarget: 5 },
+    { id: "weekly_giver", title: "Generous Spirit", description: "Send gifts 10 times in a week.", icon: "gift", metric: "gift_5", weeklyTarget: 10 },
+    { id: "weekly_favorite", title: "Crowd Favorite", description: "Receive gifts 10 times in a week.", icon: "heart", metric: "gift_received_5", weeklyTarget: 10 }
+  ];
+  const honors = honorActivity.map(def => ({ ...def, kind: "HONOR" as const, category: "ENGAGEMENT" as const, tiers: [] }));
+  const result = await Achievement.bulkWrite([...baseAchievementDefs, ...honors].map((def, i) => ({
     updateOne: {
       filter: { id: def.id },
       update: { $setOnInsert: { ...def, order: i + 1 } },
@@ -67,12 +73,5 @@ export async function seedAchievements() {
     }
   })), { ordered: false });
   const inserted = result.upsertedCount ?? 0;
-  const profileAchievement = baseAchievementDefs.find((def) => def.id === "profile_complete");
-  if (profileAchievement) {
-    await Achievement.updateOne(
-      { id: profileAchievement.id },
-      { $set: { description: profileAchievement.description, tiers: profileAchievement.tiers } }
-    );
-  }
   if (inserted > 0) console.log(`Seeded ${inserted} progression achievements`);
 }

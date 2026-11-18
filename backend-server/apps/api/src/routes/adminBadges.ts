@@ -1,0 +1,132 @@
+import { randomUUID } from "node:crypto";
+import { Router, type NextFunction, type Request, type Response } from "express";
+import multer from "multer";
+import { z } from "zod";
+import { requirePermission, type AdminAuthRequest } from "../middleware/adminAuth.js";
+import { Achievement, badgeIcons, badgeMetrics, badgeTiers, honorMetrics } from "../models/Achievement.js";
+import { adminOk } from "../modules/admin/http.js";
+import { auditLog } from "../services/adminAudit.js";
+import { asyncHandler, HttpError } from "../utils/http.js";
+
+export const adminBadgesRouter = Router();
+export const badgeArtRouter = Router();
+adminBadgesRouter.use("/badges", requirePermission("cosmetics.write"));
+
+const badgeId = z.string().trim().regex(/^[a-z0-9_-]{1,64}$/);
+const imageUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 512 * 1024, files: 1, fields: 1 } });
+const definitionSchema = z.object({
+  id: badgeId,
+  title: z.string().trim().min(1).max(60),
+  description: z.string().trim().min(1).max(240),
+  kind: z.enum(["ACHIEVEMENT", "HONOR"]),
+  metric: z.enum(badgeMetrics),
+  icon: z.enum(badgeIcons),
+  order: z.number().int().min(0).max(10000),
+  hidden: z.boolean().default(false),
+  removeImage: z.boolean().optional(),
+  weeklyTarget: z.number().int().min(1).max(1_000_000).optional(),
+  tiers: z.array(z.object({
+    tier: z.enum(badgeTiers),
+    target: z.number().int().min(1).max(1_000_000),
+    rewardCoins: z.number().int().min(0).max(1_000_000),
+    rewardCosmetic: z.string().max(64).optional()
+  })).max(badgeTiers.length)
+}).superRefine((definition, ctx) => {
+  if (definition.kind === "HONOR") {
+    if (!definition.weeklyTarget || !honorMetrics.some(metric => metric === definition.metric) || definition.tiers.length) {
+      ctx.addIssue({ code: "custom", message: "Honor badges need a weekly hosting or gifting target and no tiers." });
+    }
+  } else if (!definition.tiers.length || definition.weeklyTarget || definition.tiers.some((tier, index, tiers) =>
+    tier.tier !== badgeTiers[index] || (index > 0 && tier.target <= tiers[index - 1].target))) {
+    ctx.addIssue({ code: "custom", message: "Achievement tiers must start at Bronze and have strictly increasing targets." });
+  }
+});
+
+function parseDefinition(req: AdminAuthRequest) {
+  let body: unknown = req.body;
+  if (typeof req.body?.definition === "string") {
+    try { body = JSON.parse(req.body.definition); }
+    catch { throw new HttpError(400, "Invalid badge definition"); }
+  }
+  const parsed = definitionSchema.safeParse(body);
+  if (!parsed.success) throw new HttpError(400, parsed.error.issues.map(issue => issue.message).join(" "));
+  return parsed.data;
+}
+
+function badgeImage(file: Express.Multer.File | undefined, id: string) {
+  if (!file) return undefined;
+  const bytes = file.buffer;
+  const signature = bytes.subarray(0, 8).toString("hex");
+  const mime = signature.startsWith("ffd8ff") ? "image/jpeg"
+    : signature === "89504e470d0a1a0a" ? "image/png"
+      : bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP" ? "image/webp" : null;
+  if (!mime || mime !== file.mimetype) throw new HttpError(400, "Upload a PNG, JPEG, or WebP image.");
+  return { imageData: bytes, imageMime: mime, imageUrl: `/api/badge-art/${id}/${randomUUID()}` };
+}
+
+adminBadgesRouter.get("/badges", asyncHandler(async (_req, res) => {
+  const definitions = await Achievement.find().sort({ hidden: 1, order: 1, id: 1 }).lean();
+  adminOk(res, {
+    badges: definitions.map(def => ({ ...def, kind: def.kind ?? "ACHIEVEMENT", metric: def.metric ?? def.id })),
+    metrics: badgeMetrics, honorMetrics, icons: badgeIcons, tierNames: badgeTiers
+  });
+}));
+
+adminBadgesRouter.post("/badges", imageUpload.single("image"), asyncHandler(async (req: AdminAuthRequest, res) => {
+  const { removeImage: _, ...definition } = parseDefinition(req);
+  if (await Achievement.exists({ id: definition.id })) throw new HttpError(409, "This badge ID already exists.");
+  let entityId: string;
+  try { entityId = (await Achievement.create({ ...definition, ...badgeImage(req.file, definition.id) }))._id.toString(); }
+  catch (error) {
+    if ((error as { code?: number }).code === 11000) throw new HttpError(409, "This badge ID already exists.");
+    throw error;
+  }
+  await auditLog({ adminId: req.admin!.id, action: "badge.created", entityType: "achievement", entityId, metadata: { badgeId: definition.id }, req });
+  adminOk(res, { id: definition.id }, {}, 201);
+}));
+
+adminBadgesRouter.put("/badges/:id", imageUpload.single("image"), asyncHandler(async (req: AdminAuthRequest, res) => {
+  const { removeImage, ...definition } = parseDefinition(req);
+  if (definition.id !== req.params.id) throw new HttpError(400, "Badge IDs cannot be changed.");
+  const existing = await Achievement.findOne({ id: definition.id });
+  if (!existing) throw new HttpError(404, "Badge not found.");
+  if ((existing.kind ?? "ACHIEVEMENT") !== definition.kind) throw new HttpError(400, "Badge types cannot be changed after creation.");
+  const image = badgeImage(req.file, definition.id);
+  await Achievement.updateOne({ id: definition.id }, {
+    $set: { ...definition, ...image },
+    $unset: {
+      ...(definition.kind === "ACHIEVEMENT" ? { weeklyTarget: "" } : {}),
+      ...(removeImage && !image ? { imageData: "", imageMime: "", imageUrl: "" } : {})
+    }
+  });
+  await auditLog({ adminId: req.admin!.id, action: "badge.updated", entityType: "achievement", entityId: existing._id.toString(), metadata: { badgeId: definition.id }, req });
+  adminOk(res, { id: definition.id });
+}));
+
+adminBadgesRouter.delete("/badges/:id", asyncHandler(async (req: AdminAuthRequest, res) => {
+  const id = badgeId.safeParse(req.params.id);
+  if (!id.success) throw new HttpError(400, "Invalid badge ID.");
+  const archived = await Achievement.findOneAndUpdate({ id: id.data }, { $set: { hidden: true } });
+  if (!archived) throw new HttpError(404, "Badge not found.");
+  await auditLog({ adminId: req.admin!.id, action: "badge.archived", entityType: "achievement", entityId: archived._id.toString(), metadata: { badgeId: id.data }, req });
+  adminOk(res, { archived: true });
+}));
+
+adminBadgesRouter.use("/badges", (error: unknown, _req: Request, _res: Response, next: NextFunction) => {
+  if (error instanceof multer.MulterError) {
+    next(new HttpError(error.code === "LIMIT_FILE_SIZE" ? 413 : 400, "Upload one badge image up to 512 KB."));
+  } else next(error);
+});
+
+badgeArtRouter.get("/:id/:version", asyncHandler(async (req, res) => {
+  const image = await Achievement.findOne({
+    id: req.params.id,
+    imageUrl: `/api/badge-art/${req.params.id}/${req.params.version}`,
+    hidden: { $ne: true }
+  }).select("imageMime +imageData");
+  if (!image?.imageData || !image.imageMime) throw new HttpError(404, "Badge image not found.");
+  res.type(image.imageMime).set({
+    "Cache-Control": "public, max-age=3600, immutable",
+    "Cross-Origin-Resource-Policy": "cross-origin"
+  }).send(image.imageData);
+}));

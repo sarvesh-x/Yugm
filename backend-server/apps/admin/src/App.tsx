@@ -26,6 +26,7 @@ import {
   Wallet
 } from "lucide-react";
 import { Admin, adminApi, adminApiMultipart, adminApiWithMeta, formatDate, formatNumber, login, refreshAdminSession, Session } from "./api";
+import { BadgesPage } from "./BadgesPage";
 
 type ViewKey =
   | "dashboard"
@@ -42,6 +43,7 @@ type ViewKey =
   | "payments"
   | "gifts"
   | "cosmetics"
+  | "badges"
   | "reactions"
   | "notifications"
   | "campaigns"
@@ -73,6 +75,7 @@ const navItems: Array<{ key: ViewKey; label: string; icon: ReactNode; group: str
   { key: "payments", label: "Payments", icon: <Coins />, group: "Money" },
   { key: "gifts", label: "Gifts", icon: <Gift />, group: "Money" },
   { key: "cosmetics", label: "Cosmetics", icon: <Palette />, group: "Money" },
+  { key: "badges", label: "Badges", icon: <Crown />, group: "Operations", requiredPermission: "cosmetics.write" },
   { key: "reactions", label: "Live Reactions", icon: <Sparkles />, group: "Money", requiredPermission: "cosmetics.write" },
   { key: "notifications", label: "Notifications", icon: <Bell />, group: "Operations" },
   { key: "campaigns", label: "Campaigns", icon: <Bell />, group: "Operations", requiredPermission: "notifications.send" },
@@ -335,6 +338,7 @@ function ViewRenderer({ view, session, setNotice, onLogout }: { view: ViewKey; s
   if (view === "payments") return <SimpleResource token={session.accessToken} title="Recharges" endpoint="/payments/recharges" columns={paymentColumns} />;
   if (view === "gifts") return <GiftsPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "cosmetics") return <CosmeticsPage token={session.accessToken} setNotice={setNotice} />;
+  if (view === "badges") return <BadgesPage token={session.accessToken} />;
   if (view === "reactions") return <LiveReactionsPage token={session.accessToken} admin={session.admin} setNotice={setNotice} />;
   if (view === "notifications") return <NotificationsPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "campaigns") return <CampaignsPage token={session.accessToken} admin={session.admin} setNotice={setNotice} />;

@@ -19,6 +19,7 @@ const giftTransactionSchema = new Schema(
 );
 
 giftTransactionSchema.index({ roomId: 1, createdAt: -1 });
+giftTransactionSchema.index({ createdAt: -1 });
 giftTransactionSchema.index({ senderId: 1, createdAt: -1 });
 giftTransactionSchema.index({ receiverId: 1, createdAt: -1 });
 giftTransactionSchema.index({ type: 1, createdAt: -1 });

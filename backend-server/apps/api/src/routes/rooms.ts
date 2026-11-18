@@ -33,7 +33,7 @@ import { assertUsersCanInteract } from "../services/safety.js";
 import { autoModerate } from "../middleware/autoModerate.js";
 import { applyAutoModeration } from "../services/autoModeration.js";
 import { endRoom, recordRoomParticipantExit } from "../services/roomLifecycle.js";
-import { canUseRoomReaction, findActiveRoomReaction, normalizeReactionId, toPublicRoomReaction } from "../services/reactions.js";
+import { findActiveRoomReaction, normalizeReactionId, toPublicRoomReaction } from "../services/reactions.js";
 import { getVipStatus } from "../services/vip.js";
 
 const patchSchema = z.object({
@@ -850,13 +850,10 @@ roomsRouter.post("/:id/reactions", requireAuth, requireNotChatRestricted, valida
   const reactionId = normalizeReactionId(req.body.type);
   const reaction = await findActiveRoomReaction(reactionId);
   if (!reaction) throw new HttpError(404, "Reaction not found", ErrorCode.NOT_FOUND);
-  if (reaction.access === "VIP_EXCLUSIVE") {
-    const user = await User.findById(req.user!.id).select("vipExpiresAt").lean();
-    if (!canUseRoomReaction(reaction as any, user)) {
-      throw new HttpError(403, "This reaction unlocks at VIP 3", ErrorCode.FORBIDDEN);
-    }
+  const publicReaction = toPublicRoomReaction(reaction, req.user);
+  if (!publicReaction.usable) {
+    throw new HttpError(403, "This reaction unlocks at VIP 3", ErrorCode.FORBIDDEN);
   }
-  const publicReaction = toPublicRoomReaction(reaction as any);
   const payload = {
     type: publicReaction.id,
     reactionId: publicReaction.id,

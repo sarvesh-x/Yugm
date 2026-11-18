@@ -105,17 +105,4 @@ class GrowthViewModel @Inject constructor(
         }
     }
 
-    fun claimAchievement(token: String, achievementId: String, onResult: () -> Unit = {}) {
-        viewModelScope.launch {
-            try {
-                val result = withContext(Dispatchers.IO) {
-                    runCatching { yugmApi.claimAchievement(token, achievementId) }
-                }
-                result.onSuccess { load(token) }
-                    .onFailure { error = it.message ?: "Could not claim this achievement" }
-            } finally {
-                onResult()
-            }
-        }
-    }
 }

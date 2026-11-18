@@ -1,5 +1,5 @@
 import { legacyReactionTypes } from "@yugm/shared";
-import { RoomReaction, type RoomReactionDocument } from "../models/RoomReaction.js";
+import { RoomReaction, type RoomReactionAccess, type RoomReactionDocument } from "../models/RoomReaction.js";
 import { getVipStatus } from "./vip.js";
 
 export const legacyReactionLabels: Record<string, string> = {
@@ -24,6 +24,24 @@ export const legacyReactionEmojis: Record<string, string> = {
   party: "🎉"
 };
 
+const additionalDefaultReactions = [
+  { id: "wave", label: "Wave", emoji: "👋", access: "EVERYONE" },
+  { id: "wink", label: "Wink", emoji: "😉", access: "EVERYONE" },
+  { id: "cool", label: "Cool", emoji: "😎", access: "EVERYONE" },
+  { id: "heart_eyes", label: "Heart eyes", emoji: "😍", access: "EVERYONE" },
+  { id: "vip_diamond", label: "Diamond", emoji: "💎", access: "VIP_EXCLUSIVE" },
+  { id: "vip_fireworks", label: "Fireworks", emoji: "🎆", access: "VIP_EXCLUSIVE" },
+  { id: "vip_comet", label: "Comet", emoji: "☄️", access: "VIP_EXCLUSIVE" },
+  { id: "vip_heart", label: "Sparkling heart", emoji: "💖", access: "VIP_EXCLUSIVE" }
+] as const;
+
+interface ReactionVipUser {
+  vipExpiresAt?: Date | string | null;
+  vipTier?: string | null;
+  vipLevel?: number;
+  vipFrozen?: boolean;
+}
+
 let defaultsPromise: Promise<void> | null = null;
 
 export interface PublicRoomReaction {
@@ -40,10 +58,10 @@ export interface PublicRoomReaction {
 
 export function toPublicRoomReaction(
   reaction: Pick<RoomReactionDocument, "_id" | "label" | "emoji" | "assetUrl" | "assetKind" | "access" | "sortOrder">,
-  user?: { vipExpiresAt?: Date | string | null } | null
+  user?: ReactionVipUser | null
 ): PublicRoomReaction {
   const access = reaction.access ?? "EVERYONE";
-  const usable = canUseRoomReaction({ access } as any, user ?? null);
+  const usable = canUseRoomReaction({ access }, user);
   return {
     id: String(reaction._id),
     label: reaction.label,
@@ -82,7 +100,21 @@ export async function syncDefaultRoomReactions(): Promise<number> {
       }
     }
   ]));
-  const result = await RoomReaction.bulkWrite(ops as any, { ordered: false });
+  const additionalOps = additionalDefaultReactions.map(({ id, label, emoji, access }, index) => ({
+    updateOne: {
+      filter: { _id: id },
+      update: {
+        $setOnInsert: {
+          label, emoji, access,
+          isActive: true,
+          sortOrder: legacyReactionTypes.length + index,
+          assetKind: "STATIC" as const
+        }
+      },
+      upsert: true
+    }
+  }));
+  const result = await RoomReaction.bulkWrite([...ops, ...additionalOps], { ordered: false });
   return result.upsertedCount ?? 0;
 }
 
@@ -96,10 +128,10 @@ export function ensureDefaultRoomReactions(): Promise<void> {
   return defaultsPromise;
 }
 
-export async function listActiveRoomReactions(user?: { vipExpiresAt?: Date | string | null } | null): Promise<PublicRoomReaction[]> {
+export async function listActiveRoomReactions(user?: ReactionVipUser | null): Promise<PublicRoomReaction[]> {
   await ensureDefaultRoomReactions();
   const reactions = await RoomReaction.find({ isActive: true }).sort({ sortOrder: 1, createdAt: 1, _id: 1 }).lean();
-  return reactions.map((reaction) => toPublicRoomReaction(reaction as any, user ?? null));
+  return reactions.map((reaction) => toPublicRoomReaction(reaction, user));
 }
 
 export async function findActiveRoomReaction(id: string) {
@@ -107,11 +139,11 @@ export async function findActiveRoomReaction(id: string) {
   return RoomReaction.findOne({ _id: id.trim().toLowerCase(), isActive: true }).lean();
 }
 
-export function isActiveVip(user: { vipExpiresAt?: Date | string | null; vipTier?: string | null; vipLevel?: number; vipExp?: number; vipFrozen?: boolean; vipFreezeStartedAt?: Date | string | null } | null | undefined) {
+export function isActiveVip(user?: ReactionVipUser | null) {
   return getVipStatus(user).vipLevel >= 3;
 }
 
-export function canUseRoomReaction(reaction: { access: "EVERYONE" | "VIP_EXCLUSIVE" }, user: { vipExpiresAt?: Date | string | null; vipTier?: string | null; vipLevel?: number; vipExp?: number; vipFrozen?: boolean; vipFreezeStartedAt?: Date | string | null } | null | undefined) {
+export function canUseRoomReaction(reaction: { access: RoomReactionAccess }, user?: ReactionVipUser | null) {
   return reaction.access !== "VIP_EXCLUSIVE" || isActiveVip(user);
 }
 

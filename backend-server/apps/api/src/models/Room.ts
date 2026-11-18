@@ -71,5 +71,6 @@ const roomSchema = new Schema<IRoom>(
 );
 
 roomSchema.index({ status: 1, type: 1, participantCount: -1 });
+roomSchema.index({ startedAt: -1 });
 
 export const Room = mongoose.model<IRoom>("Room", roomSchema);

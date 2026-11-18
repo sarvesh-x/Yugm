@@ -217,6 +217,7 @@ fun NavGraphBuilder.roomNavGraph(
             val room = detail.room
             ActiveVoiceRoomScreen(
                 room = room,
+                badgeToken = authTokenProvider(),
                 chat = roomViewModel.chat,
                 gifts = roomViewModel.gifts,
                 giftInventory = roomViewModel.giftInventory,

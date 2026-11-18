@@ -23,6 +23,7 @@ const { RoomParticipant } = await import("../models/RoomParticipant.js");
 const { SpeakerRequest } = await import("../models/SpeakerRequest.js");
 const { RoomFollow } = await import("../models/RoomFollow.js");
 const { roomsRouter } = await import("../routes/rooms.js");
+const { reactionsRouter } = await import("../routes/reactions.js");
 const { livekitRouter } = await import("../routes/livekit.js");
 const { mediaProvider } = await import("../services/livekit.js");
 const { syncInvalidation } = await import("../middleware/syncInvalidation.js");
@@ -45,13 +46,20 @@ const { Purchase } = await import("../models/Purchase.js");
 const { creditPurchase } = await import("../services/purchaseCredit.js");
 const { markPurchasePaid } = await import("../services/purchaseState.js");
 const { handlePaymentWebhook } = await import("../services/paymentWebhook.js");
+const { Achievement } = await import("../models/Achievement.js");
+const { AdminUser } = await import("../models/AdminUser.js");
+const { AdminAuditLog } = await import("../models/AdminAuditLog.js");
+const { requireAdminAuth, signAdminAccessToken } = await import("../middleware/adminAuth.js");
+const { experienceRouter } = await import("../routes/experience.js");
+const { adminBadgesRouter, badgeArtRouter } = await import("../routes/adminBadges.js");
+const { awardWeeklyHonors, badgeCatalog, weeklyHonorWindow, wornBadges } = await import("../services/badges.js");
 
 let server: http.Server;
 let baseUrl: string;
 before(async () => {
   await mongoose.connect(uri, { dbName, autoIndex: false, serverSelectionTimeoutMS: 5000 });
   // Real production schema indexes, applied only inside the owned test replica.
-  for (const model of [User, AuthSession, WalletTransaction, GiftTransaction, GiftInventory, Gift, Room, RoomParticipant, SpeakerRequest, RoomFollow, Referral, ImmersiveTheme, UserSafetyStatus, Event, Purchase]) {
+  for (const model of [User, AuthSession, WalletTransaction, GiftTransaction, GiftInventory, Gift, Room, RoomParticipant, SpeakerRequest, RoomFollow, Referral, ImmersiveTheme, UserSafetyStatus, Event, Purchase, Achievement, AdminUser, AdminAuditLog]) {
     await model.createCollection();
     await model.createIndexes();
   }
@@ -60,7 +68,11 @@ before(async () => {
   app.use(express.json());
   app.use("/api", syncInvalidation);
   app.use("/api/rooms", roomsRouter);
+  app.use("/api", reactionsRouter);
   app.use("/api/livekit", livekitRouter);
+  app.use("/api/experience", experienceRouter);
+  app.use("/api/admin", requireAdminAuth, adminBadgesRouter);
+  app.use("/api/badge-art", badgeArtRouter);
   app.use("/api/events", eventsRouter);
   app.use("/api", eventsRouter);
   app.use("/api", giftsRouter, walletRouter, roomThemesRouter, referralsRouter);
@@ -104,6 +116,140 @@ async function get(route: string, token: string) {
   const response = await fetch(`${baseUrl}${route}`, { headers: { authorization: `Bearer ${token}` } });
   return { status: response.status, body: await response.json() as any };
 }
+
+test("reaction catalog and room submission agree on VIP access", async () => {
+  const future = new Date(Date.now() + 3600000);
+  const past = new Date(Date.now() - 3600000);
+  const actors = await Promise.all([
+    user(),
+    user(1000, { vipLevel: 2, vipExpiresAt: future }),
+    user(1000, { vipLevel: 3, vipExpiresAt: future }),
+    user(1000, { vipTier: "VIP3", vipExpiresAt: future }),
+    user(1000, { vipLevel: 3, vipExpiresAt: future, vipFrozen: true }),
+    user(1000, { vipLevel: 3, vipExpiresAt: past })
+  ]);
+  const room = await Room.create({
+    title: "Reaction test room", hostId: actors[0]._id, type: "VOICE",
+    category: "test", language: "English", status: "LIVE", livekitRoomName: randomUUID()
+  });
+  await RoomParticipant.insertMany(actors.map((actor, index) => ({
+    roomId: room._id, userId: actor._id, role: index === 0 ? "HOST" : "AUDIENCE"
+  })));
+  const tokens = await Promise.all(actors.map(tokenFor));
+
+  for (const [index, token] of tokens.entries()) {
+    const eligible = index === 2 || index === 3;
+    const catalog = await get("/reactions", token);
+    assert.equal(catalog.status, 200);
+    const reactions = catalog.body.data.reactions as Array<{ id: string; usable: boolean; lockedReason: string | null }>;
+    assert.equal(reactions.find(reaction => reaction.id === "wave")?.usable, true);
+    const exclusive = reactions.find(reaction => reaction.id === "vip_diamond");
+    assert.equal(exclusive?.usable, eligible);
+    assert.equal(exclusive?.lockedReason, eligible ? null : "VIP");
+
+    const sent = await post(`/rooms/${room.id}/reactions`, token, { type: "vip_diamond" });
+    assert.equal(sent.status, eligible ? 201 : 403);
+    if (eligible) assert.equal(sent.body.data.reaction.reactionId, "vip_diamond");
+  }
+  const free = await post(`/rooms/${room.id}/reactions`, tokens[0], { type: "wave" });
+  assert.equal(free.status, 201);
+  assert.equal(free.body.data.reaction.reactionId, "wave");
+});
+
+test("badge gallery grants qualifying levels once, caps automatic wear, and preserves an unwear choice", async () => {
+  const actor = await user();
+  const viewer = await user();
+  const [token, viewerToken] = await Promise.all([actor, viewer].map(tokenFor));
+  const tiers = ["BRONZE", "SILVER", "GOLD", "PLATINUM", "DIAMOND", "MASTER"].map((tier, index) => ({
+    tier, target: (index + 1) * 10, rewardCoins: 0
+  }));
+  // Name and username are two of the seven profile fields. Add enough
+  // progress to hit all six tiers on one badge and have a locked badge too.
+  await User.updateOne({ _id: actor._id }, { $set: { bio: "Test", city: "Test", avatar: "https://example.com/avatar.png" } });
+  await Achievement.insertMany(["first", "second", "third", "fourth", "locked"].map((id, i) => ({
+    id, title: id, description: "Complete the profile", metric: "profile_complete", order: i,
+    tiers: i === 4 ? [{ tier: "BRONZE", target: 100, rewardCoins: 0 }] : tiers
+  })));
+  const gallery = await Promise.all([get("/experience/badges", token), get("/experience/badges", token)]);
+  for (const result of gallery) {
+    assert.equal(result.status, 200);
+    assert.deepEqual(result.body.data.wornIds, ["first", "second", "third"]);
+    assert.equal(result.body.data.badges[3].tier, "MASTER");
+    assert.equal(result.body.data.badges[4].unlocked, false);
+  }
+  assert.equal((await User.findById(actor._id).lean())?.badgeGrants.length, 4);
+  const wear = (badgeIds: string[]) => fetch(`${baseUrl}/experience/badges/showcase`, {
+    method: "PUT", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify({ badgeIds })
+  });
+  assert.equal((await wear(["first", "second", "third", "fourth"])).status, 422);
+  assert.equal((await wear(["first", "first"])).status, 422);
+  assert.equal((await wear(["locked"])).status, 400);
+  assert.equal((await wear(["fourth", "second"])).status, 200);
+  assert.deepEqual((await get("/experience/badges", token)).body.data.wornIds, ["fourth", "second"]);
+  const publicProfile = await get(`/experience/badges/showcase/${actor.id}`, viewerToken);
+  assert.deepEqual(publicProfile.body.data.badges.map((badge: { id: string }) => badge.id), ["fourth", "second"]);
+});
+
+test("Sunday honors only count the previous week and expire at the next Sunday boundary", async () => {
+  const host = await user();
+  const lateHost = await user();
+  const now = new Date("2026-11-15T00:00:01.000Z");
+  const window = weeklyHonorWindow(now);
+  await Achievement.create({ id: "weekly-fixture", title: "Weekly host", description: "Host one room", metric: "host_3", kind: "HONOR", weeklyTarget: 1, tiers: [] });
+  for (const [actor, start] of [[host, window.from], [lateHost, window.start]] as const) {
+    await Room.create({
+      hostId: actor._id, title: "Badge test room", category: "test", language: "en", type: "VOICE",
+      livekitRoomName: randomUUID(), startedAt: start
+    });
+  }
+  await awardWeeklyHonors(now);
+  await awardWeeklyHonors(now);
+  const definitions = await badgeCatalog();
+  const awarded = await User.findById(host._id).orFail().lean();
+  assert.equal(awarded.badgeGrants.length, 1);
+  assert.equal(wornBadges(awarded, definitions, now)[0].id, "weekly-fixture");
+  assert.deepEqual(wornBadges(awarded, definitions, window.expiresAt), []);
+  assert.deepEqual((await User.findById(lateHost._id).lean())?.badgeGrants, []);
+});
+
+test("admin badge artwork is replaced and archived through permission-gated routes", async () => {
+  const admin = await AdminUser.create({ email: "super@example.test", displayName: "Super Admin", role: "SUPER_ADMIN", isSuperAdmin: true });
+  const analyst = await AdminUser.create({ email: "analyst@example.test", displayName: "Analyst", role: "ANALYST" });
+  assert.equal((await get("/admin/badges", await tokenFor(await user()))).status, 401);
+  assert.equal((await get("/admin/badges", signAdminAccessToken(analyst))).status, 403);
+  const token = signAdminAccessToken(admin);
+  const definition = {
+    id: "custom", title: "Custom", description: "Attain a level", kind: "ACHIEVEMENT", icon: "star", metric: "level_5",
+    order: 4, tiers: [{ tier: "BRONZE", target: 2, rewardCoins: 0 }]
+  };
+  const png = Uint8Array.from(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl61ZsAAAAASUVORK5CYII=", "base64"));
+  const updateArtwork = (method: "POST" | "PUT", blob = new Blob([png], { type: "image/png" })) => {
+    const body = new FormData();
+    body.set("definition", JSON.stringify(definition));
+    body.set("image", blob, "custom.png");
+    return fetch(`${baseUrl}/admin/badges${method === "PUT" ? "/custom" : ""}`, {
+      method, headers: { authorization: `Bearer ${token}` }, body
+    });
+  };
+  assert.equal((await updateArtwork("POST", new Blob(["not an image"], { type: "image/png" }))).status, 400);
+  assert.equal((await updateArtwork("POST")).status, 201);
+  const image = async () => (await get("/admin/badges", token)).body.data.badges[0].imageUrl as string;
+  const first = await image();
+  const url = (path: string) => new URL(path, baseUrl).href;
+  const art = await fetch(url(first));
+  assert.equal(art.status, 200);
+  assert.equal(art.headers.get("content-type"), "image/png");
+  assert.deepEqual(new Uint8Array(await art.arrayBuffer()), png);
+  assert.equal((await updateArtwork("PUT")).status, 200);
+  const second = await image();
+  assert.notEqual(first, second);
+  assert.equal((await fetch(url(first))).status, 404);
+  assert.equal((await fetch(`${baseUrl}/admin/badges/custom`, { method: "DELETE", headers: { authorization: `Bearer ${token}` } })).status, 200);
+  assert.equal((await fetch(url(second))).status, 404);
+  const stored = await Achievement.findOne({ id: "custom" }).orFail().lean();
+  assert.equal(await AdminAuditLog.countDocuments({ entityId: stored._id, "metadata.badgeId": "custom" }), 3);
+});
 
 test("public voice and video entry never requires following and membership counts track leave/rejoin", async () => {
   const host = await user();

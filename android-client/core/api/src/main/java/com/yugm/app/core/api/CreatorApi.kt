@@ -10,6 +10,7 @@ import com.yugm.app.core.model.TrustVerificationStatus
 import com.yugm.app.core.model.WithdrawalEligibility
 import com.yugm.app.core.model.WithdrawalRequestResult
 import com.yugm.app.core.model.Achievement
+import com.yugm.app.core.model.BadgeGallery
 import org.json.JSONObject
 import org.json.JSONArray
 
@@ -135,30 +136,28 @@ object CreatorApi {
     }
 
     suspend fun updateBadgeShowcase(token: String, badgeIds: List<String>) {
-        YugmHttpClient.put("/badges/showcase", token, JSONObject().put("badgeIds", JSONArray(badgeIds)))
+        YugmHttpClient.put("/experience/badges/showcase", token, JSONObject().put("badgeIds", JSONArray(badgeIds)))
     }
 
     suspend fun getUserBadges(token: String, userId: String): List<Achievement> {
-        val data = YugmHttpClient.get("/badges/showcase/$userId", token).getJSONObject("data")
-        val arr = data.optJSONArray("badges") ?: JSONArray()
-        val result = mutableListOf<Achievement>()
-        for (i in 0 until arr.length()) {
-            val obj = arr.optJSONObject(i) ?: continue
-            result.add(Achievement(
-                id = obj.optString("id", ""),
-                title = obj.optString("title", ""),
-                description = obj.optString("description", ""),
-                rewardCoins = obj.optInt("rewardCoins", 0),
-                category = obj.optString("category", ""),
-                icon = obj.optString("icon", "🏅"),
-                highestClaimedTier = obj.optString("tier", "").takeIf { it.isNotBlank() }
-            ))
-        }
-        return result
+        val data = YugmHttpClient.get("/experience/badges/showcase/$userId", token).getJSONObject("data")
+        return data.optJSONArray("badges")?.toAchievements().orEmpty()
+    }
+
+    suspend fun badgeGallery(token: String): BadgeGallery {
+        val data = YugmHttpClient.get("/experience/badges", token).getJSONObject("data")
+        val user = data.optJSONObject("user")
+        val worn = data.optJSONArray("wornIds") ?: JSONArray()
+        return BadgeGallery(
+            name = user?.optString("name").orEmpty(),
+            avatar = user?.optString("avatar").orEmpty(),
+            wornIds = List(worn.length()) { worn.getString(it) },
+            badges = data.optJSONArray("badges")?.toAchievements().orEmpty()
+        )
     }
 
     suspend fun shareAchievement(token: String, achievementId: String): String {
-        val data = YugmHttpClient.post("/achievements/$achievementId/share", token, JSONObject()).getJSONObject("data")
+        val data = YugmHttpClient.post("/experience/achievements/$achievementId/share", token, JSONObject()).getJSONObject("data")
         return data.optString("shareText", data.optString("shareUrl", ""))
     }
 

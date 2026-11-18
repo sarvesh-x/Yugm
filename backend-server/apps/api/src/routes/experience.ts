@@ -14,13 +14,14 @@ import { Room } from "../models/Room.js";
 import { RoomInvite } from "../models/RoomInvite.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
 import { MiniGameScore } from "../models/MiniGameScore.js";
-import { User } from "../models/User.js";
+import { User, type IUser } from "../models/User.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode } from "../utils/http.js";
 import { getLevelStatus } from "../services/levels.js";
 import { creditWallet } from "../services/wallet.js";
 import { getVipStatus } from "../services/vip.js";
 import { creatorCoinsToInr } from "../services/withdrawal.js";
 import { createNotification } from "../services/notifications.js";
+import { badgeCatalog, currentHonors, maxWornBadges, syncBadgeState, wornBadges } from "../services/badges.js";
 
 export const experienceRouter = Router();
 experienceRouter.use(requireAuth);
@@ -111,7 +112,7 @@ function computeProgress(achievement: any, user: any, followingCount: number, ho
     game_plays_10: gamesPlayed,
     gift_received_5: receivedGifts
   };
-  return raw[achievement.id] ?? 0;
+  return raw[achievement.metric ?? achievement.id] ?? 0;
 }
 
 function buildTierInfo(achievement: any, currentProgress: number, claimedTiers: Set<string>) {
@@ -151,7 +152,7 @@ function buildTierInfo(achievement: any, currentProgress: number, claimedTiers: 
   };
 }
 
-async function buildAchievements(userId: string, user: any) {
+async function buildAchievements(userId: string, user: any, catalog = badgeCatalog()) {
   const [followingCount, hostedRooms, sentGifts, chatMessages, joinedRooms, gamesPlayed, receivedGifts, allAchievements] = await Promise.all([
     Follow.countDocuments({ followerId: userId }),
     Room.countDocuments({ hostId: userId }),
@@ -160,14 +161,14 @@ async function buildAchievements(userId: string, user: any) {
     RoomParticipant.distinct("roomId", { userId }),
     MiniGameScore.countDocuments({ userId }),
     GiftTransaction.countDocuments({ receiverId: userId }),
-    Achievement.find().sort({ order: 1 }).lean()
+    catalog
   ]);
 
   const streak = streakEstimate(user, user?.streakCount ?? 0);
   const rawTiers: Array<{ achievementId: string; tier: string }> = user?.claimedAchievementTiers ?? [];
   const claimedTiers = new Set<string>(rawTiers.map((ct) => `${ct.achievementId}:${ct.tier}`));
 
-  return allAchievements.map((achievement) => {
+  return allAchievements.filter(achievement => achievement.kind !== "HONOR").map((achievement) => {
     const progress = computeProgress(achievement, user, followingCount, hostedRooms, sentGifts, chatMessages, streak, joinedRooms.length, gamesPlayed, receivedGifts);
     const tierInfo = buildTierInfo(achievement, progress, claimedTiers);
     return {
@@ -190,12 +191,29 @@ async function buildAchievements(userId: string, user: any) {
   });
 }
 
+async function loadBadgeGallery(userId: string, user: Pick<IUser, "name" | "avatar"> | null) {
+  if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+  const now = new Date();
+  const catalog = badgeCatalog();
+  const [achievements, definitions] = await Promise.all([buildAchievements(userId, user, catalog), catalog]);
+  const earned = achievements.flatMap(item => item.currentTier ? [{ badgeId: item.id, tier: item.currentTier, earnedAt: now }] : []);
+  const honors = await currentHonors(userId, definitions, now);
+  const state = await syncBadgeState(userId, definitions, [...earned, ...honors], now);
+  const progress = new Map(achievements.map(item => [item.id, item]));
+  return {
+    user: { name: user.name, avatar: user.avatar },
+    wornIds: state.wornIds,
+    badges: state.badges.map(badge => ({ ...progress.get(badge.id), ...badge }))
+  };
+}
+
 experienceRouter.get("/home", asyncHandler(async (req: AuthRequest, res) => {
   const userId = req.user!.id;
   const user = await User.findById(userId).lean();
   const hiddenIds = await blockedIdsFor(userId);
   const followingRows = await Follow.find({ followerId: userId }).lean();
   const followingIds = followingRows.map((row) => row.followingId);
+  const catalog = badgeCatalog();
 
   const [
     recommendedRooms,
@@ -229,7 +247,7 @@ experienceRouter.get("/home", asyncHandler(async (req: AuthRequest, res) => {
       .lean(),
     Notification.find({ userId }).sort({ createdAt: -1 }).limit(5).lean(),
     Notification.countDocuments({ userId, read: false }),
-    buildAchievements(userId, user),
+    buildAchievements(userId, user, catalog),
     RoomInvite.find({ inviteeId: userId, status: "PENDING" })
       .populate("roomId", "title type status hostId")
       .populate("inviterId", "name username avatar")
@@ -237,6 +255,10 @@ experienceRouter.get("/home", asyncHandler(async (req: AuthRequest, res) => {
       .limit(5)
       .lean()
   ]);
+
+  const now = new Date();
+  const earned = achievementsList.flatMap(item => item.currentTier ? [{ badgeId: item.id, tier: item.currentTier, earnedAt: now }] : []);
+  if (user && earned.length) await syncBadgeState(userId, await catalog, earned, now);
 
   sendOk(res, {
     schemaVersion: 1,
@@ -363,7 +385,7 @@ experienceRouter.post("/achievements/claim", asyncHandler(async (req: AuthReques
   const user = await User.findById(req.user!.id).lean();
   if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
 
-  const achievement = await Achievement.findOne({ id: achievementId }).lean();
+  const achievement = await Achievement.findOne({ id: achievementId, hidden: { $ne: true }, kind: { $ne: "HONOR" } }).lean();
   if (!achievement) throw new HttpError(404, "Achievement not found", ErrorCode.NOT_FOUND);
 
   const allAchievements = await buildAchievements(req.user!.id, user);
@@ -414,55 +436,41 @@ experienceRouter.get("/achievements", asyncHandler(async (req: AuthRequest, res)
   sendOk(res, { schemaVersion: 1, achievements: achievementsList });
 }));
 
-const showcasedBadgeSchema = z.object({ badgeIds: z.array(z.string()).max(5) });
+experienceRouter.get("/badges", asyncHandler(async (req: AuthRequest, res) => {
+  const user = await User.findById(req.user!.id).lean();
+  sendOk(res, await loadBadgeGallery(req.user!.id, user));
+}));
+
+const showcasedBadgeSchema = z.object({
+  badgeIds: z.array(z.string().min(1).max(64)).max(maxWornBadges)
+    .refine(ids => new Set(ids).size === ids.length, "Choose different badges for each slot")
+});
 
 experienceRouter.put("/badges/showcase", validateBody(showcasedBadgeSchema), asyncHandler(async (req: AuthRequest, res) => {
-  const { badgeIds } = req.body;
-  const user = await User.findById(req.user!.id).select("claimedAchievementTiers").lean();
-  if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
-  const claimedIds = new Set((user.claimedAchievementTiers ?? []).map((ct: { achievementId: string }) => ct.achievementId));
-  for (const id of badgeIds) {
-    if (!claimedIds.has(id)) throw new HttpError(400, `Achievement ${id} not yet claimed`, ErrorCode.VALIDATION);
-  }
-  await User.findByIdAndUpdate(req.user!.id, { $set: { showcasedBadgeIds: badgeIds } });
-  sendOk(res, { badgeIds });
+  const { badgeIds } = req.body as z.infer<typeof showcasedBadgeSchema>;
+  const state = await syncBadgeState(req.user!.id, await badgeCatalog(), [], new Date(), badgeIds);
+  sendOk(res, { badgeIds: state.wornIds });
 }));
 
 experienceRouter.get("/badges/showcase/:userId", asyncHandler(async (req: AuthRequest, res) => {
-  const user = await User.findById(req.params.userId).select("showcasedBadgeIds claimedAchievementTiers").lean();
-  if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
-
-  if (!user.showcasedBadgeIds?.length) {
-    sendOk(res, { badges: [] });
+  const { userId } = req.params;
+  if (!mongoose.isValidObjectId(userId)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
+  if (userId === req.user!.id) {
+    const gallery = await loadBadgeGallery(userId, await User.findById(userId).lean());
+    const badges = new Map(gallery.badges.map(badge => [badge.id, badge]));
+    sendOk(res, { badges: gallery.wornIds.map(id => badges.get(id)).filter(Boolean) });
     return;
   }
-
-  const achievements = await Achievement.find({ id: { $in: user.showcasedBadgeIds } }).lean();
-  const tierMap = new Map(
-    (user.claimedAchievementTiers ?? []).map((ct: { achievementId: string; tier: string }) => [ct.achievementId, ct.tier])
-  );
-
-  const badges = user.showcasedBadgeIds.map((id: string) => {
-    const achievement = achievements.find((a) => a.id === id);
-    if (!achievement) return null;
-    const highestTier = tierMap.get(id) ?? null;
-    const tierDef = achievement.tiers.find((t) => t.tier === highestTier);
-    return {
-      id: achievement.id,
-      title: achievement.title,
-      description: achievement.description,
-      icon: achievement.icon,
-      category: achievement.category,
-      tier: highestTier,
-      rewardCoins: tierDef?.rewardCoins ?? 0
-    };
-  }).filter(Boolean);
-
-  sendOk(res, { badges });
+  const [user, definitions] = await Promise.all([
+    User.findById(userId).select("badgeGrants showcasedBadgeIds claimedAchievementTiers claimedAchievementIds").lean(),
+    badgeCatalog()
+  ]);
+  if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+  sendOk(res, { badges: wornBadges(user, definitions) });
 }));
 
 experienceRouter.post("/achievements/:id/share", asyncHandler(async (req: AuthRequest, res) => {
-  const achievement = await Achievement.findOne({ id: req.params.id }).lean();
+  const achievement = await Achievement.findOne({ id: req.params.id, hidden: { $ne: true }, kind: { $ne: "HONOR" } }).lean();
   if (!achievement) throw new HttpError(404, "Achievement not found", ErrorCode.NOT_FOUND);
 
   const user = await User.findById(req.user!.id).select("claimedAchievementTiers name username").lean();

@@ -356,47 +356,15 @@ fun GrowthScreen(
                     }
                 }
                 item {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) { SectionTitle("Next best actions") }
-                        TextButton(onClick = onOpenAchievements) { Text("All achievements →", color = colors.primary, fontSize = 12.sp) }
-                    }
-                }
-                items(payload.achievements.take(5), key = { it.id }) { item ->
+                    val completed = payload.achievements.count { it.complete }
+                    val ready = payload.achievements.count { it.canClaim }
                     GlassCard(Modifier.fillMaxWidth()) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text(item.title, color = colors.textPrimary, fontWeight = FontWeight.Black)
-                                Text(item.description, color = colors.textSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 3.dp))
+                                Text("Achievements & badges", color = colors.textPrimary, fontWeight = FontWeight.Bold)
+                                Text("$completed completed · $ready ready to claim", color = colors.textSecondary, fontSize = 12.sp)
                             }
-                            if (item.canClaim) {
-                                var claiming by remember { mutableStateOf(false) }
-                                Button(
-                                    onClick = {
-                                        claiming = true
-                                        viewModel.claimAchievement(token, item.id) {
-                                            claiming = false
-                                        }
-                                    },
-                                    enabled = !claiming,
-                                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = colors.accent)
-                                ) {
-                                    Text(if (claiming) "..." else "Claim", color = colors.textPrimary, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                        LinearProgressIndicator(
-                            progress = { if (item.target > 0) (item.progress.toFloat() / item.target).coerceIn(0f, 1f) else 0f },
-                            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                            color = if (item.canClaim) colors.accent else colors.primary,
-                            trackColor = colors.textSecondary.copy(alpha = 0.24f)
-                        )
-                        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("${item.progress}/${item.target}", color = if (item.canClaim) colors.accent else colors.primary, fontWeight = FontWeight.Bold)
-                            if (item.rewardCosmetic.isNotBlank()) {
-                                Text("${cosmeticDisplayName(item.rewardCosmetic)}", color = colors.accent, fontWeight = FontWeight.Bold)
-                            } else {
-                                Text("${item.rewardCoins} coins", color = colors.accent, fontWeight = FontWeight.Bold)
-                            }
+                            TextButton(onClick = onOpenAchievements) { Text("View", color = colors.primary) }
                         }
                     }
                 }

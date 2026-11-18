@@ -13,6 +13,7 @@ import { adminSupportRouter } from "./routes/adminSupport.js";
 import { adminCosmeticsRouter } from "./routes/adminCosmetics.js";
 import { adminDmReviewsRouter } from "./routes/adminDmReviews.js";
 import { adminReactionsRouter } from "./routes/adminReactions.js";
+import { adminBadgesRouter, badgeArtRouter } from "./routes/adminBadges.js";
 import { adminVerificationRouter } from "./routes/adminVerification.js";
 import { authRouter } from "./routes/auth.js";
 import { handlePayoutWebhook } from "./services/payoutWebhook.js";
@@ -209,7 +210,9 @@ export function createApp() {
   app.use("/api/admin", adminRouter);
   app.use("/api/admin", adminSupportRouter);
   app.use("/api/admin", adminCosmeticsRouter);
+  app.use("/api/admin", adminBadgesRouter);
   app.use("/api/admin", adminReactionsRouter);
+  app.use("/api/badge-art", badgeArtRouter);
   app.use("/api/auth", requireAppCheck, authRouter);
   app.use("/api/clans", clansRouter);
   app.use("/api/creator", creatorRouter);

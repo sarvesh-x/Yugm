@@ -188,7 +188,13 @@ fun JSONObject.toAchievement(): Achievement = Achievement(
     } } ?: emptyList(),
     nextTier = optString("nextTier").takeIf { it.isNotBlank() && it != "null" },
     canClaim = optBoolean("canClaim", false),
-    canUpgrade = optBoolean("canUpgrade", false)
+    canUpgrade = optBoolean("canUpgrade", false),
+    badgeKind = optString("kind", "ACHIEVEMENT"),
+    imageUrl = optString("imageUrl"),
+    earnedBadgeTier = optString("tier").takeIf { it.isNotBlank() && it != "null" },
+    badgeUnlocked = optBoolean("unlocked"),
+    expiresAt = optString("expiresAt").takeIf { it.isNotBlank() && it != "null" },
+    weeklyTarget = optInt("weeklyTarget")
 )
 
 fun JSONArray.toAchievements(): List<Achievement> = buildList {

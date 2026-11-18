@@ -70,6 +70,12 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
 
 async function runMaintenanceTasks() {
   const results: string[] = [];
+  try {
+    const { awardWeeklyHonors } = await import("./badges.js");
+    await awardWeeklyHonors();
+  } catch (error) {
+    results.push(`Weekly honor awards failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
   try {
     const expiredDeletionCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);

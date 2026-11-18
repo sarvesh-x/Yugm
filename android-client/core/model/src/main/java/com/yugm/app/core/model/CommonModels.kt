@@ -62,7 +62,20 @@ data class Achievement(
     val tiers: List<AchievementTier> = emptyList(),
     val nextTier: String? = null,
     val canClaim: Boolean = false,
-    val canUpgrade: Boolean = false
+    val canUpgrade: Boolean = false,
+    val badgeKind: String = "ACHIEVEMENT",
+    val imageUrl: String = "",
+    val earnedBadgeTier: String? = null,
+    val badgeUnlocked: Boolean = false,
+    val expiresAt: String? = null,
+    val weeklyTarget: Int = 0
+)
+
+data class BadgeGallery(
+    val name: String = "",
+    val avatar: String = "",
+    val wornIds: List<String> = emptyList(),
+    val badges: List<Achievement> = emptyList()
 )
 
 data class AchievementTier(
