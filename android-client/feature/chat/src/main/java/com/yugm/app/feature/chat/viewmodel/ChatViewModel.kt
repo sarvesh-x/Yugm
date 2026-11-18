@@ -129,6 +129,7 @@ class ChatViewModel @Inject constructor(
     private var partnerUserId = ""
     private var activeSearchQuery = ""
     private var isMarkingConversationRead = false
+    private var lastRelationshipRefreshAt = 0L
 
     init {
         viewModelScope.launch {
@@ -814,6 +815,9 @@ class ChatViewModel @Inject constructor(
     }
 
     private fun refreshRelationshipSilently() {
+        val now = System.currentTimeMillis()
+        if (now - lastRelationshipRefreshAt < 30_000L) return
+        lastRelationshipRefreshAt = now
         val token = authToken
         val partnerId = partnerUserId
         if (token.isBlank() || partnerId.isBlank()) return

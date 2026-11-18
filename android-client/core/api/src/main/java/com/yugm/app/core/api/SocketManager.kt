@@ -12,6 +12,7 @@ import com.yugm.app.core.model.NotificationItem
 import com.yugm.app.core.model.VoiceRoomPresence
 import io.socket.client.IO
 import io.socket.client.Socket
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import org.json.JSONObject
@@ -47,7 +48,10 @@ sealed class SocketEvent {
 @Singleton
 class SocketManager @Inject constructor() {
     private var socket: Socket? = null
-    private val _events = MutableSharedFlow<SocketEvent>(extraBufferCapacity = 20)
+    private val _events = MutableSharedFlow<SocketEvent>(
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
     val events = _events.asSharedFlow()
 
     private var baseUrl: String = ""
