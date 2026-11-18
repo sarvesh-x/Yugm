@@ -38,8 +38,8 @@ import com.yugm.app.core.ui.components.GlassCard
 import com.yugm.app.core.ui.components.LoadingState
 import com.yugm.app.core.ui.components.YugmAmbientBackground
 import com.yugm.app.core.ui.theme.*
+import com.yugm.app.core.util.DateUtils
 import kotlinx.coroutines.launch
-import java.time.Instant
 
 @Composable
 fun VoicePollDetailScreen(
@@ -58,7 +58,7 @@ fun VoicePollDetailScreen(
 
     fun isExpired(p: VoicePoll): Boolean {
         if (p.expiresAt.isBlank()) return false
-        return runCatching { Instant.parse(p.expiresAt).isBefore(Instant.now()) }.getOrDefault(false)
+        return DateUtils.isIsoBeforeNow(p.expiresAt)
     }
 
     fun loadPoll() {

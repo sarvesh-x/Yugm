@@ -2,6 +2,7 @@ package com.yugm.app.feature.social.screens
 
 import com.yugm.app.core.api.SyncTopic
 import com.yugm.app.core.ui.components.AutomaticSyncEffect
+import com.yugm.app.core.util.DateUtils
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -153,7 +154,7 @@ fun VoicePollScreen(
                             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
                                 items(displayPolls, key = { it.id }) { poll ->
                                     val totalVotes = poll.options.sumOf { it.votes }
-                                    val expired = runCatching { java.time.Instant.parse(poll.expiresAt).isBefore(java.time.Instant.now()) }.getOrDefault(false)
+                                    val expired = DateUtils.isIsoBeforeNow(poll.expiresAt)
                                     val selectedIndex = if (userId.isNotBlank()) poll.selectedOptionIndexFor(userId) else null
                                     val hasVoted = selectedIndex != null || (userId.isNotBlank() && poll.voters.contains(userId))
                                     val selectedOptionText = selectedIndex?.let { poll.options.getOrNull(it)?.text }?.takeIf { it.isNotBlank() }

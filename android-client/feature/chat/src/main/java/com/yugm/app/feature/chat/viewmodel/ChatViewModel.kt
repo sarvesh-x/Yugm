@@ -23,6 +23,7 @@ import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.api.ReactionCatalogCache
 import com.yugm.app.core.api.SocketEvent
 import com.yugm.app.core.api.SocketManager
+import com.yugm.app.core.util.DateUtils
 import com.yugm.app.feature.chat.cache.CachedConversation
 import com.yugm.app.feature.chat.cache.ChatConversationCache
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -453,7 +454,7 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    private fun nowIso(): String = java.time.Instant.now().toString()
+    private fun nowIso(): String = DateUtils.nowIso()
 
     private fun optimisticMessage(
         localId: String,

@@ -2,6 +2,7 @@ package com.yugm.app.feature.missions.screens
 
 import com.yugm.app.core.api.SyncTopic
 import com.yugm.app.core.ui.components.AutomaticSyncEffect
+import com.yugm.app.core.util.DateUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -212,7 +213,7 @@ private fun PassHero(
     val colors = LocalYugmColors.current
     val isMaxLevel = level >= maxLevel
     val progress = if (isMaxLevel) 1f else (xp.toFloat() / xpPerLevel.coerceAtLeast(1)).coerceIn(0f, 1f)
-    val daysRemaining = runCatching { java.time.Duration.between(java.time.Instant.now(), java.time.Instant.parse(endDate)).toDays().coerceAtLeast(0) }.getOrNull()
+    val daysRemaining = DateUtils.daysUntilIso(endDate)
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
             .background(Brush.linearGradient(if (colors.isDark) listOf(Color(0xFF381B48), Color(0xFF211932), Color(0xFF18223B)) else listOf(Color(0xFFF0E7FF), Color(0xFFFFEFF5), Color.White)))

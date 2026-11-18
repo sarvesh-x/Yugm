@@ -1,4 +1,4 @@
-package com.yugm.app.feature.chat.screens
+﻿package com.yugm.app.feature.chat.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -263,15 +263,21 @@ fun ChatScreen(
     var forceScrollOnAppend by remember(partner?.id) { mutableStateOf(false) }
     val gatedAudioCall: () -> Unit = { if (!isCurrentUserVip) showVipCallDialog = true else onAudioCall() }
     val gatedVideoCall: () -> Unit = { if (!isCurrentUserVip) showVipCallDialog = true else onVideoCall() }
-    val visibleMessages = when {
-        searchQuery.length >= 2 -> searchResults.orEmpty()
-        searchQuery.isNotBlank() -> messages.filter { it.message.contains(searchQuery, ignoreCase = true) }
-        else -> messages
+    val visibleMessages = remember(messages, searchQuery, searchResults) {
+        when {
+            searchQuery.length >= 2 -> searchResults.orEmpty()
+            searchQuery.isNotBlank() -> messages.filter { it.message.contains(searchQuery, ignoreCase = true) }
+            else -> messages
+        }
     }
     val selectionMode = selectedMessageIds.isNotEmpty()
     BackHandler(enabled = selectionMode) { selectedMessageIds = emptySet() }
-    val selectedMessages = visibleMessages.filter { it.id in selectedMessageIds }
-    val selectedOwnIds = selectedMessages.filter { it.senderId == currentUserId }.map { it.id }
+    val selectedMessages = remember(visibleMessages, selectedMessageIds) {
+        visibleMessages.filter { it.id in selectedMessageIds }
+    }
+    val selectedOwnIds = remember(selectedMessages, currentUserId) {
+        selectedMessages.asSequence().filter { it.senderId == currentUserId }.map { it.id }.toList()
+    }
     fun toggleSelection(messageId: String) {
         if (messageId.isBlank()) return
         showMore = false
@@ -449,32 +455,16 @@ fun ChatScreen(
         }
     }
     if (showVipCallDialog) {
-        AlertDialog(
-            onDismissRequest = { showVipCallDialog = false },
-            containerColor = LocalYugmColors.current.surfaceElevated,
-            title = { Text("VIP Exclusive Feature", color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Bold) },
-            text = { Text("Voice and video calls in 1:1 chat are available only for VIP members. Upgrade to VIP to unlock this feature.", color = LocalYugmColors.current.textSecondary) },
-            confirmButton = {
-                TextButton(onClick = { showVipCallDialog = false; onOpenVip() }) {
-                    Text("Go to VIP", color = Color(0xFFFFD166), fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showVipCallDialog = false }) {
-                    Text("Not now", color = LocalYugmColors.current.textSecondary)
-                }
-            }
+        VipCallRequiredDialog(
+            onDismiss = { showVipCallDialog = false },
+            onOpenVip = onOpenVip
         )
     }
 
     if (confirmDeleteChat) {
-        AlertDialog(
-            onDismissRequest = { confirmDeleteChat = false },
-            containerColor = LocalYugmColors.current.surfaceElevated,
-            title = { Text("Delete this chat?", color = LocalYugmColors.current.textPrimary) },
-            text = { Text("This removes the conversation from your inbox. The other person will still keep their copy.", color = LocalYugmColors.current.textSecondary) },
-            confirmButton = { TextButton(onClick = { confirmDeleteChat = false; onDeleteConversation() }) { Text("Delete", color = LocalYugmColors.current.danger) } },
-            dismissButton = { TextButton(onClick = { confirmDeleteChat = false }) { Text("Cancel", color = LocalYugmColors.current.textSecondary) } }
+        DeleteConversationDialog(
+            onDismiss = { confirmDeleteChat = false },
+            onConfirm = onDeleteConversation
         )
     }
 
@@ -488,221 +478,40 @@ fun ChatScreen(
         )
     }
     forwardMessage?.let { selected ->
-        var forwardQuery by remember(selected.id) { mutableStateOf("") }
-        var selectedTargets by remember(selected.id) { mutableStateOf<Set<String>>(emptySet()) }
-        var forwarding by remember(selected.id) { mutableStateOf(false) }
-        val filteredTargets = remember(forwardTargets, forwardQuery) {
-            val q = forwardQuery.trim().lowercase()
-            if (q.isBlank()) forwardTargets else forwardTargets.filter {
-                it.name.lowercase().contains(q) || it.username.lowercase().contains(q)
-            }
-        }
-        AlertDialog(
-            onDismissRequest = { if (!forwarding) forwardMessage = null },
-            containerColor = LocalYugmColors.current.surfaceElevated,
-            title = {
-                Column {
-                    Text("Forward message", color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Bold)
-                    Text(
-                        if (selectedTargets.isEmpty()) "Select people or chats" else "${selectedTargets.size} selected",
-                        color = LocalYugmColors.current.textSecondary,
-                        fontSize = 12.sp
-                    )
-                }
-            },
-            text = {
-                if (forwardTargets.isEmpty()) {
-                    Text("Start a chat with someone before forwarding.", color = LocalYugmColors.current.textSecondary)
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(LocalYugmColors.current.surface)
-                                .border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(14.dp))
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            BasicTextField(
-                                value = forwardQuery,
-                                onValueChange = { forwardQuery = it.take(60) },
-                                singleLine = true,
-                                textStyle = androidx.compose.ui.text.TextStyle(color = LocalYugmColors.current.textPrimary, fontSize = 14.sp),
-                                cursorBrush = androidx.compose.ui.graphics.SolidColor(LocalYugmColors.current.primary),
-                                modifier = Modifier.weight(1f),
-                                decorationBox = { inner ->
-                                    Box {
-                                        if (forwardQuery.isBlank()) Text("Search people…", color = LocalYugmColors.current.textSecondary, fontSize = 14.sp)
-                                        inner()
-                                    }
-                                }
-                            )
-                            if (forwardQuery.isNotBlank()) {
-                                Text(
-                                    "Clear",
-                                    color = LocalYugmColors.current.secondary,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.clickable(enabled = !forwarding) { forwardQuery = "" }.padding(start = 8.dp)
-                                )
-                            }
-                        }
-                        if (filteredTargets.isEmpty()) {
-                            Text("No matches for \"$forwardQuery\".", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier.heightIn(max = 320.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                items(filteredTargets, key = { "forward-${it.id}" }) { target ->
-                                    val isSelected = target.id in selectedTargets
-                                    Row(
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(14.dp))
-                                            .background(if (isSelected) LocalYugmColors.current.secondary.copy(alpha = 0.14f) else Color.Transparent)
-                                            .border(1.dp, if (isSelected) LocalYugmColors.current.secondary.copy(alpha = 0.45f) else Color.Transparent, RoundedCornerShape(14.dp))
-                                            .clickable(enabled = !forwarding, role = Role.Button) {
-                                                selectedTargets = if (isSelected) selectedTargets - target.id else selectedTargets + target.id
-                                            }
-                                            .padding(horizontal = 10.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Avatar(target.name.take(1), 38, target.avatar, target.activeCosmetics)
-                                        Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                                            Text(target.name.ifBlank { target.username.ifBlank { "User" } }, color = LocalYugmColors.current.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                            if (target.username.isNotBlank()) Text("@${target.username}", color = LocalYugmColors.current.textSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        }
-                                        Box(
-                                            Modifier
-                                                .size(22.dp)
-                                                .clip(CircleShape)
-                                                .background(if (isSelected) LocalYugmColors.current.secondary else Color.Transparent)
-                                                .border(1.5.dp, if (isSelected) LocalYugmColors.current.secondary else LocalYugmColors.current.textSecondary.copy(alpha = 0.6f), CircleShape),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            if (isSelected) Text("✓", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                val count = selectedTargets.size
-                TextButton(
-                    enabled = !forwarding && count > 0 && forwardTargets.isNotEmpty(),
-                    onClick = {
-                        forwarding = true
-                        onForward(
-                            selected,
-                            selectedTargets.toList(),
-                            { msg ->
-                                forwarding = false
-                                forwardMessage = null
-                                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
-                            },
-                            { msg ->
-                                forwarding = false
-                                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
-                            }
-                        )
-                    }
-                ) {
-                    Text(
-                        when {
-                            forwarding -> "Forwarding…"
-                            count > 0 -> "Forward ($count)"
-                            else -> "Forward"
-                        },
-                        color = if (!forwarding && count > 0) LocalYugmColors.current.secondary else LocalYugmColors.current.textSecondary,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(enabled = !forwarding, onClick = { forwardMessage = null }) {
-                    Text("Cancel", color = LocalYugmColors.current.textSecondary)
-                }
-            }
+        ForwardMessageDialog(
+            message = selected,
+            forwardTargets = forwardTargets,
+            onDismiss = { forwardMessage = null },
+            onForward = onForward
         )
     }
     infoMessage?.let { msg ->
-        val mine = msg.senderId == currentUserId
-        AlertDialog(
-            onDismissRequest = { infoMessage = null },
-            containerColor = LocalYugmColors.current.surfaceElevated,
-            title = { Text("Message info", color = LocalYugmColors.current.textPrimary) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(if (mine) "Sent by you" else "Received", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
-                    Text("Time: ${com.yugm.app.feature.chat.formatMessageInfoTime(msg.createdAt)}", color = LocalYugmColors.current.textPrimary, fontSize = 13.sp)
-                    if (mine) Text(if (msg.read) "Status: Seen" else "Status: Sent", color = if (msg.read) Color(0xFF69F0AE) else LocalYugmColors.current.textSecondary, fontSize = 13.sp, fontWeight = if (msg.read) FontWeight.SemiBold else FontWeight.Normal)
-                    if (msg.isEdited) Text("Edited", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp)
-                    if (msg.forwarded) Text("Forwarded message", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp)
-                    if (msg.reactions.isNotEmpty()) {
-                        val summary = msg.reactions
-                            .groupBy { it.type }
-                            .entries
-                            .sortedByDescending { it.value.size }
-                            .joinToString("  ") { (type, items) ->
-                                val emoji = reactionById[type.lowercase()]?.emoji?.takeIf { it.isNotBlank() } ?: reactionEmoji(type)
-                                "$emoji ${items.size}"
-                            }
-                        val mineReaction = currentUserId.takeIf { it.isNotBlank() }?.let { uid -> msg.reactions.firstOrNull { it.userId == uid }?.type }
-                        Text("Reactions: $summary", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp)
-                        if (!mineReaction.isNullOrBlank()) {
-                            val mineEmoji = reactionById[mineReaction.lowercase()]?.emoji?.takeIf { it.isNotBlank() } ?: reactionEmoji(mineReaction)
-                            Text("Your reaction: $mineEmoji", color = LocalYugmColors.current.textPrimary, fontSize = 13.sp)
-                        }
-                    }
-                    msg.replyTo?.let { reply ->
-                        Text("Reply to: ${reply.author.ifBlank { "message" }} — ${reply.text.ifBlank { "Media" }}", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    }
-                    if (msg.mediaType.isNotBlank()) Text("Type: ${msg.mediaType.lowercase().replaceFirstChar { it.uppercase() }}", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp)
-                }
-            },
-            confirmButton = { TextButton(onClick = { infoMessage = null }) { Text("Close", color = LocalYugmColors.current.secondary) } }
+        MessageInfoDialog(
+            message = msg,
+            mine = msg.senderId == currentUserId,
+            currentUserId = currentUserId,
+            reactionById = reactionById,
+            onDismiss = { infoMessage = null }
         )
     }
     if (showDeleteSelected) {
-        val selectedCount = selectedMessageIds.size
-        AlertDialog(
-            onDismissRequest = { showDeleteSelected = false },
-            containerColor = LocalYugmColors.current.surfaceElevated,
-            title = { Text(if (selectedCount == 1) "Delete message?" else "Delete selected messages?", color = LocalYugmColors.current.textPrimary) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        "Choose how to delete ${if (selectedCount == 1) "this message" else "$selectedCount messages"}.",
-                        color = LocalYugmColors.current.textSecondary
-                    )
-                    Text("• Delete for me: removes it from your chat only.", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
-                    if (selectedOwnIds.isNotEmpty()) {
-                        Text("• Delete for everyone: removes ${if (selectedOwnIds.size == 1) "your selected message" else "${selectedOwnIds.size} of your selected messages"} for both people.", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
-                    }
-                }
+        DeleteSelectedMessagesDialog(
+            selectedCount = selectedMessageIds.size,
+            selectedOwnCount = selectedOwnIds.size,
+            onDismiss = { showDeleteSelected = false },
+            onDeleteForMe = {
+                onDeleteSelected(selectedMessageIds.toList(), "ME")
+                selectedMessageIds = emptySet()
+                showDeleteSelected = false
             },
-            confirmButton = {
-                Column(horizontalAlignment = Alignment.End) {
-                    TextButton(onClick = {
-                        onDeleteSelected(selectedMessageIds.toList(), "ME")
-                        selectedMessageIds = emptySet()
-                        showDeleteSelected = false
-                    }) { Text("Delete for me", color = LocalYugmColors.current.danger) }
-                    if (selectedOwnIds.isNotEmpty()) TextButton(onClick = {
-                        onDeleteSelected(selectedOwnIds, "EVERYONE")
-                        selectedMessageIds = emptySet()
-                        showDeleteSelected = false
-                    }) { Text(if (selectedOwnIds.size == 1) "Delete for everyone" else "Delete ${selectedOwnIds.size} for everyone", color = LocalYugmColors.current.danger) }
-                }
-            },
-            dismissButton = { TextButton(onClick = { showDeleteSelected = false }) { Text("Cancel") } }
+            onDeleteForEveryone = {
+                onDeleteSelected(selectedOwnIds, "EVERYONE")
+                selectedMessageIds = emptySet()
+                showDeleteSelected = false
+            }
         )
     }
+    val maxAttachmentBytes = 25L * 1024 * 1024
     val mediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             scope.launch {
@@ -714,15 +523,31 @@ fun ChatScreen(
                             if (cursor.moveToFirst() && nameIndex >= 0) cursor.getString(nameIndex) else null
                         }
                     }.getOrNull() ?: uri.lastPathSegment ?: "message-media"
-                    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    Triple(bytes, mime, name)
+                    val declaredSize = runCatching {
+                        context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+                            val idx = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                            if (cursor.moveToFirst() && idx >= 0 && !cursor.isNull(idx)) cursor.getLong(idx) else null
+                        }
+                    }.getOrNull()
+                    if (declaredSize != null && declaredSize > maxAttachmentBytes) {
+                        return@withContext Triple(Result.failure<ByteArray>(AttachmentTooLargeException(maxAttachmentBytes)), mime, name)
+                    }
+                    val result = runCatching {
+                        context.contentResolver.openInputStream(uri)?.use { input ->
+                            readBytesBounded(input, maxAttachmentBytes)
+                        } ?: throw java.io.IOException("Couldn't read selected file")
+                    }
+                    Triple(result, mime, name)
                 }
-                val bytes = payload.first
-                if (bytes != null && bytes.size <= 25 * 1024 * 1024) {
-                    onAttachmentSelected(bytes, payload.second, payload.third)
-                } else if (bytes != null) {
-                    android.widget.Toast.makeText(context, "File is too large (max 25 MB)", android.widget.Toast.LENGTH_SHORT).show()
-                }
+                payload.first
+                    .onSuccess { bytes -> onAttachmentSelected(bytes, payload.second, payload.third) }
+                    .onFailure { err ->
+                        val message = when (err) {
+                            is AttachmentTooLargeException -> "File is too large (max 25 MB)"
+                            else -> "Couldn't read selected file"
+                        }
+                        android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+                    }
             }
         }
     }
@@ -747,12 +572,23 @@ fun ChatScreen(
         }.getOrNull()
         if (send && recorded != null) {
             scope.launch {
-                val bytes = withContext(Dispatchers.IO) { runCatching { recorded.readBytes() }.getOrNull() }
-                if (bytes != null && bytes.isNotEmpty()) {
-                    onAttachmentSelected(bytes, "audio/mp4", recorded.name.ifBlank { "voice-note.m4a" })
-                } else {
-                    android.widget.Toast.makeText(context, "Couldn't send voice note", android.widget.Toast.LENGTH_SHORT).show()
+                val sendResult = withContext(Dispatchers.IO) {
+                    runCatching {
+                        recorded.inputStream().use { input -> readBytesBounded(input, maxAttachmentBytes) }
+                    }
                 }
+                sendResult
+                    .onSuccess { bytes ->
+                        if (bytes.isNotEmpty()) {
+                            onAttachmentSelected(bytes, "audio/mp4", recorded.name.ifBlank { "voice-note.m4a" })
+                        } else {
+                            android.widget.Toast.makeText(context, "Couldn't send voice note", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    .onFailure {
+                        val message = if (it is AttachmentTooLargeException) "Voice note is too large (max 25 MB)" else "Couldn't send voice note"
+                        android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+                    }
                 withContext(Dispatchers.IO) { runCatching { recorded.delete() } }
             }
         } else {
@@ -1020,68 +856,17 @@ fun ChatScreen(
                     }
                 }
                 if (searchVisible) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(LocalYugmColors.current.surfaceElevated.copy(alpha = 0.98f))
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(LocalYugmColors.current.surface)
-                                .border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(16.dp))
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            BasicTextField(
-                                value = searchQuery,
-                                onValueChange = { searchQuery = it.take(100) },
-                                singleLine = true,
-                                textStyle = androidx.compose.ui.text.TextStyle(color = LocalYugmColors.current.textPrimary, fontSize = 14.sp),
-                                cursorBrush = androidx.compose.ui.graphics.SolidColor(LocalYugmColors.current.primary),
-                                modifier = Modifier.weight(1f),
-                                decorationBox = { inner ->
-                                    Box {
-                                        if (searchQuery.isBlank()) Text("Search in this chat…", color = LocalYugmColors.current.textSecondary, fontSize = 14.sp)
-                                        inner()
-                                    }
-                                }
-                            )
-                            if (searchQuery.isNotBlank()) {
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    "Clear",
-                                    color = LocalYugmColors.current.textSecondary,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    modifier = Modifier
-                                        .clip(CircleShape)
-                                        .clickable(role = Role.Button, onClickLabel = "Clear search") { searchQuery = ""; onSearch("") }
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                "Close",
-                                color = LocalYugmColors.current.primary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .clickable(role = Role.Button, onClickLabel = "Close search") {
-                                        searchVisible = false
-                                        searchQuery = ""
-                                        onSearch("")
-                                    }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
+                    ChatSearchBar(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it.take(100) },
+                        onClear = { searchQuery = ""; onSearch("") },
+                        onClose = {
+                            searchVisible = false
+                            searchQuery = ""
+                            onSearch("")
                         }
-                    }
+                    )
                 }
-
                 relationship?.let { bond ->
                     Box(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp)) {
                         BondStrip(bond)
@@ -1215,7 +1000,8 @@ fun ChatScreen(
                                 val groupedWithPrev = prev != null && prev.senderId == message.senderId && previousDate == currentDate
                                 val groupedWithNext = next != null && next.senderId == message.senderId && messageDateLabel(next.createdAt) == currentDate
                                 val inSearchResults = searchQuery.length >= 2
-                                val swipeOffset = remember(message.id) { Animatable(0f) }
+                                var swipeOffsetPx by remember(message.id) { mutableFloatStateOf(0f) }
+                                val swipeSettle = remember(message.id) { Animatable(0f) }
                                 var swipeReplyTriggered by remember(message.id) { mutableStateOf(false) }
                                 Box(
                                     Modifier
@@ -1229,40 +1015,47 @@ fun ChatScreen(
                                             if (selectionMode || inSearchResults) return@pointerInput
                                             detectHorizontalDragGestures(
                                                 onDragEnd = {
+                                                    val shouldReply = swipeOffsetPx >= 72f && !swipeReplyTriggered
+                                                    if (shouldReply) {
+                                                        swipeReplyTriggered = true
+                                                        replyTarget = message
+                                                        editingTarget = null
+                                                        draft = ""
+                                                        selectedMessageIds = emptySet()
+                                                    }
+                                                    val start = swipeOffsetPx
+                                                    swipeReplyTriggered = false
                                                     scope.launch {
-                                                        if (swipeOffset.value >= 72f && !swipeReplyTriggered) {
-                                                            swipeReplyTriggered = true
-                                                            replyTarget = message
-                                                            editingTarget = null
-                                                            draft = ""
-                                                            selectedMessageIds = emptySet()
-                                                        }
-                                                        swipeOffset.animateTo(0f)
-                                                        swipeReplyTriggered = false
+                                                        swipeSettle.snapTo(start)
+                                                        swipeSettle.animateTo(0f)
+                                                        swipeOffsetPx = 0f
                                                     }
                                                 },
                                                 onDragCancel = {
+                                                    val start = swipeOffsetPx
+                                                    swipeReplyTriggered = false
                                                     scope.launch {
-                                                        swipeOffset.animateTo(0f)
-                                                        swipeReplyTriggered = false
+                                                        swipeSettle.snapTo(start)
+                                                        swipeSettle.animateTo(0f)
+                                                        swipeOffsetPx = 0f
                                                     }
                                                 },
                                                 onHorizontalDrag = { _, dragAmount ->
-                                                    val next = (swipeOffset.value + dragAmount).coerceIn(0f, 96f)
-                                                    scope.launch { swipeOffset.snapTo(next) }
+                                                    swipeOffsetPx = (swipeOffsetPx + dragAmount).coerceIn(0f, 96f)
                                                 }
                                             )
                                         }
                                 ) {
-                                    if (swipeOffset.value > 8f) {
+                                    val displaySwipe = if (swipeSettle.isRunning) swipeSettle.value else swipeOffsetPx
+                                    if (displaySwipe > 8f) {
                                         Icon(
                                             Icons.AutoMirrored.Filled.Reply,
                                             contentDescription = null,
-                                            tint = LocalYugmColors.current.secondary.copy(alpha = (swipeOffset.value / 72f).coerceIn(0.25f, 1f)),
+                                            tint = LocalYugmColors.current.secondary.copy(alpha = (displaySwipe / 72f).coerceIn(0.25f, 1f)),
                                             modifier = Modifier.align(Alignment.CenterStart).padding(start = 4.dp)
                                         )
                                     }
-                                    Box(Modifier.offset { androidx.compose.ui.unit.IntOffset(swipeOffset.value.roundToInt(), 0) }) {
+                                    Box(Modifier.offset { androidx.compose.ui.unit.IntOffset(displaySwipe.roundToInt(), 0) }) {
                                         MessageBubble(
                                             message = message,
                                             mine = mine,
@@ -1276,11 +1069,7 @@ fun ChatScreen(
                                             showOutgoingAvatar = mine && !groupedWithNext,
                                             groupedWithPrev = groupedWithPrev,
                                             groupedWithNext = groupedWithNext,
-                                            playingVoiceMessageId = playingVoiceMessageId,
-                                            isVoicePlaying = isVoicePlaying,
-                                            isVoicePreparing = isVoicePreparing,
-                                            voiceProgressMs = voiceProgressMs,
-                                            voiceDurationMs = voiceDurationMs,
+                                            voicePlayback = if (playingVoiceMessageId == message.id) VoicePlaybackUiState(playingVoiceMessageId, isVoicePlaying, isVoicePreparing, voiceProgressMs, voiceDurationMs) else null,
                                             startingCallType = startingCallType,
                                             isBlockedByMe = isBlockedByMe,
                                             reactionById = reactionById,
@@ -1357,41 +1146,14 @@ fun ChatScreen(
                     }
                 }
 
-                AnimatedVisibility(showEmojiBar) {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .background(LocalYugmColors.current.surfaceElevated.copy(alpha = 0.98f))
-                            .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        listOf("😊", "😂", "❤️", "✨", "🔥", "👋", "🎧", "🌙", "😍", "🥳").forEach { emoji ->
-                            val stickerLabel = "Send sticker $emoji"
-                            Box(
-                                Modifier
-                                    .sizeIn(minWidth = 42.dp, minHeight = 42.dp)
-                                    .clip(CircleShape)
-                                    .background(LocalYugmColors.current.surface.copy(alpha = 0.55f))
-                                    .border(1.dp, LocalYugmColors.current.border.copy(alpha = 0.6f), CircleShape)
-                                    .semantics { contentDescription = stickerLabel }
-                                    .clickable(
-                                        enabled = !isBlockedByMe && !isSending,
-                                        role = Role.Button,
-                                        onClickLabel = stickerLabel
-                                    ) {
-                                        showEmojiBar = false
-                                        onSend(emoji, {}, {})
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(emoji, fontSize = 22.sp)
-                            }
-                        }
+                ChatEmojiQuickBar(
+                    visible = showEmojiBar,
+                    enabled = !isBlockedByMe && !isSending,
+                    onEmojiSelected = { emoji ->
+                        showEmojiBar = false
+                        onSend(emoji, {}, {})
                     }
-                }
-
+                )
                 GlassCard(
                     modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding(),
                     gradient = Brush.linearGradient(listOf(LocalYugmColors.current.surfaceElevated, LocalYugmColors.current.surface)),
@@ -1555,1210 +1317,72 @@ fun ChatScreen(
                 }
             }
         imageViewerUrl?.let { url ->
-            Dialog(
-                onDismissRequest = { imageViewerUrl = null },
-                properties = DialogProperties(usePlatformDefaultWidth = false)
-            ) {
-                var scale by remember(url) { mutableFloatStateOf(1f) }
-                var offsetX by remember(url) { mutableFloatStateOf(0f) }
-                var offsetY by remember(url) { mutableFloatStateOf(0f) }
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.96f))
-                ) {
-                    AsyncImage(
-                        model = url,
-                        contentDescription = "Photo",
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .pointerInput(url) {
-                                detectTransformGestures { _, pan, zoom, _ ->
-                                    scale = (scale * zoom).coerceIn(1f, 4f)
-                                    if (scale > 1f) {
-                                        offsetX += pan.x
-                                        offsetY += pan.y
-                                    } else {
-                                        offsetX = 0f
-                                        offsetY = 0f
-                                    }
-                                }
-                            }
-                            .graphicsLayer(
-                                scaleX = scale,
-                                scaleY = scale,
-                                translationX = offsetX,
-                                translationY = offsetY
-                            )
-                    )
-                    Row(
-                        Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            Modifier
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.14f))
-                                .clickable(role = Role.Button, onClickLabel = "Open image externally") { openChatMedia(context, url) }
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("Open", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                        Box(
-                            Modifier
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.14f))
-                                .clickable(role = Role.Button, onClickLabel = "Close image viewer") { imageViewerUrl = null }
-                                .padding(10.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Filled.Close, contentDescription = null, tint = Color.White)
-                        }
-                    }
-                }
-            }
+            ChatImageViewerDialog(
+                url = url,
+                onDismiss = { imageViewerUrl = null },
+                onOpenExternally = { openChatMedia(context, url) }
+            )
         }
         if (showGiftSheet) {
-            ModalBottomSheet(onDismissRequest = { showGiftSheet = false }, containerColor = LocalYugmColors.current.surface) {
-                Column(Modifier.fillMaxWidth().padding(20.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Send a Gift", color = LocalYugmColors.current.textPrimary, fontSize = 20.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
-                        Text("● $balance", color = Color(0xFFFFC52F), fontWeight = FontWeight.Bold)
-                    }
-                    if (gifts.isEmpty()) {
-                        Text(
-                            "No gifts available right now.",
-                            color = LocalYugmColors.current.textSecondary,
-                            fontSize = 13.sp,
-                            modifier = Modifier.padding(top = 14.dp)
-                        )
-                    } else {
-                        Row(Modifier.padding(top = 14.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            gifts.forEach { gift ->
-                                Column(
-                                    Modifier.width(105.dp).height(132.dp).clip(RoundedCornerShape(18.dp)).background(LocalYugmColors.current.background).border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(18.dp)).clickable(enabled = balance >= gift.price) { onGift(gift); showGiftSheet = false }.padding(10.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    if (gift.icon.startsWith("http", ignoreCase = true) || gift.icon.startsWith("/")) {
-                                        AsyncImage(
-                                            model = resolveMediaUrl(gift.icon),
-                                            contentDescription = gift.name,
-                                            contentScale = ContentScale.Fit,
-                                            modifier = Modifier.size(44.dp)
-                                        )
-                                    } else {
-                                        val emoji = getGiftEmoji(gift.name, gift.icon)
-                                        Text(emoji, fontSize = 36.sp)
-                                    }
-                                    Text(gift.name, color = LocalYugmColors.current.textPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text("● ${gift.price}", color = if (balance >= gift.price) Color(0xFFFFC52F) else LocalYugmColors.current.danger, fontSize = 10.sp)
-                                }
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(24.dp))
-                }
-            }
+            ChatGiftPickerSheet(
+                gifts = gifts,
+                balance = balance,
+                onDismiss = { showGiftSheet = false },
+                onGift = { gift -> onGift(gift); showGiftSheet = false }
+            )
         }
     }
 
     reactDialogTarget?.let { target ->
-        val bounds = targetMessageBounds
-        var overlayOrigin by remember(target.id, bounds) { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
-        BoxWithConstraints(
-            Modifier
-                .fillMaxSize()
-                .onGloballyPositioned { overlayOrigin = it.boundsInRoot().topLeft }
-                .background(Color.Black.copy(alpha = 0.4f))
-                .clickable(role = Role.Button, onClickLabel = "Dismiss") { reactDialogTarget = null },
-        ) {
-            val screenWidth = maxWidth
-            val screenHeight = maxHeight
-            val density = androidx.compose.ui.platform.LocalDensity.current
-            val localLeftPx = (bounds?.left ?: 0f) - overlayOrigin.x
-            val localRightPx = (bounds?.right ?: 0f) - overlayOrigin.x
-            val localTopPx = (bounds?.top ?: 0f) - overlayOrigin.y
-            val bubbleLeft = if (bounds != null) with(density) { localLeftPx.toDp() } else 20.dp
-            val bubbleRight = if (bounds != null) with(density) { localRightPx.toDp() } else (screenWidth - 20.dp)
-            val bubbleTop = if (bounds != null) with(density) { localTopPx.toDp() } else 200.dp
-            val barWidth = (screenWidth - 24.dp).coerceAtMost(340.dp).coerceAtLeast(220.dp)
-            val barHeight = 60.dp
-            val edgeMargin = 8.dp
-            val bubbleGap = 2.dp
-
-            val preferredAboveY = bubbleTop - barHeight - bubbleGap
-            val maxY = (screenHeight - barHeight - edgeMargin).coerceAtLeast(edgeMargin)
-            val offsetY = preferredAboveY.coerceIn(edgeMargin, maxY)
-
-            val bubbleCenterX = (bubbleLeft + bubbleRight) / 2
-            val idealX = bubbleCenterX - (barWidth / 2)
-            val offsetX = idealX.coerceIn(edgeMargin, (screenWidth - barWidth - edgeMargin).coerceAtLeast(edgeMargin))
-
-            val fallbackCatalog = listOf(
-                RoomReaction(id = "heart", label = "Heart", emoji = "\u2764\uFE0F", access = RoomReactionAccess.EVERYONE, sortOrder = 0),
-                RoomReaction(id = "fire", label = "Fire", emoji = "\uD83D\uDD25", access = RoomReactionAccess.EVERYONE, sortOrder = 1),
-                RoomReaction(id = "laugh", label = "Laugh", emoji = "\uD83D\uDE02", access = RoomReactionAccess.EVERYONE, sortOrder = 2),
-                RoomReaction(id = "clap", label = "Clap", emoji = "\uD83D\uDC4F", access = RoomReactionAccess.EVERYONE, sortOrder = 3),
-                RoomReaction(id = "wow", label = "Wow", emoji = "\uD83D\uDE2E", access = RoomReactionAccess.EVERYONE, sortOrder = 4),
-                RoomReaction(id = "crown", label = "Crown", emoji = "\uD83D\uDC51", access = RoomReactionAccess.EVERYONE, sortOrder = 5),
-                RoomReaction(id = "stars", label = "Stars", emoji = "\u2728", access = RoomReactionAccess.EVERYONE, sortOrder = 6),
-                RoomReaction(id = "party", label = "Party", emoji = "\uD83C\uDF89", access = RoomReactionAccess.EVERYONE, sortOrder = 7)
-            )
-            val pickerReactions = (if (reactionCatalog.isNotEmpty()) reactionCatalog.sortedBy { it.sortOrder } else fallbackCatalog)
-            .distinctBy { it.id.trim().lowercase() }
-
-            Box(
-                modifier = Modifier
-                    .offset(x = offsetX, y = offsetY)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .width(barWidth)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(LocalYugmColors.current.surfaceElevated)
-                        .border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(24.dp))
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    if (reactionCatalogError != null && reactionCatalog.isEmpty()) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                reactionCatalogError ?: "Couldn't load reactions",
-                                color = LocalYugmColors.current.textSecondary,
-                                fontSize = 12.sp,
-                                modifier = Modifier.weight(1f)
-                            )
-                            TextButton(onClick = onReloadReactions) { Text("Retry", color = LocalYugmColors.current.secondary) }
-                        }
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        val myReaction = currentUserId.takeIf { it.isNotBlank() }?.let { uid -> target.reactions.firstOrNull { it.userId == uid }?.type }
-                        pickerReactions.forEach { reaction ->
-                            val type = reaction.id
-                            val isSelected = myReaction == type
-                            val locked = !reaction.usable || (reaction.access == RoomReactionAccess.VIP_EXCLUSIVE && !isCurrentUserVip)
-                            val lockedForVip = locked && (reaction.lockedReason == "VIP" || reaction.access == RoomReactionAccess.VIP_EXCLUSIVE)
-                            Box(
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        when {
-                                            isSelected -> LocalYugmColors.current.secondary.copy(alpha = 0.3f)
-                                            locked -> LocalYugmColors.current.surface.copy(alpha = 0.5f)
-                                            else -> Color.Transparent
-                                        }
-                                    )
-                                    .clickable(role = Role.Button, onClickLabel = "React with ${reaction.label.ifBlank { type }}") {
-                                        if (locked) {
-                                            reactDialogTarget = null
-                                            if (lockedForVip) onOpenVip()
-                                        } else {
-                                            onReactMessage(target, type)
-                                            reactDialogTarget = null
-                                        }
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                ReactionArtwork(
-                                    emoji = reaction.emoji.ifBlank { reactionEmoji(type) },
-                                    assetUrl = reaction.assetUrl,
-                                    label = reaction.label.ifBlank { type },
-                                    emojiSize = 20.sp,
-                                    modifier = Modifier.size(26.dp),
-                                    contentDescription = reaction.label.ifBlank { type }
-                                )
-                                if (locked) {
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.BottomEnd)
-                                            .size(14.dp)
-                                            .clip(CircleShape)
-                                            .background(LocalYugmColors.current.surfaceElevated),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(Icons.Default.Lock, contentDescription = if (lockedForVip) "VIP" else "Locked", tint = Color(0xFFFFD54F), modifier = Modifier.size(10.dp))
-                                    }
-                                }
-                            }
-                        }
-                        if (isReactionCatalogLoading && reactionCatalog.isEmpty()) {
-                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = LocalYugmColors.current.secondary)
-                        }
-                    }
-                }
-            }
-        }
+        ReactionPickerOverlay(
+            target = target,
+            bounds = targetMessageBounds,
+            reactionCatalog = reactionCatalog,
+            isReactionCatalogLoading = isReactionCatalogLoading,
+            reactionCatalogError = reactionCatalogError,
+            currentUserId = currentUserId,
+            isCurrentUserVip = isCurrentUserVip,
+            onDismiss = { reactDialogTarget = null },
+            onReloadReactions = onReloadReactions,
+            onReact = { type -> onReactMessage(target, type) },
+            onOpenVip = onOpenVip
+        )
     }
 
     optionsDialogTarget?.let { target ->
         val mine = target.senderId == currentUserId
-        val bounds = targetMessageBounds
-        var overlayOrigin by remember(target.id, bounds) { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
-        BoxWithConstraints(
-            Modifier
-                .fillMaxSize()
-                .onGloballyPositioned { overlayOrigin = it.boundsInRoot().topLeft }
-                .background(Color.Black.copy(alpha = 0.4f))
-                .clickable(role = Role.Button, onClickLabel = "Dismiss") { optionsDialogTarget = null },
-        ) {
-            val screenWidth = maxWidth
-            val screenHeight = maxHeight
-            val density = androidx.compose.ui.platform.LocalDensity.current
-            val localLeftPx = (bounds?.left ?: 0f) - overlayOrigin.x
-            val localRightPx = (bounds?.right ?: 0f) - overlayOrigin.x
-            val localTopPx = (bounds?.top ?: 0f) - overlayOrigin.y
-            val localBottomPx = (bounds?.bottom ?: 0f) - overlayOrigin.y
-            val bubbleLeft = if (bounds != null) with(density) { localLeftPx.toDp() } else 20.dp
-            val bubbleRight = if (bounds != null) with(density) { localRightPx.toDp() } else (screenWidth - 20.dp)
-            val bubbleTop = if (bounds != null) with(density) { localTopPx.toDp() } else 200.dp
-            val bubbleBottom = if (bounds != null) with(density) { localBottomPx.toDp() } else 250.dp
-            val cardWidth = 230.dp
-            val cardHeight = 360.dp
-            val edgeMargin = 8.dp
-            val bubbleGap = 2.dp
-
-            val preferredBelowY = bubbleBottom + bubbleGap
-            val preferredAboveY = bubbleTop - cardHeight - bubbleGap
-            val maxY = (screenHeight - cardHeight - edgeMargin).coerceAtLeast(edgeMargin)
-            val offsetY = if (preferredBelowY <= maxY) preferredBelowY else preferredAboveY.coerceIn(edgeMargin, maxY)
-
-            val idealX = if (mine) bubbleRight - cardWidth else bubbleLeft
-            val offsetX = idealX.coerceIn(edgeMargin, (screenWidth - cardWidth - edgeMargin).coerceAtLeast(edgeMargin))
-
-            Box(
-                modifier = Modifier
-                    .offset(x = offsetX, y = offsetY)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .width(cardWidth)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(LocalYugmColors.current.surfaceElevated)
-                        .border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(16.dp))
-                        .padding(vertical = 4.dp)
-                ) {
-                    CompactOptionRow(icon = Icons.Filled.Info, label = "Info") {
-                        optionsDialogTarget = null
-                        infoMessage = target
-                    }
-                    CompactOptionRow(icon = Icons.Filled.ContentCopy, label = "Copy") {
-                        optionsDialogTarget = null
-                        if (target.message.isNotBlank()) {
-                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("message", target.message))
-                            android.widget.Toast.makeText(context, "Message copied", android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                    if (mine && target.canStillEdit()) {
-                        CompactOptionRow(icon = Icons.Filled.Edit, label = "Edit") {
-                            optionsDialogTarget = null
-                            editingTarget = target
-                            replyTarget = null
-                            draft = target.message
-                        }
-                    }
-                    CompactOptionRow(icon = Icons.AutoMirrored.Filled.Reply, label = "Reply") {
-                        optionsDialogTarget = null
-                        replyTarget = target
-                        editingTarget = null
-                        draft = ""
-                    }
-                    CompactOptionRow(icon = Icons.Filled.CheckCircle, label = "Select") {
-                        optionsDialogTarget = null
-                        selectedMessageIds = if (target.id in selectedMessageIds) selectedMessageIds else selectedMessageIds + target.id
-                    }
-                    CompactOptionRow(icon = Icons.AutoMirrored.Filled.Forward, label = "Forward") {
-                        optionsDialogTarget = null
-                        forwardMessage = target
-                    }
-
-                    CompactOptionRow(icon = Icons.Filled.Delete, label = "Delete", tint = LocalYugmColors.current.danger) {
-                        optionsDialogTarget = null
-                        selectedMessageIds = setOf(target.id)
-                        showDeleteSelected = true
-                    }
+        MessageOptionsOverlay(
+            target = target,
+            bounds = targetMessageBounds,
+            mine = mine,
+            canEdit = mine && target.canStillEdit(),
+            onDismiss = { optionsDialogTarget = null },
+            onInfo = { infoMessage = target },
+            onCopy = {
+                if (target.message.isNotBlank()) {
+                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("message", target.message))
+                    android.widget.Toast.makeText(context, "Message copied", android.widget.Toast.LENGTH_SHORT).show()
                 }
+            },
+            onEdit = {
+                editingTarget = target
+                replyTarget = null
+                draft = target.message
+            },
+            onReply = {
+                replyTarget = target
+                editingTarget = null
+                draft = ""
+            },
+            onSelect = {
+                selectedMessageIds = if (target.id in selectedMessageIds) selectedMessageIds else selectedMessageIds + target.id
+            },
+            onForward = { forwardMessage = target },
+            onDelete = {
+                selectedMessageIds = setOf(target.id)
+                showDeleteSelected = true
             }
-        }
-    }
-}
-
-@Composable
-private fun LightChatAction(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    enabled: Boolean = true,
-    loading: Boolean = false,
-    locked: Boolean = false
-) {
-    Box(
-        Modifier.size(44.dp).clip(CircleShape).background(if (enabled) LocalYugmColors.current.surfaceElevated else LocalYugmColors.current.surfaceElevated.copy(alpha = 0.55f))
-            .semantics { contentDescription = label }
-            .clickable(enabled = enabled && !loading, role = Role.Button, onClickLabel = label, onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        if (loading) {
-            androidx.compose.material3.CircularProgressIndicator(
-                modifier = Modifier.size(18.dp),
-                color = LocalYugmColors.current.textPrimary,
-                strokeWidth = 2.dp
-            )
-        } else {
-            Icon(icon, contentDescription = null, tint = if (enabled) LocalYugmColors.current.textPrimary else LocalYugmColors.current.textSecondary, modifier = Modifier.size(20.dp))
-            if (locked) {
-                Box(
-                    Modifier
-                        .align(Alignment.BottomEnd)
-                        .offset(x = 4.dp, y = 4.dp)
-                        .size(18.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF1F2937))
-                        .border(1.dp, Color(0xFFFFD166).copy(alpha = 0.9f), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("VIP", color = Color(0xFFFFD166), fontSize = 7.sp, fontWeight = FontWeight.Black)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ConversationOptionsMenu(
-    expanded: Boolean,
-    isProfileEnabled: Boolean,
-    isMuted: Boolean,
-    isBlockedByMe: Boolean,
-    onExpandedChange: (Boolean) -> Unit,
-    onProfile: () -> Unit,
-    onBonds: () -> Unit,
-    onSearch: () -> Unit,
-    onMute: () -> Unit,
-    onReport: () -> Unit,
-    onToggleBlock: () -> Unit,
-    onDelete: () -> Unit
-) {
-    val colors = LocalYugmColors.current
-    Box {
-        LightChatAction(
-            Icons.Filled.MoreVert,
-            stringResource(R.string.a11y_conversation_options),
-            onClick = { onExpandedChange(!expanded) }
         )
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { onExpandedChange(false) },
-            modifier = Modifier.widthIn(min = 190.dp, max = 220.dp)
-        ) {
-            DropdownMenuItem(
-                text = { Text("Profile", color = colors.textPrimary) },
-                enabled = isProfileEnabled,
-                onClick = { onExpandedChange(false); onProfile() }
-            )
-            DropdownMenuItem(
-                text = { Text("Bonds", color = colors.textPrimary) },
-                enabled = isProfileEnabled && !isBlockedByMe,
-                onClick = { onExpandedChange(false); onBonds() }
-            )
-            DropdownMenuItem(
-                text = { Text("Search in chat", color = colors.textPrimary) },
-                onClick = { onExpandedChange(false); onSearch() }
-            )
-            DropdownMenuItem(
-                text = { Text(if (isMuted) "Unmute" else "Mute", color = colors.textPrimary) },
-                onClick = { onExpandedChange(false); onMute() }
-            )
-            DropdownMenuItem(
-                text = { Text("Report", color = colors.danger) },
-                onClick = { onExpandedChange(false); onReport() }
-            )
-            DropdownMenuItem(
-                text = { Text(if (isBlockedByMe) "Unblock" else "Block", color = if (isBlockedByMe) colors.textPrimary else colors.danger) },
-                onClick = { onExpandedChange(false); onToggleBlock() }
-            )
-            DropdownMenuItem(
-                text = { Text("Delete chat", color = colors.danger) },
-                onClick = { onExpandedChange(false); onDelete() }
-            )
-        }
     }
-}
-
-@Composable
-private fun ReportDialog(onDismiss: () -> Unit, onSubmit: (String) -> Unit) {
-    var selected by remember { mutableStateOf("harassment") }
-    val categories = listOf(
-        "harassment" to "Harassment",
-        "spam" to "Spam",
-        "nudity" to "Nudity",
-        "hate_speech" to "Hate speech",
-        "violence" to "Violence",
-        "scam" to "Scam",
-        "impersonation" to "Impersonation",
-        "other" to "Other"
-    )
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = LocalYugmColors.current.surfaceElevated,
-        title = { Text("Report this conversation", color = LocalYugmColors.current.textPrimary) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Pick a reason. Our team reviews every report.", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
-                categories.forEach { (value, label) ->
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                            .background(if (selected == value) LocalYugmColors.current.secondary.copy(alpha = 0.2f) else Color.Transparent)
-                            .clickable(role = Role.Button, onClickLabel = label) { selected = value }
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            Modifier.size(16.dp).clip(CircleShape).border(1.dp, if (selected == value) LocalYugmColors.current.secondary else LocalYugmColors.current.textSecondary, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (selected == value) Box(Modifier.size(8.dp).clip(CircleShape).background(LocalYugmColors.current.secondary))
-                        }
-                        Spacer(Modifier.width(10.dp))
-                        Text(label, color = LocalYugmColors.current.textPrimary, fontSize = 13.sp)
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = { onSubmit(selected) }) { Text("Submit report", color = LocalYugmColors.current.danger, fontWeight = FontWeight.Bold) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = LocalYugmColors.current.textSecondary) } }
-    )
-}
-
-@Composable
-private fun MatchedBanner(name: String) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Brush.horizontalGradient(listOf(LocalYugmColors.current.secondary.copy(alpha = 0.4f), LocalYugmColors.current.primary.copy(alpha = 0.3f)))).border(1.dp, LocalYugmColors.current.primary.copy(alpha = 0.4f), RoundedCornerShape(18.dp)).padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(Brush.linearGradient(listOf(LocalYugmColors.current.primary, LocalYugmColors.current.secondary))), contentAlignment = Alignment.Center) { Text("♡", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Black) }
-        Column(Modifier.padding(start = 12.dp)) {
-            Text("You're Matched!", color = LocalYugmColors.current.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Black)
-            Text("Say hello to $name and start your story ✨", color = LocalYugmColors.current.textSecondary, fontSize = 11.sp)
-        }
-    }
-}
-
-@Composable
-private fun EmptyConversationState(name: String) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Box(
-            Modifier.size(56.dp).clip(CircleShape).background(Brush.linearGradient(listOf(LocalYugmColors.current.secondary.copy(alpha = 0.75f), LocalYugmColors.current.primary.copy(alpha = 0.75f)))),
-            contentAlignment = Alignment.Center
-        ) { Text("💬", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold) }
-        Text("Start the conversation", color = LocalYugmColors.current.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        Text("Send ${name.substringBefore(' ')} a message and see where the conversation goes.", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp, lineHeight = 18.sp)
-    }
-}
-
-@Composable
-private fun SafetyTip(onDismiss: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(LocalYugmColors.current.surfaceElevated).border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(18.dp)).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("🛡️", color = LocalYugmColors.current.primary, fontSize = 28.sp)
-        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-            Text("Safety Tip", color = LocalYugmColors.current.secondary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            Text("Be kind, respectful and keep the conversation safe. Report or block anything that feels off.", color = LocalYugmColors.current.textSecondary, fontSize = 10.sp, lineHeight = 14.sp)
-        }
-        Text("×", color = LocalYugmColors.current.textSecondary, fontSize = 22.sp, modifier = Modifier.clickable(onClick = onDismiss))
-    }
-}
-
-@Composable
-private fun BondStrip(bond: RelationshipStatus) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(LocalYugmColors.current.surfaceElevated).padding(12.dp)) {
-        Row { Text("Bond Level ${bond.level}", color = LocalYugmColors.current.textPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.weight(1f)); Text(bond.title, color = LocalYugmColors.current.primary, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
-        Box(Modifier.fillMaxWidth().padding(top = 7.dp).height(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.08f))) {
-            Box(Modifier.fillMaxWidth(bond.progress.coerceIn(0f, 1f)).height(4.dp).background(Brush.horizontalGradient(listOf(LocalYugmColors.current.secondary, LocalYugmColors.current.primary))))
-        }
-    }
-}
-
-@Composable
-private fun ConversationDivider(label: String, highlight: Boolean = false) {
-    Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-        Box(
-            Modifier
-                .clip(RoundedCornerShape(50))
-                .background(LocalYugmColors.current.surfaceElevated)
-                .border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(50))
-                .padding(horizontal = 16.dp, vertical = 6.dp)
-        ) {
-            Text(label, color = if (highlight) LocalYugmColors.current.primary else LocalYugmColors.current.textSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-// Bubble geometry. WhatsApp/Telegram shapes are a rounded rectangle with one
-// nearly-square bottom corner on the sender's side, which reads as a tail without
-// needing a custom path. Consecutive messages from the same sender also share a
-// tight column of corners so a group looks like one continuous block.
-private val BubbleRadius = 20.dp
-private val BubbleTailRadius = 5.dp
-private val BubbleStackedRadius = 7.dp
-
-private fun messageBubbleShape(
-    mine: Boolean,
-    groupedWithPrev: Boolean,
-    groupedWithNext: Boolean
-): RoundedCornerShape {
-    val senderEdgeTop = if (groupedWithPrev) BubbleStackedRadius else BubbleRadius
-    return RoundedCornerShape(
-        topStart = if (mine) BubbleRadius else senderEdgeTop,
-        topEnd = if (mine) senderEdgeTop else BubbleRadius,
-        bottomStart = when {
-            mine -> BubbleRadius
-            groupedWithNext -> BubbleStackedRadius
-            else -> BubbleTailRadius
-        },
-        bottomEnd = when {
-            !mine -> BubbleRadius
-            groupedWithNext -> BubbleStackedRadius
-            else -> BubbleTailRadius
-        }
-    )
-}
-
-@Composable
-private fun MessageBubble(
-    message: DirectMessage,
-    mine: Boolean,
-    selected: Boolean,
-    highlighted: Boolean,
-    bubbleId: String,
-    partner: Host?,
-    currentUserId: String,
-    myActiveCosmetics: ActiveCosmetics,
-    showIncomingAvatar: Boolean = !mine,
-    showOutgoingAvatar: Boolean = mine,
-    groupedWithPrev: Boolean = false,
-    groupedWithNext: Boolean = false,
-    playingVoiceMessageId: String?,
-    isVoicePlaying: Boolean,
-    isVoicePreparing: Boolean,
-    voiceProgressMs: Int,
-    voiceDurationMs: Int,
-    startingCallType: RoomType? = null,
-    isBlockedByMe: Boolean = false,
-    reactionById: Map<String, RoomReaction> = emptyMap(),
-    isCurrentUserVip: Boolean = false,
-    onReact: (androidx.compose.ui.geometry.Rect) -> Unit,
-    onLongPress: (androidx.compose.ui.geometry.Rect) -> Unit,
-    onOpenImage: (String) -> Unit,
-    onOpenRoom: (String) -> Unit = {},
-    onToggleVoice: () -> Unit,
-    onSeekVoice: (Int) -> Unit,
-    onAudioCall: () -> Unit = {},
-    onVideoCall: () -> Unit = {},
-    isPendingSend: Boolean = false,
-    isFailedSend: Boolean = false,
-    onRetrySend: () -> Unit = {},
-    onJumpToReply: (String) -> Unit = {}
-) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val colors = LocalYugmColors.current
-    val bubble = if (mine) chatBubbleVisual(bubbleId) else null
-    val bubbleText = colors.chatBubbleForeground(mine)
-    val bubbleMeta = colors.chatBubbleMetadata(mine)
-    val isVoiceActive = playingVoiceMessageId == message.id
-    val effectiveDuration = voiceDurationMs.coerceAtLeast(1)
-    val safeProgress = if (isVoiceActive) voiceProgressMs.coerceIn(0, effectiveDuration) else 0
-    var bubbleCoordinates by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
-        verticalAlignment = Alignment.Bottom
-    ) {
-        if (!mine) {
-            if (showIncomingAvatar) {
-                Avatar(
-                    initial = partner?.name?.firstOrNull()?.toString() ?: "?",
-                    size = 28,
-                    imageUrl = partner?.avatar,
-                    cosmetics = partner?.activeCosmetics ?: ActiveCosmetics(),
-                    accessibilityLabel = null
-                )
-            } else {
-                Spacer(Modifier.width(42.dp))
-            }
-            Spacer(Modifier.width(8.dp))
-        }
-
-        Column(horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
-            val hasMedia = message.mediaUrl.isNotBlank()
-            val mediaOnly = hasMedia && message.message.isBlank() && message.replyTo == null && !message.forwarded
-            val bubbleShape = messageBubbleShape(mine, groupedWithPrev, groupedWithNext)
-            Box(
-                Modifier
-                    // Hug the content, capped so long messages still leave the
-                    // opposite side visible (WhatsApp/Telegram read at ~78%).
-                    .widthIn(max = (LocalConfiguration.current.screenWidthDp * 0.78f).dp)
-                    .onGloballyPositioned { bubbleCoordinates = it }
-                    .clip(bubbleShape)
-                    .background(colors.chatBubbleBackground(mine))
-                    .border(
-                        width = if (selected || highlighted) 2.dp else 1.dp,
-                        color = when {
-                            highlighted -> Color(0xFFFFC107)
-                            selected -> LocalYugmColors.current.primary
-                            bubble?.border != null -> bubble.border
-                            mine -> Color.White.copy(alpha = 0.14f)
-                            else -> LocalYugmColors.current.border
-                        },
-                        shape = bubbleShape
-                    )
-                    .combinedClickable(
-                        onClick = {
-                            val rect = bubbleCoordinates?.let { try { it.boundsInRoot() } catch (_: Exception) { null } } ?: androidx.compose.ui.geometry.Rect.Zero
-                            onReact(rect)
-                        },
-                        onLongClick = {
-                            val rect = bubbleCoordinates?.let { try { it.boundsInRoot() } catch (_: Exception) { null } } ?: androidx.compose.ui.geometry.Rect.Zero
-                            onLongPress(rect)
-                        }
-                    )
-                    .padding(
-                        horizontal = if (mediaOnly) 4.dp else 10.dp,
-                        vertical = if (mediaOnly) 4.dp else 6.dp
-                    )
-            ) {
-                Column {
-                    if (message.forwarded) {
-                        Text("Forwarded", color = LocalYugmColors.current.primary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 3.dp))
-                    }
-                    message.replyTo?.let { reply ->
-                        Column(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(bubbleText.copy(alpha = 0.08f))
-                                .clickable(enabled = reply.messageId.isNotBlank(), role = Role.Button) { onJumpToReply(reply.messageId) }
-                                .padding(horizontal = 8.dp, vertical = 6.dp)
-                        ) {
-                            Text(reply.author.ifBlank { "Replied message" }, color = LocalYugmColors.current.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            Text(reply.text.ifBlank { "Media" }, color = bubbleMeta, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                        Spacer(Modifier.height(4.dp))
-                    }
-                    if (message.mediaUrl.isNotBlank()) {
-                        val isAudio = message.mediaType.equals("AUDIO", true)
-                        val isVideo = message.mediaType.equals("VIDEO", true)
-                        if (isAudio) {
-                            Column(
-                                Modifier
-                                    .widthIn(min = 190.dp, max = 250.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(bubbleText.copy(alpha = 0.08f))
-                                    .padding(horizontal = 10.dp, vertical = 10.dp)
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        Modifier
-                                            .size(34.dp)
-                                            .clip(CircleShape)
-                                            .background(bubbleText.copy(alpha = 0.16f))
-                                            .clickable(
-                                                enabled = !(isVoiceActive && isVoicePreparing),
-                                                role = Role.Button,
-                                                onClickLabel = if (isVoiceActive && isVoicePlaying) "Pause voice note" else "Play voice note"
-                                            ) {
-                                                onToggleVoice()
-                                            },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        if (isVoiceActive && isVoicePreparing) {
-                                            androidx.compose.material3.CircularProgressIndicator(
-                                                modifier = Modifier.size(16.dp),
-                                                color = bubbleText,
-                                                strokeWidth = 2.dp
-                                            )
-                                        } else {
-                                            Icon(
-                                                imageVector = if (isVoiceActive && isVoicePlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                                                contentDescription = null,
-                                                tint = bubbleText,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-                                    }
-                                    Spacer(Modifier.width(10.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text("Voice note", color = bubbleText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                        Text(
-                                            when {
-                                                isVoiceActive && isVoicePreparing -> "Loading…"
-                                                isVoiceActive -> "${formatPlaybackTime(safeProgress)} / ${formatPlaybackTime(voiceDurationMs)}"
-                                                else -> "Tap to play"
-                                            },
-                                            color = bubbleMeta,
-                                            fontSize = 10.sp
-                                        )
-                                    }
-                                }
-                                if (isVoiceActive && voiceDurationMs > 0 && !isVoicePreparing) {
-                                    Slider(
-                                        value = safeProgress.toFloat(),
-                                        onValueChange = { onSeekVoice(it.toInt()) },
-                                        valueRange = 0f..voiceDurationMs.toFloat(),
-                                        modifier = Modifier.padding(top = 2.dp),
-                                        colors = SliderDefaults.colors(
-                                            thumbColor = bubbleText,
-                                            activeTrackColor = bubbleText.copy(alpha = 0.9f),
-                                            inactiveTrackColor = bubbleText.copy(alpha = 0.25f)
-                                        )
-                                    )
-                                }
-                            }
-                        } else {
-                            Box(
-                                Modifier
-                                    .widthIn(max = 240.dp)
-                                    .height(if (isVideo) 160.dp else 180.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(Color.Black.copy(alpha = 0.18f))
-                                    .clickable(
-                                        role = Role.Button,
-                                        onClickLabel = if (isVideo) "Open video" else "Open photo"
-                                    ) {
-                                        val resolved = resolveMediaUrl(message.mediaUrl) ?: message.mediaUrl
-                                        if (isVideo) openChatMedia(context, resolved) else onOpenImage(resolved)
-                                    }
-                            ) {
-                                AsyncImage(
-                                    model = resolveMediaUrl(message.mediaUrl),
-                                    contentDescription = if (isVideo) "Shared video" else "Shared photo",
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop
-                                )
-                                if (isVideo) {
-                                    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.22f)))
-                                    Box(
-                                        Modifier
-                                            .align(Alignment.Center)
-                                            .size(40.dp)
-                                            .clip(CircleShape)
-                                            .background(Color.Black.copy(alpha = 0.45f))
-                                            .border(1.dp, Color.White.copy(alpha = 0.35f), CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Color.White)
-                                    }
-                                }
-                                Box(
-                                    Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(8.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(Color.Black.copy(alpha = 0.45f))
-                                        .padding(horizontal = 7.dp, vertical = 3.dp)
-                                ) {
-                                    Text(
-                                        if (isVideo) "VIDEO" else "PHOTO",
-                                        color = Color.White,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
-                            }
-                        }
-                        Spacer(Modifier.height(4.dp))
-                    }
-                    if (message.message.startsWith("ROOM_INVITE:")) {
-                        val inviteRoomId = message.message.substringAfter("ROOM_INVITE:").trim()
-                        RoomInviteMessageCard(
-                            roomId = inviteRoomId,
-                            inviterName = partner?.name ?: "A friend",
-                            onOpenRoom = onOpenRoom
-                        )
-                    }
-                    if (message.message.isNotBlank() && !message.message.startsWith("ROOM_INVITE:")) {
-                        val lower = message.message.lowercase()
-                        val isCallInvite = lower.contains("call started") || (lower.contains("private") && lower.contains("call"))
-                        val callType = when {
-                            isCallInvite && lower.contains("video") -> "Video call"
-                            isCallInvite && (lower.contains("voice") || lower.contains("audio")) -> "Voice call"
-                            else -> null
-                        }
-                        if (callType != null) {
-                            val isVideoCall = callType == "Video call"
-                            val cardCallType = if (isVideoCall) RoomType.Video else RoomType.Voice
-                            val isCardStarting = startingCallType == cardCallType
-                            val anyCallStarting = startingCallType != null
-                            val callsLockedForVip = !isCurrentUserVip
-                            val callActionEnabled = !anyCallStarting && !isBlockedByMe
-                            Column(
-                                Modifier
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(bubbleText.copy(alpha = 0.08f))
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    Box(
-                                        Modifier
-                                            .size(34.dp)
-                                            .clip(CircleShape)
-                                            .background(Brush.linearGradient(listOf(LocalYugmColors.current.secondary.copy(alpha = 0.95f), LocalYugmColors.current.primary.copy(alpha = 0.9f)))),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            if (isVideoCall) Icons.Filled.Videocam else Icons.Filled.Call,
-                                            contentDescription = null,
-                                            tint = Color.White,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                    Column(Modifier.weight(1f)) {
-                                        Text(callType, color = bubbleText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                                        Text(
-                                            when {
-                                                isBlockedByMe -> "Unblock to start a call"
-                                                mine -> "You started a call"
-                                                else -> "Call invitation"
-                                            },
-                                            color = bubbleMeta,
-                                            fontSize = 11.sp
-                                        )
-                                    }
-                                }
-                                Box(
-                                    Modifier
-                                        .clip(CircleShape)
-                                        .then(
-                                            if (callActionEnabled) {
-                                                Modifier.background(
-                                                    Brush.linearGradient(
-                                                        listOf(LocalYugmColors.current.secondary.copy(alpha = 0.95f), LocalYugmColors.current.primary.copy(alpha = 0.9f))
-                                                    )
-                                                )
-                                            } else {
-                                                Modifier.background(bubbleText.copy(alpha = 0.08f))
-                                            }
-                                        )
-                                        .clickable(
-                                            enabled = callActionEnabled,
-                                            role = Role.Button,
-                                            onClickLabel = when {
-                                                isBlockedByMe -> "Unblock to call"
-                                                callsLockedForVip -> if (isVideoCall) "Video call (VIP only)" else "Voice call (VIP only)"
-                                                isVideoCall -> "Start video call again"
-                                                else -> "Start voice call again"
-                                            }
-                                        ) {
-                                            if (isVideoCall) onVideoCall() else onAudioCall()
-                                        }
-                                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        if (isCardStarting) {
-                                            androidx.compose.material3.CircularProgressIndicator(
-                                                modifier = Modifier.size(12.dp),
-                                                color = Color.White,
-                                                strokeWidth = 2.dp
-                                            )
-                                        }
-                                        Text(
-                                            when {
-                                                isCardStarting -> "Starting…"
-                                                isBlockedByMe -> "Unblock to call"
-                                                anyCallStarting -> "Please wait…"
-                                                callsLockedForVip -> "VIP only"
-                                                mine -> "Start again"
-                                                else -> "Call back"
-                                            },
-                                            color = Color.White,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
-                                }
-                            }
-                        } else {
-                            Text(message.message, color = bubbleText, fontSize = 14.sp, lineHeight = 20.sp)
-                        }
-                    }
-                    Row(
-                        Modifier
-                            .align(Alignment.End)
-                            .padding(top = if (message.message.isNotBlank()) 2.dp else 5.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (message.isEdited) {
-                            Text("edited", color = bubbleMeta, fontSize = 10.sp)
-                            Text(" · ", color = bubbleMeta, fontSize = 10.sp)
-                        }
-                        Text(messageTime(message.createdAt), color = bubbleMeta, fontSize = 10.sp)
-                        if (mine) {
-                            Spacer(Modifier.width(4.dp))
-                            when {
-                                isFailedSend -> Text(
-                                    "Failed · Tap to retry",
-                                    color = LocalYugmColors.current.danger,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.clickable(role = Role.Button) { onRetrySend() }
-                                )
-                                isPendingSend -> Text(
-                                    "Sending…",
-                                    color = bubbleMeta,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                else -> Text(
-                                    if (message.read) "Seen" else "Sent",
-                                    color = if (message.read) Color(0xFF69F0AE) else bubbleMeta,
-                                    fontSize = 10.sp,
-                                    fontWeight = if (message.read) FontWeight.SemiBold else FontWeight.Medium
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-            if (message.reactions.isNotEmpty()) {
-                val grouped = message.reactions.groupBy { it.type }.mapValues { it.value.size }
-                val aggregates = grouped.entries.sortedByDescending { it.value }.take(3).map { it.key to it.value }
-                val myReaction = currentUserId.takeIf { it.isNotBlank() }?.let { uid -> message.reactions.firstOrNull { it.userId == uid }?.type }
-                val hiddenTypes = (grouped.size - aggregates.size).coerceAtLeast(0)
-                Row(
-                    Modifier
-                        .offset(y = (-6).dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(LocalYugmColors.current.surfaceElevated)
-                        .border(1.dp, if (myReaction != null) LocalYugmColors.current.secondary.copy(alpha = 0.55f) else LocalYugmColors.current.border, RoundedCornerShape(999.dp))
-                        .clickable(role = Role.Button, onClickLabel = "View or change reaction") {
-                            val rect = bubbleCoordinates?.let { runCatching { it.boundsInRoot() }.getOrNull() } ?: androidx.compose.ui.geometry.Rect.Zero
-                            onReact(rect)
-                        }
-                        .padding(horizontal = 9.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    aggregates.forEach { (type, count) ->
-                        val reaction = reactionById[type.lowercase()]
-                        val emoji = reaction?.emoji?.takeIf { it.isNotBlank() } ?: reactionEmoji(type)
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                            if (reaction != null && reaction.assetUrl.isNotBlank()) {
-                                ReactionArtwork(
-                                    emoji = emoji,
-                                    assetUrl = reaction.assetUrl,
-                                    label = reaction.label.ifBlank { type },
-                                    emojiSize = 10.sp,
-                                    modifier = Modifier.size(14.dp),
-                                    contentDescription = null
-                                )
-                            } else {
-                                Text(
-                                    emoji,
-                                    color = if (type == myReaction) LocalYugmColors.current.textPrimary else LocalYugmColors.current.textSecondary,
-                                    fontSize = 10.sp,
-                                    fontWeight = if (type == myReaction) FontWeight.Bold else FontWeight.Medium
-                                )
-                            }
-                            if (count > 1) {
-                                Text(
-                                    "$count",
-                                    color = if (type == myReaction) LocalYugmColors.current.textPrimary else LocalYugmColors.current.textSecondary,
-                                    fontSize = 10.sp,
-                                    fontWeight = if (type == myReaction) FontWeight.Bold else FontWeight.Medium
-                                )
-                            }
-                        }
-                    }
-                    if (hiddenTypes > 0) {
-                        Text("+$hiddenTypes", color = LocalYugmColors.current.textSecondary, fontSize = 10.sp, fontWeight = FontWeight.Medium)
-                    }
-                }
-            }
-        }
-
-        if (mine) {
-            Spacer(Modifier.width(8.dp))
-            if (showOutgoingAvatar) {
-                Avatar(
-                    initial = "You".first().toString(),
-                    size = 28,
-                    imageUrl = null,
-                    cosmetics = myActiveCosmetics,
-                    accessibilityLabel = null
-                )
-            } else {
-                Spacer(Modifier.width(42.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun RoomInviteMessageCard(
-    roomId: String,
-    inviterName: String,
-    onOpenRoom: (String) -> Unit
-) {
-    Column(
-        Modifier.width(238.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(Brush.verticalGradient(listOf(Color(0xFFFFD452), Color(0xFFF6A62B))))
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(7.dp)
-    ) {
-        Text("You’re invited to chat", color = Color(0xFF281B15), fontSize = 15.sp, fontWeight = FontWeight.Bold)
-        Text("$inviterName invited you to their room", color = Color(0xFF493326), fontSize = 12.sp)
-        androidx.compose.material3.Button(
-            onClick = { if (roomId.isNotBlank()) onOpenRoom(roomId) },
-            modifier = Modifier.fillMaxWidth(),
-            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFF0798EE))
-        ) { Text("Join the room", color = Color.White) }
-    }
-}
-
-private fun isNearBottom(state: androidx.compose.foundation.lazy.LazyListState): Boolean {
-    if (!state.canScrollForward) return true
-    val lastVisibleIndex = state.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: return false
-    val lastContentIndex = (state.layoutInfo.totalItemsCount - 3).coerceAtLeast(0)
-    return lastVisibleIndex >= lastContentIndex
-}
-
-@Composable
-fun TypingIndicatorDot(delay: Int) {
-    val offsetY = if (LocalMotionEnabled.current) {
-        val transition = rememberInfiniteTransition(label = "typing")
-        val animatedOffset by transition.animateFloat(0f, -6f, infiniteRepeatable(tween(300, delayMillis = delay, easing = LinearEasing), RepeatMode.Reverse), label = "typing-dot")
-        animatedOffset
-    } else 0f
-    Box(Modifier.size(5.dp).offset(y = offsetY.dp).clip(CircleShape).background(LocalYugmColors.current.secondary))
-}
-
-@Composable
-fun TypingBubble() {
-    Row(Modifier.clip(RoundedCornerShape(14.dp)).background(LocalYugmColors.current.surfaceElevated).padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        TypingIndicatorDot(0); TypingIndicatorDot(100); TypingIndicatorDot(200)
-    }
-}
-
-private fun messageTime(value: String) = com.yugm.app.feature.chat.formatChatMessageTime(value)
-
-private fun formatPlaybackTime(ms: Int): String {
-    val totalSeconds = (ms.coerceAtLeast(0) / 1000)
-    val minutes = totalSeconds / 60
-    val seconds = totalSeconds % 60
-    return "%d:%02d".format(minutes, seconds)
-}
-
-private fun messageDateLabel(value: String): String = com.yugm.app.feature.chat.formatChatDateLabel(value)
-
-private fun DirectMessage.canStillEdit(): Boolean = com.yugm.app.feature.chat.canEditDirectMessage(createdAt)
-
-@Composable
-private fun ChatOptionRow(
-    icon: ImageVector,
-    label: String,
-    tint: Color = LocalYugmColors.current.textPrimary,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, color = tint, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
-    }
-}
-
-@Composable
-private fun CompactOptionRow(
-    icon: ImageVector,
-    label: String,
-    tint: Color = LocalYugmColors.current.textPrimary,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, color = tint, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
-    }
-}
-
-private fun getGiftEmoji(name: String, icon: String): String {
-    val query = "$name $icon".lowercase()
-    return when {
-        query.contains("diya") -> "\uD83E\uDE94"
-        query.contains("rose") -> "\uD83C\uDF39"
-        query.contains("crown") -> "\uD83D\uDC51"
-        query.contains("lotus") -> "\uD83E\uDEB7"
-        query.contains("heart") -> "\u2764\uFE0F"
-        query.contains("ring") -> "\uD83D\uDC8D"
-        query.contains("car") -> "\uD83D\uDE97"
-        query.contains("diamond") -> "\uD83D\uDC8E"
-        query.contains("fire") -> "\uD83D\uDD25"
-        query.contains("rocket") -> "\uD83D\uDE80"
-        query.contains("mic") -> "\uD83C\uDFA4"
-        query.contains("cake") -> "\uD83C\uDF82"
-        query.contains("bear") -> "\uD83E\uDDF8"
-        query.contains("star") -> "\u2B50"
-        else -> {
-            if (icon.isNotBlank() && icon.length <= 4 && !icon.any { it.isLetterOrDigit() }) icon
-            else "\uD83C\uDF81"
-        }
-    }
-}
-
-private fun openChatMedia(context: android.content.Context, rawUrl: String) {
-    val resolved = resolveMediaUrl(rawUrl) ?: rawUrl
-    if (resolved.isBlank()) return
-    runCatching {
-        val intent = Intent(Intent.ACTION_VIEW, resolved.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(intent)
-    }.onFailure {
-        android.widget.Toast.makeText(context, "Unable to open media", android.widget.Toast.LENGTH_SHORT).show()
-    }
-}
-private fun reactionEmoji(type: String): String = when (type.lowercase()) {
-    "heart" -> "\u2764\uFE0F"
-    "fire" -> "\uD83D\uDD25"
-    "laugh" -> "\uD83D\uDE02"
-    "clap" -> "\uD83D\uDC4F"
-    "wow" -> "\uD83D\uDE2E"
-    "crown" -> "\uD83D\uDC51"
-    "stars" -> "\u2728"
-    "party" -> "\uD83C\uDF89"
-    else -> "\u2764\uFE0F"
 }

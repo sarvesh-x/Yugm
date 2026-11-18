@@ -22,6 +22,13 @@ android {
     buildFeatures {
         compose = true
     }
+
+    lint {
+        // Reduce cross-module dependency analysis cost for this module; app-level lint
+        // catches shared issues. Keep builds from failing silently.
+        checkDependencies = false
+        abortOnError = true
+    }
 }
 
 kotlin {
