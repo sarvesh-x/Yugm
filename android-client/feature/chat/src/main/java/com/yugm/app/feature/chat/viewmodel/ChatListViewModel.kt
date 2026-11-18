@@ -205,20 +205,23 @@ class ChatListViewModel @Inject constructor(
                     val friendRequestsRequest = async(Dispatchers.IO) {
                         runCatching { yugmApi.friendRequests(token) }.getOrDefault(emptyList())
                     }
+                    val unreadRequest = async(Dispatchers.IO) { runCatching { yugmApi.unreadCounts(token) }.getOrDefault(emptyMap()) }
+                    val mutedRequest = async(Dispatchers.IO) { runCatching { yugmApi.mutedConversations(token) }.getOrDefault(emptySet()) }
+                    val clanRequest = async(Dispatchers.IO) { runCatching { yugmApi.myClan(token) }.getOrNull() }
 
                     matches = matchesRequest.await()
                     val recentPage = messagesRequest.await()
                     var mergedRecent = recentPage.messages
                     hasMoreRecent = recentPage.hasMore
                     recentNextBefore = recentPage.nextBefore ?: recentPage.messages.lastOrNull()?.createdAt
-                    unreadCounts = async(Dispatchers.IO) { runCatching { yugmApi.unreadCounts(token) }.getOrDefault(emptyMap()) }.await()
-                    val mutedIds = async(Dispatchers.IO) { runCatching { yugmApi.mutedConversations(token) }.getOrDefault(emptySet()) }.await()
-                    mutedPartnerIds = mutedIds
                     followers = followersRequest.await()
                     following = followingRequest.await()
                     recommendedChatUsers = recommendedRequest.await()
                     friends = friendsRequest.await()
                     friendRequests = friendRequestsRequest.await()
+                    unreadCounts = unreadRequest.await()
+                    val mutedIds = mutedRequest.await()
+                    mutedPartnerIds = mutedIds
                     val knownPartnerIds = mergedRecent.map { if (it.senderId == currentUserId) it.receiverId else it.senderId }.toSet()
                     val missingMuted = mutedIds.filter { it.isNotBlank() && it !in knownPartnerIds }
                     if (missingMuted.isNotEmpty()) {
@@ -234,7 +237,7 @@ class ChatListViewModel @Inject constructor(
                         }
                     }
                     recentMessages = mergedRecent
-                    myClan = runCatching { yugmApi.myClan(token) }.getOrNull()
+                    myClan = clanRequest.await()
                 }
             }.onFailure {
                 error = it.message ?: "Failed to load messages"
