@@ -19,6 +19,27 @@ const LABELS = ["toxicity", "severe_toxicity", "identity_attack", "insult", "thr
 let model: toxicity.ToxicityClassifier | null = null;
 let modelLoading = false;
 let modelLoadPromise: Promise<void> | null = null;
+const CLASSIFY_TIMEOUT_MS = 2500;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`operation exceeded ${ms}ms`)), ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error) => { clearTimeout(timer); reject(error); }
+    );
+  });
+}
+
+/** Warm the toxicity model after the server starts accepting requests. */
+export async function preloadToxicityModel(): Promise<void> {
+  try {
+    await getModel();
+    console.log("[aiModeration] Toxicity model ready");
+  } catch (error) {
+    console.error("[aiModeration] Toxicity model preload failed:", error);
+  }
+}
 
 async function getModel(): Promise<toxicity.ToxicityClassifier> {
   if (model) return model;
@@ -72,8 +93,11 @@ export async function classifyToxicity(text: string): Promise<AiModerationResult
   if (!text || text.trim().length < 2) return EMPTY_RESULT;
 
   try {
-    const clf = await getModel();
-    const predictions = await clf.classify([text]);
+    // The first call after a restart downloads/initializes the model. Never let
+    // that (or a slow inference) hold a chat request hostage: fall back to the
+    // keyword filter result and let the model warm in the background.
+    const clf = await withTimeout(getModel(), CLASSIFY_TIMEOUT_MS);
+    const predictions = await withTimeout(clf.classify([text]), CLASSIFY_TIMEOUT_MS);
 
     const result: AiModerationResult = {
       isClean: true,

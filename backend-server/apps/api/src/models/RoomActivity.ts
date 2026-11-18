@@ -20,5 +20,6 @@ const roomActivitySchema = new Schema<IRoomActivity>(
 );
 
 roomActivitySchema.index({ roomId: 1, createdAt: -1 });
+roomActivitySchema.index({ userId: 1, createdAt: -1 });
 
 export const RoomActivity = mongoose.model<IRoomActivity>("RoomActivity", roomActivitySchema);

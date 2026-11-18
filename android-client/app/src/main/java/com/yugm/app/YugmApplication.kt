@@ -18,9 +18,12 @@ import android.util.Log
 import timber.log.Timber
 import com.facebook.FacebookSdk
 import com.yugm.app.feature.auth.BuildConfig as AuthBuildConfig
+import java.util.concurrent.TimeUnit
 
 @HiltAndroidApp
 class YugmApplication : Application(), ImageLoaderFactory {
+    @Volatile private var appCheckToken: String? = null
+    @Volatile private var appCheckTokenExpiresAt: Long = 0L
     @Suppress("DEPRECATION")
     override fun onCreate() {
         super.onCreate()
@@ -47,6 +50,7 @@ class YugmApplication : Application(), ImageLoaderFactory {
             else -> BuildConfig.LAN_SOCKET_BASE_URL
         }
         ApiConfig.isDebug = BuildConfig.DEBUG
+        YugmHttpClient.install(this)
         val appCheckFactory: AppCheckProviderFactory = YugmAppCheckProviderFactory.getInstance()
         val appCheck = FirebaseAppCheck.getInstance()
         appCheck.installAppCheckProviderFactory(appCheckFactory)
@@ -58,7 +62,23 @@ class YugmApplication : Application(), ImageLoaderFactory {
             }
         }
         YugmHttpClient.appCheckTokenProvider = {
-            Tasks.await(FirebaseAppCheck.getInstance().limitedUseAppCheckToken).token
+            // App Check verification is a network round trip on both sides.
+            // Reuse the token for a few minutes instead of asking Play Services
+            // for a new one on every /auth call. The server caches the verified
+            // result, so non-consuming verification stays cheap.
+            val cached = appCheckToken
+            if (cached != null && System.currentTimeMillis() < appCheckTokenExpiresAt) {
+                cached
+            } else {
+                val result = Tasks.await(
+                    FirebaseAppCheck.getInstance().limitedUseAppCheckToken,
+                    10,
+                    TimeUnit.SECONDS
+                )
+                appCheckToken = result.token
+                appCheckTokenExpiresAt = System.currentTimeMillis() + 5 * 60_000L
+                result.token
+            }
         }
         if (BuildConfig.DEBUG) Timber.plant(Timber.DebugTree())
         YugmMediaRoom.initialize(this)

@@ -39,5 +39,6 @@ const giftSchema = new Schema(
 
 giftSchema.index({ category: 1, rarity: 1 });
 giftSchema.index({ collectionId: 1 });
+giftSchema.index({ isActive: 1, coinPrice: 1 });
 
 export const Gift = mongoose.model("Gift", giftSchema);

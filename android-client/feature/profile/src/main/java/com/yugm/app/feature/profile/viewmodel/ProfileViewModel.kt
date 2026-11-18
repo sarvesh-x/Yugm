@@ -169,24 +169,26 @@ class ProfileViewModel @Inject constructor(
             }.onSuccess { loadedProfile ->
                 profile = loadedProfile
                 isFollowing = loadedProfile.isFollowing
-
-                // Load optional sections in parallel before revealing the full profile to avoid
-                // random pop-in/layout shifts when switching to the profile tab.
-                coroutineScope {
-                    val roomsRequest = async(Dispatchers.IO) { runCatching { yugmApi.getUserRooms(userId, token.ifBlank { null }) } }
-                    val followersRequest = async(Dispatchers.IO) { runCatching { yugmApi.getFollowers(userId, token.ifBlank { null }) } }
-                    val followingRequest = async(Dispatchers.IO) { runCatching { yugmApi.getFollowing(userId, token.ifBlank { null }) } }
-                    val statsRequest = async(Dispatchers.IO) { runCatching { yugmApi.pkStats(token, userId) } }
-                    val historyRequest = async(Dispatchers.IO) { runCatching { yugmApi.pkHistory(token, userId) } }
-                    val clanRequest = if (token.isNotBlank()) async(Dispatchers.IO) { runCatching { yugmApi.myClan(token) } } else null
-                    roomsRequest.await().onSuccess { rooms = it }
-                    followersRequest.await().onSuccess { followers = it }
-                    followingRequest.await().onSuccess { following = it }
-                    statsRequest.await().onSuccess { pkStats = it }
-                    historyRequest.await().onSuccess { pkHistory = it }
-                    if (clanRequest != null) clanRequest.await().onSuccess { ownClan = it }
-                }
+                // Reveal the profile as soon as the user document arrives. The
+                // optional sections below hydrate independently so one slow
+                // followers/pk/ clan call cannot hold the whole screen.
                 isLoading = false
+                launch {
+                    coroutineScope {
+                        val roomsRequest = async(Dispatchers.IO) { runCatching { yugmApi.getUserRooms(userId, token.ifBlank { null }) } }
+                        val followersRequest = async(Dispatchers.IO) { runCatching { yugmApi.getFollowers(userId, token.ifBlank { null }) } }
+                        val followingRequest = async(Dispatchers.IO) { runCatching { yugmApi.getFollowing(userId, token.ifBlank { null }) } }
+                        val statsRequest = async(Dispatchers.IO) { runCatching { yugmApi.pkStats(token, userId) } }
+                        val historyRequest = async(Dispatchers.IO) { runCatching { yugmApi.pkHistory(token, userId) } }
+                        val clanRequest = if (token.isNotBlank()) async(Dispatchers.IO) { runCatching { yugmApi.myClan(token) } } else null
+                        roomsRequest.await().onSuccess { if (profile?.id == userId) rooms = it }
+                        followersRequest.await().onSuccess { if (profile?.id == userId) followers = it }
+                        followingRequest.await().onSuccess { if (profile?.id == userId) following = it }
+                        statsRequest.await().onSuccess { if (profile?.id == userId) pkStats = it }
+                        historyRequest.await().onSuccess { if (profile?.id == userId) pkHistory = it }
+                        if (clanRequest != null) clanRequest.await().onSuccess { if (profile?.id == userId) ownClan = it }
+                    }
+                }
             }
         }
     }

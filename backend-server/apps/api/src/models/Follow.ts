@@ -9,5 +9,7 @@ const followSchema = new Schema(
 );
 
 followSchema.index({ followerId: 1, followingId: 1 }, { unique: true });
+// Followers lists, profile counts, and room-create fan-out query by followingId.
+followSchema.index({ followingId: 1, createdAt: -1 });
 
 export const Follow = mongoose.model("Follow", followSchema);

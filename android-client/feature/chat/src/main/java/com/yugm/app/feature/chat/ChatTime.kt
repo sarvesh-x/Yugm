@@ -7,22 +7,45 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
+private val isoPatterns = arrayOf(
+    "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+    "yyyy-MM-dd'T'HH:mm:ssXXX",
+    "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+    "yyyy-MM-dd'T'HH:mm:ss'Z'",
+    "yyyy-MM-dd'T'HH:mm:ss.SSS",
+    "yyyy-MM-dd'T'HH:mm:ss"
+)
+
+// Chat rows ask for the same handful of timestamps on every recomposition while
+// scrolling. SimpleDateFormat construction is expensive, so memoize both the
+// parsed millis and the formatters (one per thread, since they are not
+// thread-safe).
+private val parseCache = object : LinkedHashMap<String, Long>(64, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?): Boolean = size > 512
+}
+
+private val formatters = ThreadLocal.withInitial { HashMap<String, SimpleDateFormat>() }
+
+private fun formatter(pattern: String, zone: TimeZone): SimpleDateFormat =
+    formatters.get()!!.getOrPut("$pattern@${zone.id}") {
+        SimpleDateFormat(pattern, Locale.US).apply {
+            isLenient = false
+            timeZone = zone
+        }
+    }
+
 internal fun parseIsoMillis(value: String?): Long? {
     val raw = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-    val patterns = arrayOf(
-        "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
-        "yyyy-MM-dd'T'HH:mm:ssXXX",
-        "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
-        "yyyy-MM-dd'T'HH:mm:ss'Z'",
-        "yyyy-MM-dd'T'HH:mm:ss.SSS",
-        "yyyy-MM-dd'T'HH:mm:ss"
-    )
-    for (pattern in patterns) {
-        val sdf = SimpleDateFormat(pattern, Locale.US).apply {
-            isLenient = false
-            timeZone = if (pattern.contains("X") || pattern.endsWith("'Z'")) TimeZone.getTimeZone("UTC") else TimeZone.getDefault()
-        }
-        val parsed = runCatching { sdf.parse(raw, ParsePosition(0)) }.getOrNull()
+    synchronized(parseCache) { parseCache[raw] }?.let { return it }
+    val parsedMillis = parseUncached(raw)
+    if (parsedMillis != null) synchronized(parseCache) { parseCache[raw] = parsedMillis }
+    return parsedMillis
+}
+
+private fun parseUncached(raw: String): Long? {
+    for (pattern in isoPatterns) {
+        val zone = if (pattern.contains("X") || pattern.endsWith("'Z'")) TimeZone.getTimeZone("UTC") else TimeZone.getDefault()
+        val parsed = runCatching { formatter(pattern, zone).parse(raw, ParsePosition(0)) }.getOrNull()
         if (parsed != null) return parsed.time
     }
     return runCatching {
@@ -31,10 +54,7 @@ internal fun parseIsoMillis(value: String?): Long? {
             ".${match.groupValues[1].take(3).padEnd(3, '0')}"
         }
         val zulu = if (normalized.endsWith("Z")) normalized.replace("Z", "+00:00") else normalized
-        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US).apply {
-            isLenient = false
-            timeZone = TimeZone.getTimeZone("UTC")
-        }.parse(zulu, ParsePosition(0))?.time
+        formatter("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", TimeZone.getTimeZone("UTC")).parse(zulu, ParsePosition(0))?.time
     }.getOrNull()
 }
 

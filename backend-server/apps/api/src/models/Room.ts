@@ -72,5 +72,10 @@ const roomSchema = new Schema<IRoom>(
 
 roomSchema.index({ status: 1, type: 1, participantCount: -1 });
 roomSchema.index({ startedAt: -1 });
+// Home/discover lists: live public rooms ranked by participants, scheduled
+// public rooms by start time, and a host's rooms for feeds.
+roomSchema.index({ status: 1, visibility: 1, participantCount: -1, createdAt: -1 });
+roomSchema.index({ status: 1, visibility: 1, scheduledFor: 1 });
+roomSchema.index({ hostId: 1, status: 1, participantCount: -1 });
 
 export const Room = mongoose.model<IRoom>("Room", roomSchema);

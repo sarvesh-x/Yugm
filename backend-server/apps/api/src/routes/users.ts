@@ -89,11 +89,14 @@ async function handlePublicProfile(identifier: string, isUsername: boolean, req:
   const isSelf = req.user ? req.user.id === user._id.toString() : false;
   const viewer: any = req.user;
   if (viewer && !isSelf && !viewer.mysteriousVisitors) {
-    await ProfileVisit.updateOne(
+    // Bookkeeping write on a GET; don't make the profile response wait for it.
+    void ProfileVisit.updateOne(
       { profileId: user._id, visitorId: viewer._id },
       { $set: { lastVisitedAt: new Date() }, $setOnInsert: { profileId: user._id, visitorId: viewer._id } },
       { upsert: true }
-    );
+    ).catch((error: unknown) => {
+      console.error("Profile visit upsert failed:", error instanceof Error ? error.message : String(error));
+    });
   }
   sendOk(res, {
     user: publicUser({
@@ -353,6 +356,15 @@ function publicUser(user: any) {
 
 function hasCompletedProfile(user: any) {
   return Boolean(user?.name && user?.username && user?.bio && user?.city && (user?.interests?.length ?? 0) > 0);
+}
+
+let unavailableUsersCache: { ids: any[]; expiresAt: number } = { ids: [], expiresAt: 0 };
+async function getUnavailableUserIds() {
+  const now = Date.now();
+  if (unavailableUsersCache.expiresAt > now) return unavailableUsersCache.ids;
+  const ids = await User.distinct("_id", { deletionRequestedAt: { $type: "date" } });
+  unavailableUsersCache = { ids, expiresAt: now + 5 * 60_000 };
+  return ids;
 }
 
 usersRouter.get("/me", asyncHandler(async (req: AuthRequest, res) => {
@@ -790,7 +802,7 @@ usersRouter.get("/recommended-chat", asyncHandler(async (req: AuthRequest, res) 
 }));
 
 usersRouter.get("/messages", asyncHandler(async (req: AuthRequest, res) => {
-  const unavailableUsers = await User.distinct("_id", { deletionRequestedAt: { $type: "date" } });
+  const unavailableUsers = await getUnavailableUserIds();
   const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 200);
   const beforeRaw = String(req.query.before || "").trim();
   let beforeDate: Date | null = null;
@@ -821,7 +833,7 @@ usersRouter.get("/messages", asyncHandler(async (req: AuthRequest, res) => {
 }));
 
 usersRouter.post("/messages/read-all", asyncHandler(async (req: AuthRequest, res) => {
-  const unavailableUsers = await User.distinct("_id", { deletionRequestedAt: { $type: "date" } });
+  const unavailableUsers = await getUnavailableUserIds();
   const senders = await DirectMessage.distinct("senderId", { receiverId: req.user!._id, senderId: { $nin: unavailableUsers }, read: false, hiddenFor: { $ne: req.user!._id } });
   const result = await DirectMessage.updateMany(
     { receiverId: req.user!.id, senderId: { $nin: unavailableUsers }, read: false, hiddenFor: { $ne: req.user!._id } },
@@ -853,7 +865,7 @@ usersRouter.post("/messages/:userId/read", asyncHandler(async (req: AuthRequest,
 }));
 
 usersRouter.get("/messages/unread-counts", asyncHandler(async (req: AuthRequest, res) => {
-  const unavailableUsers = await User.distinct("_id", { deletionRequestedAt: { $type: "date" } });
+  const unavailableUsers = await getUnavailableUserIds();
   const rows = await DirectMessage.aggregate([
     { $match: { receiverId: req.user!._id, senderId: { $nin: unavailableUsers }, read: false, hiddenFor: { $ne: req.user!._id } } },
     { $group: { _id: "$senderId", count: { $sum: 1 } } }

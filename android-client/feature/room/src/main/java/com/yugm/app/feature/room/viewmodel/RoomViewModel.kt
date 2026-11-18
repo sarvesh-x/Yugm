@@ -45,6 +45,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -275,21 +277,11 @@ class RoomViewModel @Inject constructor(
                 runCatching { yugmApi.followedRooms(authToken) }
             }.onSuccess { rooms -> isFollowingRoom = rooms.any { it.id == roomId } }
         }
+        // Room state is pushed over Socket.IO (chat, participants, polls, gifts).
+        // Polling every 15 s duplicated that traffic and kept the host busy even
+        // when nothing changed, so rely on socket events plus pull-to-refresh.
         roomRecoveryJob?.cancel()
-        roomRecoveryJob = viewModelScope.launch {
-            while (true) {
-                delay(15_000)
-                if (!com.yugm.app.core.api.YugmHttpClient.isOnline) continue
-                withContext(Dispatchers.IO) { runCatching { yugmApi.roomDetail(authToken, roomId) } }
-                    .onSuccess { detail ->
-                        roomDetail = detail
-                        roomState = UiState.Success(detail)
-                    }
-                refreshPollList()
-                withContext(Dispatchers.IO) { runCatching { yugmApi.roomMessages(roomId, authToken) } }.onSuccess(::mergeChat)
-                withContext(Dispatchers.IO) { runCatching { yugmApi.roomActivity(roomId, authToken) } }.onSuccess { activity = it }
-            }
-        }
+        roomRecoveryJob = null
     }
 
     fun disconnect() {
@@ -371,53 +363,83 @@ class RoomViewModel @Inject constructor(
                 android.util.Log.e("RoomViewModel", "Room detail load failed for $roomId", error)
                 roomState = UiState.Error(roomError!!, error)
             }
-            val pollsResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomPolls(authToken, roomId) } }
-            pollsResult.onSuccess { polls = it }
-            val missionsResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomMissions(authToken, roomId) } }
-            missionsResult.onSuccess { missions = it }
-            val activityResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomActivity(roomId, authToken) } }
-            activityResult.onSuccess { activity = it }
-            runCatching { withContext(Dispatchers.IO) { yugmApi.listEvents(authToken, limit = 20, roomId = roomId).first } }
-                .onSuccess { roomEvents = it }
-            val messagesResult = withContext(Dispatchers.IO) { runCatching { yugmApi.roomMessages(roomId, authToken) } }
-            messagesResult.onSuccess {
-                mergeChat(it)
-            }
-            val giftsResult = withContext(Dispatchers.IO) { runCatching { yugmApi.gifts(authToken) } }
-            giftsResult.onSuccess {
-                gifts.clear(); gifts.addAll(it)
-            }
-            runCatching { withContext(Dispatchers.IO) { yugmApi.inventory(authToken).items } }
-                .onSuccess { giftInventory = it.filter { item -> item.quantity > 0 && item.gift != null } }
-            runCatching { withContext(Dispatchers.IO) { yugmApi.walletOverview(authToken).diamondBalance } }
-                .onSuccess { diamondBalance = it }
-            if (currentUserId.isNotBlank()) {
-                val followingResult = withContext(Dispatchers.IO) { runCatching { yugmApi.getFollowing(currentUserId, authToken) } }
-                followingResult.onSuccess { inviteCandidates = it }
-                runCatching { withContext(Dispatchers.IO) { yugmApi.getFriends(authToken) } }
-                    .onSuccess { inviteFriends = it }
-                runCatching { withContext(Dispatchers.IO) { yugmApi.roomFollowers(authToken, roomId) } }
-                    .onSuccess { roomInviteFollowers = it }
-            }
-            val pkResult = withContext(Dispatchers.IO) { runCatching { yugmApi.activePkWithInvite(authToken, roomId) } }
-            pkResult.onSuccess { (battle, invite) ->
-                pkBattle = battle
-                pkInviteId = invite?.id
-                if (battle != null) {
-                    viewModelScope.launch {
-                        val leaderboardResult = withContext(Dispatchers.IO) { runCatching { yugmApi.pkLeaderboard(authToken, battle.id) } }
-                        leaderboardResult.onSuccess { pkLeaderboard = it }
-                        if (isVideo && battle.status == PkStatus.ACTIVE && battle.battleType == PkBattleType.VIDEO) {
-                            val mediaResult = withContext(Dispatchers.IO) { runCatching { yugmApi.pkMediaSession(authToken, battle.id, roomId) } }
-                            mediaResult.onSuccess {
-                                pkOpponentMedia = it
-                                it?.let { YugmMediaRoom.connectOpponent(it.token, it.url, it.roomName) }
+            // Everything below is independent of the room document, so fetch the
+            // bundle concurrently instead of serializing ~13 round trips.
+            coroutineScope {
+                val pollsDeferred = async {
+                    withContext(Dispatchers.IO) { runCatching { yugmApi.roomPolls(authToken, roomId) } }
+                }
+                val missionsDeferred = async {
+                    withContext(Dispatchers.IO) { runCatching { yugmApi.roomMissions(authToken, roomId) } }
+                }
+                val activityDeferred = async {
+                    withContext(Dispatchers.IO) { runCatching { yugmApi.roomActivity(roomId, authToken) } }
+                }
+                val eventsDeferred = async {
+                    withContext(Dispatchers.IO) { runCatching { yugmApi.listEvents(authToken, limit = 20, roomId = roomId).first } }
+                }
+                val messagesDeferred = async {
+                    withContext(Dispatchers.IO) { runCatching { yugmApi.roomMessages(roomId, authToken) } }
+                }
+                val giftsDeferred = async {
+                    if (gifts.isNotEmpty()) return@async null
+                    withContext(Dispatchers.IO) { runCatching { yugmApi.gifts(authToken) } }
+                }
+                val inventoryDeferred = async {
+                    if (giftInventory.isNotEmpty()) return@async null
+                    withContext(Dispatchers.IO) { runCatching { yugmApi.inventory(authToken).items } }
+                }
+                val walletDeferred = async {
+                    withContext(Dispatchers.IO) { runCatching { yugmApi.walletOverview(authToken).diamondBalance } }
+                }
+                val followingDeferred = async {
+                    if (currentUserId.isBlank() || inviteCandidates.isNotEmpty()) return@async null
+                    withContext(Dispatchers.IO) { runCatching { yugmApi.getFollowing(currentUserId, authToken) } }
+                }
+                val friendsDeferred = async {
+                    if (currentUserId.isBlank() || inviteFriends.isNotEmpty()) return@async null
+                    withContext(Dispatchers.IO) { runCatching { yugmApi.getFriends(authToken) } }
+                }
+                val roomFollowersDeferred = async {
+                    if (currentUserId.isBlank() || roomInviteFollowers.isNotEmpty()) return@async null
+                    withContext(Dispatchers.IO) { runCatching { yugmApi.roomFollowers(authToken, roomId) } }
+                }
+                val pkDeferred = async {
+                    withContext(Dispatchers.IO) { runCatching { yugmApi.activePkWithInvite(authToken, roomId) } }
+                }
+
+                pollsDeferred.await().onSuccess { polls = it }
+                missionsDeferred.await().onSuccess { missions = it }
+                activityDeferred.await().onSuccess { activity = it }
+                eventsDeferred.await().onSuccess { roomEvents = it }
+                messagesDeferred.await().onSuccess { mergeChat(it) }
+                giftsDeferred.await()?.onSuccess {
+                    gifts.clear(); gifts.addAll(it)
+                }
+                inventoryDeferred.await()?.onSuccess { giftInventory = it.filter { item -> item.quantity > 0 && item.gift != null } }
+                walletDeferred.await().onSuccess { diamondBalance = it }
+                followingDeferred.await()?.onSuccess { inviteCandidates = it }
+                friendsDeferred.await()?.onSuccess { inviteFriends = it }
+                roomFollowersDeferred.await()?.onSuccess { roomInviteFollowers = it }
+                pkDeferred.await().onSuccess { (battle, invite) ->
+                    pkBattle = battle
+                    pkInviteId = invite?.id
+                    if (battle != null) {
+                        viewModelScope.launch {
+                            val leaderboardResult = withContext(Dispatchers.IO) { runCatching { yugmApi.pkLeaderboard(authToken, battle.id) } }
+                            leaderboardResult.onSuccess { pkLeaderboard = it }
+                            if (isVideo && battle.status == PkStatus.ACTIVE && battle.battleType == PkBattleType.VIDEO) {
+                                val mediaResult = withContext(Dispatchers.IO) { runCatching { yugmApi.pkMediaSession(authToken, battle.id, roomId) } }
+                                mediaResult.onSuccess {
+                                    pkOpponentMedia = it
+                                    it?.let { YugmMediaRoom.connectOpponent(it.token, it.url, it.roomName) }
+                                }
                             }
                         }
+                    } else {
+                        pkLeaderboard = emptyList()
+                        pkOpponentMedia = null
                     }
-                } else {
-                    pkLeaderboard = emptyList()
-                    pkOpponentMedia = null
                 }
             }
         }
@@ -433,12 +455,9 @@ class RoomViewModel @Inject constructor(
                 runCatching {
                     yugmApi.joinRoom(authToken, roomId)
                     YugmMediaRoom.claimRoom(mediaOwnerId)
-                    // This may be a second entry through a retained destination.
-                    // Treat every successful join as a fresh visible feed snapshot.
-                    withContext(Dispatchers.Main) {
-                        chat.clear()
-                        activity = emptyList()
-                    }
+                    // Keep the snapshot loaded before joining. Clearing here forced
+                    // an empty-then-refill flash and discarded messages that were
+                    // already fetched for the lobby preview.
                     // Keep chat/reaction delivery available even if LiveKit is
                     // temporarily unreachable or microphone publishing fails.
                     viewModelScope.launch(Dispatchers.IO) {
@@ -565,7 +584,8 @@ class RoomViewModel @Inject constructor(
             val joinFailure = result.exceptionOrNull()
             if (result.isSuccess) {
                 isConnected = true
-                refresh()
+                // Chat history was already loaded before the join and the socket
+                // ack (onRoomJoined) refreshes the tail; don't repeat the bundle.
             } else if (joinFailure != null) {
                 // Join can legitimately be rejected (ended, scheduled, VIP-only,
                 // invite-only, blocked, restricted). Surface it instead of leaving
@@ -766,6 +786,9 @@ class RoomViewModel @Inject constructor(
                 else "legacy:${message.authorId}:${message.author}:${message.text}:${message.createdAt}"
             }
             .takeLast(250)
+        // A refresh that returns the same snapshot should not rebuild the list
+        // (which forces a full LazyColumn remeasure).
+        if (merged.size == chat.size && merged == chat.toList()) return
         chat.clear()
         chat.addAll(merged)
     }

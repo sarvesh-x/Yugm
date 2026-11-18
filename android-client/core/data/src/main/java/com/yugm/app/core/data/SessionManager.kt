@@ -26,67 +26,101 @@ class SessionManager @Inject constructor(
         )
     }
 
+    /**
+     * EncryptedSharedPreferences decrypts on every read. Session values are read
+     * on every HTTP request, so keep a write-through in-memory snapshot and only
+     * touch the encrypted store on the first access.
+     */
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, Any>()
+
+    private inline fun <T : Any> cached(key: String, read: () -> T): T {
+        @Suppress("UNCHECKED_CAST")
+        (cache[key] as? T)?.let { return it }
+        return read().also { cache[key] = it }
+    }
+
+    private fun writeString(key: String, value: String) {
+        cache[key] = value
+        prefs.edit().putString(key, value).apply()
+    }
+
+    private fun writeBoolean(key: String, value: Boolean) {
+        cache[key] = value
+        prefs.edit().putBoolean(key, value).apply()
+    }
+
+    private fun writeInt(key: String, value: Int) {
+        cache[key] = value
+        prefs.edit().putInt(key, value).apply()
+    }
+
+    private fun writeLong(key: String, value: Long) {
+        cache[key] = value
+        prefs.edit().putLong(key, value).apply()
+    }
+
     var authToken: String
-        get() = prefs.getString("authToken", "") ?: ""
-        set(value) = prefs.edit().putString("authToken", value).apply()
+        get() = cached("authToken") { prefs.getString("authToken", "") ?: "" }
+        set(value) = writeString("authToken", value)
 
     var refreshToken: String
-        get() = prefs.getString("refreshToken", "") ?: ""
-        set(value) = prefs.edit().putString("refreshToken", value).apply()
+        get() = cached("refreshToken") { prefs.getString("refreshToken", "") ?: "" }
+        set(value) = writeString("refreshToken", value)
 
     var sessionId: String
-        get() = prefs.getString("sessionId", "") ?: ""
-        set(value) = prefs.edit().putString("sessionId", value).apply()
+        get() = cached("sessionId") { prefs.getString("sessionId", "") ?: "" }
+        set(value) = writeString("sessionId", value)
 
     var accessTokenExpiresAt: Long
-        get() = prefs.getLong("accessTokenExpiresAt", 0L)
-        set(value) = prefs.edit().putLong("accessTokenExpiresAt", value).apply()
+        get() = cached("accessTokenExpiresAt") { prefs.getLong("accessTokenExpiresAt", 0L) }
+        set(value) = writeLong("accessTokenExpiresAt", value)
 
     var emailVerified: Boolean
-        get() = prefs.getBoolean("emailVerified", false)
-        set(value) = prefs.edit().putBoolean("emailVerified", value).apply()
+        get() = cached("emailVerified") { prefs.getBoolean("emailVerified", false) }
+        set(value) = writeBoolean("emailVerified", value)
 
     /** Older installed sessions predate this flag, so treat them as complete once a user ID exists. */
     var profileCompleted: Boolean
-        get() = prefs.getBoolean("profileCompleted", userId.isNotBlank())
-        set(value) = prefs.edit().putBoolean("profileCompleted", value).apply()
+        get() = cached("profileCompleted") { prefs.getBoolean("profileCompleted", userId.isNotBlank()) }
+        set(value) = writeBoolean("profileCompleted", value)
 
     var pendingFcmToken: String
-        get() = prefs.getString("pendingFcmToken", "") ?: ""
-        set(value) = prefs.edit().putString("pendingFcmToken", value).apply()
+        get() = cached("pendingFcmToken") { prefs.getString("pendingFcmToken", "") ?: "" }
+        set(value) = writeString("pendingFcmToken", value)
 
     var userId: String
-        get() = prefs.getString("userId", "") ?: ""
-        set(value) = prefs.edit().putString("userId", value).apply()
+        get() = cached("userId") { prefs.getString("userId", "") ?: "" }
+        set(value) = writeString("userId", value)
 
     var userName: String
-        get() = prefs.getString("userName", "Yugm User") ?: "Yugm User"
-        set(value) = prefs.edit().putString("userName", value).apply()
+        get() = cached("userName") { prefs.getString("userName", "Yugm User") ?: "Yugm User" }
+        set(value) = writeString("userName", value)
 
     var username: String
-        get() = prefs.getString("username", "vibe_user") ?: "vibe_user"
-        set(value) = prefs.edit().putString("username", value).apply()
+        get() = cached("username") { prefs.getString("username", "vibe_user") ?: "vibe_user" }
+        set(value) = writeString("username", value)
 
     var balance: Int
-        get() = prefs.getInt("balance", 0)
-        set(value) = prefs.edit().putInt("balance", value).apply()
+        get() = cached("balance") { prefs.getInt("balance", 0) }
+        set(value) = writeInt("balance", value)
 
     private val _themeModeFlow = MutableStateFlow(prefs.getString("themeMode", "SYSTEM") ?: "SYSTEM")
     val themeModeFlow: StateFlow<String> = _themeModeFlow.asStateFlow()
 
     var themeMode: String
-        get() = prefs.getString("themeMode", "SYSTEM") ?: "SYSTEM"
+        get() = cached("themeMode") { prefs.getString("themeMode", "SYSTEM") ?: "SYSTEM" }
         set(value) {
-            prefs.edit().putString("themeMode", value).apply()
+            writeString("themeMode", value)
             _themeModeFlow.value = value
         }
 
     fun saveSession(token: String, refresh: String, session: String, expiresInSeconds: Long, id: String, name: String, handle: String, walletBalance: Int, emailVerified: Boolean, profileCompleted: Boolean = false) {
+        val expiresAt = System.currentTimeMillis() + expiresInSeconds * 1000L
         prefs.edit()
             .putString("authToken", token)
             .putString("refreshToken", refresh)
             .putString("sessionId", session)
-            .putLong("accessTokenExpiresAt", System.currentTimeMillis() + expiresInSeconds * 1000L)
+            .putLong("accessTokenExpiresAt", expiresAt)
             .putString("userId", id)
             .putString("userName", name)
             .putString("username", handle)
@@ -94,11 +128,22 @@ class SessionManager @Inject constructor(
             .putBoolean("emailVerified", emailVerified)
             .putBoolean("profileCompleted", profileCompleted)
             .apply()
+        cache["authToken"] = token
+        cache["refreshToken"] = refresh
+        cache["sessionId"] = session
+        cache["accessTokenExpiresAt"] = expiresAt
+        cache["userId"] = id
+        cache["userName"] = name
+        cache["username"] = handle
+        cache["balance"] = walletBalance
+        cache["emailVerified"] = emailVerified
+        cache["profileCompleted"] = profileCompleted
     }
 
     fun logout() {
         val mode = themeMode
         prefs.edit().clear().apply()
+        cache.clear()
         themeMode = mode
     }
 }

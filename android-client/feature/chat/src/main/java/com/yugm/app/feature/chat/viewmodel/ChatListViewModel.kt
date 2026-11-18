@@ -246,13 +246,19 @@ class ChatListViewModel @Inject constructor(
     fun markAllRead(token: String, currentUserId: String = "") {
         if (token.isNotBlank()) authToken = token
         if (currentUserId.isNotBlank()) this.currentUserId = currentUserId
+        // Clear the badge immediately; a full list reload is not needed to show
+        // that everything was read and cost another 9+N round trips.
+        val previousCounts = unreadCounts
+        unreadCounts = emptyMap()
         viewModelScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
                     yugmApi.markAllMessagesRead(token)
                 }
+            }.onFailure { failure ->
+                unreadCounts = previousCounts
+                error = failure.message ?: "Couldn't mark messages as read"
             }
-            load(token, currentUserId)
         }
     }
 

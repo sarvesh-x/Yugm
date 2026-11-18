@@ -249,5 +249,7 @@ userSchema.index({ suspendedUntil: 1 });
 userSchema.index({ level: -1, xp: -1 });
 userSchema.index({ clanId: 1 });
 userSchema.index({ deletionRequestedAt: 1 });
+// Suggested-host ordering on the home feed.
+userSchema.index({ vipExpiresAt: -1, level: -1, followersCount: -1, createdAt: -1 });
 
 export const User = mongoose.model<IUser>("User", userSchema);

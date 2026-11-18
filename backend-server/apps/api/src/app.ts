@@ -203,7 +203,11 @@ export function createApp() {
 
   if (env.YUGM_RUNTIME !== "cloudflare") {
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
-    if (env.STORAGE_DRIVER !== "mongodb") app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+    if (env.STORAGE_DRIVER !== "mongodb") {
+      // Uploaded file names are content-unique; let clients and the edge cache
+      // them instead of re-downloading on every list render.
+      app.use("/uploads", express.static(path.join(process.cwd(), "uploads"), { maxAge: "365d", immutable: true }));
+    }
     app.use("/assets", express.static(path.resolve(__dirname, "../public")));
 
     // The admin UI is hosted independently on Cloudflare Pages in the

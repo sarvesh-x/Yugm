@@ -46,9 +46,23 @@ object AppSync {
             "support", "settings", "moderation", "safety", "trust-verification" -> SyncTopic.SETTINGS
             else -> SyncTopic.SOCIAL
         }
-        invalidate(topic, SyncTopic.PROFILE, SyncTopic.TASKS)
+        invalidate(topic)
         if (topic == SyncTopic.GIFTS || topic == SyncTopic.BONDS) invalidate(SyncTopic.WALLET)
+        // Progress side effects (XP from messages/gifts/reactions) do change the
+        // profile and tasks, but refetching them after every single interaction
+        // created a request storm. Refresh them immediately for profile/task
+        // mutations and coalesce the side-effect refreshes otherwise.
+        val direct = topic == SyncTopic.PROFILE || topic == SyncTopic.TASKS ||
+            topic == SyncTopic.WALLET || topic == SyncTopic.SETTINGS
+        val now = System.currentTimeMillis()
+        if (direct || now - lastProgressInvalidation >= PROGRESS_INVALIDATION_GAP_MS) {
+            lastProgressInvalidation = now
+            invalidate(SyncTopic.PROFILE, SyncTopic.TASKS)
+        }
     }
+
+    private var lastProgressInvalidation = 0L
+    private const val PROGRESS_INVALIDATION_GAP_MS = 30_000L
 }
 
 /** Conflates bursts without cancelling reads; an event during a read gets a trailing read. */

@@ -50,7 +50,9 @@ fun AuroraBackground(
     speed: Float = 1f,
     colors: List<Color> = auroraGradient,
 ) {
-    val phase = if (LocalMotionEnabled.current) {
+    // Pager neighbours stay composed. Keep their backdrop static instead of
+    // animating a 60 fps canvas off-screen.
+    val phase = if (LocalMotionEnabled.current && LocalAutomaticSyncEnabled.current) {
         val infiniteTransition = rememberInfiniteTransition(label = "aurora-background")
         val animatedPhase by infiniteTransition.animateFloat(
             initialValue = 0f,

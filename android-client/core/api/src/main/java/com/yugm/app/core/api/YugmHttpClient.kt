@@ -1,15 +1,20 @@
 package com.yugm.app.core.api
 
+import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import okhttp3.Cache
+import okhttp3.ConnectionPool
+import okhttp3.Dispatcher
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import timber.log.Timber
@@ -33,24 +38,53 @@ object YugmHttpClient {
     var appCheckTokenProvider: (suspend () -> String?)? = null
     private const val TAG = "YugmHttp"
     private val json = "application/json; charset=utf-8".toMediaType()
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        // The production API may need time to wake its hosting instance before
-        // completing Firebase token verification and the first database query.
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .apply {
-            if (ApiConfig.isDebug) {
-                addInterceptor { chain ->
-                    val request = chain.request()
-                    Timber.tag(TAG).d("→ %s %s", request.method, request.url)
-                    val response = chain.proceed(request)
-                    Timber.tag(TAG).d("← %s %s (%d)", request.method, request.url, response.code)
-                    response
+
+    @Volatile private var cacheDirectory: File? = null
+
+    /**
+     * Installs a disk cache. Screens repeat identical GETs on navigation; when the
+     * API sends validators this lets OkHttp revalidate with a 304 instead of
+     * re-downloading the payload.
+     */
+    fun install(context: Context) {
+        val directory = File(context.cacheDir, "http-cache")
+        if (cacheDirectory?.absolutePath == directory.absolutePath) return
+        cacheDirectory = directory
+        client = buildClient(directory)
+    }
+
+    private fun buildClient(cacheDir: File?): OkHttpClient =
+        OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            // The production API may need time to wake its hosting instance before
+            // completing Firebase token verification and the first database query.
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            // Screens fan out 10+ independent reads. OkHttp's default of 5 per host
+            // silently serializes them into several waves.
+            .dispatcher(Dispatcher().apply {
+                maxRequests = 64
+                maxRequestsPerHost = 12
+            })
+            .connectionPool(ConnectionPool(8, 5, TimeUnit.MINUTES))
+            .retryOnConnectionFailure(true)
+            .apply {
+                if (cacheDir != null) cache(Cache(cacheDir, 50L * 1024 * 1024))
+            }
+            .apply {
+                if (ApiConfig.isDebug) {
+                    addInterceptor { chain ->
+                        val request = chain.request()
+                        Timber.tag(TAG).d("→ %s %s", request.method, request.url)
+                        val response = chain.proceed(request)
+                        Timber.tag(TAG).d("← %s %s (%d)", request.method, request.url, response.code)
+                        response
+                    }
                 }
             }
-        }
-        .build()
+            .build()
+
+    @Volatile private var client: OkHttpClient = buildClient(null)
     val baseCandidates: List<String>
         get() = buildList {
             val configuredBase = ApiConfig.apiBaseUrl.trim().trimEnd('/')

@@ -119,12 +119,40 @@ export async function verifyIdToken(idToken: string): Promise<VerifiedFirebaseId
   }
 }
 
+// App Check verification is a network call to Google. Keeping the verification
+// result for a short window (never past the token's own expiry) removes that
+// round trip from every /auth request without trusting replayable tokens forever.
+const appCheckVerificationCache = new Map<string, { decoded: any; expiresAt: number }>();
+const APP_CHECK_CACHE_MS = 10 * 60_000;
+const APP_CHECK_CACHE_MAX_ENTRIES = 500;
+
+function pruneAppCheckCache(now: number) {
+  for (const [key, entry] of appCheckVerificationCache) {
+    if (entry.expiresAt <= now) appCheckVerificationCache.delete(key);
+  }
+  while (appCheckVerificationCache.size > APP_CHECK_CACHE_MAX_ENTRIES) {
+    const oldest = appCheckVerificationCache.keys().next().value;
+    if (oldest === undefined) break;
+    appCheckVerificationCache.delete(oldest);
+  }
+}
+
 export async function verifyAppCheckToken(token: string) {
   if (!admin?.apps.length) {
     throw new Error("App Check enforcement requires FCM_CLIENT_EMAIL and FCM_PRIVATE_KEY for Firebase Admin verification");
   }
+  const now = Date.now();
+  const cached = appCheckVerificationCache.get(token);
+  if (cached && cached.expiresAt > now) return cached.decoded;
   const firebase = await fb();
-  return firebase.appCheck().verifyToken(token, { consume: true });
+  const decoded = await firebase.appCheck().verifyToken(token, { consume: false });
+  const tokenExpiry = Number((decoded as any).expireTimeMillis ?? now + APP_CHECK_CACHE_MS);
+  const expiresAt = Math.min(now + APP_CHECK_CACHE_MS, tokenExpiry);
+  if (expiresAt > now) {
+    appCheckVerificationCache.set(token, { decoded, expiresAt });
+    pruneAppCheckCache(now);
+  }
+  return decoded;
 }
 
 export async function notifyUser(userId: string, title: string, body: string, data: Record<string, string> = {}) {

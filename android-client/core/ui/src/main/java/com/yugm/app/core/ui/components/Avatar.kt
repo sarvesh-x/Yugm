@@ -138,13 +138,21 @@ fun Avatar(
                     // in Loading because it is never drawn.
                     Box(Modifier.fillMaxSize()) {
                         DefaultAvatarPlaceholder(Modifier.fillMaxSize())
-                        coil.compose.AsyncImage(
-                            model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                        val context = androidx.compose.ui.platform.LocalContext.current
+                        val density = androidx.compose.ui.platform.LocalDensity.current
+                        val request = remember(finalImageUrl, size) {
+                            val px = with(density) { size.dp.roundToPx() }
+                            coil.request.ImageRequest.Builder(context)
                                 .data(finalImageUrl)
                                 .crossfade(true)
-                                .memoryCacheKey(finalImageUrl)
-                                .diskCacheKey(finalImageUrl)
-                                .build(),
+                                // Let Coil key/downsample by target size instead of
+                                // forcing the raw URL key, which made every avatar
+                                // variant share a full-resolution bitmap.
+                                .size(px)
+                                .build()
+                        }
+                        coil.compose.AsyncImage(
+                            model = request,
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop

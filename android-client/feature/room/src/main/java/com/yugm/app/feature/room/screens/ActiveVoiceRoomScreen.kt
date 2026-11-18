@@ -671,7 +671,12 @@ fun ActiveVoiceRoomScreen(
 
     LaunchedEffect(chat.size) {
         if (chat.isNotEmpty()) {
-            chatListState.animateScrollToItem((chat.size - 1).coerceAtLeast(0))
+            val layout = chatListState.layoutInfo
+            val lastVisible = layout.visibleItemsInfo.lastOrNull()?.index ?: -1
+            // Don't yank the user away from history when new messages arrive.
+            if (lastVisible >= layout.totalItemsCount - 2) {
+                chatListState.animateScrollToItem((layout.totalItemsCount - 1).coerceAtLeast(0))
+            }
         }
     }
 
@@ -919,7 +924,7 @@ fun ActiveVoiceRoomScreen(
                     }
 
                     // Chat messages
-                    itemsIndexed(chat.takeLast(16), key = { index, msg -> "$index-${msg.author}-${msg.text.hashCode()}" }) { _, msg ->
+                    items(chat.takeLast(16), key = { msg -> msg.id.ifBlank { "${msg.authorId}|${msg.createdAt}|${msg.text}" } }) { msg ->
                         val vipAuthor = msg.authorId.isNotBlank() && participants.firstOrNull { it.user.id == msg.authorId }?.user?.isVip == true
                         Column(
                             modifier = Modifier

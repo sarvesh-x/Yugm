@@ -16,6 +16,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -42,6 +43,7 @@ class DiscoverViewModel @Inject constructor(
         private set
 
     private var currentPresenceToken: String = ""
+    private var presenceRefreshJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -51,7 +53,7 @@ class DiscoverViewModel @Inject constructor(
                     is SocketEvent.UserOnline,
                     is SocketEvent.UserOffline -> {
                         if (currentPresenceToken.isNotBlank()) {
-                            refreshPresenceCount(currentPresenceToken)
+                            schedulePresenceRefresh(currentPresenceToken)
                         }
                     }
                     else -> {}
@@ -60,14 +62,26 @@ class DiscoverViewModel @Inject constructor(
         }
     }
 
+    private fun schedulePresenceRefresh(token: String, debounceMs: Long = 3000) {
+        presenceRefreshJob?.cancel()
+        presenceRefreshJob = viewModelScope.launch {
+            delay(debounceMs)
+            fetchPresenceCount(token)
+        }
+    }
+
+    private suspend fun fetchPresenceCount(token: String) {
+        runCatching {
+            withContext(Dispatchers.IO) { yugmApi.presenceCount(token) }
+        }.onSuccess { totalOnlineCount = it }
+    }
+
     fun refreshPresenceCount(token: String) {
         if (token.isNotBlank()) currentPresenceToken = token
         if (token.isBlank()) return
-        viewModelScope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) { yugmApi.presenceCount(token) }
-            }.onSuccess { totalOnlineCount = it }
-        }
+        // Explicit refreshes (screen open / resume) should be immediate.
+        presenceRefreshJob?.cancel()
+        viewModelScope.launch { fetchPresenceCount(token) }
     }
 
     var discoverState by mutableStateOf<UiState<List<Room>>>(UiState.Idle)

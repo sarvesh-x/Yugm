@@ -36,5 +36,8 @@ const directMessageSchema = new Schema(
 );
 
 directMessageSchema.index({ senderId: 1, receiverId: 1, createdAt: -1 });
+// Inbox, per-conversation history, and unread counters query by receiver.
+directMessageSchema.index({ receiverId: 1, createdAt: -1 });
+directMessageSchema.index({ receiverId: 1, read: 1, senderId: 1 });
 
 export const DirectMessage = mongoose.model("DirectMessage", directMessageSchema);

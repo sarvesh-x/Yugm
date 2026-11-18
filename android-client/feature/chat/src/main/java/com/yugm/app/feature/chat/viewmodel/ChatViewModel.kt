@@ -348,11 +348,6 @@ class ChatViewModel @Inject constructor(
                     val myProfileRequest = async(Dispatchers.IO) {
                         runCatching { yugmApi.authMe(requestToken) }
                     }
-                    val giftsRequest = async(Dispatchers.IO) { runCatching { yugmApi.gifts(requestToken) } }
-                    val walletRequest = async(Dispatchers.IO) { runCatching { yugmApi.walletOverview(requestToken) } }
-                    val matchesRequest = async(Dispatchers.IO) {
-                        runCatching { yugmApi.datingMatches(requestToken) }.getOrDefault(emptyList())
-                    }
                     historyRequest.await()
                         .onSuccess { conversation ->
                             val oldestIncoming = conversation.messages.minOfOrNull { it.createdAt }
@@ -383,11 +378,27 @@ class ChatViewModel @Inject constructor(
                         myActiveCosmetics = it.activeCosmetics
                         isCurrentUserVip = it.isVip
                     }
+                }
+            } finally {
+                // Content is usable at this point. The composer/forward bundles
+                // below only decorate optional sheets and must not hold the loader.
+                if (version == refreshVersion) isLoading = false
+            }
+            // These six calls only feed the gift picker, wallet chip and forward
+            // sheet. Load them in the background instead of delaying the thread.
+            launch {
+                supervisorScope {
+                    val giftsRequest = async(Dispatchers.IO) { runCatching { yugmApi.gifts(requestToken) } }
+                    val walletRequest = async(Dispatchers.IO) { runCatching { yugmApi.walletOverview(requestToken) } }
+                    val matchesRequest = async(Dispatchers.IO) {
+                        runCatching { yugmApi.datingMatches(requestToken) }.getOrDefault(emptyList())
+                    }
                     giftsRequest.await().onSuccess { gifts = it }
                     walletRequest.await().onSuccess { walletBalance = it.balance }
-                    isMatched = matchesRequest.await().any { it.id == partnerUserId }
+                    val matched = matchesRequest.await().any { it.id == partnerUserId }
+                    if (version == refreshVersion) isMatched = matched
                     runCatching { yugmApi.getBlockedUsers(requestToken) }
-                        .onSuccess { blocked -> isBlockedByMe = blocked.any { it.id == partnerUserId } }
+                        .onSuccess { blocked -> if (version == refreshVersion) isBlockedByMe = blocked.any { it.id == partnerUserId } }
                     val recentTargets = runCatching { yugmApi.getRecentMessages(requestToken) }.getOrDefault(emptyList())
                     val followedTargets = runCatching { yugmApi.getFollowing(requestUser, requestToken) }.getOrDefault(emptyList())
                     val friendTargets = runCatching { yugmApi.friendList(requestToken) }.getOrDefault(emptyList())
@@ -400,12 +411,11 @@ class ChatViewModel @Inject constructor(
                                 avatar = friend.avatar
                             )
                         }
-                    forwardTargets = (recentTargets.flatMap { listOfNotNull(it.sender, it.receiver) } + followedTargets + friendTargets)
+                    val targets = (recentTargets.flatMap { listOfNotNull(it.sender, it.receiver) } + followedTargets + friendTargets)
                         .filter { it.id.isNotBlank() && it.id != currentUserId && it.id != partnerUserId }
                         .distinctBy { it.id }
+                    if (version == refreshVersion) forwardTargets = targets
                 }
-            } finally {
-                if (version == refreshVersion) isLoading = false
             }
             markConversationReadIfNeeded()
             if (loadError == null || messages.isNotEmpty()) snapshotConversationCache()
