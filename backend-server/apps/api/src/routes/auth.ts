@@ -62,6 +62,8 @@ async function findOrCreateFirebaseUser(input: {
       if (byUid.deletionRequestedAt) { byUid.deletionRequestedAt = undefined; changed = true; }
       if (!byUid.email && normalizedEmail) { byUid.email = normalizedEmail; changed = true; }
       if (!byUid.phone && normalizedPhone) { byUid.phone = normalizedPhone; changed = true; }
+      if ((!byUid.name || byUid.name === "Yugm User") && input.name) { byUid.name = input.name; changed = true; }
+      if (!byUid.avatar && input.avatar) { byUid.avatar = input.avatar; changed = true; }
       if (changed) await byUid.save();
       return { user: byUid, isNewUser: false };
     }
@@ -176,34 +178,60 @@ function publicUser(user: any) {
   };
 }
 
-const authSchema = z.object({ idToken: z.string().min(20), acceptTerms: z.literal(true), provider: z.enum(["google", "facebook", "email"]).optional() });
-const facebookAuthSchema = z.object({ idToken: z.string().min(20), acceptTerms: z.literal(true) });
+const authSchema = z.object({
+  idToken: z.string().min(20),
+  acceptTerms: z.literal(true),
+  provider: z.enum(["google", "facebook", "email"]).optional(),
+  name: z.string().trim().min(1).max(60).optional(),
+  mode: z.enum(["login", "signup"]).optional()
+});
+const facebookAuthSchema = z.object({
+  idToken: z.string().min(20),
+  acceptTerms: z.literal(true),
+  name: z.string().trim().min(1).max(60).optional()
+});
 const phoneAuthSchema = z.object({ idToken: z.string().min(20), acceptTerms: z.literal(true) });
 
 authRouter.post("/google", authLimiter, authIdentifierLimiter, validateBody(authSchema), asyncHandler(async (req, res) => {
-  const { idToken, acceptTerms } = req.body;
+  const { idToken, acceptTerms, name: bodyName, mode } = req.body;
   if (!idToken) throw new HttpError(400, "idToken is required", ErrorCode.VALIDATION);
 
   const payload = await verifyIdToken(idToken);
-  const { sub: firebaseUid, name, email, picture, email_verified } = payload;
+  const { sub: firebaseUid, name: tokenName, email, picture, email_verified } = payload;
   if (!firebaseUid) throw new HttpError(401, "Invalid Firebase identity token", ErrorCode.UNAUTHORIZED);
-  const { user, isNewUser } = await findOrCreateFirebaseUser({ firebaseUid, name, email, avatar: picture, acceptTerms, emailVerified: email_verified });
+
+  const normalizedEmail = email?.trim().toLowerCase();
+  if (mode === "login") {
+    const existing = await User.findOne({
+      $or: [
+        { firebaseUid },
+        ...(normalizedEmail ? [{ email: normalizedEmail }] : [])
+      ]
+    }).select("+email +phone -__v");
+    if (!existing) {
+      throw new HttpError(404, "No account found for this Google email. Please create a password to sign up.", ErrorCode.NOT_FOUND);
+    }
+  }
+
+  const resolvedName = tokenName || bodyName;
+  const { user, isNewUser } = await findOrCreateFirebaseUser({ firebaseUid, name: resolvedName, email, avatar: picture, acceptTerms, emailVerified: email_verified });
   const tokens = await issueSingleDeviceSession(user, req);
   sendOk(res, { ...tokens, user: publicUser(user), isNewUser: isNewUser || !isProfileCompleted(user) });
 }));
 
 authRouter.post("/facebook", authLimiter, authIdentifierLimiter, validateBody(facebookAuthSchema), asyncHandler(async (req, res) => {
-  const { idToken, acceptTerms } = req.body;
+  const { idToken, acceptTerms, name: bodyName } = req.body;
   if (!idToken) throw new HttpError(400, "idToken is required", ErrorCode.VALIDATION);
 
   const payload = await verifyIdToken(idToken);
-  const { sub: firebaseUid, name, email, picture, email_verified } = payload;
+  const { sub: firebaseUid, name: tokenName, email, picture, email_verified } = payload;
   if (!firebaseUid) throw new HttpError(401, "Invalid Firebase identity token", ErrorCode.UNAUTHORIZED);
   const signInProvider = payload.firebase?.sign_in_provider;
   if (signInProvider && signInProvider !== "facebook.com") {
     throw new HttpError(401, "This token was not issued for Facebook sign-in", ErrorCode.UNAUTHORIZED);
   }
-  const { user, isNewUser } = await findOrCreateFirebaseUser({ firebaseUid, name, email, avatar: picture, acceptTerms, emailVerified: email_verified });
+  const resolvedName = tokenName || bodyName;
+  const { user, isNewUser } = await findOrCreateFirebaseUser({ firebaseUid, name: resolvedName, email, avatar: picture, acceptTerms, emailVerified: email_verified });
   const tokens = await issueSingleDeviceSession(user, req);
   sendOk(res, { ...tokens, user: publicUser(user), isNewUser: isNewUser || !isProfileCompleted(user) });
 }));

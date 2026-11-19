@@ -19,8 +19,11 @@ interface VerifiedFirebaseIdToken extends jwt.JwtPayload {
   };
 }
 const firebaseCertsUrl = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
+const googleCertsUrl = "https://www.googleapis.com/oauth2/v1/certs";
 let signingCertCache: { certs: Record<string, string>; expiresAt: number } | undefined;
 let signingCertRequest: Promise<Record<string, string>> | undefined;
+let googleCertCache: { certs: Record<string, string>; expiresAt: number } | undefined;
+let googleCertRequest: Promise<Record<string, string>> | undefined;
 
 async function getFirebaseSigningCerts(): Promise<Record<string, string>> {
   if (signingCertCache && signingCertCache.expiresAt > Date.now()) return signingCertCache.certs;
@@ -46,10 +49,68 @@ async function getFirebaseSigningCerts(): Promise<Record<string, string>> {
   return signingCertRequest;
 }
 
+async function getGoogleSigningCerts(): Promise<Record<string, string>> {
+  if (googleCertCache && googleCertCache.expiresAt > Date.now()) return googleCertCache.certs;
+  if (!googleCertRequest) {
+    googleCertRequest = (async () => {
+      const response = await fetch(googleCertsUrl, { signal: AbortSignal.timeout(10_000) });
+      if (!response.ok) throw Object.assign(new Error("Could not retrieve Google signing certificates"), { status: 503 });
+      const certs = await response.json() as Record<string, unknown>;
+      const validCerts = Object.fromEntries(
+        Object.entries(certs).filter((entry): entry is [string, string] => typeof entry[1] === "string")
+      );
+      if (!Object.keys(validCerts).length) {
+        throw Object.assign(new Error("Google signing certificate response was empty"), { status: 503 });
+      }
+      const maxAge = response.headers.get("cache-control")?.match(/max-age=(\d+)/i);
+      const cacheSeconds = maxAge ? Number(maxAge[1]) : 300;
+      googleCertCache = { certs: validCerts, expiresAt: Date.now() + cacheSeconds * 1000 };
+      return validCerts;
+    })().finally(() => {
+      googleCertRequest = undefined;
+    });
+  }
+  return googleCertRequest;
+}
+
 async function verifyFirebaseIdTokenWithoutServiceAccount(idToken: string): Promise<VerifiedFirebaseIdToken> {
   const decoded = jwt.decode(idToken, { complete: true });
   if (!decoded || typeof decoded.payload === "string" || typeof decoded.header.kid !== "string") {
     throw Object.assign(new Error("Invalid Firebase ID token"), { status: 401 });
+  }
+
+  const iss = typeof decoded.payload === "object" ? decoded.payload.iss : undefined;
+  const isGoogleIssuer = iss === "accounts.google.com" || iss === "https://accounts.google.com";
+
+  if (isGoogleIssuer) {
+    const certs = await getGoogleSigningCerts();
+    const certificate = certs[decoded.header.kid];
+    if (!certificate) throw Object.assign(new Error("Google signing key is unknown"), { status: 401 });
+
+    let payload: string | jwt.JwtPayload;
+    try {
+      payload = jwt.verify(idToken, certificate, {
+        algorithms: ["RS256"],
+        clockTolerance: 60
+      });
+    } catch (err: any) {
+      throw Object.assign(new Error(`Invalid Google ID token: ${err?.message || "verification failed"}`), { status: 401 });
+    }
+    const now = Math.floor(Date.now() / 1000);
+    if (typeof payload === "string" || typeof payload.sub !== "string" || !payload.sub.trim() || payload.sub.length > 128 ||
+        typeof payload.iat !== "number" || payload.iat > (now + 60)) {
+      throw Object.assign(new Error("Invalid Google ID token claims"), { status: 401 });
+    }
+    return {
+      uid: payload.sub,
+      sub: payload.sub,
+      auth_time: typeof payload.auth_time === "number" ? payload.auth_time : (payload.iat || now),
+      email: typeof payload.email === "string" ? payload.email : undefined,
+      name: typeof payload.name === "string" ? payload.name : undefined,
+      picture: typeof payload.picture === "string" ? payload.picture : undefined,
+      email_verified: Boolean(payload.email_verified),
+      firebase: { sign_in_provider: "google.com" }
+    } as VerifiedFirebaseIdToken;
   }
 
   const certs = await getFirebaseSigningCerts();
@@ -61,15 +122,16 @@ async function verifyFirebaseIdTokenWithoutServiceAccount(idToken: string): Prom
     payload = jwt.verify(idToken, certificate, {
       algorithms: ["RS256"],
       audience: env.FCM_PROJECT_ID,
-      issuer: `https://securetoken.google.com/${env.FCM_PROJECT_ID}`
+      issuer: `https://securetoken.google.com/${env.FCM_PROJECT_ID}`,
+      clockTolerance: 60
     });
-  } catch {
-    throw Object.assign(new Error("Invalid Firebase ID token"), { status: 401 });
+  } catch (err: any) {
+    throw Object.assign(new Error(`Invalid Firebase ID token: ${err?.message || "verification failed"}`), { status: 401 });
   }
   const now = Math.floor(Date.now() / 1000);
   if (typeof payload === "string" || typeof payload.sub !== "string" || !payload.sub.trim() || payload.sub.length > 128 ||
-      typeof payload.iat !== "number" || payload.iat > now ||
-      typeof payload.auth_time !== "number" || payload.auth_time > payload.iat) {
+      typeof payload.iat !== "number" || payload.iat > (now + 60) ||
+      typeof payload.auth_time !== "number" || payload.auth_time > (payload.iat + 60)) {
     throw Object.assign(new Error("Invalid Firebase ID token claims"), { status: 401 });
   }
   return { ...payload, uid: payload.sub } as VerifiedFirebaseIdToken;

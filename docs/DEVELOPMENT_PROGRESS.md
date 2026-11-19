@@ -1,5 +1,58 @@
-# Development progress
+﻿# Development progress
 
+## 2026-11-20 -- Prove the staging auth 500 and add rate-limiter regression tests
+
+- **Live evidence:** against `https://yugm-api-staging.sarveshkumar10101.workers.dev`, `POST /api/auth/google`, `/api/auth/facebook`, and `/api/auth/phone` all return HTTP 500 `{"ok":false,"error":{"message":"Cannot read properties of undefined (reading 'replace')","code":"INTERNAL"}}`. `/api/auth/refresh` returns 422, `/api/auth/logout` and `/api/users/me` return 401, and `GET /api/health` is 200 with `db.ready=true`. That split matches exactly the routes whose limiter key comes from `req.ip`.
+- **Local repro of the pre-fix source:** an Express harness that shadows `req.ip` with `undefined` (as the Cloudflare node bridge does) failed on the committed sources with `TypeError: Cannot read properties of undefined (reading 'replace')` at `safeKey` (`rateLimitStore.ts:10`) via `ResilientRedisRateLimitStore.increment`, producing HTTP 500. The same harness returns 200 on the fixed sources, so the crash is isolated rather than inferred.
+- **Hardening:** `safeKey()` now returns `"unknown"` for non-string or empty keys, and `get`/`decrement`/`resetKey` normalize keys the same way as `increment`, so store lookups cannot miss a bucket an increment created.
+- **New regression tests:** `apps/api/src/middleware/rateLimit.test.ts` (auth, identifier and refresh limiters keep serving requests with no `req.ip`) and `apps/api/src/services/rateLimitStore.test.ts` (undefined and over-long keys).
+- **Verification:** `npm --workspace @yugm/api run typecheck` clean; `npm --workspace @yugm/api test` 178/178 pass. Nothing was deployed; the staging Worker still serves the crash, so release sign-in stays broken until a deploy.
+
+## 2026-11-19 -- Diagnose & resolve infinite hang on manual login and Google Credential Manager rejection
+
+- **Root Cause of Infinite Hang in Manual Sign-In:**
+  - The local backend API server was not running on port 4000 (http://192.168.1.2:4000/api), causing OkHttp TCP connect attempts to hang until timeout (up to 60s). Started local backend dev server with MongoDB Atlas, Redis, and Firebase Auth active.
+  - Compounding the delay, AppCheckReadiness.requireReady had an 8-second blocking timeout and YugmApplication.appCheckTokenProvider had a 10-second blocking timeout (18s total before the HTTP request even began). Reduced both timeouts to 2 seconds.
+  - Eliminated redundant getIdToken(true) network call immediately following signInWithEmailAndPassword, reusing the freshly issued token via getIdToken(false).
+  - Tuned OkHttp timeouts in YugmHttpClient (connectTimeout: 10s, eadTimeout: 25s, writeTimeout: 20s).
+- **Google Sign-In / HiddenActivity Immediate Exit:**
+  - Diagnosed from device Logcat (HiddenActivity launched and killed after 2 seconds): Google Identity Credential Manager verifies the client package name and signing keystore SHA-1 against Google Cloud / Firebase Console.
+  - Neither the debug keystore (9B:FC:C9:2B:A9:59:25:73:21:CE:40:EA:82:65:8D:F0:54:10:BE:D2) nor the release keystore (91:E4:CE:9A:22:94:93:6D:DC:91:2F:CF:1B:D4:E7:A3:3A:ED:C7:C5) are registered in google-services.json (only older hashes 69:9e:... and 80:55:... exist).
+  - Updated AuthNavGraph.kt so that when GetCredentialException occurs, it gracefully triggers switchToSignUp with a clear message: "Could not sign in with Google. Create an account with your email and password."
+- **Verification:**
+  - Local backend API running on http://localhost:4000 & http://192.168.1.2:4000 (/api/health 200 OK in 16ms).
+  - :app:compileDebugKotlin, :feature:auth:compileDebugKotlin, :core:api:compileDebugKotlin all BUILD SUCCESSFUL.
+  - Auth unit tests passed (13/13).
+## 2026-11-19 -- Rework Google sign-in fallback to email signup with password & fix release token validation
+
+- **Google Login to Email Signup Transition:**
+  - When a user tries to log in using Google on the "Sign in" tab and no account exists on Yugm, the app no longer fails or throws errors.
+  - The client sends mode: "login" to /api/auth/google. If no account exists with that Firebase UID or email, the backend returns a 404 (ErrorCode.NOT_FOUND).
+  - Android AuthViewModel catches the 404 or missing user, and invokes switchToSignUp(email, name, "No account found for this Google email. Create a password to sign up.").
+  - LoginScreen automatically transitions to "Create account" mode, pre-fills the email address from the Google account, retains accepted terms, and displays the password and confirm password fields ("ask to create password").
+  - Once the user enters and confirms their password and taps "Create account", an account is created with their email, password, and Google display name, directly entering onboarding (ProfileSetupScreen).
+- **Credential Manager New User Selection:**
+  - In AuthNavGraph.kt, updated GetGoogleIdOption.Builder() from setFilterByAuthorizedAccounts(true) to setFilterByAuthorizedAccounts(false) so that new users who have never used the app can pick any Google account on their device instead of encountering a hard NoCredentialException.
+  - Added fallback in NoCredentialException to smoothly direct users to email signup.
+- **Release APK "firebase token invalid" Resolution:**
+  - In irebase.ts, added 60-second clock skew tolerance (clockTolerance: 60) to jwt.verify and added clock leeway (iat <= now + 60, uth_time <= iat + 60) in erifyFirebaseIdTokenWithoutServiceAccount to eliminate clock drift rejections between Google/Firebase and Cloudflare Workers.
+  - Added support for Google public signing certs (https://www.googleapis.com/oauth2/v1/certs) when verifying tokens with Google issuer (ccounts.google.com / https://accounts.google.com), allowing both Google ID tokens and Firebase ID tokens to verify cleanly.
+  - In AuthViewModel.kt, switched token retrieval from cached getIdToken(false) to force-refreshed getIdToken(true) so stale tokens are never transmitted.
+  - Cleaned up auth error mapping in mapAuthError so internal Firebase errors return user-friendly guidance instead of raw technical strings.
+- **Verification:**
+  - Backend API: 173/173 tests pass (
+pm --workspace @yugm/api test); TypeScript typecheck passes clean (
+pm --workspace @yugm/api run typecheck).
+  - Android Unit Tests: :feature:auth:testDebugUnitTest :core:api:testDebugUnitTest passed.
+  - Android Kotlin Compilation: :app:compileDebugKotlin :feature:auth:compileDebugKotlin :core:api:compileDebugKotlin :core:data:compileDebugKotlin all BUILD SUCCESSFUL.
+## 2026-11-19 — Fix auth rate limiter crash in Cloudflare Worker, social name propagation, and release App Check resilience
+
+- **Cloudflare Worker rateLimitStore crash:** Investigated 500 error (Cannot read properties of undefined (reading 'replace')) on /api/auth/* routes in staging. In Cloudflare Workers, eq.ip is undefined. The default key generator in express-rate-limit passed undefined to ateLimitStore.safeKey(), throwing an exception. Added a clientIp() helper reading cf-connecting-ip and x-forwarded-for headers, configured keyGenerator on uthLimiter, and added a fallback guard in safeKey().
+- **Social auth name propagation:** Wired Google and Facebook auth flows to pass Firebase display name through AuthApi / AuthRepository to backend /google and /facebook endpoints. Backend updates existing users if name was blank or default "Yugm User". Android AuthViewModel ensures the session user has the account name for the subsequent profile setup step if needed.
+- **Release build auth / App Check resilience:** Addressed failure in release/production builds where App Check token generation failure or unregistered debug tokens blocked login. Made YugmHttpClient token attachment non-throwing (proceeds without X-Firebase-AppCheck header; server decides enforcement via APP_CHECK_ENFORCE). Updated AppCheckReadiness.requireReady() to log a warning rather than throwing an exception.
+- **Facebook SDK token safety:** Updated FacebookLoginCoordinator to safely fallback from ccessToken?.token to uthenticationToken?.token for newer Facebook SDK Limited Login flows.
+- **Keystores & Key Hashes identified:** Extracted SHA1 and Base64 hashes for debug (~/.android/debug.keystore), release (D:\Keystores\yugm-release.jks), and upload (ndroid-client/app/release/yugm-upload.jks) to verify Facebook Developer dashboard configuration.
+- **Verification:** Backend tests: 173/173 passed, typecheck clean. Android: :feature:auth:testDebugUnitTest :core:api:testDebugUnitTest passed; :feature:auth:compileDebugKotlin :core:api:compileDebugKotlin :core:data:compileDebugKotlin passed (BUILD SUCCESSFUL). No staging deploy or physical device testing run.
 ## 2026-11-19 — Release builds no longer run lint
 
 - Set `lint { checkReleaseBuilds = false }` in `android-client/app/build.gradle.kts`, so AGP no longer attaches the release vital lint pass to `:app:assembleRelease`.

@@ -4,13 +4,25 @@ import type { Request } from "express";
 import type { AuthRequest } from "./auth.js";
 import { ResilientRedisRateLimitStore } from "../services/rateLimitStore.js";
 
+function clientIp(req: Request): string {
+  const cfIp = req.headers["cf-connecting-ip"];
+  if (typeof cfIp === "string" && cfIp.trim()) return cfIp.trim();
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.trim()) {
+    const first = forwarded.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  return req.ip ?? "unknown";
+}
+
 function userOrIpKey(req: Request) {
-  return (req as AuthRequest).user?.id ?? req.ip ?? "unknown";
+  return (req as AuthRequest).user?.id ?? clientIp(req);
 }
 
 export const authLimiter = rateLimit({
   windowMs: 60_000,
   max: 20,
+  keyGenerator: clientIp,
   store: new ResilientRedisRateLimitStore("auth"),
   standardHeaders: true,
   legacyHeaders: false
@@ -23,7 +35,7 @@ export const authIdentifierLimiter = rateLimit({
     const value = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase()
       : typeof req.body?.phone === "string" ? req.body.phone.replace(/[\s()-]/g, "")
         : "";
-    return value ? `identifier:${crypto.createHash("sha256").update(value).digest("hex")}` : `ip:${req.ip ?? "unknown"}`;
+    return value ? `identifier:${crypto.createHash("sha256").update(value).digest("hex")}` : `ip:${clientIp(req)}`;
   },
   store: new ResilientRedisRateLimitStore("auth-identifier"),
   standardHeaders: true,
@@ -35,8 +47,9 @@ export const refreshLimiter = rateLimit({
   max: 30,
   keyGenerator: (req) => {
     const token = typeof req.body?.refreshToken === "string" ? req.body.refreshToken : "";
-    const identity = token ? crypto.createHash("sha256").update(token).digest("hex").slice(0, 20) : (req.ip ?? "unknown");
-    return `refresh:${req.ip ?? "unknown"}:${identity}`;
+    const ip = clientIp(req);
+    const identity = token ? crypto.createHash("sha256").update(token).digest("hex").slice(0, 20) : ip;
+    return `refresh:${ip}:${identity}`;
   },
   store: new ResilientRedisRateLimitStore("auth-refresh"),
   standardHeaders: true,

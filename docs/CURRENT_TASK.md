@@ -1,4 +1,21 @@
-# Current task
+﻿# Current task
+
+## YUGM-AUTH-RATELIMIT-002 -- Close the staging auth 500 that blocks release sign-in
+
+- **Problem:** Release/device sign-in and sign-up failed while the base URL and connectivity were correct. Every credential exchange (email, Google, Facebook, phone) funnels through `POST /api/auth/google|facebook|phone`, and the deployed staging Worker answers all of them with HTTP 500 `{"ok":false,"error":{"message":"Cannot read properties of undefined (reading 'replace')","code":"INTERNAL"}}` before schema validation runs.
+- **Root cause (confirmed, not inferred):** the Cloudflare node bridge does not populate `req.ip`, so `express-rate-limit`'s default `keyGenerator` returns `undefined`; `ResilientRedisRateLimitStore.increment` passed it to `safeKey()`, which called `.replace` on `undefined`. Shadowing `req.ip` with `undefined` in a local Express harness reproduces the exact staging message and HTTP 500 on the pre-fix source, and returns 200 on the fixed source.
+- **Fix:** a `clientIp()` helper (`cf-connecting-ip` -> `x-forwarded-for` -> `req.ip` -> `"unknown"`) is now the key generator for the auth, identifier, refresh, and per-user limiters, and `safeKey()` returns `"unknown"` for non-string/empty keys instead of throwing. Store `get`/`decrement`/`resetKey` normalize keys the same way as `increment`.
+- **Verification:** `npm --workspace @yugm/api run typecheck` clean; `npm --workspace @yugm/api test` 178/178 pass, including the new `src/middleware/rateLimit.test.ts` and `src/services/rateLimitStore.test.ts` regression tests.
+- **Status:** Source fix and regression tests complete. The deployed staging Worker still returns HTTP 500 on `/api/auth/google|facebook|phone` (checked 2026-11-20), so a Worker deploy is required before release sign-in works. Not deployed here: no deployment authorization was given. Release App Check is client-side best-effort (`AppCheckReadiness` logs and continues; `YugmHttpClient` attaches `X-Firebase-AppCheck` only when a token exists), and the staging Worker does not enforce App Check, so the 500 is the whole blocker.
+
+## YUGM-AUTH-PROD-001 -- Fix login/signup flow in release builds and social-auth reliability
+
+- **Scope:** Auth flow only: Google sign-in fallback to email signup with password, resolve 18s+ blocking AppCheck and unstarted backend hang, eliminate redundant token network roundtrips, and document Google Cloud SHA-1 console registration.
+- **Contract:**
+  - Manual sign-in and Google sign-in do not block indefinitely. AppCheck timeouts reduced to 2s; OkHttp timeouts tuned.
+  - Local backend API running on http://192.168.1.2:4000/api with live MongoDB, Redis, and Firebase Auth.
+  - When Google sign-in fails or finds no account, the flow smoothly transitions to Create Account with email prefilled, prompt to create password, and onboarding navigation upon submit.
+- **Status:** Complete & verified. Backend tests 173/173, Android unit tests pass, Kotlin compilation passed.
 
 ## YUGM-AVATAR-R2-001 — Store and visualize profile avatars in Cloudflare R2
 

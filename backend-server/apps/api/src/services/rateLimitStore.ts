@@ -6,7 +6,8 @@ type LocalEntry = {
   resetTime: Date;
 };
 
-function safeKey(value: string) {
+function safeKey(value?: string) {
+  if (typeof value !== "string" || !value) return "unknown";
   return value.replace(/[^a-zA-Z0-9:_-]/g, "_").slice(0, 180);
 }
 
@@ -25,9 +26,9 @@ export class ResilientRedisRateLimitStore implements Store {
   }
 
   async get(key: string): Promise<ClientRateLimitInfo | undefined> {
-    const local = this.localFallback.get(key);
+    const local = this.localFallback.get(safeKey(key));
     if (local && local.resetTime > new Date()) return local;
-    if (local) this.localFallback.delete(key);
+    if (local) this.localFallback.delete(safeKey(key));
     return undefined;
   }
 
@@ -37,16 +38,16 @@ export class ResilientRedisRateLimitStore implements Store {
     if (redisResult && redis?.status === "ready") {
       return { totalHits: redisResult.totalHits, resetTime: redisResult.resetTime };
     }
-    return this.incrementLocal(key);
+    return this.incrementLocal(safeKey(key));
   }
 
   async decrement(key: string) {
-    const local = this.localFallback.get(key);
+    const local = this.localFallback.get(safeKey(key));
     if (local) local.totalHits = Math.max(0, local.totalHits - 1);
   }
 
   async resetKey(key: string) {
-    this.localFallback.delete(key);
+    this.localFallback.delete(safeKey(key));
     if (redis?.status === "ready") {
       await redis.del(`rate:${this.prefix}${safeKey(key)}`).catch(() => {});
     }
