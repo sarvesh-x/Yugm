@@ -91,6 +91,21 @@ data class Session(
     val expiresIn: Long = 2700
 )
 
+data class AuthProfileUpdate(
+    val name: String,
+    val username: String,
+    val bio: String,
+    val city: String,
+    val interests: List<String>,
+    val languages: List<String>,
+    val gender: String?,
+    val age: Int,
+    val lookingFor: String?,
+    val avatar: String?,
+    val acceptTerms: Boolean,
+    val vibeLine: String?,
+)
+
 data class RefreshedSession(val accessToken: String, val refreshToken: String, val sessionId: String, val expiresIn: Long)
 
 data class MediaSession(

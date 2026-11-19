@@ -54,6 +54,7 @@ kotlin {
 }
 
 dependencies {
+    testImplementation(libs.junit)
     implementation(project(":core:model"))
     implementation(project(":core:api"))
     implementation(project(":core:ui"))

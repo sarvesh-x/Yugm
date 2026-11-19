@@ -11,6 +11,8 @@ import { asyncHandler, sendOk, HttpError, ErrorCode } from "../utils/http.js";
 import { issueSession, revokeAllForUser, revokeSession, rotateRefresh } from "../services/tokens.js";
 import { z } from "zod";
 import { disconnectOtherUserSockets } from "../services/socket.js";
+import { isProfileCompleted } from "../services/profileCompletion.js";
+import { hasFirebaseIdentityConflict } from "../services/authSessionRules.js";
 
 export const authRouter = Router();
 
@@ -79,7 +81,7 @@ async function findOrCreateFirebaseUser(input: {
       if (byEmail && !input.emailVerified) {
         throw new HttpError(409, "Verify this email address before linking it to an existing account.", ErrorCode.CONFLICT);
       }
-      if (existingIdentity.firebaseUid && existingIdentity.firebaseUid !== input.firebaseUid) {
+      if (hasFirebaseIdentityConflict(existingIdentity.firebaseUid, input.firebaseUid)) {
         throw new HttpError(409, "This account is already linked to another sign-in method. Contact support to recover the account.", ErrorCode.CONFLICT);
       }
       if (input.acceptTerms && !existingIdentity.termsAcceptedAt) existingIdentity.termsAcceptedAt = new Date();
@@ -132,10 +134,6 @@ async function issueSingleDeviceSession(user: any, req: AuthRequest) {
   const tokens = await issueSession(user, req);
   await disconnectOtherUserSockets(user.id, tokens.sessionId);
   return tokens;
-}
-
-function isProfileCompleted(user: any): boolean {
-  return Boolean(user.profileCompletedAt || (user.bio && user.city && user.interests?.length));
 }
 
 function publicUser(user: any) {

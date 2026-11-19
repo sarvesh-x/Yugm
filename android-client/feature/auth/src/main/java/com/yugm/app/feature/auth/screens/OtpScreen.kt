@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.sp
 import com.yugm.app.core.ui.components.AuthShell
 import com.yugm.app.core.ui.components.PrimaryButton
 import com.yugm.app.core.ui.components.YugmTextField
-import com.yugm.app.core.ui.theme.DangerRed
+import com.yugm.app.core.ui.theme.LocalYugmColors
 
 @Composable
 fun OtpScreen(
@@ -28,11 +28,13 @@ fun OtpScreen(
     onResend: () -> Unit = {}
 ) {
     var otp by rememberSaveable { mutableStateOf("") }
+    val authColors = LocalYugmColors.current
     AuthShell(title = "Verify OTP", subtitle = "Code sent to $identifier.") {
-        YugmTextField(value = otp, onValueChange = { otp = it }, label = "OTP", keyboardType = KeyboardType.Number)
+        YugmTextField(value = otp, onValueChange = { otp = it.filter(Char::isDigit).take(6) }, label = "OTP", keyboardType = KeyboardType.Number,
+            accentColor = authColors.accent, borderColor = androidx.compose.material3.MaterialTheme.colorScheme.outline)
         if (error != null) {
             Spacer(Modifier.height(8.dp))
-            Text(error, color = DangerRed, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Text(error, color = authColors.danger, fontSize = 13.sp, fontWeight = FontWeight.Medium)
         }
         Spacer(Modifier.height(18.dp))
         PrimaryButton(

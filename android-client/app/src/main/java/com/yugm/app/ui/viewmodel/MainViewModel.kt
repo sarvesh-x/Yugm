@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yugm.app.core.data.SessionManager
 import com.yugm.app.core.api.IYugmApi
+import com.yugm.app.core.api.ApiHttpException
 import com.yugm.app.core.api.SocketManager
 import com.yugm.app.core.api.YugmSocket
 import com.yugm.app.core.api.YugmMediaRoom
@@ -20,6 +21,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
@@ -27,6 +29,9 @@ class MainViewModel @Inject constructor(
     private val yugmApi: IYugmApi,
     private val socketManager: SocketManager
 ) : ViewModel() {
+    private var startupSessionCheckStarted = false
+    var startupSessionCheckComplete by mutableStateOf(sessionManager.authToken.isBlank())
+        private set
 
     var authToken by mutableStateOf(sessionManager.authToken)
         private set
@@ -60,13 +65,50 @@ class MainViewModel @Inject constructor(
                 }
             }
         }
-        if (sessionManager.authToken.isNotBlank()) {
-            socketManager.connect(sessionManager.authToken)
-        }
     }
 
     fun dismissInAppNotification() {
         inAppNotification = null
+    }
+
+    /** Validate restored auth/profile data before the splash chooses an authenticated route. */
+    suspend fun validateStartupSession() {
+        val token = sessionManager.authToken
+        if (token.isBlank() || startupSessionCheckComplete) {
+            startupSessionCheckComplete = true
+            return
+        }
+        if (startupSessionCheckStarted) return
+        startupSessionCheckStarted = true
+        try {
+            withTimeout(10_000L) {
+                val user = withContext(Dispatchers.IO) { yugmApi.authMe(token) }
+                if (sessionManager.authToken == token) {
+                    // The server response is authoritative for identity as well as
+                    // profile completion; repair older cached sessions with no ID.
+                    currentUserId = user.id
+                    sessionManager.userId = user.id
+                    validateAndUpdate(user, registerPush = false)
+                }
+            }
+        } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
+            // The splash remains bounded and falls back to the saved session.
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            // Network/App Check failures do not prove the account is revoked. A
+            // definitive unauthorized response clears the session; transient
+            // failures continue from the locally restored session snapshot.
+            if (failure is ApiHttpException && failure.statusCode in 401..403 &&
+                !failure.message.orEmpty().contains("app verification", ignoreCase = true) &&
+                sessionManager.authToken == token
+            ) {
+                logout(revokeServerSession = false)
+            }
+        } finally {
+            startupSessionCheckComplete = true
+            sessionManager.authToken.takeIf(String::isNotBlank)?.let(socketManager::connect)
+        }
     }
 
     fun updateSession(token: String, userId: String, name: String, username: String, balance: Int, refreshToken: String, sessionId: String, expiresIn: Long, emailVerified: Boolean, profileCompleted: Boolean) {

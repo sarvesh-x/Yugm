@@ -31,7 +31,7 @@ object YugmHttpClient {
             field = value
             if (restored) AppSync.invalidate(SyncTopic.ALL)
         }
-    var onUnauthorized: ((rejectedToken: String) -> Unit)? = null
+    var onUnauthorized: ((rejectedToken: String, reason: String) -> Unit)? = null
     /** Supplies the persisted session token when a navigation callback captured an empty token. */
     var authTokenProvider: (() -> String)? = null
     var refreshAccessToken: (suspend (rejectedToken: String) -> String?)? = null
@@ -166,7 +166,9 @@ object YugmHttpClient {
                     "DELETE" -> builder.delete()
                     else -> builder.get()
                 }
-                client.newCall(builder.build()).execute().use { response ->
+                client.newCall(builder.build()).apply {
+                    if (path == "/auth/me") timeout().timeout(8, TimeUnit.SECONDS)
+                }.execute().use { response ->
                     val raw = response.body?.string()
                     if (raw.isNullOrBlank()) throw ApiProtocolException("Empty response body")
                     if (!response.isSuccessful) {
@@ -204,15 +206,18 @@ throw ApiHttpException(response.code, errorContext)
             } catch (error: ApiHttpException) {
                 checkAccount()
                 val mayRefresh = !path.startsWith("/auth/") || path == "/auth/me"
-                if (error.statusCode == 401 && requestAuth != null && allowRefresh && mayRefresh) {
+                val isAppCheckFailure = error.message.orEmpty().contains("app verification", ignoreCase = true)
+                if (error.statusCode == 401 && requestAuth != null && allowRefresh && mayRefresh && !isAppCheckFailure) {
                     // A network failure during refresh is not evidence that the session
                     // is invalid. Let the request fail offline while retaining cached auth.
+                    var unauthorizedReason = error.message ?: "Your session is no longer valid"
                     val renewed = try {
                         refreshAccessToken?.invoke(requestAuth)
                     } catch (refreshError: IOException) {
                         throw refreshError
                     } catch (refreshError: ApiHttpException) {
                         if (refreshError.statusCode == 401 || refreshError.statusCode == 403) {
+                            unauthorizedReason = refreshError.message ?: unauthorizedReason
                             null
                         } else {
                             throw refreshError
@@ -226,11 +231,11 @@ throw ApiHttpException(response.code, errorContext)
                         return@withContext request(method, path, renewed, body, allowRefresh = false)
                     }
                     onUnauthorized?.let { callback ->
-                        withContext(Dispatchers.Main) { callback(requestAuth) }
+                        withContext(Dispatchers.Main) { callback(requestAuth, unauthorizedReason) }
                     }
-                } else if (error.statusCode == 401 && requestAuth != null && mayRefresh) {
+                } else if (error.statusCode == 401 && requestAuth != null && mayRefresh && !isAppCheckFailure) {
                     onUnauthorized?.let { callback ->
-                        withContext(Dispatchers.Main) { callback(requestAuth) }
+                        withContext(Dispatchers.Main) { callback(requestAuth, error.message ?: "Your session is no longer valid") }
                     }
                 }
                 throw error
@@ -320,7 +325,7 @@ throw ApiHttpException(response.code, errorContext)
                 if (!renewed.isNullOrBlank() && renewed != requestToken) {
                     return@withContext executeUpload(renewed)
                 } else {
-                    withContext(Dispatchers.Main) { onUnauthorized?.invoke(requestToken) }
+                    withContext(Dispatchers.Main) { onUnauthorized?.invoke(requestToken, error.message ?: "Your session is no longer valid") }
                     throw error
                 }
             } catch (error: IOException) {

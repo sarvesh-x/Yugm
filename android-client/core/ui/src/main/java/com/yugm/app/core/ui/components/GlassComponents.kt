@@ -365,7 +365,11 @@ fun GlassTextField(
     singleLine: Boolean = true,
     keyboardOptions: androidx.compose.foundation.text.KeyboardOptions = androidx.compose.foundation.text.KeyboardOptions.Default,
     visualTransformation: androidx.compose.ui.text.input.VisualTransformation = androidx.compose.ui.text.input.VisualTransformation.None,
+    textColor: Color = Color.White,
+    accentColor: Color = PrimaryPink,
+    containerColor: Color? = null,
 ) {
+    val fieldContainerColor = containerColor ?: Surface.copy(alpha = 0.5f)
     val shape = RoundedCornerShape(16.dp)
     androidx.compose.material3.OutlinedTextField(
         value = value,
@@ -379,15 +383,15 @@ fun GlassTextField(
             .fillMaxWidth()
             .clip(shape),
         colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-            focusedTextColor = Color.White,
-            unfocusedTextColor = Color.White,
-            focusedLabelColor = PrimaryPink,
+            focusedTextColor = textColor,
+            unfocusedTextColor = textColor,
+            focusedLabelColor = accentColor,
             unfocusedLabelColor = TextMuted,
-            focusedBorderColor = PrimaryPink,
+            focusedBorderColor = accentColor,
             unfocusedBorderColor = Line,
-            cursorColor = PrimaryPink,
-            focusedContainerColor = Surface.copy(alpha = 0.5f),
-            unfocusedContainerColor = Surface.copy(alpha = 0.3f),
+            cursorColor = accentColor,
+            focusedContainerColor = fieldContainerColor,
+            unfocusedContainerColor = fieldContainerColor,
         ),
         shape = shape,
         textStyle = androidx.compose.ui.text.TextStyle(fontSize = 15.sp)

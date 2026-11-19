@@ -10,10 +10,10 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import com.yugm.app.core.model.Session
-import com.yugm.app.core.model.YugmUser
 import com.yugm.app.core.navigation.Screen
 import com.yugm.app.feature.auth.screens.*
 import com.yugm.app.feature.auth.viewmodel.AuthViewModel
+import com.yugm.app.feature.auth.viewmodel.AuthProvider
 import com.yugm.app.feature.auth.rememberFacebookSignIn
 import kotlinx.coroutines.launch
 import androidx.credentials.CredentialManager
@@ -23,29 +23,24 @@ import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
 import kotlinx.coroutines.CancellationException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 
 fun NavGraphBuilder.authNavGraph(
     navController: NavHostController,
-    isLoggedIn: Boolean,
-    isProfileCompleted: Boolean,
     profileName: String,
     profileUsername: String,
     authTokenProvider: () -> String,
     googleWebClientId: String,
+    validateStartupSession: suspend () -> Unit,
+    currentStartupDestination: () -> String,
     navigateAfterLogin: (Session) -> Unit,
     onProfileComplete: (Session) -> Unit,
 ) {
     composable(Screen.Splash.route) {
         SplashScreen {
-            // Use the persisted session to render the app immediately. API requests
-            // refresh an expired access token in the background; making /auth/me a
-            // prerequisite here added a network round trip to every cold launch.
-            val start = when {
-                !isLoggedIn -> Screen.Onboarding.route
-                !isProfileCompleted -> Screen.ProfileSetup.route
-                else -> Screen.MainTabs.createRoute("discover")
-            }
+            validateStartupSession()
+            val start = currentStartupDestination()
             navController.navigate(start) {
                 popUpTo(Screen.Splash.route) { inclusive = true }
             }
@@ -54,7 +49,12 @@ fun NavGraphBuilder.authNavGraph(
 
     composable(Screen.Onboarding.route) {
         OnboardingScreen(
-            onStart = { navController.navigate(Screen.Login.route) }
+            onStart = {
+                navController.navigate(Screen.Login.route) {
+                    popUpTo(Screen.Onboarding.route) { inclusive = true }
+                    launchSingleTop = true
+                }
+            }
         )
     }
 
@@ -64,51 +64,56 @@ fun NavGraphBuilder.authNavGraph(
         val scope = rememberCoroutineScope()
         val facebookSignIn = rememberFacebookSignIn(
             onToken = { token, acceptTerms ->
-                authViewModel.setFacebookCredentialBusy(true)
                 authViewModel.facebookAuth(token, acceptTerms)
             },
             onError = { message ->
-                authViewModel.setFacebookCredentialBusy(false)
-                authViewModel.reportError(message)
+                authViewModel.cancelCredentialAuth(AuthProvider.FACEBOOK, IllegalStateException(message))
             },
-            onFinished = { authViewModel.setFacebookCredentialBusy(false) },
+            onFinished = { authViewModel.cancelCredentialAuth(AuthProvider.FACEBOOK) },
         )
 
         LoginScreen(
             onGoogleSignIn = { acceptTerms ->
-                if (!acceptTerms || authViewModel.googleCredentialLoading) return@LoginScreen
-                authViewModel.setGoogleCredentialBusy(true)
+                if (!acceptTerms || !authViewModel.beginCredentialAuth(AuthProvider.GOOGLE)) return@LoginScreen
                 scope.launch {
                     try {
-                        val googleOption = GetGoogleIdOption.Builder()
-                            .setServerClientId(googleWebClientId)
-                            .setFilterByAuthorizedAccounts(false)
-                            .setAutoSelectEnabled(false)
-                            .build()
-                        val request = GetCredentialRequest.Builder().addCredentialOption(googleOption).build()
-                        val result = CredentialManager.create(context).getCredential(context, request)
+                        val result = try {
+                            val googleOption = GetGoogleIdOption.Builder()
+                                .setServerClientId(googleWebClientId)
+                                .setFilterByAuthorizedAccounts(true)
+                                .setAutoSelectEnabled(false)
+                                .build()
+                            val request = GetCredentialRequest.Builder().addCredentialOption(googleOption).build()
+                            CredentialManager.create(context).getCredential(context, request)
+                        } catch (_: androidx.credentials.exceptions.NoCredentialException) {
+                            val signInOption = GetSignInWithGoogleOption.Builder(googleWebClientId).build()
+                            val request = GetCredentialRequest.Builder().addCredentialOption(signInOption).build()
+                            CredentialManager.create(context).getCredential(context, request)
+                        } catch (_: GetCredentialException) {
+                            val signInOption = GetSignInWithGoogleOption.Builder(googleWebClientId).build()
+                            val request = GetCredentialRequest.Builder().addCredentialOption(signInOption).build()
+                            CredentialManager.create(context).getCredential(context, request)
+                        }
+
                         val credential = result.credential
                         val googleCredential = if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                             GoogleIdTokenCredential.createFrom(credential.data)
                         } else throw IllegalStateException("Google did not return an ID token")
                         authViewModel.googleAuth(googleCredential.idToken, acceptTerms)
                     } catch (_: GetCredentialCancellationException) {
-                        authViewModel.setGoogleCredentialBusy(false)
+                        authViewModel.cancelCredentialAuth(AuthProvider.GOOGLE)
                     } catch (error: GetCredentialException) {
-                        authViewModel.reportError("Google sign-in is unavailable right now. Try email or phone.")
-                        authViewModel.setGoogleCredentialBusy(false)
+                        authViewModel.cancelCredentialAuth(AuthProvider.GOOGLE, error)
                     } catch (cancelled: CancellationException) {
-                        authViewModel.setGoogleCredentialBusy(false)
+                        authViewModel.cancelCredentialAuth(AuthProvider.GOOGLE)
                         throw cancelled
                     } catch (error: Exception) {
-                        authViewModel.setGoogleCredentialBusy(false)
-                        authViewModel.reportError(error.message?.takeIf(String::isNotBlank) ?: "Google sign-in failed. Please try again.")
+                        authViewModel.cancelCredentialAuth(AuthProvider.GOOGLE, error)
                     }
                 }
             },
             onFacebookSignIn = { acceptTerms ->
-                authViewModel.setFacebookCredentialBusy(true)
-                facebookSignIn(acceptTerms)
+                if (acceptTerms && authViewModel.beginCredentialAuth(AuthProvider.FACEBOOK)) facebookSignIn(acceptTerms)
             },
             onPhoneSignIn = {
                 navController.navigate(Screen.PhoneLogin.route)
@@ -137,6 +142,7 @@ fun NavGraphBuilder.authNavGraph(
     }
 
     composable(Screen.ProfileSetup.route) {
+        val profileAuthViewModel: AuthViewModel = hiltViewModel()
         val scope = rememberCoroutineScope()
         val context = androidx.compose.ui.platform.LocalContext.current
         CreateProfileScreen(
@@ -149,7 +155,7 @@ fun NavGraphBuilder.authNavGraph(
                             ?: throw IllegalStateException("Your sign-in session expired. Please sign in again.")
                         val uploadedUrl = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                             val (mime, bytes) = readImageUpload(context, uri)
-                            com.yugm.app.core.api.YugmApi.uploadAvatar(sessionToken, bytes, mime)
+                            profileAuthViewModel.uploadAvatar(sessionToken, bytes, mime)
                         }
                         uploadedUrl
                     }.onSuccess { url -> onResult(url, null) }
@@ -164,21 +170,27 @@ fun NavGraphBuilder.authNavGraph(
                         // can outlive the login composition that originally registered it.
                         sessionToken = authTokenProvider().takeIf(String::isNotBlank)
                             ?: throw IllegalStateException("Your sign-in session expired. Please sign in again.")
-                        com.yugm.app.core.api.YugmApi.updateProfile(
+                        val updatedUser = profileAuthViewModel.updateProfile(
                             token = sessionToken,
-                            name = profileData.name,
-                            username = profileData.username,
-                            bio = profileData.bio,
-                            city = profileData.city,
-                            interests = profileData.interests,
-                            languages = profileData.languages,
-                            gender = profileData.gender,
-                            age = profileData.age,
-                            lookingFor = profileData.lookingFor,
-                            avatar = profileData.avatar.ifBlank { null },
-                            acceptTerms = profileData.acceptTerms,
-                            vibeLine = profileData.vibeLine.ifBlank { null }
+                            update = com.yugm.app.core.model.AuthProfileUpdate(
+                                name = profileData.name,
+                                username = profileData.username,
+                                bio = profileData.bio,
+                                city = profileData.city,
+                                interests = profileData.interests,
+                                languages = profileData.languages,
+                                gender = profileData.gender.ifBlank { null },
+                                age = profileData.age,
+                                lookingFor = profileData.lookingFor.ifBlank { null },
+                                avatar = profileData.avatar.ifBlank { null },
+                                acceptTerms = profileData.acceptTerms,
+                                vibeLine = profileData.vibeLine.ifBlank { null },
+                            )
                         )
+                        if (!updatedUser.profileCompleted) {
+                            throw IllegalStateException("Your profile was saved, but Yugm still needs the required profile details. Review your name, username, bio, city, and interests.")
+                        }
+                        updatedUser
                     }.onSuccess { user ->
                         onResult(null)
                         onProfileComplete(Session(token = sessionToken, user = user))

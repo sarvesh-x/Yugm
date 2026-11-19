@@ -83,7 +83,6 @@ fun rememberFacebookSignIn(
                                     LoginManager.getInstance().unregisterCallback(callbackManager)
                                     val token = result.accessToken.token
                                     if (token.isBlank()) {
-                                        currentOnFinished()
                                         currentOnError("Facebook did not return an access token. Try again.")
                                     } else {
                                         currentOnToken(token, acceptTerms)
@@ -101,7 +100,6 @@ fun rememberFacebookSignIn(
                                     handled.value = true
                                     inFlight.value = false
                                     LoginManager.getInstance().unregisterCallback(callbackManager)
-                                    currentOnFinished()
                                     currentOnError(
                                         error.localizedMessage
                                             ?: "Facebook sign-in failed. Please try again."
@@ -115,7 +113,6 @@ fun rememberFacebookSignIn(
                         handled.value = true
                         inFlight.value = false
                         LoginManager.getInstance().unregisterCallback(callbackManager)
-                        currentOnFinished()
                         currentOnError(
                             error.localizedMessage
                                 ?: "Facebook sign-in could not start. Check the Facebook app configuration."

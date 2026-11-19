@@ -92,8 +92,14 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
         FirebaseApp.initializeApp(this)
         YugmHttpClient.authTokenProvider = { sessionManager.authToken }
         enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+            statusBarStyle = SystemBarStyle.auto(
+                lightScrim = android.graphics.Color.TRANSPARENT,
+                darkScrim = android.graphics.Color.TRANSPARENT
+            ),
+            navigationBarStyle = SystemBarStyle.auto(
+                lightScrim = android.graphics.Color.TRANSPARENT,
+                darkScrim = android.graphics.Color.TRANSPARENT
+            )
         )
 
         setContent {
@@ -114,7 +120,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                 val mainViewModel: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
                 com.yugm.app.core.ui.components.AutomaticSyncEffect(mainViewModel.currentUserId, mainViewModel.authToken,
                     topics = setOf(com.yugm.app.core.api.SyncTopic.PROFILE, com.yugm.app.core.api.SyncTopic.WALLET, com.yugm.app.core.api.SyncTopic.TASKS),
-                    enabled = mainViewModel.authToken.isNotBlank()) {
+                    enabled = mainViewModel.authToken.isNotBlank() && mainViewModel.startupSessionCheckComplete) {
                     val accountId = mainViewModel.currentUserId
                     runCatching { YugmApi.authMe(sessionManager.authToken) }.onSuccess { user ->
                         if (accountId == mainViewModel.currentUserId && user.id == accountId) mainViewModel.validateAndUpdate(user, registerPush = false)
@@ -131,8 +137,8 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                 val context = this@MainActivity
                 var notificationPromptAttempted by remember { mutableStateOf(false) }
                 val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
-                LaunchedEffect(mainViewModel.authToken) {
-                    if (Build.VERSION.SDK_INT >= 33 && mainViewModel.authToken.isNotBlank() &&
+                LaunchedEffect(mainViewModel.authToken, mainViewModel.startupSessionCheckComplete) {
+                    if (Build.VERSION.SDK_INT >= 33 && mainViewModel.authToken.isNotBlank() && mainViewModel.startupSessionCheckComplete &&
                         !notificationPromptAttempted &&
                         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
                     ) {
@@ -142,8 +148,8 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                 }
 
                 val pushRoute = pendingPushRoute.value
-                LaunchedEffect(pushRoute, mainViewModel.authToken, mainViewModel.profileCompleted) {
-                    if (!pushRoute.isNullOrBlank() && mainViewModel.authToken.isNotBlank() && mainViewModel.profileCompleted) {
+                LaunchedEffect(pushRoute, mainViewModel.authToken, mainViewModel.profileCompleted, mainViewModel.startupSessionCheckComplete) {
+                    if (!pushRoute.isNullOrBlank() && mainViewModel.authToken.isNotBlank() && mainViewModel.startupSessionCheckComplete && mainViewModel.profileCompleted) {
                         navController.navigate(pushRoute)
                         pendingPushRoute.value = null
                     }
@@ -172,7 +178,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                             }
                         }
                     }
-                    YugmHttpClient.onUnauthorized = { rejectedToken ->
+                    YugmHttpClient.onUnauthorized = { rejectedToken, reason ->
                         // Several requests may fail together. Only clear the session if
                         // the rejected token is still the current one, and navigate once.
                         val rejectedCurrentSession = rejectedToken == sessionManager.authToken && rejectedToken == mainViewModel.authToken
@@ -182,8 +188,14 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                         val sessionAlreadyCleared = sessionManager.authToken.isBlank() && mainViewModel.authToken.isBlank()
                         val route = navController.currentDestination?.route
                         if ((rejectedCurrentSession || sessionAlreadyCleared) && route != Screen.Login.route && route != Screen.Splash.route) {
+                                val message = if (reason.contains("another device", ignoreCase = true)) {
+                                    "This account was signed in on another device. Sign in again to continue."
+                                } else {
+                                    "Your session expired or was revoked. Sign in again to continue."
+                                }
+                                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                                 navController.navigate(Screen.Login.route) {
-                                    popUpTo(0) { inclusive = true }
+                                    popUpTo(navController.graph.id) { inclusive = true }
                                     launchSingleTop = true
                                 }
                         }

@@ -59,6 +59,8 @@ fun LoginScreen(
     facebookLoading: Boolean = false
 ) {
     val context = LocalContext.current
+    val authColors = LocalYugmColors.current
+    val authAccent = authColors.accent
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var confirmPassword by rememberSaveable { mutableStateOf("") }
@@ -78,14 +80,14 @@ fun LoginScreen(
         onClearError()
     }
 
-    Box(Modifier.fillMaxSize()) {
-        AuroraBackground()
+    Box(Modifier.fillMaxSize().background(Background)) {
+        AuroraBackground(colors = if (authColors.isDark) auroraGradient else listOf(authColors.secondary, authColors.primary, authColors.accent))
         Column(
             Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).imePadding().padding(horizontal = 22.dp, vertical = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text("Yugm", color = Color.White, fontSize = 44.sp, fontWeight = FontWeight.Black, letterSpacing = (-1).sp)
+            Text("Yugm", color = TextPrimary, fontSize = 44.sp, fontWeight = FontWeight.Black, letterSpacing = (-1).sp)
             Text("Find your people. Share your vibe.", color = TextMuted, fontSize = 14.sp, textAlign = TextAlign.Center)
             Spacer(Modifier.height(22.dp))
             GlassCard(
@@ -115,6 +117,9 @@ fun LoginScreen(
                         label = "Email address",
                         placeholder = "name@example.com",
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Email, autoCorrectEnabled = false),
+                        textColor = TextPrimary,
+                        accentColor = authAccent,
+                        containerColor = SurfaceElevated,
                         modifier = Modifier.semantics { contentDescription = "Email address"; contentType = ContentType.EmailAddress }
                     )
                     if (email.isNotBlank() && !emailValid) FieldHint("Enter a valid email address.")
@@ -128,13 +133,16 @@ fun LoginScreen(
                                 placeholder = if (createAccount) "8+ characters, letters and numbers" else "Your password",
                                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
                                 visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                textColor = TextPrimary,
+                                accentColor = authAccent,
+                                containerColor = SurfaceElevated,
                                 modifier = Modifier.semantics {
                                     contentDescription = if (createAccount) "New password" else "Password"
                                     contentType = if (createAccount) ContentType.NewPassword else ContentType.Password
                                 }
                             )
                         }
-                        TextButton(onClick = { passwordVisible = !passwordVisible }) { Text(if (passwordVisible) "Hide" else "Show", color = Gold) }
+                        TextButton(onClick = { passwordVisible = !passwordVisible }) { Text(if (passwordVisible) "Hide" else "Show", color = authAccent) }
                     }
                     if (createAccount && password.isNotBlank() && !passwordStrong) FieldHint("Use at least 8 characters with a letter and a number.")
                     if (createAccount) {
@@ -146,13 +154,16 @@ fun LoginScreen(
                             placeholder = "Enter the password again",
                             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
                             visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            textColor = TextPrimary,
+                            accentColor = authAccent,
+                            containerColor = SurfaceElevated,
                             modifier = Modifier.semantics { contentDescription = "Confirm password"; contentType = ContentType.NewPassword }
                         )
                         if (confirmPassword.isNotBlank() && confirmPassword != password) FieldHint("Passwords do not match.")
                     }
                     if (!createAccount) {
                         TextButton(onClick = { clearErrors(); forgotDialog = true }, enabled = emailValid && !loading, modifier = Modifier.align(Alignment.End)) {
-                            Text("Forgot password?", color = Gold)
+                            Text("Forgot password?", color = authAccent)
                         }
                     }
                 } else {
@@ -183,17 +194,17 @@ fun LoginScreen(
                         enabled = !loading && !googleLoading && !facebookLoading && acceptTerms
                     )
                     TextButton(onClick = { manualLogin = true; clearErrors() }, enabled = !loading && !googleLoading && !facebookLoading, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                        Text("Login manually instead", color = Gold, fontWeight = FontWeight.SemiBold)
+                        Text("Login manually instead", color = authAccent, fontWeight = FontWeight.SemiBold)
                     }
                 }
                 (localError ?: error)?.let { message ->
-                    Text(message, color = Danger, fontSize = 13.sp, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).semantics {
+                    Text(message, color = authColors.danger, fontSize = 13.sp, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).semantics {
                         contentDescription = "Sign-in error: $message"
                         liveRegion = LiveRegionMode.Polite
                     })
                 }
                 notice?.let { message ->
-                    Text(message, color = Success, fontSize = 13.sp, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).semantics {
+                    Text(message, color = authColors.success, fontSize = 13.sp, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).semantics {
                         liveRegion = LiveRegionMode.Polite
                     })
                 }
@@ -230,10 +241,10 @@ fun LoginScreen(
                 Column(Modifier.weight(1f).padding(top = 10.dp)) {
                     Text("I am 18+ and accept the", color = TextPrimary, fontSize = 13.sp)
                     Row {
-                        Text("Terms of Service", color = Gold, fontSize = 13.sp, modifier = Modifier
+                    Text("Terms of Service", color = authAccent, fontSize = 13.sp, modifier = Modifier
                             .clickable(role = Role.Button, onClickLabel = "Read Terms of Service") { openLegal(context, "terms") })
                         Text("  and  ", color = TextMuted, fontSize = 13.sp)
-                        Text("Privacy Policy", color = Gold, fontSize = 13.sp, modifier = Modifier
+                    Text("Privacy Policy", color = authAccent, fontSize = 13.sp, modifier = Modifier
                             .clickable(role = Role.Button, onClickLabel = "Read Privacy Policy") { openLegal(context, "privacy") })
                     }
                 }
@@ -250,7 +261,7 @@ fun LoginScreen(
             text = { Text("If an account uses ${email.trim()}, we’ll send it a secure password reset link.", color = TextMuted) },
             confirmButton = {
                 TextButton(enabled = !loading, onClick = { clearErrors(); onForgotPassword(email); forgotDialog = false }) {
-                    Text(if (loading) "Sending…" else "Send reset link", color = Gold)
+                    Text(if (loading) "Sending…" else "Send reset link", color = authAccent)
                 }
             },
             dismissButton = { TextButton(onClick = { forgotDialog = false }) { Text("Cancel", color = TextMuted) } },
@@ -270,6 +281,7 @@ private fun LoginMethodButton(
     isPrimary: Boolean = false,
     loading: Boolean = false
 ) {
+    val colors = LocalYugmColors.current
     val shape = RoundedCornerShape(16.dp)
     val interactionSource = remember { MutableInteractionSource() }
     val borderModifier = if (isPrimary) {
@@ -277,14 +289,14 @@ private fun LoginMethodButton(
     } else {
         Modifier.border(
             1.dp,
-            Brush.horizontalGradient(listOf(PrimaryPurple.copy(alpha = 0.3f), PrimaryPink.copy(alpha = 0.3f))),
+            Brush.horizontalGradient(listOf(colors.secondary.copy(alpha = 0.48f), colors.primary.copy(alpha = 0.42f))),
             shape
         )
     }
     val backgroundBrush = if (isPrimary) {
         Brush.horizontalGradient(auroraGradientPrimary)
     } else {
-        Brush.linearGradient(listOf(Surface.copy(alpha = 0.4f), Surface.copy(alpha = 0.4f)))
+        Brush.linearGradient(listOf(colors.surfaceElevated, colors.surface))
     }
     Box(
         modifier = modifier
@@ -321,14 +333,14 @@ private fun LoginMethodButton(
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = if (isPrimary) Color.White else Gold,
+                        tint = if (isPrimary) Color.White else colors.accent,
                         modifier = Modifier.size(20.dp)
                     )
                 }
                 Spacer(Modifier.width(10.dp))
                 Text(
                     text = text,
-                    color = Color.White,
+                    color = if (isPrimary) Color.White else colors.textPrimary,
                     fontWeight = if (isPrimary) FontWeight.Black else FontWeight.Medium,
                     fontSize = 15.sp
                 )
@@ -339,23 +351,24 @@ private fun LoginMethodButton(
 
 @Composable
 private fun AuthModeButton(label: String, selected: Boolean, modifier: Modifier, enabled: Boolean = true, onClick: () -> Unit) {
+    val colors = LocalYugmColors.current
     Surface(
-        color = if (selected) Gold.copy(alpha = .16f) else SurfaceElevated.copy(alpha = .45f),
-        border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) Gold else Line),
+        color = if (selected) colors.accent.copy(alpha = if (colors.isDark) .16f else .1f) else colors.surfaceElevated,
+        border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) colors.accent else colors.border),
         shape = androidx.compose.foundation.shape.RoundedCornerShape(13.dp),
         modifier = modifier.heightIn(min = 48.dp)
             .selectable(selected = selected, enabled = enabled, role = Role.Tab, onClick = onClick)
             .semantics { selectedSemantics = selected; contentDescription = label }
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp)) {
-            Text(label, color = if (selected) Gold else TextMuted, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            Text(label, color = if (selected) colors.accent else colors.textSecondary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
         }
     }
 }
 
 @Composable
 private fun FieldHint(text: String) {
-    Text(text, color = Danger, fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 4.dp))
+    Text(text, color = LocalYugmColors.current.danger, fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 4.dp))
 }
 
 private fun openLegal(context: android.content.Context, path: String) {

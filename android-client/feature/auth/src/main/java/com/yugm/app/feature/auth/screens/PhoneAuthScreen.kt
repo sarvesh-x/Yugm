@@ -28,26 +28,22 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import com.yugm.app.core.api.YugmApi
 import com.yugm.app.core.api.resolveMediaUrl
 import com.yugm.app.core.model.Session
-import com.yugm.app.core.ui.theme.Danger
+import com.yugm.app.feature.auth.viewmodel.AuthViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.yugm.app.core.ui.components.AuthShell
 import com.yugm.app.core.ui.components.PrimaryButton
 import com.yugm.app.core.ui.components.YugmTextField
 import com.yugm.app.core.ui.theme.TextMuted
-import com.yugm.app.feature.auth.AppCheckReadiness
-import com.google.android.gms.tasks.Tasks
 import com.google.firebase.FirebaseException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.PhoneAuthOptions
 import com.google.firebase.auth.PhoneAuthProvider
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
 @Composable
@@ -55,6 +51,8 @@ fun PhoneAuthScreen(
     onBack: () -> Unit,
     onAuthSuccess: (Session) -> Unit
 ) {
+    val authViewModel: AuthViewModel = hiltViewModel()
+    val authColors = com.yugm.app.core.ui.theme.LocalYugmColors.current
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     val scope = rememberCoroutineScope()
@@ -66,8 +64,14 @@ fun PhoneAuthScreen(
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var acceptTerms by rememberSaveable { mutableStateOf(false) }
-    var submittingCredential by remember { mutableStateOf(false) }
     var resendCooldown by remember { mutableStateOf(0) }
+    val authLoading = authViewModel.isLoading
+    val loadingNow = loading || authLoading
+    val displayedError = error ?: authViewModel.error
+
+    LaunchedEffect(authViewModel.session) {
+        authViewModel.consumeSession()?.let(onAuthSuccess)
+    }
 
     LaunchedEffect(resendCooldown) {
         if (resendCooldown > 0) {
@@ -77,38 +81,21 @@ fun PhoneAuthScreen(
     }
 
     fun verifyCredential(credential: com.google.firebase.auth.PhoneAuthCredential) {
-        if (submittingCredential) return
+        if (authViewModel.isLoading) return
         if (!acceptTerms) {
             error = "Confirm that you are 18+ and accept the Terms and Privacy Policy."
             return
         }
-        submittingCredential = true
-        loading = true
         error = null
-        scope.launch {
-            try {
-                withContext(Dispatchers.IO) {
-                    val result = Tasks.await(FirebaseAuth.getInstance().signInWithCredential(credential))
-                    val token = Tasks.await(
-                        result.user?.getIdToken(false)
-                            ?: throw IllegalStateException("Firebase did not return a user")
-                    ).token ?: throw IllegalStateException("Firebase did not return an ID token")
-                    AppCheckReadiness.requireReady(context)
-                    YugmApi.phoneAuth(token, acceptTerms)
-                }
-                    .let(onAuthSuccess)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: Exception) {
-                error = phoneAuthError(failure)
-            } finally {
-                loading = false
-                submittingCredential = false
-            }
-        }
+        loading = false
+        authViewModel.phoneAuth(credential, acceptTerms)
     }
 
     fun sendCode(forceResend: Boolean = false) {
+        if (!acceptTerms) {
+            error = "Confirm that you are 18+ and accept the Terms and Privacy Policy."
+            return
+        }
         if (activity == null) {
             error = "Phone sign-in is unavailable in this screen."
             return
@@ -178,7 +165,7 @@ fun PhoneAuthScreen(
         subtitle = if (step == "phone") "Firebase will send a one-time code via SMS." else "Code sent to $phone"
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = acceptTerms, onCheckedChange = { acceptTerms = it }, enabled = !loading)
+            Checkbox(checked = acceptTerms, onCheckedChange = { acceptTerms = it }, enabled = !loadingNow)
             Text("I am 18+ and accept the Terms and Privacy Policy", color = TextMuted)
         }
         Row {
@@ -186,24 +173,26 @@ fun PhoneAuthScreen(
             TextButton(onClick = { openPhoneLegal(context, "privacy") }) { Text("Read Privacy Policy", color = TextMuted) }
         }
         if (step == "phone") {
-            YugmTextField(value = phone, onValueChange = { phone = it }, label = "+911234567890", keyboardType = KeyboardType.Phone)
-            if (error != null) {
+            YugmTextField(value = phone, onValueChange = { phone = it }, label = "+911234567890", keyboardType = KeyboardType.Phone,
+                accentColor = authColors.accent, borderColor = androidx.compose.material3.MaterialTheme.colorScheme.outline)
+            if (displayedError != null) {
                 Spacer(Modifier.height(4.dp))
-                Text(error!!, color = Danger, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                Text(displayedError!!, color = authColors.danger, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             }
             Spacer(Modifier.height(12.dp))
-            PrimaryButton(text = if (loading) "Sending code..." else "Send code", onClick = { sendCode() }, enabled = !loading && phone.length >= 8 && acceptTerms)
+            PrimaryButton(text = if (loadingNow) "Sending code..." else "Send code", onClick = { sendCode() }, enabled = !loadingNow && phone.length >= 8 && acceptTerms)
         } else {
-            YugmTextField(value = otp, onValueChange = { otp = it.filter(Char::isDigit).take(6) }, label = "6-digit code", keyboardType = KeyboardType.Number)
-            if (error != null) {
+            YugmTextField(value = otp, onValueChange = { otp = it.filter(Char::isDigit).take(6) }, label = "6-digit code", keyboardType = KeyboardType.Number,
+                accentColor = authColors.accent, borderColor = androidx.compose.material3.MaterialTheme.colorScheme.outline)
+            if (displayedError != null) {
                 Spacer(Modifier.height(4.dp))
-                Text(error!!, color = Danger, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                Text(displayedError!!, color = authColors.danger, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             }
             Spacer(Modifier.height(12.dp))
-            PrimaryButton(text = if (loading) "Verifying..." else "Verify and continue", onClick = { verifyCode() }, enabled = !loading && otp.length == 6 && acceptTerms)
+            PrimaryButton(text = if (loadingNow) "Verifying..." else "Verify and continue", onClick = { verifyCode() }, enabled = !loadingNow && otp.length == 6 && acceptTerms)
             TextButton(
                 onClick = { sendCode(forceResend = true) },
-                enabled = !loading && resendCooldown == 0
+                enabled = !loadingNow && resendCooldown == 0
             ) {
                 Text(
                     if (resendCooldown > 0) "Resend code in ${resendCooldown}s" else "Resend code",
@@ -223,7 +212,7 @@ fun PhoneAuthScreen(
             } else {
                 onBack()
             }
-        }, enabled = !loading) {
+        }, enabled = !loadingNow) {
             Text(if (step == "otp") "Change number" else "Back", color = TextMuted)
         }
     }

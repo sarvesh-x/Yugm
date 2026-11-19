@@ -15,7 +15,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.semantics.Role
@@ -61,6 +60,8 @@ fun CreateProfileScreen(
     onDone: (ProfileSetupData, (String?) -> Unit) -> Unit
 ) {
     val context = LocalContext.current
+    val profileColors = LocalYugmColors.current
+    val profileAccent = profileColors.accent
     var step by rememberSaveable { mutableStateOf(1) }
     var errorMessage by rememberSaveable { mutableStateOf("") }
     var termsAccepted by rememberSaveable { mutableStateOf(false) }
@@ -190,14 +191,17 @@ fun CreateProfileScreen(
                             .weight(1f)
                             .height(6.dp)
                             .clip(RoundedCornerShape(3.dp))
-                            .background(if (index + 1 <= step) Gold else Color(0x33FFFFFF))
+                            .background(
+                                if (index + 1 <= step) profileAccent
+                                else MaterialTheme.colorScheme.outline.copy(alpha = if (profileColors.isDark) 0.45f else 0.65f)
+                            )
                     )
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "Step $step of 5",
-                color = Gold,
+                color = profileAccent,
                 fontWeight = FontWeight.Bold,
                 fontSize = 12.sp,
                 modifier = Modifier.semantics {
@@ -210,14 +214,14 @@ fun CreateProfileScreen(
         when (step) {
             1 -> {
                 item {
-                    Text("Basic Identity", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black)
+                    Text("Basic Identity", color = TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.Black)
                     Text("Enter your name, handle, age and gender.", color = TextMuted)
                 }
-                item { YugmTextField(name, { name = it.take(60); errorMessage = "" }, "Name (2–60 characters)") }
-                item { YugmTextField(handle, { handle = it.take(24).filter { char -> char in 'a'..'z' || char in 'A'..'Z' || char in '0'..'9' || char == '_' || char == '.' }; errorMessage = "" }, "Username") }
-                item { YugmTextField(ageStr, { ageStr = it.filter(Char::isDigit).take(2); errorMessage = "" }, "Age (18–80)", keyboardType = androidx.compose.ui.text.input.KeyboardType.Number) }
+                item { ProfileSetupTextField(name, { name = it.take(60); errorMessage = "" }, "Name (2–60 characters)") }
+                item { ProfileSetupTextField(handle, { handle = it.take(24).filter { char -> char in 'a'..'z' || char in 'A'..'Z' || char in '0'..'9' || char == '_' || char == '.' }; errorMessage = "" }, "Username") }
+                item { ProfileSetupTextField(ageStr, { ageStr = it.filter(Char::isDigit).take(2); errorMessage = "" }, "Age (18–80)", keyboardType = androidx.compose.ui.text.input.KeyboardType.Number) }
                 item {
-                    Text("Gender", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text("Gender", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
@@ -225,8 +229,8 @@ fun CreateProfileScreen(
                         availableGenders.forEach { g ->
                             val selected = gender == g
                             Surface(
-                                color = if (selected) Gold.copy(alpha = 0.2f) else SurfaceElevated,
-                                border = BorderStroke(1.dp, if (selected) Gold else Color(0x1AFFFFFF)),
+                                color = if (selected) profileAccent.copy(alpha = if (profileColors.isDark) 0.2f else 0.12f) else SurfaceElevated,
+                                border = BorderStroke(1.dp, if (selected) profileAccent else MaterialTheme.colorScheme.outline),
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier
                                     .weight(1f)
@@ -235,7 +239,7 @@ fun CreateProfileScreen(
                             ) {
                                 Text(
                                     text = g,
-                                    color = Color.White,
+                                    color = TextPrimary,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
                                     textAlign = TextAlign.Center,
@@ -248,12 +252,12 @@ fun CreateProfileScreen(
             }
             2 -> {
                 item {
-                    Text("Location & Languages", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black)
+                    Text("Location & Languages", color = TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.Black)
                     Text("Where are you located and what languages do you vibe in?", color = TextMuted)
                 }
-                item { YugmTextField(city, { city = it }, "City (e.g. Mumbai, Delhi)") }
+                item { ProfileSetupTextField(city, { city = it }, "City (e.g. Mumbai, Delhi)") }
                 item {
-                    Text("Languages", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text("Languages", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Spacer(modifier = Modifier.height(8.dp))
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -263,8 +267,8 @@ fun CreateProfileScreen(
                         availableLanguages.forEach { lang ->
                             val selected = selectedLanguages.contains(lang)
                             Surface(
-                                color = if (selected) Gold.copy(alpha = 0.2f) else SurfaceElevated,
-                                border = BorderStroke(1.dp, if (selected) Gold else Color(0x1AFFFFFF)),
+                                color = if (selected) profileAccent.copy(alpha = if (profileColors.isDark) 0.2f else 0.12f) else SurfaceElevated,
+                                border = BorderStroke(1.dp, if (selected) profileAccent else MaterialTheme.colorScheme.outline),
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier.heightIn(min = 48.dp).toggleable(
                                     value = selected,
@@ -275,7 +279,7 @@ fun CreateProfileScreen(
                             ) {
                                 Text(
                                     text = lang,
-                                    color = Color.White,
+                                    color = TextPrimary,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
                                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
@@ -287,7 +291,7 @@ fun CreateProfileScreen(
             }
             3 -> {
                 item {
-                    Text("Select Interests", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black)
+                    Text("Select Interests", color = TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.Black)
                     Text("Choose at least 1 tag that matches your energy.", color = TextMuted)
                 }
                 item {
@@ -299,8 +303,8 @@ fun CreateProfileScreen(
                         availableInterests.forEach { interest ->
                             val selected = selectedInterests.contains(interest)
                             Surface(
-                                color = if (selected) Gold.copy(alpha = 0.2f) else SurfaceElevated,
-                                border = BorderStroke(1.dp, if (selected) Gold else Color(0x1AFFFFFF)),
+                                color = if (selected) profileAccent.copy(alpha = if (profileColors.isDark) 0.2f else 0.12f) else SurfaceElevated,
+                                border = BorderStroke(1.dp, if (selected) profileAccent else MaterialTheme.colorScheme.outline),
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier.heightIn(min = 48.dp).toggleable(
                                     value = selected,
@@ -311,7 +315,7 @@ fun CreateProfileScreen(
                             ) {
                                 Text(
                                     text = interest,
-                                    color = Color.White,
+                                    color = TextPrimary,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
                                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
@@ -323,7 +327,7 @@ fun CreateProfileScreen(
             }
             4 -> {
                 item {
-                    Text("Photos & Bio", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black)
+                    Text("Photos & Bio", color = TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.Black)
                     Text("Set up your avatar and write a catchy bio.", color = TextMuted)
                 }
                 item {
@@ -344,16 +348,16 @@ fun CreateProfileScreen(
                         }
                     }
                 }
-                item { YugmTextField(bio, { bio = it.take(180); errorMessage = "" }, "Bio (up to 180 characters)", minLines = 3) }
-                item { YugmTextField(vibeLine, { vibeLine = it.take(120); errorMessage = "" }, "Short vibe line (optional)") }
+                item { ProfileSetupTextField(bio, { bio = it.take(180); errorMessage = "" }, "Bio (up to 180 characters)", minLines = 3) }
+                item { ProfileSetupTextField(vibeLine, { vibeLine = it.take(120); errorMessage = "" }, "Short vibe line (optional)") }
             }
             5 -> {
                 item {
-                    Text("Preferences", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black)
+                    Text("Preferences", color = TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.Black)
                     Text("Who or what are you looking for on Yugm?", color = TextMuted)
                 }
                 item {
-                    Text("Looking For", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text("Looking For", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Spacer(modifier = Modifier.height(8.dp))
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -363,8 +367,8 @@ fun CreateProfileScreen(
                         availablePreferences.forEach { pref ->
                             val selected = lookingFor == pref
                             Surface(
-                                color = if (selected) Gold.copy(alpha = 0.2f) else SurfaceElevated,
-                                border = BorderStroke(1.dp, if (selected) Gold else Color(0x1AFFFFFF)),
+                                color = if (selected) profileAccent.copy(alpha = if (profileColors.isDark) 0.2f else 0.12f) else SurfaceElevated,
+                                border = BorderStroke(1.dp, if (selected) profileAccent else MaterialTheme.colorScheme.outline),
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier.heightIn(min = 48.dp).selectable(
                                     selected = selected,
@@ -373,7 +377,7 @@ fun CreateProfileScreen(
                             ) {
                                 Text(
                                     text = pref,
-                                    color = Color.White,
+                                    color = TextPrimary,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
                                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
@@ -390,7 +394,7 @@ fun CreateProfileScreen(
                     TextButton(onClick = {
                         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(resolveMediaUrl("/legal/terms")))) }
                     }) {
-                        Text("Read Terms of Use", color = Gold, fontWeight = FontWeight.Bold)
+                        Text("Read Terms of Use", color = profileAccent, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -398,7 +402,7 @@ fun CreateProfileScreen(
 
         if (errorMessage.isNotBlank()) {
             item {
-                Text(errorMessage, color = DangerRed, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                Text(errorMessage, color = profileColors.danger, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             }
         }
 
@@ -412,11 +416,11 @@ fun CreateProfileScreen(
                     OutlinedButton(
                         onClick = { step--; errorMessage = "" },
                         enabled = !isSubmitting,
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f)),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f).height(56.dp)
                     ) {
-                        Text("Back", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("Back", color = TextPrimary, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -456,4 +460,23 @@ fun CreateProfileScreen(
             }
         }
     }
+}
+
+@Composable
+private fun ProfileSetupTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    keyboardType: androidx.compose.ui.text.input.KeyboardType = androidx.compose.ui.text.input.KeyboardType.Text,
+    minLines: Int = 1,
+) {
+    YugmTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = label,
+        keyboardType = keyboardType,
+        minLines = minLines,
+        accentColor = LocalYugmColors.current.accent,
+        borderColor = MaterialTheme.colorScheme.outline,
+    )
 }

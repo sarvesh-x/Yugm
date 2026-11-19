@@ -23,14 +23,15 @@ import com.yugm.app.core.ui.theme.*
 @Composable
 fun SplashScreen(onTimeout: suspend () -> Unit) {
     val scale = remember { Animatable(0.6f) }
+    val motionEnabled = LocalMotionEnabled.current
+    val colors = LocalYugmColors.current
 
-    LaunchedEffect(Unit) {
-        scale.animateTo(
-            targetValue = 1.0f,
-            animationSpec = tween(
-                durationMillis = 500
-            )
-        )
+    LaunchedEffect(motionEnabled) {
+        if (motionEnabled) {
+            scale.animateTo(1f, animationSpec = tween(durationMillis = 250))
+        } else {
+            scale.snapTo(1f)
+        }
         onTimeout()
     }
 
@@ -65,14 +66,14 @@ fun SplashScreen(onTimeout: suspend () -> Unit) {
             Spacer(modifier = Modifier.height(24.dp))
             Text(
                 text = "Yugm",
-                color = Color.White,
+                    color = colors.textPrimary,
                 fontSize = 42.sp,
                 fontWeight = FontWeight.Black
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = "Match the Vibe",
-                color = Gold,
+                    color = if (colors.isDark) Gold else AccessibleSaffron,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )

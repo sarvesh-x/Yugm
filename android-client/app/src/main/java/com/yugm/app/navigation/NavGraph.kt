@@ -63,6 +63,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.round
 import com.yugm.app.core.navigation.Screen
 import com.yugm.app.feature.auth.navigation.authNavGraph
+import com.yugm.app.feature.auth.navigation.startupDestination
 import com.yugm.app.feature.chat.navigation.chatNavGraph
 import com.yugm.app.feature.creator.navigation.creatorNavGraph
 import com.yugm.app.feature.discover.navigation.discoverNavGraph
@@ -92,8 +93,8 @@ fun NavGraph(
     var minimizedRoom by remember { mutableStateOf<Room?>(null) }
     var minimizedRoomType by remember { mutableStateOf(RoomType.Voice) }
     var minimizedVideoFeed by remember { mutableStateOf<YugmMediaRoom.VideoFeed?>(null) }
-    LaunchedEffect(mainViewModel.authToken) {
-        if (mainViewModel.authToken.isNotBlank() && !vibeInitDone.value) {
+    LaunchedEffect(mainViewModel.authToken, mainViewModel.startupSessionCheckComplete) {
+        if (mainViewModel.authToken.isNotBlank() && mainViewModel.startupSessionCheckComplete && !vibeInitDone.value) {
             runCatching { VibeApi.init(mainViewModel.authToken) }
                 .onFailure { e -> android.util.Log.w("NavGraph", "Vibe init failed (non-fatal): ${e.message}") }
             vibeInitDone.value = true
@@ -122,7 +123,7 @@ fun NavGraph(
             // A successful sign-in establishes a new authenticated root. Clear
             // onboarding and every auth destination so system Back cannot reveal
             // the login flow behind Home/Discovery.
-            popUpTo(Screen.Onboarding.route) { inclusive = true }
+            popUpTo(navController.graph.id) { inclusive = true }
             launchSingleTop = true
         }
     }
@@ -137,21 +138,28 @@ fun NavGraph(
       ) {
         authNavGraph(
             navController = navController,
-            isLoggedIn = mainViewModel.authToken.isNotBlank(),
-            isProfileCompleted = mainViewModel.profileCompleted,
             profileName = mainViewModel.userName,
             profileUsername = mainViewModel.username,
             authTokenProvider = { mainViewModel.authToken },
             googleWebClientId = resources.getString(com.yugm.app.R.string.default_web_client_id),
+            validateStartupSession = mainViewModel::validateStartupSession,
+            currentStartupDestination = {
+                startupDestination(
+                    isLoggedIn = mainViewModel.authToken.isNotBlank(),
+                    isProfileCompleted = mainViewModel.profileCompleted,
+                )
+            },
             navigateAfterLogin = ::navigateAfterLogin,
             onProfileComplete = { session ->
                 // Profile completion returns only the updated user. Keep the refresh
                 // token/session ID saved during sign-in instead of overwriting them
                 // with the empty defaults on this lightweight Session wrapper.
-                mainViewModel.validateAndUpdate(session.user)
-                navController.navigate(Screen.MainTabs.createRoute("discover")) {
-                    popUpTo(Screen.ProfileSetup.route) { inclusive = true }
+                if (session.user.profileCompleted) {
+                    mainViewModel.validateAndUpdate(session.user)
+                    navController.navigate(Screen.MainTabs.createRoute("discover")) {
+                    popUpTo(navController.graph.id) { inclusive = true }
                     launchSingleTop = true
+                    }
                 }
             }
         )

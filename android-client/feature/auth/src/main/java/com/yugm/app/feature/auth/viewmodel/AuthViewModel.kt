@@ -7,13 +7,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.yugm.app.core.api.IYugmApi
+import com.yugm.app.core.data.repository.AuthRepository
 import com.yugm.app.core.model.Session
+import com.yugm.app.core.model.AuthProfileUpdate
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.FacebookAuthProvider
+import com.google.firebase.auth.PhoneAuthCredential
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import com.yugm.app.feature.auth.AppCheckReadiness
@@ -27,31 +29,49 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
-    private val yugmApi: IYugmApi,
-    @ApplicationContext private val context: Context,
+    private val authRepository: AuthRepository,
+    @param:ApplicationContext private val context: Context,
 ) : ViewModel() {
-    var isLoading by mutableStateOf(false)
-        private set
+    private var authOperation by mutableStateOf<AuthOperation?>(null)
+
+    val isLoading: Boolean
+        get() = authOperation != null
     var error by mutableStateOf<String?>(null)
         private set
     var notice by mutableStateOf<String?>(null)
         private set
     var session by mutableStateOf<Session?>(null)
         private set
-    var googleCredentialLoading by mutableStateOf(false)
-        private set
-    var facebookCredentialLoading by mutableStateOf(false)
-        private set
+    val googleCredentialLoading: Boolean
+        get() = authOperation == AuthOperation(AuthProvider.GOOGLE, AuthPhase.CREDENTIAL)
+    val facebookCredentialLoading: Boolean
+        get() = authOperation == AuthOperation(AuthProvider.FACEBOOK, AuthPhase.CREDENTIAL)
 
-    fun setGoogleCredentialBusy(value: Boolean) { googleCredentialLoading = value }
-    fun setFacebookCredentialBusy(value: Boolean) { facebookCredentialLoading = value }
+    /** The ViewModel owns one provider operation across UI credential and API phases. */
+    fun beginCredentialAuth(provider: AuthProvider): Boolean {
+        authOperation = beginAuthOperation(authOperation, provider) ?: return false
+        error = null
+        notice = null
+        return true
+    }
+
+    fun cancelCredentialAuth(provider: AuthProvider, failure: Throwable? = null) {
+        if (authOperation?.provider != provider) {
+            if (failure != null) error = mapAuthError(failure, provider)
+            return
+        }
+        if (failure != null) error = mapAuthError(failure, provider)
+        authOperation = finishAuthOperation(authOperation, provider)
+    }
 
     fun clearError() { error = null; notice = null }
+    fun consumeSession(): Session? = session.also { session = null }
 
-    fun reportError(message: String) {
-        error = message
-        notice = null
-    }
+    suspend fun uploadAvatar(token: String, bytes: ByteArray, mimeType: String): String =
+        authRepository.uploadAvatar(token, bytes, mimeType)
+
+    suspend fun updateProfile(token: String, update: AuthProfileUpdate) =
+        authRepository.updateProfile(token, update)
 
     fun emailAuth(email: String, password: String, createAccount: Boolean, acceptTerms: Boolean) {
         val normalizedEmail = email.trim().lowercase(Locale.ROOT)
@@ -60,24 +80,25 @@ class AuthViewModel @Inject constructor(
         if (createAccount && (password.length < 8 || password.none(Char::isDigit) || password.none(Char::isLetter))) {
             error = "Use at least 8 characters with a letter and a number."; return
         }
-        launchAuth {
+        launchAuth(AuthProvider.EMAIL) {
             val auth = FirebaseAuth.getInstance()
             val priorSignup = auth.currentUser?.takeIf { createAccount && it.email.equals(normalizedEmail, true) }
             val user = if (priorSignup != null) {
                 // A previous attempt may have created the Firebase identity but failed
                 // before Yugm finished creating its profile. Reuse it only after Firebase
                 // confirms the password entered on this attempt.
-                Tasks.await(priorSignup.reauthenticate(EmailAuthProvider.getCredential(normalizedEmail, password)))
+                withContext(Dispatchers.IO) { Tasks.await(priorSignup.reauthenticate(EmailAuthProvider.getCredential(normalizedEmail, password))) }
                 priorSignup
             } else if (createAccount) {
-                Tasks.await(auth.createUserWithEmailAndPassword(normalizedEmail, password)).user
+                withContext(Dispatchers.IO) { Tasks.await(auth.createUserWithEmailAndPassword(normalizedEmail, password)).user }
             } else {
-                Tasks.await(auth.signInWithEmailAndPassword(normalizedEmail, password)).user
+                withContext(Dispatchers.IO) { Tasks.await(auth.signInWithEmailAndPassword(normalizedEmail, password)).user }
             } ?: error("Firebase did not return a user")
             // Sign-in has just produced a current Firebase user/token. Avoid forcing
             // another Firebase network round trip before exchanging it with Yugm.
-            val firebaseToken = Tasks.await(user.getIdToken(false)).token ?: error("Firebase did not return an ID token")
-            val session = yugmApi.googleAuth(firebaseToken, acceptTerms, provider = "email")
+            val firebaseToken = withContext(Dispatchers.IO) { Tasks.await(user.getIdToken(false)).token } ?: error("Firebase did not return an ID token")
+            beginBackendExchange(AuthProvider.EMAIL)
+            val session = authRepository.googleAuth(firebaseToken, acceptTerms, provider = "email")
             // Send verification only after the backend session exchange succeeded.
             if (createAccount && !user.isEmailVerified) {
                 viewModelScope.launch(Dispatchers.IO) {
@@ -90,29 +111,38 @@ class AuthViewModel @Inject constructor(
 
     fun googleAuth(googleIdToken: String, acceptTerms: Boolean) {
         if (!acceptTerms) { error = "Confirm that you are 18+ and accept the Terms and Privacy Policy."; return }
-        launchAuth {
+        launchAuth(AuthProvider.GOOGLE) {
             val credential = GoogleAuthProvider.getCredential(googleIdToken, null)
-            val user = Tasks.await(FirebaseAuth.getInstance().signInWithCredential(credential)).user ?: error("Google sign-in returned no user")
-            val firebaseToken = Tasks.await(user.getIdToken(false)).token ?: error("Firebase did not return an ID token")
-            yugmApi.googleAuth(firebaseToken, acceptTerms, provider = "google")
+            val user = withContext(Dispatchers.IO) { Tasks.await(FirebaseAuth.getInstance().signInWithCredential(credential)).user } ?: error("Google sign-in returned no user")
+            val firebaseToken = withContext(Dispatchers.IO) { Tasks.await(user.getIdToken(false)).token } ?: error("Firebase did not return an ID token")
+            beginBackendExchange(AuthProvider.GOOGLE)
+            authRepository.googleAuth(firebaseToken, acceptTerms, provider = "google")
         }
     }
 
     fun facebookAuth(facebookAccessToken: String, acceptTerms: Boolean) {
         if (!acceptTerms) { error = "Confirm that you are 18+ and accept the Terms and Privacy Policy."; return }
         if (facebookAccessToken.isBlank()) { error = "Facebook did not return an access token. Try again."; return }
-        launchAuth {
+        launchAuth(AuthProvider.FACEBOOK) {
             val credential = FacebookAuthProvider.getCredential(facebookAccessToken)
-            val user = Tasks.await(FirebaseAuth.getInstance().signInWithCredential(credential)).user
+            val user = withContext(Dispatchers.IO) { Tasks.await(FirebaseAuth.getInstance().signInWithCredential(credential)).user }
                 ?: error("Facebook sign-in returned no user")
-            val firebaseToken = Tasks.await(user.getIdToken(false)).token ?: error("Firebase did not return an ID token")
-            yugmApi.facebookAuth(firebaseToken, acceptTerms)
+            val firebaseToken = withContext(Dispatchers.IO) { Tasks.await(user.getIdToken(false)).token } ?: error("Firebase did not return an ID token")
+            beginBackendExchange(AuthProvider.FACEBOOK)
+            authRepository.facebookAuth(firebaseToken, acceptTerms)
         }
     }
 
-    fun phoneAuth(firebaseIdToken: String, acceptTerms: Boolean) {
+    fun phoneAuth(credential: PhoneAuthCredential, acceptTerms: Boolean) {
         if (!acceptTerms) { error = "Confirm that you are 18+ and accept the Terms and Privacy Policy."; return }
-        launchAuth { yugmApi.phoneAuth(firebaseIdToken, acceptTerms) }
+        launchAuth(AuthProvider.PHONE) {
+            val user = withContext(Dispatchers.IO) { Tasks.await(FirebaseAuth.getInstance().signInWithCredential(credential)).user }
+                ?: error("Phone sign-in returned no user")
+            val firebaseToken = withContext(Dispatchers.IO) { Tasks.await(user.getIdToken(false)).token }
+                ?: error("Firebase did not return an ID token")
+            beginBackendExchange(AuthProvider.PHONE)
+            authRepository.phoneAuth(firebaseToken, acceptTerms)
+        }
     }
 
     fun forgotPassword(email: String) {
@@ -120,7 +150,7 @@ class AuthViewModel @Inject constructor(
         if (!Patterns.EMAIL_ADDRESS.matcher(normalizedEmail).matches()) { error = "Enter your email address first."; return }
         if (isLoading) return
         viewModelScope.launch {
-            isLoading = true
+            authOperation = AuthOperation(AuthProvider.PASSWORD, AuthPhase.PASSWORD_RESET)
             error = null
             notice = null
             try {
@@ -133,9 +163,9 @@ class AuthViewModel @Inject constructor(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
-                error = mapAuthError(failure)
+                error = mapAuthError(failure, AuthProvider.PASSWORD)
             } finally {
-                isLoading = false
+                authOperation = finishAuthOperation(authOperation, AuthProvider.PASSWORD)
             }
         }
     }
@@ -153,50 +183,59 @@ class AuthViewModel @Inject constructor(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
-                error = mapAuthError(failure)
+                error = mapAuthError(failure, AuthProvider.EMAIL)
             }
         }
     }
 
-    private fun launchAuth(block: suspend () -> Session) {
-        if (isLoading) {
-            googleCredentialLoading = false
-            facebookCredentialLoading = false
-            return
-        }
+    private fun launchAuth(provider: AuthProvider, block: suspend () -> Session) {
+        authOperation = startAuthExecution(authOperation, provider) ?: return
+        error = null
+        notice = null
         viewModelScope.launch {
-            isLoading = true
-            error = null
-            notice = null
             try {
-                session = withContext(Dispatchers.IO) { block() }
+                session = block()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
-                error = mapAuthError(failure)
+                error = mapAuthError(failure, provider)
             } finally {
-                isLoading = false
-                googleCredentialLoading = false
-                facebookCredentialLoading = false
+                authOperation = finishAuthOperation(authOperation, provider)
             }
         }
     }
 
-    private fun mapAuthError(error: Throwable): String {
+    private suspend fun beginBackendExchange(provider: AuthProvider) {
+        withContext(Dispatchers.Main.immediate) {
+            authOperation = advanceAuthOperation(authOperation, provider, AuthPhase.BACKEND_EXCHANGE)
+        }
+        withContext(Dispatchers.IO) { AppCheckReadiness.requireReady(context) }
+    }
+
+    private fun mapAuthError(error: Throwable, provider: AuthProvider): String {
+        val apiFailure = generateSequence(error) { it.cause }
+            .filterIsInstance<com.yugm.app.core.api.ApiHttpException>()
+            .firstOrNull()
+        if (apiFailure?.statusCode == 401 && apiFailure.message.orEmpty().contains("app verification", ignoreCase = true)) {
+            return "App verification failed. Update or restart Yugm and try again."
+        }
+        if (apiFailure?.statusCode == 401 && apiFailure.message.orEmpty().contains("another device", ignoreCase = true)) {
+            return "This account was signed in on another device. Sign in again to continue."
+        }
+        if (apiFailure?.statusCode == 409) return apiFailure.message ?: "This account conflicts with an existing sign-in. Use the original sign-in method."
         val appCheckFailure = generateSequence(error) { it.cause }
             .filterIsInstance<AppCheckSetupException>()
             .firstOrNull()
         if (appCheckFailure != null) return appCheckFailure.message.orEmpty()
         val root = generateSequence(error) { it.cause }.last()
         if (root is com.google.firebase.auth.FirebaseAuthException) {
+            firebaseCredentialErrorMessage(provider, root.errorCode)?.let { return it }
             when (root.errorCode) {
                 "ERROR_TOO_MANY_REQUESTS" -> return "Too many attempts. Wait a little before trying again."
                 "ERROR_USER_DISABLED" -> return "This account is disabled. Contact support for help."
                 "ERROR_OPERATION_NOT_ALLOWED" -> return "This sign-in method is not enabled for the app."
                 "ERROR_EMAIL_ALREADY_IN_USE", "ERROR_ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL" ->
                     return "An account already uses this email. Sign in with its original method."
-                "ERROR_INVALID_CREDENTIAL", "ERROR_INVALID_PROVIDER_ID" ->
-                    return "Facebook could not verify that sign-in. Try again or use another method."
                 "ERROR_INVALID_VERIFICATION_CODE" -> return "That verification code is incorrect or expired. Request a new code."
                 "ERROR_INVALID_PHONE_NUMBER" -> return "Enter a valid phone number with its country code."
             }

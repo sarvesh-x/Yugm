@@ -5,6 +5,7 @@ import { User, type IUser } from "../models/User.js";
 import { AuthSession } from "../models/AuthSession.js";
 import { env } from "../config/env.js";
 import { ErrorCode, HttpError } from "../utils/http.js";
+import { isSessionGenerationCurrent } from "./authSessionRules.js";
 
 function accessLifetimeSeconds() {
   const match = env.ACCESS_TOKEN_TTL.match(/^(\d+)(s|m|h|d)$/i);
@@ -87,7 +88,7 @@ export async function rotateRefresh(raw: string, req: Request) {
   // currently signed-in generation. A fresh login revokes all such legacy
   // sessions before issuing its own generation.
   const sessionTokenVersion = old.tokenVersion ?? user.tokenVersion;
-  if (sessionTokenVersion !== user.tokenVersion) {
+  if (!isSessionGenerationCurrent(old.tokenVersion, user.tokenVersion)) {
     await AuthSession.updateOne({ _id: old._id, revokedAt: null }, { $set: { revokedAt: new Date() } });
     throw new HttpError(401, "This account was signed in on another device", ErrorCode.UNAUTHORIZED);
   }

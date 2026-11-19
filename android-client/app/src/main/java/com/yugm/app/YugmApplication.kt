@@ -22,8 +22,6 @@ import java.util.concurrent.TimeUnit
 
 @HiltAndroidApp
 class YugmApplication : Application(), ImageLoaderFactory {
-    @Volatile private var appCheckToken: String? = null
-    @Volatile private var appCheckTokenExpiresAt: Long = 0L
     @Suppress("DEPRECATION")
     override fun onCreate() {
         super.onCreate()
@@ -62,23 +60,9 @@ class YugmApplication : Application(), ImageLoaderFactory {
             }
         }
         YugmHttpClient.appCheckTokenProvider = {
-            // App Check verification is a network round trip on both sides.
-            // Reuse the token for a few minutes instead of asking Play Services
-            // for a new one on every /auth call. The server caches the verified
-            // result, so non-consuming verification stays cheap.
-            val cached = appCheckToken
-            if (cached != null && System.currentTimeMillis() < appCheckTokenExpiresAt) {
-                cached
-            } else {
-                val result = Tasks.await(
-                    FirebaseAppCheck.getInstance().limitedUseAppCheckToken,
-                    10,
-                    TimeUnit.SECONDS
-                )
-                appCheckToken = result.token
-                appCheckTokenExpiresAt = System.currentTimeMillis() + 5 * 60_000L
-                result.token
-            }
+            // Server-side replay protection consumes limited-use tokens, so each
+            // protected request must carry a fresh token rather than a cached one.
+            Tasks.await(FirebaseAppCheck.getInstance().limitedUseAppCheckToken, 10, TimeUnit.SECONDS).token
         }
         if (BuildConfig.DEBUG) Timber.plant(Timber.DebugTree())
         YugmMediaRoom.initialize(this)

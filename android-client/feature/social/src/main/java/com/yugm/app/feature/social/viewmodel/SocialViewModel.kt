@@ -269,7 +269,4 @@ class SocialViewModel @Inject constructor(
         return withContext(Dispatchers.IO) { yugmApi.uploadTrustVerificationMedia(token, bytes, mimeType, purpose) }
     }
 
-    suspend fun phoneAuth(fbToken: String, acceptTerms: Boolean): com.yugm.app.core.model.Session {
-        return withContext(Dispatchers.IO) { yugmApi.phoneAuth(fbToken, acceptTerms) }
-    }
 }

@@ -21,6 +21,7 @@ import { Room } from "../models/Room.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
 import { SupportTicket } from "../models/SupportTicket.js";
 import { User, type IUser } from "../models/User.js";
+import { isProfileCompleted } from "../services/profileCompletion.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId, sanitizeText } from "../utils/http.js";
 import { TrustVerification } from "../models/TrustVerification.js";
 import { createNotification } from "../services/notifications.js";
@@ -337,7 +338,7 @@ function publicUser(user: any) {
     city: user.city,
     state: user.state,
     bio: user.bio,
-    profileCompleted: Boolean(user.profileCompletedAt || (user.bio && user.city && user.interests?.length)),
+    profileCompleted: isProfileCompleted(user),
     streakCount: user.streakCount ?? 0,
     vibeLine: user.vibeLine,
     gender: user.gender,
@@ -352,10 +353,6 @@ function publicUser(user: any) {
     isFollowing: user.isFollowing,
     isCloseFriend: user.isCloseFriend, isVerified: Boolean(user.isVerified), verificationLevel: user.verificationLevel ?? (user.isVerified ? "BASIC" : "NONE"), showcasedBadgeIds: user.showcasedBadgeIds ?? []
   };
-}
-
-function hasCompletedProfile(user: any) {
-  return Boolean(user?.name && user?.username && user?.bio && user?.city && (user?.interests?.length ?? 0) > 0);
 }
 
 let unavailableUsersCache: { ids: any[]; expiresAt: number } = { ids: [], expiresAt: 0 };
@@ -412,7 +409,7 @@ usersRouter.patch("/me", validateBody(profileSchema.partial().refine((data) => d
     throw error;
   }
   let xpGrant: Awaited<ReturnType<typeof grantXp>> = undefined;
-  if (user && !user.profileCompletedAt && hasCompletedProfile(user)) {
+  if (user && !user.profileCompletedAt && isProfileCompleted(user)) {
     user.profileCompletedAt = new Date();
     await user.save();
     xpGrant = await grantXp(user.id, "PROFILE_COMPLETE", { idempotencyKey: `profile-complete:${user.id}` });
