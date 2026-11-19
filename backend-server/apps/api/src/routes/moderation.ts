@@ -6,7 +6,6 @@ import { ModerationAction } from "../models/ModerationAction.js";
 import { Report } from "../models/Report.js";
 import { UserSafetyStatus } from "../models/UserSafetyStatus.js";
 import { User } from "../models/User.js";
-import { classifyToxicity, toxicitySeverity, isModelReady, isModelLoading } from "../services/aiModeration.js";
 import { moderateContent } from "../services/autoModeration.js";
 import { createReportWithEvidence } from "../services/moderation.js";
 import { asyncHandler, sendOk } from "../utils/http.js";
@@ -22,38 +21,28 @@ router.post("/v1/moderation/check-text", requireAuth, asyncHandler(async (req: A
   const { text, context } = checkTextSchema.parse(req.body);
 
   const keywordResult = moderateContent(text);
-  const aiResult = await classifyToxicity(text);
-
-  const keywordSeverity = keywordResult.severity;
-  const aiSeverity = toxicitySeverity(aiResult);
-  const overallSeverity = keywordSeverity === "HIGH" || aiSeverity === "HIGH"
-    ? "HIGH"
-    : keywordSeverity === "MEDIUM" || aiSeverity === "MEDIUM"
-      ? "MEDIUM"
-      : "LOW";
-
-  const isFlagged = !keywordResult.isClean || !aiResult.isClean;
-  const isBlocked = overallSeverity === "HIGH" || (!keywordResult.isClean && keywordResult.action === "BLOCK");
+  const isFlagged = !keywordResult.isClean;
+  const isBlocked = keywordResult.action === "BLOCK";
 
   sendOk(res, {
     text,
     context,
     isClean: !isFlagged,
     isBlocked,
-    severity: overallSeverity,
+    severity: keywordResult.severity,
     keywordFlags: keywordResult.flaggedWords,
-    aiFlags: aiResult.flaggedLabels,
+    aiFlags: [],
     toxicityScores: {
-      toxicity: aiResult.toxicityScore,
-      severeToxicity: aiResult.severeToxicityScore,
-      identityAttack: aiResult.identityAttackScore,
-      insult: aiResult.insultScore,
-      threat: aiResult.threatScore,
-      sexuallyExplicit: aiResult.sexuallyExplicitScore,
+      toxicity: 0,
+      severeToxicity: 0,
+      identityAttack: 0,
+      insult: 0,
+      threat: 0,
+      sexuallyExplicit: 0,
     },
-    topLabel: aiResult.topLabel,
-    aiModelReady: isModelReady(),
-    aiModelLoading: isModelLoading(),
+    topLabel: null,
+    aiModelReady: false,
+    aiModelLoading: false,
   });
 }));
 
@@ -165,21 +154,20 @@ router.post("/v1/moderation/check-voice", requireAuth, asyncHandler(async (req: 
     return res.status(400).json({ ok: false, error: { message: "Transcript is required" } });
   }
 
-  const aiResult = await classifyToxicity(transcript);
   const keywordResult = moderateContent(transcript);
 
   sendOk(res, {
     transcript,
-    isClean: aiResult.isClean && keywordResult.isClean,
-    severity: toxicitySeverity(aiResult),
+    isClean: keywordResult.isClean,
+    severity: keywordResult.severity,
     keywordFlags: keywordResult.flaggedWords,
-    aiFlags: aiResult.flaggedLabels,
+    aiFlags: [],
     toxicityScores: {
-      toxicity: aiResult.toxicityScore,
-      severeToxicity: aiResult.severeToxicityScore,
-      identityAttack: aiResult.identityAttackScore,
-      insult: aiResult.insultScore,
-      threat: aiResult.threatScore,
+      toxicity: 0,
+      severeToxicity: 0,
+      identityAttack: 0,
+      insult: 0,
+      threat: 0,
     },
   });
 }));

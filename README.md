@@ -13,6 +13,10 @@ Yugm uses **Yugm Trust Verification** for user safety, fake-profile prevention, 
 
 Each project has its own build configuration and dependency manifests. Open `android-client/` in Android Studio, and run npm commands from `backend-server/`.
 
+## Engineering documentation
+
+Start with [AGENTS.md](AGENTS.md) and the [documentation index](docs/INDEX.md). The index links the project context, design system, feature/contract references, and the detailed source-based production audit.
+
 ## Backend Setup
 
 ```bash
