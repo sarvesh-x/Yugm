@@ -14,11 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "625913395416-215qrd2n9ju5e5gpp069643kbnbv5o53.apps.googleusercontent.com",
+          "client_id": "625913395416-a1pss0js95k1300du6gt8prl0ubcpcjt.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.yugm.app",
-            "certificate_hash": "699e4549c3e9fb820799bd32882ddae49734fc0e"
+            "certificate_hash": "623cdb7f07ba173ae840d02fc6ef34a9099d9df6"
           }
         },
         {
@@ -30,19 +30,11 @@
           }
         },
         {
-          "client_id": "625913395416-kadu7li1ibpdbmuaa20njr4dd8krbcrg.apps.googleusercontent.com",
+          "client_id": "625913395416-sbafkapuevs23d5cg4fpjqhqcssd38ii.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.yugm.app",
-            "certificate_hash": "80559b673423e670635bfb6a351e623fe69b8d48"
-          }
-        },
-        {
-          "client_id": "625913395416-mac9o78ope5puqmlo9uud4a405s268dc.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.yugm.app",
-            "certificate_hash": "9bfcc92ba959257321ce40ea82658df05410bed2"
+            "certificate_hash": "9bfcc943a959257321ce40ea82658df05410bed2"
           }
         },
         {
