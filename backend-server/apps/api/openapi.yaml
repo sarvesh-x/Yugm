@@ -197,6 +197,21 @@ paths:
                 otp: { type: string }
       responses:
         "200": { description: Login success, returns session }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke the current account sessions
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken: { type: string }
+                deviceToken: { type: string, minLength: 20, description: Current-install FCM token to remove from this user before revoking sessions. }
+      responses:
+        "200": { description: Sessions revoked and active sockets disconnected }
 
   # ─── STORIES ───────────────────────────────────────────
   /stories:

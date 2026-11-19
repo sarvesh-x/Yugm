@@ -62,8 +62,10 @@ object AuthApi {
         )
     }
 
-    suspend fun logout(token: String, refreshToken: String) {
-        YugmHttpClient.post("/auth/logout", auth = token, JSONObject().put("refreshToken", refreshToken))
+    suspend fun logout(token: String, refreshToken: String, deviceToken: String? = null) {
+        val body = JSONObject().put("refreshToken", refreshToken)
+        if (!deviceToken.isNullOrBlank()) body.put("deviceToken", deviceToken)
+        YugmHttpClient.post("/auth/logout", auth = token, body)
     }
 
     suspend fun me(token: String): YugmUser {

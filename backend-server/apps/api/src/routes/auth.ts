@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { profileSchema } from "@yugm/shared";
 import { User } from "../models/User.js";
+import { DeviceToken } from "../models/DeviceToken.js";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { authIdentifierLimiter, authLimiter, refreshLimiter } from "../middleware/rateLimit.js";
 import { validateBody } from "../middleware/validate.js";
@@ -10,7 +11,7 @@ import { getLevelStatus } from "../services/levels.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode } from "../utils/http.js";
 import { issueSession, revokeAllForUser, revokeSession, rotateRefresh } from "../services/tokens.js";
 import { z } from "zod";
-import { disconnectOtherUserSockets } from "../services/socket.js";
+import { disconnectOtherUserSockets, disconnectUserSockets } from "../services/socket.js";
 import { isProfileCompleted } from "../services/profileCompletion.js";
 import { hasFirebaseIdentityConflict } from "../services/authSessionRules.js";
 
@@ -218,10 +219,14 @@ authRouter.post("/refresh", refreshLimiter, validateBody(z.object({ refreshToken
   sendOk(res, await rotateRefresh(req.body.refreshToken, req));
 }));
 
-authRouter.post("/logout", requireAuth, validateBody(z.object({ refreshToken: z.string().optional() })), asyncHandler(async (req: AuthRequest, res) => {
+authRouter.post("/logout", requireAuth, validateBody(z.object({ refreshToken: z.string().optional(), deviceToken: z.string().min(20).optional() })), asyncHandler(async (req: AuthRequest, res) => {
+  if (req.body.deviceToken) {
+    await DeviceToken.deleteOne({ userId: req.user!._id, token: req.body.deviceToken });
+  }
   if (req.body.refreshToken) await revokeSession(req.body.refreshToken, req.user!.id);
   await User.updateOne({ _id: req.user!._id }, { $inc: { tokenVersion: 1 } });
   await revokeAllForUser(req.user!.id);
+  await disconnectUserSockets(req.user!.id);
   sendOk(res, { loggedOut: true });
 }));
 

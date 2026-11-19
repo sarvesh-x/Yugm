@@ -57,6 +57,17 @@ export async function disconnectOtherUserSockets(userId: string, activeSessionId
   }
 }
 
+/** Disconnect every live socket after an account-wide session revocation. */
+export async function disconnectUserSockets(userId: string) {
+  if (!io) return;
+  try {
+    const sockets = await io.in(`user:${userId}`).fetchSockets();
+    sockets.forEach((socket) => socket.disconnect(true));
+  } catch (error) {
+    console.warn("Could not disconnect the user's revoked sockets:", error instanceof Error ? error.message : String(error));
+  }
+}
+
 const onlineUsers = new Map<string, { count: number; lastSeen: number }>();
 const redisPresenceUsers = new Set<string>();
 const messageCounts = new Map<string, { count: number; resetAt: number }>();

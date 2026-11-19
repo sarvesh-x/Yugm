@@ -173,6 +173,10 @@ class MainViewModel @Inject constructor(
         YugmMediaRoom.disconnectAsync()
         com.yugm.app.core.api.ReactionCatalogCache.clear()
         com.yugm.app.feature.chat.cache.ChatConversationCache.clear()
+        inAppNotification = null
+        com.yugm.app.core.api.AppSync.invalidate(
+            com.yugm.app.core.api.SyncTopic.ALL
+        )
         sessionManager.logout()
         authToken = ""
         currentUserId = ""
@@ -184,11 +188,10 @@ class MainViewModel @Inject constructor(
 
         if (revokeServerSession && token.isNotBlank()) {
             viewModelScope.launch(Dispatchers.IO) {
-                runCatching {
-                    val deviceToken = Tasks.await(FirebaseMessaging.getInstance().token)
-                    if (deviceToken.isNotBlank()) yugmApi.removeFcmToken(token, deviceToken)
-                }
-                runCatching { yugmApi.logoutAuth(token, refresh) }
+                val deviceToken = runCatching {
+                    Tasks.await(FirebaseMessaging.getInstance().token).takeIf(String::isNotBlank)
+                }.getOrNull()
+                runCatching { yugmApi.logoutAuth(token, refresh, deviceToken) }
             }
         }
     }

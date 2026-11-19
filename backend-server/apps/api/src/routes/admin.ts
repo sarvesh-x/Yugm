@@ -1,4 +1,5 @@
 import { endUnavailableBonds } from "../services/bonds.js";
+import { disconnectUserSockets } from "../services/socket.js";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import { Router } from "express";
@@ -861,6 +862,7 @@ adminRouter.post("/users/:userId/ban", requireTwoFactor, requirePermission("user
   const user = await User.findByIdAndUpdate(req.params.userId, { isBlocked: true, moderationReason: req.body.reason, $inc: { moderationStrikes: 1, tokenVersion: 1 } }, { new: true }).lean();
   if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
   await endUnavailableBonds(req.params.userId, "TERMINATED_BY_MODERATION");
+  await disconnectUserSockets(req.params.userId);
   await createModerationAction(req, "USER_BANNED", { targetType: "USER", targetId: req.params.userId, targetUserId: req.params.userId, reason: req.body.reason });
   await refreshUserSafetyStatus(req.params.userId, req.admin!.id);
   adminOk(res, { user });
@@ -1093,6 +1095,7 @@ adminRouter.post("/reports/:reportId/action", requirePermission("reports.resolve
   if (req.body.action === "BAN_USER" && report.targetUserId) {
     await User.findByIdAndUpdate(report.targetUserId, { isBlocked: true, moderationReason: req.body.reason, $inc: { moderationStrikes: 1, tokenVersion: 1 } });
     await endUnavailableBonds(String(report.targetUserId), "TERMINATED_BY_MODERATION");
+    await disconnectUserSockets(String(report.targetUserId));
   }
   if (req.body.action === "END_ROOM" && report.roomId) {
     const roomId = report.roomId.toString();

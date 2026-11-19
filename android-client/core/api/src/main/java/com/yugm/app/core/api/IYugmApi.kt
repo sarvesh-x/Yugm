@@ -150,7 +150,7 @@ interface IYugmApi {
     suspend fun facebookAuth(idToken: String, acceptTerms: Boolean): Session
     suspend fun phoneAuth(idToken: String, acceptTerms: Boolean): Session
     suspend fun refreshAuth(refreshToken: String): RefreshedSession
-    suspend fun logoutAuth(token: String, refreshToken: String)
+    suspend fun logoutAuth(token: String, refreshToken: String, deviceToken: String? = null)
     suspend fun authMe(token: String): YugmUser
 
     suspend fun rooms(type: RoomType? = null): List<Room>

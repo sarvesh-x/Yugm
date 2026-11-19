@@ -36,6 +36,7 @@ import { creditWallet } from "../services/wallet.js";
 import { findRelationship, grantRelationshipXp } from "../services/relationships.js";
 import { DeviceToken } from "../models/DeviceToken.js";
 import { revokeAllForUser } from "../services/tokens.js";
+import { disconnectUserSockets } from "../services/socket.js";
 
 export const usersRouter = Router();
 
@@ -380,6 +381,7 @@ usersRouter.delete("/me", asyncHandler(async (req: AuthRequest, res) => {
     revokeAllForUser(req.user!.id),
     DeviceToken.deleteMany({ userId: req.user!._id })
   ]);
+  await disconnectUserSockets(req.user!.id);
   for (const partnerId of new Set([...sentPartners, ...receivedPartners].map((id: any) => id.toString()))) {
     emitUser(partnerId, socketEvents.directConversationDeleted, { partnerId: req.user!.id });
   }

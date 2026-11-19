@@ -1,6 +1,19 @@
 # Current task
 
-## YUGM-AUTH-ERROR-001 — Match credential errors to the active provider
+## YUGM-AUTH-BOUNDARY-AUDIT-001 — Prove and close auth/session boundary gaps
+
+- **Problem:** Prior onboarding/auth changes were implemented, but remaining provider, Mongo, device, navigation, and realtime evidence gaps prevented the auth-boundary audit from being closed.
+- **Scope:** Re-verify the implemented contracts; repair confirmed socket revocation and logout/account-switch cleanup gaps; record exact checks and remaining runtime gates.
+- **Acceptance:** Android auth tests and app/instrumentation compiles pass; emulator smoke suite passes; API suite and typecheck pass; session/account-wide revocation disconnects realtime sockets; logout clears local account-owned state and requests server FCM-token removal; docs accurately separate source evidence from unverified Firebase/Mongo/device behavior.
+- **Status:** Source repairs and requested static/JVM/emulator verification complete. Audit remains open for live Firebase/App Check, Mongo persistence/race, real auth navigation and provider/OTP scenarios; see [auth audit](features/auth-flow-audit.md) and [handoff](handoffs/2026-11-19-auth-boundary-audit.md).
+
+## Completed predecessor — YUGM-AUTH-ERROR-001
+
+Provider-aware Firebase credential error wording is complete; details and tests are recorded in [auth flow audit](features/auth-flow-audit.md).
+
+<!-- Historical task record retained below. -->
+
+### YUGM-AUTH-ERROR-001 — Match credential errors to the active provider
 
 - **Problem:** Firebase's `ERROR_INVALID_CREDENTIAL`/`ERROR_INVALID_PROVIDER_ID` was always rendered as a Facebook error, including during manual email sign-in.
 - **Scope:** Map those shared Firebase codes using the active auth provider and prevent provider-mismatched wording.
