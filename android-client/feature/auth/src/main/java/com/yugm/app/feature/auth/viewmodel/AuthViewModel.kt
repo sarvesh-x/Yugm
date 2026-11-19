@@ -4,6 +4,9 @@ import android.content.Context
 import android.util.Log
 import android.util.Patterns
 import androidx.compose.runtime.getValue
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.NoCredentialException
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
@@ -323,11 +326,11 @@ class AuthViewModel @Inject constructor(
             is com.google.firebase.auth.FirebaseAuthInvalidUserException -> "No account was found for this email. Create one first."
             is com.google.firebase.auth.FirebaseAuthWeakPasswordException -> "Choose a stronger password with at least 8 characters."
             is com.google.firebase.FirebaseNetworkException, is java.io.IOException -> "Check your connection and try again."
-            is TimeoutException -> "Sign-in is taking too long. Check your connection and try again."
+            is TimeoutException -> "Sign-in is taking too long. Check your internet connection, Google Play services, and device time, then try again."
             is java.util.concurrent.ExecutionException -> {
                 val cause = root.cause ?: error.cause
                 when (cause) {
-                    is TimeoutException -> "Sign-in is taking too long. Check your connection and try again."
+                    is TimeoutException -> "Sign-in is taking too long. Check your internet connection, Google Play services, and device time, then try again."
                     is com.google.firebase.FirebaseNetworkException, is java.io.IOException -> "Check your connection and try again."
                     is com.google.firebase.auth.FirebaseAuthException -> return mapAuthError(cause, provider)
                     else -> cause?.message?.takeIf(String::isNotBlank) ?: "Sign-in failed. Please try again."

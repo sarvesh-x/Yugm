@@ -77,29 +77,29 @@ fun NavGraphBuilder.authNavGraph(
         LoginScreen(
             onGoogleSignIn = { acceptTerms ->
                 if (!acceptTerms || !authViewModel.beginCredentialAuth(AuthProvider.GOOGLE)) return@LoginScreen
+                if (googleWebClientId.isBlank()) {
+                    authViewModel.cancelCredentialAuth(AuthProvider.GOOGLE, IllegalStateException("Google sign-in is not configured for this build."))
+                    return@LoginScreen
+                }
                 Log.d("YugmAuth", "Google sign-in started")
                 scope.launch {
                     try {
                         val credentialManager = CredentialManager.create(context)
                         val result = try {
+                            // Prefer the explicit Google sign-in UI for a deliberate sign-in tap.
+                            val signInOption = GetSignInWithGoogleOption.Builder(googleWebClientId).build()
+                            val request = GetCredentialRequest.Builder().addCredentialOption(signInOption).build()
+                            credentialManager.getCredential(context, request)
+                        } catch (cancelled: GetCredentialCancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            Log.w("YugmAuth", "GetSignInWithGoogleOption failed (${error.javaClass.simpleName}); trying GetGoogleIdOption", error)
                             val googleOption = GetGoogleIdOption.Builder()
                                 .setServerClientId(googleWebClientId)
                                 .setFilterByAuthorizedAccounts(false)
                                 .setAutoSelectEnabled(false)
                                 .build()
                             val request = GetCredentialRequest.Builder().addCredentialOption(googleOption).build()
-                            credentialManager.getCredential(context, request)
-                        } catch (cancelled: GetCredentialCancellationException) {
-                            throw cancelled
-                        } catch (_: androidx.credentials.exceptions.NoCredentialException) {
-                            Log.d("YugmAuth", "No authorized Google account; falling back to Google sign-in UI")
-                            val signInOption = GetSignInWithGoogleOption.Builder(googleWebClientId).build()
-                            val request = GetCredentialRequest.Builder().addCredentialOption(signInOption).build()
-                            credentialManager.getCredential(context, request)
-                        } catch (error: GetCredentialException) {
-                            Log.w("YugmAuth", "GetGoogleIdOption failed (${error.javaClass.simpleName}); falling back to Google sign-in UI", error)
-                            val signInOption = GetSignInWithGoogleOption.Builder(googleWebClientId).build()
-                            val request = GetCredentialRequest.Builder().addCredentialOption(signInOption).build()
                             credentialManager.getCredential(context, request)
                         }
 
