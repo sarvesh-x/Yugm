@@ -18,7 +18,7 @@
     "YUGM_RUNTIME": "cloudflare",
     "PORT": "4000",
     "MONGODB_URI": "mongodb://sarveshkumar10101:sarvesh121@ac-nh6iqql-shard-00-00.zl0la4t.mongodb.net:27017,ac-nh6iqql-shard-00-01.zl0la4t.mongodb.net:27017,ac-nh6iqql-shard-00-02.zl0la4t.mongodb.net:27017/?ssl=true&replicaSet=atlas-11zorg-shard-0&authSource=admin&appName=Cluster0",
-    "MONGODB_DB_NAME": "Yugm",
+    "MONGODB_DB_NAME": "YugmStaging",
     "REDIS_URL": "redis://default:G430q9wxyPUKXIJuAIn2AexCnWxmbjo9@exhilarating-inherent-brother-77531.db.redis.io:18068",
     "JWT_SECRET": "AuLpMaTdkGGlojvp0mgauaVtpyFCN9y0OEP4nZRamR6",
     "DEV_BYPASS_OTP": "123456",
