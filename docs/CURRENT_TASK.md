@@ -2,11 +2,25 @@
 
 ## YUGM-AUTH-RATELIMIT-002 -- Close the staging auth 500 that blocks release sign-in
 
-- **Problem:** Release/device sign-in and sign-up failed while the base URL and connectivity were correct. Every credential exchange (email, Google, Facebook, phone) funnels through `POST /api/auth/google|facebook|phone`, and the deployed staging Worker answers all of them with HTTP 500 `{"ok":false,"error":{"message":"Cannot read properties of undefined (reading 'replace')","code":"INTERNAL"}}` before schema validation runs.
+- **Problem:** Release/device sign-in and sign-up failed while the base URL and connectivity were correct. Every credential exchange (email, Google, Facebook, phone) funnels through `POST /api/auth/google|facebook|phone`, and the deployed staging Worker answered all of them with HTTP 500 `{"ok":false,"error":{"message":"Cannot read properties of undefined (reading 'replace')","code":"INTERNAL"}}` before schema validation runs.
 - **Root cause (confirmed, not inferred):** the Cloudflare node bridge does not populate `req.ip`, so `express-rate-limit`'s default `keyGenerator` returns `undefined`; `ResilientRedisRateLimitStore.increment` passed it to `safeKey()`, which called `.replace` on `undefined`. Shadowing `req.ip` with `undefined` in a local Express harness reproduces the exact staging message and HTTP 500 on the pre-fix source, and returns 200 on the fixed source.
 - **Fix:** a `clientIp()` helper (`cf-connecting-ip` -> `x-forwarded-for` -> `req.ip` -> `"unknown"`) is now the key generator for the auth, identifier, refresh, and per-user limiters, and `safeKey()` returns `"unknown"` for non-string/empty keys instead of throwing. Store `get`/`decrement`/`resetKey` normalize keys the same way as `increment`.
-- **Verification:** `npm --workspace @yugm/api run typecheck` clean; `npm --workspace @yugm/api test` 178/178 pass, including the new `src/middleware/rateLimit.test.ts` and `src/services/rateLimitStore.test.ts` regression tests.
-- **Status:** Source fix and regression tests complete. The deployed staging Worker still returns HTTP 500 on `/api/auth/google|facebook|phone` (checked 2026-11-20), so a Worker deploy is required before release sign-in works. Not deployed here: no deployment authorization was given. Release App Check is client-side best-effort (`AppCheckReadiness` logs and continues; `YugmHttpClient` attaches `X-Firebase-AppCheck` only when a token exists), and the staging Worker does not enforce App Check, so the 500 is the whole blocker.
+- **Deployment fix:** `wrangler.jsonc` had a duplicate trailing root object syntax error preventing deploy; merged `observability` into the primary root block and added observability to `wrangler.staging.jsonc`. Pushed to `master` and verified deployment on Cloudflare staging Worker.
+- **Verification:** Worker deployed cleanly (`startedAt: 2026-11-19T20:44:02.483Z`). Live verification of `POST /api/auth/google` with payload returns HTTP 422 (schema/token validation) rather than HTTP 500 internal server error.
+- **Status:** Complete & verified deployed on staging.
+
+## YUGM-AUTH-GOOGLE-KEY-001 -- Register APK signing certs in Google Cloud API key & google-services.json
+
+- **Problem:** Android release builds failed Google sign-in and Email sign-in with 30s timeout (`Tasks.await TimeoutException` at `AuthViewModel.kt:300`). Direct API probes confirmed Google's Identity Toolkit API returned `403 PERMISSION_DENIED: API_KEY_SERVICE_BLOCKED` and `API_KEY_ANDROID_APP_BLOCKED`.
+- **Root cause:** 
+  1. The Firebase API key had API restrictions that excluded `Identity Toolkit API`.
+  2. The Google Cloud API key application restriction only allowed fingerprint `91:E4:...`, whereas the release APK signed with `playUpload` used upload certificate SHA-1 `62:3C:DB:7F:07:BA:17:3A:E8:40:D0:2F:C6:EF:34:A9:09:9D:9D:F6`.
+- **Fix:**
+  - Allowed `Identity Toolkit API` and `Token Service API` on the Google Cloud API key.
+  - Added Android package `com.yugm.app` with SHA-1 `62:3C:DB:7F:07:BA:17:3A:E8:40:D0:2F:C6:EF:34:A9:09:9D:9D:F6` and debug SHA-1 `9B:FC:C9:43:A9:59:25:73:21:CE:40:EA:82:65:8D:F0:54:10:BE:D2` to Google Cloud Console.
+  - Updated `android-client/app/google-services.json` with the corresponding OAuth client definitions.
+- **Verification:** Direct API call with the release certificate header returned HTTP 400 (expected invalid credential response) instead of HTTP 403 API blocked.
+- **Status:** Complete and committed.
 
 ## YUGM-AUTH-PROD-001 -- Fix login/signup flow in release builds and social-auth reliability
 

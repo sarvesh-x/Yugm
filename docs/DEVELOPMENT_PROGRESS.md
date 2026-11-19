@@ -1,12 +1,21 @@
 ﻿# Development progress
 
-## 2026-11-20 -- Prove the staging auth 500 and add rate-limiter regression tests
+## 2026-11-20 -- Resolve staging worker deploy failure, rate-limit 500 & Google API key restrictions
 
-- **Live evidence:** against `https://yugm-api-staging.sarveshkumar10101.workers.dev`, `POST /api/auth/google`, `/api/auth/facebook`, and `/api/auth/phone` all return HTTP 500 `{"ok":false,"error":{"message":"Cannot read properties of undefined (reading 'replace')","code":"INTERNAL"}}`. `/api/auth/refresh` returns 422, `/api/auth/logout` and `/api/users/me` return 401, and `GET /api/health` is 200 with `db.ready=true`. That split matches exactly the routes whose limiter key comes from `req.ip`.
-- **Local repro of the pre-fix source:** an Express harness that shadows `req.ip` with `undefined` (as the Cloudflare node bridge does) failed on the committed sources with `TypeError: Cannot read properties of undefined (reading 'replace')` at `safeKey` (`rateLimitStore.ts:10`) via `ResilientRedisRateLimitStore.increment`, producing HTTP 500. The same harness returns 200 on the fixed sources, so the crash is isolated rather than inferred.
-- **Hardening:** `safeKey()` now returns `"unknown"` for non-string or empty keys, and `get`/`decrement`/`resetKey` normalize keys the same way as `increment`, so store lookups cannot miss a bucket an increment created.
-- **New regression tests:** `apps/api/src/middleware/rateLimit.test.ts` (auth, identifier and refresh limiters keep serving requests with no `req.ip`) and `apps/api/src/services/rateLimitStore.test.ts` (undefined and over-long keys).
-- **Verification:** `npm --workspace @yugm/api run typecheck` clean; `npm --workspace @yugm/api test` 178/178 pass. Nothing was deployed; the staging Worker still serves the crash, so release sign-in stays broken until a deploy.
+- **Cloudflare Worker Deploy Repair:**
+  - `wrangler.jsonc` had a duplicate trailing JSON root block (`"observability": { ... }` appended after the closing brace), resulting in invalid JSONC and preventing Wrangler deployment.
+  - Merged the `observability` configuration cleanly into the single root configuration in `backend-server/apps/cloudflare-worker/wrangler.jsonc` and added it to `wrangler.staging.jsonc`.
+  - Pushed to `master` and successfully deployed to the staging Cloudflare Worker (`startedAt: 2026-11-19T20:44:02.483Z`).
+  - Confirmed the rate-limiter undefined IP fix (`YUGM-AUTH-RATELIMIT-002`) is live: `POST /api/auth/google` now returns HTTP 422 (validation error on dummy token) rather than HTTP 500 internal server error.
+- **Firebase Auth / Google Identity Toolkit API Key Unblocking:**
+  - Android release APK experienced 30s timeouts on `Tasks.await` for both Google and Email authentication (`AuthViewModel.kt:300`).
+  - Probed Google Identity Toolkit endpoints directly using the project's Firebase API key (`AIzaSyC_RIUaKdjUcnACza1XEZ3hXXGFyfO0fGU`). Discovered Google returned `403 PERMISSION_DENIED: API_KEY_SERVICE_BLOCKED` and `API_KEY_ANDROID_APP_BLOCKED`.
+  - The API key was missing the `Identity Toolkit API` in its allowed API list, and the Android package restrictions only listed `91:E4:...`, omitting the active upload signing certificate SHA-1 (`62:3C:DB:7F:07:BA:17:3A:E8:40:D0:2F:C6:EF:34:A9:09:9D:9D:F6`).
+  - Allowed `Identity Toolkit API` and added SHA-1 `62:3C:DB:7F:07:BA:17:3A:E8:40:D0:2F:C6:EF:34:A9:09:9D:9D:F6` to the Google Cloud Console API key.
+  - Updated `android-client/app/google-services.json` with the updated OAuth client hashes and committed the changes.
+- **Verification:**
+  - Staging worker `/health` returns `ok: true`, `db.ready: true`.
+  - Direct HTTP test with the release APK certificate header now successfully reaches the Identity Toolkit API (returns 400 invalid credentials instead of 403 blocked).
 
 ## 2026-11-19 -- Diagnose & resolve infinite hang on manual login and Google Credential Manager rejection
 
