@@ -124,6 +124,9 @@ android {
     }
 
     lint {
+        // Release builds skip lint entirely; the heavy Compose modules can OOM
+        // or stall the release build. Debug lint still runs in CI via :app:lintDebug.
+        checkReleaseBuilds = false
         disable += setOf(
             "LogNotTimber",
             "StringFormatInTimber",

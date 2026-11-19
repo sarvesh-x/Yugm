@@ -86,6 +86,11 @@ lint {
 ```
 **Rationale:** avoid unnecessary dependency lint aggregation in the heaviest chat module while preserving failure visibility.
 
+### B3. Release lint disabled (`android-client/app/build.gradle.kts`)
+- Set `lint { checkReleaseBuilds = false }` for the app module. AGP no longer attaches the release "vital" lint pass to `:app:assembleRelease`.
+- **Verified:** `:app:assembleRelease --dry-run` lists no `lint*Release` tasks in the graph (configuration succeeds).
+- **CI:** `.github/workflows/android-release.yml` no longer needs explicit `-x lintVital*` exclusions. Debug lint still runs in CI via `:app:lintDebug`, and `:app:lintRelease` remains available only when invoked explicitly.
+
 ---
 
 ## C. Source-level optimizations

@@ -81,10 +81,10 @@ jobs:
           YUGM_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
           YUGM_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
           YUGM_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
-        # AGP's release-only "vital" lint pass OOMs on the large Compose
-        # screens (feature:chat ChatScreen.kt) and is not needed to package
-        # the APK. Full lint still runs in CI via :app:lintDebug.
-        run: bash ./gradlew --no-daemon :app:assembleRelease -x lintVitalRelease -x lintVitalAnalyzeRelease -x lintVitalReportRelease
+        # Release lint is disabled in app/build.gradle.kts (checkReleaseBuilds = false)
+        # because AGP's release-only "vital" pass OOMs on the large Compose screens
+        # (feature:chat ChatScreen.kt). Debug lint still runs in CI via :app:lintDebug.
+        run: bash ./gradlew --no-daemon :app:assembleRelease
 
       - name: Publish APK to GitHub Release
         uses: softprops/action-gh-release@v2

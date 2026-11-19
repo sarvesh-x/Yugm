@@ -1,5 +1,11 @@
 # Development progress
 
+## 2026-11-19 — Release builds no longer run lint
+
+- Set `lint { checkReleaseBuilds = false }` in `android-client/app/build.gradle.kts`, so AGP no longer attaches the release vital lint pass to `:app:assembleRelease`.
+- Removed the explicit `-x lintVital*` exclusions from the tagged release workflow; debug lint still runs in CI via `:app:lintDebug`.
+- Verified with `:app:assembleRelease --dry-run`: configuration succeeded and the task graph contained no `lint*Release` tasks. No release APK was assembled in this check.
+
 ## 2026-11-19 — Release/production endpoints moved to Cloudflare
 
 - Switched the Android release/production API and Socket.IO defaults to the Cloudflare staging Worker: `https://yugm-api-staging.sarveshkumar10101.workers.dev/api` and `https://yugm-api-staging.sarveshkumar10101.workers.dev` (`android-client/app/build.gradle.kts`).
