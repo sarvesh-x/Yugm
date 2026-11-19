@@ -19,11 +19,14 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import com.yugm.app.feature.auth.AppCheckReadiness
 import com.yugm.app.feature.auth.AppCheckSetupException
+import com.google.android.gms.tasks.Task
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import javax.inject.Inject
 
 class NoAccountFoundException(val email: String, val name: String, message: String) : Exception(message)
@@ -50,9 +53,9 @@ class AuthViewModel @Inject constructor(
     var prefilledName by mutableStateOf("")
         private set
     val googleCredentialLoading: Boolean
-        get() = authOperation == AuthOperation(AuthProvider.GOOGLE, AuthPhase.CREDENTIAL)
+        get() = authOperation?.provider == AuthProvider.GOOGLE
     val facebookCredentialLoading: Boolean
-        get() = authOperation == AuthOperation(AuthProvider.FACEBOOK, AuthPhase.CREDENTIAL)
+        get() = authOperation?.provider == AuthProvider.FACEBOOK
 
     fun switchToSignUp(email: String = "", name: String = "", message: String? = null) {
         isCreateAccount = true
@@ -104,20 +107,20 @@ class AuthViewModel @Inject constructor(
                 // A previous attempt may have created the Firebase identity but failed
                 // before Yugm finished creating its profile. Reuse it only after Firebase
                 // confirms the password entered on this attempt.
-                withContext(Dispatchers.IO) { Tasks.await(priorSignup.reauthenticate(EmailAuthProvider.getCredential(normalizedEmail, password))) }
+                awaitFirebase(priorSignup.reauthenticate(EmailAuthProvider.getCredential(normalizedEmail, password)))
                 priorSignup
             } else if (createAccount) {
-                withContext(Dispatchers.IO) { Tasks.await(auth.createUserWithEmailAndPassword(normalizedEmail, password)).user }
+                awaitFirebase(auth.createUserWithEmailAndPassword(normalizedEmail, password)).user
             } else {
                 try {
-                    withContext(Dispatchers.IO) { Tasks.await(auth.signInWithEmailAndPassword(normalizedEmail, password)).user }
+                    awaitFirebase(auth.signInWithEmailAndPassword(normalizedEmail, password)).user
                 } catch (userEx: com.google.firebase.auth.FirebaseAuthInvalidUserException) {
                     throw NoAccountFoundException(normalizedEmail, "", "No account found for this email. Create a password to sign up.")
                 }
             } ?: error("Firebase did not return a user")
             // Sign-in has just produced a current Firebase user/token. Avoid forcing
             // another Firebase network round trip before exchanging it with Yugm.
-            val firebaseToken = withContext(Dispatchers.IO) { Tasks.await(user.getIdToken(false)).token } ?: error("Firebase did not return an ID token")
+            val firebaseToken = awaitFirebase(user.getIdToken(false), 15).token ?: error("Firebase did not return an ID token")
             beginBackendExchange(AuthProvider.EMAIL)
             val session = authRepository.googleAuth(
                 firebaseToken,
@@ -128,7 +131,7 @@ class AuthViewModel @Inject constructor(
             // Send verification only after the backend session exchange succeeded.
             if (createAccount && !user.isEmailVerified) {
                 viewModelScope.launch(Dispatchers.IO) {
-                    runCatching { Tasks.await(user.sendEmailVerification()) }
+                    runCatching { Tasks.await(user.sendEmailVerification(), 15, TimeUnit.SECONDS) }
                 }
             }
             if ((session.user.name.isBlank() || session.user.name == "Yugm User") && prefilledName.isNotBlank()) {
@@ -148,17 +151,10 @@ class AuthViewModel @Inject constructor(
         if (!acceptTerms) { error = "Confirm that you are 18+ and accept the Terms and Privacy Policy."; return }
         launchAuth(AuthProvider.GOOGLE) {
             val credential = GoogleAuthProvider.getCredential(googleIdToken, null)
-            val user = try {
-                withContext(Dispatchers.IO) { Tasks.await(FirebaseAuth.getInstance().signInWithCredential(credential)).user }
-            } catch (authEx: Exception) {
-                val fallbackEmail = email.orEmpty()
-                if (fallbackEmail.isNotBlank()) {
-                    throw NoAccountFoundException(fallbackEmail, name.orEmpty(), "No account found for this Google email. Create a password to sign up.")
-                }
-                throw authEx
-            } ?: error("Google sign-in returned no user")
+            val user = awaitFirebase(FirebaseAuth.getInstance().signInWithCredential(credential)).user
+                ?: error("Google sign-in returned no user")
 
-            val firebaseToken = withContext(Dispatchers.IO) { Tasks.await(user.getIdToken(false)).token } ?: error("Firebase did not return an ID token")
+            val firebaseToken = awaitFirebase(user.getIdToken(false), 15).token ?: error("Firebase did not return an ID token")
             val resolvedEmail = email?.takeIf(String::isNotBlank) ?: user.email
             val accountName = name?.takeIf(String::isNotBlank) ?: user.displayName?.takeIf(String::isNotBlank)
             beginBackendExchange(AuthProvider.GOOGLE)
@@ -190,9 +186,9 @@ class AuthViewModel @Inject constructor(
         if (facebookAccessToken.isBlank()) { error = "Facebook did not return an access token. Try again."; return }
         launchAuth(AuthProvider.FACEBOOK) {
             val credential = FacebookAuthProvider.getCredential(facebookAccessToken)
-            val user = withContext(Dispatchers.IO) { Tasks.await(FirebaseAuth.getInstance().signInWithCredential(credential)).user }
+            val user = awaitFirebase(FirebaseAuth.getInstance().signInWithCredential(credential)).user
                 ?: error("Facebook sign-in returned no user")
-            val firebaseToken = withContext(Dispatchers.IO) { Tasks.await(user.getIdToken(false)).token } ?: error("Firebase did not return an ID token")
+            val firebaseToken = awaitFirebase(user.getIdToken(false), 15).token ?: error("Firebase did not return an ID token")
             val accountName = user.displayName?.takeIf(String::isNotBlank)
             beginBackendExchange(AuthProvider.FACEBOOK)
             val session = authRepository.facebookAuth(firebaseToken, acceptTerms, name = accountName)
@@ -207,9 +203,9 @@ class AuthViewModel @Inject constructor(
     fun phoneAuth(credential: PhoneAuthCredential, acceptTerms: Boolean) {
         if (!acceptTerms) { error = "Confirm that you are 18+ and accept the Terms and Privacy Policy."; return }
         launchAuth(AuthProvider.PHONE) {
-            val user = withContext(Dispatchers.IO) { Tasks.await(FirebaseAuth.getInstance().signInWithCredential(credential)).user }
+            val user = awaitFirebase(FirebaseAuth.getInstance().signInWithCredential(credential)).user
                 ?: error("Phone sign-in returned no user")
-            val firebaseToken = withContext(Dispatchers.IO) { Tasks.await(user.getIdToken(false)).token }
+            val firebaseToken = awaitFirebase(user.getIdToken(false), 15).token
                 ?: error("Firebase did not return an ID token")
             beginBackendExchange(AuthProvider.PHONE)
             authRepository.phoneAuth(firebaseToken, acceptTerms)
@@ -227,7 +223,7 @@ class AuthViewModel @Inject constructor(
             try {
                 withContext(Dispatchers.IO) {
                     AppCheckReadiness.requireReady(context)
-                    Tasks.await(FirebaseAuth.getInstance().sendPasswordResetEmail(normalizedEmail))
+                    Tasks.await(FirebaseAuth.getInstance().sendPasswordResetEmail(normalizedEmail), 30, TimeUnit.SECONDS)
                 }
                 // Keep this response generic to avoid revealing whether an email is registered.
                 notice = "If an account uses this email, a password reset link is on its way."
@@ -247,7 +243,7 @@ class AuthViewModel @Inject constructor(
                 val verified = withContext(Dispatchers.IO) {
                     AppCheckReadiness.requireReady(context)
                     val user = FirebaseAuth.getInstance().currentUser ?: error("Sign in again to check verification.")
-                    Tasks.await(user.reload())
+                    Tasks.await(user.reload(), 15, TimeUnit.SECONDS)
                     user.isEmailVerified
                 }
                 onComplete(verified)
@@ -284,6 +280,9 @@ class AuthViewModel @Inject constructor(
         }
         withContext(Dispatchers.IO) { AppCheckReadiness.requireReady(context) }
     }
+
+    private suspend fun <T> awaitFirebase(task: Task<T>, timeoutSeconds: Long = 30): T =
+        withContext(Dispatchers.IO) { Tasks.await(task, timeoutSeconds, TimeUnit.SECONDS) }
 
     private fun mapAuthError(error: Throwable, provider: AuthProvider): String {
         val apiFailure = generateSequence(error) { it.cause }
@@ -322,6 +321,16 @@ class AuthViewModel @Inject constructor(
             is com.google.firebase.auth.FirebaseAuthInvalidUserException -> "No account was found for this email. Create one first."
             is com.google.firebase.auth.FirebaseAuthWeakPasswordException -> "Choose a stronger password with at least 8 characters."
             is com.google.firebase.FirebaseNetworkException, is java.io.IOException -> "Check your connection and try again."
+            is TimeoutException -> "Sign-in is taking too long. Check your connection and try again."
+            is java.util.concurrent.ExecutionException -> {
+                val cause = root.cause ?: error.cause
+                when (cause) {
+                    is TimeoutException -> "Sign-in is taking too long. Check your connection and try again."
+                    is com.google.firebase.FirebaseNetworkException, is java.io.IOException -> "Check your connection and try again."
+                    is com.google.firebase.auth.FirebaseAuthException -> return mapAuthError(cause, provider)
+                    else -> cause?.message?.takeIf(String::isNotBlank) ?: "Sign-in failed. Please try again."
+                }
+            }
             else -> if (root.message?.contains("too many", ignoreCase = true) == true) "Too many attempts. Wait a little before trying again."
                 else root.message?.takeIf(String::isNotBlank) ?: "Sign-in failed. Please try again."
         }

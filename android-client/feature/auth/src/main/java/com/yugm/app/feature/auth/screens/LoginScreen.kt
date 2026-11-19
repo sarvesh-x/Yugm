@@ -192,7 +192,8 @@ fun LoginScreen(
                         icon = Icons.Filled.Public,
                         onClick = { if (acceptTerms) onGoogleSignIn(acceptTerms) else localError = "Accept the terms to continue." },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !loading && !googleLoading && !facebookLoading && acceptTerms
+                        enabled = !loading && !googleLoading && !facebookLoading && acceptTerms,
+                        loading = googleLoading
                     )
                     Spacer(Modifier.height(10.dp))
                     LoginMethodButton(

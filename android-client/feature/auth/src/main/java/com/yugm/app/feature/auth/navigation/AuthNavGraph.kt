@@ -97,9 +97,16 @@ fun NavGraphBuilder.authNavGraph(
                         }
 
                         val credential = result.credential
-                        val googleCredential = if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-                            GoogleIdTokenCredential.createFrom(credential.data)
-                        } else throw IllegalStateException("Google did not return an ID token")
+                        val googleCredential = runCatching {
+                            when {
+                                credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL ->
+                                    GoogleIdTokenCredential.createFrom(credential.data)
+                                credential is CustomCredential -> GoogleIdTokenCredential.createFrom(credential.data)
+                                else -> GoogleIdTokenCredential.createFrom(credential.data)
+                            }
+                        }.getOrElse { parseError ->
+                            throw IllegalStateException("Google did not return a valid sign-in credential", parseError)
+                        }
                         authViewModel.googleAuth(
                             googleIdToken = googleCredential.idToken,
                             acceptTerms = acceptTerms,
