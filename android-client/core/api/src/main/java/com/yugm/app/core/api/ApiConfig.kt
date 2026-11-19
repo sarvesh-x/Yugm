@@ -6,6 +6,16 @@ object ApiConfig {
     var lanApiBaseUrl: String = ""
     var lanSocketBaseUrl: String = ""
     var isDebug: Boolean = false
+    /** Defaults closed; YugmApplication disables App Check only for debug builds targeting loopback. */
+    var appCheckRequired: Boolean = true
+}
+
+/** A local-only development bypass; never trust a remote host based on its build variant. */
+fun shouldRequireAppCheck(apiBaseUrl: String, isDebugBuild: Boolean): Boolean {
+    if (!isDebugBuild) return true
+    val uri = runCatching { java.net.URI(apiBaseUrl.trim()) }.getOrNull() ?: return true
+    val isLoopbackHost = uri.host?.lowercase() in setOf("localhost", "127.0.0.1", "::1", "10.0.2.2", "10.0.3.2")
+    return !(uri.scheme.equals("http", ignoreCase = true) && isLoopbackHost)
 }
 
 /** Turns API-relative media paths (for example `/uploads/avatar.jpg`) into loadable URLs. */

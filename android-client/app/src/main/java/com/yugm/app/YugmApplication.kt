@@ -9,6 +9,7 @@ import coil.decode.ImageDecoderDecoder
 import dagger.hilt.android.HiltAndroidApp
 import com.yugm.app.core.api.YugmMediaRoom
 import com.yugm.app.core.api.ApiConfig
+import com.yugm.app.core.api.shouldRequireAppCheck
 import com.yugm.app.core.api.YugmHttpClient
 import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
@@ -48,11 +49,12 @@ class YugmApplication : Application(), ImageLoaderFactory {
             else -> BuildConfig.LAN_SOCKET_BASE_URL
         }
         ApiConfig.isDebug = BuildConfig.DEBUG
+        ApiConfig.appCheckRequired = shouldRequireAppCheck(ApiConfig.apiBaseUrl, BuildConfig.DEBUG)
         YugmHttpClient.install(this)
         val appCheckFactory: AppCheckProviderFactory = YugmAppCheckProviderFactory.getInstance()
         val appCheck = FirebaseAppCheck.getInstance()
         appCheck.installAppCheckProviderFactory(appCheckFactory)
-        if (BuildConfig.DEBUG) {
+        if (BuildConfig.DEBUG && ApiConfig.appCheckRequired) {
             // Warm the debug provider at app start so its allowlist token and any
             // Firebase setup errors are visible in Logcat before the user signs in.
             appCheck.getAppCheckToken(false).addOnFailureListener { failure ->

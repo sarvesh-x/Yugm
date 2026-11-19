@@ -153,7 +153,7 @@ object YugmHttpClient {
                 checkAccount(requestAuth)
                 if (requestAuth != null) builder.header("Authorization", "Bearer $requestAuth")
                 val appCheckRequired = path.startsWith("/auth/") || path.startsWith("/notifications/device-token")
-                if (appCheckRequired) {
+                if (appCheckRequired && ApiConfig.appCheckRequired) {
                     val token = appCheckTokenProvider?.invoke()?.takeIf(String::isNotBlank)
                         ?: throw IllegalStateException("App verification is unavailable. Please restart the app and try again.")
                     builder.header("X-Firebase-AppCheck", token)

@@ -1,5 +1,11 @@
 # Development progress
 
+## 2026-11-19 — Skip App Check for local Android debug sessions
+
+- Removed the Firebase debug-token registration requirement only when a debuggable Android build targets cleartext loopback (`10.0.2.2`, localhost, or loopback). In that mode the app skips the auth preflight, request header, and startup token warm-up; the local API's existing `NODE_ENV=development/test` bypass is consistent with this behavior.
+- Release builds and debug builds using remote/LAN APIs continue requesting App Check. Backend production enforcement remains controlled by `APP_CHECK_ENFORCE`; production deployment configuration must keep it enabled.
+- Added core API tests for local debug bypass and release/remote target enforcement. Verification: from `android-client/`, ` .\gradlew.bat :core:api:testDebugUnitTest :feature:auth:testDebugUnitTest :app:compileDebugKotlin --console=plain` passed. Core API unit tests: 26 passed; auth unit tests: 8 passed; app Kotlin compilation passed. No Firebase token, API request, or backend runtime was exercised.
+
 ## 2026-11-19 — Auth boundary re-audit and session cleanup
 
 - Rechecked provider operation ownership/settlement, root navigation reset, server-confirmed profile completion, App Check readiness/error mapping, startup `/auth/me` validation, session revocation messaging, and Socket.IO handshake/reconnect session checks against current source.

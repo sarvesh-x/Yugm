@@ -5,11 +5,13 @@ import android.content.pm.ApplicationInfo
 import android.util.Log
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.appcheck.FirebaseAppCheck
+import com.yugm.app.core.api.ApiConfig
 import kotlinx.coroutines.CancellationException
 import java.util.concurrent.TimeUnit
 
 internal object AppCheckReadiness {
     fun requireReady(context: Context) {
+        if (!ApiConfig.appCheckRequired) return
         try {
             val token = Tasks.await(
                 FirebaseAppCheck.getInstance().getAppCheckToken(false),
