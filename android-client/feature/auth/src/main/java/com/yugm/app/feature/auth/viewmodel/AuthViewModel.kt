@@ -114,7 +114,18 @@ class AuthViewModel @Inject constructor(
                 awaitFirebase(priorSignup.reauthenticate(EmailAuthProvider.getCredential(normalizedEmail, password)))
                 priorSignup
             } else if (createAccount) {
-                awaitFirebase(auth.createUserWithEmailAndPassword(normalizedEmail, password)).user
+                try {
+                    awaitFirebase(auth.createUserWithEmailAndPassword(normalizedEmail, password)).user
+                } catch (collision: com.google.firebase.auth.FirebaseAuthUserCollisionException) {
+                    // The Firebase identity already exists from a previous (possibly
+                    // failed) attempt. Sign in with the entered password instead of
+                    // leaving the user stuck on "account already exists".
+                    try {
+                        awaitFirebase(auth.signInWithEmailAndPassword(normalizedEmail, password)).user
+                    } catch (signInError: Exception) {
+                        throw IllegalStateException("An account already uses this email. Sign in with the original password, or reset it if needed.", signInError)
+                    }
+                }
             } else {
                 try {
                     awaitFirebase(auth.signInWithEmailAndPassword(normalizedEmail, password)).user
@@ -302,7 +313,7 @@ class AuthViewModel @Inject constructor(
         if (apiFailure?.statusCode == 401 && apiFailure.message.orEmpty().contains("firebase", ignoreCase = true)) {
             return "Authentication could not be verified. Please try again or sign up with email."
         }
-        if (apiFailure?.statusCode == 409) return apiFailure.message ?: "This account conflicts with an existing sign-in. Use the original sign-in method."
+        if (apiFailure?.statusCode == 409) return apiFailure.message ?: "An account already uses this email. Sign in instead, or reset the password if needed."
         val appCheckFailure = generateSequence(error) { it.cause }
             .filterIsInstance<AppCheckSetupException>()
             .firstOrNull()
