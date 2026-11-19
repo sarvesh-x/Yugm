@@ -7,15 +7,18 @@ import com.yugm.app.core.model.YugmUser
 import org.json.JSONObject
 
 object AuthApi {
-    suspend fun googleAuth(idToken: String, acceptTerms: Boolean, provider: String = "google"): Session {
-        val response = YugmHttpClient.post("/auth/google", auth = null,
-            JSONObject().put("idToken", idToken).put("acceptTerms", acceptTerms).put("provider", provider))
+    suspend fun googleAuth(idToken: String, acceptTerms: Boolean, provider: String = "google", name: String? = null, mode: String? = null): Session {
+        val payload = JSONObject().put("idToken", idToken).put("acceptTerms", acceptTerms).put("provider", provider)
+        if (!name.isNullOrBlank()) payload.put("name", name.trim())
+        if (!mode.isNullOrBlank()) payload.put("mode", mode.trim())
+        val response = YugmHttpClient.post("/auth/google", auth = null, payload)
         return parseSession(response)
     }
 
-    suspend fun facebookAuth(idToken: String, acceptTerms: Boolean): Session {
-        val response = YugmHttpClient.post("/auth/facebook", auth = null,
-            JSONObject().put("idToken", idToken).put("acceptTerms", acceptTerms))
+    suspend fun facebookAuth(idToken: String, acceptTerms: Boolean, name: String? = null): Session {
+        val payload = JSONObject().put("idToken", idToken).put("acceptTerms", acceptTerms)
+        if (!name.isNullOrBlank()) payload.put("name", name.trim())
+        val response = YugmHttpClient.post("/auth/facebook", auth = null, payload)
         return parseSession(response)
     }
 

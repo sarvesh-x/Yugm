@@ -56,20 +56,37 @@ fun LoginScreen(
     error: String?,
     notice: String? = null,
     googleLoading: Boolean = false,
-    facebookLoading: Boolean = false
+    facebookLoading: Boolean = false,
+    initialEmail: String = "",
+    initialCreateAccount: Boolean = false,
+    onModeChange: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
     val authColors = LocalYugmColors.current
     val authAccent = authColors.accent
-    var email by rememberSaveable { mutableStateOf("") }
+    var email by rememberSaveable { mutableStateOf(initialEmail) }
     var password by rememberSaveable { mutableStateOf("") }
     var confirmPassword by rememberSaveable { mutableStateOf("") }
-    var createAccount by rememberSaveable { mutableStateOf(false) }
-    var manualLogin by rememberSaveable { mutableStateOf(false) }
+    var createAccount by rememberSaveable { mutableStateOf(initialCreateAccount) }
+    var manualLogin by rememberSaveable { mutableStateOf(initialCreateAccount) }
     var acceptTerms by rememberSaveable { mutableStateOf(false) }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
     var forgotDialog by rememberSaveable { mutableStateOf(false) }
     var localError by rememberSaveable { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(initialEmail) {
+        if (initialEmail.isNotBlank()) {
+            email = initialEmail
+        }
+    }
+    LaunchedEffect(initialCreateAccount) {
+        if (initialCreateAccount) {
+            createAccount = true
+            manualLogin = true
+            acceptTerms = true
+        }
+    }
+
     val emailValid = Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()
     val passwordStrong = password.length >= 8 && password.any(Char::isLetter) && password.any(Char::isDigit)
     val canSubmit = !loading && !googleLoading && !facebookLoading && acceptTerms && emailValid && password.isNotEmpty() &&
@@ -102,11 +119,13 @@ fun LoginScreen(
                         manualLogin = false
                         confirmPassword = ""
                         clearErrors()
+                        onModeChange(false)
                     }
                     AuthModeButton("Create account", selected = createAccount, Modifier.weight(1f), enabled = !loading && !googleLoading && !facebookLoading) {
                         createAccount = true
                         manualLogin = true
                         clearErrors()
+                        onModeChange(true)
                     }
                 }
                 Spacer(Modifier.height(18.dp))

@@ -8,11 +8,11 @@ import javax.inject.Singleton
 
 @Singleton
 class AuthRepository @Inject constructor(private val api: IYugmApi) {
-    suspend fun googleAuth(idToken: String, acceptTerms: Boolean, provider: String = "google"): Session =
-        api.googleAuth(idToken, acceptTerms, provider)
+    suspend fun googleAuth(idToken: String, acceptTerms: Boolean, provider: String = "google", name: String? = null, mode: String? = null): Session =
+        api.googleAuth(idToken, acceptTerms, provider, name, mode)
 
-    suspend fun facebookAuth(idToken: String, acceptTerms: Boolean): Session =
-        api.facebookAuth(idToken, acceptTerms)
+    suspend fun facebookAuth(idToken: String, acceptTerms: Boolean, name: String? = null): Session =
+        api.facebookAuth(idToken, acceptTerms, name)
 
     suspend fun phoneAuth(idToken: String, acceptTerms: Boolean): Session =
         api.phoneAuth(idToken, acceptTerms)

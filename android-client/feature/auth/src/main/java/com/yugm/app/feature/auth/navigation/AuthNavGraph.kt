@@ -81,7 +81,7 @@ fun NavGraphBuilder.authNavGraph(
                         val result = try {
                             val googleOption = GetGoogleIdOption.Builder()
                                 .setServerClientId(googleWebClientId)
-                                .setFilterByAuthorizedAccounts(true)
+                                .setFilterByAuthorizedAccounts(false)
                                 .setAutoSelectEnabled(false)
                                 .build()
                             val request = GetCredentialRequest.Builder().addCredentialOption(googleOption).build()
@@ -100,11 +100,20 @@ fun NavGraphBuilder.authNavGraph(
                         val googleCredential = if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                             GoogleIdTokenCredential.createFrom(credential.data)
                         } else throw IllegalStateException("Google did not return an ID token")
-                        authViewModel.googleAuth(googleCredential.idToken, acceptTerms)
+                        authViewModel.googleAuth(
+                            googleIdToken = googleCredential.idToken,
+                            acceptTerms = acceptTerms,
+                            email = googleCredential.id,
+                            name = googleCredential.displayName
+                        )
                     } catch (_: GetCredentialCancellationException) {
                         authViewModel.cancelCredentialAuth(AuthProvider.GOOGLE)
+                    } catch (_: androidx.credentials.exceptions.NoCredentialException) {
+                        authViewModel.cancelCredentialAuth(AuthProvider.GOOGLE)
+                        authViewModel.switchToSignUp(message = "No Google account found. Create an account with your email.")
                     } catch (error: GetCredentialException) {
-                        authViewModel.cancelCredentialAuth(AuthProvider.GOOGLE, error)
+                        authViewModel.cancelCredentialAuth(AuthProvider.GOOGLE)
+                        authViewModel.switchToSignUp(message = "Could not sign in with Google. Create an account with your email and password.")
                     } catch (cancelled: CancellationException) {
                         authViewModel.cancelCredentialAuth(AuthProvider.GOOGLE)
                         throw cancelled
@@ -128,7 +137,10 @@ fun NavGraphBuilder.authNavGraph(
             error = authViewModel.error,
             notice = authViewModel.notice,
             googleLoading = authViewModel.googleCredentialLoading,
-            facebookLoading = authViewModel.facebookCredentialLoading
+            facebookLoading = authViewModel.facebookCredentialLoading,
+            initialEmail = authViewModel.prefilledEmail,
+            initialCreateAccount = authViewModel.isCreateAccount,
+            onModeChange = authViewModel::setAuthMode
         )
         LaunchedEffect(authViewModel.session) {
             authViewModel.session?.let(navigateAfterLogin)

@@ -146,8 +146,8 @@ import com.yugm.app.core.model.WingmanAnalyticsResponse
 import org.json.JSONObject
 
 interface IYugmApi {
-    suspend fun googleAuth(idToken: String, acceptTerms: Boolean, provider: String = "google"): Session
-    suspend fun facebookAuth(idToken: String, acceptTerms: Boolean): Session
+    suspend fun googleAuth(idToken: String, acceptTerms: Boolean, provider: String = "google", name: String? = null, mode: String? = null): Session
+    suspend fun facebookAuth(idToken: String, acceptTerms: Boolean, name: String? = null): Session
     suspend fun phoneAuth(idToken: String, acceptTerms: Boolean): Session
     suspend fun refreshAuth(refreshToken: String): RefreshedSession
     suspend fun logoutAuth(token: String, refreshToken: String, deviceToken: String? = null)

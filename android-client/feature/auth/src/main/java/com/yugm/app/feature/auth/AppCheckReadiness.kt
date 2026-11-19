@@ -18,7 +18,9 @@ internal object AppCheckReadiness {
                 TOKEN_TIMEOUT_SECONDS,
                 TimeUnit.SECONDS
             ).token
-            if (token.isNullOrBlank()) throw IllegalStateException("App Check returned an empty token")
+            if (token.isNullOrBlank()) {
+                Log.w("YugmAppCheck", "App Check returned an empty token; continuing with auth request")
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (interrupted: InterruptedException) {
@@ -28,19 +30,14 @@ internal object AppCheckReadiness {
             val appId = context.packageName
             val isDebugBuild = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
             if (isDebugBuild) {
-                Log.e("YugmAppCheck", "Debug App Check token request failed for $appId", error)
-            }
-            val setupInstructions = if (isDebugBuild) {
-                "Allowlist this debug build's token in Firebase Console → App Check → Apps → $appId → Debug tokens. " +
-                    "Find the token in Logcat under DebugAppCheckProvider, then retry."
+                Log.w("YugmAppCheck", "Debug App Check token request failed for $appId: ${error.message}; continuing request to server")
             } else {
-                "Register Android app $appId in Firebase App Check with Play Integrity. Verify this release's signing certificate SHA-256 and distribution settings."
+                Log.w("YugmAppCheck", "Release App Check token request failed for $appId: ${error.message}; continuing request to server")
             }
-            throw AppCheckSetupException("App verification failed. $setupInstructions", error)
         }
     }
 
-    private const val TOKEN_TIMEOUT_SECONDS = 8L
+    private const val TOKEN_TIMEOUT_SECONDS = 2L
 }
 
 internal class AppCheckSetupException(message: String, cause: Throwable) : IllegalStateException(message, cause)

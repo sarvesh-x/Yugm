@@ -64,7 +64,7 @@ class YugmApplication : Application(), ImageLoaderFactory {
         YugmHttpClient.appCheckTokenProvider = {
             // Server-side replay protection consumes limited-use tokens, so each
             // protected request must carry a fresh token rather than a cached one.
-            Tasks.await(FirebaseAppCheck.getInstance().limitedUseAppCheckToken, 10, TimeUnit.SECONDS).token
+            Tasks.await(FirebaseAppCheck.getInstance().limitedUseAppCheckToken, 2, TimeUnit.SECONDS).token
         }
         if (BuildConfig.DEBUG) Timber.plant(Timber.DebugTree())
         YugmMediaRoom.initialize(this)

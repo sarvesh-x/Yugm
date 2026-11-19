@@ -55,11 +55,11 @@ object YugmHttpClient {
 
     private fun buildClient(cacheDir: File?): OkHttpClient =
         OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
+            .connectTimeout(10, TimeUnit.SECONDS)
             // The production API may need time to wake its hosting instance before
             // completing Firebase token verification and the first database query.
-            .readTimeout(60, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(25, TimeUnit.SECONDS)
+            .writeTimeout(20, TimeUnit.SECONDS)
             // Screens fan out 10+ independent reads. OkHttp's default of 5 per host
             // silently serializes them into several waves.
             .dispatcher(Dispatcher().apply {
@@ -154,9 +154,15 @@ object YugmHttpClient {
                 if (requestAuth != null) builder.header("Authorization", "Bearer $requestAuth")
                 val appCheckRequired = path.startsWith("/auth/") || path.startsWith("/notifications/device-token")
                 if (appCheckRequired && ApiConfig.appCheckRequired) {
-                    val token = appCheckTokenProvider?.invoke()?.takeIf(String::isNotBlank)
-                        ?: throw IllegalStateException("App verification is unavailable. Please restart the app and try again.")
-                    builder.header("X-Firebase-AppCheck", token)
+                    val token = try {
+                        appCheckTokenProvider?.invoke()?.takeIf(String::isNotBlank)
+                    } catch (e: Exception) {
+                        Timber.tag(TAG).w(e, "Could not acquire App Check token")
+                        null
+                    }
+                    if (token != null) {
+                        builder.header("X-Firebase-AppCheck", token)
+                    }
                 }
                 val requestBody = body?.toString()?.toRequestBody(json)
                 when (method) {

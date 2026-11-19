@@ -155,8 +155,10 @@ object YugmApi : IYugmApi {
     fun endpoint(path: String): String = YugmHttpClient.endpoint(path)
 
     // Auth
-    override suspend fun googleAuth(idToken: String, acceptTerms: Boolean, provider: String): Session = AuthApi.googleAuth(idToken, acceptTerms, provider)
-    override suspend fun facebookAuth(idToken: String, acceptTerms: Boolean): Session = AuthApi.facebookAuth(idToken, acceptTerms)
+    override suspend fun googleAuth(idToken: String, acceptTerms: Boolean, provider: String, name: String?, mode: String?): Session =
+        AuthApi.googleAuth(idToken, acceptTerms, provider, name, mode)
+    override suspend fun facebookAuth(idToken: String, acceptTerms: Boolean, name: String?): Session =
+        AuthApi.facebookAuth(idToken, acceptTerms, name)
     override suspend fun phoneAuth(idToken: String, acceptTerms: Boolean): Session = AuthApi.phoneAuth(idToken, acceptTerms)
     override suspend fun refreshAuth(refreshToken: String): RefreshedSession = AuthApi.refresh(refreshToken)
     override suspend fun logoutAuth(token: String, refreshToken: String, deviceToken: String?) = AuthApi.logout(token, refreshToken, deviceToken)

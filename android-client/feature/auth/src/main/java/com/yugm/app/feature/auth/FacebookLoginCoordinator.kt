@@ -81,8 +81,8 @@ fun rememberFacebookSignIn(
                                     handled.value = true
                                     inFlight.value = false
                                     LoginManager.getInstance().unregisterCallback(callbackManager)
-                                    val token = result.accessToken.token
-                                    if (token.isBlank()) {
+                                    val token = result.accessToken?.token ?: result.authenticationToken?.token
+                                    if (token.isNullOrBlank()) {
                                         currentOnError("Facebook did not return an access token. Try again.")
                                     } else {
                                         currentOnToken(token, acceptTerms)
