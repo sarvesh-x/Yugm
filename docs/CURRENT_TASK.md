@@ -1,10 +1,16 @@
 # Current task
 
+## YUGM-AVATAR-R2-001 — Store and visualize profile avatars in Cloudflare R2
+
+- **Scope:** Move new/updated profile avatars from inline MongoDB data URLs to the configured public S3-compatible object store (Cloudflare R2), keep `User.avatar` as a stable public URL, clean up replaced managed objects, and verify Android upload/visualization compatibility.
+- **Contract:** `POST /upload/avatar` keeps auth, image validation, and its `{ url, storage }` response. With `STORAGE_DRIVER=s3` + `S3_ENDPOINT` + `S3_PUBLIC_BASE_URL`, objects live under `avatars/` in R2. Legacy `data:` avatars remain readable; blank profile values do not erase the committed avatar. See [avatar R2 storage](features/avatar-r2-storage.md).
+- **Status:** Source implementation and bounded checks are complete: backend storage URL/key helpers, R2/S3 upload + managed replacement cleanup, health/config warnings, Android pass-through and hosted-URL regression tests, and documentation. Verification: API 173/173 + typecheck; core API 29/29 and auth 13/13 unit tests. Live R2/Mongo persistence, bucket public/CORS policy, and device rendering remain unverified; see [handoff](handoffs/2026-11-19-avatar-r2-storage.md).
+
 ## YUGM-PROFILE-SETUP-001 — Unify new-user profile creation contract and recovery
 
 - **Scope:** Complete the signed-in profile setup contract, shared backend write path, client DTO, completion/consent rules, recoverable upload/submit behavior, exit navigation, and Yugm-standard UI.
 - **Contract decision:** Gender and `lookingFor` are both required. Completion also requires name, username, age 18–80, city, at least one language and interest, bio, and accepted terms; avatar and vibe line remain optional. See [profile setup contract](features/auth-flow-audit.md#profile-setup-contract-locked-before-implementation).
-- **Status:** Source implementation is complete for the shared required-field contract, normalized/parity backend write path, client payload, required gender/looking-for/terms validation, confirmed profile completion gate, sign-out exit, saved form values, ViewModel-owned upload/submit lifecycle, acceptance of the server's persisted base64 avatar URL, and avatar-upload profile invalidation. Latest verification: API 169/169 + typecheck; targeted Android model/API/data/auth unit and app compile checks pass; `git diff --check` is clean. Mongo persistence/XP/avatar integration, real provider navigation, and device visual/accessibility review remain unverified; see [handoff](handoffs/2026-11-19-profile-setup.md).
+- **Status:** Source implementation is complete for the shared required-field contract, normalized/parity backend write path, client payload, required gender/looking-for/terms validation, confirmed profile completion gate, sign-out exit, saved form values, ViewModel-owned upload/submit lifecycle, acceptance of the server's persisted avatar URL (hosted object URL or legacy data URL), and avatar-upload profile invalidation. Latest verification: API 173/173 + typecheck; targeted Android model/API/data/auth unit and app compile checks pass; `git diff --check` is clean. Mongo persistence/XP/avatar integration, real provider navigation, and device visual/accessibility review remain unverified; see [handoff](handoffs/2026-11-19-profile-setup.md).
 
 ## YUGM-AUTH-BOUNDARY-AUDIT-001 — Prove and close auth/session boundary gaps
 

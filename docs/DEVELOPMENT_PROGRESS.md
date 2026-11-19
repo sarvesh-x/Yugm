@@ -1,5 +1,24 @@
 # Development progress
 
+## 2026-11-19 — Release/production endpoints moved to Cloudflare
+
+- Switched the Android release/production API and Socket.IO defaults to the Cloudflare staging Worker: `https://yugm-api-staging.sarveshkumar10101.workers.dev/api` and `https://yugm-api-staging.sarveshkumar10101.workers.dev` (`android-client/app/build.gradle.kts`).
+- Updated the tagged release workflow to build the signed APK against the same Worker endpoints (`.github/workflows/android-release.yml`).
+- Recorded the current admin panel origin as `https://yugm-admin-staging.pages.dev` in the Pages deployment guide and migration audit; the staging Worker already allows it via `CORS_ORIGIN`.
+- Updated the legal hosting references to the Worker-served pages (`/legal/privacy`, `/legal/account-deletion`).
+- Left the Worker's `YUGM_STAGE=production` startup guard and the separate production Wrangler config unchanged; the given Worker identifies as staging, so enabling a production Worker remains a separate authorized cutover.
+- Verification: URL/config source review only. No Android release build or Cloudflare deployment was run in this change.
+
+## 2026-11-19 — Profile avatars stored in Cloudflare R2 object storage
+
+- Replaced the inline MongoDB avatar thumbnail in `POST /upload/avatar` with the existing storage abstraction. Avatars are now persisted under the `avatars/` folder and `User.avatar` stores the returned public URL. With `STORAGE_DRIVER=s3`, `S3_ENDPOINT`, and `S3_PUBLIC_BASE_URL`, this is the configured R2 bucket/public domain.
+- Added strict managed-object cleanup: an upload or profile PATCH deletes the previous `avatars/` object only when the old URL matches the configured public base and prefix. Legacy `data:image/...`, cosmetic assets, external images, and sibling media are never deleted. Blank optional profile values remain omissions, so a profile PATCH cannot accidentally erase the committed avatar.
+- Made public S3-compatible URL construction explicit: the public base is preferred and a custom endpoint without `S3_PUBLIC_BASE_URL` now fails loudly instead of emitting an unusable AWS hostname. `/health` exposes `endpointConfigured` and `publicUrlReady`; startup warns when the pair is incomplete.
+- Kept auth/permission, signature/type/220 KB validation, temp-file cleanup, the existing avatar `PROFILE`/`TASKS` realtime invalidation, and client compatibility intact. Android already accepts absolute hosted URLs through `resolveMediaUrl`, profile-setup validation, Coil rendering, and the profile-edit upload path; regression tests now pin those behaviors.
+- Added operations and contract documentation in [avatar R2 storage](features/avatar-r2-storage.md), [API contracts](API_CONTRACTS.md), and the [auth flow audit](features/auth-flow-audit.md).
+- Verification: from `backend-server/`, `npm --workspace @yugm/api test` passed 173/173 (including new storage URL/key tests) and `npm --workspace @yugm/api run typecheck` passed. From `android-client/`, `.\gradlew.bat :core:api:testDebugUnitTest :feature:auth:testDebugUnitTest --console=plain` passed (`BUILD SUCCESSFUL`; 29 core API tests, 13 auth tests, 0 failures). `git diff --check` reported no whitespace errors.
+- Not exercised: a live R2 upload/read/delete, Mongo-backed route persistence and replacement cleanup, public bucket/CORS behavior, real Android upload/display, and device visual/accessibility review. See the [handoff](handoffs/2026-11-19-avatar-r2-storage.md).
+
 ## 2026-11-19 — Profile setup contract and shared server update path
 
 - Locked required profile completion fields with the user: name, normalized username, age 18–80, gender (`Male`/`Female`/`Non-Binary`), city, at least one language and interest, bio, canonical `lookingFor` (`Friendship`/`Dating`/`Relationship`/`Networking`), and accepted terms. Avatar and other optional profile fields do not gate completion; legacy `profileCompletedAt` remains authoritative.

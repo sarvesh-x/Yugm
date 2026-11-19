@@ -1,6 +1,7 @@
 import { User } from "../models/User.js";
 import { grantXp } from "./levels.js";
 import { isProfileCompleted, normalizeProfileUpdate } from "./profileCompletion.js";
+import { deleteStoredFile, managedAvatarKeyFromUrl } from "./storage.js";
 import { ErrorCode, HttpError } from "../utils/http.js";
 
 const PROFILE_FIELDS = [
@@ -16,7 +17,7 @@ export async function updateProfileForUser(userId: string, body: Record<string, 
   for (const field of PROFILE_FIELDS) {
     if (field in normalized) update[field] = normalized[field];
   }
-  const userBefore = await User.findById(userId).select("termsAcceptedAt profileCompletedAt");
+  const userBefore = await User.findById(userId).select("termsAcceptedAt profileCompletedAt avatar");
   if (!userBefore) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
   if (body.acceptTerms === true && !userBefore.termsAcceptedAt) update.termsAcceptedAt = new Date();
   if (typeof update.username === "string") {
@@ -34,6 +35,17 @@ export async function updateProfileForUser(userId: string, body: Record<string, 
     throw error;
   }
   if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+
+  // A profile PATCH only manages avatar objects it created. Legacy data URLs
+  // and external images remain untouched when the user replaces them.
+  if (typeof update.avatar === "string" && update.avatar !== userBefore.avatar) {
+    const previousKey = managedAvatarKeyFromUrl(userBefore.avatar);
+    if (previousKey) {
+      await deleteStoredFile("avatars", previousKey).catch((error) => {
+        console.warn("[profile] failed to remove the replaced avatar object", error);
+      });
+    }
+  }
 
   let xpGrant: Awaited<ReturnType<typeof grantXp>> = undefined;
   if (!user.profileCompletedAt && isProfileCompleted(user)) {

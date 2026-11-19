@@ -5,7 +5,8 @@ import fs from "fs";
 import fsp from "fs/promises";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode } from "../utils/http.js";
-import { persistUploadedFile, safeUploadName } from "../services/storage.js";
+import { deleteStoredFile, managedAvatarKeyFromUrl, persistUploadedFile, safeUploadName } from "../services/storage.js";
+import { User } from "../models/User.js";
 import { env } from "../config/env.js";
 
 export const uploadRouter = Router();
@@ -170,33 +171,48 @@ function assertSafeTrustMedia(file: Express.Multer.File | undefined, purpose: st
   return normalizedPurpose;
 }
 
+const AVATAR_MAX_BYTES = 220 * 1024;
+
+async function discardStoredAvatar(stored?: { url: string; key?: string }) {
+  if (!stored) return;
+  const reference = stored.key ?? path.basename(stored.url);
+  await deleteStoredFile("avatars", reference).catch((error) => {
+    console.warn("[upload/avatar] failed to remove stored avatar object", error);
+  });
+}
+
 uploadRouter.post("/upload/avatar", requireAuth, upload.single("avatar"), asyncHandler(async (req: AuthRequest, res) => {
   assertSafeImage(req.file);
   const file = req.file!;
+  const previousAvatar = req.user!.avatar;
+  let stored: Awaited<ReturnType<typeof persistUploadedFile>> | undefined;
   try {
-    const bytes = await fsp.readFile(file.path);
-    const maxThumbnailBytes = 220 * 1024;
-    if (bytes.length > maxThumbnailBytes) {
+    if (file.size > AVATAR_MAX_BYTES) {
       throw new HttpError(400, "Avatar image is too large. Please choose or crop a smaller image.", ErrorCode.VALIDATION);
     }
 
-    let mime = (file.mimetype || "").toLowerCase();
-    if (!mime.startsWith("image/")) {
-      const ext = path.extname(file.originalname).toLowerCase();
-      mime = ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : ext === ".gif" ? "image/gif" : "image/jpeg";
-    }
-    if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(mime)) {
-      mime = "image/jpeg";
+    stored = await persistUploadedFile(file, "avatars");
+    await User.updateOne(
+      { _id: req.user!._id },
+      { $set: { avatar: stored.url, "activeCosmetics.avatarAsset": "" } }
+    );
+
+    const previousKey = managedAvatarKeyFromUrl(previousAvatar);
+    if (previousKey && previousKey !== stored.key) {
+      await deleteStoredFile("avatars", previousKey).catch((error) => {
+        console.warn("[upload/avatar] failed to remove the previous avatar object", error);
+      });
     }
 
-    const url = `data:${mime};base64,${bytes.toString("base64")}`;
-    await req.user!.updateOne({
-      avatar: url,
-      "activeCosmetics.avatarAsset": ""
-    });
-    sendOk(res, { url, storage: "mongo-thumbnail" });
+    sendOk(res, { url: stored.url, storage: stored.storage });
+  } catch (error) {
+    await discardStoredAvatar(stored);
+    throw error;
   } finally {
-    await fsp.unlink(file.path).catch(() => {});
+    // The local driver keeps the staged file as the stored object.
+    if (!stored || env.STORAGE_DRIVER !== "local") {
+      await fsp.unlink(file.path).catch(() => {});
+    }
   }
 }));
 

@@ -91,7 +91,7 @@ Google Play requires a **publicly accessible HTTPS URL** (not a Google Doc or PD
 4. GitHub will give you a live HTTPS URL like:
    `https://sarvesh-x.github.io/yugm-legal/privacy-policy`
 
-### Option 2: Render Static Site (Since You Already Use Render)
-1. Add a `/privacy` route to your existing `render-backend` that serves this HTML page, giving you:
-   `https://your-backend-url.onrender.com/privacy`
+### Option 2: Cloudflare Worker (Since You Already Use Cloudflare)
+1. The deployed API already serves the policy at `/legal/privacy`, giving you:
+   `https://yugm-api-staging.sarveshkumar10101.workers.dev/legal/privacy`
 2. Paste that exact URL into **Google Play Console** $\to$ **App Content** $\to$ **Privacy Policy** (and link it on your app's Login/Settings screen).

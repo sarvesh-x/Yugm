@@ -29,6 +29,54 @@ function assertS3Ready() {
   }
 }
 
+interface PublicStorageConfig {
+  publicBaseUrl?: string;
+  endpoint?: string;
+  bucket?: string;
+  region?: string;
+}
+
+const currentPublicStorageConfig = (): PublicStorageConfig => ({
+  publicBaseUrl: env.S3_PUBLIC_BASE_URL,
+  endpoint: env.S3_ENDPOINT,
+  bucket: env.S3_BUCKET,
+  region: env.S3_REGION
+});
+
+const trimBaseUrl = (value?: string) => value?.trim().replace(/\/+$/, "") ?? "";
+
+/**
+ * Build the browser-loadable URL for a public object key.
+ * S3-compatible endpoints (for example Cloudflare R2) do not use the AWS
+ * virtual-hosted hostname, so a missing public base must fail loudly instead
+ * of producing a URL that can never resolve.
+ */
+export function buildPublicStorageUrl(key: string, config: PublicStorageConfig = currentPublicStorageConfig()): string {
+  const objectKey = key.replace(/^\/+/, "");
+  const base = trimBaseUrl(config.publicBaseUrl);
+  if (base) return `${base}/${objectKey}`;
+  if (config.endpoint) {
+    throw new Error("S3_PUBLIC_BASE_URL is required when S3_ENDPOINT is configured so stored objects have a public URL");
+  }
+  if (!config.bucket || !config.region) throw new Error("S3 storage requires S3_BUCKET and S3_REGION");
+  return `https://${config.bucket}.s3.${config.region}.amazonaws.com/${objectKey}`;
+}
+
+/**
+ * Identify an avatar object created by this deployment. Only URLs below the
+ * configured public base and the avatars/ prefix are managed; legacy inline
+ * data URLs, cosmetic assets and external images must never be deleted.
+ */
+export function managedAvatarKeyFromUrl(value?: string | null, publicBaseUrl = env.S3_PUBLIC_BASE_URL): string | null {
+  const url = value?.trim();
+  if (!url || /^data:/i.test(url)) return null;
+  const base = trimBaseUrl(publicBaseUrl);
+  if (!base || !url.startsWith(`${base}/`)) return null;
+  const key = url.slice(base.length + 1).split(/[?#]/, 1)[0];
+  if (!key.startsWith("avatars/") || key.includes("..")) return null;
+  return key;
+}
+
 function getMediaBucket() {
   const db = mongoose.connection.db;
   if (!db || mongoose.connection.readyState !== 1) throw new Error("MongoDB media storage is unavailable");
@@ -117,23 +165,25 @@ export async function persistUploadedFile(file: Express.Multer.File, folder: "av
   }
   assertS3Ready();
   const key = `${folder}/${file.filename}`;
-  const body = await fs.readFile(file.path);
-  await getS3Client().send(new PutObjectCommand({
-    Bucket: env.S3_BUCKET,
-    Key: key,
-    Body: body,
-    ContentType: file.mimetype,
-    CacheControl: folder === "trust-verification" ? "private, no-store" : "public, max-age=31536000, immutable"
-  }));
-  await fs.unlink(file.path).catch(() => {});
-  if (folder === "trust-verification") {
-    return { url: `/api/trust-verification/media/${file.filename}`, storage: "private-s3" as const, key };
+  try {
+    // Resolve the public URL before the upload so a misconfigured public base
+    // fails before writing an unreachable object.
+    const publicUrl = folder === "trust-verification" ? undefined : buildPublicStorageUrl(key);
+    const body = await fs.readFile(file.path);
+    await getS3Client().send(new PutObjectCommand({
+      Bucket: env.S3_BUCKET,
+      Key: key,
+      Body: body,
+      ContentType: file.mimetype,
+      CacheControl: folder === "trust-verification" ? "private, no-store" : "public, max-age=31536000, immutable"
+    }));
+    if (folder === "trust-verification") {
+      return { url: `/api/trust-verification/media/${file.filename}`, storage: "private-s3" as const, key };
+    }
+    return { url: publicUrl!, storage: "s3" as const, key };
+  } finally {
+    await fs.unlink(file.path).catch(() => {});
   }
-  const base = env.S3_PUBLIC_BASE_URL?.replace(/\/$/, "");
-  const url = base
-    ? `${base}/${key}`
-    : `https://${env.S3_BUCKET}.s3.${env.S3_REGION}.amazonaws.com/${key}`;
-  return { url, storage: "s3" as const, key };
 }
 
 const trustMediaNamePattern = /^[0-9a-f]{24}_[0-9]+_[a-z0-9]{6}\.(?:jpe?g|png|webp|mp4|mov|m4v|webm|mp3|m4a|aac|wav|ogg)$/i;
@@ -166,13 +216,16 @@ export async function loadTrustVerificationFile(fileName: string) {
   return { body: Buffer.from(await object.Body.transformToByteArray()), contentType: object.ContentType ?? "application/octet-stream" };
 }
 
-export async function deleteStoredFile(folder: "reactions", fileNameOrKey?: string) {
+export async function deleteStoredFile(folder: "reactions" | "avatars", fileNameOrKey?: string) {
   if (!fileNameOrKey) return;
   const fileName = path.basename(fileNameOrKey);
   if (!fileName) return;
+  const key = fileNameOrKey.includes("/") ? fileNameOrKey : `${folder}/${fileName}`;
+  // Only objects under the owning folder may be removed; external URLs and
+  // sibling media must never be deleted through this helper.
+  if (!key.startsWith(`${folder}/`) || key.includes("..")) return;
   if (env.STORAGE_DRIVER === "mongodb") {
     const bucket = getMediaBucket();
-    const key = fileNameOrKey.includes("/") ? fileNameOrKey : `${folder}/${fileName}`;
     const files = await bucket.find({ filename: key }).toArray();
     for (const file of files) {
       await bucket.delete(file._id);
@@ -185,7 +238,6 @@ export async function deleteStoredFile(folder: "reactions", fileNameOrKey?: stri
     return;
   }
   assertS3Ready();
-  const key = fileNameOrKey.includes("/") ? fileNameOrKey : `${folder}/${fileName}`;
   const { DeleteObjectCommand } = await import("@aws-sdk/client-s3");
   await getS3Client().send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: key })).catch(() => {});
 }
@@ -196,11 +248,15 @@ export function safeUploadName(userId: string, originalName: string) {
 }
 
 export function getStorageHealth() {
+  const endpointConfigured = Boolean(env.S3_ENDPOINT);
+  const publicBaseUrlConfigured = Boolean(env.S3_PUBLIC_BASE_URL);
   return {
     driver: env.STORAGE_DRIVER,
     ready: env.STORAGE_DRIVER === "local" || (env.STORAGE_DRIVER === "mongodb" ? mongoose.connection.readyState === 1 : Boolean(env.S3_BUCKET && env.S3_REGION)),
     bucketConfigured: Boolean(env.S3_BUCKET),
-    publicBaseUrlConfigured: Boolean(env.S3_PUBLIC_BASE_URL)
+    endpointConfigured,
+    publicBaseUrlConfigured,
+    publicUrlReady: env.STORAGE_DRIVER !== "s3" || publicBaseUrlConfigured || !endpointConfigured
   };
 }
 

@@ -69,6 +69,6 @@ Google Play’s **Data Safety** form specifically asks for a **"Delete account U
 
    * **GitHub Pages:** `https://sarvesh-x.github.io/yugm-legal/delete-account`
 
-   * **Render Backend:** `https://your-backend-url.onrender.com/delete-account`
+   * **Cloudflare Worker:** `https://yugm-api-staging.sarveshkumar10101.workers.dev/legal/account-deletion`
 
 2. Go to **Google Play Console** $\to$ **App Content** $\to$ **Data Safety** $\to$ **Account deletion** and paste that exact URL.

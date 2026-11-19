@@ -12,6 +12,11 @@ health, and uploads the admin build to `yugm-admin-staging`. Set the
 branch. The token needs permission to deploy the staging Worker and Pages
 project. The Worker retains its existing runtime secrets in Cloudflare.
 
+Current release/production endpoints:
+
+- API: `https://yugm-api-staging.sarveshkumar10101.workers.dev` (Android uses `/api`)
+- Admin: `https://yugm-admin-staging.pages.dev`
+
 ## Prepare separate environments
 
 1. Create two Pages projects on Cloudflare's Free plan: one for staging and one

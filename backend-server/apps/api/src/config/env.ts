@@ -79,6 +79,9 @@ const envSchema = z.object({
 });
 
 const parsed = envSchema.parse(process.env);
+if (parsed.STORAGE_DRIVER === "s3" && parsed.S3_ENDPOINT && !parsed.S3_PUBLIC_BASE_URL) {
+  console.warn("S3/R2 storage uses a custom endpoint but S3_PUBLIC_BASE_URL is not set; public media uploads will fail until it is configured.");
+}
 if (parsed.NODE_ENV === "production" && parsed.YUGM_RUNTIME !== "cloudflare" && (!parsed.LIVEKIT_URL.startsWith("wss://") || !parsed.LIVEKIT_API_KEY || !parsed.LIVEKIT_API_SECRET)) {
   console.warn("LiveKit is not fully configured; the API will start, but voice/video room tokens will be unavailable.");
 }

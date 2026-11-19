@@ -71,12 +71,12 @@ if (isReleaseTaskRequested) {
 
 val localLanHost = configValue("YUGM_LAN_HOST")?.trim()?.takeIf(String::isNotBlank) ?: localLanIpv4()
 val defaultApiBaseUrl = if (yugmServerMode == "deploy") {
-    "https://yugm.onrender.com/api"
+    "https://yugm-api-staging.sarveshkumar10101.workers.dev/api"
 } else {
     localLanHost?.let { "http://$it:4000/api" } ?: "http://10.0.2.2:4000/api"
 }
 val defaultSocketBaseUrl = if (yugmServerMode == "deploy") {
-    "https://yugm.onrender.com"
+    "https://yugm-api-staging.sarveshkumar10101.workers.dev"
 } else {
     localLanHost?.let { "http://$it:4000" } ?: "http://10.0.2.2:4000"
 }
@@ -93,10 +93,10 @@ val hasUploadSigning = listOf(uploadKeystoreFile, uploadKeystorePassword, upload
 
 if (isReleaseTaskRequested) {
     require(!yugmApiBaseUrl.isNullOrBlank()) {
-        "Set YUGM_API_BASE_URL to your deployed API URL, for example https://your-backend.onrender.com/api"
+        "Set YUGM_API_BASE_URL to your deployed API URL, for example https://your-backend.example.com/api"
     }
     require(!yugmSocketBaseUrl.isNullOrBlank()) {
-        "Set YUGM_SOCKET_BASE_URL to your deployed socket URL, for example https://your-backend.onrender.com"
+        "Set YUGM_SOCKET_BASE_URL to your deployed socket URL, for example https://your-backend.example.com"
     }
     require(yugmApiBaseUrl.startsWith("https://")) {
         "YUGM_API_BASE_URL must use HTTPS for release builds"

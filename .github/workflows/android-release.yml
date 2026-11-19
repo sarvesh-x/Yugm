@@ -73,8 +73,8 @@ jobs:
         working-directory: android-client
         env:
           YUGM_SERVER_MODE: deploy
-          YUGM_API_BASE_URL: https://yugm.onrender.com/api
-          YUGM_SOCKET_BASE_URL: https://yugm.onrender.com
+          YUGM_API_BASE_URL: https://yugm-api-staging.sarveshkumar10101.workers.dev/api
+          YUGM_SOCKET_BASE_URL: https://yugm-api-staging.sarveshkumar10101.workers.dev
           YUGM_VERSION_CODE: ${{ steps.version.outputs.code }}
           YUGM_VERSION_NAME: ${{ steps.version.outputs.name }}
           YUGM_UPLOAD_KEYSTORE_FILE: ${{ runner.temp }}/yugm-upload.jks

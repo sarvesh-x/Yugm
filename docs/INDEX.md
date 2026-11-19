@@ -51,6 +51,7 @@ The production audit documents explain their baselines and verification limits. 
 - [Permissions](permissions.md) · [moderation workflow](moderation-workflow.md) · [admin system](admin-system.md) · [trust verification](trust-verification.md)
 - [Privacy policy](privacy-policy.md) · [data deletion](data-deletion.md) · [biometric data handling](biometric-data-handling.md)
 - [PK battle architecture](pk-battle-architecture.md) · [bonds](bonds.md) · [UI accessibility](ui-accessibility.md)
+- [Profile avatar storage in Cloudflare R2](features/avatar-r2-storage.md)
 - [Android build performance audit](android-build-performance-audit.md)
 - [Cloudflare migration audit](cloudflare-migration/audit.md)
 - [Production blueprint and audit](production/README.md)

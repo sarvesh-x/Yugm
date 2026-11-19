@@ -13,6 +13,7 @@ class ProfileAvatarValidationTest {
     @Test
     fun acceptsHostedHttpAndHttpsImages() {
         assertTrue(isValidProfileAvatarReference("https://cdn.example.test/avatar.jpg"))
+        assertTrue(isValidProfileAvatarReference("https://pub-example.r2.dev/avatars/user_1.jpg"))
         assertTrue(isValidProfileAvatarReference("http://localhost/avatar.jpg"))
     }
 
