@@ -1,6 +1,7 @@
 package com.yugm.app.feature.auth.viewmodel
 
 import android.content.Context
+import android.util.Log
 import android.util.Patterns
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -285,6 +286,7 @@ class AuthViewModel @Inject constructor(
         withContext(Dispatchers.IO) { Tasks.await(task, timeoutSeconds, TimeUnit.SECONDS) }
 
     private fun mapAuthError(error: Throwable, provider: AuthProvider): String {
+        Log.w("YugmAuth", "Auth failed provider=$provider phase=${authOperation?.phase}: ${error.message}", error)
         val apiFailure = generateSequence(error) { it.cause }
             .filterIsInstance<com.yugm.app.core.api.ApiHttpException>()
             .firstOrNull()
