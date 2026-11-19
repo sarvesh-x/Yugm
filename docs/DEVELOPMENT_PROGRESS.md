@@ -1,5 +1,28 @@
 # Development progress
 
+## 2026-11-19 — Profile setup contract and shared server update path
+
+- Locked required profile completion fields with the user: name, normalized username, age 18–80, gender (`Male`/`Female`/`Non-Binary`), city, at least one language and interest, bio, canonical `lookingFor` (`Friendship`/`Dating`/`Relationship`/`Networking`), and accepted terms. Avatar and other optional profile fields do not gate completion; legacy `profileCompletedAt` remains authoritative.
+- Added server normalization for names/usernames/optional text and arrays; completion now requires all documented fields including consent. Shared schema now aligns age and enum values. `/users/me` and retained `/auth/profile` delegate to one profile update service with terms timestamp, profile timestamp, username conflict handling, idempotent XP and response behavior.
+- Updated the Android profile DTO/API to carry all supported fields and omit blank optional values. The setup requires gender, `lookingFor`, and terms; it exposes a confirmed sign-out exit and preserves canonical preference values.
+- Verification: from `backend-server/`, `npm --workspace @yugm/api test` passed (168/168) and `npm --workspace @yugm/api run typecheck` passed. From `android-client/`, `:core:model:compileDebugKotlin :core:api:testDebugUnitTest :core:data:compileDebugKotlin :feature:auth:testDebugUnitTest :app:compileDebugKotlin` passed. No connected Mongo/Firebase/profile navigation runtime was run.
+- Remaining profile form state ownership and visual redesign are tracked in [handoff](handoffs/2026-11-19-profile-setup.md); this task is not fully closed.
+
+## 2026-11-19 — Profile setup async state ownership and contract verification
+
+- Added route-scoped `ProfileSetupViewModel` ownership for avatar upload and profile submission, including session-token lookup at operation time, one-flight guards, cancellation handling, image type/5 MB checks, retryable failures, and navigation only after the returned user confirms `profileCompleted`.
+- Kept user-entered form fields in `rememberSaveable` so a setup form survives configuration changes and saved-state restoration; an upload interrupted by process death can be retried by selecting the image again.
+- Required gender in client validation to match the previously agreed gender + looking-for completion contract. Removed the obsolete auth-graph token-provider parameter now that setup actions use the session repository boundary.
+- Verification: from `android-client/`, `:feature:auth:testDebugUnitTest :app:compileDebugKotlin` passed (`BUILD SUCCESSFUL`; tests executed as part of the task). From `backend-server/`, `npm --workspace @yugm/api test` passed (168/168) and `npm --workspace @yugm/api run typecheck` passed. `git diff --check` passed. No Mongo/Firebase/API runtime, provider callback, or device visual/accessibility scenario was exercised.
+- Remaining live integration and device review is documented in [profile setup handoff](handoffs/2026-11-19-profile-setup.md).
+
+## 2026-11-19 — Profile avatar completion regression
+
+- Confirmed `/upload/avatar` stores the authenticated user's thumbnail immediately and returns a `data:image/{jpeg,png,webp,gif};base64,...` URL. Step-four validation incorrectly allowed only HTTP(S), which could trap users after a successful upload. Added strict, bounded validation for server-supported image data URLs and valid hosted HTTP(S) references.
+- Wired successful `/upload/avatar` mutations into the existing per-user `PROFILE` realtime invalidation while keeping other upload endpoints excluded; added a middleware regression test.
+- Added upload-ready and retryable-failure copy. Kept the large avatar data URL out of `rememberSaveable` state and omitted it from the later profile PATCH because the upload endpoint has already persisted it; blank optional profile fields therefore do not erase the avatar.
+- Added JVM regression tests for accepted data URLs and hosted URLs plus malformed/unsupported/empty/oversized values. `:core:model:compileDebugKotlin :core:api:testDebugUnitTest :core:data:compileDebugKotlin :feature:auth:testDebugUnitTest :app:compileDebugKotlin --console=plain` passed (auth tests 13/13; core API tests 26/26; all requested Kotlin compile targets passed). Backend check from `backend-server/`: `npm --workspace @yugm/api test` passed 169/169 and `npm --workspace @yugm/api run typecheck` passed. `git diff --check` passed. No connected Firebase/App Check/Mongo or device onboarding flow was run.
+
 ## 2026-11-19 — Skip App Check for local Android debug sessions
 
 - Removed the Firebase debug-token registration requirement only when a debuggable Android build targets cleartext loopback (`10.0.2.2`, localhost, or loopback). In that mode the app skips the auth preflight, request header, and startup token warm-up; the local API's existing `NODE_ENV=development/test` bypass is consistent with this behavior.

@@ -40,22 +40,28 @@ object UserApi {
         acceptTerms: Boolean = false,
         vibeLine: String? = null,
         hobbies: List<String>? = null,
-        state: String? = null
+        state: String? = null,
+        interestedIn: String? = null,
+        datingAgeMin: Int? = null,
+        datingAgeMax: Int? = null
     ): YugmUser {
         val body = JSONObject()
             .put("name", name)
             .put("username", username.lowercase().replace(" ", "_"))
-        if (city != null) body.put("city", city)
-        if (state != null) body.put("state", state)
-        if (bio != null) body.put("bio", bio)
-        if (interests != null) body.put("interests", JSONArray(interests))
-        if (hobbies != null) body.put("hobbies", JSONArray(hobbies))
-        if (languages != null) body.put("languages", JSONArray(languages))
-        if (gender != null) body.put("gender", gender)
+        city?.trim()?.takeIf(String::isNotBlank)?.let { body.put("city", it) }
+        state?.trim()?.takeIf(String::isNotBlank)?.let { body.put("state", it) }
+        bio?.trim()?.takeIf(String::isNotBlank)?.let { body.put("bio", it) }
+        interests?.map(String::trim)?.filter(String::isNotBlank)?.distinctBy(String::lowercase)?.takeIf { it.isNotEmpty() }?.let { body.put("interests", JSONArray(it)) }
+        hobbies?.map(String::trim)?.filter(String::isNotBlank)?.distinctBy(String::lowercase)?.takeIf { it.isNotEmpty() }?.let { body.put("hobbies", JSONArray(it)) }
+        languages?.map(String::trim)?.filter(String::isNotBlank)?.distinctBy(String::lowercase)?.takeIf { it.isNotEmpty() }?.let { body.put("languages", JSONArray(it)) }
+        gender?.trim()?.takeIf(String::isNotBlank)?.let { body.put("gender", it) }
         if (age != null) body.put("age", age)
-        if (lookingFor != null) body.put("lookingFor", lookingFor)
-        if (avatar != null) body.put("avatar", avatar)
-        if (vibeLine != null) body.put("vibeLine", vibeLine)
+        lookingFor?.trim()?.takeIf(String::isNotBlank)?.let { body.put("lookingFor", it) }
+        avatar?.trim()?.takeIf(String::isNotBlank)?.let { body.put("avatar", it) }
+        vibeLine?.trim()?.takeIf(String::isNotBlank)?.let { body.put("vibeLine", it) }
+        interestedIn?.trim()?.takeIf(String::isNotBlank)?.let { body.put("interestedIn", it) }
+        if (datingAgeMin != null) body.put("datingAgeMin", datingAgeMin)
+        if (datingAgeMax != null) body.put("datingAgeMax", datingAgeMax)
         if (acceptTerms) body.put("acceptTerms", true)
         return YugmHttpClient.patch("/users/me", token, body).getJSONObject("data").getJSONObject("user").toUser()
     }

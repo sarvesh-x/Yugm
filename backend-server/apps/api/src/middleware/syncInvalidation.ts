@@ -4,9 +4,11 @@ import { emitUser, invalidatePublicTopics } from "../services/socket.js";
 
 export function mutationTopics(method: string, originalPath: string): string[] {
   const path = originalPath.split("?")[0].replace(/^\/api\//, "/");
-  if (!["POST", "PUT", "PATCH", "DELETE"].includes(method) || /^\/(auth|livekit|upload|admin|payments)\b/.test(path) ||
+  const isAvatarUpload = path === "/upload/avatar";
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(method) || /^\/(auth|livekit|admin|payments)\b/.test(path) ||
+      (/^\/upload\b/.test(path) && !isAvatarUpload) ||
       /\/(typing|device-token|heartbeat)(\/|$)/.test(path) || (!path.startsWith("/notifications") && /\/(read|read-all)$/.test(path))) return [];
-  let topic = "SOCIAL";
+  let topic = isAvatarUpload ? "PROFILE" : "SOCIAL";
   if (path.startsWith("/users/messages")) topic = "CHAT";
   else if (/^\/(rooms|pk|watch-party)\b/.test(path)) topic = "ROOMS";
   else if (/^\/(users|profile|cosmetics|highlights|vibe)\b/.test(path)) topic = "PROFILE";

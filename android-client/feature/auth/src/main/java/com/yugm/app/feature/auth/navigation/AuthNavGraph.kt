@@ -14,6 +14,7 @@ import com.yugm.app.core.navigation.Screen
 import com.yugm.app.feature.auth.screens.*
 import com.yugm.app.feature.auth.viewmodel.AuthViewModel
 import com.yugm.app.feature.auth.viewmodel.AuthProvider
+import com.yugm.app.feature.auth.viewmodel.ProfileSetupViewModel
 import com.yugm.app.feature.auth.rememberFacebookSignIn
 import kotlinx.coroutines.launch
 import androidx.credentials.CredentialManager
@@ -30,12 +31,12 @@ fun NavGraphBuilder.authNavGraph(
     navController: NavHostController,
     profileName: String,
     profileUsername: String,
-    authTokenProvider: () -> String,
     googleWebClientId: String,
     validateStartupSession: suspend () -> Unit,
     currentStartupDestination: () -> String,
     navigateAfterLogin: (Session) -> Unit,
     onProfileComplete: (Session) -> Unit,
+    onProfileExit: () -> Unit,
 ) {
     composable(Screen.Splash.route) {
         SplashScreen {
@@ -142,83 +143,37 @@ fun NavGraphBuilder.authNavGraph(
     }
 
     composable(Screen.ProfileSetup.route) {
-        val profileAuthViewModel: AuthViewModel = hiltViewModel()
-        val scope = rememberCoroutineScope()
-        val context = androidx.compose.ui.platform.LocalContext.current
+        val profileSetupViewModel: ProfileSetupViewModel = hiltViewModel()
         CreateProfileScreen(
             initialName = profileName.takeUnless { it == "Yugm User" }.orEmpty(),
             initialUsername = profileUsername.takeUnless { it == "vibe_user" }.orEmpty(),
-            onUploadAvatar = { uri, onResult ->
-                scope.launch {
-                    runCatching {
-                        val sessionToken = authTokenProvider().takeIf(String::isNotBlank)
-                            ?: throw IllegalStateException("Your sign-in session expired. Please sign in again.")
-                        val uploadedUrl = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            val (mime, bytes) = readImageUpload(context, uri)
-                            profileAuthViewModel.uploadAvatar(sessionToken, bytes, mime)
-                        }
-                        uploadedUrl
-                    }.onSuccess { url -> onResult(url, null) }
-                        .onFailure { failure -> onResult(null, failure.message ?: "Could not upload that photo. Try another image.") }
-                }
-            },
+            isSubmitting = profileSetupViewModel.isSubmitting,
+            isUploadingAvatar = profileSetupViewModel.avatarUploadState == com.yugm.app.feature.auth.viewmodel.AvatarUploadState.UPLOADING,
+            onExit = onProfileExit,
+            onUploadAvatar = profileSetupViewModel::uploadAvatar,
             onDone = { profileData, onResult ->
-                scope.launch {
-                    var sessionToken = ""
-                    runCatching {
-                        // Read the token when the user submits the form. The navigation graph
-                        // can outlive the login composition that originally registered it.
-                        sessionToken = authTokenProvider().takeIf(String::isNotBlank)
-                            ?: throw IllegalStateException("Your sign-in session expired. Please sign in again.")
-                        val updatedUser = profileAuthViewModel.updateProfile(
-                            token = sessionToken,
-                            update = com.yugm.app.core.model.AuthProfileUpdate(
-                                name = profileData.name,
-                                username = profileData.username,
-                                bio = profileData.bio,
-                                city = profileData.city,
-                                interests = profileData.interests,
-                                languages = profileData.languages,
-                                gender = profileData.gender.ifBlank { null },
-                                age = profileData.age,
-                                lookingFor = profileData.lookingFor.ifBlank { null },
-                                avatar = profileData.avatar.ifBlank { null },
-                                acceptTerms = profileData.acceptTerms,
-                                vibeLine = profileData.vibeLine.ifBlank { null },
-                            )
-                        )
-                        if (!updatedUser.profileCompleted) {
-                            throw IllegalStateException("Your profile was saved, but Yugm still needs the required profile details. Review your name, username, bio, city, and interests.")
-                        }
-                        updatedUser
-                    }.onSuccess { user ->
+                profileSetupViewModel.submit(
+                    update = com.yugm.app.core.model.AuthProfileUpdate(
+                        name = profileData.name,
+                        username = profileData.username,
+                        bio = profileData.bio,
+                        city = profileData.city,
+                        interests = profileData.interests,
+                        languages = profileData.languages,
+                        gender = profileData.gender,
+                        age = profileData.age,
+                        lookingFor = profileData.lookingFor,
+                        avatar = null,
+                        acceptTerms = profileData.acceptTerms,
+                        vibeLine = profileData.vibeLine.ifBlank { null },
+                    ),
+                    onSuccess = { session ->
                         onResult(null)
-                        onProfileComplete(Session(token = sessionToken, user = user))
-                    }.onFailure { failure ->
-                        onResult(failure.message?.takeIf(String::isNotBlank) ?: "Profile creation failed. Check your connection and try again.")
-                    }
-                }
+                        onProfileComplete(session)
+                    },
+                    onFailure = onResult
+                )
             }
         )
     }
-}
-
-private fun readImageUpload(context: android.content.Context, uri: android.net.Uri): Pair<String, ByteArray> {
-    val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
-    require(mime.startsWith("image/", ignoreCase = true)) { "Choose an image file." }
-    val input = context.contentResolver.openInputStream(uri) ?: error("Could not read the selected image")
-    val output = java.io.ByteArrayOutputStream()
-    val buffer = ByteArray(8 * 1024)
-    var totalBytes = 0
-    input.use { stream ->
-        while (true) {
-            val count = stream.read(buffer)
-            if (count < 0) break
-            totalBytes += count
-            require(totalBytes <= 5 * 1024 * 1024) { "Choose a photo smaller than 5 MB." }
-            output.write(buffer, 0, count)
-        }
-    }
-    require(totalBytes > 0) { "The selected image is empty." }
-    return mime to output.toByteArray()
 }

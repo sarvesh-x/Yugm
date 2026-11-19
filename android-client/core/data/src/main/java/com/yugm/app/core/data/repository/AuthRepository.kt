@@ -36,5 +36,10 @@ class AuthRepository @Inject constructor(private val api: IYugmApi) {
         avatar = update.avatar,
         acceptTerms = update.acceptTerms,
         vibeLine = update.vibeLine,
+        state = update.state,
+        hobbies = update.hobbies,
+        interestedIn = update.interestedIn,
+        datingAgeMin = update.datingAgeMin,
+        datingAgeMax = update.datingAgeMax,
     )
 }

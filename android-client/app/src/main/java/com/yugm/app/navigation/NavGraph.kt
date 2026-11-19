@@ -140,7 +140,6 @@ fun NavGraph(
             navController = navController,
             profileName = mainViewModel.userName,
             profileUsername = mainViewModel.username,
-            authTokenProvider = { mainViewModel.authToken },
             googleWebClientId = resources.getString(com.yugm.app.R.string.default_web_client_id),
             validateStartupSession = mainViewModel::validateStartupSession,
             currentStartupDestination = {
@@ -160,6 +159,13 @@ fun NavGraph(
                     popUpTo(navController.graph.id) { inclusive = true }
                     launchSingleTop = true
                     }
+                }
+            },
+            onProfileExit = {
+                mainViewModel.logout()
+                navController.navigate(Screen.Login.route) {
+                    popUpTo(navController.graph.id) { inclusive = true }
+                    launchSingleTop = true
                 }
             }
         )

@@ -104,6 +104,11 @@ data class AuthProfileUpdate(
     val avatar: String?,
     val acceptTerms: Boolean,
     val vibeLine: String?,
+    val state: String? = null,
+    val hobbies: List<String>? = null,
+    val interestedIn: String? = null,
+    val datingAgeMin: Int? = null,
+    val datingAgeMax: Int? = null,
 )
 
 data class RefreshedSession(val accessToken: String, val refreshToken: String, val sessionId: String, val expiresIn: Long)

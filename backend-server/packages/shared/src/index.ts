@@ -574,9 +574,9 @@ export const verifyOtpSchema = otpContactSchema.extend({
 }).refine((value) => value.email || value.phone, "Email or phone is required");
 
 export const profileSchema = z.object({
-  name: z.string().min(2).max(60),
-  username: z.string().min(3).max(24).regex(/^[a-z0-9_.]+$/i),
-  gender: z.string().max(32).optional(),
+  name: z.string().trim().min(2).max(60),
+  username: z.string().trim().min(3).max(24).regex(/^[a-z0-9_.]+$/i).transform(value => value.toLowerCase()),
+  gender: z.enum(["Male", "Female", "Non-Binary"]).optional(),
   age: z.number().int().min(18).max(80).optional(),
   acceptTerms: z.literal(true).optional(),
   city: z.string().max(60).optional(),
@@ -588,7 +588,7 @@ export const profileSchema = z.object({
   languages: z.array(z.string().min(1).max(24)).default(["Hindi", "English"]),
   avatar: z.string().url().optional(),
   interestedIn: z.string().max(32).optional(),
-  lookingFor: z.string().max(60).optional(),
+  lookingFor: z.enum(["Friendship", "Dating", "Relationship", "Networking"]).optional(),
   datingAgeMin: z.number().int().min(18).max(80).optional(),
   datingAgeMax: z.number().int().min(18).max(80).optional()
 });

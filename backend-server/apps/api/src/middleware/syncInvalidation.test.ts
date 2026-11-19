@@ -11,6 +11,12 @@ test("sync invalidation excludes reads, passive acknowledgements and provider/au
   assert.ok(mutationTopics("POST", "/api/users/messages/person").includes("CHAT"));
 });
 
+test("avatar upload invalidates the actor profile while other upload routes stay excluded", () => {
+  assert.deepEqual(mutationTopics("POST", "/api/upload/avatar"), ["PROFILE", "TASKS"]);
+  assert.deepEqual(mutationTopics("POST", "/api/upload/profile-media"), []);
+  assert.deepEqual(mutationTopics("POST", "/api/upload/cover"), []);
+});
+
 test("only successful authenticated responses invalidate and publish no mutation payload", () => {
   const privateEvents: unknown[][] = [];
   const publicEvents: string[][] = [];

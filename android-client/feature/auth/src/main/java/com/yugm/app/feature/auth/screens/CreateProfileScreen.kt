@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -27,6 +28,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yugm.app.core.ui.components.BrandHeader
+import com.yugm.app.core.ui.components.AuroraBackground
+import com.yugm.app.core.ui.components.GlassCard
 import com.yugm.app.core.ui.components.PrimaryButton
 import com.yugm.app.core.ui.components.YugmTextField
 import com.yugm.app.core.ui.theme.*
@@ -48,7 +51,6 @@ data class ProfileSetupData(
     val gender: String,
     val age: Int,
     val lookingFor: String,
-    val avatar: String,
     val acceptTerms: Boolean
 )
 
@@ -56,6 +58,9 @@ data class ProfileSetupData(
 fun CreateProfileScreen(
     initialName: String,
     initialUsername: String,
+    isSubmitting: Boolean,
+    isUploadingAvatar: Boolean,
+    onExit: () -> Unit,
     onUploadAvatar: (Uri, (String?, String?) -> Unit) -> Unit,
     onDone: (ProfileSetupData, (String?) -> Unit) -> Unit
 ) {
@@ -65,8 +70,7 @@ fun CreateProfileScreen(
     var step by rememberSaveable { mutableStateOf(1) }
     var errorMessage by rememberSaveable { mutableStateOf("") }
     var termsAccepted by rememberSaveable { mutableStateOf(false) }
-    var isSubmitting by remember { mutableStateOf(false) }
-    var isUploadingAvatar by remember { mutableStateOf(false) }
+    var showExitConfirmation by rememberSaveable { mutableStateOf(false) }
 
     var name by rememberSaveable { mutableStateOf(initialName.take(60)) }
     var handle by rememberSaveable { mutableStateOf(initialUsername.take(24)) }
@@ -78,7 +82,10 @@ fun CreateProfileScreen(
 
     var selectedInterests by rememberSaveable { mutableStateOf(emptyList<String>()) }
 
-    var avatarUrl by rememberSaveable { mutableStateOf("") }
+    // Avatar uploads are committed immediately by /upload/avatar; don't place
+    // the large base64 data URL in the saved-instance Bundle.
+    var avatarUrl by remember { mutableStateOf("") }
+    var avatarUploadFailed by rememberSaveable { mutableStateOf(false) }
     var bio by rememberSaveable { mutableStateOf("") }
     var vibeLine by rememberSaveable { mutableStateOf("") }
 
@@ -92,15 +99,37 @@ fun CreateProfileScreen(
 
     val availableLanguages = listOf("Hindi", "English", "Punjabi", "Bengali", "Marathi", "Telugu", "Tamil", "Kannada")
     val availableGenders = listOf("Male", "Female", "Non-Binary")
-    val availablePreferences = listOf("Friends", "Dating", "Serious", "Casual social", "Live community")
+    val availablePreferences = listOf("Friendship", "Dating", "Relationship", "Networking")
+
+    BackHandler(enabled = !isSubmitting) {
+        if (step > 1) { step--; errorMessage = "" } else showExitConfirmation = true
+    }
+
+    if (showExitConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showExitConfirmation = false },
+            title = { Text("Leave profile setup?") },
+            text = { Text("Your sign-in will be cleared. You can sign in again and finish your profile later.") },
+            confirmButton = {
+                TextButton(onClick = { showExitConfirmation = false; onExit() }) { Text("Sign out") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExitConfirmation = false }) { Text("Continue setup") }
+            }
+        )
+    }
 
     val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null && !isUploadingAvatar && !isSubmitting) {
-            isUploadingAvatar = true
             errorMessage = ""
+            avatarUploadFailed = false
             onUploadAvatar(uri) { uploadedUrl, uploadError ->
-                isUploadingAvatar = false
-                if (!uploadedUrl.isNullOrBlank()) avatarUrl = uploadedUrl
+                if (!uploadedUrl.isNullOrBlank()) {
+                    avatarUrl = uploadedUrl
+                    avatarUploadFailed = false
+                } else if (!uploadError.isNullOrBlank()) {
+                    avatarUploadFailed = true
+                }
                 errorMessage = uploadError.orEmpty()
             }
         }
@@ -122,6 +151,10 @@ fun CreateProfileScreen(
                 val age = ageStr.toIntOrNull()
                 if (age == null || age !in 18..80) {
                     errorMessage = "Enter an age between 18 and 80. Yugm is for adults only."
+                    return false
+                }
+                if (gender !in availableGenders) {
+                    errorMessage = "Choose your gender to continue."
                     return false
                 }
             }
@@ -151,14 +184,17 @@ fun CreateProfileScreen(
                     return false
                 }
                 if (avatarUrl.isNotBlank()) {
-                    val uri = runCatching { Uri.parse(avatarUrl.trim()) }.getOrNull()
-                    if (uri?.scheme !in listOf("https", "http") || uri?.host.isNullOrBlank()) {
-                        errorMessage = "Enter a valid image link, or leave the avatar field empty."
+                    if (!isValidProfileAvatarReference(avatarUrl)) {
+                        errorMessage = "The uploaded photo is not in a supported format. Choose it again or continue without a photo."
                         return false
                     }
                 }
             }
             5 -> {
+                if (lookingFor !in availablePreferences) {
+                    errorMessage = "Choose what you are looking for to continue."
+                    return false
+                }
                 if (!termsAccepted) {
                     errorMessage = "Please accept the Terms of Use before continuing."
                     return false
@@ -168,7 +204,9 @@ fun CreateProfileScreen(
         return true
     }
 
-    LazyColumn(
+    Box(Modifier.fillMaxSize().background(Background)) {
+      AuroraBackground(Modifier.fillMaxSize())
+      LazyColumn(
         contentPadding = PaddingValues(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier
@@ -176,8 +214,7 @@ fun CreateProfileScreen(
             .statusBarsPadding()
             .navigationBarsPadding()
             .imePadding()
-            .background(Background)
-    ) {
+      ) {
         item {
             BrandHeader(compact = true)
             Spacer(Modifier.height(16.dp))
@@ -338,13 +375,30 @@ fun CreateProfileScreen(
                             imageUrl = avatarUrl.takeIf(String::isNotBlank)
                         )
                         Column(Modifier.weight(1f)) {
-                            Text(if (avatarUrl.isBlank()) "Add a profile photo" else "Profile photo selected", color = TextPrimary, fontWeight = FontWeight.Bold)
+                            Text(
+                                when {
+                                    isUploadingAvatar -> "Uploading profile photo…"
+                                    avatarUploadFailed -> "Photo upload failed. Choose a photo to retry."
+                                    avatarUrl.isNotBlank() -> "Photo uploaded and ready."
+                                    else -> "Add a profile photo"
+                                },
+                                color = if (avatarUploadFailed) profileColors.danger else TextPrimary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                            )
                             Text("Optional. You can change it later.", color = TextMuted, fontSize = 12.sp)
                             OutlinedButton(
                                 onClick = { avatarPicker.launch("image/*") },
                                 enabled = !isUploadingAvatar && !isSubmitting,
                                 modifier = Modifier.padding(top = 6.dp)
-                            ) { Text(if (isUploadingAvatar) "Uploading…" else if (avatarUrl.isBlank()) "Choose photo" else "Change photo") }
+                            ) {
+                                Text(when {
+                                    isUploadingAvatar -> "Uploading…"
+                                    avatarUploadFailed -> "Retry upload"
+                                    avatarUrl.isBlank() -> "Choose photo"
+                                    else -> "Change photo"
+                                })
+                            }
                         }
                     }
                 }
@@ -402,11 +456,18 @@ fun CreateProfileScreen(
 
         if (errorMessage.isNotBlank()) {
             item {
-                Text(errorMessage, color = profileColors.danger, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                GlassCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(14.dp)) {
+                    Text(errorMessage, color = profileColors.danger, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                }
             }
         }
 
         item {
+            if (step == 1) {
+                TextButton(onClick = { showExitConfirmation = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Use a different account", color = profileAccent)
+                }
+            }
             Spacer(modifier = Modifier.height(16.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -432,7 +493,6 @@ fun CreateProfileScreen(
                         if (!isSubmitting && !isUploadingAvatar && validateStep()) {
                             if (step == 5) {
                                 val age = ageStr.toIntOrNull() ?: 18
-                                isSubmitting = true
                                 errorMessage = ""
                                 onDone(ProfileSetupData(
                                     name = name.trim(),
@@ -445,10 +505,8 @@ fun CreateProfileScreen(
                                     gender = gender,
                                     age = age,
                                     lookingFor = lookingFor,
-                                    avatar = avatarUrl.trim(),
                                     acceptTerms = termsAccepted
                                 )) { submissionError ->
-                                    isSubmitting = false
                                     errorMessage = submissionError.orEmpty()
                                 }
                             } else {
@@ -460,6 +518,7 @@ fun CreateProfileScreen(
             }
         }
     }
+}
 }
 
 @Composable

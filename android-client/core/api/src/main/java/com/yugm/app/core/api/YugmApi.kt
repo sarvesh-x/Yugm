@@ -304,7 +304,7 @@ object YugmApi : IYugmApi {
     override suspend fun shareGameScore(token: String, scoreId: String, targetUserId: String) = GameApi.shareGameScore(token, scoreId, targetUserId)
 
     // User profile, search, follow, block, notifications, messaging
-    override suspend fun updateProfile(token: String, name: String, username: String, bio: String?, city: String?, interests: List<String>?, languages: List<String>?, gender: String?, age: Int?, lookingFor: String?, avatar: String?, acceptTerms: Boolean, vibeLine: String?, hobbies: List<String>?, state: String?): YugmUser = UserApi.updateProfile(token, name, username, bio, city, interests, languages, gender, age, lookingFor, avatar, acceptTerms, vibeLine, hobbies, state)
+    override suspend fun updateProfile(token: String, name: String, username: String, bio: String?, city: String?, interests: List<String>?, languages: List<String>?, gender: String?, age: Int?, lookingFor: String?, avatar: String?, acceptTerms: Boolean, vibeLine: String?, hobbies: List<String>?, state: String?, interestedIn: String?, datingAgeMin: Int?, datingAgeMax: Int?): YugmUser = UserApi.updateProfile(token, name, username, bio, city, interests, languages, gender, age, lookingFor, avatar, acceptTerms, vibeLine, hobbies, state, interestedIn, datingAgeMin, datingAgeMax)
     override suspend fun searchUsers(query: String, token: String?, usernameOnly: Boolean): List<Host> = UserApi.searchUsers(query, token, usernameOnly)
     override suspend fun getUser(userId: String, token: String?): Host = UserApi.getUser(userId, token)
     override suspend fun getPublicProfile(userId: String, token: String?): Host = UserApi.getPublicProfile(userId, token)

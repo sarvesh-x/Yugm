@@ -9,7 +9,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yugm.app.core.data.repository.AuthRepository
 import com.yugm.app.core.model.Session
-import com.yugm.app.core.model.AuthProfileUpdate
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.EmailAuthProvider
@@ -66,12 +65,6 @@ class AuthViewModel @Inject constructor(
 
     fun clearError() { error = null; notice = null }
     fun consumeSession(): Session? = session.also { session = null }
-
-    suspend fun uploadAvatar(token: String, bytes: ByteArray, mimeType: String): String =
-        authRepository.uploadAvatar(token, bytes, mimeType)
-
-    suspend fun updateProfile(token: String, update: AuthProfileUpdate) =
-        authRepository.updateProfile(token, update)
 
     fun emailAuth(email: String, password: String, createAccount: Boolean, acceptTerms: Boolean) {
         val normalizedEmail = email.trim().lowercase(Locale.ROOT)

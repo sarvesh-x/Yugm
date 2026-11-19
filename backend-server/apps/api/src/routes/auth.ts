@@ -14,6 +14,7 @@ import { z } from "zod";
 import { disconnectOtherUserSockets, disconnectUserSockets } from "../services/socket.js";
 import { isProfileCompleted } from "../services/profileCompletion.js";
 import { hasFirebaseIdentityConflict } from "../services/authSessionRules.js";
+import { updateProfileForUser } from "../services/profileUpdate.js";
 
 export const authRouter = Router();
 
@@ -159,7 +160,16 @@ function publicUser(user: any) {
     interests: user.interests,
     languages: user.languages,
     city: user.city,
+    state: user.state,
     bio: user.bio,
+    vibeLine: user.vibeLine,
+    gender: user.gender,
+    age: user.age,
+    hobbies: user.hobbies,
+    interestedIn: user.interestedIn,
+    lookingFor: user.lookingFor,
+    datingAgeMin: user.datingAgeMin,
+    datingAgeMax: user.datingAgeMax,
     profileCompleted: isProfileCompleted(user),
     followersCount: user.followersCount,
     followingCount: user.followingCount
@@ -232,25 +242,7 @@ authRouter.post("/logout", requireAuth, validateBody(z.object({ refreshToken: z.
 
 authRouter.get("/me", requireAuth, (req: AuthRequest, res) => sendOk(res, { user: publicUser(req.user) }));
 
-authRouter.patch("/profile", requireAuth, validateBody(profileSchema.partial().refine((data) => data.age === undefined || (data.age >= 18 && data.age <= 100), { message: "You must be between 18 and 100 years old", path: ["age"] })), asyncHandler(async (req: AuthRequest, res) => {
-  const allowedFields = ["name", "username", "gender", "age", "city", "state", "bio", "vibeLine", "interests", "hobbies", "languages", "avatar", "interestedIn", "lookingFor", "datingAgeMin", "datingAgeMax"];
-  const update: Record<string, unknown> = {};
-  for (const key of allowedFields) {
-    if (key in req.body) update[key] = req.body[key];
-  }
-  if (typeof update.username === "string") {
-    update.username = update.username.trim().toLowerCase();
-    const existing = await User.exists({ username: update.username, _id: { $ne: req.user!._id } });
-    if (existing) throw new HttpError(409, "That username is already taken. Choose another one.", ErrorCode.CONFLICT);
-  }
-  let user;
-  try {
-    user = await User.findByIdAndUpdate(req.user!.id, { $set: update }, { new: true }).select("-__v");
-  } catch (error: any) {
-    if (error?.code === 11000 && (error?.keyPattern?.username || error?.keyValue?.username)) {
-      throw new HttpError(409, "That username is already taken. Choose another one.", ErrorCode.CONFLICT);
-    }
-    throw error;
-  }
-  sendOk(res, { user: publicUser(user) });
+authRouter.patch("/profile", requireAuth, validateBody(profileSchema.partial()), asyncHandler(async (req: AuthRequest, res) => {
+  const { user, xpGrant } = await updateProfileForUser(req.user!.id, req.body);
+  sendOk(res, { user: publicUser(user), xpGrant });
 }));
