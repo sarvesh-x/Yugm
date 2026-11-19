@@ -12,6 +12,25 @@
     "bindings": [{ "name": "API_SERVICE", "class_name": "YugmApi" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["YugmApi"] }],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "redact_query_string": false,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true
+    },
+    "traces": {
+      "enabled": false,
+      "head_sampling_rate": 1,
+      "persist": true
+    },
+    "issues": {
+      "enabled": true
+    }
+  },
   "vars": {
     "YUGM_STAGE": "staging",
     "NODE_ENV": "production",
