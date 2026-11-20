@@ -502,7 +502,7 @@ private fun FindPeopleIllustration(compact: Boolean) {
     val radiusPx = if (compact) 85.dp else 105.dp
     val motionEnabled = LocalMotionEnabled.current
 
-    val (avatarFloatY, waveformPulse) = if (motionEnabled) {
+    val (avatarFloatY, waveformPhase) = if (motionEnabled) {
         val infiniteTransition = rememberInfiniteTransition(label = "find_people_motion")
         val floatY by infiniteTransition.animateFloat(
             initialValue = -4f,
@@ -513,17 +513,17 @@ private fun FindPeopleIllustration(compact: Boolean) {
             ),
             label = "avatarFloatY"
         )
-        val pulse by infiniteTransition.animateFloat(
-            initialValue = 0.85f,
-            targetValue = 1.15f,
+        val phase by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = (2f * kotlin.math.PI).toFloat(),
             animationSpec = infiniteRepeatable(
-                animation = tween(1400, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
+                animation = tween(1400, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
             ),
-            label = "waveformPulse"
+            label = "waveformPhase"
         )
-        Pair(floatY, pulse)
-    } else Pair(0f, 1f)
+        Pair(floatY, phase)
+    } else Pair(0f, 0f)
 
     Box(
         modifier = Modifier.fillMaxSize(),
@@ -558,11 +558,12 @@ private fun FindPeopleIllustration(compact: Boolean) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val heights = listOf(14.dp, 24.dp, 34.dp, 20.dp, 12.dp)
-                heights.forEach { h ->
+                heights.forEachIndexed { index, h ->
+                    val scale = 0.6f + 0.4f * ((kotlin.math.sin(waveformPhase + index * 1.1f) + 1f) / 2f)
                     Box(
                         modifier = Modifier
                             .width(3.5.dp)
-                            .height((if (compact) h * 0.85f else h) * waveformPulse)
+                            .height((if (compact) h * 0.85f else h) * scale)
                             .clip(RoundedCornerShape(2.dp))
                             .background(Color.White)
                     )
@@ -634,7 +635,7 @@ private fun ShareMomentsIllustration(compact: Boolean) {
                 .clip(RoundedCornerShape(20.dp))
                 .background(Color.White)
                 .border(1.5.dp, Color.White.copy(alpha = 0.9f), RoundedCornerShape(20.dp))
-                .size(width = if (compact) 230.dp else 265.dp, height = if (compact) 130.dp else 152.dp)
+                .size(width = if (compact) 260.dp else 300.dp, height = if (compact) 150.dp else 175.dp)
         ) {
             // Video Thumbnail Backdrop
             Image(
@@ -699,7 +700,7 @@ private fun ShareMomentsIllustration(compact: Boolean) {
         Row(
             modifier = Modifier
                 .align(Alignment.Center)
-                .offset(y = if (compact) 76.dp else 90.dp),
+                .offset(y = if (compact) 88.dp else 104.dp),
             horizontalArrangement = Arrangement.spacedBy((-6).dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -716,7 +717,7 @@ private fun ShareMomentsIllustration(compact: Boolean) {
                         .clip(CircleShape)
                         .background(Color.White)
                         .border(1.5.dp, Color.White, CircleShape)
-                        .size(if (compact) 26.dp else 30.dp)
+                        .size(if (compact) 32.dp else 36.dp)
                 ) {
                     Image(
                         painter = painterResource(id = resId),
@@ -733,10 +734,10 @@ private fun ShareMomentsIllustration(compact: Boolean) {
                     .clip(CircleShape)
                     .background(Brush.linearGradient(onboardingBrandGradient))
                     .border(1.5.dp, Color.White, CircleShape)
-                    .size(if (compact) 26.dp else 30.dp),
+                    .size(if (compact) 32.dp else 36.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("+2", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("+2", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
             }
         }
 
