@@ -309,21 +309,11 @@ private fun OnboardingHeader(
                     .background(Brush.linearGradient(onboardingBrandGradient)),
                 contentAlignment = Alignment.Center
             ) {
-                Canvas(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-                    val strokeWidth = 3.2.dp.toPx()
-                    val path = Path().apply {
-                        moveTo(size.width * 0.15f, size.height * 0.12f)
-                        lineTo(size.width * 0.5f, size.height * 0.52f)
-                        lineTo(size.width * 0.85f, size.height * 0.12f)
-                        moveTo(size.width * 0.5f, size.height * 0.52f)
-                        lineTo(size.width * 0.5f, size.height * 0.95f)
-                    }
-                    drawPath(
-                        path = path,
-                        color = Color.White,
-                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-                    )
-                }
+                Image(
+                    painter = painterResource(id = com.yugm.app.feature.auth.R.drawable.ic_launcher_foreground),
+                    contentDescription = "Yugm",
+                    modifier = Modifier.fillMaxSize().padding(6.dp)
+                )
             }
 
             Text(
@@ -334,21 +324,25 @@ private fun OnboardingHeader(
             )
         }
 
-        // Skip Button (Hidden on page 4)
-        if (showSkip) {
-            TextButton(
-                onClick = onSkip,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
-            ) {
-                Text(
-                    text = "Skip",
-                    color = mutedColor,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 14.sp
-                )
+        // Skip Button (Hidden on page 4). Keep a stable placeholder so the header
+        // does not jump/re-layout when the button disappears on the last page.
+        Box(
+            modifier = Modifier.widthIn(min = 64.dp),
+            contentAlignment = Alignment.CenterEnd
+        ) {
+            if (showSkip) {
+                TextButton(
+                    onClick = onSkip,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        text = "Skip",
+                        color = mutedColor,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 14.sp
+                    )
+                }
             }
-        } else {
-            Spacer(modifier = Modifier.width(48.dp))
         }
     }
 }
