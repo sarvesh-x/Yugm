@@ -281,7 +281,7 @@ fun LoginScreen(
                 } else {
                     Text("Choose how you want to sign in", color = TextMuted, fontSize = 13.sp, modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 12.dp))
                     LoginMethodButton(
-                        text = if (googleLoading) "Connecting…" else "Continue with Google",
+                        text = if (googleLoading) "Connecting…" else " Google",
                         iconRes = R.drawable.ic_google_logo,
                         onClick = { if (acceptTerms) onGoogleSignIn(acceptTerms) else localError = "Accept the terms to continue." },
                         modifier = Modifier.fillMaxWidth(),
@@ -290,7 +290,7 @@ fun LoginScreen(
                     )
                     Spacer(Modifier.height(10.dp))
                     LoginMethodButton(
-                        text = if (facebookLoading) "Connecting…" else "Continue with Facebook",
+                        text = if (facebookLoading) "Connecting…" else " Facebook",
                         iconRes = R.drawable.ic_facebook_logo,
                         onClick = { if (acceptTerms) onFacebookSignIn(acceptTerms) else localError = "Accept the terms to continue." },
                         modifier = Modifier.fillMaxWidth(),
@@ -299,7 +299,7 @@ fun LoginScreen(
                     )
                     Spacer(Modifier.height(10.dp))
                     LoginMethodButton(
-                        text = "Continue with phone",
+                        text = " Phone",
                         icon = Icons.Filled.Phone,
                         onClick = { if (acceptTerms) onPhoneSignIn() else localError = "Accept the terms to continue." },
                         modifier = Modifier.fillMaxWidth(),
