@@ -26,7 +26,9 @@ fun SplashScreen(onTimeout: suspend () -> Unit) {
     val motionEnabled = LocalMotionEnabled.current
     val colors = LocalYugmColors.current
 
-    LaunchedEffect(motionEnabled) {
+    // Keyed on Unit: navigation must happen exactly once. Re-keying on the motion
+    // preference would re-run the timer and issue a second navigate().
+    LaunchedEffect(Unit) {
         if (motionEnabled) {
             scale.animateTo(1f, animationSpec = tween(durationMillis = 250))
         } else {

@@ -1,5 +1,14 @@
 ﻿# Development progress
 
+## 2026-11-20 -- Pre-Home onboarding/auth audit: restore self email, consent, and flow edge cases
+
+- **Self email wiring:** `apps/api/src/middleware/auth.ts` now selects `+email` for the authenticated user, so `/auth/me` and `/auth/verify-email` actually include the address that `User` marks `select: false`. `apps/api/src/services/profileUpdate.ts` does the same on both reads, and `apps/api/src/routes/auth.ts` selects `+email` for existing and phone-linked Firebase identities. `handlePublicProfile`/`users.publicUser` still exclude email for other users.
+- **Self profile payload:** `PATCH /users/me` now returns `email` and `emailVerified` alongside `publicUser`, so profile setup/edit responses no longer blank the cached address or regress the Settings verified state. `MainViewModel.validateAndUpdate` additionally preserves the cached email when a response omits it.
+- **Consent and pending verification:** Login no longer pre-checks the 18+/Terms box when opened directly in sign-up mode. `clearPendingVerification()` clears stale notice/error, and a failed non-verification attempt keeps the Firebase identity while verification is pending.
+- **Edge cases:** splash routing is keyed on `Unit` so it cannot navigate twice; profile setup disables Finish while an avatar upload is running; phone/OTP edits clear stale errors; unreferenced `OtpScreen.kt` removed.
+- **Onboarding decision:** intro completion remains install-scoped and now survives logout (`SessionManager.logout` restores the flag after clearing account data). The onboarding audit was updated from the earlier replay rule to this confirmed product decision.
+- **Verification:** backend `node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit` passed and `npm.cmd --workspace @yugm/api test` passed 178/178. Android with the Android Studio JBR: `.\gradlew.bat :feature:auth:testDebugUnitTest :core:api:testDebugUnitTest :app:compileDebugKotlin --console=plain --max-workers=2` succeeded (auth 14/14, core API 29/29). `git diff --check` clean. Not run: live Firebase/Mongo/App Check, provider/OTP device flows, emulator instrumentation, TalkBack/visual review.
+
 ## 2026-11-20 -- Require email verification at creation/sign-in, settings email display, and Firebase user deletion on account delete
 
 - **Email verification enforcement (anti-abuse):**

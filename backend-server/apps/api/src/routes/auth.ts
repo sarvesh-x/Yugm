@@ -78,7 +78,7 @@ async function findOrCreateFirebaseUser(input: {
     // identity to legacy phone accounts instead of trying to create a duplicate
     // record and failing against the unique phone index.
     const byPhone = !byEmail && normalizedPhone
-      ? await User.findOne({ phone: { $in: phoneLookupValues(input.phone) } }).select("+phone -__v")
+      ? await User.findOne({ phone: { $in: phoneLookupValues(input.phone) } }).select("+phone +email -__v")
       : null;
     const existingIdentity = byEmail ?? byPhone;
     if (existingIdentity) {
@@ -149,7 +149,7 @@ async function findOrCreateFirebaseUser(input: {
     }
   }
 
-  const existing = await User.findOne({ firebaseUid: input.firebaseUid }).select("-__v");
+  const existing = await User.findOne({ firebaseUid: input.firebaseUid }).select("-__v +email");
   if (existing) return { user: existing, isNewUser: false };
   throw new HttpError(409, "Could not finish creating your account. Please retry.", ErrorCode.CONFLICT);
 }

@@ -173,7 +173,7 @@ fun PhoneAuthScreen(
             TextButton(onClick = { openPhoneLegal(context, "privacy") }) { Text("Read Privacy Policy", color = TextMuted) }
         }
         if (step == "phone") {
-            YugmTextField(value = phone, onValueChange = { phone = it }, label = "+911234567890", keyboardType = KeyboardType.Phone,
+            YugmTextField(value = phone, onValueChange = { phone = it; error = null; authViewModel.clearError() }, label = "+911234567890", keyboardType = KeyboardType.Phone,
                 accentColor = authColors.accent, borderColor = androidx.compose.material3.MaterialTheme.colorScheme.outline)
             if (displayedError != null) {
                 Spacer(Modifier.height(4.dp))
@@ -182,7 +182,7 @@ fun PhoneAuthScreen(
             Spacer(Modifier.height(12.dp))
             PrimaryButton(text = if (loadingNow) "Sending code..." else "Send code", onClick = { sendCode() }, enabled = !loadingNow && phone.length >= 8 && acceptTerms)
         } else {
-            YugmTextField(value = otp, onValueChange = { otp = it.filter(Char::isDigit).take(6) }, label = "6-digit code", keyboardType = KeyboardType.Number,
+            YugmTextField(value = otp, onValueChange = { otp = it.filter(Char::isDigit).take(6); error = null; authViewModel.clearError() }, label = "6-digit code", keyboardType = KeyboardType.Number,
                 accentColor = authColors.accent, borderColor = androidx.compose.material3.MaterialTheme.colorScheme.outline)
             if (displayedError != null) {
                 Spacer(Modifier.height(4.dp))

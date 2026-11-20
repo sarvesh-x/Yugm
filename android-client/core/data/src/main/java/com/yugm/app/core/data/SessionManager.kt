@@ -164,8 +164,12 @@ class SessionManager @Inject constructor(
 
     fun logout() {
         val mode = themeMode
+        // Intro completion is install-scoped, not session-scoped: signing out
+        // must not replay onboarding on the next launch.
+        val introSeen = onboardingCompleted
         prefs.edit().clear().apply()
         cache.clear()
         themeMode = mode
+        onboardingCompleted = introSeen
     }
 }

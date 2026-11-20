@@ -488,7 +488,7 @@ fun CreateProfileScreen(
                 PrimaryButton(
                     text = when { isSubmitting -> "Saving your profile…"; step == 5 -> "Finish & enter Yugm"; else -> "Next" },
                     modifier = Modifier.weight(2f),
-                    enabled = !isSubmitting,
+                    enabled = !isSubmitting && !isUploadingAvatar,
                     onClick = {
                         if (!isSubmitting && !isUploadingAvatar && validateStep()) {
                             if (step == 5) {

@@ -102,6 +102,8 @@ class AuthViewModel @Inject constructor(
     fun consumeSession(): Session? = session.also { session = null }
     fun clearPendingVerification() {
         pendingVerificationEmail = null
+        notice = null
+        error = null
         runCatching { FirebaseAuth.getInstance().signOut() }
     }
 
@@ -378,9 +380,13 @@ class AuthViewModel @Inject constructor(
                 throw cancelled
             } catch (failure: Exception) {
                 if (session == null && provider != AuthProvider.PASSWORD) {
-                    // Keep Firebase session for email verification flow; otherwise sign out.
+                    // Keep Firebase signed in for the verification flow: the pending
+                    // screen needs the verified identity to retry a backend exchange
+                    // that failed transiently. "Use a different email" signs out.
                     val isPending = failure is EmailVerificationRequiredException
-                    if (!isPending) runCatching { FirebaseAuth.getInstance().signOut() }
+                    if (!isPending && pendingVerificationEmail == null) {
+                        runCatching { FirebaseAuth.getInstance().signOut() }
+                    }
                 }
                 if (failure !is EmailVerificationRequiredException) {
                     error = mapAuthError(failure, provider)

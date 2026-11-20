@@ -87,7 +87,8 @@ fun LoginScreen(
         if (initialCreateAccount) {
             createAccount = true
             manualLogin = true
-            acceptTerms = true
+            // Terms/18+ consent is never pre-checked: the user must affirm it
+            // themselves, even when the screen opens directly in sign-up mode.
         }
     }
 

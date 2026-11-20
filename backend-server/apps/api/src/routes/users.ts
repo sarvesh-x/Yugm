@@ -430,7 +430,13 @@ usersRouter.delete("/me", asyncHandler(async (req: AuthRequest, res) => {
 
 usersRouter.patch("/me", validateBody(profileSchema.partial()), asyncHandler(async (req: AuthRequest, res) => {
   const { user, xpGrant } = await updateProfileForUser(req.user!.id, req.body);
-  sendOk(res, { user: publicUser(user), xpGrant });
+  // This response is self-only, so include the email and verification state
+  // that `publicUser` deliberately omits for other users' profiles. The Android
+  // client keeps the cached signed-in identity from this payload.
+  sendOk(res, {
+    user: { ...publicUser(user), email: user?.email, emailVerified: Boolean(user?.emailVerified) },
+    xpGrant
+  });
 }));
 
 usersRouter.get("/me/friends", requireAuth, asyncHandler(async (req: AuthRequest, res) => {

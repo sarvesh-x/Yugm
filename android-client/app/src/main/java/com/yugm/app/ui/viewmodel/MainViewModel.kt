@@ -158,13 +158,17 @@ class MainViewModel @Inject constructor(
     fun validateAndUpdate(user: com.yugm.app.core.model.YugmUser, registerPush: Boolean = true) {
         userName = user.name
         username = user.username
-        userEmail = user.email
+        // Several responses (public profiles, media mutations) omit the
+        // select-gated email. Keep the known address instead of blanking it.
+        if (user.email.isNotBlank()) {
+            userEmail = user.email
+            sessionManager.userEmail = user.email
+        }
         balance = user.walletBalance
         emailVerified = user.emailVerified
         profileCompleted = user.profileCompleted
         sessionManager.userName = user.name
         sessionManager.username = user.username
-        sessionManager.userEmail = user.email
         sessionManager.balance = user.walletBalance
         sessionManager.emailVerified = user.emailVerified
         sessionManager.profileCompleted = user.profileCompleted

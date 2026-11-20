@@ -1,5 +1,22 @@
 ﻿# Current task
 
+## YUGM-PREHOME-AUDIT-006 — Deep-audit the pre-Home onboarding/auth/profile-setup path
+
+- **Scope:** splash → onboarding → login/signup (email, Google, Facebook, phone) → email verification → profile setup. Verify UI, state, API wiring, realtime/persistence, permissions, errors, edge cases, and design consistency without changing unrelated features.
+- **Repairs:**
+  - Backend now actually returns the authenticated user's `email`: auth middleware (`/auth/me`, `/auth/verify-email`) and the shared profile-update service (`PATCH /users/me`, `PATCH /auth/profile`) select `+email`; Firebase identity lookups for existing and phone-linked accounts do too. Other-user/public payloads still omit email.
+  - `PATCH /users/me` also returns `emailVerified` so profile edits no longer regress Settings from "verified" to "Verify".
+  - Android `MainViewModel.validateAndUpdate` keeps the cached email when a response omits it instead of blanking it.
+  - Login no longer pre-checks the 18+/Terms box when opened in sign-up mode; consent must be affirmed by the user.
+  - `clearPendingVerification()` clears stale notice/error; pending verification keeps the Firebase identity for retry; splash routes exactly once; profile setup cannot submit during avatar upload; phone inputs clear stale errors; dead `OtpScreen.kt` removed.
+  - Onboarding completion is install-scoped and now survives logout (product decision confirmed 2026-11-20; audit doc updated).
+- **Verification (run):**
+  - Backend: `node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit` passed; `npm.cmd --workspace @yugm/api test` passed 178/178.
+  - Android (JAVA_HOME = Android Studio JBR): `.\gradlew.bat :feature:auth:testDebugUnitTest :core:api:testDebugUnitTest :app:compileDebugKotlin --console=plain --max-workers=2` BUILD SUCCESSFUL (auth 14/14, core API 29/29).
+  - `git diff --check` clean.
+- **Not run:** live Firebase/Mongo/App Check, real provider callbacks, SMS/OTP on device, emulator instrumentation, TalkBack/visual review. See [auth audit](features/auth-flow-audit.md) and [onboarding audit](features/onboarding-audit.md).
+- **Status:** Source repairs complete and bounded checks pass; integration gates remain. Handoff: [2026-11-20 pre-home auth audit](handoffs/2026-11-20-prehome-auth-audit.md).
+
 ## YUGM-AUTH-EMAIL-VERIFY-005 — Require email verification at account creation and show verification in settings
 
 - **Problem/requirements:**

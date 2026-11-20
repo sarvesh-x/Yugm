@@ -27,7 +27,9 @@ export async function updateProfileForUser(userId: string, body: Record<string, 
 
   let user;
   try {
-    user = await User.findByIdAndUpdate(userId, { $set: update }, { new: true }).select("-__v");
+    // Include the self-only `email` field so the client can keep showing the
+    // signed-in address after profile setup/edit responses.
+    user = await User.findByIdAndUpdate(userId, { $set: update }, { new: true }).select("-__v +email");
   } catch (error: any) {
     if (error?.code === 11000 && (error?.keyPattern?.username || error?.keyValue?.username)) {
       throw new HttpError(409, "That username is already taken. Choose another one.", ErrorCode.CONFLICT);
@@ -52,7 +54,7 @@ export async function updateProfileForUser(userId: string, body: Record<string, 
     user.profileCompletedAt = new Date();
     await user.save();
     xpGrant = await grantXp(user.id, "PROFILE_COMPLETE", { idempotencyKey: `profile-complete:${user.id}` });
-    user = await User.findById(userId).select("-__v");
+    user = await User.findById(userId).select("-__v +email");
   }
   return { user, xpGrant };
 }

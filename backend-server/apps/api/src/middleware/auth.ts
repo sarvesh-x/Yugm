@@ -35,8 +35,12 @@ async function resolveAuthContext(decoded: { sub: string; tokenVersion?: number;
   if (cached) {
     return { user: User.hydrate(cached.user), session: AuthSession.hydrate(cached.session), key };
   }
+  // `email`/`phone` are `select: false` on the schema. Self-facing responses
+  // (`/auth/me`, `/auth/verify-email`, profile updates) need the verified
+  // address for display and identity matching, so request it explicitly here.
+  // Public/shared payload builders must not forward it for other users.
   const [user, session] = await Promise.all([
-    User.findById(decoded.sub).select("-__v").lean(),
+    User.findById(decoded.sub).select("-__v +email").lean(),
     AuthSession.findOne({ _id: decoded.sid, userId: decoded.sub, revokedAt: null, expiresAt: { $gt: new Date() } }).lean()
   ]);
   if (user && session) writeAuthCache(key, user as Record<string, unknown>, session as Record<string, unknown>);

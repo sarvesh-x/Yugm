@@ -27,7 +27,7 @@
 
 ## Behavior and contracts
 
-- Signed-out cold starts always route to onboarding. The user confirmed that completing the slides without authenticating must replay them next launch; therefore there is no install-scoped or account-scoped intro-completion flag. Auth/profile completion is a separate server-backed concept.
+- Signed-out cold starts route to onboarding until the intro is completed or skipped once per install; completion is stored locally and survives sign-out. Auth/profile completion is a separate server-backed concept. See the [onboarding audit](onboarding-audit.md#product-decision-2026-11-20--intro-completion-is-install-scoped).
 - Authenticated cold starts call `/auth/me` from the splash before choosing profile setup or discovery. The request has an 8-second HTTP call timeout and a 10-second coroutine bound. A confirmed 401/403 clears the local session through the existing unauthorized callback. Transient network or App Check failures retain the local snapshot and continue, so offline routing remains best effort.
 - Email, Google, Facebook, and phone credential/backend operations share one exclusive operation state in `AuthViewModel`. Credential acquisition, Firebase sign-in, and backend exchange progress cannot be independently toggled by UI callbacks. Repeated starts are rejected; cancellation/failure clears the state.
 - Each backend auth exchange passes App Check readiness first. Protected requests obtain a limited-use token per request. The API verifies with `consume: true`, rejects `alreadyConsumed`, and does not cache verification results. App Check failures do not masquerade as revoked account sessions.
@@ -97,6 +97,28 @@
 - **Self email exposure:** `publicUser`/auth session responses and `/auth/me` now include `email` for the authenticated user. Settings displays the email in the first/profile card with a verified indicator or a verify action.
 - **Account deletion:** `DELETE /users/me` tombstones/frees identifiers, revokes sessions/device tokens, disconnects sockets, and attempts Firebase Admin deletion of the Firebase Auth user (`deleteFirebaseUser`); Mongo/session cleanup still completes if Admin is not configured (warned). Pending-deletion records matched by email/phone release identifiers to allow re-registration.
 - **Verification:** backend `npx tsc -p apps/api/tsconfig.json --noEmit` passed from `backend-server/`. Android Gradle compile/tests and live Firebase/Mongo/device/staging behavior were not verified in this environment; deployment and runtime config (Firebase Admin creds, Firebase email delivery/template/domain/quota) are required for full effect.
+
+## Pre-home auth audit repairs (2026-11-20)
+
+Deep audit of everything before Home (splash → onboarding → login/signup → phone → email verification → profile setup) against the implemented Android and API source. Fixes:
+
+- **Self `email` was not actually returned after the earlier change.** `User.email` is `select: false`, but the auth middleware and the shared profile-update service still loaded users without it, so `/auth/me`, `/auth/verify-email`, `PATCH /users/me`, and `PATCH /auth/profile` returned no email. Android then overwrote the cached address with `""` on cold start and after every profile edit, and Settings could not show the signed-in email. `resolveAuthContext` now selects `+email`; `updateProfileForUser` selects `+email` on both reads; the Firebase lookup paths for existing and phone-linked identities select `+email`. Public/other-user payloads still omit email (`handlePublicProfile` continues to exclude it, and `users.publicUser` never includes it).
+- **`PATCH /users/me` now returns a complete self payload.** Besides `email`, it adds `emailVerified`. Without it, editing a profile replaced the cached verification state with the parser default `false`, so a verified user's Settings card regressed to "Verify" after an edit. `/auth/profile` already returned both through `auth.publicUser`.
+- **Cached email is preserved when a response omits it.** `MainViewModel.validateAndUpdate` only overwrites `userEmail`/`sessionManager.userEmail` when the parsed email is non-blank. Authoritative self responses still update it; responses that intentionally omit contact data (public profiles, media mutations) no longer erase it.
+- **Consent is no longer pre-checked.** Opening Login directly in sign-up mode (for example after "no account found") auto-ticked the 18+/Terms checkbox. That auto-affirmed consent; the checkbox now stays unchecked until the user ticks it. Create-profile consent was already user-driven and remains gated client- and server-side.
+- **"Use a different email" clears stale messaging.** `AuthViewModel.clearPendingVerification()` now also clears `notice`/`error`, so the pending-verification copy does not linger after returning to the form.
+- **Pending-verification identity is retained.** A failed non-verification auth attempt no longer signs Firebase out while a verification is pending; the pending screen needs that identity to retry the backend exchange. Cancelling verification still signs out.
+- **Splash navigates once.** The routing effect is keyed on `Unit` instead of the motion preference, preventing a second `navigate()` if the preference changes while the splash is visible.
+- **Profile setup cannot submit mid-upload.** The primary action is disabled while an avatar upload is in flight, matching the existing click-time guard, so "Finish" cannot race the upload.
+- **Phone form clears stale errors** on phone/OTP edits instead of leaving the previous failure text visible.
+- **Removed dead `OtpScreen.kt`.** It had no references and duplicated the live phone/OTP UI in `PhoneAuthScreen`.
+
+Verification for this audit:
+
+- Backend, from `backend-server/`: `node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit` — passed; `npm.cmd --workspace @yugm/api test` — 178/178 passed.
+- Android, from `android-client/` with `JAVA_HOME` set to the Android Studio JBR: `.\gradlew.bat :feature:auth:testDebugUnitTest :core:api:testDebugUnitTest :app:compileDebugKotlin --console=plain --max-workers=2` — BUILD SUCCESSFUL (auth 14/14, core API 29/29).
+- `git diff --check` — passed (only a Git LF/CRLF warning for `profileUpdate.ts`).
+- Not run: live Firebase/Mongo/App Check, a real signup → verify → profile-setup walkthrough, phone SMS/auto-retrieval/resend on a device, emulator instrumentation, TalkBack, and Settings visual review. The backend suite does not exercise Mongo-backed auth/profile responses; those remain integration gates.
 
 ## Verification
 

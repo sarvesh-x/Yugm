@@ -9,7 +9,7 @@
 
 1. `MainActivity.onCreate` sets the Compose content and `YugmTheme`; the theme mode comes from `SessionManager` or follows the system setting.
 2. `NavGraph` starts the `NavHost` at `Screen.Splash` and passes the restored session snapshot and validation callback to `authNavGraph`.
-3. `SplashScreen` animates its logo for 250 ms when motion is enabled, then performs a bounded `/auth/me` check for a restored token before routing. Signed-out users route to onboarding; authenticated users route from the server-reconciled profile completion value.
+3. `SplashScreen` animates its logo for 250 ms when motion is enabled, then performs a bounded `/auth/me` check for a restored token before routing. Signed-out users route to onboarding until the intro is completed or skipped once per install; authenticated users route from the server-reconciled profile completion value.
 4. `OnboardingScreen` renders four hard-coded slides in `HorizontalPager`. Users can swipe or press Next; the last CTA navigates to Login. Successful sign-in/profile completion resets to the root graph anchor. See the separate [auth-flow audit](auth-flow-audit.md) for login, session, App Check, and profile behavior.
 
 Relevant implementation: [MainActivity](../../android-client/app/src/main/java/com/yugm/app/MainActivity.kt), [NavGraph](../../android-client/app/src/main/java/com/yugm/app/navigation/NavGraph.kt), [AuthNavGraph](../../android-client/feature/auth/src/main/java/com/yugm/app/feature/auth/navigation/AuthNavGraph.kt), [SplashScreen](../../android-client/feature/auth/src/main/java/com/yugm/app/feature/auth/screens/SplashScreen.kt), [OnboardingScreen](../../android-client/feature/auth/src/main/java/com/yugm/app/feature/auth/screens/OnboardingScreen.kt), and the shared [GlassComponents](../../android-client/core/ui/src/main/java/com/yugm/app/core/ui/components/GlassComponents.kt).
@@ -22,13 +22,15 @@ Relevant implementation: [MainActivity](../../android-client/app/src/main/java/c
 
 Evidence: `SplashScreen.kt`, `OnboardingScreen.kt`, `Theme.kt`, `GlassComponents.kt`. The light capture is not a formal contrast measurement.
 
-### Required behavior — Abandoned onboarding repeats
+### Product decision (2026-11-20) — Intro completion is install-scoped
 
-The user clarified that if someone finishes the slides but leaves without signing in or creating an account, the next cold launch must show onboarding again. The flow now does not save intro completion. The last CTA navigates to Login only in the current navigation session. On a later cold start, a blank auth token routes to onboarding; a persisted authenticated session bypasses it.
+The original audit recorded an abandon-and-replay rule. On 2026-11-20 the product owner confirmed the newer committed behavior instead: finishing or skipping the slides persists completion for the install, so a later cold launch goes straight to Login, and signing out does **not** replay onboarding.
 
-Evidence: `StartupDestination.kt`, `AuthNavGraph.kt`, `OnboardingScreen.kt`. Three route unit tests cover signed-out, incomplete-profile, and authenticated startup paths. The later startup-validation change is described in [auth-flow audit](auth-flow-audit.md).
+Implementation: `SessionManager.onboardingCompleted` is persisted in the same preferences store, `MainViewModel.markOnboardingCompleted` writes it when the last CTA or Skip is used, and `startupDestination` selects Onboarding only when signed out and not yet completed. `SessionManager.logout()` now reads the flag before clearing preferences and restores it afterwards, so the install-scoped value survives sign-out while account-scoped data is still cleared.
 
-This feature has no onboarding database/API/realtime write by design. Persisting completion would violate the abandon-and-replay rule.
+Evidence: `SessionManager.kt`, `MainViewModel.kt`, `StartupDestination.kt`, `AuthNavGraph.kt`, `OnboardingScreen.kt`. Four `StartupDestinationTest` cases cover signed-out first launch, signed-out completed intro, incomplete-profile session, and complete session. Startup session validation is described in the [auth-flow audit](auth-flow-audit.md).
+
+This remains client-only: there is no onboarding database/API/realtime write. The flag is per install, not per account, so a reinstall shows the slides again and a different account signing in on the same install does not.
 
 ### Repaired — Compact-height and large-font layout
 
@@ -44,7 +46,7 @@ Evidence: `OnboardingScreen.kt`, `GlassComponents.kt`, `OnboardingFlowTest.pager
 
 ### Improved — Compose splash delay and reduced motion
 
-The presentation-only scale animation is now 250 ms and calls `snapTo` without animation when the system motion preference is off. Routing remains based on locally restored session state rather than a network prerequisite.
+The presentation-only scale animation is now 250 ms and calls `snapTo` without animation when the system motion preference is off. Routing remains based on locally restored session state rather than a network prerequisite. The routing effect is keyed on `Unit` (not the motion preference), so a preference change while the splash is visible cannot re-run the timer and issue a second `navigate()`.
 
 Evidence: `SplashScreen.kt`, `AuthNavGraph.kt`. Cold/warm timing remains unmeasured; routing now waits for the bounded session-validation decision before choosing a destination.
 
@@ -64,12 +66,12 @@ Evidence: `OnboardingScreen.kt`; no `floatY` reference remains.
 
 ## Checks and limits
 
-- The onboarding route test set passed three startup destination cases; the expanded auth unit suite has five passing cases including provider-operation state coverage.
-- `:app:connectedDebugAndroidTest` passed three emulator tests, covering pager semantics/progression, compact large-font rendering, and the existing app example test.
-- `:app:compileDebugKotlin` and `:app:compileDebugAndroidTestKotlin` passed.
+- The onboarding route test set passes four startup destination cases (signed-out first launch, signed-out completed intro, incomplete-profile session, complete session); the auth unit suite passes 14/14 including provider-operation state and avatar-reference coverage.
+- `:app:connectedDebugAndroidTest` previously passed three emulator tests, covering pager semantics/progression, compact large-font rendering, and the existing app example test.
+- 2026-11-20 bounded run: `:feature:auth:testDebugUnitTest :core:api:testDebugUnitTest :app:compileDebugKotlin --console=plain` passed (auth 14/14, core API 29/29, app compile successful). The earlier `:app:compileDebugAndroidTestKotlin` result still applies; instrumentation was not re-run.
 - A fresh light-theme emulator screen capture showed readable wordmark, title, and body; inactive progress dots were adjusted after visual inspection.
 - No full signup/sign-in, TalkBack, physical-device, cold-start timing, or separate platform system-splash verification was performed.
-- Backend API, realtime, permissions, and server database persistence are not applicable to this client-only introductory flow. The intended signed-out replay behavior explicitly avoids persisting intro completion.
+- Backend API, realtime, permissions, and server database persistence are not applicable to this client-only introductory flow. Intro completion is persisted locally per install and deliberately survives sign-out.
 - Session validation, backend auth, App Check, account linking, profile persistence, and revoked-session behavior are covered separately in [auth-flow audit](auth-flow-audit.md); live Firebase/Mongo behavior remains unverified.
 
 ## Suggested order
