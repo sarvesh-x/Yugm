@@ -2,11 +2,13 @@ package com.yugm.app.feature.auth.screens
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -64,11 +66,10 @@ fun SplashScreen(onTimeout: suspend () -> Unit) {
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "Y",
-                    color = Color.White,
-                    fontSize = 48.sp,
-                    fontWeight = FontWeight.Black
+                Image(
+                    painter = painterResource(id = com.yugm.app.feature.auth.R.drawable.ic_launcher_foreground),
+                    contentDescription = "Yugm",
+                    modifier = Modifier.size(72.dp)
                 )
             }
             Spacer(modifier = Modifier.height(24.dp))
