@@ -1,0 +1,53 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <!-- Background Circle -->
+    <path
+        android:pathData="M60,0A60,60 0 1,1 0,60A60,60 0 0,1 60,0Z"
+        android:fillColor="#EADCF8" />
+    <!-- Gradient Inner Glow -->
+    <path
+        android:pathData="M60,8A52,52 0 1,1 8,60A52,52 0 0,1 60,8Z"
+        android:fillColor="#D8C2F2" />
+    <!-- Clothing / Shoulders -->
+    <path
+        android:pathData="M24,115 C26,88 40,80 60,80 C80,80 94,88 96,115 Z"
+        android:fillColor="#5C4D7D" />
+    <path
+        android:pathData="M38,115 C40,94 48,88 60,88 C72,88 80,94 82,115 Z"
+        android:fillColor="#8C7AA9" />
+    <!-- Headphones on neck -->
+    <path
+        android:pathData="M30,76 C30,60 90,60 90,76 C90,82 82,86 78,80 C70,72 50,72 42,80 C38,86 30,82 30,76 Z"
+        android:fillColor="#E2E2E8" />
+    <!-- Neck -->
+    <path
+        android:pathData="M50,62 L70,62 L70,78 L50,78 Z"
+        android:fillColor="#CE9E7C" />
+    <!-- Face Head -->
+    <path
+        android:pathData="M36,44 C36,24 84,24 84,44 C84,62 70,72 60,72 C50,72 36,62 36,44 Z"
+        android:fillColor="#DEAF8C" />
+    <!-- Curly Hair Top -->
+    <path
+        android:pathData="M32,40 C28,26 40,14 55,14 C65,14 74,18 80,14 C90,16 92,30 88,40 C86,30 80,24 66,22 C52,20 40,28 32,40 Z"
+        android:fillColor="#2A1B2E" />
+    <path
+        android:pathData="M38,24 A8,8 0 1,1 54,22 A10,10 0 1,1 74,20 A8,8 0 1,1 86,28 C82,18 70,16 60,16 C46,16 38,20 38,24 Z"
+        android:fillColor="#2A1B2E" />
+    <!-- Eyes -->
+    <path
+        android:pathData="M46,42 A3,3 0 1,1 46,41.9 Z"
+        android:fillColor="#2A1B2E" />
+    <path
+        android:pathData="M74,42 A3,3 0 1,1 74,41.9 Z"
+        android:fillColor="#2A1B2E" />
+    <!-- Smile -->
+    <path
+        android:pathData="M48,54 Q60,63 72,54"
+        android:strokeColor="#2A1B2E"
+        android:strokeWidth="3"
+        android:strokeLineCap="round" />
+</vector>

@@ -1,0 +1,44 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="114dp"
+    android:viewportWidth="280"
+    android:viewportHeight="160">
+    <!-- Sky Twilight Gradient Base -->
+    <path
+        android:pathData="M0,0 L280,0 L280,160 L0,160 Z"
+        android:fillColor="#311B92" />
+    <!-- Sunset Glow Arc -->
+    <path
+        android:pathData="M0,40 C80,20 200,20 280,40 L280,160 L0,160 Z"
+        android:fillColor="#B71C1C" />
+    <path
+        android:pathData="M0,70 C90,50 190,50 280,70 L280,160 L0,160 Z"
+        android:fillColor="#E65100" />
+    <path
+        android:pathData="M0,100 C100,85 180,85 280,100 L280,160 L0,160 Z"
+        android:fillColor="#F57C00" />
+    <path
+        android:pathData="M0,120 L280,120 L280,160 L0,160 Z"
+        android:fillColor="#FFB74D" />
+    <!-- Sun / Glow behind skyline -->
+    <path
+        android:pathData="M140,110 A25,25 0 1,1 140,109.9 Z"
+        android:fillColor="#FFE082" />
+    <!-- City Skyline Silhouettes -->
+    <path
+        android:pathData="M0,160 L0,125 L15,125 L15,110 L25,110 L25,125 L40,125 L40,100 L55,100 L55,125 L75,125 L75,90 L85,90 L85,75 L90,75 L90,90 L100,90 L100,125 L125,125 L125,85 L140,85 L140,125 L160,125 L160,95 L175,95 L175,125 L200,125 L200,105 L215,105 L215,125 L240,125 L240,115 L255,115 L255,125 L280,125 L280,160 Z"
+        android:fillColor="#1A002C" />
+    <!-- Couple Silhouette foreground watching sunset -->
+    <path
+        android:pathData="M105,160 C105,140 115,130 125,130 C135,130 142,140 142,160 Z"
+        android:fillColor="#0D001A" />
+    <path
+        android:pathData="M125,128 A7,7 0 1,1 125,127.9 Z"
+        android:fillColor="#0D001A" />
+    <path
+        android:pathData="M145,160 C145,142 154,134 162,134 C170,134 178,142 178,160 Z"
+        android:fillColor="#0D001A" />
+    <path
+        android:pathData="M162,132 A6,6 0 1,1 162,131.9 Z"
+        android:fillColor="#0D001A" />
+</vector>

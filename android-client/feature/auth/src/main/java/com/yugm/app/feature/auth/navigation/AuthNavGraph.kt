@@ -38,6 +38,7 @@ fun NavGraphBuilder.authNavGraph(
     navigateAfterLogin: (Session) -> Unit,
     onProfileComplete: (Session) -> Unit,
     onProfileExit: () -> Unit,
+    onOnboardingComplete: () -> Unit = {},
 ) {
     composable(Screen.Splash.route) {
         SplashScreen {
@@ -52,6 +53,7 @@ fun NavGraphBuilder.authNavGraph(
     composable(Screen.Onboarding.route) {
         OnboardingScreen(
             onStart = {
+                onOnboardingComplete()
                 navController.navigate(Screen.Login.route) {
                     popUpTo(Screen.Onboarding.route) { inclusive = true }
                     launchSingleTop = true

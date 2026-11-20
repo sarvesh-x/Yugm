@@ -58,6 +58,14 @@ class MainViewModel @Inject constructor(
     var profileCompleted by mutableStateOf(sessionManager.profileCompleted)
         private set
 
+    var onboardingCompleted by mutableStateOf(sessionManager.onboardingCompleted)
+        private set
+
+    fun markOnboardingCompleted() {
+        sessionManager.onboardingCompleted = true
+        onboardingCompleted = true
+    }
+
     var inAppNotification by mutableStateOf<NotificationItem?>(null)
         private set
 

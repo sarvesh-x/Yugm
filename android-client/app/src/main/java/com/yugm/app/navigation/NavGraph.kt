@@ -147,6 +147,7 @@ fun NavGraph(
                 startupDestination(
                     isLoggedIn = mainViewModel.authToken.isNotBlank(),
                     isProfileCompleted = mainViewModel.profileCompleted,
+                    isOnboardingCompleted = mainViewModel.onboardingCompleted,
                 )
             },
             navigateAfterLogin = ::navigateAfterLogin,
@@ -168,7 +169,8 @@ fun NavGraph(
                     popUpTo(navController.graph.id) { inclusive = true }
                     launchSingleTop = true
                 }
-            }
+            },
+            onOnboardingComplete = mainViewModel::markOnboardingCompleted,
         )
         composable(
             route = Screen.MainTabs.route,

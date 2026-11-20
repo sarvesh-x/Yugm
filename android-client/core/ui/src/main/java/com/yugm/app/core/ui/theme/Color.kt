@@ -33,6 +33,19 @@ val TextSecondaryColor: Color
 val BorderColor: Color
     @Composable get() = LocalYugmColors.current.border
 
+// Premium Onboarding design tokens matching visual reference specification
+val OnboardingBgLight = Color(0xFFFCF9FE)
+val OnboardingBgDark = Color(0xFF14101C)
+val OnboardingGlowLavender = Color(0xFFF0E4FC)
+val OnboardingGlowPink = Color(0xFFF9E7F1)
+val OnboardingTextPrimaryLight = Color(0xFF161326)
+val OnboardingTextSecondaryLight = Color(0xFF626174)
+val OnboardingBrandStart = Color(0xFF9237F4)
+val OnboardingBrandMiddle = Color(0xFF8E2DCE)
+val OnboardingBrandEnd = Color(0xFFBE145F)
+
+val onboardingBrandGradient = listOf(OnboardingBrandStart, OnboardingBrandMiddle, OnboardingBrandEnd)
+
 // Aurora Gradients - each is a list of colors for gradient transitions
 object Aurora {
     val Sunrise = listOf(Color(0xFFFF6B35), Color(0xFFF7C59F), Color(0xFFEFEFBB))

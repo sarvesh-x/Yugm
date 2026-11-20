@@ -36,10 +36,10 @@ class OnboardingFlowTest {
             }
         }
 
-        composeRule.onNodeWithText("Match the Vibe").assertIsDisplayed()
+        composeRule.onNodeWithText("Match the vibe").assertIsDisplayed()
         composeRule.onNode(hasStateDescription("Slide 1 of 4")).assertExists()
 
-        listOf("Go Live, Not Lonely", "Find People Around Your Energy", "Safe Connections")
+        listOf("Find your people", "Share every moment", "Build meaningful bonds")
             .forEachIndexed { index, title ->
                 composeRule.onNodeWithText("Next").performClick()
                 composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -49,7 +49,7 @@ class OnboardingFlowTest {
                 }
             }
 
-        composeRule.onNodeWithText("Start matching the vibe").performClick()
+        composeRule.onNodeWithText("Get started").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) { completed }
         assertTrue(completed)
     }
@@ -67,7 +67,7 @@ class OnboardingFlowTest {
             }
         }
 
-        composeRule.onNodeWithText("Match the Vibe").assertIsDisplayed()
+        composeRule.onNodeWithText("Match the vibe").assertIsDisplayed()
         composeRule.onNodeWithText("Next").assertIsDisplayed()
     }
 }

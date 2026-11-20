@@ -78,7 +78,12 @@ data class YugmColors(
     val success: Color,
     val danger: Color,
     val warning: Color,
-    val isDark: Boolean
+    val isDark: Boolean,
+    val onboardingBackground: Color = OnboardingBgLight,
+    val onboardingGlowLavender: Color = OnboardingGlowLavender,
+    val onboardingGlowPink: Color = OnboardingGlowPink,
+    val onboardingTextPrimary: Color = OnboardingTextPrimaryLight,
+    val onboardingTextSecondary: Color = OnboardingTextSecondaryLight,
 )
 
 /** Shared message colors keep direct and clan conversations visually aligned. */
@@ -107,7 +112,12 @@ val DarkYugmColors = YugmColors(
     success = Color(0xFF3BE477),
     danger = Color(0xFFFF3B4F),
     warning = Color(0xFFFF9F43),
-    isDark = true
+    isDark = true,
+    onboardingBackground = OnboardingBgDark,
+    onboardingGlowLavender = Color(0xFF281E38),
+    onboardingGlowPink = Color(0xFF331A28),
+    onboardingTextPrimary = Color(0xFFF7F4FC),
+    onboardingTextSecondary = Color(0xFFB8AEC7),
 )
 
 val LightYugmColors = YugmColors(
@@ -126,7 +136,12 @@ val LightYugmColors = YugmColors(
     success = Color(0xFF1E8E4E),
     danger = Color(0xFFBA1B1B),
     warning = Color(0xFFB7462B),
-    isDark = false
+    isDark = false,
+    onboardingBackground = OnboardingBgLight,
+    onboardingGlowLavender = OnboardingGlowLavender,
+    onboardingGlowPink = OnboardingGlowPink,
+    onboardingTextPrimary = OnboardingTextPrimaryLight,
+    onboardingTextSecondary = OnboardingTextSecondaryLight,
 )
 
 val LocalYugmColors = staticCompositionLocalOf { DarkYugmColors }

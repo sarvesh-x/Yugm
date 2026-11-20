@@ -84,6 +84,10 @@ class SessionManager @Inject constructor(
         get() = cached("profileCompleted") { prefs.getBoolean("profileCompleted", userId.isNotBlank()) }
         set(value) = writeBoolean("profileCompleted", value)
 
+    var onboardingCompleted: Boolean
+        get() = cached("onboardingCompleted") { prefs.getBoolean("onboardingCompleted", false) }
+        set(value) = writeBoolean("onboardingCompleted", value)
+
     var pendingFcmToken: String
         get() = cached("pendingFcmToken") { prefs.getString("pendingFcmToken", "") ?: "" }
         set(value) = writeString("pendingFcmToken", value)

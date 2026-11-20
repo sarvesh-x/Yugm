@@ -9,7 +9,15 @@ class StartupDestinationTest {
     fun signedOutColdLaunchAlwaysStartsAtOnboarding() {
         assertEquals(
             Screen.Onboarding.route,
-            startupDestination(isLoggedIn = false, isProfileCompleted = false),
+            startupDestination(isLoggedIn = false, isProfileCompleted = false, isOnboardingCompleted = false),
+        )
+    }
+
+    @Test
+    fun signedOutCompletedOnboardingStartsAtLogin() {
+        assertEquals(
+            Screen.Login.route,
+            startupDestination(isLoggedIn = false, isProfileCompleted = false, isOnboardingCompleted = true),
         )
     }
 
