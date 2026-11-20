@@ -86,6 +86,7 @@ import com.yugm.app.core.ui.cosmetics.profileThemeColors
 import com.yugm.app.core.ui.cosmetics.profileBannerColors
 import com.yugm.app.core.ui.theme.*
 import kotlinx.coroutines.launch
+import com.yugm.app.core.ui.components.YugmBottomDockDefaults
 import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -260,12 +261,17 @@ fun ProfileDetailScreen(
             if (isOwnProfile && showBottomDock) {
                 YugmBottomDock(
                     selected = YugmDockTab.PROFILE,
-                    onDiscover = onDiscover,
-                    onLive = onParty,
-                    onChat = onChatTab,
-                    onProfile = {},
-                    onGameZone = onGameZone,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    onTabSelected = { tab ->
+                        when (tab) {
+                            YugmDockTab.DISCOVER -> onDiscover()
+                            YugmDockTab.LIVE -> onParty()
+                            YugmDockTab.CHAT -> onChatTab()
+                            YugmDockTab.PROFILE -> Unit
+                            YugmDockTab.GAME_ZONE -> onGameZone()
+                        }
+                    },
+                    onTabReselected = { }
                 )
             } else if (!isOwnProfile) viewModel.profile?.let { profile ->
                 Surface(
@@ -327,7 +333,12 @@ fun ProfileDetailScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 104.dp),
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 12.dp,
+                    bottom = if (isOwnProfile && showBottomDock) 24.dp else 104.dp
+                ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Header card

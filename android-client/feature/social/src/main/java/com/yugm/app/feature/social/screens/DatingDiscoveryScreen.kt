@@ -63,6 +63,7 @@ fun DatingDiscoveryScreen(
     onLive: () -> Unit = {},
     onWallet: () -> Unit = {},
     onSelfProfile: () -> Unit = {},
+    onGameZone: () -> Unit = {},
     viewModel: DatingViewModel = hiltViewModel()
 ) {
     var matchedCandidate by remember { mutableStateOf<Host?>(null) }
@@ -87,11 +88,13 @@ fun DatingDiscoveryScreen(
             .fillMaxSize()
             .background(Background)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = 90.dp) // Leave space for bottom bar
-        ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+            ) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 BrandHeader(compact = true)
                 Spacer(Modifier.weight(1f))
@@ -217,6 +220,21 @@ fun DatingDiscoveryScreen(
                     )
                 }
             }
+            }
+
+            YugmBottomDock(
+                selected = YugmDockTab.DISCOVER,
+                modifier = Modifier.fillMaxWidth(),
+                onTabSelected = { tab ->
+                    when (tab) {
+                        YugmDockTab.DISCOVER -> onDiscover()
+                        YugmDockTab.LIVE -> onLive()
+                        YugmDockTab.CHAT -> onMatches()
+                        YugmDockTab.PROFILE -> onSelfProfile()
+                        YugmDockTab.GAME_ZONE -> onGameZone()
+                    }
+                }
+            )
         }
 
         // Mutual Match Overlay Dialog
@@ -235,25 +253,18 @@ fun DatingDiscoveryScreen(
                 )
             }
         }
-        YugmBottomDock(
-            selected = YugmDockTab.DISCOVER,
-            modifier = Modifier.align(Alignment.BottomCenter),
-            onDiscover = onDiscover,
-            onCreate = onCreateRoom,
-            onLive = onLive,
-            onChat = onMatches,
-            onWallet = onWallet,
-            onProfile = onSelfProfile
-        )
         viewModel.error?.takeIf { it.isNotBlank() && viewModel.candidates.isNotEmpty() }?.let { message ->
             Text(
                 text = message,
                 color = Color.White,
                 fontSize = 12.sp,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(start = 20.dp, end = 20.dp, bottom = 88.dp)
-                    .clip(RoundedCornerShape(14.dp)).background(Color(0xEE7B294D)).clickable {
-                        viewModel.loadCandidates(token, discoveryMode)
-                    }.padding(horizontal = 14.dp, vertical = 10.dp)
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(start = 20.dp, end = 20.dp, bottom = 124.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xEE7B294D))
+                    .clickable { viewModel.loadCandidates(token, discoveryMode) }
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
             )
         }
     }

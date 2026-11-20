@@ -42,9 +42,10 @@ fun MatchesScreen(
     onDating: () -> Unit,
     onCreateRoom: () -> Unit,
     onLive: () -> Unit = onDiscover,
-    onWallet: () -> Unit,
+    onWallet: () -> Unit = {},
     onProfile: () -> Unit,
     onBack: () -> Unit,
+    onGameZone: () -> Unit = {},
 ) {
     var matches by remember { mutableStateOf<List<Host>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -73,13 +74,17 @@ fun MatchesScreen(
         containerColor = Background,
         bottomBar = {
             YugmBottomDock(
-                selected = YugmDockTab.DISCOVER,
-                onDiscover = onDiscover,
-                onCreate = onCreateRoom,
-                onLive = onLive,
-                onChat = {},
-                onWallet = onWallet,
-                onProfile = onProfile
+                selected = YugmDockTab.CHAT,
+                modifier = Modifier.fillMaxWidth(),
+                onTabSelected = { tab ->
+                    when (tab) {
+                        YugmDockTab.DISCOVER -> onDiscover()
+                        YugmDockTab.LIVE -> onLive()
+                        YugmDockTab.CHAT -> Unit
+                        YugmDockTab.PROFILE -> onProfile()
+                        YugmDockTab.GAME_ZONE -> onGameZone()
+                    }
+                }
             )
         }
     ) { innerPadding ->

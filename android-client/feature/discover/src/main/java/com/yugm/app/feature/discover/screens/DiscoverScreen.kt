@@ -10,18 +10,23 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.selectable
@@ -70,6 +75,7 @@ import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.ui.components.Avatar
 import com.yugm.app.core.ui.components.YugmBottomDock
+import com.yugm.app.core.ui.components.YugmBottomDockDefaults
 import com.yugm.app.core.ui.components.YugmDockTab
 import com.yugm.app.core.ui.theme.Background
 import com.yugm.app.core.ui.theme.BorderColor
@@ -118,8 +124,15 @@ fun DiscoverScreen(
     onLeaderboards: () -> Unit = {},
     onClans: () -> Unit = {},
     showBottomDock: Boolean = true,
+    listState: LazyListState = rememberLazyListState(),
+    reselectSignal: Int = 0,
     viewModel: DiscoverViewModel = hiltViewModel()
 ) {
+    LaunchedEffect(reselectSignal) {
+        if (reselectSignal > 0 && (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0)) {
+            listState.animateScrollToItem(0)
+        }
+    }
     com.yugm.app.core.ui.components.AutomaticSyncEffect(token, topics = setOf(com.yugm.app.core.api.SyncTopic.ROOMS, com.yugm.app.core.api.SyncTopic.NOTIFICATIONS, com.yugm.app.core.api.SyncTopic.PROFILE), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) {
         if (token.isNotBlank()) viewModel.refreshHome(token)
     }
@@ -163,11 +176,15 @@ fun DiscoverScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Background)) {
-        Box(modifier = Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().background(Background)) {
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = 8.dp, bottom = if (showBottomDock) 120.dp else 32.dp),
+                contentPadding = PaddingValues(
+                    top = 8.dp,
+                    bottom = 24.dp
+                ),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item {
@@ -258,15 +275,18 @@ fun DiscoverScreen(
 
         if (showBottomDock) {
             YugmBottomDock(
-                modifier = Modifier.align(Alignment.BottomCenter),
                 selected = YugmDockTab.DISCOVER,
-                onDiscover = {},
-                onCreate = onCreateRoom,
-                onLive = onVoiceRooms,
-                onChat = onChat,
-                onWallet = onWallet,
-                onProfile = onSelfProfile,
-                onGameZone = onGames
+                modifier = Modifier.fillMaxWidth(),
+                onTabSelected = { tab ->
+                    when (tab) {
+                        YugmDockTab.DISCOVER -> Unit
+                        YugmDockTab.LIVE -> onVoiceRooms()
+                        YugmDockTab.CHAT -> onChat()
+                        YugmDockTab.PROFILE -> onSelfProfile()
+                        YugmDockTab.GAME_ZONE -> onGames()
+                    }
+                },
+                onTabReselected = { tab -> if (tab == YugmDockTab.DISCOVER) scope.launch { listState.animateScrollToItem(0) } }
             )
         }
     }

@@ -9,15 +9,20 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -31,7 +36,6 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -51,15 +55,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.api.YugmApi
 import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.core.ui.components.Avatar
 import com.yugm.app.core.ui.components.YugmBottomDock
+import com.yugm.app.core.ui.components.YugmBottomDockDefaults
 import com.yugm.app.core.ui.components.YugmDockTab
 import com.yugm.app.feature.room.viewmodel.RoomViewModel
 import coil.compose.AsyncImage
@@ -79,15 +81,22 @@ fun VoiceRoomsScreen(
     onCreateRoom: () -> Unit,
     onDiscover: () -> Unit,
     onChat: () -> Unit,
-    onWallet: () -> Unit,
+    onWallet: () -> Unit = {},
     onProfile: () -> Unit,
     onSearch: () -> Unit = {},
     onEvents: () -> Unit = {},
     onFollowedRooms: () -> Unit = {},
     onGameZone: () -> Unit = {},
     showBottomDock: Boolean = true,
+    listState: LazyListState = rememberLazyListState(),
+    reselectSignal: Int = 0,
     viewModel: RoomViewModel = hiltViewModel()
 ) {
+    LaunchedEffect(reselectSignal) {
+        if (reselectSignal > 0 && (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0)) {
+            listState.animateScrollToItem(0)
+        }
+    }
     var selectedSection by remember { mutableStateOf(PartySection.Voice) }
     var followedRooms by remember { mutableStateOf<List<Room>>(emptyList()) }
     val scope = rememberCoroutineScope()
@@ -108,10 +117,14 @@ fun VoiceRoomsScreen(
     }
     val liveRooms = viewModel.rooms.filter { it.type == RoomType.Voice && it.status == "LIVE" }
     val liveVideoRooms = viewModel.rooms.filter { it.type == RoomType.Video && it.status == "LIVE" }
-    Box(Modifier.fillMaxSize().background(LocalYugmColors.current.background)) {
-        Box(modifier = Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().background(LocalYugmColors.current.background)) {
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(
-                contentPadding = PaddingValues(top = 14.dp, bottom = if (showBottomDock) 120.dp else 100.dp),
+                state = listState,
+                contentPadding = PaddingValues(
+                    top = 14.dp,
+                    bottom = 24.dp
+                ),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
@@ -232,14 +245,17 @@ fun VoiceRoomsScreen(
         if (showBottomDock) {
             YugmBottomDock(
                 selected = YugmDockTab.LIVE,
-                onDiscover = onDiscover,
-                onCreate = onCreateRoom,
-                onLive = {},
-                onChat = onChat,
-                onWallet = onWallet,
-                onProfile = onProfile,
-                onGameZone = onGameZone,
-                modifier = Modifier.align(Alignment.BottomCenter)
+                modifier = Modifier.fillMaxWidth(),
+                onTabSelected = { tab ->
+                    when (tab) {
+                        YugmDockTab.DISCOVER -> onDiscover()
+                        YugmDockTab.LIVE -> Unit
+                        YugmDockTab.CHAT -> onChat()
+                        YugmDockTab.PROFILE -> onProfile()
+                        YugmDockTab.GAME_ZONE -> onGameZone()
+                    }
+                },
+                onTabReselected = { tab -> if (tab == YugmDockTab.LIVE) scope.launch { listState.animateScrollToItem(0) } }
             )
         }
     }

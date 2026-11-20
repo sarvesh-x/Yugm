@@ -42,7 +42,8 @@ fun NavGraphBuilder.socialNavGraph(
             onSelfProfile = {
                 if (currentUserIdProvider().isNotBlank()) navController.navigate(Screen.MainTabs.createRoute("profile")) { launchSingleTop = true }
                 else navController.navigate(Screen.ProfileSetup.route)
-            }
+            },
+            onGameZone = { navController.navigateTopLevel(Screen.Games.route) }
         )
     }
 
@@ -331,9 +332,10 @@ fun NavGraphBuilder.socialNavGraph(
             onWallet = { navController.navigateTopLevel(Screen.Wallet.route) },
             onLive = { navController.navigateTopLevel(Screen.VoiceRooms.route) },
             onProfile = {
-                if (currentUserIdProvider().isNotBlank()) navController.navigateTopLevel(Screen.ProfileDetail.createRoute(currentUserIdProvider()))
+                if (currentUserIdProvider().isNotBlank()) navController.navigate(Screen.MainTabs.createRoute("profile")) { launchSingleTop = true }
                 else navController.navigate(Screen.ProfileSetup.route)
-            }
+            },
+            onGameZone = { navController.navigateTopLevel(Screen.Games.route) }
         )
     }
 

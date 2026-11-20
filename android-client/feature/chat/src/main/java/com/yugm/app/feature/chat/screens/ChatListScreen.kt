@@ -9,10 +9,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -76,6 +79,7 @@ import com.yugm.app.core.model.Host
 import com.yugm.app.core.ui.components.Avatar
 import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.core.ui.components.YugmBottomDock
+import com.yugm.app.core.ui.components.YugmBottomDockDefaults
 import com.yugm.app.core.ui.components.YugmDockTab
 import com.yugm.app.feature.chat.viewmodel.ChatListViewModel
 import com.yugm.app.feature.social.screens.ClanChatScreen
@@ -103,6 +107,7 @@ fun ChatListScreen(
     onGameZone: () -> Unit = {},
     showBottomDock: Boolean = true,
     onClanTabActiveChanged: (Boolean) -> Unit = {},
+    reselectSignal: Int = 0,
     viewModel: com.yugm.app.feature.chat.viewmodel.ChatListViewModel = hiltViewModel()
 ) {
     var mainTab by remember { mutableIntStateOf(0) }
@@ -115,8 +120,18 @@ fun ChatListScreen(
         onClanTabActiveChanged(mainTab == 1)
     }
 
+    LaunchedEffect(reselectSignal) {
+        if (reselectSignal > 0) {
+            // Return to primary conversations view on active-tab reselect.
+            if (mainTab != 0) mainTab = 0
+            contactTab = 0
+            searchOpen = false
+        }
+    }
+
     com.yugm.app.core.ui.components.AutomaticSyncEffect(token, currentUserId, topics = setOf(com.yugm.app.core.api.SyncTopic.CHAT, com.yugm.app.core.api.SyncTopic.CLANS, com.yugm.app.core.api.SyncTopic.SOCIAL), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) { viewModel.load(token, currentUserId) }
-    val listBottomPadding = if (showBottomDock) 120.dp else 100.dp
+    val dockVisible = showBottomDock && mainTab != 1
+    val listBottomPadding = 24.dp
 
     val conversations = remember(viewModel.recentMessages, viewModel.matches, currentUserId) {
         viewModel.recentMessages.groupBy { if (it.senderId == currentUserId) it.receiverId else it.senderId }
@@ -197,6 +212,8 @@ fun ChatListScreen(
 
     Box(Modifier.fillMaxSize().background(LocalYugmColors.current.background)) {
         Column(Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                Column(Modifier.fillMaxSize()) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 16.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -650,20 +667,25 @@ fun ChatListScreen(
                     }
                 }
             }
-        }
-        if (showBottomDock && mainTab != 1) {
-            YugmBottomDock(
-                selected = YugmDockTab.CHAT,
-                onDiscover = onDiscover,
-                onCreate = onCreateRoom,
-                onLive = onLive,
-                onChat = {},
-                onWallet = onWallet,
-                onProfile = onProfile,
-                onGameZone = onGameZone,
-                chatBadge = unread.coerceAtMost(9),
-                modifier = Modifier.align(Alignment.BottomCenter)
-            )
+                }
+            }
+            if (dockVisible) {
+                YugmBottomDock(
+                    selected = YugmDockTab.CHAT,
+                    modifier = Modifier.fillMaxWidth(),
+                    onTabSelected = { tab ->
+                        when (tab) {
+                            YugmDockTab.DISCOVER -> onDiscover()
+                            YugmDockTab.LIVE -> onLive()
+                            YugmDockTab.CHAT -> Unit
+                            YugmDockTab.PROFILE -> onProfile()
+                            YugmDockTab.GAME_ZONE -> onGameZone()
+                        }
+                    },
+                    onTabReselected = { tab -> if (tab == YugmDockTab.CHAT) { mainTab = 0; contactTab = 0; searchOpen = false } },
+                    chatUnreadCount = unread
+                )
+            }
         }
         if (showFindPeople) {
             FindPeopleSheet(
