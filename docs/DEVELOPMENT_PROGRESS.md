@@ -1,5 +1,11 @@
 ﻿# Development progress
 
+## 2026-11-20 -- Integrate Multiavatar generation/customization (continuation 18, in progress)
+
+- **Edit Profile UI polish (Android):** `feature/profile` `ProfileDetailScreen.kt` Edit Profile now uses icon-labeled buttons for **Change photo** (`FilledTonalButton`, camera icon) and **Generate avatar** (primary button, `AutoAwesome` icon) instead of text labels; removed stale leading arrow icon from the profile-tip banner; moved **ID** above **Name** in BASIC INFO with a clearer aligned read-only block and copy action. Existing handlers, avatar generator flow, Yugm theme/colors, and save/validation behavior preserved.
+- **Verification (run):** Android `:feature:profile:compileDebugKotlin` **BUILD SUCCESSFUL** (`JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'`, `--console=plain --max-workers=2`; existing deprecation warnings only).
+- **Not run:** on-device/emulator visual/runtime verification (layout, light/dark, font scaling/a11y, tap states, end-to-end edit/create avatar actions). Task-level Multiavatar runtime parity/verification and licensing/provenance blockers remain.
+
 ## 2026-11-20 -- Integrate Multiavatar generation/customization (continuation 17, in progress)
 
 - **Android SVG rendering repair (source):** registered `coil.decode.SvgDecoder.Factory()` in `YugmApplication` ImageLoader and added `coil-svg` to `:app`; reworked `GeneratedAvatar` for shared engine/cache, async cached SVG rendering, explicit SVG `ImageRequest`/decoder config, and fallback container.

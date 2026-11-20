@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Key
@@ -931,28 +932,68 @@ private fun EditProfilePage(
                         modifier = Modifier.size(34.dp).clip(CircleShape).background(colors.primary).border(2.dp, colors.background, CircleShape)
                     ) { Icon(Icons.Filled.CameraAlt, contentDescription = "Change photo", tint = Color.White, modifier = Modifier.size(17.dp)) }
                 }
-                Text("Change Photo", color = colors.textSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 9.dp).clickable(onClick = onChangePhoto))
-                Text("Generate avatar", color = colors.primary, fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 4.dp).clickable { showAvatarGenerator = true })
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FilledTonalButton(
+                        onClick = onChangePhoto,
+                        enabled = !isBusy,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = colors.surfaceElevated,
+                            contentColor = colors.textPrimary
+                        ),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+                    ) {
+                        Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Change photo", fontWeight = FontWeight.SemiBold)
+                    }
+                    Button(
+                        onClick = { showAvatarGenerator = true },
+                        enabled = !isBusy,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colors.primary,
+                            contentColor = Color.White
+                        ),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+                    ) {
+                        Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Generate avatar", fontWeight = FontWeight.SemiBold)
+                    }
+                }
             }
 
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(colors.primary.copy(alpha = 0.08f)).border(1.dp, colors.primary.copy(alpha = 0.2f), RoundedCornerShape(16.dp)).padding(13.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(colors.primary.copy(alpha = 0.08f)).border(1.dp, colors.primary.copy(alpha = 0.2f), RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("←", color = colors.primary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text("Make your profile yours. Add a little detail so people can find a reason to connect.", color = colors.textPrimary, fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(start = 10.dp))
+                Text("Make your profile yours. Add a little detail so people can find a reason to connect.", color = colors.textPrimary, fontSize = 13.sp, lineHeight = 19.sp)
             }
 
             EditProfileSection("BASIC INFO") {
-                EditProfileTextField("Name", name, onNameChange, maxLength = 60)
-                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("ID", color = colors.textPrimary, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                    Text(profile?.id?.takeLast(9).orEmpty(), color = colors.textSecondary, fontSize = 14.sp)
-                    TextButton(onClick = { clipboard.setText(AnnotatedString(profile?.id?.takeLast(9).orEmpty())) }) {
-                        Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(15.dp))
-                        Text("Copy", color = colors.textSecondary, modifier = Modifier.padding(start = 4.dp))
+                Column(
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(colors.surfaceVariant.copy(alpha = 0.45f)).border(1.dp, colors.border, RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text("ID", color = colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(profile?.id?.takeLast(9).orEmpty(), color = colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                        TextButton(
+                            onClick = { clipboard.setText(AnnotatedString(profile?.id?.takeLast(9).orEmpty())) },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = colors.primary, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Copy", color = colors.primary, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
+                EditProfileTextField("Name", name, onNameChange, maxLength = 60)
                 EditProfileTextField("Username", username, onUsernameChange, prefix = "@", maxLength = 24)
                 Text("Gender", color = colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

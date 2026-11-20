@@ -29,4 +29,4 @@
 ## References
 - Plan: `C:\Users\longl\OneDrive\Desktop\yugm-multiavatar-implementation-plan.md`
 - Task/progress: `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`
-- Latest handoff: `docs/handoffs/2026-11-20-multiavatar-continuation-17.md`
+- Latest handoff: `docs/handoffs/2026-11-20-multiavatar-continuation-18.md`
