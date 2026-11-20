@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import com.yugm.app.core.api.resolveMediaUrl
 import android.util.Patterns
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,12 +38,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.core.graphics.drawable.toBitmap
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Public
 import com.yugm.app.core.ui.components.*
 import com.yugm.app.core.ui.theme.*
+import com.yugm.app.feature.auth.R
 
 @Composable
 fun LoginScreen(
@@ -68,6 +74,11 @@ fun LoginScreen(
     val context = LocalContext.current
     val authColors = LocalYugmColors.current
     val authAccent = authColors.accent
+    val appIcon = remember {
+        runCatching {
+            context.packageManager.getApplicationIcon(context.packageName).toBitmap(128, 128).asImageBitmap()
+        }.getOrNull()
+    }
     var email by rememberSaveable { mutableStateOf(initialEmail) }
     var password by rememberSaveable { mutableStateOf("") }
     var confirmPassword by rememberSaveable { mutableStateOf("") }
@@ -109,6 +120,14 @@ fun LoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
+            if (appIcon != null) {
+                Image(
+                    bitmap = appIcon,
+                    contentDescription = "Yugm",
+                    modifier = Modifier.size(72.dp)
+                )
+                Spacer(Modifier.height(8.dp))
+            }
             Text("Yugm", color = TextPrimary, fontSize = 44.sp, fontWeight = FontWeight.Black, letterSpacing = (-1).sp)
             Text("Find your people. Share your vibe.", color = TextMuted, fontSize = 14.sp, textAlign = TextAlign.Center)
             Spacer(Modifier.height(22.dp))
@@ -263,7 +282,7 @@ fun LoginScreen(
                     Text("Choose how you want to sign in", color = TextMuted, fontSize = 13.sp, modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 12.dp))
                     LoginMethodButton(
                         text = if (googleLoading) "Connecting…" else "Continue with Google",
-                        icon = Icons.Filled.Public,
+                        iconRes = R.drawable.ic_google_logo,
                         onClick = { if (acceptTerms) onGoogleSignIn(acceptTerms) else localError = "Accept the terms to continue." },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !loading && !googleLoading && !facebookLoading,
@@ -272,8 +291,7 @@ fun LoginScreen(
                     Spacer(Modifier.height(10.dp))
                     LoginMethodButton(
                         text = if (facebookLoading) "Connecting…" else "Continue with Facebook",
-                        icon = null,
-                        brandMark = "f",
+                        iconRes = R.drawable.ic_facebook_logo,
                         onClick = { if (acceptTerms) onFacebookSignIn(acceptTerms) else localError = "Accept the terms to continue." },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !loading && !googleLoading && !facebookLoading,
@@ -381,7 +399,8 @@ fun LoginScreen(
 @Composable
 private fun LoginMethodButton(
     text: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector?,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    iconRes: Int? = null,
     brandMark: String? = null,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -435,7 +454,14 @@ private fun LoginMethodButton(
                 horizontalArrangement = Arrangement.Center,
                 modifier = Modifier.padding(horizontal = 16.dp)
             ) {
-                if (brandMark != null) {
+                if (iconRes != null) {
+                    Icon(
+                        painter = painterResource(id = iconRes),
+                        contentDescription = null,
+                        tint = Color.Unspecified,
+                        modifier = Modifier.size(20.dp)
+                    )
+                } else if (brandMark != null) {
                     Text(brandMark, color = Color(0xFF1877F2), fontWeight = FontWeight.Black, fontSize = 22.sp)
                 } else if (icon != null) {
                     Icon(
