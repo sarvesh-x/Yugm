@@ -82,6 +82,27 @@ async function findOrCreateFirebaseUser(input: {
       : null;
     const existingIdentity = byEmail ?? byPhone;
     if (existingIdentity) {
+      if (existingIdentity.deletionRequestedAt) {
+        // Accounts pending deletion must not block new registrations. Release any
+        // identifiers still present (e.g. deleted before Firebase/Auth cleanup)
+        // so a fresh account can be created with the same email/phone.
+        const unset: Record<string, string> = {};
+        if (existingIdentity.email) unset.email = "";
+        if (existingIdentity.phone) unset.phone = "";
+        if (existingIdentity.firebaseUid) unset.firebaseUid = "";
+        const tombstoneUsername = String(existingIdentity.username || "").startsWith("deleted_")
+          ? existingIdentity.username
+          : `deleted_${existingIdentity._id.toString()}`;
+        await User.updateOne(
+          { _id: existingIdentity._id, deletionRequestedAt: { $type: "date" } },
+          {
+            $set: { name: "Deleted User", username: tombstoneUsername, emailVerified: false, isVerified: false },
+            ...(Object.keys(unset).length ? { $unset: unset } : {})
+          }
+        );
+        continue;
+      }
+
       if (byEmail && !input.emailVerified) {
         throw new HttpError(409, "Verify this email address before linking it to an existing account.", ErrorCode.CONFLICT);
       }
@@ -90,7 +111,6 @@ async function findOrCreateFirebaseUser(input: {
       }
       if (input.acceptTerms && !existingIdentity.termsAcceptedAt) existingIdentity.termsAcceptedAt = new Date();
       if (input.emailVerified) existingIdentity.emailVerified = true;
-      if (existingIdentity.deletionRequestedAt) existingIdentity.deletionRequestedAt = undefined;
       existingIdentity.firebaseUid = input.firebaseUid;
       if (!existingIdentity.email && normalizedEmail) existingIdentity.email = normalizedEmail;
       if (!existingIdentity.phone && normalizedPhone) existingIdentity.phone = normalizedPhone;
@@ -147,6 +167,7 @@ function publicUser(user: any) {
     _id: user._id?.toString?.() ?? user.id,
     name: user.name,
     username: user.username,
+    email: user.email,
     avatar: user.avatar,
     isVerified: Boolean(user.isVerified),
     emailVerified: Boolean(user.emailVerified),
@@ -199,6 +220,12 @@ authRouter.post("/google", authLimiter, authIdentifierLimiter, validateBody(auth
   const payload = await verifyIdToken(idToken);
   const { sub: firebaseUid, name: tokenName, email, picture, email_verified } = payload;
   if (!firebaseUid) throw new HttpError(401, "Invalid Firebase identity token", ErrorCode.UNAUTHORIZED);
+
+  // Email/password accounts must be verified before they can create or use a
+  // Yugm account. This prevents abuse with unverified email addresses.
+  if (payload.firebase?.sign_in_provider === "password" && !payload.email_verified) {
+    throw new HttpError(403, "Verify your email address to continue. Check your inbox for the verification link.", ErrorCode.FORBIDDEN);
+  }
 
   const resolvedName = tokenName || bodyName;
   const { user, isNewUser } = await findOrCreateFirebaseUser({ firebaseUid, name: resolvedName, email, avatar: picture, acceptTerms, emailVerified: email_verified });
@@ -256,6 +283,25 @@ authRouter.post("/logout", requireAuth, validateBody(z.object({ refreshToken: z.
 }));
 
 authRouter.get("/me", requireAuth, (req: AuthRequest, res) => sendOk(res, { user: publicUser(req.user) }));
+
+authRouter.post("/verify-email", requireAuth, validateBody(z.object({ idToken: z.string().min(20).optional() }).optional()), asyncHandler(async (req: AuthRequest, res) => {
+  if (req.user!.emailVerified) {
+    return sendOk(res, { emailVerified: true, user: publicUser(req.user) });
+  }
+
+  const { idToken } = req.body ?? {};
+  if (idToken) {
+    const payload = await verifyIdToken(idToken);
+    const isMatchingUser = payload.sub === req.user!.firebaseUid || (payload.email && payload.email.toLowerCase() === req.user!.email?.toLowerCase());
+    if (isMatchingUser && payload.email_verified) {
+      await User.updateOne({ _id: req.user!._id }, { $set: { emailVerified: true } });
+      req.user!.emailVerified = true;
+      return sendOk(res, { emailVerified: true, user: publicUser(req.user) });
+    }
+  }
+
+  sendOk(res, { emailVerified: Boolean(req.user!.emailVerified), user: publicUser(req.user) });
+}));
 
 authRouter.patch("/profile", requireAuth, validateBody(profileSchema.partial()), asyncHandler(async (req: AuthRequest, res) => {
   const { user, xpGrant } = await updateProfileForUser(req.user!.id, req.body);

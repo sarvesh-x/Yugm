@@ -152,6 +152,7 @@ interface IYugmApi {
     suspend fun refreshAuth(refreshToken: String): RefreshedSession
     suspend fun logoutAuth(token: String, refreshToken: String, deviceToken: String? = null)
     suspend fun authMe(token: String): YugmUser
+    suspend fun verifyEmail(token: String, idToken: String? = null): Boolean
 
     suspend fun rooms(type: RoomType? = null): List<Room>
     suspend fun updateRoom(token: String, roomId: String, room: Room, coverImage: String? = null): Room

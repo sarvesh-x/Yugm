@@ -163,6 +163,7 @@ object YugmApi : IYugmApi {
     override suspend fun refreshAuth(refreshToken: String): RefreshedSession = AuthApi.refresh(refreshToken)
     override suspend fun logoutAuth(token: String, refreshToken: String, deviceToken: String?) = AuthApi.logout(token, refreshToken, deviceToken)
     override suspend fun authMe(token: String): YugmUser = AuthApi.me(token)
+    override suspend fun verifyEmail(token: String, idToken: String?): Boolean = AuthApi.verifyEmail(token, idToken)
 
     // Rooms
     override suspend fun rooms(type: RoomType?): List<Room> = RoomApi.rooms(type)

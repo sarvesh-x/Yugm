@@ -191,6 +191,27 @@ export async function verifyAppCheckToken(token: string) {
   return firebase.appCheck().verifyToken(token, { consume: true });
 }
 
+export async function deleteFirebaseUser(uid: string): Promise<{ deleted: boolean; reason?: "not_configured" | "not_found" }> {
+  const normalizedUid = uid?.trim();
+  if (!normalizedUid) return { deleted: false, reason: "not_found" };
+
+  if (!admin?.apps.length) {
+    console.warn("Firebase Admin is not configured; cannot delete Firebase Auth user", normalizedUid);
+    return { deleted: false, reason: "not_configured" };
+  }
+
+  const firebase = await fb();
+  try {
+    await firebase.auth().deleteUser(normalizedUid);
+    return { deleted: true };
+  } catch (err: any) {
+    if (err?.code === "auth/user-not-found") {
+      return { deleted: false, reason: "not_found" };
+    }
+    throw err;
+  }
+}
+
 export async function notifyUser(userId: string, title: string, body: string, data: Record<string, string> = {}) {
   if (!admin?.apps.length) return;
   const firebase = await fb();

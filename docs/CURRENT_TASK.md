@@ -1,5 +1,32 @@
 ﻿# Current task
 
+## YUGM-AUTH-EMAIL-VERIFY-005 — Require email verification at account creation and show verification in settings
+
+- **Problem/requirements:**
+  - Unverified email/password accounts could be abused; email verification must be required at account creation/sign-in time (not deferred).
+  - Account deletion removed the MongoDB user but did not remove the Firebase Authentication user.
+  - Settings profile card did not show the user's email or a verified indicator/action.
+
+- **Backend changes:**
+  - `POST /api/auth/google` (email-provider exchange): rejects Firebase `password` sign-in tokens where `email_verified` is false with **403** `"Verify your email address to continue. Check your inbox for the verification link."` and does **not** create/link a Yugm account or issue a session until verified.
+  - `GET /auth/me`, auth session responses, and `/auth/verify-email` responses now include `email` in the public user payload (for self-display in settings). `/auth/verify-email` continues to accept an optional fresh `idToken` and marks the matching identity verified when `email_verified` is true.
+  - `DELETE /users/me`: tombstones/anonymizes and frees identifiers (`email`, `phone`, `firebaseUid`, profile fields; `username` → `deleted_<id>`), revokes sessions/device tokens, disconnects sockets, and attempts Firebase Admin deletion of the Firebase Auth user via new `deleteFirebaseUser` service. MongoDB/session cleanup still completes if Firebase Admin is not configured (warned server-side).
+  - Auth identity linking: accounts pending deletion matched by email/phone release remaining identifiers/tombstone state and allow fresh registration instead of blocking on re-link/verification conflicts.
+
+- **Android changes:**
+  - Email/password signup/sign-in (`feature:auth`): detects unverified email/password Firebase users, sends verification email on account creation, enters a pending-verification UI state (verify/resend/continue/use different email), and only completes backend exchange/session after the user verifies (reload + fresh verified token). `LoginScreen`/`AuthNavGraph`/`AuthViewModel` wired accordingly.
+  - Settings profile card (`feature:settings`, wired via `NavGraph`/`MainViewModel`): shows the user’s email and a verified indicator when `emailVerified`, otherwise a **Verify** action in the first/profile card.
+  - Client data plumbing: added `email` to `YugmUser`, parsed from API, persisted/restored via `SessionManager` (`userEmail`/`saveSession`), and exposed through `MainViewModel`.
+
+- **Verification (run):**
+  - Backend: `cd backend-server && cmd /c "npx tsc -p apps/api/tsconfig.json --noEmit"` — **passed**.
+
+- **Not run / pending:**
+  - Android Gradle/Kotlin compile/tests not run in this environment (`JAVA_HOME`/`java` unavailable). Run bounded targeted checks when available (e.g. `:core:model :core:api :core:data :feature:auth :feature:settings :app` compile/unit tests as appropriate).
+  - No live Firebase/Mongo/device/emulator/staging verification. Backend behavior requires deployment/restart of the updated API/Worker; Firebase Auth deletion on account delete requires configured Firebase Admin service-account credentials in runtime. Email delivery depends on Firebase template/quota/authorized-domain/action-link configuration.
+
+- **Status:** Source changes implemented; runtime/deployment and Android build verification pending.
+
 ## YUGM-AUTH-SIGNUP-REAUTH-004 — Fix Google sign-in rejection and email reauth deadlock
 
 - **Problem:** Google sign-in and subsequent account creation failed on release devices.

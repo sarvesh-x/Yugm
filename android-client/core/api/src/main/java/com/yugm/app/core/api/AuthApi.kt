@@ -74,4 +74,11 @@ object AuthApi {
     suspend fun me(token: String): YugmUser {
         return YugmHttpClient.get("/auth/me", token).getJSONObject("data").getJSONObject("user").toUser()
     }
+
+    suspend fun verifyEmail(token: String, idToken: String? = null): Boolean {
+        val payload = JSONObject()
+        if (!idToken.isNullOrBlank()) payload.put("idToken", idToken)
+        val response = YugmHttpClient.post("/auth/verify-email", auth = token, payload)
+        return response.optJSONObject("data")?.optBoolean("emailVerified", false) ?: false
+    }
 }

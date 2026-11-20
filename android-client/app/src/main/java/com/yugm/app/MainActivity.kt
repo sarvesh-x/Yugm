@@ -7,7 +7,6 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Build
 import android.os.Bundle
-import android.view.WindowManager
 import android.Manifest
 import android.content.pm.PackageManager
 import android.widget.Toast
@@ -77,13 +76,10 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
     override fun onResume() {
         super.onResume()
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // FLAG_KEEP_SCREEN_ON is managed by room screens (voice/video) via DisposableEffect.
+        // Setting it unconditionally here keeps the display on during login/onboarding, which
+        // drains battery unnecessarily. Leave it off at the Activity level.
         YugmMediaRoom.syncForegroundAudioType()
-    }
-
-    override fun onPause() {
-        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        super.onPause()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

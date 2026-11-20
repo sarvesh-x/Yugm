@@ -70,6 +70,7 @@ data class YugmUser(
     val id: String = "",
     val name: String = "",
     val username: String = "",
+    val email: String = "",
     val profileCompleted: Boolean = false,
     val emailVerified: Boolean = false,
     val walletBalance: Int = 0,

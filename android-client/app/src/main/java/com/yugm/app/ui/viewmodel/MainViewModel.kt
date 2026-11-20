@@ -16,6 +16,7 @@ import com.yugm.app.core.model.NotificationItem
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.android.gms.tasks.Tasks
+import java.util.concurrent.TimeUnit
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +44,9 @@ class MainViewModel @Inject constructor(
         private set
 
     var username by mutableStateOf(sessionManager.username)
+        private set
+
+    var userEmail by mutableStateOf(sessionManager.userEmail)
         private set
 
     var balance by mutableStateOf(sessionManager.balance)
@@ -111,16 +115,29 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun updateSession(token: String, userId: String, name: String, username: String, balance: Int, refreshToken: String, sessionId: String, expiresIn: Long, emailVerified: Boolean, profileCompleted: Boolean) {
+    fun updateSession(
+        token: String,
+        userId: String,
+        name: String,
+        username: String,
+        email: String,
+        balance: Int,
+        refreshToken: String,
+        sessionId: String,
+        expiresIn: Long,
+        emailVerified: Boolean,
+        profileCompleted: Boolean
+    ) {
         this.authToken = token
         this.currentUserId = userId
         this.userName = name
         this.username = username
+        this.userEmail = email
         this.balance = balance
         this.emailVerified = emailVerified
         this.profileCompleted = profileCompleted
 
-        sessionManager.saveSession(token, refreshToken, sessionId, expiresIn, userId, name, username, balance, emailVerified, profileCompleted)
+        sessionManager.saveSession(token, refreshToken, sessionId, expiresIn, userId, name, username, balance, emailVerified, profileCompleted, email)
         socketManager.connect(token)
         syncPushToken()
     }
@@ -133,15 +150,63 @@ class MainViewModel @Inject constructor(
     fun validateAndUpdate(user: com.yugm.app.core.model.YugmUser, registerPush: Boolean = true) {
         userName = user.name
         username = user.username
+        userEmail = user.email
         balance = user.walletBalance
         emailVerified = user.emailVerified
         profileCompleted = user.profileCompleted
         sessionManager.userName = user.name
         sessionManager.username = user.username
+        sessionManager.userEmail = user.email
         sessionManager.balance = user.walletBalance
         sessionManager.emailVerified = user.emailVerified
         sessionManager.profileCompleted = user.profileCompleted
         if (registerPush) syncPushToken()
+    }
+
+    fun syncEmailVerification(onResult: (Boolean) -> Unit = {}) {
+        val token = authToken
+        if (token.isBlank()) return
+        viewModelScope.launch {
+            try {
+                val isVerified = withContext(Dispatchers.IO) {
+                    val fbUser = FirebaseAuth.getInstance().currentUser
+                    if (fbUser != null) {
+                        Tasks.await(fbUser.reload(), 10, TimeUnit.SECONDS)
+                        if (fbUser.isEmailVerified) {
+                            val idToken = Tasks.await(fbUser.getIdToken(true), 10, TimeUnit.SECONDS).token
+                            yugmApi.verifyEmail(token, idToken)
+                        } else {
+                            yugmApi.verifyEmail(token, null)
+                        }
+                    } else {
+                        yugmApi.verifyEmail(token, null)
+                    }
+                }
+                if (isVerified) {
+                    emailVerified = true
+                    sessionManager.emailVerified = true
+                }
+                onResult(isVerified)
+            } catch (_: Exception) {
+                onResult(emailVerified)
+            }
+        }
+    }
+
+    fun resendVerificationEmail(onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val fbUser = FirebaseAuth.getInstance().currentUser
+                    ?: error("Sign in again to resend verification email.")
+                withContext(Dispatchers.IO) {
+                    Tasks.await(fbUser.sendEmailVerification(), 15, TimeUnit.SECONDS)
+                }
+                val dest = fbUser.email?.takeIf(String::isNotBlank) ?: "your email address"
+                onResult(true, "Verification link sent to $dest.")
+            } catch (e: Exception) {
+                onResult(false, e.message ?: "Could not send verification email. Try again later.")
+            }
+        }
     }
 
     fun updateTokens(tokens: RefreshedSession) {
@@ -157,7 +222,8 @@ class MainViewModel @Inject constructor(
             handle = sessionManager.username,
             walletBalance = sessionManager.balance,
             emailVerified = sessionManager.emailVerified,
-            profileCompleted = sessionManager.profileCompleted
+            profileCompleted = sessionManager.profileCompleted,
+            email = sessionManager.userEmail
         )
     }
 
@@ -182,6 +248,7 @@ class MainViewModel @Inject constructor(
         currentUserId = ""
         userName = "Yugm User"
         username = "vibe_user"
+        userEmail = ""
         balance = 0
         emailVerified = false
         profileCompleted = false

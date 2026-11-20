@@ -107,6 +107,7 @@ fun NavGraph(
             userId = session.user.id,
             name = session.user.name,
             username = session.user.username,
+            email = session.user.email,
             balance = session.user.walletBalance,
             refreshToken = session.refreshToken,
             sessionId = session.sessionId,
@@ -239,6 +240,15 @@ fun NavGraph(
             currentUserIdProvider = { mainViewModel.currentUserId },
             userNameProvider = { mainViewModel.userName },
             usernameProvider = { mainViewModel.username },
+            userEmailProvider = { mainViewModel.userEmail },
+            emailVerifiedProvider = { mainViewModel.emailVerified },
+            onVerifyEmail = {
+                mainViewModel.syncEmailVerification { verified ->
+                    if (!verified) {
+                        mainViewModel.resendVerificationEmail { _, _ -> }
+                    }
+                }
+            },
             onLogout = { mainViewModel.logout() }
         )
         roomModesNavGraph(navController, { mainViewModel.authToken }, { mainViewModel.currentUserId })

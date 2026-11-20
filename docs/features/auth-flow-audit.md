@@ -91,6 +91,13 @@
   - Cleared orphaned Firebase sessions: `AuthViewModel.launchAuth()` and `switchToSignUp()` sign out of Firebase when a Yugm session exchange is incomplete, preventing residual Firebase sessions from corrupting subsequent operations.
 - **Verification:** Backend tests (178/178 passed), backend typecheck (clean across all workspaces), Android auth unit tests (passed), and Android app/feature compilation (`:feature:auth:compileDebugKotlin` and `:app:compileDebugKotlin` passed).
 
+## Email verification enforcement, settings email display, and account-deletion Firebase cleanup (2026-11-20)
+
+- **Email/password verification required:** `POST /api/auth/google` (email-provider exchange) rejects Firebase tokens with `sign_in_provider == "password"` and `email_verified == false` with 403 and does not create/link a Yugm user or issue a session. Android email signup/sign-in now detects unverified password-provider users, sends a verification email on creation, enters a pending-verification state (continue/resend/use different email), and completes backend exchange only after the user verifies and presents a fresh verified token. This prevents unverified email/password account abuse at creation/sign-in time.
+- **Self email exposure:** `publicUser`/auth session responses and `/auth/me` now include `email` for the authenticated user. Settings displays the email in the first/profile card with a verified indicator or a verify action.
+- **Account deletion:** `DELETE /users/me` tombstones/frees identifiers, revokes sessions/device tokens, disconnects sockets, and attempts Firebase Admin deletion of the Firebase Auth user (`deleteFirebaseUser`); Mongo/session cleanup still completes if Admin is not configured (warned). Pending-deletion records matched by email/phone release identifiers to allow re-registration.
+- **Verification:** backend `npx tsc -p apps/api/tsconfig.json --noEmit` passed from `backend-server/`. Android Gradle compile/tests and live Firebase/Mongo/device/staging behavior were not verified in this environment; deployment and runtime config (Firebase Admin creds, Firebase email delivery/template/domain/quota) are required for full effect.
+
 ## Verification
 
 - Android command (from `android-client/`): `.\gradlew.bat :feature:auth:testDebugUnitTest :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin :app:connectedDebugAndroidTest --console=plain` — passed after the logout contract changes. Auth unit reports total 8 tests passed; app and instrumentation Kotlin compilation passed; connected API 37 emulator instrumentation reports 3 tests passed (smoke and onboarding pager/compact-font coverage).

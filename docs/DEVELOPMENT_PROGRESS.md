@@ -1,5 +1,16 @@
 ﻿# Development progress
 
+## 2026-11-20 -- Require email verification at creation/sign-in, settings email display, and Firebase user deletion on account delete
+
+- **Email verification enforcement (anti-abuse):**
+  - Backend `apps/api/src/routes/auth.ts`: `POST /auth/google` now rejects unverified Firebase `password`-provider tokens (`email_verified=false`) with 403 and does not create/link a Yugm account or issue a session, so email/password accounts must be verified before creation/use.
+  - Backend `publicUser` responses now include `email`; `/auth/verify-email` remains the authenticated endpoint for syncing verification state from a fresh matching Firebase ID token.
+  - Android `feature:auth`: email/password signup sends a verification email, enters a pending-verification UI state, and only completes backend exchange after the user verifies (reload + verified token exchange). Unverified email/password sign-in is also gated into the verification flow. `LoginScreen`/`AuthNavGraph`/`AuthViewModel` updated accordingly.
+- **Settings profile card:** `feature:settings` now shows the user’s email in the first/profile card with a verified indicator (`✓`) when verified, or a **Verify** action when not verified (wired via `SettingsNavGraph`, `NavGraph`, `MainViewModel`).
+- **Client data plumbing:** added `email` to `core:model` `YugmUser`, parsed in `core:api` `ProfileParser.toUser()`, persisted/restored in `core:data` `SessionManager` (`userEmail`/`saveSession`), and propagated through `MainViewModel`/navigation.
+- **Account deletion Firebase cleanup:** `apps/api/src/services/firebase.ts` adds `deleteFirebaseUser(uid)` (Firebase Admin). `DELETE /users/me` now tombstones/frees identifiers, revokes sessions/tokens, disconnects sockets, and attempts Firebase Auth user deletion (Mongo cleanup still completes if Admin is unconfigured; warned). Auth identity resolution releases identifiers for pending-deletion records matched by email/phone to allow clean re-registration.
+- **Verification:** backend `cd backend-server && cmd /c "npx tsc -p apps/api/tsconfig.json --noEmit"` passed. Android Gradle compile/tests not run in this environment (`JAVA_HOME`/`java` unavailable). No live Firebase/Mongo/device/staging verification. Requires deployment/restart of updated API/Worker; Firebase Auth deletion requires configured Admin credentials; email delivery depends on Firebase mail/template/quota/domain configuration.
+
 ## 2026-11-20 -- Fix Google sign-in rejection and email reauth deadlock
 
 - **Root Cause Analysis (from release device logcat):**

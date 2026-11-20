@@ -38,6 +38,7 @@ import { findRelationship, grantRelationshipXp } from "../services/relationships
 import { DeviceToken } from "../models/DeviceToken.js";
 import { revokeAllForUser } from "../services/tokens.js";
 import { disconnectUserSockets } from "../services/socket.js";
+import { deleteFirebaseUser } from "../services/firebase.js";
 
 export const usersRouter = Router();
 
@@ -372,11 +373,41 @@ usersRouter.get("/me", asyncHandler(async (req: AuthRequest, res) => {
 
 usersRouter.delete("/me", asyncHandler(async (req: AuthRequest, res) => {
   const requestedAt = new Date();
+  const firebaseUid = (req.user as any).firebaseUid as string | undefined;
+  const tombstoneUsername = `deleted_${req.user!._id.toString()}`;
   const [sentPartners, receivedPartners] = await Promise.all([
     DirectMessage.distinct("receiverId", { senderId: req.user!._id }),
     DirectMessage.distinct("senderId", { receiverId: req.user!._id })
   ]);
-  await User.updateOne({ _id: req.user!._id }, { $set: { deletionRequestedAt: requestedAt }, $inc: { tokenVersion: 1 } });
+  await User.updateOne(
+    { _id: req.user!._id },
+    {
+      $set: {
+        deletionRequestedAt: requestedAt,
+        name: "Deleted User",
+        username: tombstoneUsername,
+        emailVerified: false,
+        isVerified: false
+      },
+      $unset: {
+        email: "",
+        phone: "",
+        firebaseUid: "",
+        avatar: "",
+        bio: "",
+        vibeLine: "",
+        city: "",
+        state: "",
+        gender: "",
+        age: "",
+        interestedIn: "",
+        lookingFor: "",
+        profileCompletedAt: "",
+        termsAcceptedAt: ""
+      },
+      $inc: { tokenVersion: 1 }
+    }
+  );
   await endUnavailableBonds(req.user!.id, "TERMINATED_BY_ACCOUNT_REMOVAL");
   await Promise.all([
     revokeAllForUser(req.user!.id),
@@ -386,6 +417,14 @@ usersRouter.delete("/me", asyncHandler(async (req: AuthRequest, res) => {
   for (const partnerId of new Set([...sentPartners, ...receivedPartners].map((id: any) => id.toString()))) {
     emitUser(partnerId, socketEvents.directConversationDeleted, { partnerId: req.user!.id });
   }
+
+  if (firebaseUid) {
+    const firebaseDelete = await deleteFirebaseUser(firebaseUid);
+    if (firebaseDelete.reason === "not_configured") {
+      console.warn("Account deletion completed in MongoDB but Firebase Admin is not configured; Firebase Auth user was not deleted", { userId: req.user!.id, firebaseUid });
+    }
+  }
+
   sendOk(res, { deletionScheduledAt: new Date(requestedAt.getTime() + 30 * 24 * 60 * 60 * 1000) });
 }));
 

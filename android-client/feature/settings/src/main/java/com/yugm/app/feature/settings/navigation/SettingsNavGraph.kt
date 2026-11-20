@@ -14,6 +14,9 @@ fun NavGraphBuilder.settingsNavGraph(
     currentUserIdProvider: () -> String,
     userNameProvider: () -> String,
     usernameProvider: () -> String,
+    userEmailProvider: () -> String = { "" },
+    emailVerifiedProvider: () -> Boolean = { true },
+    onVerifyEmail: (() -> Unit)? = null,
     onLogout: () -> Unit,
 ) {
     composable(Screen.Safety.route) {
@@ -36,6 +39,9 @@ fun NavGraphBuilder.settingsNavGraph(
             token = authTokenProvider(),
             userName = userNameProvider(),
             username = usernameProvider(),
+            userEmail = userEmailProvider(),
+            emailVerified = emailVerifiedProvider(),
+            onVerifyEmail = onVerifyEmail,
             onLogout = {
                 onLogout()
                 navController.navigate(Screen.Login.route) {

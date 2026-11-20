@@ -56,6 +56,9 @@ class AuthViewModel @Inject constructor(
         private set
     var prefilledName by mutableStateOf("")
         private set
+    /** Email awaiting verification after account creation. Non-null blocks normal auth and shows verification UI. */
+    var pendingVerificationEmail by mutableStateOf<String?>(null)
+        private set
     val googleCredentialLoading: Boolean
         get() = authOperation?.provider == AuthProvider.GOOGLE
     val facebookCredentialLoading: Boolean
@@ -97,6 +100,10 @@ class AuthViewModel @Inject constructor(
 
     fun clearError() { error = null; notice = null }
     fun consumeSession(): Session? = session.also { session = null }
+    fun clearPendingVerification() {
+        pendingVerificationEmail = null
+        runCatching { FirebaseAuth.getInstance().signOut() }
+    }
 
     fun emailAuth(email: String, password: String, createAccount: Boolean, acceptTerms: Boolean) {
         val normalizedEmail = email.trim().lowercase(Locale.ROOT)
@@ -145,26 +152,88 @@ class AuthViewModel @Inject constructor(
                     throw NoAccountFoundException(normalizedEmail, "", "No account found for this email. Create a password to sign up.")
                 }
             } ?: error("Firebase did not return a user")
+
+            // For email/password signup or unverified email sign-in, verification is
+            // required before the account can be used in Yugm.
+            if (!user.isEmailVerified && user.providerData.any { it.providerId == EmailAuthProvider.PROVIDER_ID }) {
+                if (createAccount) {
+                    runCatching { awaitFirebase(user.sendEmailVerification(), 15) }
+                        .onFailure { Log.w("YugmAuth", "Failed to send verification email to $normalizedEmail", it) }
+                }
+                pendingVerificationEmail = normalizedEmail
+                notice = if (createAccount) {
+                    "We sent a verification link to $normalizedEmail. Verify your email, then continue."
+                } else {
+                    "Verify your email address to continue. Check $normalizedEmail for the verification link."
+                }
+                throw EmailVerificationRequiredException(normalizedEmail)
+            }
+
             // Sign-in has just produced a current Firebase user/token. Avoid forcing
             // another Firebase network round trip before exchanging it with Yugm.
             val firebaseToken = awaitFirebase(user.getIdToken(false), 15).token ?: error("Firebase did not return an ID token")
             beginBackendExchange(AuthProvider.EMAIL)
-            val session = authRepository.googleAuth(
+            val sessionResult = authRepository.googleAuth(
                 firebaseToken,
                 acceptTerms,
                 provider = "email",
                 name = prefilledName.takeIf(String::isNotBlank)
             )
-            // Send verification only after the backend session exchange succeeded.
-            if (createAccount && !user.isEmailVerified) {
-                viewModelScope.launch(Dispatchers.IO) {
-                    runCatching { Tasks.await(user.sendEmailVerification(), 15, TimeUnit.SECONDS) }
-                }
-            }
-            if ((session.user.name.isBlank() || session.user.name == "Yugm User") && prefilledName.isNotBlank()) {
-                session.copy(user = session.user.copy(name = prefilledName))
+            if ((sessionResult.user.name.isBlank() || sessionResult.user.name == "Yugm User") && prefilledName.isNotBlank()) {
+                sessionResult.copy(user = sessionResult.user.copy(name = prefilledName))
             } else {
-                session
+                sessionResult
+            }
+        }
+    }
+
+    class EmailVerificationRequiredException(val email: String) : Exception("Email verification required")
+
+    /** Called after the user has clicked the verification link. Reloads Firebase user and completes sign-in/signup. */
+    fun checkEmailVerificationAndContinue() {
+        val normalizedEmail = pendingVerificationEmail?.trim()?.lowercase(Locale.ROOT) ?: return
+        if (isLoading) return
+        launchAuth(AuthProvider.EMAIL) {
+            val auth = FirebaseAuth.getInstance()
+            val user = auth.currentUser?.takeIf { it.email.equals(normalizedEmail, true) }
+                ?: error("Your sign-in session expired. Please sign in again to continue.")
+            awaitFirebase(user.reload(), 15)
+            if (!user.isEmailVerified) {
+                notice = "Email not verified yet. Check your inbox and tap the verification link, then try again."
+                throw EmailVerificationRequiredException(normalizedEmail)
+            }
+            val firebaseToken = awaitFirebase(user.getIdToken(true), 15).token ?: error("Firebase did not return an ID token")
+            beginBackendExchange(AuthProvider.EMAIL)
+            val sessionResult = authRepository.googleAuth(
+                firebaseToken,
+                true,
+                provider = "email",
+                name = prefilledName.takeIf(String::isNotBlank)
+            )
+            pendingVerificationEmail = null
+            if ((sessionResult.user.name.isBlank() || sessionResult.user.name == "Yugm User") && prefilledName.isNotBlank()) {
+                sessionResult.copy(user = sessionResult.user.copy(name = prefilledName))
+            } else {
+                sessionResult
+            }
+        }
+    }
+
+    fun resendVerificationEmailForPending() {
+        viewModelScope.launch {
+            try {
+                val user = FirebaseAuth.getInstance().currentUser ?: run {
+                    error = "Your sign-in session expired. Please sign in again to resend."
+                    return@launch
+                }
+                awaitFirebase(user.sendEmailVerification(), 15)
+                val dest = user.email?.takeIf(String::isNotBlank) ?: pendingVerificationEmail ?: "your email address"
+                notice = "Verification link sent to $dest."
+                error = null
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                error = mapAuthError(failure, AuthProvider.EMAIL)
             }
         }
     }
@@ -272,6 +341,24 @@ class AuthViewModel @Inject constructor(
         }
     }
 
+    fun sendEmailVerification(onComplete: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    AppCheckReadiness.requireReady(context)
+                    val user = FirebaseAuth.getInstance().currentUser ?: error("Sign in again to send verification email.")
+                    Tasks.await(user.sendEmailVerification(), 15, TimeUnit.SECONDS)
+                }
+                onComplete(true, "Verification email sent. Check your inbox.")
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                val msg = mapAuthError(failure, AuthProvider.EMAIL)
+                onComplete(false, msg)
+            }
+        }
+    }
+
     private fun launchAuth(provider: AuthProvider, block: suspend () -> Session) {
         authOperation = startAuthExecution(authOperation, provider) ?: return
         error = null
@@ -281,13 +368,23 @@ class AuthViewModel @Inject constructor(
                 session = block()
             } catch (noAccount: NoAccountFoundException) {
                 switchToSignUp(noAccount.email, noAccount.name, noAccount.message)
+            } catch (pending: EmailVerificationRequiredException) {
+                pendingVerificationEmail = pending.email
+                if (notice == null) {
+                    notice = "Verify your email address to continue."
+                }
+                // Keep Firebase signed in so the user can resend/check verification.
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
                 if (session == null && provider != AuthProvider.PASSWORD) {
-                    runCatching { FirebaseAuth.getInstance().signOut() }
+                    // Keep Firebase session for email verification flow; otherwise sign out.
+                    val isPending = failure is EmailVerificationRequiredException
+                    if (!isPending) runCatching { FirebaseAuth.getInstance().signOut() }
                 }
-                error = mapAuthError(failure, provider)
+                if (failure !is EmailVerificationRequiredException) {
+                    error = mapAuthError(failure, provider)
+                }
             } finally {
                 authOperation = finishAuthOperation(authOperation, provider)
             }
@@ -319,6 +416,9 @@ class AuthViewModel @Inject constructor(
             return "Authentication could not be verified. Please try again or sign up with email."
         }
         if (apiFailure?.statusCode == 409) return apiFailure.message ?: "An account already uses this email. Sign in instead, or reset the password if needed."
+        if (apiFailure?.statusCode == 403 && apiFailure.message.orEmpty().contains("verify your email", ignoreCase = true)) {
+            return apiFailure.message ?: "Verify your email address to continue."
+        }
         val appCheckFailure = generateSequence(error) { it.cause }
             .filterIsInstance<AppCheckSetupException>()
             .firstOrNull()

@@ -50,6 +50,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -88,6 +90,9 @@ fun SettingsScreen(
     token: String,
     userName: String,
     username: String,
+    userEmail: String = "",
+    emailVerified: Boolean = true,
+    onVerifyEmail: (() -> Unit)? = null,
     onLogout: () -> Unit,
     onBack: () -> Unit,
     onNavigateToSafety: () -> Unit,
@@ -196,8 +201,11 @@ fun SettingsScreen(
                     modifier = Modifier.padding(innerPadding),
                     userName = userName,
                     username = username,
+                    userEmail = userEmail,
                     blockedCount = viewModel.blockedUsers.size,
                     error = error,
+                    emailVerified = emailVerified,
+                    onVerifyEmail = onVerifyEmail,
                     onProfile = onNavigateToProfileSetup,
                     onGames = onNavigateToGames,
                     onClans = onNavigateToClans,
@@ -306,8 +314,11 @@ private fun SettingsHome(
     modifier: Modifier,
     userName: String,
     username: String,
+    userEmail: String = "",
     blockedCount: Int,
     error: String?,
+    emailVerified: Boolean = true,
+    onVerifyEmail: (() -> Unit)? = null,
     onProfile: () -> Unit,
     onGames: () -> Unit,
     onClans: () -> Unit = {},
@@ -335,16 +346,55 @@ private fun SettingsHome(
             AnimatedEntrance(delay = 100) {
                 WhiteCard(modifier = Modifier.fillMaxWidth()) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Avatar(userName.firstOrNull()?.toString() ?: "Y", 52)
-                    Column(Modifier.weight(1f)) {
-                        Text(userName.ifBlank { "Yugm User" }, color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp)
-                        Text("@${username.ifBlank { "yugm" }}", color = LocalYugmColors.current.textPrimary.copy(alpha = 0.74f), fontWeight = FontWeight.Bold)
-                    }
-                    OutlinedButton(onClick = onProfile, border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)), shape = RoundedCornerShape(8.dp)) {
-                        Text("Edit", color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Bold)
+                        Avatar(userName.firstOrNull()?.toString() ?: "Y", 52)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(userName.ifBlank { "Yugm User" }, color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                            Text("@${username.ifBlank { "yugm" }}", color = LocalYugmColors.current.textPrimary.copy(alpha = 0.74f), fontWeight = FontWeight.Bold)
+                            if (userEmail.isNotBlank()) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(
+                                        userEmail,
+                                        color = LocalYugmColors.current.textSecondary,
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
+                                    if (emailVerified) {
+                                        Text(
+                                            text = "✓",
+                                            color = Color(0xFF2E7D32),
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.semantics { contentDescription = "Email verified" }
+                                        )
+                                    } else if (onVerifyEmail != null) {
+                                        Text(
+                                            "Verify",
+                                            color = LocalYugmColors.current.primary,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(999.dp))
+                                                .background(LocalYugmColors.current.primary.copy(alpha = 0.12f))
+                                                .clickable(onClick = onVerifyEmail)
+                                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    } else {
+                                        Text(
+                                            "Not verified",
+                                            color = LocalYugmColors.current.textSecondary,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        OutlinedButton(onClick = onProfile, border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)), shape = RoundedCornerShape(8.dp)) {
+                            Text("Edit", color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
-            }
             }
             if (!error.isNullOrBlank()) {
                 Text(error, color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
@@ -353,6 +403,13 @@ private fun SettingsHome(
         item {
             AnimatedEntrance(delay = 200) {
                 SettingsGroup("Account") {
+                    if (!emailVerified && onVerifyEmail != null) {
+                        SettingsNavRow(
+                            "Verify email address",
+                            "Tap to check or resend your email verification link.",
+                            onVerifyEmail
+                        )
+                    }
                     SettingsNavRow("Yugm Trust Verification", "Verify your face and voice to show people you're real.", onTrustVerification)
                     SettingsNavRow("Yugm Arcade", "New games coming soon.", onGames)
                     SettingsNavRow("Yugm Clans", "Create or join a clan and chat with your family.", onClans)

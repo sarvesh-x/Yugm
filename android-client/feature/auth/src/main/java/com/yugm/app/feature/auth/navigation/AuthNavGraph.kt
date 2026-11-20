@@ -158,6 +158,10 @@ fun NavGraphBuilder.authNavGraph(
             facebookLoading = authViewModel.facebookCredentialLoading,
             initialEmail = authViewModel.prefilledEmail,
             initialCreateAccount = authViewModel.isCreateAccount,
+            pendingVerificationEmail = authViewModel.pendingVerificationEmail,
+            onCheckVerification = authViewModel::checkEmailVerificationAndContinue,
+            onResendVerification = authViewModel::resendVerificationEmailForPending,
+            onCancelVerification = authViewModel::clearPendingVerification,
             onModeChange = authViewModel::setAuthMode
         )
         LaunchedEffect(authViewModel.session) {

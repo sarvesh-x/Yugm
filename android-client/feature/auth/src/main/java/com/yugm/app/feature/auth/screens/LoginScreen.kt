@@ -59,6 +59,10 @@ fun LoginScreen(
     facebookLoading: Boolean = false,
     initialEmail: String = "",
     initialCreateAccount: Boolean = false,
+    pendingVerificationEmail: String? = null,
+    onCheckVerification: () -> Unit = {},
+    onResendVerification: () -> Unit = {},
+    onCancelVerification: () -> Unit = {},
     onModeChange: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -113,6 +117,65 @@ fun LoginScreen(
                 borderGradient = Brush.horizontalGradient(listOf(PrimaryPurple.copy(alpha = .35f), PrimaryPink.copy(alpha = .28f))),
                 contentPadding = PaddingValues(20.dp)
             ) {
+                if (pendingVerificationEmail != null) {
+                    Text("Verify your email", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "We sent a verification link to",
+                        color = TextMuted,
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        pendingVerificationEmail,
+                        color = authAccent,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Open the link in your email to verify your account. After verifying, tap Continue. You need to verify your email before you can use Yugm.",
+                        color = TextMuted,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp
+                    )
+                    (localError ?: error)?.let { message ->
+                        Text(message, color = authColors.danger, fontSize = 13.sp, modifier = Modifier.fillMaxWidth().padding(top = 10.dp).semantics {
+                            contentDescription = "Verification error: $message"
+                            liveRegion = LiveRegionMode.Polite
+                        })
+                    }
+                    notice?.let { message ->
+                        Text(message, color = authColors.success, fontSize = 13.sp, modifier = Modifier.fillMaxWidth().padding(top = 10.dp).semantics {
+                            liveRegion = LiveRegionMode.Polite
+                        })
+                    }
+                    Spacer(Modifier.height(18.dp))
+                    LoginMethodButton(
+                        text = "I've verified, continue",
+                        icon = Icons.Filled.Email,
+                        onClick = { clearErrors(); onCheckVerification() },
+                        enabled = !loading,
+                        isPrimary = true,
+                        loading = loading
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = { clearErrors(); onResendVerification() },
+                        enabled = !loading,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, authAccent.copy(alpha = 0.5f))
+                    ) {
+                        Text("Resend verification email", color = authAccent, fontWeight = FontWeight.SemiBold)
+                    }
+                    TextButton(
+                        onClick = { clearErrors(); onCancelVerification() },
+                        enabled = !loading,
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                    ) {
+                        Text("Use a different email", color = TextMuted)
+                    }
+                } else {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     AuthModeButton("Sign in", selected = !createAccount, Modifier.weight(1f), enabled = !loading && !googleLoading && !facebookLoading) {
                         createAccount = false
@@ -247,30 +310,35 @@ fun LoginScreen(
                         }
                     }
                 }
-            }
-            Row(
-                Modifier.fillMaxWidth().padding(top = 14.dp, start = 2.dp, end = 2.dp),
-                verticalAlignment = Alignment.Top
-            ) {
-                Checkbox(
-                    checked = acceptTerms,
-                    onCheckedChange = { acceptTerms = it; clearErrors() },
-                    enabled = !loading && !googleLoading && !facebookLoading,
-                    modifier = Modifier.semantics { contentDescription = "I am 18 or older and accept Yugm's terms and privacy policy" }
-                )
-                Column(Modifier.weight(1f).padding(top = 10.dp)) {
-                    Text("I am 18+ and accept the", color = TextPrimary, fontSize = 13.sp)
-                    Row {
-                    Text("Terms of Service", color = authAccent, fontSize = 13.sp, modifier = Modifier
-                            .clickable(role = Role.Button, onClickLabel = "Read Terms of Service") { openLegal(context, "terms") })
-                        Text("  and  ", color = TextMuted, fontSize = 13.sp)
-                    Text("Privacy Policy", color = authAccent, fontSize = 13.sp, modifier = Modifier
-                            .clickable(role = Role.Button, onClickLabel = "Read Privacy Policy") { openLegal(context, "privacy") })
-                    }
                 }
             }
-            Spacer(Modifier.height(16.dp))
-            Text("Your account is protected with Firebase sign-in.", color = TextMuted, fontSize = 11.sp, textAlign = TextAlign.Center)
+            if (pendingVerificationEmail == null) {
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 14.dp, start = 2.dp, end = 2.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Checkbox(
+                        checked = acceptTerms,
+                        onCheckedChange = { acceptTerms = it; clearErrors() },
+                        enabled = !loading && !googleLoading && !facebookLoading,
+                        modifier = Modifier.semantics { contentDescription = "I am 18 or older and accept Yugm's terms and privacy policy" }
+                    )
+                    Column(Modifier.weight(1f).padding(top = 10.dp)) {
+                        Text("I am 18+ and accept the", color = TextPrimary, fontSize = 13.sp)
+                        Row {
+                        Text("Terms of Service", color = authAccent, fontSize = 13.sp, modifier = Modifier
+                                .clickable(role = Role.Button, onClickLabel = "Read Terms of Service") { openLegal(context, "terms") })
+                            Text("  and  ", color = TextMuted, fontSize = 13.sp)
+                        Text("Privacy Policy", color = authAccent, fontSize = 13.sp, modifier = Modifier
+                                .clickable(role = Role.Button, onClickLabel = "Read Privacy Policy") { openLegal(context, "privacy") })
+                        }
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+                Text("Your account is protected with Firebase sign-in.", color = TextMuted, fontSize = 11.sp, textAlign = TextAlign.Center)
+            } else {
+                Spacer(Modifier.height(8.dp))
+            }
         }
     }
 

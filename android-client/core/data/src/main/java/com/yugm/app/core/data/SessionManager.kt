@@ -100,6 +100,10 @@ class SessionManager @Inject constructor(
         get() = cached("username") { prefs.getString("username", "vibe_user") ?: "vibe_user" }
         set(value) = writeString("username", value)
 
+    var userEmail: String
+        get() = cached("userEmail") { prefs.getString("userEmail", "") ?: "" }
+        set(value) = writeString("userEmail", value)
+
     var balance: Int
         get() = cached("balance") { prefs.getInt("balance", 0) }
         set(value) = writeInt("balance", value)
@@ -114,7 +118,19 @@ class SessionManager @Inject constructor(
             _themeModeFlow.value = value
         }
 
-    fun saveSession(token: String, refresh: String, session: String, expiresInSeconds: Long, id: String, name: String, handle: String, walletBalance: Int, emailVerified: Boolean, profileCompleted: Boolean = false) {
+    fun saveSession(
+        token: String,
+        refresh: String,
+        session: String,
+        expiresInSeconds: Long,
+        id: String,
+        name: String,
+        handle: String,
+        walletBalance: Int,
+        emailVerified: Boolean,
+        profileCompleted: Boolean = false,
+        email: String = "",
+    ) {
         val expiresAt = System.currentTimeMillis() + expiresInSeconds * 1000L
         prefs.edit()
             .putString("authToken", token)
@@ -124,6 +140,7 @@ class SessionManager @Inject constructor(
             .putString("userId", id)
             .putString("userName", name)
             .putString("username", handle)
+            .putString("userEmail", email)
             .putInt("balance", walletBalance)
             .putBoolean("emailVerified", emailVerified)
             .putBoolean("profileCompleted", profileCompleted)
@@ -135,6 +152,7 @@ class SessionManager @Inject constructor(
         cache["userId"] = id
         cache["userName"] = name
         cache["username"] = handle
+        cache["userEmail"] = email
         cache["balance"] = walletBalance
         cache["emailVerified"] = emailVerified
         cache["profileCompleted"] = profileCompleted

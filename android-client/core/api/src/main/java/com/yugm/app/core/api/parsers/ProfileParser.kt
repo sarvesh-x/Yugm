@@ -36,6 +36,7 @@ fun JSONObject.toUser(): YugmUser = YugmUser(
     id = optString("_id", optString("id", "")),
     name = optString("name", ""),
     username = optString("username", ""),
+    email = optString("email", ""),
     profileCompleted = optBoolean("profileCompleted", false),
     emailVerified = optBoolean("emailVerified", false),
     walletBalance = optInt("walletBalance", 0),
