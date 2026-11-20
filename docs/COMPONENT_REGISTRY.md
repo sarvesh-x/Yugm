@@ -16,9 +16,10 @@ This is a source-location index, not a guarantee that every screen uses these co
 | `ControlButton` | `ControlButton.kt` | Room/media control affordance |
 | `ChallengeCard` | `ChallengeCard.kt` | Challenge presentation |
 | `SlimLineFrame` | `SlimLineFrame.kt` | Decorative frame |
+| `YugmBottomDock` / `YugmDockTab` / `YugmBottomDockDefaults` | `ReferenceComponents.kt` | Centralized main bottom navigation: floating adaptive capsule (60dp) for Yugm Arcade/Party/Discover/Chat/Profile. Inactive tabs icon-only; active tab shows icon + compact label with expanding indicator; supports select/reselect callbacks, chat unread badge/count semantics, theme-aware styling, reduced-motion-aware animation, and reserved-content padding constant (`ReservedContentPaddingAboveNavBar`). Runtime/a11y verification pending for latest redesign. |
 | `YugmLoadingSpinner` | `YugmLoadingSpinner.kt` (`core/ui`) | App-wide loading spinner; renders the single approved Lottie animation (`res/raw/loading_spinner.json`). Replaces `CircularProgressIndicator` spinner usages; callers control size/modifier. |
 | `AvatarGeneratorDialog` / generated avatar UI | `core/ui/avatar/AvatarGeneratorDialog.kt`, `GeneratedAvatar.kt`, `AvatarEngine.kt` | Shared offline Multiavatar customization dialog and SVG rendering helpers used by profile creation and Edit Profile (integration in progress). |
 | `AutomaticSyncEffect` | `AutomaticSyncEffect.kt` | Shared sync-related UI effect; inspect before reuse |
-| `ReferenceComponents` | `ReferenceComponents.kt` | Inventory contents require source review |
+| `ReferenceComponents` | `ReferenceComponents.kt` | Other shared components/utilities in this file (page header, chips, segmented tabs, ambient background, etc.) require source review when reused |
 
 Other reusable visuals include `BadgeArtwork`, `CosmeticArtwork`, `ReactionArtwork`, `ProfileLiveVoiceBanner`, `ParticleEffects`, `FloatingEmojiEffect`, and `AnimatedEqualizer`. This registry is an initial inventory; each entry's parameters, supported states, and use locations should be expanded as those components are touched. Prefer Material 3 primitives for common controls where no shared Yugm equivalent exists.
