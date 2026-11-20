@@ -1,5 +1,12 @@
 ﻿# Development progress
 
+## 2026-11-20 -- Diagnose staging auth 404 from stale Worker deployment and add explicit deploy scripts
+
+- **Live diagnosis (from provided Cloudflare log):** Release Android client (`okhttp/4.12.0`) reached staging `POST https://yugm-api-staging.sarveshkumar10101.workers.dev/api/auth/google` but the Worker returned **404 Route not found** (`scriptVersion.id: bc0ebaf6-af81-413d-9932-6a69bb6d4b8f`, `outcome: ok`). Current source mounts `/api/auth` with `POST /google`, indicating a stale deployed bundle rather than a source routing defect.
+- **Client log evidence (provided):** latest release run completed Firebase Google sign-in and App Check preflight (`YugmAppCheck ... continuing request to server`) before backend exchange; release builds do not emit `YugmHttp` debug request logs, and no `YugmAuth` Google backend-exchange failure line was present in the captured slice. Earlier debug/emulator runs in the same log targeted `http://10.0.2.2:4000/api/auth/google` (404) per `YugmApplication` debug-emulator override, not Cloudflare.
+- **Repo fix:** added root workspace deploy scripts in `backend-server/package.json` (`deploy`, `deploy:staging`, `deploy:production`, `deploy:dry-run:staging`, `deploy:dry-run:production`) using explicit `--config apps/cloudflare-worker/wrangler.staging.jsonc` / production config to avoid `npx wrangler deploy` failures when invoked from the npm workspace root.
+- **Required follow-up (not run/verified here):** update Cloudflare/dashboard or external deploy command to `npm run deploy:staging` (or explicit config), redeploy staging, and verify `/api/health` plus non-404 `/api/auth/google` behavior and release-client auth. CI workflow already calls `npm --workspace apps/cloudflare-worker run deploy:staging`.
+
 ## 2026-11-20 -- Resolve staging worker deploy failure, rate-limit 500 & Google API key restrictions
 
 - **Cloudflare Worker Deploy Repair:**

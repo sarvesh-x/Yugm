@@ -1,13 +1,25 @@
 ﻿# Current task
 
+## YUGM-AUTH-STAGING-DEPLOY-003 — Redeploy staging Worker so auth routes are live
+
+- **Problem:** Release Android auth reaches the staging Worker but cannot complete sign-in because the live Worker returns `404 Route not found` for `POST /api/auth/google`. Cloudflare log evidence (2026-11-20, `scriptVersion.id: bc0ebaf6-af81-413d-9932-6a69bb6d4b8f`, `user-agent: okhttp/4.12.0`, request to `https://yugm-api-staging.sarveshkumar10101.workers.dev/api/auth/google`, response `404`, `outcome: ok`) confirms the request reached Cloudflare from the release client.
+- **Diagnosis:** Current source mounts the route correctly (`backend-server/apps/api/src/app.ts`: `/api/auth` + `requireAppCheck`, `backend-server/apps/api/src/routes/auth.ts`: `POST /google`), so a 404 from the deployed Express app indicates a **stale Worker deployment**. A prior dashboard/workspace-root deploy attempt using plain `npx wrangler deploy` fails in this npm workspace layout unless the Worker config is targeted explicitly.
+- **Repo fix:** Added root deploy scripts in `backend-server/package.json`: `deploy`/`deploy:staging` → `wrangler deploy --config apps/cloudflare-worker/wrangler.staging.jsonc`, `deploy:production` → explicit production config, plus dry-run variants. CI (`.github/workflows/cloudflare-staging.yml`) already deploys via `npm --workspace apps/cloudflare-worker run deploy:staging`.
+- **Required action (not verifiable here):** update any Cloudflare/GitHub/dashboard deploy command that runs `npx wrangler deploy` from the workspace root to `npm run deploy:staging` (from `backend-server/`) or `npx wrangler deploy --config apps/cloudflare-worker/wrangler.staging.jsonc`, redeploy staging, then verify:
+  - `GET /api/health` returns `ok`, `db.ready`, `db.name == "YugmStaging"`, `storage.ready`.
+  - `POST /api/auth/google` with an invalid body returns a **4xx** validation/app-check/auth error (not 404).
+  - Release client auth reaches a non-404 backend response (Cloudflare request logs visible).
+- **Related runtime checks (unverified):** staging Worker secrets/vars (`STAGING_DB_ISOLATED`, `MONGODB_URI`, `JWT_SECRET`, Firebase/App Check, storage config) and `APP_CHECK_ENFORCE` behavior; release client logs showed Play Integrity/App Check attestation failures (`App attestation failed` / `Too many attempts`) but client continued—if enforced server-side, valid attestation/config is required after route reachability is restored.
+- **Status:** Source/deploy-script fix prepared; **live staging redeploy and runtime verification pending**.
+
 ## YUGM-AUTH-RATELIMIT-002 -- Close the staging auth 500 that blocks release sign-in
 
 - **Problem:** Release/device sign-in and sign-up failed while the base URL and connectivity were correct. Every credential exchange (email, Google, Facebook, phone) funnels through `POST /api/auth/google|facebook|phone`, and the deployed staging Worker answered all of them with HTTP 500 `{"ok":false,"error":{"message":"Cannot read properties of undefined (reading 'replace')","code":"INTERNAL"}}` before schema validation runs.
 - **Root cause (confirmed, not inferred):** the Cloudflare node bridge does not populate `req.ip`, so `express-rate-limit`'s default `keyGenerator` returns `undefined`; `ResilientRedisRateLimitStore.increment` passed it to `safeKey()`, which called `.replace` on `undefined`. Shadowing `req.ip` with `undefined` in a local Express harness reproduces the exact staging message and HTTP 500 on the pre-fix source, and returns 200 on the fixed source.
 - **Fix:** a `clientIp()` helper (`cf-connecting-ip` -> `x-forwarded-for` -> `req.ip` -> `"unknown"`) is now the key generator for the auth, identifier, refresh, and per-user limiters, and `safeKey()` returns `"unknown"` for non-string/empty keys instead of throwing. Store `get`/`decrement`/`resetKey` normalize keys the same way as `increment`.
-- **Deployment fix:** `wrangler.jsonc` had a duplicate trailing root object syntax error preventing deploy; merged `observability` into the primary root block and added observability to `wrangler.staging.jsonc`. Pushed to `master` and verified deployment on Cloudflare staging Worker.
-- **Verification:** Worker deployed cleanly (`startedAt: 2026-11-19T20:44:02.483Z`). Live verification of `POST /api/auth/google` with payload returns HTTP 422 (schema/token validation) rather than HTTP 500 internal server error.
-- **Status:** Complete & verified deployed on staging.
+- **Deployment fix:** `wrangler.jsonc` had a duplicate trailing root object syntax error preventing deploy; merged `observability` into the primary root block and added observability to `wrangler.staging.jsonc`. Pushed to `master` and previously verified a clean deploy.
+- **Verification:** Earlier live check returned HTTP 422 (schema/token validation) rather than HTTP 500. **Current live state (2026-11-20):** staging returns 404 for `/api/auth/google` (stale deployment), so prior live verification is no longer representative until redeployed.
+- **Status:** Source fix complete; **staging redeploy/verification pending** (see YUGM-AUTH-STAGING-DEPLOY-003).
 
 ## YUGM-AUTH-GOOGLE-KEY-001 -- Register APK signing certs in Google Cloud API key & google-services.json
 

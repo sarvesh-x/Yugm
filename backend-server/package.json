@@ -25,7 +25,12 @@
     "test": "npm --workspaces --if-present run test",
     "typecheck": "npm --workspaces --if-present run typecheck",
     "load:test": "node scripts/load-test-api.mjs",
-    "build:admin": "npm --workspace apps/admin run build"
+    "build:admin": "npm --workspace apps/admin run build",
+    "deploy": "wrangler deploy --config apps/cloudflare-worker/wrangler.staging.jsonc",
+    "deploy:staging": "wrangler deploy --config apps/cloudflare-worker/wrangler.staging.jsonc",
+    "deploy:production": "wrangler deploy --config apps/cloudflare-worker/wrangler.production.jsonc",
+    "deploy:dry-run:staging": "wrangler deploy --dry-run --config apps/cloudflare-worker/wrangler.staging.jsonc",
+    "deploy:dry-run:production": "wrangler deploy --dry-run --config apps/cloudflare-worker/wrangler.production.jsonc"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261117.1",
