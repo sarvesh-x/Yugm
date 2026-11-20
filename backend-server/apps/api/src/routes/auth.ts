@@ -200,19 +200,6 @@ authRouter.post("/google", authLimiter, authIdentifierLimiter, validateBody(auth
   const { sub: firebaseUid, name: tokenName, email, picture, email_verified } = payload;
   if (!firebaseUid) throw new HttpError(401, "Invalid Firebase identity token", ErrorCode.UNAUTHORIZED);
 
-  const normalizedEmail = email?.trim().toLowerCase();
-  if (mode === "login") {
-    const existing = await User.findOne({
-      $or: [
-        { firebaseUid },
-        ...(normalizedEmail ? [{ email: normalizedEmail }] : [])
-      ]
-    }).select("+email +phone -__v");
-    if (!existing) {
-      throw new HttpError(404, "No account found for this Google email. Please create a password to sign up.", ErrorCode.NOT_FOUND);
-    }
-  }
-
   const resolvedName = tokenName || bodyName;
   const { user, isNewUser } = await findOrCreateFirebaseUser({ firebaseUid, name: resolvedName, email, avatar: picture, acceptTerms, emailVerified: email_verified });
   const tokens = await issueSingleDeviceSession(user, req);

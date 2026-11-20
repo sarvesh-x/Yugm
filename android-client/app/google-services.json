@@ -22,14 +22,6 @@
           }
         },
         {
-          "client_id": "625913395416-iah7b08vib510md7h2co93f4i0t06rqc.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.yugm.app",
-            "certificate_hash": "91e4ce9a2294936ddc912fcf1bd4e7a33aedc7c5"
-          }
-        },
-        {
           "client_id": "625913395416-sbafkapuevs23d5cg4fpjqhqcssd38ii.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

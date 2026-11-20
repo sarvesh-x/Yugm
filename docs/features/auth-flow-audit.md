@@ -81,6 +81,16 @@
 - Static review found and removed hard-coded white foregrounds and bright yellow text accents that lost contrast against the system light palette. No backend, API, realtime, permission, or persistence behavior changed in this visual repair.
 - Build verification is recorded in `docs/DEVELOPMENT_PROGRESS.md`. Real-device light/dark launch-window rendering and visual contrast/TalkBack review remain unverified.
 
+## Google sign-in and email reauthentication deadlock fix (2026-11-20)
+
+- **Issue:** On release builds, tapping "Sign in with Google" for a new account was rejected with HTTP 404 because `POST /api/auth/google` checked `mode === "login"` and threw `ErrorCode.NOT_FOUND` when the account was not already in MongoDB. The client transitioned the user to "Create Account" with their Google email prefilled. When the user entered a password and submitted, `emailAuth()` attempted to reauthenticate `priorSignup` (the current Firebase Google session) using an `EmailAuthProvider` password credential, throwing `FirebaseAuthInvalidCredentialsException: The supplied auth credential is incorrect, malformed or has expired.`.
+- **Resolution:**
+  - Removed `if (mode === "login")` from `backend-server/apps/api/src/routes/auth.ts`: Google sign-in now always proceeds to `findOrCreateFirebaseUser()`, signing in existing accounts or creating new MongoDB users with `isNewUser: true`.
+  - Removed `mode = "login"` from `AuthViewModel.kt`: Google sign-in directly exchanges tokens and navigates to discovery (completed profile) or profile setup (new user).
+  - Protected `priorSignup` in `AuthViewModel.emailAuth()`: only attempts reauthentication when `priorSignup.providerData` explicitly includes `EmailAuthProvider.PROVIDER_ID` (`"password"`). If not a password account or reauthentication fails, it signs out of Firebase.
+  - Cleared orphaned Firebase sessions: `AuthViewModel.launchAuth()` and `switchToSignUp()` sign out of Firebase when a Yugm session exchange is incomplete, preventing residual Firebase sessions from corrupting subsequent operations.
+- **Verification:** Backend tests (178/178 passed), backend typecheck (clean across all workspaces), Android auth unit tests (passed), and Android app/feature compilation (`:feature:auth:compileDebugKotlin` and `:app:compileDebugKotlin` passed).
+
 ## Verification
 
 - Android command (from `android-client/`): `.\gradlew.bat :feature:auth:testDebugUnitTest :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin :app:connectedDebugAndroidTest --console=plain` — passed after the logout contract changes. Auth unit reports total 8 tests passed; app and instrumentation Kotlin compilation passed; connected API 37 emulator instrumentation reports 3 tests passed (smoke and onboarding pager/compact-font coverage).

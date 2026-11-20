@@ -1,5 +1,30 @@
 ﻿# Current task
 
+## YUGM-AUTH-SIGNUP-REAUTH-004 — Fix Google sign-in rejection and email reauth deadlock
+
+- **Problem:** Google sign-in and subsequent account creation failed on release devices.
+  - Logcat evidence: Google Sign-In succeeded in Firebase (`TYPE_GOOGLE_ID_TOKEN_CREDENTIAL`, Firebase user issued), but backend returned 404 because `mode === "login"` rejected unregistered Google users with `"No account found for this Google email. Please create a password to sign up."`.
+  - The client caught 404 and transitioned to Create Account with email prefilled, but left the Google user signed into `FirebaseAuth.getInstance().currentUser`.
+  - When the user typed a password and tapped "Create account", `emailAuth` attempted `priorSignup.reauthenticate(EmailAuthProvider.getCredential(normalizedEmail, password))`. Since the Firebase account was created via Google OAuth (no password provider), Firebase threw `FirebaseAuthInvalidCredentialsException: The supplied auth credential is incorrect, malformed or has expired.`.
+  - Even if `priorSignup` was bypassed, `auth.createUserWithEmailAndPassword` collided with the existing Google email, and its catch block attempted `signInWithEmailAndPassword` which also failed because no password credential exists for Google-authenticated users.
+- **Root cause:**
+  1. `POST /api/auth/google` in `backend-server/apps/api/src/routes/auth.ts` intercepted requests with `mode === "login"` and threw HTTP 404 if the user was not already in MongoDB, instead of delegating to `findOrCreateFirebaseUser()`. Google OAuth users should seamlessly authenticate or register without needing to create a separate password.
+  2. `AuthViewModel.kt` passed `mode = "login"` and threw `NoAccountFoundException` on 404, trapping Google users in a dead-end email/password sign-up flow.
+  3. `AuthViewModel.kt`'s `emailAuth` attempted `priorSignup.reauthenticate()` without checking if `priorSignup` had an `EmailAuthProvider` (`"password"`) credential. If `auth.currentUser` was a Google user, reauthenticating with password always failed.
+  4. Failed/cancelled auth attempts did not sign out of Firebase, leaving orphaned Firebase sessions that corrupted subsequent sign-in/up operations.
+- **Fix:**
+  - Removed `if (mode === "login")` rejection in `backend-server/apps/api/src/routes/auth.ts`: Google sign-in now authenticates existing users or creates new users via `findOrCreateFirebaseUser()`, returning `isNewUser: true` when onboarding/profile setup is needed.
+  - Updated `AuthViewModel.kt`:
+    - Removed `mode = "login"` from `googleAuth()`; Google sign-in now directly completes and navigates to discovery (existing user) or profile setup (new user).
+    - Hardened `emailAuth()` to only reauthenticate if `priorSignup.providerData` explicitly contains `EmailAuthProvider.PROVIDER_ID` (`"password"`), and signs out if reauthentication fails or before creating a new account when a mismatched/non-password session exists.
+    - Updated `launchAuth()` and `switchToSignUp()` to sign out of Firebase if a Yugm session exchange is not completed, preventing orphaned Firebase users.
+- **Verification:**
+  - Backend tests: 178/178 passed (`npm --prefix backend-server test`).
+  - Backend typecheck: Clean across all workspaces (`npm --prefix backend-server run typecheck`).
+  - Android unit tests: `:feature:auth:testDebugUnitTest :core:api:testDebugUnitTest` passed.
+  - Android compile: `:feature:auth:compileDebugKotlin` and `:app:compileDebugKotlin` BUILD SUCCESSFUL.
+- **Status:** Complete in repository. Staging worker redeploy (`npm run deploy:staging`) will make the backend Google sign-in fix live.
+
 ## YUGM-AUTH-STAGING-DEPLOY-003 — Redeploy staging Worker so auth routes are live
 
 - **Problem:** Release Android auth reaches the staging Worker but cannot complete sign-in because the live Worker returns `404 Route not found` for `POST /api/auth/google`. Cloudflare log evidence (2026-11-20, `scriptVersion.id: bc0ebaf6-af81-413d-9932-6a69bb6d4b8f`, `user-agent: okhttp/4.12.0`, request to `https://yugm-api-staging.sarveshkumar10101.workers.dev/api/auth/google`, response `404`, `outcome: ok`) confirms the request reached Cloudflare from the release client.

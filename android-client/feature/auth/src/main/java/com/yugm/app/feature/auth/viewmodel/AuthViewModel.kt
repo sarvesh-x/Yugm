@@ -67,6 +67,7 @@ class AuthViewModel @Inject constructor(
         if (name.isNotBlank()) prefilledName = name
         if (!message.isNullOrBlank()) notice = message
         error = null
+        runCatching { FirebaseAuth.getInstance().signOut() }
     }
 
     fun setAuthMode(create: Boolean) {
@@ -106,24 +107,35 @@ class AuthViewModel @Inject constructor(
         }
         launchAuth(AuthProvider.EMAIL) {
             val auth = FirebaseAuth.getInstance()
-            val priorSignup = auth.currentUser?.takeIf { createAccount && it.email.equals(normalizedEmail, true) }
+            val priorSignup = auth.currentUser?.takeIf {
+                createAccount &&
+                it.email.equals(normalizedEmail, true) &&
+                it.providerData.any { p -> p.providerId == EmailAuthProvider.PROVIDER_ID }
+            }
             val user = if (priorSignup != null) {
-                // A previous attempt may have created the Firebase identity but failed
-                // before Yugm finished creating its profile. Reuse it only after Firebase
-                // confirms the password entered on this attempt.
-                awaitFirebase(priorSignup.reauthenticate(EmailAuthProvider.getCredential(normalizedEmail, password)))
-                priorSignup
+                // A previous attempt may have created the Firebase identity with email/password
+                // but failed before Yugm finished creating its profile. Reuse it only after
+                // Firebase confirms the password entered on this attempt.
+                try {
+                    awaitFirebase(priorSignup.reauthenticate(EmailAuthProvider.getCredential(normalizedEmail, password)))
+                    priorSignup
+                } catch (reauthEx: Exception) {
+                    auth.signOut()
+                    throw reauthEx
+                }
             } else if (createAccount) {
+                if (auth.currentUser != null) {
+                    auth.signOut()
+                }
                 try {
                     awaitFirebase(auth.createUserWithEmailAndPassword(normalizedEmail, password)).user
                 } catch (collision: com.google.firebase.auth.FirebaseAuthUserCollisionException) {
                     // The Firebase identity already exists from a previous (possibly
-                    // failed) attempt. Sign in with the entered password instead of
-                    // leaving the user stuck on "account already exists".
+                    // failed) attempt. Try to sign in with the entered password.
                     try {
                         awaitFirebase(auth.signInWithEmailAndPassword(normalizedEmail, password)).user
                     } catch (signInError: Exception) {
-                        throw IllegalStateException("An account already uses this email. Sign in with the original password, or reset it if needed.", signInError)
+                        throw IllegalStateException("An account already uses this email. Sign in with the original method, or reset your password.", signInError)
                     }
                 }
             } else {
@@ -170,28 +182,18 @@ class AuthViewModel @Inject constructor(
                 ?: error("Google sign-in returned no user")
 
             val firebaseToken = awaitFirebase(user.getIdToken(false), 15).token ?: error("Firebase did not return an ID token")
-            val resolvedEmail = email?.takeIf(String::isNotBlank) ?: user.email
             val accountName = name?.takeIf(String::isNotBlank) ?: user.displayName?.takeIf(String::isNotBlank)
             beginBackendExchange(AuthProvider.GOOGLE)
-            try {
-                val session = authRepository.googleAuth(firebaseToken, acceptTerms, provider = "google", name = accountName, mode = "login")
-                if ((session.user.name.isBlank() || session.user.name == "Yugm User") && !accountName.isNullOrBlank()) {
-                    session.copy(user = session.user.copy(name = accountName))
-                } else {
-                    session
-                }
-            } catch (httpEx: com.yugm.app.core.api.ApiHttpException) {
-                if (httpEx.statusCode == 404) {
-                    val fallbackEmail = resolvedEmail.orEmpty()
-                    if (fallbackEmail.isNotBlank()) {
-                        throw NoAccountFoundException(
-                            fallbackEmail,
-                            accountName.orEmpty(),
-                            "No account found for this Google email. Create a password to sign up."
-                        )
-                    }
-                }
-                throw httpEx
+            val session = authRepository.googleAuth(
+                firebaseToken,
+                acceptTerms,
+                provider = "google",
+                name = accountName
+            )
+            if ((session.user.name.isBlank() || session.user.name == "Yugm User") && !accountName.isNullOrBlank()) {
+                session.copy(user = session.user.copy(name = accountName))
+            } else {
+                session
             }
         }
     }
@@ -282,6 +284,9 @@ class AuthViewModel @Inject constructor(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
+                if (session == null && provider != AuthProvider.PASSWORD) {
+                    runCatching { FirebaseAuth.getInstance().signOut() }
+                }
                 error = mapAuthError(failure, provider)
             } finally {
                 authOperation = finishAuthOperation(authOperation, provider)

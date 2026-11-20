@@ -1,5 +1,25 @@
 ﻿# Development progress
 
+## 2026-11-20 -- Fix Google sign-in rejection and email reauth deadlock
+
+- **Root Cause Analysis (from release device logcat):**
+  - Device Logcat showed Google Sign-In succeeded in Firebase (`TYPE_GOOGLE_ID_TOKEN_CREDENTIAL`, Firebase user issued `Bo4vppehu1Nl5erReQuqq2m2Cok2`), but `POST /api/auth/google` with `mode: "login"` returned 404 because the account did not exist in MongoDB.
+  - The client caught 404 and switched the UI to "Create Account" with email prefilled, but left the Google user signed into `FirebaseAuth.getInstance().currentUser`.
+  - When the user entered a password to create an account, `emailAuth()` found `priorSignup = auth.currentUser` and called `priorSignup.reauthenticate(EmailAuthProvider.getCredential(normalizedEmail, password))`. Because the Firebase account was created via Google OAuth (without a password provider), Firebase rejected reauthentication with `FirebaseAuthInvalidCredentialsException: The supplied auth credential is incorrect, malformed or has expired.`.
+  - In addition, failed auth exchanges left orphaned Firebase sessions on the client, creating state corruption on subsequent attempts.
+- **Backend Fix:**
+  - Removed the `if (mode === "login")` 404 rejection from `backend-server/apps/api/src/routes/auth.ts`: Google sign-in now delegates directly to `findOrCreateFirebaseUser()`, allowing both existing users to sign in and new users to seamlessly register without requiring a separate password.
+- **Android Client Fix:**
+  - `AuthViewModel.kt`:
+    - Removed `mode = "login"` parameter from `googleAuth()`, enabling seamless sign-in/registration directly into discovery or profile setup (`isNewUser: true`).
+    - Guarded `priorSignup` reauthentication in `emailAuth()` to only run if `priorSignup.providerData` explicitly contains `EmailAuthProvider.PROVIDER_ID` (`"password"`). If it is not a password account or if reauthentication fails, it signs out of Firebase.
+    - Updated `launchAuth()` and `switchToSignUp()` to sign out of Firebase if a Yugm session exchange is not completed, preventing orphaned Firebase users.
+- **Verification:**
+  - Backend test suite: 178/178 passed (`npm.cmd --prefix backend-server test`).
+  - Backend typecheck: Clean across all workspaces (`npm.cmd --prefix backend-server run typecheck`).
+  - Android tests: `:feature:auth:testDebugUnitTest :core:api:testDebugUnitTest` passed.
+  - Android compilation: `:feature:auth:compileDebugKotlin` and `:app:compileDebugKotlin` passed.
+
 ## 2026-11-20 -- Diagnose staging auth 404 from stale Worker deployment and add explicit deploy scripts
 
 - **Live diagnosis (from provided Cloudflare log):** Release Android client (`okhttp/4.12.0`) reached staging `POST https://yugm-api-staging.sarveshkumar10101.workers.dev/api/auth/google` but the Worker returned **404 Route not found** (`scriptVersion.id: bc0ebaf6-af81-413d-9932-6a69bb6d4b8f`, `outcome: ok`). Current source mounts `/api/auth` with `POST /google`, indicating a stale deployed bundle rather than a source routing defect.
