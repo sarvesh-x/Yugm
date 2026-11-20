@@ -1,5 +1,6 @@
 package com.yugm.app.feature.auth.screens
 
+import android.graphics.drawable.BitmapDrawable
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -8,7 +9,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -21,9 +21,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.drawable.toBitmap
 import com.yugm.app.core.ui.theme.*
 
 @Composable
@@ -32,6 +35,12 @@ fun SplashScreen(onTimeout: suspend () -> Unit) {
     val motionEnabled = LocalMotionEnabled.current
     val colors = LocalYugmColors.current
     var showProgress by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val appIcon = remember {
+        runCatching {
+            context.packageManager.getApplicationIcon(context.packageName).toBitmap(256, 256).asImageBitmap()
+        }.getOrNull()
+    }
 
     // Keyed on Unit: navigation must happen exactly once. Re-keying on the motion
     // preference would re-run the timer and issue a second navigate().
@@ -55,22 +64,31 @@ fun SplashScreen(onTimeout: suspend () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.scale(scale.value)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(100.dp)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(
-                        Brush.linearGradient(
-                            listOf(Saffron, Pink, Purple)
-                        )
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
+            if (appIcon != null) {
                 Image(
-                    painter = painterResource(id = com.yugm.app.feature.auth.R.drawable.ic_launcher_foreground),
+                    bitmap = appIcon,
                     contentDescription = "Yugm",
-                    modifier = Modifier.size(72.dp)
+                    modifier = Modifier.size(120.dp)
                 )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(100.dp)
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(
+                            Brush.linearGradient(
+                                listOf(Saffron, Pink, Purple)
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Y",
+                        color = Color.White,
+                        fontSize = 48.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                }
             }
             Spacer(modifier = Modifier.height(24.dp))
             Text(

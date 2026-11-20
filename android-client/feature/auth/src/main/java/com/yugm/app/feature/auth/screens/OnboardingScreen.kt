@@ -19,6 +19,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -29,6 +30,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -40,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.drawable.toBitmap
 import com.yugm.app.core.ui.theme.*
 import com.yugm.app.feature.auth.R
 import kotlinx.coroutines.delay
@@ -289,6 +293,12 @@ private fun OnboardingHeader(
     textColor: Color,
     mutedColor: Color,
 ) {
+    val context = LocalContext.current
+    val appIcon = remember {
+        runCatching {
+            context.packageManager.getApplicationIcon(context.packageName).toBitmap(128, 128).asImageBitmap()
+        }.getOrNull()
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -301,19 +311,22 @@ private fun OnboardingHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Yugm Logo Container (34dp rounded box with brand gradient)
-            Box(
-                modifier = Modifier
-                    .size(if (compact) 32.dp else 34.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Brush.linearGradient(onboardingBrandGradient)),
-                contentAlignment = Alignment.Center
-            ) {
+            if (appIcon != null) {
                 Image(
-                    painter = painterResource(id = com.yugm.app.feature.auth.R.drawable.ic_launcher_foreground),
+                    bitmap = appIcon,
                     contentDescription = "Yugm",
-                    modifier = Modifier.fillMaxSize().padding(6.dp)
+                    modifier = Modifier.size(if (compact) 32.dp else 34.dp)
                 )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(if (compact) 32.dp else 34.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Brush.linearGradient(onboardingBrandGradient)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Y", color = Color.White, fontWeight = FontWeight.Black)
+                }
             }
 
             Text(
@@ -324,25 +337,20 @@ private fun OnboardingHeader(
             )
         }
 
-        // Skip Button (Hidden on page 4). Keep a stable placeholder so the header
-        // does not jump/re-layout when the button disappears on the last page.
-        Box(
-            modifier = Modifier.widthIn(min = 64.dp),
-            contentAlignment = Alignment.CenterEnd
+        // Skip Button (Hidden on page 4). Keep the button mounted (invisible) on the
+        // last page so its size is reserved and the header does not pop/jump.
+        TextButton(
+            onClick = onSkip,
+            enabled = showSkip,
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+            modifier = Modifier.alpha(if (showSkip) 1f else 0f)
         ) {
-            if (showSkip) {
-                TextButton(
-                    onClick = onSkip,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
-                ) {
-                    Text(
-                        text = "Skip",
-                        color = mutedColor,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 14.sp
-                    )
-                }
-            }
+            Text(
+                text = "Skip",
+                color = mutedColor,
+                fontWeight = FontWeight.Medium,
+                fontSize = 14.sp
+            )
         }
     }
 }
