@@ -782,6 +782,12 @@ private fun ReactionPill(emoji: String, modifier: Modifier = Modifier) {
 /** Page 4 — Build meaningful bonds: Two prominent paired tilted cards with Yugm Y-badge */
 @Composable
 private fun BuildBondsIllustration(compact: Boolean) {
+    val context = LocalContext.current
+    val appIcon = remember {
+        runCatching {
+            context.packageManager.getApplicationIcon(context.packageName).toBitmap(128, 128).asImageBitmap()
+        }.getOrNull()
+    }
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -831,18 +837,31 @@ private fun BuildBondsIllustration(compact: Boolean) {
             )
         }
 
-        // Central Yugm Bond Y-Badge overlapping between cards
-        Box(
-            modifier = Modifier
-                .offset(y = 52.dp)
-                .shadow(10.dp, CircleShape)
-                .clip(CircleShape)
-                .background(Brush.linearGradient(onboardingBrandGradient))
-                .border(2.5.dp, Color.White, CircleShape)
-                .size(if (compact) 40.dp else 48.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("Y", fontSize = if (compact) 20.sp else 24.sp, fontWeight = FontWeight.Black, color = Color.White)
+        // Central Yugm Bond badge overlapping between cards (uses the original app icon)
+        if (appIcon != null) {
+            Image(
+                bitmap = appIcon,
+                contentDescription = "Yugm",
+                modifier = Modifier
+                    .offset(y = 52.dp)
+                    .shadow(10.dp, CircleShape)
+                    .clip(CircleShape)
+                    .border(2.5.dp, Color.White, CircleShape)
+                    .size(if (compact) 40.dp else 48.dp)
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .offset(y = 52.dp)
+                    .shadow(10.dp, CircleShape)
+                    .clip(CircleShape)
+                    .background(Brush.linearGradient(onboardingBrandGradient))
+                    .border(2.5.dp, Color.White, CircleShape)
+                    .size(if (compact) 40.dp else 48.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Y", fontSize = if (compact) 20.sp else 24.sp, fontWeight = FontWeight.Black, color = Color.White)
+            }
         }
 
         // Top Sparkle Lines
