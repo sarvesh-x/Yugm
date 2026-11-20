@@ -37,6 +37,8 @@ object UserApi {
         age: Int? = null,
         lookingFor: String? = null,
         avatar: String? = null,
+        avatarType: String? = null,
+        avatarPartsJson: String? = null,
         acceptTerms: Boolean = false,
         vibeLine: String? = null,
         hobbies: List<String>? = null,
@@ -58,6 +60,8 @@ object UserApi {
         if (age != null) body.put("age", age)
         lookingFor?.trim()?.takeIf(String::isNotBlank)?.let { body.put("lookingFor", it) }
         avatar?.trim()?.takeIf(String::isNotBlank)?.let { body.put("avatar", it) }
+        avatarType?.trim()?.takeIf(String::isNotBlank)?.let { body.put("avatarType", it) }
+        avatarPartsJson?.trim()?.takeIf(String::isNotBlank)?.let { body.put("avatarParts", JSONObject(it)) }
         vibeLine?.trim()?.takeIf(String::isNotBlank)?.let { body.put("vibeLine", it) }
         interestedIn?.trim()?.takeIf(String::isNotBlank)?.let { body.put("interestedIn", it) }
         if (datingAgeMin != null) body.put("datingAgeMin", datingAgeMin)

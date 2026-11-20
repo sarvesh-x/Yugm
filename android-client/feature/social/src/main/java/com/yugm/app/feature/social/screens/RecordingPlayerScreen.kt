@@ -72,7 +72,7 @@ fun RecordingPlayerScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Avatar(initial = recording.hostName.firstOrNull()?.toString() ?: "?", size = 80, imageUrl = recording.hostAvatar)
+            Avatar(initial = recording.hostName.firstOrNull()?.toString() ?: "?", size = 80, imageUrl = recording.hostAvatar, avatarType = recording.hostAvatarType, avatarParts = recording.hostAvatarParts)
 
             Spacer(Modifier.height(16.dp))
 

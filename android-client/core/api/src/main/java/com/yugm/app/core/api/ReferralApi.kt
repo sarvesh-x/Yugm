@@ -38,7 +38,18 @@ object ReferralApi {
                 referredUserId = userObj?.let { ReferralUser(
                     name = it.optString("name", "").ifEmpty { null },
                     username = it.optString("username", "").ifEmpty { null },
-                    avatar = it.optString("avatar", "").ifEmpty { null }
+                    avatar = it.optString("avatar", "").ifEmpty { null }?.let { url -> resolveMediaUrl(url) ?: url },
+                    avatarType = it.optString("avatarType", "").ifEmpty { null },
+                    avatarParts = it.optJSONObject("avatarParts")?.let { parts ->
+                        com.yugm.app.core.model.AvatarPartsPayload(
+                            background = parts.optInt("background", 0),
+                            clothes = parts.optInt("clothes", 0),
+                            head = parts.optInt("head", 0),
+                            mouth = parts.optInt("mouth", 0),
+                            eyes = parts.optInt("eyes", 0),
+                            top = parts.optInt("top", 0)
+                        )
+                    }
                 ) },
                 referralCode = r.optString("referralCode", ""),
                 status = r.optString("status", "PENDING"),

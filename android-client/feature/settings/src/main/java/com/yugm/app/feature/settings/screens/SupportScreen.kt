@@ -26,6 +26,7 @@ import com.yugm.app.feature.settings.viewmodel.SupportViewModel
 import com.yugm.app.core.util.UiState
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import kotlinx.coroutines.launch
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 private val statusColors = mapOf(
     "OPEN" to Color(0xFF4CAF50),
@@ -208,7 +209,7 @@ private fun SubmitTicketTab(token: String, viewModel: SupportViewModel) {
                 modifier = Modifier.fillMaxWidth().height(52.dp)
             ) {
                 if (isSubmitting) {
-                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    YugmLoadingSpinner(size = 20.dp)
                 } else {
                     Text("Submit Ticket", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
@@ -242,7 +243,7 @@ private fun MyTicketsTab(token: String, onTicketClick: (String) -> Unit, viewMod
 
     when {
         isLoading && (tickets.isEmpty()) -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = PrimaryPink)
+            YugmLoadingSpinner(size = 40.dp)
         }
         errorMessage != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {

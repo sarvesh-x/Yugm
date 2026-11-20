@@ -74,6 +74,8 @@ data class Achievement(
 data class BadgeGallery(
     val name: String = "",
     val avatar: String = "",
+    val avatarType: String? = null,
+    val avatarParts: AvatarPartsPayload? = null,
     val wornIds: List<String> = emptyList(),
     val badges: List<Achievement> = emptyList()
 )

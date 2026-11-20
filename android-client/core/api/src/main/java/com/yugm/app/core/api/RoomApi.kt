@@ -450,7 +450,25 @@ object RoomApi {
         val result = mutableListOf<Host>()
         for (i in 0 until arr.length()) {
             val obj = arr.optJSONObject(i)
-            if (obj != null) result.add(Host(id = obj.optString("_id", ""), name = obj.optString("name", ""), username = obj.optString("username", ""), avatar = obj.optString("avatar", "").ifEmpty { null }))
+            if (obj != null) result.add(
+                Host(
+                    id = obj.optString("_id", ""),
+                    name = obj.optString("name", ""),
+                    username = obj.optString("username", ""),
+                    avatar = obj.optString("avatar", "").ifEmpty { null }?.let { url -> resolveMediaUrl(url) ?: url },
+                    avatarType = obj.optString("avatarType", "").ifEmpty { null },
+                    avatarParts = obj.optJSONObject("avatarParts")?.let { parts ->
+                        com.yugm.app.core.model.AvatarPartsPayload(
+                            background = parts.optInt("background", 0),
+                            clothes = parts.optInt("clothes", 0),
+                            head = parts.optInt("head", 0),
+                            mouth = parts.optInt("mouth", 0),
+                            eyes = parts.optInt("eyes", 0),
+                            top = parts.optInt("top", 0)
+                        )
+                    }
+                )
+            )
         }
         return result
     }
@@ -462,7 +480,23 @@ object RoomApi {
         val added = mutableListOf<Host>()
         for (i in 0 until arr.length()) {
             val obj = arr.optJSONObject(i)
-            if (obj != null && obj.optString("_id", "") == userId) return Host(id = obj.optString("_id", ""), name = obj.optString("name", ""), username = obj.optString("username", ""), avatar = obj.optString("avatar", "").ifEmpty { null })
+            if (obj != null && obj.optString("_id", "") == userId) return Host(
+                id = obj.optString("_id", ""),
+                name = obj.optString("name", ""),
+                username = obj.optString("username", ""),
+                avatar = obj.optString("avatar", "").ifEmpty { null }?.let { url -> resolveMediaUrl(url) ?: url },
+                avatarType = obj.optString("avatarType", "").ifEmpty { null },
+                avatarParts = obj.optJSONObject("avatarParts")?.let { parts ->
+                    com.yugm.app.core.model.AvatarPartsPayload(
+                        background = parts.optInt("background", 0),
+                        clothes = parts.optInt("clothes", 0),
+                        head = parts.optInt("head", 0),
+                        mouth = parts.optInt("mouth", 0),
+                        eyes = parts.optInt("eyes", 0),
+                        top = parts.optInt("top", 0)
+                    )
+                }
+            )
         }
         return Host(id = userId)
     }

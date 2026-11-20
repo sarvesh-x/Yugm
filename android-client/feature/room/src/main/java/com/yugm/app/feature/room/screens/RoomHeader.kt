@@ -204,7 +204,9 @@ internal fun SharedRoomHeader(
                             participant.user.name.firstOrNull()?.toString() ?: "?",
                             28,
                             participant.user.avatar,
-                            participant.user.activeCosmetics
+                            participant.user.activeCosmetics,
+                            avatarType = participant.user.avatarType,
+                            avatarParts = participant.user.avatarParts
                         )
                     }
                 }

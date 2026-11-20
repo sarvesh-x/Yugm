@@ -249,7 +249,16 @@ fun RoomCard(room: Room, wide: Boolean, onClick: () -> Unit) {
             Column(modifier = Modifier.align(Alignment.BottomStart)) {
                 Text(room.title, color = TextPrimary, fontSize = 20.sp, lineHeight = 23.sp, fontWeight = FontWeight.Black, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                    room.host?.let { Avatar(initial = it.name.firstOrNull()?.toString() ?: "?", size = 34, imageUrl = it.avatar, cosmetics = it.activeCosmetics) }
+                    room.host?.let { host ->
+                        Avatar(
+                            initial = host.name.firstOrNull()?.toString() ?: "?",
+                            size = 34,
+                            imageUrl = host.avatar,
+                            cosmetics = host.activeCosmetics,
+                            avatarType = host.avatarType,
+                            avatarParts = host.avatarParts
+                        )
+                    }
                     Text(room.host?.name ?: "", color = TextPrimary, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Text("${room.participants} live / ${room.language}", color = TextMuted, fontSize = 12.sp)
@@ -294,7 +303,7 @@ fun HostRow(host: Host, onFollow: ((String) -> Unit)? = null, onClick: ((Host) -
             )
             .padding(12.dp)
     ) {
-        Avatar(initial = host.name.firstOrNull()?.toString() ?: "?", size = 48, imageUrl = host.avatar, cosmetics = host.activeCosmetics)
+        Avatar(initial = host.name.firstOrNull()?.toString() ?: "?", size = 48, imageUrl = host.avatar, cosmetics = host.activeCosmetics, avatarType = host.avatarType, avatarParts = host.avatarParts)
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(host.name, color = TextPrimary, fontWeight = FontWeight.Black)
@@ -326,7 +335,7 @@ fun HostRow(host: Host, onFollow: ((String) -> Unit)? = null, onClick: ((Host) -
 fun HostCard(host: Host) {
     GlassCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Avatar(host.name.firstOrNull()?.toString() ?: "?", 58, imageUrl = host.avatar, cosmetics = host.activeCosmetics, showEntry = true)
+            Avatar(host.name.firstOrNull()?.toString() ?: "?", 58, imageUrl = host.avatar, cosmetics = host.activeCosmetics, showEntry = true, avatarType = host.avatarType, avatarParts = host.avatarParts)
             Column(Modifier.weight(1f)) {
                 Text(host.name, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp)
                 Text("${host.username} / ${host.city}", color = TextMuted, fontSize = 12.sp)
@@ -352,8 +361,11 @@ fun SpeakerGrid(room: Room) {
                                 else -> "Open seat"
                             },
                             cosmetics = if (index == 0) room.host?.activeCosmetics ?: ActiveCosmetics() else ActiveCosmetics(),
+                            imageUrl = if (index == 0) room.host?.avatar else null,
                             isSpeaking = false,
                             showEntry = index == 0,
+                            avatarType = if (index == 0) room.host?.avatarType else null,
+                            avatarParts = if (index == 0) room.host?.avatarParts else null,
                             modifier = Modifier.weight(1f)
                         )
                     } else {
@@ -366,7 +378,7 @@ fun SpeakerGrid(room: Room) {
 }
 
 @Composable
-fun SeatCard(name: String, cosmetics: ActiveCosmetics = ActiveCosmetics(), imageUrl: String? = null, isSpeaking: Boolean = false, showEntry: Boolean = false, isEmpty: Boolean = false, isMuted: Boolean = false, isLocked: Boolean = false, compact: Boolean = false, modifier: Modifier = Modifier) {
+fun SeatCard(name: String, cosmetics: ActiveCosmetics = ActiveCosmetics(), imageUrl: String? = null, isSpeaking: Boolean = false, showEntry: Boolean = false, isEmpty: Boolean = false, isMuted: Boolean = false, isLocked: Boolean = false, compact: Boolean = false, avatarType: String? = null, avatarParts: com.yugm.app.core.model.AvatarPartsPayload? = null, modifier: Modifier = Modifier) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -386,7 +398,7 @@ fun SeatCard(name: String, cosmetics: ActiveCosmetics = ActiveCosmetics(), image
                 )
             }
         } else {
-            Avatar(initial = name.firstOrNull()?.toString() ?: "?", size = if (compact) 36 else 42, imageUrl = imageUrl, cosmetics = cosmetics, isSpeaking = isSpeaking, isMuted = isMuted, showEntry = showEntry)
+            Avatar(initial = name.firstOrNull()?.toString() ?: "?", size = if (compact) 36 else 42, imageUrl = imageUrl, cosmetics = cosmetics, isSpeaking = isSpeaking, isMuted = isMuted, showEntry = showEntry, avatarType = avatarType, avatarParts = avatarParts)
         }
         Text(name, color = TextPrimary, fontSize = if (compact) 9.sp else 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = if (compact) 3.dp else 5.dp))
     }
@@ -405,6 +417,8 @@ fun VideoGrid(room: Room, camera: Boolean, participants: List<com.yugm.app.core.
                         highlighted = index == 0,
                         cosmetics = participant?.user?.activeCosmetics ?: if (index == 0) room.host?.activeCosmetics ?: ActiveCosmetics() else ActiveCosmetics(),
                         imageUrl = participant?.user?.avatar ?: if (index == 0) room.host?.avatar else null,
+                        avatarType = participant?.user?.avatarType ?: if (index == 0) room.host?.avatarType else null,
+                        avatarParts = participant?.user?.avatarParts ?: if (index == 0) room.host?.avatarParts else null,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -414,7 +428,7 @@ fun VideoGrid(room: Room, camera: Boolean, participants: List<com.yugm.app.core.
 }
 
 @Composable
-fun VideoTile(label: String, highlighted: Boolean, cosmetics: ActiveCosmetics = ActiveCosmetics(), imageUrl: String? = null, modifier: Modifier = Modifier) {
+fun VideoTile(label: String, highlighted: Boolean, cosmetics: ActiveCosmetics = ActiveCosmetics(), imageUrl: String? = null, avatarType: String? = null, avatarParts: com.yugm.app.core.model.AvatarPartsPayload? = null, modifier: Modifier = Modifier) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
@@ -424,7 +438,7 @@ fun VideoTile(label: String, highlighted: Boolean, cosmetics: ActiveCosmetics = 
             .padding(10.dp)
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Avatar(initial = label.firstOrNull()?.toString() ?: "?", size = 76, imageUrl = imageUrl, cosmetics = cosmetics, isSpeaking = highlighted, showEntry = highlighted)
+            Avatar(initial = label.firstOrNull()?.toString() ?: "?", size = 76, imageUrl = imageUrl, cosmetics = cosmetics, isSpeaking = highlighted, showEntry = highlighted, avatarType = avatarType, avatarParts = avatarParts)
             Text(label, color = TextPrimary, fontWeight = FontWeight.Black, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 10.dp))
         }
     }

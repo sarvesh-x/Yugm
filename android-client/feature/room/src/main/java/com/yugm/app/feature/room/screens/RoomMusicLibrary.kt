@@ -39,7 +39,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -71,6 +70,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 internal data class RoomMusicLibraryTrack(
     val id: Long,
@@ -243,7 +243,7 @@ internal fun RoomMusicLibraryDialog(
                     )
                 }
                 loading -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = LibraryPink)
+                    YugmLoadingSpinner(size = 40.dp)
                 }
                 loadError != null -> Box(Modifier.weight(1f).fillMaxWidth()) {
                     AudioLibraryMessage("!", "Couldn't scan audio", loadError!!, "Try again") { scanVersion++ }

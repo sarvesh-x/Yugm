@@ -338,7 +338,7 @@ fun DiscoveryCard(
                 Modifier.fillMaxSize().background(Brush.linearGradient(listOf(PrimaryPurple, Surface, PrimaryPink.copy(alpha = 0.65f)))),
                 contentAlignment = Alignment.Center
             ) {
-                Avatar(candidate.name.take(1).ifBlank { "?" }, 156, cosmetics = candidate.activeCosmetics)
+                Avatar(candidate.name.take(1).ifBlank { "?" }, 156, cosmetics = candidate.activeCosmetics, avatarType = candidate.avatarType, avatarParts = candidate.avatarParts)
             }
         }
 
@@ -599,7 +599,7 @@ fun MatchOverlayScreen(
                         .padding(4.dp)
                 ) {
                     if (partner.avatar.isNullOrBlank()) {
-                        Avatar(partner.name.take(1).ifBlank { "?" }, 102, cosmetics = partner.activeCosmetics)
+                        Avatar(partner.name.take(1).ifBlank { "?" }, 102, cosmetics = partner.activeCosmetics, avatarType = partner.avatarType, avatarParts = partner.avatarParts)
                     } else {
                         AsyncImage(
                             model = partner.avatar,

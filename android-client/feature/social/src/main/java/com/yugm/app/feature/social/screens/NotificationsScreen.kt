@@ -24,7 +24,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -49,6 +48,7 @@ import com.yugm.app.core.model.NotificationItem
 import com.yugm.app.core.ui.components.LoadingState
 import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.feature.social.viewmodel.NotificationsViewModel
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 private enum class NotificationFilter { ALL, UNREAD }
 
@@ -91,7 +91,7 @@ fun NotificationsScreen(
                     onClick = { viewModel.markAllRead(token) }
                 ) {
                     if (viewModel.isMarkingAllRead) {
-                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = colors.primary)
+                        YugmLoadingSpinner(size = 16.dp)
                     } else Text("Mark all read", color = colors.primary, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                 }
             }

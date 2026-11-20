@@ -56,6 +56,8 @@ function publicUser(user: any) {
     name: user.name,
     username: user.username,
     avatar: user.avatar,
+    avatarType: user.avatarType ?? null,
+    avatarParts: user.avatarParts ?? null,
     city: user.city,
     interests: user.interests ?? [],
     followersCount: user.followersCount ?? 0,
@@ -191,7 +193,7 @@ async function buildAchievements(userId: string, user: any, catalog = badgeCatal
   });
 }
 
-async function loadBadgeGallery(userId: string, user: Pick<IUser, "name" | "avatar"> | null) {
+async function loadBadgeGallery(userId: string, user: Pick<IUser, "name" | "avatar" | "avatarType" | "avatarParts"> | null) {
   if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
   const now = new Date();
   const catalog = badgeCatalog();
@@ -201,7 +203,12 @@ async function loadBadgeGallery(userId: string, user: Pick<IUser, "name" | "avat
   const state = await syncBadgeState(userId, definitions, [...earned, ...honors], now);
   const progress = new Map(achievements.map(item => [item.id, item]));
   return {
-    user: { name: user.name, avatar: user.avatar },
+    user: {
+      name: user.name,
+      avatar: user.avatar,
+      avatarType: (user as any).avatarType ?? null,
+      avatarParts: (user as any).avatarParts ?? null
+    },
     wornIds: state.wornIds,
     badges: state.badges.map(badge => ({ ...progress.get(badge.id), ...badge }))
   };
@@ -234,22 +241,22 @@ experienceRouter.get("/home", asyncHandler(async (req: AuthRequest, res) => {
     invites
   ] = await Promise.all([
     Room.find({ status: "LIVE", visibility: "PUBLIC" })
-      .populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+      .populate("hostId", "name username avatar avatarType avatarParts city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
       .sort({ participantCount: -1, createdAt: -1 })
       .limit(8)
       .lean(),
     Room.find({ status: "SCHEDULED", visibility: "PUBLIC" })
-      .populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+      .populate("hostId", "name username avatar avatarType avatarParts city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
       .sort({ scheduledFor: 1 })
       .limit(6)
       .lean(),
     Room.find({ status: "LIVE", visibility: "PUBLIC", hostId: { $in: followingIds } })
-      .populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+      .populate("hostId", "name username avatar avatarType avatarParts city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
       .sort({ participantCount: -1, createdAt: -1 })
       .limit(6)
       .lean(),
     User.find({ _id: { $nin: [userId, ...followingIds, ...hiddenIds] }, isBlocked: { $ne: true } })
-      .select("name username avatar city followersCount interests activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+      .select("name username avatar avatarType avatarParts city followersCount interests activeCosmetics vipTier vipExpiresAt xp level levelTitle")
       .sort({ vipExpiresAt: -1, level: -1, followersCount: -1, createdAt: -1 })
       .limit(8)
       .lean(),
@@ -258,7 +265,7 @@ experienceRouter.get("/home", asyncHandler(async (req: AuthRequest, res) => {
     buildAchievements(userId, user, catalog),
     RoomInvite.find({ inviteeId: userId, status: "PENDING" })
       .populate("roomId", "title type status hostId")
-      .populate("inviterId", "name username avatar")
+      .populate("inviterId", "name username avatar avatarType avatarParts")
       .sort({ createdAt: -1 })
       .limit(5)
       .lean()
@@ -319,7 +326,7 @@ experienceRouter.get("/creator-dashboard", asyncHandler(async (req: AuthRequest,
       { $match: { joinedAt: { $gte: since }, roomId: { $in: hostedRoomIds } } },
       { $group: { _id: null, visits: { $sum: 1 }, people: { $addToSet: "$userId" } } }
     ]),
-    GiftTransaction.find({ receiverId: userId, createdAt: { $gte: since } }).populate("senderId", "name username avatar").populate("giftId", "name icon coinPrice").populate("roomId", "title").sort({ createdAt: -1 }).limit(8).lean(),
+    GiftTransaction.find({ receiverId: userId, createdAt: { $gte: since } }).populate("senderId", "name username avatar avatarType avatarParts").populate("giftId", "name icon coinPrice").populate("roomId", "title").sort({ createdAt: -1 }).limit(8).lean(),
     Room.find({ hostId: userId, status: "SCHEDULED", scheduledFor: { $gte: new Date() } }).sort({ scheduledFor: 1 }).limit(8).lean(),
     GiftTransaction.aggregate([
       { $match: { receiverId: req.user!._id, createdAt: { $gte: since } } },
@@ -330,7 +337,7 @@ experienceRouter.get("/creator-dashboard", asyncHandler(async (req: AuthRequest,
   ]);
   const giftSummary = giftIncome[0] ?? { coins: 0, count: 0, supporters: [] };
   const participantStats = participantSummary[0] ?? { visits: 0, people: [] };
-  const supporterUsers = await User.find({ _id: { $in: topSupporterRows.map((row) => row._id) } }).select("name username avatar").lean();
+  const supporterUsers = await User.find({ _id: { $in: topSupporterRows.map((row) => row._id) } }).select("name username avatar avatarType avatarParts").lean();
   const supporterMap = new Map(supporterUsers.map((user) => [user._id.toString(), user]));
   const topSupporters = topSupporterRows.map((row) => ({ ...row, user: supporterMap.get(row._id.toString()) ?? null }));
   const nextSteps = [
@@ -361,7 +368,7 @@ experienceRouter.get("/creator-dashboard", asyncHandler(async (req: AuthRequest,
 
 experienceRouter.get("/safety-center", asyncHandler(async (req: AuthRequest, res) => {
   const [blockedUsers, reportsSent, unreadSafety] = await Promise.all([
-    Block.find({ blockerId: req.user!.id }).populate("blockedUserId", "name username avatar").sort({ createdAt: -1 }).limit(20).lean(),
+    Block.find({ blockerId: req.user!.id }).populate("blockedUserId", "name username avatar avatarType avatarParts").sort({ createdAt: -1 }).limit(20).lean(),
     import("../models/Report.js").then(({ Report }) => Report.countDocuments({ reporterId: req.user!.id })),
     Notification.countDocuments({ userId: req.user!.id, type: "SYSTEM", read: false })
   ]);

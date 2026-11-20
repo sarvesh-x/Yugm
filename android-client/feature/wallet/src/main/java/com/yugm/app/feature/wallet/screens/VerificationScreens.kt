@@ -25,6 +25,7 @@ import com.yugm.app.core.ui.theme.Success
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -126,11 +127,7 @@ fun FaceVerificationScreen(token: String, onBack: () -> Unit, onSubmit: (String)
             enabled = selectedUri != null && !uploading
         ) {
             if (uploading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp,
-                    color = LocalYugmColors.current.textPrimary
-                )
+                YugmLoadingSpinner(size = 20.dp)
                 Spacer(Modifier.width(8.dp))
             }
             Text(if (uploading) "Uploading..." else "Submit face check")
@@ -195,11 +192,7 @@ fun VoiceVerificationScreen(token: String, promptText: String, onBack: () -> Uni
             enabled = selectedUri != null && !uploading
         ) {
             if (uploading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp,
-                    color = LocalYugmColors.current.textPrimary
-                )
+                YugmLoadingSpinner(size = 20.dp)
                 Spacer(Modifier.width(8.dp))
             }
             Text(if (uploading) "Uploading..." else "Submit voice check")

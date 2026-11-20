@@ -179,7 +179,7 @@ fun VoicePollScreen(
                                                     .weight(1f)
                                                     .clickable { onPollDetail(poll.id) }
                                             ) {
-                                                Avatar(poll.userName.firstOrNull()?.toString() ?: "?", 36, imageUrl = poll.userAvatar)
+                                                Avatar(poll.userName.firstOrNull()?.toString() ?: "?", 36, imageUrl = poll.userAvatar, avatarType = poll.userAvatarType, avatarParts = poll.userAvatarParts)
                                                 Column(Modifier.weight(1f)) {
                                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                                         Text(if (poll.userName.isNotBlank()) poll.userName else "Someone", color = TextMuted, fontSize = 12.sp)

@@ -36,8 +36,8 @@ groupsRouter.post("/groups", validateBody(createGroupChatSchema), asyncHandler(a
     participantIds: allIds
   });
   const populated = await GroupChat.findById(group._id)
-    .populate("createdBy", "name username avatar")
-    .populate("participantIds", "name username avatar")
+    .populate("createdBy", "name username avatar avatarType avatarParts")
+    .populate("participantIds", "name username avatar avatarType avatarParts")
     .lean();
   emitToParticipants(allIds, socketEvents.groupCreated, { group: populated }, req.user!.id);
   sendOk(res, { group: populated }, 201);
@@ -45,8 +45,8 @@ groupsRouter.post("/groups", validateBody(createGroupChatSchema), asyncHandler(a
 
 groupsRouter.get("/groups", asyncHandler(async (req: AuthRequest, res) => {
   const groups = await GroupChat.find({ participantIds: req.user!.id })
-    .populate("createdBy", "name username avatar")
-    .populate("participantIds", "name username avatar")
+    .populate("createdBy", "name username avatar avatarType avatarParts")
+    .populate("participantIds", "name username avatar avatarType avatarParts")
     .sort({ lastMessageAt: -1, createdAt: -1 })
     .lean();
   sendOk(res, { groups });
@@ -55,8 +55,8 @@ groupsRouter.get("/groups", asyncHandler(async (req: AuthRequest, res) => {
 groupsRouter.get("/groups/:id", asyncHandler(async (req: AuthRequest, res) => {
   await requireGroupParticipant(req.params.id, req.user!.id);
   const group = await GroupChat.findById(req.params.id)
-    .populate("createdBy", "name username avatar")
-    .populate("participantIds", "name username avatar")
+    .populate("createdBy", "name username avatar avatarType avatarParts")
+    .populate("participantIds", "name username avatar avatarType avatarParts")
     .lean();
   if (!group) throw new HttpError(404, "Group not found", ErrorCode.NOT_FOUND);
   const messageCount = await GroupMessage.countDocuments({ groupId: req.params.id });
@@ -78,7 +78,7 @@ groupsRouter.post("/groups/:id/message", chatLimiter, validateBody(groupMessageS
     lastMessageAt: new Date()
   });
   const message = await GroupMessage.findById(created._id)
-    .populate("senderId", "name username avatar")
+    .populate("senderId", "name username avatar avatarType avatarParts")
     .lean();
   emitToParticipants(participants, socketEvents.groupMessageNew, { groupId: req.params.id, message }, req.user!.id);
   sendOk(res, { message }, 201);
@@ -89,7 +89,7 @@ groupsRouter.get("/groups/:id/messages", asyncHandler(async (req: AuthRequest, r
   const skip = Math.max(0, Number(req.query.skip) || 0);
   const limit = Math.min(Math.max(1, Number(req.query.limit) || 30), 100);
   const messages = await GroupMessage.find({ groupId: req.params.id })
-    .populate("senderId", "name username avatar")
+    .populate("senderId", "name username avatar avatarType avatarParts")
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit)
@@ -107,8 +107,8 @@ groupsRouter.post("/groups/:id/add", asyncHandler(async (req: AuthRequest, res) 
   if (newIds.length === 0) return sendOk(res, { group });
   await GroupChat.findByIdAndUpdate(req.params.id, { $addToSet: { participantIds: { $each: newIds } } });
   const updated = await GroupChat.findById(req.params.id)
-    .populate("createdBy", "name username avatar")
-    .populate("participantIds", "name username avatar")
+    .populate("createdBy", "name username avatar avatarType avatarParts")
+    .populate("participantIds", "name username avatar avatarType avatarParts")
     .lean();
   const allParticipants = [...new Set([...participants, ...newIds])];
   emitToParticipants(allParticipants, socketEvents.groupParticipantAdd, { groupId: req.params.id, group: updated, addedUserIds: newIds }, req.user!.id);
@@ -126,8 +126,8 @@ groupsRouter.post("/groups/:id/remove", asyncHandler(async (req: AuthRequest, re
   if (targetId === creatorId) throw new HttpError(400, "Creator cannot be removed", ErrorCode.VALIDATION);
   await GroupChat.findByIdAndUpdate(req.params.id, { $pull: { participantIds: targetId } });
   const updated = await GroupChat.findById(req.params.id)
-    .populate("createdBy", "name username avatar")
-    .populate("participantIds", "name username avatar")
+    .populate("createdBy", "name username avatar avatarType avatarParts")
+    .populate("participantIds", "name username avatar avatarType avatarParts")
     .lean();
   emitToParticipants(participants, socketEvents.groupParticipantRemove, { groupId: req.params.id, group: updated, removedUserId: targetId });
   sendOk(res, { group: updated });
@@ -148,8 +148,8 @@ groupsRouter.post("/groups/:id/leave", asyncHandler(async (req: AuthRequest, res
   }
   await GroupChat.findByIdAndUpdate(req.params.id, update);
   const updated = await GroupChat.findById(req.params.id)
-    .populate("createdBy", "name username avatar")
-    .populate("participantIds", "name username avatar")
+    .populate("createdBy", "name username avatar avatarType avatarParts")
+    .populate("participantIds", "name username avatar avatarType avatarParts")
     .lean();
   emitToParticipants(remaining, socketEvents.groupParticipantRemove, { groupId: req.params.id, group: updated, removedUserId: req.user!.id });
   sendOk(res, { left: true });

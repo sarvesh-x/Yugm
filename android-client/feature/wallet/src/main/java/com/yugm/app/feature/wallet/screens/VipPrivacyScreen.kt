@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.sp
 import com.yugm.app.core.model.VipPrivacySettings
 import com.yugm.app.core.api.YugmApi
 import kotlinx.coroutines.launch
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 private val PrivacyBackground = Color(0xFF100D18)
 private val PrivacyCard = Color(0xFFF5EEE6)
@@ -38,7 +39,7 @@ fun VipPrivacyScreen(token: String, onBack: () -> Unit) {
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp, vertical = 26.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("Your VIP, your boundaries", color = Color(0xFFBEB7C8), fontSize = 14.sp)
-            if (loading) CircularProgressIndicator(color = Color(0xFFFFD477), modifier = Modifier.align(Alignment.CenterHorizontally))
+            if (loading) YugmLoadingSpinner(size = 40.dp, modifier = Modifier.align(Alignment.CenterHorizontally))
             PrivacySettingCard("Who can chat to me?", if (settings.chatPrivacy == "FOLLOWERS") "Followers" else "Everyone") {
                 var expanded by remember { mutableStateOf(false) }
                 Box {

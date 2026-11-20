@@ -339,7 +339,9 @@ private fun EventCard(
                 Avatar(
                     initial = event.hostName.firstOrNull()?.toString() ?: "?",
                     size = 32,
-                    imageUrl = event.hostAvatar
+                    imageUrl = event.hostAvatar,
+                    avatarType = event.hostAvatarType,
+                    avatarParts = event.hostAvatarParts
                 )
                 Text(event.hostName, color = colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (event.festival != "none") {

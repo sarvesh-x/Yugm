@@ -83,7 +83,18 @@ object SocialApi {
                             _id = it.optString("_id", ""),
                             name = it.optString("name", ""),
                             username = it.optString("username", ""),
-                            avatar = it.optString("avatar", "").ifBlank { null }
+                            avatar = it.optString("avatar", "").ifBlank { null }?.let { url -> resolveMediaUrl(url) ?: url },
+                            avatarType = it.optString("avatarType", "").ifBlank { null },
+                            avatarParts = it.optJSONObject("avatarParts")?.let { parts ->
+                                com.yugm.app.core.model.AvatarPartsPayload(
+                                    background = parts.optInt("background", 0),
+                                    clothes = parts.optInt("clothes", 0),
+                                    head = parts.optInt("head", 0),
+                                    mouth = parts.optInt("mouth", 0),
+                                    eyes = parts.optInt("eyes", 0),
+                                    top = parts.optInt("top", 0)
+                                )
+                            }
                         )
                     },
                     receiverId = w.optString("receiverId", ""),
@@ -143,7 +154,18 @@ object SocialApi {
             id = obj.optString("_id", ""),
             userId = userObj?.optString("_id", "") ?: obj.optString("userId", ""),
             userName = userObj?.optString("name", "") ?: "",
-            userAvatar = userObj?.optString("avatar", "")?.ifBlank { null },
+            userAvatar = userObj?.optString("avatar", "")?.ifBlank { null }?.let { url -> resolveMediaUrl(url) ?: url },
+            userAvatarType = userObj?.optString("avatarType", "")?.ifBlank { null },
+            userAvatarParts = userObj?.optJSONObject("avatarParts")?.let { parts ->
+                com.yugm.app.core.model.AvatarPartsPayload(
+                    background = parts.optInt("background", 0),
+                    clothes = parts.optInt("clothes", 0),
+                    head = parts.optInt("head", 0),
+                    mouth = parts.optInt("mouth", 0),
+                    eyes = parts.optInt("eyes", 0),
+                    top = parts.optInt("top", 0)
+                )
+            },
             questionId = obj.optString("questionId", ""),
             answer = obj.optString("answer", ""),
             isPublic = obj.optBoolean("isPublic", true),
@@ -231,7 +253,18 @@ object SocialApi {
             id = obj.optString("_id", ""),
             userId = userObj?.optString("_id", "") ?: obj.optString("userId", ""),
             userName = userObj?.optString("name", "") ?: "",
-            userAvatar = userObj?.optString("avatar", "")?.ifBlank { null },
+            userAvatar = userObj?.optString("avatar", "")?.ifBlank { null }?.let { url -> resolveMediaUrl(url) ?: url },
+            userAvatarType = userObj?.optString("avatarType", "")?.ifBlank { null },
+            userAvatarParts = userObj?.optJSONObject("avatarParts")?.let { parts ->
+                com.yugm.app.core.model.AvatarPartsPayload(
+                    background = parts.optInt("background", 0),
+                    clothes = parts.optInt("clothes", 0),
+                    head = parts.optInt("head", 0),
+                    mouth = parts.optInt("mouth", 0),
+                    eyes = parts.optInt("eyes", 0),
+                    top = parts.optInt("top", 0)
+                )
+            },
             question = obj.optString("question", ""),
             audioUrl = obj.optString("audioUrl", ""),
             duration = obj.optInt("duration", 0),

@@ -184,7 +184,7 @@ pkRouter.get("/:battleId/events", asyncHandler(async (req, res) => {
 pkRouter.get("/:battleId/leaderboard", asyncHandler(async (req, res) => {
   if (!isValidObjectId(req.params.battleId)) throw new HttpError(400, "Invalid battleId", ErrorCode.VALIDATION);
   const entries = await PkLeaderboardEntry.find({ battleId: req.params.battleId })
-    .populate("userId", "name username avatar activeCosmetics")
+    .populate("userId", "name username avatar avatarType avatarParts activeCosmetics")
     .sort({ totalPoints: -1 })
     .limit(50)
     .lean();

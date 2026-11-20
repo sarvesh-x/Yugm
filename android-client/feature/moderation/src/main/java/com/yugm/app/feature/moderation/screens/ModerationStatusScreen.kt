@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.yugm.app.feature.moderation.viewmodel.ModerationAction
 import com.yugm.app.feature.moderation.viewmodel.ModerationViewModel
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,7 +58,7 @@ fun ModerationStatusScreen(
         ) {
             if (state.isLoading && state.status == null) {
                 Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                    YugmLoadingSpinner(size = 40.dp)
                 }
                 return@Column
             }

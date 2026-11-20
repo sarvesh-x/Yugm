@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.Alignment
@@ -37,6 +36,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 fun NavGraphBuilder.roomNavGraph(
     navController: NavHostController,
@@ -581,7 +581,7 @@ private fun RoomConnectionFallback(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.padding(24.dp)
         ) {
-            if (isLoading) CircularProgressIndicator()
+            if (isLoading) YugmLoadingSpinner(size = 40.dp)
             Text(
                 if (isLoading) "Opening room…" else message ?: "Couldn't open this room.",
                 color = Color.White,

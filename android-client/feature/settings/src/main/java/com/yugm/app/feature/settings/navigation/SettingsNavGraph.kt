@@ -16,6 +16,9 @@ fun NavGraphBuilder.settingsNavGraph(
     usernameProvider: () -> String,
     userEmailProvider: () -> String = { "" },
     emailVerifiedProvider: () -> Boolean = { true },
+    userAvatarProvider: () -> String? = { null },
+    userAvatarTypeProvider: () -> String? = { null },
+    userAvatarPartsProvider: () -> com.yugm.app.core.model.AvatarPartsPayload? = { null },
     onVerifyEmail: (() -> Unit)? = null,
     onLogout: () -> Unit,
 ) {
@@ -41,6 +44,9 @@ fun NavGraphBuilder.settingsNavGraph(
             username = usernameProvider(),
             userEmail = userEmailProvider(),
             emailVerified = emailVerifiedProvider(),
+            userAvatar = userAvatarProvider(),
+            userAvatarType = userAvatarTypeProvider(),
+            userAvatarParts = userAvatarPartsProvider(),
             onVerifyEmail = onVerifyEmail,
             onLogout = {
                 onLogout()

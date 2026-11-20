@@ -54,7 +54,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -146,6 +145,7 @@ import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 // Theme-aware palette is read via LocalYugmColors inside composables.
 
@@ -256,6 +256,9 @@ internal fun MessageBubble(
     partner: Host?,
     currentUserId: String,
     myActiveCosmetics: ActiveCosmetics,
+    myAvatarUrl: String? = null,
+    myAvatarType: String? = null,
+    myAvatarParts: com.yugm.app.core.model.AvatarPartsPayload? = null,
     showIncomingAvatar: Boolean = !mine,
     showOutgoingAvatar: Boolean = mine,
     groupedWithPrev: Boolean = false,
@@ -303,6 +306,8 @@ internal fun MessageBubble(
                     size = 28,
                     imageUrl = partner?.avatar,
                     cosmetics = partner?.activeCosmetics ?: ActiveCosmetics(),
+                    avatarType = partner?.avatarType,
+                    avatarParts = partner?.avatarParts,
                     accessibilityLabel = null
                 )
             } else {
@@ -394,11 +399,7 @@ internal fun MessageBubble(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         if (isVoiceActive && isVoicePreparing) {
-                                            androidx.compose.material3.CircularProgressIndicator(
-                                                modifier = Modifier.size(16.dp),
-                                                color = bubbleText,
-                                                strokeWidth = 2.dp
-                                            )
+                                            YugmLoadingSpinner(size = 16.dp)
                                         } else {
                                             Icon(
                                                 imageVector = if (isVoiceActive && isVoicePlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
@@ -581,11 +582,7 @@ internal fun MessageBubble(
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                         if (isCardStarting) {
-                                            androidx.compose.material3.CircularProgressIndicator(
-                                                modifier = Modifier.size(12.dp),
-                                                color = Color.White,
-                                                strokeWidth = 2.dp
-                                            )
+                                            YugmLoadingSpinner(size = 12.dp)
                                         }
                                         Text(
                                             when {
@@ -708,8 +705,10 @@ internal fun MessageBubble(
                 Avatar(
                     initial = "You".first().toString(),
                     size = 28,
-                    imageUrl = null,
+                    imageUrl = myAvatarUrl,
                     cosmetics = myActiveCosmetics,
+                    avatarType = myAvatarType,
+                    avatarParts = myAvatarParts,
                     accessibilityLabel = null
                 )
             } else {

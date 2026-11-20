@@ -12,6 +12,8 @@ data class PkSide(
     val hostId: String = "",
     val hostName: String = "",
     val hostAvatar: String? = null,
+    val hostAvatarType: String? = null,
+    val hostAvatarParts: AvatarPartsPayload? = null,
     val score: Int = 0,
     val participantCount: Int = 0,
     val activeCosmetics: ActiveCosmetics = ActiveCosmetics(),
@@ -22,6 +24,8 @@ data class PkTeamMember(
     val userId: String = "",
     val name: String = "",
     val avatar: String? = null,
+    val avatarType: String? = null,
+    val avatarParts: AvatarPartsPayload? = null,
     val isReady: Boolean = false,
     val team: String = "A"
 )
@@ -90,6 +94,8 @@ data class PkOpponent(
     val hostId: String = "",
     val hostName: String = "",
     val hostAvatar: String? = null,
+    val hostAvatarType: String? = null,
+    val hostAvatarParts: AvatarPartsPayload? = null,
     val battleType: PkBattleType = PkBattleType.VOICE,
     val category: String = "",
     val language: String = "",
@@ -101,6 +107,8 @@ data class PkLeaderboardEntry(
     val userId: String = "",
     val name: String = "",
     val avatar: String? = null,
+    val avatarType: String? = null,
+    val avatarParts: AvatarPartsPayload? = null,
     val side: PkSideType = PkSideType.LEFT,
     val totalPoints: Int = 0,
     val totalGiftsSent: Int = 0

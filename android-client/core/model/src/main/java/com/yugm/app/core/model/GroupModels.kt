@@ -6,6 +6,8 @@ data class Clan(
     val slug: String = "",
     val description: String = "",
     val avatar: String? = null,
+    val avatarType: String? = null,
+    val avatarParts: AvatarPartsPayload? = null,
     val familyLabel: String = "",
     val privacy: String = "PUBLIC",
     val memberCount: Int = 0,
@@ -45,6 +47,8 @@ data class ClanSummary(
     val name: String = "Family",
     val slug: String = "",
     val avatar: String? = null,
+    val avatarType: String? = null,
+    val avatarParts: AvatarPartsPayload? = null,
     val familyLabel: String = "",
     val memberCount: Int = 0
 )
@@ -54,6 +58,8 @@ data class ClanInvitation(
     val clanId: String = "",
     val clanName: String = "Clan",
     val clanAvatar: String? = null,
+    val clanAvatarType: String? = null,
+    val clanAvatarParts: AvatarPartsPayload? = null,
     val inviterName: String = "",
     val expiresAt: String = ""
 )
@@ -64,6 +70,8 @@ data class ClanSentInvitation(
     val inviteeName: String = "",
     val inviteeUsername: String = "",
     val inviteeAvatar: String? = null,
+    val inviteeAvatarType: String? = null,
+    val inviteeAvatarParts: AvatarPartsPayload? = null,
     val inviterName: String = "",
     val createdAt: String = "",
     val expiresAt: String = ""
@@ -74,6 +82,8 @@ data class ClanRankingEntry(
     val rank: Int = 0,
     val name: String = "",
     val avatar: String? = null,
+    val avatarType: String? = null,
+    val avatarParts: AvatarPartsPayload? = null,
     val familyLabel: String = "",
     val memberCount: Int = 0,
     val totalXp: Long = 0

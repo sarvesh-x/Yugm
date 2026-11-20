@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -68,6 +67,7 @@ import androidx.compose.ui.layout.ContentScale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 
 private enum class PartySection { Voice, Video }
@@ -155,7 +155,7 @@ fun VoiceRoomsScreen(
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
                                     Box {
-                                        Avatar(host.name.take(1), 62, host.avatar, host.activeCosmetics)
+                                        Avatar(host.name.take(1), 62, host.avatar, host.activeCosmetics, avatarType = host.avatarType, avatarParts = host.avatarParts)
                                         Box(Modifier.align(Alignment.BottomEnd).size(18.dp).clip(CircleShape).background(Color(0xFF39C891)).border(2.dp, LocalYugmColors.current.background, CircleShape))
                                     }
                                     Text(host.name, color = LocalYugmColors.current.textPrimary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 5.dp))
@@ -178,7 +178,7 @@ fun VoiceRoomsScreen(
             } else if (viewModel.isRoomListLoading) {
                 item {
                     Column(Modifier.fillMaxWidth().padding(top = 90.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = LocalYugmColors.current.secondary, strokeWidth = 3.dp)
+                        YugmLoadingSpinner(size = 40.dp)
                         Text("Finding live rooms…", color = LocalYugmColors.current.textSecondary, modifier = Modifier.padding(top = 14.dp))
                     }
                 }
@@ -295,7 +295,7 @@ private fun PartyTab(label: String, selected: Boolean, modifier: Modifier = Modi
 @Composable
 private fun PartyLoadingState(message: String) {
     Column(Modifier.fillMaxWidth().padding(vertical = 90.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        CircularProgressIndicator(color = LocalYugmColors.current.secondary, strokeWidth = 3.dp)
+        YugmLoadingSpinner(size = 40.dp)
         Text(message, color = LocalYugmColors.current.textSecondary, modifier = Modifier.padding(top = 14.dp))
     }
 }
@@ -324,7 +324,7 @@ private fun VideoPartyCard(room: Room, modifier: Modifier = Modifier, following:
             AsyncImage(model = image, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         } else {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Avatar(room.host?.name?.take(1) ?: "V", 82, room.host?.avatar, room.host?.activeCosmetics ?: com.yugm.app.core.model.ActiveCosmetics())
+                Avatar(room.host?.name?.take(1) ?: "V", 82, room.host?.avatar, room.host?.activeCosmetics ?: com.yugm.app.core.model.ActiveCosmetics(), avatarType = room.host?.avatarType, avatarParts = room.host?.avatarParts)
             }
         }
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC050610)))))
@@ -364,7 +364,7 @@ private fun PartyRoomCard(room: Room, following: Boolean, onFollow: () -> Unit, 
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Avatar(room.host?.name?.take(1) ?: "🎙", 86, room.host?.avatar, room.host?.activeCosmetics ?: com.yugm.app.core.model.ActiveCosmetics())
+        Avatar(room.host?.name?.take(1) ?: "🎙", 86, room.host?.avatar, room.host?.activeCosmetics ?: com.yugm.app.core.model.ActiveCosmetics(), avatarType = room.host?.avatarType, avatarParts = room.host?.avatarParts)
         Column(Modifier.weight(1f).padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(room.title.ifBlank { "Voice room" }, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))

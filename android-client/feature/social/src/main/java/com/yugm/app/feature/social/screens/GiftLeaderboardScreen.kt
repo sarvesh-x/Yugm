@@ -169,7 +169,7 @@ fun GiftLeaderboardScreen(
                                 Text(room.title.ifBlank { "Live room" }, color = TextPrimary, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text("${room.category.ifBlank { "Live" }} · ${room.participants} watching", color = TextMuted, fontSize = 11.sp)
                             }
-                            room.host?.let { Avatar(it.name.firstOrNull()?.toString() ?: "?", 40, it.avatar, it.activeCosmetics) }
+                            room.host?.let { Avatar(it.name.firstOrNull()?.toString() ?: "?", 40, it.avatar, it.activeCosmetics, avatarType = it.avatarType, avatarParts = it.avatarParts) }
                         }
                     }
                 }
@@ -223,7 +223,7 @@ private fun PodiumGiftEntry(entry: LeaderboardEntry, rank: Int, modifier: Modifi
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(if (rank == 1) "👑" else "✦", fontSize = if (rank == 1) 18.sp else 14.sp, color = accent)
         Box(Modifier.padding(top = 3.dp).border(2.dp, accent, CircleShape).padding(3.dp)) {
-            Avatar(name.firstOrNull()?.toString() ?: "?", avatarSize, entry.user?.avatar)
+            Avatar(name.firstOrNull()?.toString() ?: "?", avatarSize, entry.user?.avatar, avatarType = entry.user?.avatarType, avatarParts = entry.user?.avatarParts)
         }
         Text(name, color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
         Text("${entry.totalCoins} coins", color = accent, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
@@ -265,7 +265,7 @@ private fun PodiumHostEntry(host: com.yugm.app.core.model.Host, rank: Int, modif
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(if (rank == 1) "👑" else "✦", fontSize = if (rank == 1) 18.sp else 14.sp)
         Box(Modifier.padding(top = 3.dp).border(2.dp, accent, CircleShape).padding(3.dp)) {
-            Avatar(host.name.firstOrNull()?.toString() ?: "?", avatarSize, host.avatar, host.activeCosmetics)
+            Avatar(host.name.firstOrNull()?.toString() ?: "?", avatarSize, host.avatar, host.activeCosmetics, avatarType = host.avatarType, avatarParts = host.avatarParts)
         }
         Text(host.name, color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
         Text("${host.xp} XP", color = accent, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
@@ -292,7 +292,7 @@ private fun HostRankingRow(rank: Int, host: com.yugm.app.core.model.Host) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text("#$rank", color = Gold, fontWeight = FontWeight.Black, modifier = Modifier.width(38.dp))
-        Avatar(host.name.firstOrNull()?.toString() ?: "?", 42, host.avatar, host.activeCosmetics)
+        Avatar(host.name.firstOrNull()?.toString() ?: "?", 42, host.avatar, host.activeCosmetics, avatarType = host.avatarType, avatarParts = host.avatarParts)
         Column(Modifier.weight(1f).padding(start = 10.dp)) {
             Text(host.name, color = TextPrimary, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(host.levelTitle.ifBlank { "Level ${host.level}" }, color = TextMuted, fontSize = 11.sp)
@@ -332,7 +332,7 @@ private fun LeaderboardRow(rank: Int, entry: LeaderboardEntry) {
             }
         }
         Spacer(Modifier.width(8.dp))
-        Avatar(initial = name.firstOrNull()?.toString() ?: "?", size = 44, imageUrl = avatarUrl)
+        Avatar(initial = name.firstOrNull()?.toString() ?: "?", size = 44, imageUrl = avatarUrl, avatarType = entry.user?.avatarType, avatarParts = entry.user?.avatarParts)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(name, color = TextPrimary, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)

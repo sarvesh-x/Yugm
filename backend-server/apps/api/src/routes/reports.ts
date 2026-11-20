@@ -42,7 +42,7 @@ reportsRouter.patch("/admin/reports/:id", requireAuth, requireRole("ADMIN", "MOD
 reportsRouter.get("/admin/moderation/actions", requireAuth, requireRole("ADMIN", "MODERATOR"), asyncHandler(async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 100, 200);
   const actions = await ModerationAction.find()
-    .populate("targetUserId", "name username avatar role isBlocked mutedUntil suspendedUntil moderationStrikes")
+    .populate("targetUserId", "name username avatar avatarType avatarParts role isBlocked mutedUntil suspendedUntil moderationStrikes")
     .populate("moderatorId", "name username role")
     .sort({ createdAt: -1 })
     .limit(limit)

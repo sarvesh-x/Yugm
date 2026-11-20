@@ -37,6 +37,18 @@ fun JSONObject.toUser(): YugmUser = YugmUser(
     name = optString("name", ""),
     username = optString("username", ""),
     email = optString("email", ""),
+    avatar = if (has("avatar") && !isNull("avatar")) com.yugm.app.core.api.resolveMediaUrl(optString("avatar", "")) else null,
+    avatarType = optString("avatarType", "").takeIf { it.isNotBlank() },
+    avatarParts = optJSONObject("avatarParts")?.let { parts ->
+        com.yugm.app.core.model.AvatarPartsPayload(
+            background = parts.optInt("background", 0),
+            clothes = parts.optInt("clothes", 0),
+            head = parts.optInt("head", 0),
+            mouth = parts.optInt("mouth", 0),
+            eyes = parts.optInt("eyes", 0),
+            top = parts.optInt("top", 0)
+        )
+    },
     profileCompleted = optBoolean("profileCompleted", false),
     emailVerified = optBoolean("emailVerified", false),
     walletBalance = optInt("walletBalance", 0),

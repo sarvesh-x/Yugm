@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
@@ -91,11 +90,7 @@ fun ProfileLiveVoiceBanner(
             Spacer(Modifier.width(8.dp))
 
             if (isJoining) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    color = Color.White,
-                    strokeWidth = 2.dp
-                )
+                YugmLoadingSpinner(size = 18.dp)
             } else {
                 Icon(
                     imageVector = Icons.Filled.ChevronRight,

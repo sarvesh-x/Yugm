@@ -28,7 +28,9 @@ data class WaveSender(
     val _id: String = "",
     val name: String = "",
     val username: String = "",
-    val avatar: String? = null
+    val avatar: String? = null,
+    val avatarType: String? = null,
+    val avatarParts: AvatarPartsPayload? = null
 )
 
 data class UnreadWaveCount(
@@ -47,6 +49,8 @@ data class DailyQuestionAnswer(
     val userId: String = "",
     val userName: String = "",
     val userAvatar: String? = null,
+    val userAvatarType: String? = null,
+    val userAvatarParts: AvatarPartsPayload? = null,
     val questionId: String = "",
     val answer: String = "",
     val isPublic: Boolean = true,
@@ -69,6 +73,8 @@ data class VoicePoll(
     val userId: String = "",
     val userName: String = "",
     val userAvatar: String? = null,
+    val userAvatarType: String? = null,
+    val userAvatarParts: AvatarPartsPayload? = null,
     val question: String = "",
     val audioUrl: String = "",
     val duration: Int = 0,

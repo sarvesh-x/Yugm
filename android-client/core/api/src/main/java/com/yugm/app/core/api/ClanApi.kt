@@ -2,11 +2,11 @@ package com.yugm.app.core.api
 
 import com.yugm.app.core.api.parsers.*
 import com.yugm.app.core.model.Clan
+import com.yugm.app.core.model.ClanInvitation
 import com.yugm.app.core.model.ClanMessage
+import com.yugm.app.core.model.ClanRankingEntry
 import com.yugm.app.core.model.ClanSentInvitation
 import com.yugm.app.core.model.ClanSummary
-import com.yugm.app.core.model.ClanInvitation
-import com.yugm.app.core.model.ClanRankingEntry
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -23,7 +23,9 @@ object ClanApi {
                     id = item.optString("_id", item.optString("id")),
                     clanId = clan?.optString("_id", clan.optString("id")) ?: item.optString("clanId"),
                     clanName = clan?.optString("name").orEmpty().ifBlank { "Clan" },
-                    clanAvatar = clan?.optString("avatar")?.takeIf(String::isNotBlank),
+                    clanAvatar = clan?.parseAvatarUrlField("avatar"),
+                    clanAvatarType = clan?.parseAvatarTypeField(),
+                    clanAvatarParts = clan?.parseAvatarPartsField(),
                     inviterName = inviter?.optString("name").orEmpty(),
                     expiresAt = item.optString("expiresAt")
                 ))
@@ -54,7 +56,9 @@ object ClanApi {
                         inviteeId = invitee?.optString("_id", invitee.optString("id")).orEmpty(),
                         inviteeName = invitee?.optString("name").orEmpty().ifBlank { "User" },
                         inviteeUsername = invitee?.optString("username").orEmpty(),
-                        inviteeAvatar = invitee?.optString("avatar")?.takeIf(String::isNotBlank),
+                        inviteeAvatar = invitee?.parseAvatarUrlField("avatar"),
+                        inviteeAvatarType = invitee?.parseAvatarTypeField(),
+                        inviteeAvatarParts = invitee?.parseAvatarPartsField(),
                         inviterName = inviter?.optString("name").orEmpty(),
                         createdAt = item.optString("createdAt"),
                         expiresAt = item.optString("expiresAt")
@@ -82,7 +86,9 @@ object ClanApi {
                     id = item.optString("id", item.optString("_id")),
                     rank = item.optInt("rank", index + 1),
                     name = item.optString("name", "Clan"),
-                    avatar = item.optString("avatar").takeIf(String::isNotBlank),
+                    avatar = item.parseAvatarUrlField("avatar"),
+                    avatarType = item.parseAvatarTypeField(),
+                    avatarParts = item.parseAvatarPartsField(),
                     familyLabel = item.optString("familyLabel"),
                     memberCount = item.optInt("memberCount"),
                     totalXp = item.optLong("totalXp")

@@ -101,7 +101,18 @@ object EventsApi {
             description = obj.optString("description", "").ifEmpty { null },
             hostId = hostObj?.optString("_id", "") ?: obj.optString("hostId", ""),
             hostName = hostObj?.optString("name", "") ?: "",
-            hostAvatar = hostObj?.optString("avatar", "")?.ifEmpty { null },
+            hostAvatar = hostObj?.optString("avatar", "")?.ifEmpty { null }?.let { resolveMediaUrl(it) ?: it },
+            hostAvatarType = hostObj?.optString("avatarType", "")?.ifEmpty { null },
+            hostAvatarParts = hostObj?.optJSONObject("avatarParts")?.let { parts ->
+                com.yugm.app.core.model.AvatarPartsPayload(
+                    background = parts.optInt("background", 0),
+                    clothes = parts.optInt("clothes", 0),
+                    head = parts.optInt("head", 0),
+                    mouth = parts.optInt("mouth", 0),
+                    eyes = parts.optInt("eyes", 0),
+                    top = parts.optInt("top", 0)
+                )
+            },
             coverImage = obj.optString("coverImage", "").ifEmpty { null },
             category = obj.optString("category", ""),
             type = obj.optString("type", ""),

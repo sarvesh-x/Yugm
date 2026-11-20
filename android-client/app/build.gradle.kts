@@ -230,6 +230,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.coil.compose)
     implementation(libs.coil.gif)
+    implementation(libs.coil.svg)
     implementation(libs.razorpay.checkout)
     implementation(libs.play.billing)
     implementation(libs.socketio.client)

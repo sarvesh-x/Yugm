@@ -59,7 +59,18 @@ object RecordingsApi {
             roomId = if (roomObj != null) roomObj.optString("_id", obj.optString("roomId", "")) else obj.optString("roomId", ""),
             hostId = hostObj?.optString("_id", "") ?: obj.optString("hostId", ""),
             hostName = hostObj?.optString("name", "") ?: "",
-            hostAvatar = hostObj?.optString("avatar", "")?.ifEmpty { null },
+            hostAvatar = hostObj?.optString("avatar", "")?.ifEmpty { null }?.let { com.yugm.app.core.api.resolveMediaUrl(it) ?: it },
+            hostAvatarType = hostObj?.optString("avatarType", "")?.ifEmpty { null },
+            hostAvatarParts = hostObj?.optJSONObject("avatarParts")?.let { parts ->
+                com.yugm.app.core.model.AvatarPartsPayload(
+                    background = parts.optInt("background", 0),
+                    clothes = parts.optInt("clothes", 0),
+                    head = parts.optInt("head", 0),
+                    mouth = parts.optInt("mouth", 0),
+                    eyes = parts.optInt("eyes", 0),
+                    top = parts.optInt("top", 0)
+                )
+            },
             title = obj.optString("title", ""),
             recordingUrl = obj.optString("recordingUrl", ""),
             duration = obj.optInt("duration", 0),

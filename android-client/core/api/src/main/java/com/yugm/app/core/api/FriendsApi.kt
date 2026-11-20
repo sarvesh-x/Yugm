@@ -76,7 +76,18 @@ object FriendsApi {
             _id = obj.optString("_id", ""),
             name = obj.optString("name", ""),
             username = obj.optString("username", ""),
-            avatar = obj.optString("avatar", "").ifEmpty { null },
+            avatar = com.yugm.app.core.api.resolveMediaUrl(obj.optString("avatar", "").ifEmpty { null }),
+            avatarType = obj.optString("avatarType", "").ifEmpty { null },
+            avatarParts = obj.optJSONObject("avatarParts")?.let { parts ->
+                com.yugm.app.core.model.AvatarPartsPayload(
+                    background = parts.optInt("background", 0),
+                    clothes = parts.optInt("clothes", 0),
+                    head = parts.optInt("head", 0),
+                    mouth = parts.optInt("mouth", 0),
+                    eyes = parts.optInt("eyes", 0),
+                    top = parts.optInt("top", 0)
+                )
+            },
             bio = obj.optString("bio", "").ifEmpty { null },
             level = obj.optInt("level", 1),
             levelTitle = obj.optString("levelTitle", ""),

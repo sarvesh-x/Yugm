@@ -7,7 +7,7 @@ This is a source-location index, not a guarantee that every screen uses these co
 | `BrandHeader`, `AuthShell` | `SharedComponents.kt` | Brand and auth layout |
 | `SearchBar`, `CategoryChips`, `Chip`, `ChipWrap` | `SharedComponents.kt` | Discovery filters/search affordance |
 | `RoomCarousel`, `RoomCard` | `SharedComponents.kt` | Room discovery presentation |
-| `Avatar` | `Avatar.kt` | Shared avatar presentation |
+| `Avatar` | `Avatar.kt` | Shared avatar presentation; supports uploaded/default images and generated Multiavatar descriptors (`avatarType`/`avatarParts`) when provided |
 | `AvatarLiveIndicator` | `AvatarLiveIndicator.kt` | Live state decoration |
 | `GlassComponents` | `GlassComponents.kt` | Branded glass surfaces |
 | `RoomShell` | `RoomShell.kt` | Room screen shell |
@@ -16,6 +16,8 @@ This is a source-location index, not a guarantee that every screen uses these co
 | `ControlButton` | `ControlButton.kt` | Room/media control affordance |
 | `ChallengeCard` | `ChallengeCard.kt` | Challenge presentation |
 | `SlimLineFrame` | `SlimLineFrame.kt` | Decorative frame |
+| `YugmLoadingSpinner` | `YugmLoadingSpinner.kt` (`core/ui`) | App-wide loading spinner; renders the single approved Lottie animation (`res/raw/loading_spinner.json`). Replaces `CircularProgressIndicator` spinner usages; callers control size/modifier. |
+| `AvatarGeneratorDialog` / generated avatar UI | `core/ui/avatar/AvatarGeneratorDialog.kt`, `GeneratedAvatar.kt`, `AvatarEngine.kt` | Shared offline Multiavatar customization dialog and SVG rendering helpers used by profile creation and Edit Profile (integration in progress). |
 | `AutomaticSyncEffect` | `AutomaticSyncEffect.kt` | Shared sync-related UI effect; inspect before reuse |
 | `ReferenceComponents` | `ReferenceComponents.kt` | Inventory contents require source review |
 

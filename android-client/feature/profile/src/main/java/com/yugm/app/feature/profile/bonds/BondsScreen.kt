@@ -46,6 +46,7 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 private enum class BondsPage { Home, Center, Detail, Rankings }
 
@@ -128,7 +129,7 @@ internal fun BondsScreen(
         Box(Modifier.padding(padding).fillMaxSize()) {
             if (home == null) {
                 Column(Modifier.align(Alignment.Center).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    if (state.error == null) CircularProgressIndicator()
+                    if (state.error == null) YugmLoadingSpinner(size = 40.dp)
                     else {
                         Text(state.error.orEmpty())
                         TextButton(onClick = { viewModel.clearError(); AppSync.invalidate(SyncTopic.BONDS) }) { Text("Try again") }
@@ -156,7 +157,7 @@ internal fun BondsScreen(
                 BondsPage.Detail -> {
                     val detail = state.detail?.takeIf { it.card.id == selectedBond }
                     if (detail != null) BondDetailsScreen(detail, home, state, token, viewModel, onProfile, onChat, onCall)
-                    else CircularProgressIndicator(Modifier.align(Alignment.Center))
+                    else YugmLoadingSpinner(size = 40.dp, modifier = Modifier.align(Alignment.Center))
                 }
                 BondsPage.Rankings -> BondRankings(state.ranking, state.busy) { category, previous, window, kind, scope ->
                     viewModel.rankings(token, category, previous, window, kind, scope)
@@ -306,7 +307,7 @@ internal fun BondSection(title: String, content: @Composable ColumnScope.() -> U
 
 @Composable
 internal fun BondAvatar(person: BondPerson, size: Int = 48) {
-    Avatar(person.name.take(1), size, person.avatar)
+    Avatar(person.name.take(1), size, person.avatar, avatarType = person.avatarType, avatarParts = person.avatarParts)
 }
 
 private fun localTime(iso: String): Long? = runCatching {

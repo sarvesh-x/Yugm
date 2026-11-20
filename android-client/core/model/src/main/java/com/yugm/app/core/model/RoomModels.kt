@@ -83,6 +83,8 @@ data class RoomActivityItem(
     val userId: String = "",
     val userName: String = "",
     val avatar: String? = null,
+    val avatarType: String? = null,
+    val avatarParts: AvatarPartsPayload? = null,
     val roomEntry: String = "",
     val entranceEffect: String = ""
 )

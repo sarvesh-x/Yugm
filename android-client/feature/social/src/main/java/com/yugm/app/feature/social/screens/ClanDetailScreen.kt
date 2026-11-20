@@ -140,7 +140,7 @@ fun ClanDetailScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            Avatar(currentClan.name.take(1).uppercase(), 68, currentClan.avatar)
+                            Avatar(currentClan.name.take(1).uppercase(), 68, currentClan.avatar, avatarType = currentClan.avatarType, avatarParts = currentClan.avatarParts)
                             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                 Text(currentClan.name, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 Text("#${currentClan.slug}", color = Pink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -236,7 +236,9 @@ fun ClanDetailScreen(
                             Avatar(
                                 initial = member.name.firstOrNull()?.toString() ?: "?",
                                 size = 40,
-                                imageUrl = member.avatar
+                                imageUrl = member.avatar,
+                                avatarType = member.avatarType,
+                                avatarParts = member.avatarParts
                             )
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
@@ -267,7 +269,7 @@ fun ClanDetailScreen(
                     } else {
                         items(viewModel.sentInvitations, key = { "sent-invite-${it.id}" }) { invite ->
                             Row(Modifier.padding(horizontal = 20.dp).fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Avatar(invite.inviteeName.firstOrNull()?.toString() ?: "?", 36, invite.inviteeAvatar)
+                                Avatar(invite.inviteeName.firstOrNull()?.toString() ?: "?", 36, invite.inviteeAvatar, avatarType = invite.inviteeAvatarType, avatarParts = invite.inviteeAvatarParts)
                                 Column(Modifier.weight(1f).padding(start = 10.dp)) {
                                     Text(invite.inviteeName, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                                     val sub = when {
@@ -294,7 +296,7 @@ fun ClanDetailScreen(
                     } else {
                         items(candidates, key = { "invite-${it.id}" }) { candidate ->
                             Row(Modifier.padding(horizontal = 20.dp).fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Avatar(candidate.name.firstOrNull()?.toString() ?: "?", 36, candidate.avatar)
+                                Avatar(candidate.name.firstOrNull()?.toString() ?: "?", 36, candidate.avatar, avatarType = candidate.avatarType, avatarParts = candidate.avatarParts)
                                 Column(Modifier.weight(1f).padding(start = 10.dp)) {
                                     Text(candidate.name, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                                     if (candidate.username.isNotBlank()) Text("@${candidate.username}", color = TextMuted, fontSize = 10.sp)

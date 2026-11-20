@@ -8,7 +8,15 @@ export interface IUser extends mongoose.Document {
   phone?: string;
   firebaseUid?: string;
   avatar?: string;
-  gender?: string;
+  avatarType?: "UPLOADED" | "GENERATED" | "DEFAULT";
+  avatarParts?: {
+    background: number;
+    clothes: number;
+    head: number;
+    mouth: number;
+    eyes: number;
+    top: number;
+  };  gender?: string;
   age?: number;
   bondVersion?: number;
   bondInvitations?: boolean;
@@ -123,7 +131,15 @@ const userSchema = new Schema<IUser>(
     phone: { type: String, trim: true, select: false },
     firebaseUid: String,
     avatar: String,
-    gender: String,
+    avatarType: { type: String, enum: ["UPLOADED", "GENERATED", "DEFAULT"] },
+    avatarParts: {
+      background: { type: Number, min: 0, max: 47 },
+      clothes: { type: Number, min: 0, max: 47 },
+      head: { type: Number, min: 0, max: 47 },
+      mouth: { type: Number, min: 0, max: 47 },
+      eyes: { type: Number, min: 0, max: 47 },
+      top: { type: Number, min: 0, max: 47 }
+    },    gender: String,
     age: Number,
     bondVersion: { type: Number, default: 0, select: false },
     bondInvitations: { type: Boolean, default: true },

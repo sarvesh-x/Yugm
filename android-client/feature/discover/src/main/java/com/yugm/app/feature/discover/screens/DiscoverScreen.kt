@@ -38,7 +38,6 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -85,6 +84,7 @@ import com.yugm.app.feature.discover.viewmodel.DiscoverViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 private data class DiscoveryFilter(val label: String, val icon: ImageVector)
 
@@ -281,7 +281,7 @@ fun DiscoverScreen(
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Text(friendSearchError ?: "We’re finding someone who is looking for a private voice call too.", color = TextMuted)
-                    if (friendSearchError == null) CircularProgressIndicator(color = PrimaryPurple)
+                    if (friendSearchError == null) YugmLoadingSpinner(size = 40.dp)
                 }
             },
             confirmButton = {
@@ -487,7 +487,7 @@ private fun DiscoverActionCard(
                 .border(1.dp, Color.White.copy(alpha = 0.3f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            if (loading) CircularProgressIndicator(Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
+            if (loading) YugmLoadingSpinner(size = 22.dp)
             else Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(23.dp))
         }
     }
@@ -581,7 +581,7 @@ private fun RecommendedRoomCard(room: Room, onOpen: () -> Unit, onJoin: () -> Un
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 room.host?.let { host ->
-                    Avatar(host.name.take(1).ifBlank { "Y" }, 30, host.avatar, host.activeCosmetics)
+                    Avatar(host.name.take(1).ifBlank { "Y" }, 30, host.avatar, host.activeCosmetics, avatarType = host.avatarType, avatarParts = host.avatarParts)
                     Text(
                         host.name.ifBlank { "Yugm host" },
                         color = TextPrimary,
@@ -629,7 +629,7 @@ private fun RoomInfoChip(icon: ImageVector, label: String) {
 private fun DiscoverLoadingState() {
     Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 34.dp), contentAlignment = Alignment.Center) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            CircularProgressIndicator(Modifier.size(22.dp), color = PrimaryPurple, strokeWidth = 2.dp)
+            YugmLoadingSpinner(size = 22.dp)
             Text("Finding conversations for you…", color = TextMuted, fontSize = 14.sp)
         }
     }

@@ -47,7 +47,6 @@ import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -108,6 +107,7 @@ import com.yugm.app.core.ui.components.GiftPanel
 import com.yugm.app.core.ui.components.*
 import livekit.org.webrtc.SurfaceViewRenderer
 import kotlinx.coroutines.delay
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 private val StreamInk = Color(0xFFF8FAFC)
 private val StreamMuted = Color(0xFFD0D1DB)
@@ -355,7 +355,7 @@ fun VideoLivestreamScreen(
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF251642), Color(0xFF11121B), Color(0xFF05060A)))), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(Modifier.size(116.dp).clip(CircleShape).border(2.dp, Color.White.copy(alpha = .74f), CircleShape), contentAlignment = Alignment.Center) {
-                        Avatar(room.host?.name?.take(1) ?: "?", 110, room.host?.avatar, room.host?.activeCosmetics ?: com.yugm.app.core.model.ActiveCosmetics())
+                        Avatar(room.host?.name?.take(1) ?: "?", 110, room.host?.avatar, room.host?.activeCosmetics ?: com.yugm.app.core.model.ActiveCosmetics(), avatarType = room.host?.avatarType, avatarParts = room.host?.avatarParts)
                     }
                     Text(if (cameraOn && isHost) "Starting your livestream…" else "${room.host?.name ?: "Host"} is getting ready", color = StreamInk, fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp))
                     Text("The live video will appear here", color = StreamMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 5.dp))
@@ -654,11 +654,7 @@ fun VideoLivestreamScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(top = 10.dp)
                         ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp,
-                                color = Gold
-                            )
+                            YugmLoadingSpinner(size = 16.dp)
                             Spacer(Modifier.width(10.dp))
                             Text("Loading reactions…", color = StreamMuted, fontSize = 13.sp)
                         }
@@ -746,7 +742,7 @@ fun VideoLivestreamScreen(
                 if (speakerRequests.isEmpty()) Text("No one is waiting to join the conversation.", color = StreamMuted, modifier = Modifier.padding(vertical = 12.dp))
                 speakerRequests.forEach { request ->
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFF22232D)).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Avatar(request.user.name.take(1), 42, request.user.avatar, request.user.activeCosmetics)
+                        Avatar(request.user.name.take(1), 42, request.user.avatar, request.user.activeCosmetics, avatarType = request.user.avatarType, avatarParts = request.user.avatarParts)
                         Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                             Text(request.user.name, color = StreamInk, fontWeight = FontWeight.Bold)
                             Text("Wants to join with camera and microphone", color = StreamMuted, fontSize = 11.sp)
@@ -802,7 +798,7 @@ fun VideoLivestreamScreen(
                     Text("Room ID: ${room.id}\nHost: ${room.host?.name ?: "Host"}\n${participants.size} people in room", color = StreamMuted)
                     participants.forEach { participant ->
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Avatar(participant.user.name.take(1), 36, participant.user.avatar, participant.user.activeCosmetics)
+                            Avatar(participant.user.name.take(1), 36, participant.user.avatar, participant.user.activeCosmetics, avatarType = participant.user.avatarType, avatarParts = participant.user.avatarParts)
                             Column {
                                 Text(participant.user.name, color = StreamInk, fontWeight = FontWeight.SemiBold)
                                 Text(participant.role.lowercase().replaceFirstChar { it.uppercase() }, color = StreamMuted, fontSize = 12.sp)

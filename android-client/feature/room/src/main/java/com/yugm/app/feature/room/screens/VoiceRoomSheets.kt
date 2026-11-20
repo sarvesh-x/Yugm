@@ -33,7 +33,6 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -70,6 +69,7 @@ import androidx.compose.ui.unit.sp
 import com.yugm.app.core.model.RoomReaction
 import com.yugm.app.core.model.RoomReactionAccess
 import com.yugm.app.core.ui.components.ReactionArtwork
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 private val SheetBackground = Color(0xFF121525)
 internal val RoomSheetTile = Color(0xFF1C2034)
@@ -192,11 +192,7 @@ internal fun VoiceRoomReactionSheet(
                                 }
                             }
                         }
-                        loading -> CircularProgressIndicator(
-                            modifier = Modifier.size(28.dp).semantics { stateDescription = "Loading reactions" },
-                            color = RoomSheetAccent,
-                            strokeWidth = 2.dp
-                        )
+                        loading -> YugmLoadingSpinner(size = 28.dp, modifier = Modifier.semantics { stateDescription = "Loading reactions" })
                         error != null -> Column(
                             modifier = Modifier.padding(horizontal = 16.dp).verticalScroll(rememberScrollState()),
                             horizontalAlignment = Alignment.CenterHorizontally

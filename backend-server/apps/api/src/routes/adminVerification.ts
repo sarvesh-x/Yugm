@@ -69,7 +69,7 @@ adminVerificationRouter.get("/trust-verifications", requireAdminAuth, requirePer
 
 adminVerificationRouter.get("/trust-verifications/:id", requireAdminAuth, requirePermission("trust_verification.read"), asyncHandler(async (req: AdminAuthRequest, res) => {
   assertObjectId(req.params.id);
-  const verification = await TrustVerification.findById(req.params.id).populate("userId", "name username avatar role isVerified").lean();
+  const verification = await TrustVerification.findById(req.params.id).populate("userId", "name username avatar avatarType avatarParts role isVerified").lean();
   if (!verification) throw new HttpError(404, "Trust verification not found", ErrorCode.NOT_FOUND);
   const mediaAccessGranted = canReadTrustMedia(req);
   const [faceSubmissionCount, voiceSubmissionCount, faceSubmissions, voiceSubmissions] = await Promise.all([
@@ -128,7 +128,7 @@ adminVerificationRouter.get("/creator-kyc", requireAdminAuth, requirePermission(
 
 adminVerificationRouter.get("/creator-kyc/:userId", requireAdminAuth, requirePermission("creator_kyc.read"), asyncHandler(async (req: AdminAuthRequest, res) => {
   assertObjectId(req.params.userId, "userId");
-  const kyc = await CreatorPayoutKyc.findOne({ userId: req.params.userId }).populate("userId", "name username avatar role").lean();
+  const kyc = await CreatorPayoutKyc.findOne({ userId: req.params.userId }).populate("userId", "name username avatar avatarType avatarParts role").lean();
   if (!kyc) throw new HttpError(404, "Creator payout KYC not found", ErrorCode.NOT_FOUND);
   const sensitiveAccessGranted = canReadSensitive(req);
   await recordAuditLog({ adminId: req.admin!.id, action: sensitiveAccessGranted ? "creator_kyc.view_masked_finance" : "creator_kyc.view_masked", entityType: "creator_payout_kyc", entityId: kyc._id.toString(), targetUserId: req.params.userId, metadata: { sensitiveFieldsMasked: true }, req });
@@ -178,7 +178,7 @@ adminVerificationRouter.get("/payout-reviews", requireAdminAuth, requirePermissi
 
 adminVerificationRouter.get("/payout-reviews/:id", requireAdminAuth, requirePermission("payout_review.read"), asyncHandler(async (req, res) => {
   assertObjectId(req.params.id);
-  const review = await PayoutReview.findById(req.params.id).populate("userId", "name username avatar role").populate("withdrawalRequestId").lean();
+  const review = await PayoutReview.findById(req.params.id).populate("userId", "name username avatar avatarType avatarParts role").populate("withdrawalRequestId").lean();
   if (!review) throw new HttpError(404, "Payout review not found", ErrorCode.NOT_FOUND);
   adminOk(res, { payoutReview: publicPayoutReview(review), raw: review });
 }));

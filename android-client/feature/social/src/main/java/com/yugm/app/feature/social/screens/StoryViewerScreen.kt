@@ -152,7 +152,7 @@ fun StoryViewerScreen(
                 .padding(start = 16.dp, top = 58.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Avatar(initial = story.userName.firstOrNull()?.toString() ?: "?", size = 36, imageUrl = story.userAvatar)
+            Avatar(initial = story.userName.firstOrNull()?.toString() ?: "?", size = 36, imageUrl = story.userAvatar, avatarType = story.userAvatarType, avatarParts = story.userAvatarParts)
             Spacer(Modifier.width(10.dp))
             Text(story.userName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         }

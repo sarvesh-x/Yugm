@@ -573,6 +573,15 @@ export const verifyOtpSchema = otpContactSchema.extend({
   otp: z.string().min(4).max(8)
 }).refine((value) => value.email || value.phone, "Email or phone is required");
 
+export const avatarPartsSchema = z.object({
+  background: z.number().int().min(0).max(47),
+  clothes: z.number().int().min(0).max(47),
+  head: z.number().int().min(0).max(47),
+  mouth: z.number().int().min(0).max(47),
+  eyes: z.number().int().min(0).max(47),
+  top: z.number().int().min(0).max(47)
+});
+
 export const profileSchema = z.object({
   name: z.string().trim().min(2).max(60),
   username: z.string().trim().min(3).max(24).regex(/^[a-z0-9_.]+$/i).transform(value => value.toLowerCase()),
@@ -586,7 +595,9 @@ export const profileSchema = z.object({
   interests: z.array(z.string().min(1).max(24)).default([]),
   hobbies: z.array(z.string().min(1).max(32)).max(16).default([]),
   languages: z.array(z.string().min(1).max(24)).default(["Hindi", "English"]),
-  avatar: z.string().url().optional(),
+  avatar: z.string().url().optional().nullable(),
+  avatarType: z.enum(["UPLOADED", "GENERATED", "DEFAULT"]).optional(),
+  avatarParts: avatarPartsSchema.optional().nullable(),
   interestedIn: z.string().max(32).optional(),
   lookingFor: z.enum(["Friendship", "Dating", "Relationship", "Networking"]).optional(),
   datingAgeMin: z.number().int().min(18).max(80).optional(),

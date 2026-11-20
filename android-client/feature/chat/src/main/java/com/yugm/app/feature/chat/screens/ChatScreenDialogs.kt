@@ -54,7 +54,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -146,6 +145,7 @@ import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 // Theme-aware palette is read via LocalYugmColors inside composables.
 
@@ -291,11 +291,7 @@ internal fun LightChatAction(
         contentAlignment = Alignment.Center
     ) {
         if (loading) {
-            androidx.compose.material3.CircularProgressIndicator(
-                modifier = Modifier.size(18.dp),
-                color = LocalYugmColors.current.textPrimary,
-                strokeWidth = 2.dp
-            )
+            YugmLoadingSpinner(size = 18.dp)
         } else {
             Icon(icon, contentDescription = null, tint = if (enabled) LocalYugmColors.current.textPrimary else LocalYugmColors.current.textSecondary, modifier = Modifier.size(20.dp))
             if (locked) {
@@ -685,7 +681,7 @@ internal fun ReactionPickerOverlay(
                         }
                     }
                     if (isReactionCatalogLoading && reactionCatalog.isEmpty()) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = LocalYugmColors.current.secondary)
+                        YugmLoadingSpinner(size = 18.dp)
                     }
                 }
             }
@@ -852,7 +848,7 @@ internal fun ForwardMessageDialog(
                                         .padding(horizontal = 10.dp, vertical = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Avatar(target.name.take(1), 38, target.avatar, target.activeCosmetics)
+                                    Avatar(target.name.take(1), 38, target.avatar, target.activeCosmetics, avatarType = target.avatarType, avatarParts = target.avatarParts)
                                     Column(Modifier.weight(1f).padding(start = 10.dp)) {
                                         Text(target.name.ifBlank { target.username.ifBlank { "User" } }, color = LocalYugmColors.current.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         if (target.username.isNotBlank()) Text("@${target.username}", color = LocalYugmColors.current.textSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)

@@ -24,7 +24,7 @@ export function setBondBackgroundTracker(track: (work: Promise<unknown>) => void
   trackBondBackground = track;
 }
 
-export const bondPeopleFields = "name username avatar age isBlocked suspendedUntil deletionRequestedAt bondInvitations";
+export const bondPeopleFields = "name username avatar avatarType avatarParts age isBlocked suspendedUntil deletionRequestedAt bondInvitations";
 export const idsFor = (pair: string) => pair.split(":");
 const open = (id: string) => ({ status: "ACTIVE", users: id });
 const pending = (id: string) => ({ status: "PENDING", $or: [{ senderId: id }, { recipientId: id }] });

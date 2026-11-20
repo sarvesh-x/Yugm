@@ -49,6 +49,15 @@ class MainViewModel @Inject constructor(
     var userEmail by mutableStateOf(sessionManager.userEmail)
         private set
 
+    var userAvatar by mutableStateOf(sessionManager.userAvatar.takeIf { it.isNotBlank() })
+        private set
+
+    var userAvatarType by mutableStateOf(sessionManager.userAvatarType.takeIf { it.isNotBlank() })
+        private set
+
+    var userAvatarPartsJson by mutableStateOf(sessionManager.userAvatarParts.takeIf { it.isNotBlank() })
+        private set
+
     var balance by mutableStateOf(sessionManager.balance)
         private set
 
@@ -134,18 +143,24 @@ class MainViewModel @Inject constructor(
         sessionId: String,
         expiresIn: Long,
         emailVerified: Boolean,
-        profileCompleted: Boolean
+        profileCompleted: Boolean,
+        avatar: String? = null,
+        avatarType: String? = null,
+        avatarPartsJson: String? = null,
     ) {
         this.authToken = token
         this.currentUserId = userId
         this.userName = name
         this.username = username
         this.userEmail = email
+        this.userAvatar = avatar?.takeIf { it.isNotBlank() }
+        this.userAvatarType = avatarType?.takeIf { it.isNotBlank() }
+        this.userAvatarPartsJson = avatarPartsJson?.takeIf { it.isNotBlank() }
         this.balance = balance
         this.emailVerified = emailVerified
         this.profileCompleted = profileCompleted
 
-        sessionManager.saveSession(token, refreshToken, sessionId, expiresIn, userId, name, username, balance, emailVerified, profileCompleted, email)
+        sessionManager.saveSession(token, refreshToken, sessionId, expiresIn, userId, name, username, balance, emailVerified, profileCompleted, email, avatar, avatarType, avatarPartsJson)
         socketManager.connect(token)
         syncPushToken()
     }
@@ -158,17 +173,30 @@ class MainViewModel @Inject constructor(
     fun validateAndUpdate(user: com.yugm.app.core.model.YugmUser, registerPush: Boolean = true) {
         userName = user.name
         username = user.username
-        // Several responses (public profiles, media mutations) omit the
-        // select-gated email. Keep the known address instead of blanking it.
         if (user.email.isNotBlank()) {
             userEmail = user.email
             sessionManager.userEmail = user.email
+        }
+        userAvatar = user.avatar?.takeIf { it.isNotBlank() }
+        userAvatarType = user.avatarType?.takeIf { it.isNotBlank() }
+        userAvatarPartsJson = user.avatarParts?.let {
+            org.json.JSONObject()
+                .put("background", it.background)
+                .put("clothes", it.clothes)
+                .put("head", it.head)
+                .put("mouth", it.mouth)
+                .put("eyes", it.eyes)
+                .put("top", it.top)
+                .toString()
         }
         balance = user.walletBalance
         emailVerified = user.emailVerified
         profileCompleted = user.profileCompleted
         sessionManager.userName = user.name
         sessionManager.username = user.username
+        sessionManager.userAvatar = user.avatar.orEmpty()
+        sessionManager.userAvatarType = user.avatarType.orEmpty()
+        sessionManager.userAvatarParts = userAvatarPartsJson.orEmpty()
         sessionManager.balance = user.walletBalance
         sessionManager.emailVerified = user.emailVerified
         sessionManager.profileCompleted = user.profileCompleted
@@ -235,7 +263,10 @@ class MainViewModel @Inject constructor(
             walletBalance = sessionManager.balance,
             emailVerified = sessionManager.emailVerified,
             profileCompleted = sessionManager.profileCompleted,
-            email = sessionManager.userEmail
+            email = sessionManager.userEmail,
+            avatar = sessionManager.userAvatar.takeIf { it.isNotBlank() },
+            avatarType = sessionManager.userAvatarType.takeIf { it.isNotBlank() },
+            avatarPartsJson = sessionManager.userAvatarParts.takeIf { it.isNotBlank() }
         )
     }
 
@@ -261,6 +292,9 @@ class MainViewModel @Inject constructor(
         userName = "Yugm User"
         username = "vibe_user"
         userEmail = ""
+        userAvatar = null
+        userAvatarType = null
+        userAvatarPartsJson = null
         balance = 0
         emailVerified = false
         profileCompleted = false

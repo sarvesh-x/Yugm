@@ -25,6 +25,7 @@ import com.yugm.app.core.ui.theme.*
 import com.yugm.app.ui.viewmodel.WingmanAction
 import com.yugm.app.ui.viewmodel.WingmanTab
 import com.yugm.app.ui.viewmodel.WingmanViewModel
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -116,7 +117,7 @@ private fun LoadingOverlay(isLoading: Boolean, content: @Composable () -> Unit) 
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
             ) {
-                CircularProgressIndicator(color = PrimaryPink)
+                YugmLoadingSpinner(size = 40.dp)
             }
         }
     }

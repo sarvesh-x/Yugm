@@ -227,7 +227,9 @@ private fun ReferralDetailCard(detail: ReferralDetail) {
             Avatar(
                 initial = userName.firstOrNull()?.toString() ?: "?",
                 size = 42,
-                imageUrl = userAvatar
+                imageUrl = userAvatar,
+                avatarType = detail.referredUserId?.avatarType,
+                avatarParts = detail.referredUserId?.avatarParts
             )
             Column(Modifier.weight(1f)) {
                 Text(userName, color = TextPrimary, fontWeight = FontWeight.Bold)

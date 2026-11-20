@@ -20,17 +20,17 @@ feedRouter.get("/feed", requireAuth, asyncHandler(async (req: AuthRequest, res) 
 
   const activities = await RoomActivity.find({ userId: { $in: relevantIds } })
     .sort({ createdAt: -1 }).limit(30)
-    .populate("userId", "name username avatar").populate("roomId", "title")
+    .populate("userId", "name username avatar avatarType avatarParts").populate("roomId", "title")
     .lean();
 
   const friendStories = await Story.find({ userId: { $in: friendIds }, status: "ACTIVE", expiresAt: { $gt: new Date() } })
     .sort({ createdAt: -1 }).limit(10)
-    .populate("userId", "name username avatar")
+    .populate("userId", "name username avatar avatarType avatarParts")
     .lean();
 
   const friendRooms = await Room.find({ hostId: { $in: relevantIds }, status: "LIVE" })
     .sort({ participantCount: -1 }).limit(10)
-    .populate("hostId", "name username avatar")
+    .populate("hostId", "name username avatar avatarType avatarParts")
     .lean();
 
   const feed = [

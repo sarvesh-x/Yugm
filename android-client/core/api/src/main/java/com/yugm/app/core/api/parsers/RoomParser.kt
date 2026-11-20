@@ -43,6 +43,17 @@ fun JSONObject.toHost(): Host = Host(
     diamondBalance = optInt("diamondBalance", 0),
     bio = optString("bio", ""),
     avatar = if (has("avatar") && !isNull("avatar")) resolveMediaUrl(optString("avatar", "")) else null,
+    avatarType = optString("avatarType", "").takeIf { it.isNotBlank() },
+    avatarParts = optJSONObject("avatarParts")?.let { parts ->
+        com.yugm.app.core.model.AvatarPartsPayload(
+            background = parts.optInt("background", 0),
+            clothes = parts.optInt("clothes", 0),
+            head = parts.optInt("head", 0),
+            mouth = parts.optInt("mouth", 0),
+            eyes = parts.optInt("eyes", 0),
+            top = parts.optInt("top", 0)
+        )
+    },
     isVip = optBoolean("isVip", false),
     vipTier = optString("vipTier", ""),
     vipLevel = optInt("vipLevel", 0),
@@ -139,7 +150,18 @@ fun JSONObject.toRoomChatMessage(): ChatMessage {
             if (opt("senderId") is JSONObject) sender.optString("_id", sender.optString("id", "")) else optString("senderId", "")
         } else "",
         author = sender.optString("name", optString("senderName", "User")),
-        authorAvatar = sender.optString("avatar", "").ifBlank { null },
+        authorAvatar = sender.optString("avatar", "").ifBlank { null }?.let { resolveMediaUrl(it) ?: it },
+        authorAvatarType = sender.optString("avatarType", "").ifBlank { null },
+        authorAvatarParts = sender.optJSONObject("avatarParts")?.let { parts ->
+            com.yugm.app.core.model.AvatarPartsPayload(
+                background = parts.optInt("background", 0),
+                clothes = parts.optInt("clothes", 0),
+                head = parts.optInt("head", 0),
+                mouth = parts.optInt("mouth", 0),
+                eyes = parts.optInt("eyes", 0),
+                top = parts.optInt("top", 0)
+            )
+        },
         text = optString("message", ""),
         mediaUrl = optString("mediaUrl", "").ifBlank { null },
         mediaType = optString("mediaType", "").ifBlank { null },
@@ -211,17 +233,31 @@ fun JSONArray.toRoomMissions(): List<RoomMission> = buildList {
     for (index in 0 until length()) add(getJSONObject(index).toRoomMission())
 }
 
-fun JSONObject.toRoomActivityItem(): RoomActivityItem = RoomActivityItem(
-    id = optString("_id", optString("id", "")),
-    label = optString("label", ""),
-    type = optString("type", ""),
-    createdAt = optString("createdAt", ""),
-    userId = optJSONObject("userId")?.entityId() ?: optString("userId", ""),
-    userName = optJSONObject("metadata")?.optString("userName", "") ?: "",
-    avatar = optJSONObject("metadata")?.optString("avatar", "")?.ifBlank { null },
-    roomEntry = optJSONObject("metadata")?.optString("roomEntry", "") ?: "",
-    entranceEffect = optJSONObject("metadata")?.optString("entranceEffect", "") ?: ""
-)
+fun JSONObject.toRoomActivityItem(): RoomActivityItem {
+    val metadata = optJSONObject("metadata")
+    return RoomActivityItem(
+        id = optString("_id", optString("id", "")),
+        label = optString("label", ""),
+        type = optString("type", ""),
+        createdAt = optString("createdAt", ""),
+        userId = optJSONObject("userId")?.entityId() ?: optString("userId", ""),
+        userName = metadata?.optString("userName", "") ?: "",
+        avatar = metadata?.optString("avatar", "")?.ifBlank { null }?.let { resolveMediaUrl(it) ?: it },
+        avatarType = metadata?.optString("avatarType", "")?.ifBlank { null },
+        avatarParts = metadata?.optJSONObject("avatarParts")?.let { parts ->
+            com.yugm.app.core.model.AvatarPartsPayload(
+                background = parts.optInt("background", 0),
+                clothes = parts.optInt("clothes", 0),
+                head = parts.optInt("head", 0),
+                mouth = parts.optInt("mouth", 0),
+                eyes = parts.optInt("eyes", 0),
+                top = parts.optInt("top", 0)
+            )
+        },
+        roomEntry = metadata?.optString("roomEntry", "") ?: "",
+        entranceEffect = metadata?.optString("entranceEffect", "") ?: ""
+    )
+}
 
 fun JSONArray.toRoomActivityItems(): List<RoomActivityItem> = buildList {
     for (index in 0 until length()) add(getJSONObject(index).toRoomActivityItem())

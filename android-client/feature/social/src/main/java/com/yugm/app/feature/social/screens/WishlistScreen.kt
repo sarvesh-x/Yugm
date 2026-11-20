@@ -26,7 +26,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -65,6 +64,7 @@ import com.yugm.app.core.ui.theme.Danger
 import com.yugm.app.feature.social.viewmodel.SocialViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 @Composable
 fun WishlistScreen(
@@ -219,7 +219,7 @@ fun WishlistScreen(
             title = { Text("Choose a gift", color = TextPrimary, fontWeight = FontWeight.Black) },
             text = {
                 when {
-                    giftsLoading -> CircularProgressIndicator()
+                    giftsLoading -> YugmLoadingSpinner(size = 40.dp)
                     gifts.isEmpty() -> Text(giftsError ?: "No gifts are available right now.", color = TextMuted)
                     else -> LazyColumn(Modifier.heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(gifts, key = { it.id }) { gift ->

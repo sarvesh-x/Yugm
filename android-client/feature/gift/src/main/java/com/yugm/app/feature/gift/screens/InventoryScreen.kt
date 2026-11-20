@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -55,6 +54,7 @@ import com.yugm.app.core.api.YugmApi
 import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.feature.gift.viewmodel.GiftViewModel
 import kotlinx.coroutines.launch
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 private enum class InventoryFilter { ALL, TRADABLE, UPGRADEABLE }
 private enum class InventoryTab { GIFTS, COSMETICS, BADGES }
@@ -238,7 +238,7 @@ fun InventoryScreen(
                 when {
                     state.isLoading && state.inventory.isEmpty() -> {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = colors.primary)
+                            YugmLoadingSpinner(size = 40.dp)
                         }
                     }
                     state.error != null && state.inventory.isEmpty() -> {

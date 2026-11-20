@@ -25,7 +25,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -51,6 +50,7 @@ import com.yugm.app.core.model.BattlePassTrackReward
 import com.yugm.app.core.model.SeasonReward
 import com.yugm.app.core.ui.theme.LocalYugmColors
 import kotlinx.coroutines.launch
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 @Composable
 fun BattlePassScreen(token: String, onBack: () -> Unit) {
@@ -86,7 +86,7 @@ fun BattlePassScreen(token: String, onBack: () -> Unit) {
         }
 
         when {
-            isLoading && data == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = colors.primary) }
+            isLoading && data == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { YugmLoadingSpinner(size = 40.dp) }
             data == null -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(error ?: "Season information is unavailable.", color = colors.textSecondary)

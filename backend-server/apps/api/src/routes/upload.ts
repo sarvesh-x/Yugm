@@ -194,7 +194,7 @@ uploadRouter.post("/upload/avatar", requireAuth, upload.single("avatar"), asyncH
     stored = await persistUploadedFile(file, "avatars");
     await User.updateOne(
       { _id: req.user!._id },
-      { $set: { avatar: stored.url, "activeCosmetics.avatarAsset": "" } }
+      { $set: { avatar: stored.url, avatarType: "UPLOADED", "activeCosmetics.avatarAsset": "" }, $unset: { avatarParts: "" } }
     );
 
     const previousKey = managedAvatarKeyFromUrl(previousAvatar);

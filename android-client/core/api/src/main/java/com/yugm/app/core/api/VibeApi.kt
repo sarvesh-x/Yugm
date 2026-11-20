@@ -51,7 +51,18 @@ object VibeApi {
                 VibeTargetUser(
                     id = it.optString("_id", ""),
                     name = it.optString("name", ""),
-                    avatar = it.optString("avatar", "").ifBlank { null },
+                    avatar = it.optString("avatar", "").ifBlank { null }?.let { url -> resolveMediaUrl(url) ?: url },
+                    avatarType = it.optString("avatarType", "").ifBlank { null },
+                    avatarParts = it.optJSONObject("avatarParts")?.let { parts ->
+                        com.yugm.app.core.model.AvatarPartsPayload(
+                            background = parts.optInt("background", 0),
+                            clothes = parts.optInt("clothes", 0),
+                            head = parts.optInt("head", 0),
+                            mouth = parts.optInt("mouth", 0),
+                            eyes = parts.optInt("eyes", 0),
+                            top = parts.optInt("top", 0)
+                        )
+                    },
                     username = it.optString("username", ""),
                     level = it.optInt("level", 1),
                     levelTitle = it.optString("levelTitle", "New Vibe")
@@ -72,7 +83,18 @@ object VibeApi {
                     user = VibeTargetUser(
                         id = user?.optString("_id", "") ?: "",
                         name = user?.optString("name", "") ?: "",
-                        avatar = user?.optString("avatar", "")?.ifBlank { null },
+                        avatar = user?.optString("avatar", "")?.ifBlank { null }?.let { url -> resolveMediaUrl(url) ?: url },
+                        avatarType = user?.optString("avatarType", "")?.ifBlank { null },
+                        avatarParts = user?.optJSONObject("avatarParts")?.let { parts ->
+                            com.yugm.app.core.model.AvatarPartsPayload(
+                                background = parts.optInt("background", 0),
+                                clothes = parts.optInt("clothes", 0),
+                                head = parts.optInt("head", 0),
+                                mouth = parts.optInt("mouth", 0),
+                                eyes = parts.optInt("eyes", 0),
+                                top = parts.optInt("top", 0)
+                            )
+                        },
                         username = user?.optString("username", "") ?: "",
                         level = user?.optInt("level", 1) ?: 1,
                         levelTitle = user?.optString("levelTitle", "New Vibe") ?: "New Vibe"

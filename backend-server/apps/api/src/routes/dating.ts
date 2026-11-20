@@ -125,6 +125,8 @@ datingRouter.get("/explore", requireNotShadowBanned, asyncHandler(async (req: Au
       name: candidate.name,
       username: candidate.username,
       avatar: candidate.avatar,
+      avatarType: candidate.avatarType,
+      avatarParts: candidate.avatarParts,
       age: candidate.age,
       gender: candidate.gender,
       city: candidate.city,
@@ -269,7 +271,7 @@ datingRouter.get("/matches", asyncHandler(async (req: AuthRequest, res) => {
   // Fetch user profiles for partners
   const partners = await User.find({
     _id: { $in: partnerIds }
-  }).select("name username avatar city bio interests languages activeCosmetics vipTier vipStartedAt vipExpiresAt").lean();
+  }).select("name username avatar avatarType avatarParts city bio interests languages activeCosmetics vipTier vipStartedAt vipExpiresAt").lean();
 
   // Map back matching documents with details
   const formattedMatches = await Promise.all(matches.map(async (m) => {
@@ -289,6 +291,8 @@ datingRouter.get("/matches", asyncHandler(async (req: AuthRequest, res) => {
         name: partner.name,
         username: partner.username,
         avatar: partner.avatar,
+        avatarType: partner.avatarType,
+        avatarParts: partner.avatarParts,
         city: partner.city,
         bio: partner.bio,
         activeCosmetics: partner.activeCosmetics,

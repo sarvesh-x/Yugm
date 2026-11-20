@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -60,6 +59,7 @@ import com.yugm.app.core.ui.theme.LocalYugmColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -126,7 +126,7 @@ fun FollowedRoomsScreen(
     ) { padding ->
         when {
             loading && rooms.isEmpty() -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = colors.primary)
+                YugmLoadingSpinner(size = 40.dp)
             }
             error != null && rooms.isEmpty() -> Column(
                 Modifier.fillMaxSize().padding(padding).padding(28.dp),
@@ -193,7 +193,7 @@ fun FollowedRoomsScreen(
                                 }
                                 Spacer(Modifier.weight(1f))
                                 TextButton(onClick = { unfollow(room) }, enabled = busyRoomId != room.id) {
-                                    if (busyRoomId == room.id) CircularProgressIndicator(Modifier.size(15.dp), color = colors.textSecondary, strokeWidth = 2.dp)
+                                    if (busyRoomId == room.id) YugmLoadingSpinner(size = 15.dp)
                                     else Text("Remove", color = colors.textSecondary, fontSize = 12.sp)
                                 }
                                 if (isLive) {

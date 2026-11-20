@@ -8,7 +8,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import com.yugm.app.core.ui.theme.*
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 @Composable
 fun SplashScreen(onTimeout: suspend () -> Unit) {
@@ -106,11 +106,7 @@ fun SplashScreen(onTimeout: suspend () -> Unit) {
             )
             if (showProgress) {
                 Spacer(modifier = Modifier.height(20.dp))
-                CircularProgressIndicator(
-                    color = colors.accent,
-                    modifier = Modifier.size(24.dp),
-                    strokeWidth = 2.dp
-                )
+                YugmLoadingSpinner(size = 24.dp)
             }
         }
     }

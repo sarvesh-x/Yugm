@@ -108,6 +108,18 @@ class SessionManager @Inject constructor(
         get() = cached("userEmail") { prefs.getString("userEmail", "") ?: "" }
         set(value) = writeString("userEmail", value)
 
+    var userAvatar: String
+        get() = cached("userAvatar") { prefs.getString("userAvatar", "") ?: "" }
+        set(value) = writeString("userAvatar", value)
+
+    var userAvatarType: String
+        get() = cached("userAvatarType") { prefs.getString("userAvatarType", "") ?: "" }
+        set(value) = writeString("userAvatarType", value)
+
+    var userAvatarParts: String
+        get() = cached("userAvatarParts") { prefs.getString("userAvatarParts", "") ?: "" }
+        set(value) = writeString("userAvatarParts", value)
+
     var balance: Int
         get() = cached("balance") { prefs.getInt("balance", 0) }
         set(value) = writeInt("balance", value)
@@ -134,8 +146,14 @@ class SessionManager @Inject constructor(
         emailVerified: Boolean,
         profileCompleted: Boolean = false,
         email: String = "",
+        avatar: String? = null,
+        avatarType: String? = null,
+        avatarPartsJson: String? = null,
     ) {
         val expiresAt = System.currentTimeMillis() + expiresInSeconds * 1000L
+        val avatarValue = avatar.orEmpty()
+        val avatarTypeValue = avatarType.orEmpty()
+        val avatarPartsValue = avatarPartsJson.orEmpty()
         prefs.edit()
             .putString("authToken", token)
             .putString("refreshToken", refresh)
@@ -145,6 +163,9 @@ class SessionManager @Inject constructor(
             .putString("userName", name)
             .putString("username", handle)
             .putString("userEmail", email)
+            .putString("userAvatar", avatarValue)
+            .putString("userAvatarType", avatarTypeValue)
+            .putString("userAvatarParts", avatarPartsValue)
             .putInt("balance", walletBalance)
             .putBoolean("emailVerified", emailVerified)
             .putBoolean("profileCompleted", profileCompleted)
@@ -157,6 +178,9 @@ class SessionManager @Inject constructor(
         cache["userName"] = name
         cache["username"] = handle
         cache["userEmail"] = email
+        cache["userAvatar"] = avatarValue
+        cache["userAvatarType"] = avatarTypeValue
+        cache["userAvatarParts"] = avatarPartsValue
         cache["balance"] = walletBalance
         cache["emailVerified"] = emailVerified
         cache["profileCompleted"] = profileCompleted

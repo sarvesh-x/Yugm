@@ -118,7 +118,7 @@ internal fun ChatScreenHeader(
                     partner?.id?.takeIf(String::isNotBlank)?.let(onOpenProfile)
                 }
             ) {
-                Avatar(partner?.name?.take(1) ?: "?", 34, partner?.avatar, partner?.activeCosmetics ?: ActiveCosmetics(), accessibilityLabel = stringResource(com.yugm.app.feature.chat.R.string.a11y_profile_picture, partner?.name ?: defaultMatchName))
+                Avatar(partner?.name?.take(1) ?: "?", 34, partner?.avatar, partner?.activeCosmetics ?: ActiveCosmetics(), avatarType = partner?.avatarType, avatarParts = partner?.avatarParts, accessibilityLabel = stringResource(com.yugm.app.feature.chat.R.string.a11y_profile_picture, partner?.name ?: defaultMatchName))
                 if (partner?.isOnline == true) {
                     Box(
                         Modifier

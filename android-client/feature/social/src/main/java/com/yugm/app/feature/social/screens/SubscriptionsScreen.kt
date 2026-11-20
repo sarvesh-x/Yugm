@@ -132,7 +132,7 @@ fun SubscriptionsScreen(
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                                         ) {
-                                            Avatar(initial = creator.name.firstOrNull()?.toString() ?: "?", size = 46, imageUrl = creator.avatar)
+                                            Avatar(initial = creator.name.firstOrNull()?.toString() ?: "?", size = 46, imageUrl = creator.avatar, avatarType = creator.avatarType, avatarParts = creator.avatarParts)
                                             Column(Modifier.weight(1f)) {
                                                 Text(creator.name, color = TextPrimary, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                                 Text("Plan: ${sub.plan}", color = TextMuted, fontSize = 12.sp)
@@ -176,7 +176,7 @@ fun SubscriptionsScreen(
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                                         ) {
-                                            Avatar(initial = user.name.firstOrNull()?.toString() ?: "?", size = 46, imageUrl = user.avatar)
+                                            Avatar(initial = user.name.firstOrNull()?.toString() ?: "?", size = 46, imageUrl = user.avatar, avatarType = user.avatarType, avatarParts = user.avatarParts)
                                             Column(Modifier.weight(1f)) {
                                                 Text(user.name, color = TextPrimary, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                                 Text("Plan: ${info.plan}", color = TextMuted, fontSize = 12.sp)

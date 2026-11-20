@@ -1,5 +1,136 @@
 ﻿# Development progress
 
+## 2026-11-20 -- Integrate Multiavatar generation/customization (continuation 17, in progress)
+
+- **Android SVG rendering repair (source):** registered `coil.decode.SvgDecoder.Factory()` in `YugmApplication` ImageLoader and added `coil-svg` to `:app`; reworked `GeneratedAvatar` for shared engine/cache, async cached SVG rendering, explicit SVG `ImageRequest`/decoder config, and fallback container.
+- **Avatar dialog redesign (source):** redesigned `AvatarGeneratorDialog` with compact premium Material3/Yugm-token layout, icon-based 6-category selector (Hair/Face/Eyes/Mouth/Clothes/Background), decorative preview, randomize/shuffle/reset actions, lazy 4-column thumbnails with selected border/checkmark, and fixed primary confirm action (close/back/outside cancel preserves prior selection).
+- **Backend cleanup:** `users.ts` account tombstone delete now unsets `avatarType`/`avatarParts`.
+- **Verification (run):** Android `:core:ui:compileDebugKotlin :app:compileDebugKotlin` **BUILD SUCCESSFUL**; final `:app:compileDebugKotlin` consistency check **BUILD SUCCESSFUL** (`JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'`, `--console=plain --max-workers=2`). Backend `node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit` **exit 0**.
+- **Not run / blocking for runtime claim:** device/emulator verification of SVG preview/thumbnail rendering, HWUI/logcat behavior, all 6 categories, lazy/cached thumbnail behavior, stale-preview prevention, cancel/confirm flow in create/edit profile, light/dark/small-screen/a11y checks.
+- **Not run / remaining:** tests/lint/release, perf/memory/APK size, live backend/socket/migration checks, systematic parity audit, licensing provenance/notices (blocking), diff cleanup.
+
+## 2026-11-20 -- Integrate Multiavatar generation/customization (continuation 16, in progress)
+
+- **Backend profile validation parity (functional):** `packages/shared` `profileSchema` now accepts `avatarType`, `avatarParts` (0–47 ints), and nullable `avatar`, preventing `validateBody(profileSchema.partial())` on PATCH profile routes from stripping generated-avatar descriptors before `profileUpdate` service handling.
+- **Docs:** updated `docs/features/avatar/API_CONTRACT.md` and `docs/features/avatar/README.md`.
+- **Verification (run):** Backend `node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit` **exit 0**. `node --test apps/api/src/services/authProfileContract.test.ts` **2/2 passed**. Direct TS-source runs of `profileCompletion.test.ts`/`profileFeatures.test.ts` failed in this env due ESM `.js` sibling resolution (not this change). Android not modified.
+- **Not run / remaining:** full backend test suite, systematic app-wide/backend/socket parity audit, licensing provenance/notices (blocking), semantics verification, Android/tests/lint/release, runtime visual-SVG-a11y QA, perf/size, migration/backward-compat checks, and diff cleanup.
+
+## 2026-11-20 -- Integrate Multiavatar generation/customization (continuation 15, in progress)
+
+- **Backend leaderboard parity:** `giftLeaderboard.ts` top-senders/top-receivers `$project` stages now include `user.avatarType`/`user.avatarParts`.
+- **Verification (run):** Backend `node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit` **exit 0**. Android not modified.
+- **Not run / remaining:** systematic app-wide/backend/socket parity audit, licensing provenance/notices (blocking), semantics verification, tests/lint/release, runtime visual-SVG-a11y QA, perf/size, migration/backward-compat checks, and diff cleanup.
+
+## 2026-11-20 -- Integrate Multiavatar generation/customization (continuation 14, in progress)
+
+- **Backend admin parity:** `admin.ts` referral-stats top-referrers `$project` now includes `user.avatarType`/`user.avatarParts`.
+- **Docs:** updated `docs/features/avatar/README.md` handoff reference and provenance-gap note.
+- **Verification (run):** Backend `node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit` **exit 0**. Android not modified (docs-only edits aside).
+- **Not run / remaining:** systematic app-wide/backend/socket parity audit, licensing provenance/notices (blocking), semantics verification, tests/lint/release, runtime visual-SVG-a11y QA, perf/size, migration/backward-compat checks, and diff cleanup.
+
+## 2026-11-20 -- Integrate Multiavatar generation/customization (continuation 13, in progress)
+
+- **Provenance/licensing status docs (factual):** added `core/ui/avatar/UPSTREAM_PROVENANCE.md` and provenance comments in `MultiAvatar.kt`, `MultiavatarEngine.kt`, `ValueObjectCreator.kt`; updated `docs/features/avatar/LICENSING.md`. No upstream commit/version or license notices fabricated.
+- **Verification (run):** Android `.\\gradlew.bat :core:ui:compileDebugKotlin --console=plain --max-workers=2` **BUILD SUCCESSFUL** (`JAVA_HOME='C:\\Program Files\\Android\\Android Studio\\jbr'`).
+- **Not run / remaining:** other-module compiles/tests/lint/release, backend verification, systematic parity/socket semantics audit, verified upstream commit/licenses/notices, runtime visual-SVG-a11y QA, perf/size, migration/backward-compat checks, and diff cleanup.
+
+## 2026-11-20 -- Integrate Multiavatar generation/customization (continuation 12, in progress)
+
+- **Audit-only (no source changes):** reviewed plan/licensing-provenance requirements and repo state (no pinned upstream `mew22/Multiavatar` commit/version or LICENSE/NOTICE files in integrated avatar paths; engine files lack upstream headers). Scanned for profile-updated socket events in backend/shared/android (none found in scanned paths). Spot-checked backend avatar payload grep hits as largely line-based false positives after prior fixes.
+- **Blocker:** licensing/provenance cannot be completed from repo state alone without verified upstream source/commit and license details.
+- **Verification (run):** none (audit-only).
+- **Not run / remaining:** systematic app-wide/backend/socket parity audit, licensing provenance/notices, semantics verification, tests/lint/release, runtime visual-SVG-a11y QA, perf/size, migration/backward-compat/runtime checks, and diff cleanup.
+
+## 2026-11-20 -- Integrate Multiavatar generation/customization (continuation 11, in progress)
+
+- **Backend realtime/activity parity:** `rooms.ts` JOIN/LEAVE `RoomActivity` metadata (emitted via `roomActivityNew`) now includes `avatarType`/`avatarParts` with existing user avatar/name fields.
+- **Audit:** other `addActivity` call sites in `rooms.ts` do not currently include user avatar metadata; gift chat message sender population in `wallet.ts` already includes descriptors.
+- **Verification (run):** Backend `node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit` **exit 0**. Android not modified.
+- **Not run / remaining:** systematic app-wide/backend/socket parity audit, licensing provenance/notices, tests/lint/release, runtime visual-SVG-a11y QA, perf/size, migration/backward-compat/runtime checks, and diff cleanup.
+
+## 2026-11-20 -- Integrate Multiavatar generation/customization (continuation 10, in progress)
+
+- **Audit-only (no source changes):** Android parser/`Avatar(...)` scans found no additional descriptor gaps in scanned user-avatar contexts; backend spot-check confirmed `pk` discovery payload includes host descriptors.
+- **Licensing/provenance:** “Avatars by Multiavatar” present in `feature/settings` About UI source, but no pinned upstream `mew22/Multiavatar` commit/version and no LICENSE/NOTICE files for integrated engine/artwork found in repo; remains incomplete/blocking per plan.
+- **Verification (run):** none (audit-only).
+- **Not run / remaining:** systematic app-wide/backend/socket parity audit, licensing provenance/notices, tests/lint/release, runtime visual-SVG-a11y QA, perf/size, migration/backward-compat/runtime checks, and diff cleanup.
+
+## 2026-11-20 -- Integrate Multiavatar generation/customization (continuation 9, in progress)
+
+- **Backend parity (targeted):** `experience.ts` local `publicUser` and badge-gallery user payload now include `avatarType`/`avatarParts`; `games.ts` leaderboard aggregate projects user avatar descriptors.
+- **Android audit:** targeted `Avatar(...)` scan reviewed flagged cases (uploaded/cover/clan-entity/non-user contexts or already-descriptorized call sites); no additional Android source fixes applied.
+- **Verification (run):** Backend `node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit` **exit 0**. Android not modified/re-run (continuation 8 compile **BUILD SUCCESSFUL**).
+- **Not run / remaining:** systematic app-wide model/parser/API/UI/socket parity audit, licensing/provenance/notices, tests/lint/release, runtime visual-SVG-a11y QA, perf/size, migration/backward-compat/runtime checks, and diff cleanup.
+
+## 2026-11-20 -- Integrate Multiavatar generation/customization (continuation 8, in progress)
+
+- **Chat self-avatar plumbing:** `MessageBubble`/`ChatTimelineMessageItem`/`ChatScreen`/`ChatNavGraph` now accept and forward session/self avatar descriptors for outgoing message avatars; app `NavGraph` passes `MainViewModel` avatar fields (parsed `userAvatarPartsJson`) into chat navigation.
+- **Profile customization preview:** `CustomizeProfileScreen` live preview passes `userProfile` avatar descriptors to `Avatar`.
+- **Backend:** no source changes this continuation; spot-checked auth and dating payloads include avatar descriptors.
+- **Verification (run):** Android `.\gradlew.bat :feature:chat:compileDebugKotlin :feature:profile:compileDebugKotlin :app:compileDebugKotlin --console=plain --max-workers=2` **BUILD SUCCESSFUL** (`JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'`, warnings only).
+- **Not run / remaining:** other-module compiles/tests/lint/release, runtime/device visual-SVG-a11y QA, perf/size, full model/parser/API/socket parity audit, licensing provenance/notices, and diff cleanup.
+
+## 2026-11-20 -- Integrate Multiavatar generation/customization (continuation 7, in progress)
+
+- **Shared components:** Extended `SeatCard`, `VideoTile`, `SpeakerGrid`, and `VideoGrid` in `core/ui/components/SharedComponents.kt` to accept/pass avatar descriptors.
+- **UI propagation:** Passed descriptors in profile clan details (`ProfileDetailScreen`), voice-room mic-seat participant (`ActiveVoiceRoomScreen`), and both blocked-users screens (`feature:settings`, `feature:social`).
+- **Backend:** no source changes this continuation.
+- **Verification (run):** Android `.\gradlew.bat :core:ui:compileDebugKotlin :feature:profile:compileDebugKotlin :feature:room:compileDebugKotlin :feature:settings:compileDebugKotlin :feature:social:compileDebugKotlin --console=plain --max-workers=2` **BUILD SUCCESSFUL** (`JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'`, warnings only).
+- **Not run / remaining:** `:app`/other-module compiles this continuation, tests/lint/release, runtime/device visual-SVG-a11y QA, perf/size, full model/parser/API/socket parity audit, licensing provenance/notices, and diff cleanup.
+
+## 2026-11-20 -- Integrate Multiavatar generation/customization (continuation 6, in progress)
+
+- **Android UI propagation:** Passed avatar descriptors in additional surfaces - `NavGraph` minimized room bubble, `GiftPanel`, room header/voice/video participant and entry-overlay avatars, clan chat/detail/list, waves, level leaderboard, achievements badge gallery, vibe graph matches, matches, subscriptions, dating discovery candidate/partner fallbacks. Extended bonds `BondPerson`/parsing and `BondAvatar` to carry/render descriptors.
+- **Settings self-avatar:** `SettingsScreen`/`SettingsHome` now render session avatar descriptors; `SettingsNavGraph` and app `NavGraph` pass `MainViewModel` session avatar fields (including parsed `userAvatarPartsJson`).
+- **Backend:** no source changes this continuation (continuation 5 payload/parity edits remain in source).
+- **Verification (run):** Android `.\gradlew.bat :core:ui:compileDebugKotlin :feature:room:compileDebugKotlin :feature:social:compileDebugKotlin :feature:settings:compileDebugKotlin :feature:discover:compileDebugKotlin :feature:profile:compileDebugKotlin :app:compileDebugKotlin --console=plain --max-workers=2` **BUILD SUCCESSFUL** (`JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'`, warnings only). Backend not modified/re-run (continuation 5 `tsc` **exit 0**).
+- **Not run / remaining:** full app-wide model/parser/UI/socket propagation and parity audit, migration/backward-compat verification, licensing provenance and preserved notices, tests/lint/release/runtime visual-SVG-a11y/perf/size checks, and diff cleanup (widespread unrelated whitespace-only tracked diffs remain).
+
+## 2026-11-20 -- Integrate Multiavatar generation/customization (continuation 5, in progress)
+
+- **Android models/parsers/APIs:** Added avatar descriptors to clan/group models (`Clan`, `ClanSummary`, `ClanInvitation` clan avatar, `ClanRankingEntry`) and updated `SocialParser`, `ClanApi`, and `CreatorApi` badge-gallery parsing. Builds on prior `AvatarFieldParser` and Events/Feed/Social/Vibe/Subscriptions/Referral/Room API coverage.
+- **UI consumer updates:** Passed descriptors in selected surfaces — `FriendsScreen` (friends/requests/sent), `GiftLeaderboardScreen` (room hosts, podiums, rows), `DiscoverScreen` host cards, chat partner typing and forward-target avatars, and `ActiveVoiceRoomScreen` selected participant/invite/follower/user avatars.
+- **Backend/API parity:** Added avatar descriptor fields to bond people payloads (`services/bonds.ts`, `routes/bonds.ts`), vibe match target/match user responses, users level-overview leaderboard and recommended-chat projection/response, PK side/member/opponent payloads, and dating explore/match partner responses.
+- **Verification (run):** Android targeted compiles **BUILD SUCCESSFUL** — `:core:api :feature:chat :feature:social :feature:discover :feature:room` and `:core:api` recheck (`JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'`, `--console=plain --max-workers=2`, warnings only). Backend `node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit` **exit 0**.
+- **Not run / remaining:** full app-wide model/parser/UI/socket propagation and parity audit, migration/backward-compat verification, licensing provenance and preserved notices, tests/lint/release/runtime visual-SVG-a11y/perf/size checks, and diff cleanup (widespread unrelated whitespace-only tracked diffs remain).
+
+## 2026-11-20 -- Integrate Multiavatar generation/customization (continuation 4, in progress)
+
+## 2026-11-20 -- Integrate Multiavatar generation/customization (continuation 3, in progress)
+
+- **Model/parser expansion:** Added avatar descriptor fields to additional non-Host models: room chat `ChatMessage.authorAvatar*`, `RoomActivityItem`, `RoomRecording`/`YugmEvent` host avatars, story user/item/comment avatars, `FeedUser`, PK side/member/opponent/leaderboard avatars, `WaveSender`/`DailyQuestionAnswer`/`VoicePoll` user avatars, `VibeTargetUser`, `BadgeGallery`, `SubscriptionCreator`. Updated selected parsers/APIs to populate descriptors (`RoomParser` chat/activity, `PkParser`, `StoryApi`, `RecordingsApi`) alongside prior `FriendsApi`/`GiftLeaderboardApi`/`ClanApi`/`ProfileParser`/`RoomParser.toHost` work.
+- **UI consumer updates:** Passed descriptors to key `Avatar(...)` consumers in PK components, recordings list/player, story viewer, events list/detail, daily question answers, voice poll, and referral detail.
+- **Verification (run):** `android-client` `.\gradlew.bat :core:model:compileDebugKotlin :core:api:compileDebugKotlin :core:data:compileDebugKotlin --console=plain --max-workers=2` **BUILD SUCCESSFUL** and `.\gradlew.bat :app:compileDebugKotlin --console=plain --max-workers=2` **BUILD SUCCESSFUL** (`JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'`).
+- **Not run / remaining:** many API parsers/clients still omit descriptors (events/feed/social/vibe/subscriptions/discover/match/notification/etc.), many UI consumers (chat rendering, room activity/feed/discover/matches/clans/notifications/leaderboards and other surfaces) still don’t pass them, backend/socket/event payload parity and migration/backward-compat audit incomplete, licensing/attribution and `docs/features/avatar/*` missing, and tests/lint/release/runtime-visual-SVG/perf/size checks not run. Working tree remains heavily modified/uncommitted with unrelated whitespace-only diffs.
+
+## 2026-11-20 -- Integrate Multiavatar generation/customization (continuation 2, in progress)
+
+- **Session/core plumbing:** Extended `YugmUser` (`core:model`) with `avatar`/`avatarType`/`avatarParts`; updated `ProfileParser.toUser()` and `RoomParser.toHost()`-aligned parsing; persisted/restored session avatar fields in `SessionManager`; updated `MainViewModel` and `NavGraph` login handoff to track/pass session avatar through update/validate/refresh flows.
+- **Non-Host model/parser coverage (initial):** Added descriptor fields and parsing for `FriendUser`, `LeaderboardUser`, `ReferralUser` (SocialModels + Friends/Gift leaderboard APIs) and `ClanSentInvitation.inviteeAvatar*` (GroupModels + `ClanApi`).
+- **Backend:** `publicUser` builders in `apps/api/src/routes/auth.ts` and `apps/api/src/routes/users.ts` now include `avatarType`/`avatarParts` (in addition to prior schema/validation/upload/select/populate work).
+- **Verification (run):** `android-client` `.\gradlew.bat :core:model:compileDebugKotlin :core:api:compileDebugKotlin :core:data:compileDebugKotlin :app:compileDebugKotlin --console=plain --max-workers=2` **BUILD SUCCESSFUL** with `JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'`. Backend `node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit` exited 0 (no output).
+- **Not run / remaining:** broad non-Host model/parser/consumer propagation (chat/feed/story/recording/PK/event/discover/match/notification/clan UI, `authorAvatar`/`userAvatar`/`hostAvatar`-style fields), backend/socket/event contract parity and migration/backward-compat audit, licensing/attribution and `docs/features/avatar/*`, tests/lint/release/runtime-visual-SVG/perf/size checks, and diff cleanup (widespread unrelated whitespace-only changes remain).
+
+## 2026-11-20 -- Integrate Multiavatar generation/customization (continuation, in progress)
+
+- **Engine/UI:** Integrated pinned upstream `mew22/Multiavatar` engine into `android-client/core/ui/src/main/java/com/yugm/app/core/ui/avatar/` (adapted from upstream sample deps) with `AvatarDescriptor`/`AvatarParts`, cache, `GeneratedAvatar`, and shared `AvatarGeneratorDialog`. Added `coil-svg`.
+- **Profile flows:** Profile creation (`CreateProfileScreen`/`AuthNavGraph`) can generate, preview, and submit generated avatars. Edit Profile (`ProfileDetailScreen`) now persists generated descriptors on Save (hoisted draft, `updateProfile` sends `avatarType=GENERATED` + `avatarPartsJson`, local profile state updated); immediate photo upload clears generated draft and marks avatar as `UPLOADED`.
+- **Data/API plumbing:** Added `avatarType`/`avatarParts` to `Host` and `AuthProfileUpdate`, parsed in `RoomParser.toHost()`, and extended shared `Avatar` to render generated descriptors. Backend `User` schema and `profileUpdate` validate/store generated descriptors; `POST /upload/avatar` sets `avatarType=UPLOADED` and unsets `avatarParts`. Added `avatarType avatarParts` to many backend user/avatar `select`/`populate` field lists for exposure.
+- **Rendering propagation:** Propagated descriptor params to key Host-based `Avatar(...)` consumers (shared components, profile/profile social/public preview, room host/speakers/selected participant cases, settings/hosts/selected social cases). Repaired compile breakage from prior automated propagation scripts.
+- **Verification (run):** `:core:ui:compileDebugKotlin`, `:feature:profile:compileDebugKotlin`, targeted module compiles, and `:app:compileDebugKotlin` BUILD SUCCESSFUL (latest run). Backend `node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json --noEmit` passed.
+- **Not run / remaining:** non-Host model/parser/consumer coverage (chat/friends/clans/matches/leaderboards/notifications/realtime payloads), full backend response/event/migration/backward-compat audit, licensing/attribution and upstream version docs, `docs/features/avatar/*`, tests/lint/release checks, visual/runtime/device QA, performance/memory, and APK/AAB size measurement. Working tree includes broad unrelated whitespace-only diffs from earlier scripts.
+
+## 2026-11-20 -- Standardize loading spinners on approved Lottie animation
+
+- Imported the provided Desktop `loading.lottie` as `android-client/core/ui/src/main/res/raw/loading_spinner.json`.
+- Added `lottie-compose` dependency to `:core:ui` and `YugmLoadingSpinner` (motion-aware, default 40dp, size/modifier parameters).
+- Replaced indeterminate `CircularProgressIndicator` spinner usages across `app` and feature modules with `YugmLoadingSpinner`, scaling via `size`/`modifier` and removing color/strokeWidth.
+- Retained determinate `LinearProgressIndicator` progress bars and non-spinner loading/decorative animations.
+- Updated `DESIGN_SYSTEM.md` and `COMPONENT_REGISTRY.md`.
+- Verification (run): `:core:ui:compileDebugKotlin` and `:app:compileDebugKotlin` BUILD SUCCESSFUL in this session (including latest compile after subsequent edits).
+- Not run: device/emulator visual/runtime verification, accessibility/TalkBack/motion checks, APK size impact.
+
 ## 2026-11-20 -- Decompose ChatScreen into smaller composables
 
 - Extracted `ChatTimelineMessageItem` (per-message swipe-to-reply + MessageBubble rendering) into `ChatScreenMessageItem.kt`.

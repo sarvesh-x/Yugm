@@ -224,7 +224,7 @@ clansRouter.get("/", asyncHandler(async (req: AuthRequest, res) => {
 
 clansRouter.get("/me", asyncHandler(async (req: AuthRequest, res) => {
   const clan = await Clan.findOne({ memberIds: req.user!.id })
-    .populate("memberIds", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .populate("memberIds", "name username avatar avatarType avatarParts city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .lean();
   sendOk(res, { clan: clan ? publicClan(clan, req.user!.id) : null });
 }));
@@ -233,8 +233,8 @@ clansRouter.get("/invitations", asyncHandler(async (req: AuthRequest, res) => {
   const now = new Date();
   await ClanInvite.updateMany({ inviteeId: req.user!.id, status: "PENDING", expiresAt: { $lte: now } }, { $set: { status: "EXPIRED" } });
   const invitations = await ClanInvite.find({ inviteeId: req.user!.id, status: "PENDING", expiresAt: { $gt: now } })
-    .populate("clanId", "name slug avatar familyLabel memberCount privacy")
-    .populate("inviterId", "name username avatar")
+    .populate("clanId", "name slug avatar avatarType avatarParts familyLabel memberCount privacy")
+    .populate("inviterId", "name username avatar avatarType avatarParts")
     .sort({ createdAt: -1 }).limit(30).lean();
   sendOk(res, { invitations });
 }));
@@ -261,8 +261,8 @@ clansRouter.get("/:id/invitations", asyncHandler(async (req: AuthRequest, res) =
   const now = new Date();
   await ClanInvite.updateMany({ clanId: clan._id, status: "PENDING", expiresAt: { $lte: now } }, { $set: { status: "EXPIRED" } });
   const invitations = await ClanInvite.find({ clanId: clan._id, status: "PENDING", expiresAt: { $gt: now } })
-    .populate("inviteeId", "name username avatar")
-    .populate("inviterId", "name username avatar")
+    .populate("inviteeId", "name username avatar avatarType avatarParts")
+    .populate("inviterId", "name username avatar avatarType avatarParts")
     .sort({ createdAt: -1 })
     .limit(50)
     .lean();
@@ -423,7 +423,7 @@ clansRouter.get("/:id/messages", asyncHandler(async (req: AuthRequest, res) => {
     if (!Number.isNaN(beforeDate.getTime())) query.createdAt = { $lt: beforeDate };
   }
   const messages = await ClanMessage.find(query)
-    .populate("senderId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .populate("senderId", "name username avatar avatarType avatarParts activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean();
@@ -438,7 +438,7 @@ clansRouter.post("/:id/messages", requireNotMuted, chatLimiter, validateBody(cla
     message: sanitizeText(req.body.message)
   });
   const message = await ClanMessage.findById(created._id)
-    .populate("senderId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .populate("senderId", "name username avatar avatarType avatarParts activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .lean();
   emitClanMembers(members, socketEvents.clanMessageNew, { clanId: req.params.id, message }, req.user!.id);
   await Promise.all(members
@@ -465,7 +465,7 @@ clansRouter.post("/:id/messages/:messageId/reactions", chatLimiter, validateBody
       { $pull: { reactions: { userId: req.user!.id } } },
       { new: true }
     )
-      .populate("senderId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+      .populate("senderId", "name username avatar avatarType avatarParts activeCosmetics vipTier vipExpiresAt xp level levelTitle")
       .lean();
   } else {
     await ClanMessage.updateOne({ _id: req.params.messageId }, { $pull: { reactions: { userId: req.user!.id } } });
@@ -474,7 +474,7 @@ clansRouter.post("/:id/messages/:messageId/reactions", chatLimiter, validateBody
       { $push: { reactions: { userId: req.user!.id, type: requestedType, createdAt: new Date() } } },
       { new: true }
     )
-      .populate("senderId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+      .populate("senderId", "name username avatar avatarType avatarParts activeCosmetics vipTier vipExpiresAt xp level levelTitle")
       .lean();
   }
 
@@ -552,7 +552,7 @@ clansRouter.post("/", validateBody(clanSchema), asyncHandler(async (req: AuthReq
 clansRouter.get("/:id", asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid clan ID", ErrorCode.VALIDATION);
   const clan = await Clan.findById(req.params.id)
-    .populate("memberIds", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .populate("memberIds", "name username avatar avatarType avatarParts city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .lean();
   if (!clan) throw new HttpError(404, "Clan not found", ErrorCode.NOT_FOUND);
   const mapped = publicClan(clan, req.user!.id);

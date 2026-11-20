@@ -46,12 +46,7 @@ object FeedApi {
         return FeedRoom(
             _id = obj.optString("_id", ""),
             title = obj.optString("title", ""),
-            hostId = if (hostObj != null) FeedUser(
-                _id = hostObj.optString("_id", ""),
-                name = hostObj.optString("name", ""),
-                username = hostObj.optString("username", ""),
-                avatar = hostObj.optString("avatar", "").ifEmpty { null }
-            ) else null,
+            hostId = hostObj?.let { parseFeedUser(it) },
             participantCount = obj.optInt("participantCount", 0),
             status = obj.optString("status", "")
         )
@@ -63,7 +58,18 @@ object FeedApi {
             _id = obj.optString("_id", ""),
             userId = userObj?.optString("_id", "") ?: obj.optString("userId", ""),
             userName = userObj?.optString("name", "") ?: "",
-            userAvatar = userObj?.optString("avatar", "")?.ifEmpty { null },
+            userAvatar = userObj?.optString("avatar", "")?.ifEmpty { null }?.let { resolveMediaUrl(it) ?: it },
+            userAvatarType = userObj?.optString("avatarType", "")?.ifEmpty { null },
+            userAvatarParts = userObj?.optJSONObject("avatarParts")?.let { parts ->
+                com.yugm.app.core.model.AvatarPartsPayload(
+                    background = parts.optInt("background", 0),
+                    clothes = parts.optInt("clothes", 0),
+                    head = parts.optInt("head", 0),
+                    mouth = parts.optInt("mouth", 0),
+                    eyes = parts.optInt("eyes", 0),
+                    top = parts.optInt("top", 0)
+                )
+            },
             mediaUrl = obj.optString("mediaUrl", ""),
             mediaType = obj.optString("mediaType", "IMAGE"),
             caption = obj.optString("caption", "").ifEmpty { null },
@@ -76,12 +82,7 @@ object FeedApi {
         val roomObj = obj.optJSONObject("roomId")
         return FeedActivity(
             _id = obj.optString("_id", ""),
-            userId = if (userObj != null) FeedUser(
-                _id = userObj.optString("_id", ""),
-                name = userObj.optString("name", ""),
-                username = userObj.optString("username", ""),
-                avatar = userObj.optString("avatar", "").ifEmpty { null }
-            ) else null,
+            userId = userObj?.let { parseFeedUser(it) },
             roomId = if (roomObj != null) FeedRoomSummary(
                 _id = roomObj.optString("_id", ""),
                 title = roomObj.optString("title", "")
@@ -90,4 +91,22 @@ object FeedApi {
             createdAt = obj.optString("createdAt", "")
         )
     }
+
+    private fun parseFeedUser(obj: JSONObject): FeedUser = FeedUser(
+        _id = obj.optString("_id", ""),
+        name = obj.optString("name", ""),
+        username = obj.optString("username", ""),
+        avatar = obj.optString("avatar", "").ifEmpty { null }?.let { resolveMediaUrl(it) ?: it },
+        avatarType = obj.optString("avatarType", "").ifEmpty { null },
+        avatarParts = obj.optJSONObject("avatarParts")?.let { parts ->
+            com.yugm.app.core.model.AvatarPartsPayload(
+                background = parts.optInt("background", 0),
+                clothes = parts.optInt("clothes", 0),
+                head = parts.optInt("head", 0),
+                mouth = parts.optInt("mouth", 0),
+                eyes = parts.optInt("eyes", 0),
+                top = parts.optInt("top", 0)
+            )
+        }
+    )
 }

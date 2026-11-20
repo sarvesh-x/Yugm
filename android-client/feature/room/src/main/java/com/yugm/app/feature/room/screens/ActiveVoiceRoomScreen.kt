@@ -98,7 +98,6 @@ import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -915,6 +914,8 @@ fun ActiveVoiceRoomScreen(
                             label = item.label,
                             userName = item.userName,
                             avatarUrl = item.avatar,
+                            avatarType = item.avatarType,
+                            avatarParts = item.avatarParts,
                             vipLevel = participants.firstOrNull { it.user.id == item.userId }?.user?.takeIf { it.isVip }?.vipLevel ?: 0,
                             onWelcomeClick = {
                                 onReact("clap")
@@ -1487,7 +1488,7 @@ fun ActiveVoiceRoomScreen(
                     Box(Modifier.size(86.dp).clip(CircleShape)
                         .background(Brush.linearGradient(listOf(RoomSheetAccent, RoomSheetAction)))
                         .padding(3.dp), contentAlignment = Alignment.Center) {
-                        Avatar(target.user.name.take(1), 70, target.user.avatar, target.user.activeCosmetics)
+                        Avatar(target.user.name.take(1), 70, target.user.avatar, target.user.activeCosmetics, avatarType = target.user.avatarType, avatarParts = target.user.avatarParts)
                     }
                     IconButton(onClick = { selectedParticipant = null }, modifier = Modifier.align(Alignment.TopEnd)) {
                         Icon(Icons.Filled.Close, contentDescription = "Close participant profile", tint = RoomSheetMuted)
@@ -1860,7 +1861,9 @@ private fun VoiceSeatItem(
                     imageUrl = participant.user.avatar,
                     cosmetics = participant.user.activeCosmetics,
                     isSpeaking = isSpeaking,
-                    isMuted = isCurrentMuted
+                    isMuted = isCurrentMuted,
+                    avatarType = participant.user.avatarType,
+                    avatarParts = participant.user.avatarParts
                 )
 
                 if (participant.isRoomAdmin || participant.role == "HOST") {
@@ -1978,6 +1981,8 @@ private fun EntranceAnnouncementCard(
     label: String,
     userName: String = "",
     avatarUrl: String? = null,
+    avatarType: String? = null,
+    avatarParts: com.yugm.app.core.model.AvatarPartsPayload? = null,
     vipLevel: Int = 0,
     onWelcomeClick: () -> Unit
 ) {
@@ -1997,7 +2002,7 @@ private fun EntranceAnnouncementCard(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.weight(1f)
         ) {
-            Avatar(name.take(1).uppercase(), 28, avatarUrl)
+            Avatar(name.take(1).uppercase(), 28, avatarUrl, avatarType = avatarType, avatarParts = avatarParts)
 
             Spacer(modifier = Modifier.width(8.dp))
 
@@ -2208,7 +2213,7 @@ fun FriendInviteSheet(
                 items(people, key = { it.id }) { host ->
                     val checked = host.id in selected
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { if (checked) selected.remove(host.id) else selected.add(host.id) }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Avatar(host.name.take(1), 42, host.avatar, host.activeCosmetics)
+                        Avatar(host.name.take(1), 42, host.avatar, host.activeCosmetics, avatarType = host.avatarType, avatarParts = host.avatarParts)
                         Column(Modifier.weight(1f).padding(start = 12.dp)) { Text(host.name, color = Color(0xFF171421), fontWeight = FontWeight.SemiBold); Text("@${host.username}", color = Color.Gray, fontSize = 12.sp) }
                         androidx.compose.material3.Checkbox(checked, onCheckedChange = { if (it) selected.add(host.id) else selected.remove(host.id) })
                     }
@@ -2266,7 +2271,7 @@ fun RoomExitOverlay(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(11.dp)
                             ) {
-                                Avatar(participant.user.name.take(1), 44, participant.user.avatar, participant.user.activeCosmetics)
+                                Avatar(participant.user.name.take(1), 44, participant.user.avatar, participant.user.activeCosmetics, avatarType = participant.user.avatarType, avatarParts = participant.user.avatarParts)
                                 Column(Modifier.weight(1f)) {
                                     Text(participant.user.name.ifBlank { "Yugm user" }, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Text("@${participant.user.username}", color = TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -2689,7 +2694,7 @@ private fun RoomOverviewTabsSheet(
                         } else LazyColumn(Modifier.weight(1f).padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             items(filteredFollowers, key = { it.id }) { follower ->
                                 Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Avatar(follower.name.take(1), 52, follower.avatar, follower.activeCosmetics)
+                                    Avatar(follower.name.take(1), 52, follower.avatar, follower.activeCosmetics, avatarType = follower.avatarType, avatarParts = follower.avatarParts)
                                     Column(Modifier.weight(1f)) {
                                         Text(follower.name.ifBlank { "Yugm user" }, color = ink, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         Text("@${follower.username}", color = muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -2807,7 +2812,7 @@ private fun OnlineUsersSheet(
                     val user = participant.user
                     val isFollowing = user.isFollowing || user.id in followingIds
                     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Avatar(user.name.firstOrNull()?.toString() ?: "?", 54, user.avatar, user.activeCosmetics)
+                        Avatar(user.name.firstOrNull()?.toString() ?: "?", 54, user.avatar, user.activeCosmetics, avatarType = user.avatarType, avatarParts = user.avatarParts)
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             Text(user.name.ifBlank { "Yugm user" }, color = Color(0xFF171421), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(

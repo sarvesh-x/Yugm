@@ -37,7 +37,7 @@ adminSupportRouter.get("/support/tickets", requirePermission("support.read"),
         .sort({ updatedAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate("userId", "username displayName avatar")
+        .populate("userId", "username displayName avatar avatarType avatarParts")
         .populate("assignedTo", "username email")
         .lean(),
       SupportTicket.countDocuments(filter)
@@ -50,9 +50,9 @@ adminSupportRouter.get("/support/tickets", requirePermission("support.read"),
 adminSupportRouter.get("/support/tickets/:ticketId", requirePermission("support.read"),
   asyncHandler(async (req: AdminAuthRequest, res) => {
     const ticket = await SupportTicket.findById(req.params.ticketId)
-      .populate("userId", "username displayName avatar")
+      .populate("userId", "username displayName avatar avatarType avatarParts")
       .populate("assignedTo", "username email")
-      .populate("messages.senderId", "username displayName avatar")
+      .populate("messages.senderId", "username displayName avatar avatarType avatarParts")
       .lean();
 
     if (!ticket) {

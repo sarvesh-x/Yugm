@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.yugm.app.feature.gift.viewmodel.GiftViewModel
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -156,7 +157,7 @@ fun GiftCatalogScreen(
 
             if (state.isLoading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                    YugmLoadingSpinner(size = 40.dp)
                 }
             } else if (state.error != null) {
                 Text("Error: ${state.error}", color = MaterialTheme.colorScheme.error)

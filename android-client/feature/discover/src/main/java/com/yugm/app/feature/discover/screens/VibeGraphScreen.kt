@@ -26,7 +26,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -63,6 +62,7 @@ import com.yugm.app.feature.discover.viewmodel.VibeGraphUiState
 import com.yugm.app.feature.discover.viewmodel.VibeGraphViewModel
 import kotlin.math.cos
 import kotlin.math.sin
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 @Composable
 fun VibeGraphScreen(
@@ -118,7 +118,7 @@ fun VibeGraphScreen(
                 when (val current = state) {
                     is VibeGraphUiState.Loading -> {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = SaffronGold)
+                            YugmLoadingSpinner(size = 40.dp)
                         }
                     }
                     is VibeGraphUiState.Error -> {
@@ -334,7 +334,9 @@ private fun VibeMatchCard(match: VibeMatchUser, onClick: () -> Unit) {
             Avatar(
                 initial = match.user.name.firstOrNull()?.toString() ?: "?",
                 size = 52,
-                imageUrl = match.user.avatar
+                imageUrl = match.user.avatar,
+                avatarType = match.user.avatarType,
+                avatarParts = match.user.avatarParts
             )
             Spacer(Modifier.height(6.dp))
             Text(match.user.name, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1)

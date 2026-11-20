@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -53,6 +52,7 @@ import com.yugm.app.core.ui.theme.PrimaryPurple
 import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.core.ui.theme.TextMuted
 import com.yugm.app.core.ui.theme.TextPrimary
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 @Composable
 fun PollComposerSheet(
@@ -150,11 +150,7 @@ fun PollComposerSheet(
                 )
             ) {
                 if (isSubmitting) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.padding(end = 8.dp).size(16.dp),
-                        color = RoomSheetAccent,
-                        strokeWidth = 2.dp
-                    )
+                    YugmLoadingSpinner(size = 16.dp, modifier = Modifier.padding(end = 8.dp))
                 }
                 Text(if (isSubmitting) "Launching…" else "Launch poll", fontWeight = FontWeight.Bold)
             }

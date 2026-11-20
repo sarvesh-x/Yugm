@@ -419,7 +419,9 @@ fun RoomLobbyScreen(
                                         initial = host.name.take(1),
                                         size = 46,
                                         imageUrl = host.avatar,
-                                        cosmetics = host.activeCosmetics
+                                        cosmetics = host.activeCosmetics,
+                                        avatarType = host.avatarType,
+                                        avatarParts = host.avatarParts
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column(modifier = Modifier.weight(1f)) {
@@ -470,7 +472,9 @@ fun RoomLobbyScreen(
                                                 initial = spk.user.name.take(1),
                                                 size = 44,
                                                 imageUrl = spk.user.avatar,
-                                                cosmetics = spk.user.activeCosmetics
+                                                cosmetics = spk.user.activeCosmetics,
+                                                avatarType = spk.user.avatarType,
+                                                avatarParts = spk.user.avatarParts
                                             )
                                             Spacer(modifier = Modifier.height(4.dp))
                                             Text(

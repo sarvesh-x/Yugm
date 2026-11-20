@@ -27,7 +27,7 @@ adminDmReviewsRouter.get("/dm-reviews", requireAdminAuth, requirePermission("mes
       .sort({ createdAt: -1 })
       .skip(skip).limit(limit)
       .populate("reportId")
-      .populate({ path: "targetUserId", select: "name username avatar" })
+      .populate({ path: "targetUserId", select: "name username avatar avatarType avatarParts" })
       .populate({ path: "resolvedBy", select: "displayName" })
       .lean(),
     ModerationQueue.countDocuments(filter)
@@ -55,7 +55,7 @@ adminDmReviewsRouter.get("/dm-reviews/:queueId", requireAdminAuth, requirePermis
   const { queueId } = req.params;
   const queue = await ModerationQueue.findById(queueId)
     .populate("reportId")
-    .populate({ path: "targetUserId", select: "name username avatar role" })
+    .populate({ path: "targetUserId", select: "name username avatar avatarType avatarParts role" })
     .lean();
   if (!queue) throw new HttpError(404, "DM review not found", ErrorCode.NOT_FOUND);
 
@@ -63,8 +63,8 @@ adminDmReviewsRouter.get("/dm-reviews/:queueId", requireAdminAuth, requirePermis
   let partnerId = "";
   if (queue.targetType === "MESSAGE" && queue.targetId) {
     const msg = await DirectMessage.findById(queue.targetId)
-      .populate("senderId", "name username avatar")
-      .populate("receiverId", "name username avatar")
+      .populate("senderId", "name username avatar avatarType avatarParts")
+      .populate("receiverId", "name username avatar avatarType avatarParts")
       .lean();
     if (msg) {
       messages = [msg];
@@ -79,8 +79,8 @@ adminDmReviewsRouter.get("/dm-reviews/:queueId", requireAdminAuth, requirePermis
     })
       .sort({ createdAt: -1 })
       .limit(100)
-      .populate("senderId", "name username avatar")
-      .populate("receiverId", "name username avatar")
+      .populate("senderId", "name username avatar avatarType avatarParts")
+      .populate("receiverId", "name username avatar avatarType avatarParts")
       .lean();
     messages = all;
   }

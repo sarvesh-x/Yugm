@@ -64,7 +64,7 @@ internal fun RoomEntryCosmeticOverlay(event: RoomActivityItem?) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     CosmeticArtwork(entrance, "ROOM_ENTRY", modifier = Modifier.size(104.dp), animate = true, showBackdrop = true)
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Avatar(event?.userName?.take(1)?.uppercase() ?: "?", 38, event?.avatar)
+                        Avatar(event?.userName?.take(1)?.uppercase() ?: "?", 38, event?.avatar, avatarType = event?.avatarType, avatarParts = event?.avatarParts)
                         Spacer(Modifier.width(10.dp))
                         Column {
                             Text(event?.userName?.ifBlank { "Someone" } ?: "Someone", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black, maxLines = 1)

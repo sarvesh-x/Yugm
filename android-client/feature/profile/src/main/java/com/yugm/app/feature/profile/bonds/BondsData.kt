@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yugm.app.core.api.YugmHttpClient
 import com.yugm.app.core.api.resolveMediaUrl
+import com.yugm.app.core.model.AvatarPartsPayload
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,7 +15,14 @@ import org.json.JSONArray
 import org.json.JSONObject
 import javax.inject.Inject
 
-internal data class BondPerson(val id: String, val name: String, val username: String, val avatar: String)
+internal data class BondPerson(
+    val id: String,
+    val name: String,
+    val username: String,
+    val avatar: String,
+    val avatarType: String? = null,
+    val avatarParts: AvatarPartsPayload? = null
+)
 internal data class BondKind(val id: String, val name: String, val description: String, val icon: String)
 internal data class BondGift(val id: String, val name: String, val icon: String, val price: Int, val purpose: String, val kind: String, val days: Int, val points: Int)
 internal data class BondCard(
@@ -43,8 +51,23 @@ internal data class BondRanks(val entries: List<BondRank>, val resetsAt: String)
 private fun JSONObject.string(key: String) = if (isNull(key)) "" else optString(key)
 private fun JSONArray?.objects(): List<JSONObject> = if (this == null) emptyList()
     else (0 until length()).mapNotNull { optJSONObject(it) }
-private fun JSONObject.person() = BondPerson(string("id"), string("name").ifBlank { "Unavailable profile" },
-    string("username"), resolveMediaUrl(string("avatar")).orEmpty())
+private fun JSONObject.person() = BondPerson(
+    string("id"),
+    string("name").ifBlank { "Unavailable profile" },
+    string("username"),
+    resolveMediaUrl(string("avatar")).orEmpty(),
+    string("avatarType").ifBlank { null },
+    optJSONObject("avatarParts")?.let { parts ->
+        AvatarPartsPayload(
+            background = parts.optInt("background", 0),
+            clothes = parts.optInt("clothes", 0),
+            head = parts.optInt("head", 0),
+            mouth = parts.optInt("mouth", 0),
+            eyes = parts.optInt("eyes", 0),
+            top = parts.optInt("top", 0)
+        )
+    }
+)
 private fun JSONObject.person(key: String) = (optJSONObject(key) ?: JSONObject()).person()
 private fun JSONObject.card() = BondCard(
     string("id"), string("kind"), string("kindName"), person("partner"), optInt("slot"),

@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -85,6 +84,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 // Theme-aware palette is read via LocalYugmColors inside composables.
 
@@ -344,7 +344,7 @@ fun ChatListScreen(
                                             Text("People online", color = LocalYugmColors.current.textPrimary, fontSize = 19.sp, fontWeight = FontWeight.Bold)
                                             Spacer(Modifier.weight(1f))
                                             if (viewModel.isLoading && viewModel.recommendedChatUsers.isEmpty()) {
-                                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = LocalYugmColors.current.secondary, strokeWidth = 2.dp)
+                                                YugmLoadingSpinner(size = 16.dp)
                                             }
                                         }
                                         if (viewModel.recommendedChatUsers.isNotEmpty()) {
@@ -370,7 +370,7 @@ fun ChatListScreen(
                                         LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                                             items(viewModel.matches.take(20), key = { "match-${it.id}" }) { user ->
                                                 Column(Modifier.width(70.dp).clickable(role = Role.Button, onClickLabel = "Chat with ${user.name}") { onOpenChat(user.id) }, horizontalAlignment = Alignment.CenterHorizontally) {
-                                                    Avatar(user.name.take(1), 58, user.avatar, user.activeCosmetics)
+                                                    Avatar(user.name.take(1), 58, user.avatar, user.activeCosmetics, avatarType = user.avatarType, avatarParts = user.avatarParts)
                                                     Text(user.name, color = LocalYugmColors.current.textPrimary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 5.dp))
                                                 }
                                             }
@@ -387,7 +387,7 @@ fun ChatListScreen(
                                     }
                                 }
                                 if (viewModel.isLoading && filteredConversations.isEmpty()) item {
-                                    Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = LocalYugmColors.current.secondary) }
+                                    Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { YugmLoadingSpinner(size = 40.dp) }
                                 } else if (filteredConversations.isEmpty() && searchQuery.isNotBlank()) item {
                                     Column(
                                         Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 40.dp),
@@ -471,7 +471,7 @@ fun ChatListScreen(
                         when {
                             viewModel.isLoading && clan == null -> {
                                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    CircularProgressIndicator(color = LocalYugmColors.current.secondary)
+                                    YugmLoadingSpinner(size = 40.dp)
                                 }
                             }
                             clan == null -> {
@@ -572,7 +572,7 @@ fun ChatListScreen(
                                 when (contactTab) {
                                     0 -> {
                                         if (viewModel.isLoading && filteredFriends.isEmpty()) item {
-                                            Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = LocalYugmColors.current.secondary) }
+                                            Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { YugmLoadingSpinner(size = 40.dp) }
                                         } else if (filteredFriends.isEmpty()) item {
                                             ContactEmptyState(
                                                 title = if (searchQuery.isBlank()) "No friends yet" else "No friends found",
@@ -618,7 +618,7 @@ fun ChatListScreen(
                                     }
                                     2 -> {
                                         if (viewModel.isLoading && filteredFollowers.isEmpty()) item {
-                                            Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = LocalYugmColors.current.secondary) }
+                                            Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { YugmLoadingSpinner(size = 40.dp) }
                                         } else if (filteredFollowers.isEmpty()) item {
                                             ContactEmptyState(
                                                 title = "No followers yet",
@@ -632,7 +632,7 @@ fun ChatListScreen(
                                     }
                                     else -> {
                                         if (viewModel.isLoading && filteredFollowing.isEmpty()) item {
-                                            Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = LocalYugmColors.current.secondary) }
+                                            Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { YugmLoadingSpinner(size = 40.dp) }
                                         } else if (filteredFollowing.isEmpty()) item {
                                             ContactEmptyState(
                                                 title = "Not following anyone yet",
@@ -791,7 +791,7 @@ private fun FindPeopleSheet(
                             Text("Find someone by their @username", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp))
                         }
                     }
-                    searching -> CircularProgressIndicator(color = LocalYugmColors.current.secondary, strokeWidth = 2.5.dp)
+                    searching -> YugmLoadingSpinner(size = 40.dp)
                     error != null -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(error.orEmpty(), color = LocalYugmColors.current.textSecondary, fontSize = 13.sp)
                         TextButton(onClick = { retry++ }) { Text("Try again", color = Color(0xFFC9A5FF)) }
@@ -852,7 +852,7 @@ private fun FindPeopleResultRow(
             .border(1.dp, LocalYugmColors.current.border, RoundedCornerShape(19.dp)).padding(horizontal = 13.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Avatar(user.name.take(1), 48, user.avatar, user.activeCosmetics)
+        Avatar(user.name.take(1), 48, user.avatar, user.activeCosmetics, avatarType = user.avatarType, avatarParts = user.avatarParts)
         Column(
             Modifier.weight(1f).padding(start = 11.dp).clickable(role = Role.Button, onClickLabel = "Start a chat with ${user.name}", onClick = onOpenChat),
             verticalArrangement = Arrangement.Center
@@ -867,7 +867,7 @@ private fun FindPeopleResultRow(
                 .padding(horizontal = 12.dp, vertical = 9.dp),
             contentAlignment = Alignment.Center
         ) {
-            if (followBusy) CircularProgressIndicator(Modifier.size(15.dp), color = LocalYugmColors.current.textPrimary, strokeWidth = 2.dp)
+            if (followBusy) YugmLoadingSpinner(size = 15.dp)
             else Text(if (user.isFollowing) "Following" else "Follow", color = LocalYugmColors.current.textPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         }
         TextButton(onClick = onOpenChat, modifier = Modifier.padding(start = 3.dp)) {
@@ -938,7 +938,7 @@ private fun FriendContactRow(
                 .padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Avatar(friend.name.take(1).uppercase(), 48, friend.avatar)
+            Avatar(friend.name.take(1).uppercase(), 48, friend.avatar, avatarType = friend.avatarType, avatarParts = friend.avatarParts)
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -959,7 +959,7 @@ private fun FriendContactRow(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            if (busy) CircularProgressIndicator(Modifier.size(16.dp), color = LocalYugmColors.current.secondary, strokeWidth = 2.dp)
+            if (busy) YugmLoadingSpinner(size = 16.dp)
             else Text("›", color = LocalYugmColors.current.textSecondary, fontSize = 25.sp)
         }
     }
@@ -978,7 +978,7 @@ private fun FriendRequestRow(
             Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Avatar(person.name.take(1).uppercase(), 48, person.avatar)
+            Avatar(person.name.take(1).uppercase(), 48, person.avatar, avatarType = person.avatarType, avatarParts = person.avatarParts)
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
                 Text(
                     person.name.ifBlank { person.username },
@@ -997,7 +997,7 @@ private fun FriendRequestRow(
                 )
             }
             if (busy) {
-                CircularProgressIndicator(Modifier.size(18.dp), color = LocalYugmColors.current.secondary, strokeWidth = 2.dp)
+                YugmLoadingSpinner(size = 18.dp)
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(
@@ -1035,7 +1035,7 @@ private fun PersonContactRow(person: Host, showDivider: Boolean, onClick: () -> 
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box {
-                Avatar(person.name.take(1).uppercase(), 48, person.avatar, person.activeCosmetics)
+                Avatar(person.name.take(1).uppercase(), 48, person.avatar, person.activeCosmetics, avatarType = person.avatarType, avatarParts = person.avatarParts)
                 if (person.isOnline) Box(Modifier.align(Alignment.BottomEnd).size(12.dp).clip(CircleShape).background(Color(0xFF39C891)).border(2.dp, LocalYugmColors.current.surface, CircleShape))
             }
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
@@ -1075,7 +1075,7 @@ private fun LightChatRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
         Box {
-            Avatar(item.partner.name.take(1), 52, item.partner.avatar, item.partner.activeCosmetics)
+            Avatar(item.partner.name.take(1), 52, item.partner.avatar, item.partner.activeCosmetics, avatarType = item.partner.avatarType, avatarParts = item.partner.avatarParts)
             if (item.partner.isOnline) Box(Modifier.align(Alignment.BottomEnd).size(13.dp).clip(CircleShape).background(Color(0xFF39C891)).border(2.dp, LocalYugmColors.current.surface, CircleShape))
         }
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
@@ -1176,7 +1176,9 @@ private fun RecommendedUserChip(user: Host, onClick: () -> Unit) {
                     initial = user.name.take(1),
                     size = 62,
                     imageUrl = user.avatar,
-                    cosmetics = user.activeCosmetics
+                    cosmetics = user.activeCosmetics,
+                    avatarType = user.avatarType,
+                    avatarParts = user.avatarParts
                 )
             }
             // Online / offline dot

@@ -83,7 +83,7 @@ async function publicSide(battle: any, side: PkSide) {
   const score = side === "LEFT" ? battle.leftScore : battle.rightScore;
   const [room, host, count] = await Promise.all([
     Room.findById(roomId).select("title category language participantCount").lean(),
-    User.findById(hostId).select("name username avatar activeCosmetics").lean(),
+    User.findById(hostId).select("name username avatar avatarType avatarParts activeCosmetics").lean(),
     participantCount(roomId)
   ]);
   return {
@@ -92,9 +92,11 @@ async function publicSide(battle: any, side: PkSide) {
     hostId: hostId?.toString?.() ?? String(hostId),
     hostName: host?.name ?? "Yugm Host",
     hostAvatar: host?.avatar,
+    hostAvatarType: host?.avatarType,
+    hostAvatarParts: host?.avatarParts,
     activeCosmetics: host?.activeCosmetics ?? {},
     score,
-    members: [] as Array<{ userId: string; name: string; avatar?: string; isReady?: boolean; team: string }>,
+    members: [] as Array<{ userId: string; name: string; avatar?: string; avatarType?: string; avatarParts?: any; isReady?: boolean; team: string }>,
     participantCount: count || room?.participantCount || 0
   };
 }
@@ -108,12 +110,12 @@ export async function pkState(battleOrId: any) {
     publicSide(battle, "LEFT"),
     publicSide(battle, "RIGHT"),
     PkParticipant.find({ battleId: battle._id, leftAt: null })
-      .populate("userId", "name username avatar")
+      .populate("userId", "name username avatar avatarType avatarParts")
       .select("userId side teamName isReady")
       .lean()
   ]);
-  left.members = members.filter((entry: any) => entry.side === "LEFT").map((entry: any) => ({ userId: entry.userId?._id?.toString?.() ?? entry.userId?.toString?.(), name: entry.userId?.name ?? "Player", avatar: entry.userId?.avatar, isReady: entry.isReady, team: entry.teamName ?? "A" }));
-  right.members = members.filter((entry: any) => entry.side === "RIGHT").map((entry: any) => ({ userId: entry.userId?._id?.toString?.() ?? entry.userId?.toString?.(), name: entry.userId?.name ?? "Player", avatar: entry.userId?.avatar, isReady: entry.isReady, team: entry.teamName ?? "B" }));
+  left.members = members.filter((entry: any) => entry.side === "LEFT").map((entry: any) => ({ userId: entry.userId?._id?.toString?.() ?? entry.userId?.toString?.(), name: entry.userId?.name ?? "Player", avatar: entry.userId?.avatar, avatarType: entry.userId?.avatarType, avatarParts: entry.userId?.avatarParts, isReady: entry.isReady, team: entry.teamName ?? "A" }));
+  right.members = members.filter((entry: any) => entry.side === "RIGHT").map((entry: any) => ({ userId: entry.userId?._id?.toString?.() ?? entry.userId?.toString?.(), name: entry.userId?.name ?? "Player", avatar: entry.userId?.avatar, avatarType: entry.userId?.avatarType, avatarParts: entry.userId?.avatarParts, isReady: entry.isReady, team: entry.teamName ?? "B" }));
   return {
     battleId: battle._id?.toString?.() ?? battle.id,
     id: battle._id?.toString?.() ?? battle.id,
@@ -912,7 +914,7 @@ export async function availableOpponents(input: { userId: string; battleType?: s
     filter.$or = [{ title: regex }, { category: regex }, { language: regex }];
   }
   const rooms = await Room.find(filter)
-    .populate("hostId", "name username avatar city activeCosmetics isBlocked mutedUntil suspendedUntil")
+    .populate("hostId", "name username avatar avatarType avatarParts city activeCosmetics isBlocked mutedUntil suspendedUntil")
     .sort({ participantCount: -1, createdAt: -1 })
     .limit(Math.min(input.limit ?? 20, 50))
     .lean();
@@ -928,6 +930,8 @@ export async function availableOpponents(input: { userId: string; battleType?: s
       hostId: room.hostId?._id?.toString?.() ?? "",
       hostName: room.hostId?.name ?? "Host",
       hostAvatar: room.hostId?.avatar,
+      hostAvatarType: room.hostId?.avatarType,
+      hostAvatarParts: room.hostId?.avatarParts,
       activeCosmetics: room.hostId?.activeCosmetics ?? {}
     }));
 }

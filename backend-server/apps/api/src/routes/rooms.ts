@@ -265,7 +265,7 @@ roomsRouter.get("/", asyncHandler(async (req, res) => {
   const cacheKey = `rooms:list:${JSON.stringify(filter)}`;
   const cached = await getCachedJson(cacheKey);
   if (cached) return sendOk(res, cached);
-  const rooms = await Room.find(filter).populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle").sort({ participantCount: -1, createdAt: -1 }).limit(50).lean();
+  const rooms = await Room.find(filter).populate("hostId", "name username avatar avatarType avatarParts city activeCosmetics vipTier vipExpiresAt xp level levelTitle").sort({ participantCount: -1, createdAt: -1 }).limit(50).lean();
   const payload = { rooms };
   await setCachedJson(cacheKey, payload, 20);
   sendOk(res, payload);
@@ -273,7 +273,7 @@ roomsRouter.get("/", asyncHandler(async (req, res) => {
 
 roomsRouter.get("/scheduled", asyncHandler(async (_req, res) => {
   const rooms = await Room.find({ status: "SCHEDULED", visibility: "PUBLIC" })
-    .populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .populate("hostId", "name username avatar avatarType avatarParts city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .sort({ scheduledFor: 1 })
     .limit(30)
     .lean();
@@ -284,7 +284,7 @@ roomsRouter.get("/followed", requireAuth, asyncHandler(async (req: AuthRequest, 
   const follows = await RoomFollow.find({ userId: req.user!._id }).sort({ createdAt: -1 }).populate({
     path: "roomId",
     match: { visibility: "PUBLIC" },
-    populate: { path: "hostId", select: "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle" }
+    populate: { path: "hostId", select: "name username avatar avatarType avatarParts city activeCosmetics vipTier vipExpiresAt xp level levelTitle" }
   }).lean();
   sendOk(res, { rooms: follows.map((follow: any) => follow.roomId).filter(Boolean) });
 }));
@@ -292,7 +292,7 @@ roomsRouter.get("/followed", requireAuth, asyncHandler(async (req: AuthRequest, 
 roomsRouter.get("/:id/followers", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
   const follows = await RoomFollow.find({ roomId: req.params.id })
-    .populate("userId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .populate("userId", "name username avatar avatarType avatarParts city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .sort({ createdAt: -1 }).limit(100).lean();
   const userIds = follows.map((follow: any) => follow.userId?._id).filter(Boolean);
   const followingIds = new Set((await Follow.find({ followerId: req.user!._id, followingId: { $in: userIds } }).distinct("followingId")).map((id) => id.toString()));
@@ -339,7 +339,7 @@ roomsRouter.get("/recommended", requireAuth, asyncHandler(async (req: AuthReques
       { language: { $in: languages } }
     ]
   })
-    .populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .populate("hostId", "name username avatar avatarType avatarParts city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .sort({ participantCount: -1, createdAt: -1 })
     .limit(30)
     .lean();
@@ -364,13 +364,13 @@ roomsRouter.get("/recommended", requireAuth, asyncHandler(async (req: AuthReques
 
 roomsRouter.get("/leaderboard", asyncHandler(async (_req, res) => {
   const topRooms = await Room.find({ status: "LIVE", visibility: "PUBLIC" })
-    .populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .populate("hostId", "name username avatar avatarType avatarParts city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .sort({ participantCount: -1, createdAt: -1 })
     .limit(10)
     .lean();
   const topHosts = await User.find({ role: { $in: ["HOST", "USER"] } })
     .sort({ followersCount: -1, walletBalance: -1 })
-    .select("name username avatar city followersCount walletBalance activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .select("name username avatar avatarType avatarParts city followersCount walletBalance activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .limit(10)
     .lean();
   sendOk(res, { topRooms, topHosts });
@@ -379,7 +379,7 @@ roomsRouter.get("/leaderboard", asyncHandler(async (_req, res) => {
 roomsRouter.get("/trending", asyncHandler(async (_req, res) => {
   const cached = await getCachedJson("rooms:trending");
   if (cached) return sendOk(res, cached);
-  const rooms = await Room.find({ status: "LIVE", visibility: "PUBLIC" }).populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle").sort({ participantCount: -1 }).limit(12).lean();
+  const rooms = await Room.find({ status: "LIVE", visibility: "PUBLIC" }).populate("hostId", "name username avatar avatarType avatarParts city activeCosmetics vipTier vipExpiresAt xp level levelTitle").sort({ participantCount: -1 }).limit(12).lean();
   const payload = { rooms };
   await setCachedJson("rooms:trending", payload, 20);
   sendOk(res, payload);
@@ -404,7 +404,7 @@ roomsRouter.get("/search", asyncHandler(async (req, res) => {
     visibility: "PUBLIC",
     $or: [{ title: regex }, { description: regex }, { tags: regex }, { category: regex }, { language: regex }]
   })
-    .populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .populate("hostId", "name username avatar avatarType avatarParts city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .sort({ participantCount: -1 })
     .limit(limit)
     .lean();
@@ -416,10 +416,10 @@ roomsRouter.get("/:id", requireAuth, asyncHandler(async (req: AuthRequest, res) 
   const rawRoom = await Room.findById(req.params.id).lean();
   if (!rawRoom) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
   await assertPrivateRoomAccess(rawRoom, req.user!.id);
-  const room = await Room.findById(req.params.id).populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle").populate("coHostIds", "name username avatar").lean();
+  const room = await Room.findById(req.params.id).populate("hostId", "name username avatar avatarType avatarParts city activeCosmetics vipTier vipExpiresAt xp level levelTitle").populate("coHostIds", "name username avatar avatarType avatarParts").lean();
   if (!room) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
-  const participants = await RoomParticipant.find({ roomId: req.params.id, leftAt: null }).populate("userId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle").lean();
-  const speakerRequests = await SpeakerRequest.find({ roomId: req.params.id, status: "PENDING" }).populate("userId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle").lean();
+  const participants = await RoomParticipant.find({ roomId: req.params.id, leftAt: null }).populate("userId", "name username avatar avatarType avatarParts activeCosmetics vipTier vipExpiresAt xp level levelTitle").lean();
+  const speakerRequests = await SpeakerRequest.find({ roomId: req.params.id, status: "PENDING" }).populate("userId", "name username avatar avatarType avatarParts activeCosmetics vipTier vipExpiresAt xp level levelTitle").lean();
   const orderedSpeakers = participants.filter((participant: any) => ["HOST", "SPEAKER", "MODERATOR"].includes(participant.role))
     .sort((a: any, b: any) => new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime());
   const legacySeatById = new Map<string, number>();
@@ -486,6 +486,8 @@ roomsRouter.post("/:id/join", requireAuth, requireNotRoomRestricted, requireNotS
     {
       userName: req.user!.name,
       avatar: req.user!.avatar ?? "",
+      avatarType: req.user!.avatarType ?? null,
+      avatarParts: req.user!.avatarParts ?? null,
       roomEntry: req.user!.activeCosmetics?.roomEntry ?? "",
       entranceEffect: req.user!.activeCosmetics?.entranceEffect ?? ""
     }
@@ -499,7 +501,12 @@ roomsRouter.post("/:id/leave", requireAuth, asyncHandler(async (req: AuthRequest
 
   const exit = await recordRoomParticipantExit(req.params.id, req.user!.id, "explicit leave");
   emitRoom(req.params.id, socketEvents.roomParticipantUpdate, { userId: req.user!.id, action: "leave" });
-  await addActivity(req.params.id, "LEAVE", `${req.user!.name} left`, req.user!.id);
+  await addActivity(req.params.id, "LEAVE", `${req.user!.name} left`, req.user!.id, {
+    userName: req.user!.name,
+    avatar: req.user!.avatar ?? "",
+    avatarType: req.user!.avatarType ?? null,
+    avatarParts: req.user!.avatarParts ?? null
+  });
   if (exit.ended) emitRoom(req.params.id, socketEvents.roomEnded, { roomId: req.params.id, reason: "room owner or last participant left" });
 
   sendOk(res, { left: true });
@@ -808,7 +815,7 @@ roomsRouter.post("/:id/remove-co-host", requireAuth, asyncHandler(async (req: Au
 }));
 
 roomsRouter.get("/:id/co-hosts", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
-  const room = await Room.findById(req.params.id).populate("coHostIds", "name username avatar").lean();
+  const room = await Room.findById(req.params.id).populate("coHostIds", "name username avatar avatarType avatarParts").lean();
   if (!room) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
   sendOk(res, { coHosts: room.coHostIds, isDuet: room.isDuet });
 }));
@@ -826,7 +833,7 @@ roomsRouter.get("/:id/messages", requireAuth, asyncHandler(async (req: AuthReque
   const participant = await RoomParticipant.findOne({ roomId: req.params.id, userId: req.user!.id, leftAt: null }).lean();
   const limit = Math.min(Number(req.query.limit) || 80, 200);
   const messages = room.status === "LIVE" && participant
-    ? await ChatMessage.find({ roomId: req.params.id, createdAt: { $gte: participant.joinedAt } }).populate("senderId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle").sort({ createdAt: -1 }).limit(limit).lean()
+    ? await ChatMessage.find({ roomId: req.params.id, createdAt: { $gte: participant.joinedAt } }).populate("senderId", "name username avatar avatarType avatarParts activeCosmetics vipTier vipExpiresAt xp level levelTitle").sort({ createdAt: -1 }).limit(limit).lean()
     : [];
   sendOk(res, { messages: messages.reverse() });
 }));
@@ -1040,7 +1047,7 @@ roomsRouter.post("/:id/messages", requireAuth, requireNotMuted, requireNotChatRe
     type: "TEXT",
     ...(req.body.mediaUrl ? { mediaUrl: req.body.mediaUrl, mediaType: "IMAGE" } : {})
   });
-  const populatedMessage = await message.populate("senderId", "name username avatar");
+  const populatedMessage = await message.populate("senderId", "name username avatar avatarType avatarParts");
   // NOTE: emitRoom is called after the socket room join for consistent ordering
   emitRoom(req.params.id, socketEvents.roomChatMessage, { message: populatedMessage });
   void grantRoomXp(req.user!.id, "CHAT_MESSAGE", { roomId: req.params.id, messageId: message._id.toString(), idempotencyKey: `message:${message._id}` }).catch((error) => {

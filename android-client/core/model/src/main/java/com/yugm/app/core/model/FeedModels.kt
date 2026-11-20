@@ -20,7 +20,9 @@ data class FeedUser(
     val _id: String = "",
     val name: String = "",
     val username: String = "",
-    val avatar: String? = null
+    val avatar: String? = null,
+    val avatarType: String? = null,
+    val avatarParts: AvatarPartsPayload? = null
 )
 
 data class FeedActivity(

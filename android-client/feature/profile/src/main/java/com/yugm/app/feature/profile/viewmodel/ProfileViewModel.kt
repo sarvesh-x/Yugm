@@ -119,7 +119,10 @@ class ProfileViewModel @Inject constructor(
         hobbies: List<String> = profile?.hobbies ?: emptyList(),
         state: String = profile?.state.orEmpty(),
         gender: String = profile?.gender.orEmpty(),
-        age: Int = profile?.age ?: 0
+        age: Int = profile?.age ?: 0,
+        avatar: String? = profile?.avatar,
+        avatarType: String? = profile?.avatarType,
+        avatarParts: com.yugm.app.core.model.AvatarPartsPayload? = profile?.avatarParts
     ) {
         profile = profile?.copy(
             name = name,
@@ -131,7 +134,10 @@ class ProfileViewModel @Inject constructor(
             gender = gender,
             age = age,
             interests = interests,
-            hobbies = hobbies
+            hobbies = hobbies,
+            avatar = avatar,
+            avatarType = avatarType,
+            avatarParts = avatarParts
         )
     }
 
@@ -139,6 +145,8 @@ class ProfileViewModel @Inject constructor(
         profile = profile?.let { current ->
             current.copy(
                 avatar = url,
+                avatarType = "UPLOADED",
+                avatarParts = null,
                 activeCosmetics = current.activeCosmetics.copy(avatarAsset = "")
             )
         }

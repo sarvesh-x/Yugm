@@ -6,6 +6,7 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
+import coil.decode.SvgDecoder
 import dagger.hilt.android.HiltAndroidApp
 import com.yugm.app.core.api.YugmMediaRoom
 import com.yugm.app.core.api.ApiConfig
@@ -73,6 +74,7 @@ class YugmApplication : Application(), ImageLoaderFactory {
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
             .components {
+                add(SvgDecoder.Factory())
                 if (Build.VERSION.SDK_INT >= 28) add(ImageDecoderDecoder.Factory())
                 else add(GifDecoder.Factory())
             }

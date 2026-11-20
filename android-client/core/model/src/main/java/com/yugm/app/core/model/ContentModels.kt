@@ -6,6 +6,8 @@ data class RoomRecording(
     val hostId: String = "",
     val hostName: String = "",
     val hostAvatar: String? = null,
+    val hostAvatarType: String? = null,
+    val hostAvatarParts: AvatarPartsPayload? = null,
     val title: String = "",
     val recordingUrl: String = "",
     val duration: Int = 0,
@@ -21,6 +23,8 @@ data class YugmEvent(
     val hostId: String = "",
     val hostName: String = "",
     val hostAvatar: String? = null,
+    val hostAvatarType: String? = null,
+    val hostAvatarParts: AvatarPartsPayload? = null,
     val coverImage: String? = null,
     val category: String = "",
     val type: String = "",
@@ -52,7 +56,9 @@ data class MyEvents(
 data class StoryUser(
     val _id: String = "",
     val name: String = "",
-    val avatar: String? = null
+    val avatar: String? = null,
+    val avatarType: String? = null,
+    val avatarParts: AvatarPartsPayload? = null
 )
 
 data class StoryItem(
@@ -60,6 +66,8 @@ data class StoryItem(
     val userId: String = "",
     val userName: String = "",
     val userAvatar: String? = null,
+    val userAvatarType: String? = null,
+    val userAvatarParts: AvatarPartsPayload? = null,
     val mediaUrl: String = "",
     val mediaType: String = "IMAGE",
     val caption: String? = null,
@@ -85,6 +93,8 @@ data class StoryCommentItem(
     val userId: String = "",
     val userName: String = "",
     val userAvatar: String? = null,
+    val userAvatarType: String? = null,
+    val userAvatarParts: AvatarPartsPayload? = null,
     val parentId: String? = null,
     val text: String = "",
     val replies: List<StoryCommentItem> = emptyList(),

@@ -20,7 +20,10 @@ import com.yugm.app.feature.chat.viewmodel.ChatViewModel
 fun NavGraphBuilder.chatNavGraph(
     navController: NavHostController,
     authTokenProvider: () -> String,
-    currentUserIdProvider: () -> String
+    currentUserIdProvider: () -> String,
+    userAvatarProvider: () -> String? = { null },
+    userAvatarTypeProvider: () -> String? = { null },
+    userAvatarPartsProvider: () -> com.yugm.app.core.model.AvatarPartsPayload? = { null }
 ) {
     composable(Screen.ChatList.route) {
         LaunchedEffect(Unit) {
@@ -63,6 +66,9 @@ fun NavGraphBuilder.chatNavGraph(
             partner = chatViewModel.partner,
             currentUserId = currentUserIdProvider(),
             myActiveCosmetics = chatViewModel.myActiveCosmetics,
+            myAvatarUrl = userAvatarProvider(),
+            myAvatarType = userAvatarTypeProvider(),
+            myAvatarParts = userAvatarPartsProvider(),
             messages = chatViewModel.messages,
             gifts = chatViewModel.gifts,
             balance = chatViewModel.walletBalance,

@@ -145,6 +145,8 @@ fun CustomizeProfileScreen(
                 LiveCustomizationPreview(
                     name = userProfile?.name ?: "You",
                     avatarUrl = userProfile?.avatar.orEmpty(),
+                    avatarType = userProfile?.avatarType,
+                    avatarParts = userProfile?.avatarParts,
                     activeCosmetics = activeCosmetics,
                     onViewPublicProfile = onOpenPublicProfile
                 )
@@ -249,6 +251,8 @@ fun CustomizeProfileScreen(
 private fun LiveCustomizationPreview(
     name: String,
     avatarUrl: String,
+    avatarType: String? = null,
+    avatarParts: com.yugm.app.core.model.AvatarPartsPayload? = null,
     activeCosmetics: ActiveCosmetics,
     onViewPublicProfile: () -> Unit
 ) {
@@ -309,7 +313,9 @@ private fun LiveCustomizationPreview(
                             initial = name.firstOrNull()?.toString() ?: "Y",
                             size = 72,
                             imageUrl = avatarUrl,
-                            cosmetics = activeCosmetics
+                            cosmetics = activeCosmetics,
+                            avatarType = avatarType,
+                            avatarParts = avatarParts
                         )
 
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

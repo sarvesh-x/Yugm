@@ -28,11 +28,48 @@ fun JSONObject.toPkSide(): PkSide = PkSide(
     roomTitle = optString("roomTitle", ""),
     hostId = optString("hostId", ""),
     hostName = optString("hostName", "Host"),
-    hostAvatar = if (has("hostAvatar") && !isNull("hostAvatar")) optString("hostAvatar") else null,
+    hostAvatar = if (has("hostAvatar") && !isNull("hostAvatar")) optString("hostAvatar").takeIf { it.isNotBlank() } else null,
+    hostAvatarType = optString("hostAvatarType", "").takeIf { it.isNotBlank() },
+    hostAvatarParts = optJSONObject("hostAvatarParts")?.let { parts ->
+        com.yugm.app.core.model.AvatarPartsPayload(
+            background = parts.optInt("background", 0),
+            clothes = parts.optInt("clothes", 0),
+            head = parts.optInt("head", 0),
+            mouth = parts.optInt("mouth", 0),
+            eyes = parts.optInt("eyes", 0),
+            top = parts.optInt("top", 0)
+        )
+    },
     score = optInt("score", 0),
     participantCount = optInt("participantCount", 0),
     activeCosmetics = optJSONObject("activeCosmetics")?.toActiveCosmetics() ?: ActiveCosmetics(),
-    members = optJSONArray("members")?.let { items -> buildList { for (index in 0 until items.length()) { val item = items.getJSONObject(index); add(PkTeamMember(item.optString("userId"), item.optString("name"), item.optString("avatar").takeIf { it.isNotBlank() }, item.optBoolean("isReady"), item.optString("team", "A"))) } } } ?: emptyList()
+    members = optJSONArray("members")?.let { items ->
+        buildList {
+            for (index in 0 until items.length()) {
+                val item = items.optJSONObject(index) ?: continue
+                add(
+                    PkTeamMember(
+                        userId = item.optString("userId", ""),
+                        name = item.optString("name", ""),
+                        avatar = item.optString("avatar").takeIf { it.isNotBlank() },
+                        avatarType = item.optString("avatarType", "").takeIf { it.isNotBlank() },
+                        avatarParts = item.optJSONObject("avatarParts")?.let { parts ->
+                            com.yugm.app.core.model.AvatarPartsPayload(
+                                background = parts.optInt("background", 0),
+                                clothes = parts.optInt("clothes", 0),
+                                head = parts.optInt("head", 0),
+                                mouth = parts.optInt("mouth", 0),
+                                eyes = parts.optInt("eyes", 0),
+                                top = parts.optInt("top", 0)
+                            )
+                        },
+                        isReady = item.optBoolean("isReady", false),
+                        team = item.optString("team", "A")
+                    )
+                )
+            }
+        }
+    } ?: emptyList()
 )
 
 fun JSONObject.toPkBattle(): PkBattle = PkBattle(
@@ -91,7 +128,18 @@ fun JSONObject.toPkOpponent(): PkOpponent = PkOpponent(
     roomTitle = optString("roomTitle", ""),
     hostId = optString("hostId", ""),
     hostName = optString("hostName", ""),
-    hostAvatar = if (has("hostAvatar") && !isNull("hostAvatar")) optString("hostAvatar") else null,
+    hostAvatar = if (has("hostAvatar") && !isNull("hostAvatar")) optString("hostAvatar").takeIf { it.isNotBlank() } else null,
+    hostAvatarType = optString("hostAvatarType", "").takeIf { it.isNotBlank() },
+    hostAvatarParts = optJSONObject("hostAvatarParts")?.let { parts ->
+        com.yugm.app.core.model.AvatarPartsPayload(
+            background = parts.optInt("background", 0),
+            clothes = parts.optInt("clothes", 0),
+            head = parts.optInt("head", 0),
+            mouth = parts.optInt("mouth", 0),
+            eyes = parts.optInt("eyes", 0),
+            top = parts.optInt("top", 0)
+        )
+    },
     battleType = optString("battleType", "VOICE").toPkBattleType(),
     category = optString("category", ""),
     language = optString("language", ""),
@@ -112,7 +160,18 @@ fun JSONObject.toPkLeaderboardEntry(): PkLeaderboardEntry {
     return PkLeaderboardEntry(
         userId = user?.entityId() ?: optString("userId", ""),
         name = user?.optString("name", "") ?: "",
-        avatar = if (user != null && user.has("avatar") && !user.isNull("avatar")) user.optString("avatar") else null,
+        avatar = if (user != null && user.has("avatar") && !user.isNull("avatar")) user.optString("avatar").takeIf { it.isNotBlank() } else null,
+        avatarType = user?.optString("avatarType", "")?.takeIf { it.isNotBlank() },
+        avatarParts = user?.optJSONObject("avatarParts")?.let { parts ->
+            com.yugm.app.core.model.AvatarPartsPayload(
+                background = parts.optInt("background", 0),
+                clothes = parts.optInt("clothes", 0),
+                head = parts.optInt("head", 0),
+                mouth = parts.optInt("mouth", 0),
+                eyes = parts.optInt("eyes", 0),
+                top = parts.optInt("top", 0)
+            )
+        },
         side = optString("side", "LEFT").toPkSideTypeOrNull() ?: PkSideType.LEFT,
         totalPoints = optInt("totalPoints", 0),
         totalGiftsSent = optInt("totalGiftsSent", 0)

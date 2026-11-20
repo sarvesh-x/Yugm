@@ -224,7 +224,9 @@ private fun MyClanCard(clan: Clan, onClick: () -> Unit) {
             Avatar(
                 initial = clan.name.take(1).uppercase(),
                 size = 48,
-                imageUrl = clan.avatar
+                imageUrl = clan.avatar,
+                avatarType = clan.avatarType,
+                avatarParts = clan.avatarParts
             )
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
@@ -246,7 +248,9 @@ private fun ClanCard(clan: ClanSummary, onClick: () -> Unit) {
         Avatar(
             initial = clan.name.take(1).uppercase(),
             size = 44,
-            imageUrl = clan.avatar
+            imageUrl = clan.avatar,
+            avatarType = clan.avatarType,
+            avatarParts = clan.avatarParts
         )
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {

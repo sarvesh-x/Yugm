@@ -97,7 +97,7 @@ fun FriendsScreen(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
-                                        Avatar(initial = friend.name.firstOrNull()?.toString() ?: "?", size = 46, imageUrl = friend.avatar)
+                                        Avatar(initial = friend.name.firstOrNull()?.toString() ?: "?", size = 46, imageUrl = friend.avatar, avatarType = friend.avatarType, avatarParts = friend.avatarParts)
                                         Column(Modifier.weight(1f)) {
                                             Text(friend.name, color = TextPrimary, fontWeight = FontWeight.Bold)
                                             Text("Level ${friend.level}", color = TextMuted, fontSize = 12.sp)
@@ -118,7 +118,7 @@ fun FriendsScreen(
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                                         ) {
-                                            Avatar(initial = user.name.firstOrNull()?.toString() ?: "?", size = 46, imageUrl = user.avatar)
+                                            Avatar(initial = user.name.firstOrNull()?.toString() ?: "?", size = 46, imageUrl = user.avatar, avatarType = user.avatarType, avatarParts = user.avatarParts)
                                             Column(Modifier.weight(1f)) {
                                                 Text(user.name, color = TextPrimary, fontWeight = FontWeight.Bold)
                                                 Text("Level ${user.level}", color = TextMuted, fontSize = 12.sp)
@@ -160,7 +160,7 @@ fun FriendsScreen(
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                                         ) {
-                                            Avatar(initial = user.name.firstOrNull()?.toString() ?: "?", size = 46, imageUrl = user.avatar)
+                                            Avatar(initial = user.name.firstOrNull()?.toString() ?: "?", size = 46, imageUrl = user.avatar, avatarType = user.avatarType, avatarParts = user.avatarParts)
                                             Column(Modifier.weight(1f)) {
                                                 Text(user.name, color = TextPrimary, fontWeight = FontWeight.Bold)
                                                 Text("Pending", color = Gold, fontSize = 12.sp)

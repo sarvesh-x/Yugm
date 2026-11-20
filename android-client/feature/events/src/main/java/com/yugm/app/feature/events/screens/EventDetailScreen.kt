@@ -92,7 +92,7 @@ fun EventDetailScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Avatar(initial = event.hostName.firstOrNull()?.toString() ?: "?", size = 48, imageUrl = event.hostAvatar)
+                Avatar(initial = event.hostName.firstOrNull()?.toString() ?: "?", size = 48, imageUrl = event.hostAvatar, avatarType = event.hostAvatarType, avatarParts = event.hostAvatarParts)
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Text(event.hostName, color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)

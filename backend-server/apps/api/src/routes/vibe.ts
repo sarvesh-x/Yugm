@@ -110,7 +110,7 @@ vibeRouter.get("/vibe/match/:userId", asyncHandler(async (req: AuthRequest, res)
 
   const [currentUser, targetUser] = await Promise.all([
     User.findById(req.user!.id).select("interests languages city").lean(),
-    User.findById(userId).select("interests languages city name avatar username level levelTitle").lean(),
+    User.findById(userId).select("interests languages city name avatar avatarType avatarParts username level levelTitle").lean(),
   ]);
   if (!currentUser) throw new HttpError(404, "Current user not found", ErrorCode.NOT_FOUND);
   if (!targetUser) throw new HttpError(404, "Target user not found", ErrorCode.NOT_FOUND);
@@ -142,6 +142,8 @@ vibeRouter.get("/vibe/match/:userId", asyncHandler(async (req: AuthRequest, res)
       _id: targetUser._id.toString(),
       name: targetUser.name,
       avatar: targetUser.avatar,
+      avatarType: targetUser.avatarType,
+      avatarParts: targetUser.avatarParts,
       username: targetUser.username,
       level: targetUser.level,
       levelTitle: targetUser.levelTitle,
@@ -166,7 +168,7 @@ vibeRouter.get("/vibe/matches", asyncHandler(async (req: AuthRequest, res) => {
   };
 
   const candidates = await User.find(candidateFilter)
-    .select("_id name avatar username level levelTitle interests languages city")
+    .select("_id name avatar avatarType avatarParts username level levelTitle interests languages city")
     .limit(limit * 5) // oversample to sort by score
     .skip((page - 1) * limit * 5)
     .lean();
@@ -186,6 +188,8 @@ vibeRouter.get("/vibe/matches", asyncHandler(async (req: AuthRequest, res) => {
       _id: user._id.toString(),
       name: user.name,
       avatar: user.avatar,
+      avatarType: user.avatarType,
+      avatarParts: user.avatarParts,
       username: user.username,
       level: user.level ?? 1,
       levelTitle: user.levelTitle ?? "New Vibe"

@@ -61,7 +61,18 @@ object SubscriptionsApi {
                 _id = creatorObj.optString("_id", ""),
                 name = creatorObj.optString("name", ""),
                 username = creatorObj.optString("username", ""),
-                avatar = creatorObj.optString("avatar", "").ifEmpty { null }
+                avatar = creatorObj.optString("avatar", "").ifEmpty { null }?.let { resolveMediaUrl(it) ?: it },
+                avatarType = creatorObj.optString("avatarType", "").ifEmpty { null },
+                avatarParts = creatorObj.optJSONObject("avatarParts")?.let { parts ->
+                    com.yugm.app.core.model.AvatarPartsPayload(
+                        background = parts.optInt("background", 0),
+                        clothes = parts.optInt("clothes", 0),
+                        head = parts.optInt("head", 0),
+                        mouth = parts.optInt("mouth", 0),
+                        eyes = parts.optInt("eyes", 0),
+                        top = parts.optInt("top", 0)
+                    )
+                }
             ) else null,
             plan = obj.optString("plan", ""),
             coinAmount = obj.optInt("coinAmount", 0),
@@ -80,7 +91,18 @@ object SubscriptionsApi {
                 _id = subscriberObj.optString("_id", ""),
                 name = subscriberObj.optString("name", ""),
                 username = subscriberObj.optString("username", ""),
-                avatar = subscriberObj.optString("avatar", "").ifEmpty { null }
+                avatar = subscriberObj.optString("avatar", "").ifEmpty { null }?.let { resolveMediaUrl(it) ?: it },
+                avatarType = subscriberObj.optString("avatarType", "").ifEmpty { null },
+                avatarParts = subscriberObj.optJSONObject("avatarParts")?.let { parts ->
+                    com.yugm.app.core.model.AvatarPartsPayload(
+                        background = parts.optInt("background", 0),
+                        clothes = parts.optInt("clothes", 0),
+                        head = parts.optInt("head", 0),
+                        mouth = parts.optInt("mouth", 0),
+                        eyes = parts.optInt("eyes", 0),
+                        top = parts.optInt("top", 0)
+                    )
+                }
             ) else null,
             plan = obj.optString("plan", ""),
             active = obj.optBoolean("active", true),

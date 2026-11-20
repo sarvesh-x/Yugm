@@ -39,6 +39,11 @@ import com.yugm.app.core.api.resolveMediaUrl
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import java.util.Locale
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
+import com.yugm.app.core.ui.avatar.AvatarDescriptor
+import com.yugm.app.core.ui.avatar.AvatarGeneratorDialog
+import com.yugm.app.core.ui.avatar.GeneratedAvatar
+import com.yugm.app.core.ui.avatar.MultiavatarEngine
 
 data class ProfileSetupData(
     val name: String,
@@ -51,7 +56,8 @@ data class ProfileSetupData(
     val gender: String,
     val age: Int,
     val lookingFor: String,
-    val acceptTerms: Boolean
+    val acceptTerms: Boolean,
+    val generatedAvatar: AvatarDescriptor? = null
 )
 
 @Composable
@@ -86,6 +92,19 @@ fun CreateProfileScreen(
     // the large base64 data URL in the saved-instance Bundle.
     var avatarUrl by remember { mutableStateOf("") }
     var avatarUploadFailed by rememberSaveable { mutableStateOf(false) }
+    var generatedAvatar by remember { mutableStateOf<AvatarDescriptor?>(null) }
+    var showAvatarGenerator by remember { mutableStateOf(false) }
+
+    if (showAvatarGenerator) {
+        AvatarGeneratorDialog(
+            initialAvatar = generatedAvatar,
+            onConfirm = { descriptor ->
+                generatedAvatar = descriptor
+                showAvatarGenerator = false
+            },
+            onDismiss = { showAvatarGenerator = false }
+        )
+    }
     var bio by rememberSaveable { mutableStateOf("") }
     var vibeLine by rememberSaveable { mutableStateOf("") }
 
@@ -369,16 +388,21 @@ fun CreateProfileScreen(
                 }
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        com.yugm.app.core.ui.components.Avatar(
-                            initial = name.firstOrNull()?.toString() ?: "?",
-                            size = 72,
-                            imageUrl = avatarUrl.takeIf(String::isNotBlank)
-                        )
+                        if (generatedAvatar != null) {
+                            GeneratedAvatar(descriptor = generatedAvatar!!, size = 72.dp)
+                        } else {
+                            com.yugm.app.core.ui.components.Avatar(
+                                initial = name.firstOrNull()?.toString() ?: "?",
+                                size = 72,
+                                imageUrl = avatarUrl.takeIf(String::isNotBlank)
+                            )
+                        }
                         Column(Modifier.weight(1f)) {
                             Text(
                                 when {
                                     isUploadingAvatar -> "Uploading profile photo…"
                                     avatarUploadFailed -> "Photo upload failed. Choose a photo to retry."
+                                    generatedAvatar != null -> "Generated avatar ready."
                                     avatarUrl.isNotBlank() -> "Photo uploaded and ready."
                                     else -> "Add a profile photo"
                                 },
@@ -388,23 +412,29 @@ fun CreateProfileScreen(
                             )
                             Text("Optional. You can change it later.", color = TextMuted, fontSize = 12.sp)
                             if (isUploadingAvatar) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp,
-                                    color = profileAccent
-                                )
+                                YugmLoadingSpinner(size = 20.dp)
                             }
-                            OutlinedButton(
-                                onClick = { avatarPicker.launch("image/*") },
-                                enabled = !isUploadingAvatar && !isSubmitting,
-                                modifier = Modifier.padding(top = 6.dp)
-                            ) {
-                                Text(when {
-                                    isUploadingAvatar -> "Uploading…"
-                                    avatarUploadFailed -> "Retry upload"
-                                    avatarUrl.isBlank() -> "Choose photo"
-                                    else -> "Change photo"
-                                })
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                                OutlinedButton(
+                                    onClick = {
+                                        generatedAvatar = null
+                                        avatarPicker.launch("image/*")
+                                    },
+                                    enabled = !isUploadingAvatar && !isSubmitting,
+                                ) {
+                                    Text(when {
+                                        isUploadingAvatar -> "Uploading…"
+                                        avatarUploadFailed -> "Retry upload"
+                                        avatarUrl.isBlank() && generatedAvatar == null -> "Choose photo"
+                                        else -> "Change photo"
+                                    })
+                                }
+                                OutlinedButton(
+                                    onClick = { showAvatarGenerator = true },
+                                    enabled = !isUploadingAvatar && !isSubmitting,
+                                ) {
+                                    Text("Generate avatar")
+                                }
                             }
                         }
                     }
@@ -512,7 +542,8 @@ fun CreateProfileScreen(
                                     gender = gender,
                                     age = age,
                                     lookingFor = lookingFor,
-                                    acceptTerms = termsAccepted
+                                    acceptTerms = termsAccepted,
+                                    generatedAvatar = generatedAvatar
                                 )) { submissionError ->
                                     errorMessage = submissionError.orEmpty()
                                 }

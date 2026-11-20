@@ -112,7 +112,9 @@ fun WaveInboxScreen(
                                 Avatar(
                                     initial = sender?.name?.firstOrNull()?.toString() ?: "?",
                                     size = 44,
-                                    imageUrl = sender?.avatar
+                                    imageUrl = sender?.avatar,
+                                    avatarType = sender?.avatarType,
+                                    avatarParts = sender?.avatarParts
                                 )
                                 Column(Modifier.weight(1f)) {
                                     Text(sender?.name ?: "Someone", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)

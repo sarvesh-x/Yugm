@@ -145,6 +145,8 @@ gamesRouter.get("/leaderboard", asyncHandler(async (req: AuthRequest, res) => {
           name: "$user.name",
           username: "$user.username",
           avatar: "$user.avatar",
+          avatarType: "$user.avatarType",
+          avatarParts: "$user.avatarParts",
           level: "$user.level",
           levelTitle: "$user.levelTitle"
         }
@@ -160,20 +162,20 @@ gamesRouter.get("/challenges", asyncHandler(async (req: AuthRequest, res) => {
   const clanId = myClan?._id;
   const [incoming, outgoing, clan] = await Promise.all([
     MiniGameChallenge.find({ targetUserId: req.user!.id, expiresAt: { $gt: new Date() } })
-      .populate("challengerId", "name username avatar level levelTitle")
+      .populate("challengerId", "name username avatar avatarType avatarParts level levelTitle")
       .sort({ createdAt: -1 })
       .limit(20)
       .lean(),
     MiniGameChallenge.find({ challengerId: req.user!.id })
-      .populate("targetUserId", "name username avatar level levelTitle")
-      .populate("clanId", "name slug avatar familyLabel")
+      .populate("targetUserId", "name username avatar avatarType avatarParts level levelTitle")
+      .populate("clanId", "name slug avatar avatarType avatarParts familyLabel")
       .sort({ createdAt: -1 })
       .limit(20)
       .lean(),
     clanId
       ? MiniGameChallenge.find({ clanId, expiresAt: { $gt: new Date() } })
-        .populate("challengerId", "name username avatar level levelTitle")
-        .populate("clanId", "name slug avatar familyLabel")
+        .populate("challengerId", "name username avatar avatarType avatarParts level levelTitle")
+        .populate("clanId", "name slug avatar avatarType avatarParts familyLabel")
         .sort({ createdAt: -1 })
         .limit(20)
         .lean()
@@ -294,7 +296,7 @@ gamesRouter.post("/scores/:scoreId/share", chatLimiter, validateBody(shareScoreS
     message: text
   });
   const message = await DirectMessage.findById(created._id)
-    .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .populate("senderId receiverId", "name username avatar avatarType avatarParts activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .lean();
   emitUser(req.body.targetUserId, socketEvents.directMessageNew, { message, partnerId: req.user!.id });
   emitUser(req.user!.id, socketEvents.directMessageNew, { message, partnerId: req.body.targetUserId });

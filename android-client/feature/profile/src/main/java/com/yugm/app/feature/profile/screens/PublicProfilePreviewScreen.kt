@@ -305,7 +305,9 @@ private fun PublicHeroCard(profile: Host) {
                     initial = profile.name.firstOrNull()?.toString() ?: "?",
                     size = 88,
                     imageUrl = profile.avatar,
-                    cosmetics = profile.activeCosmetics
+                    cosmetics = profile.activeCosmetics,
+                    avatarType = profile.avatarType,
+                    avatarParts = profile.avatarParts
                 )
 
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {

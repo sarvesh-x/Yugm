@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -49,6 +48,7 @@ import com.yugm.app.core.ui.components.AutomaticSyncEffect
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 private val TasksBackground = Color(0xFFF7F7FB)
 private val TasksInk = Color(0xFF19182B)
@@ -110,7 +110,7 @@ fun MissionsScreen(token: String, onBack: () -> Unit, onBattlePass: () -> Unit) 
             )
         }
         if (loading && missions == null) {
-            item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = TasksPurple) } }
+            item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { YugmLoadingSpinner(size = 40.dp) } }
         }
         error?.let { message ->
             item {
@@ -196,7 +196,7 @@ private fun CheckInBanner(checkedIn: Boolean, loading: Boolean, onSignIn: () -> 
                     .padding(horizontal = 20.dp, vertical = 9.dp),
                 contentAlignment = Alignment.Center
             ) {
-                if (loading) CircularProgressIndicator(Modifier.size(18.dp), color = TasksInk, strokeWidth = 2.dp)
+                if (loading) YugmLoadingSpinner(size = 18.dp)
                 else Text(if (checkedIn) "Checked in" else "Sign in", color = if (checkedIn) Color.White else Color(0xFF382200), fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
         }
@@ -260,7 +260,7 @@ private fun ActionPill(label: String, loading: Boolean = false, get: Boolean = f
             .clickable(enabled = !loading, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        if (loading) CircularProgressIndicator(Modifier.size(17.dp), color = Color.White, strokeWidth = 2.dp)
+        if (loading) YugmLoadingSpinner(size = 17.dp)
         else Text(label, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
     }
 }

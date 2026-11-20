@@ -45,7 +45,7 @@ storiesRouter.get("/stories/feed", requireAuth, asyncHandler(async (req: AuthReq
   const userIds = [req.user!._id, ...following.map((f) => f.followingId)];
   const stories = await Story.find({ userId: { $in: userIds }, status: "ACTIVE", expiresAt: { $gt: new Date() } })
     .sort({ createdAt: -1 })
-    .populate("userId", "name username avatar")
+    .populate("userId", "name username avatar avatarType avatarParts")
     .lean();
 
   const grouped: Record<string, { user: any; stories: any[] }> = {};
@@ -66,7 +66,7 @@ storiesRouter.get("/stories/user/:userId", requireAuth, asyncHandler(async (req:
   const stories = await Story.find({ userId: req.params.userId, status: "ACTIVE", expiresAt: { $gt: new Date() } })
     .sort({ createdAt: -1 })
     .skip(skip).limit(limit)
-    .populate("userId", "name username avatar")
+    .populate("userId", "name username avatar avatarType avatarParts")
     .lean();
   sendOk(res, { stories });
 }));
@@ -109,7 +109,7 @@ storiesRouter.delete("/stories/:storyId", requireAuth, asyncHandler(async (req: 
 
 storiesRouter.get("/stories/:storyId/views", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   const story = await Story.findById(req.params.storyId)
-    .populate("viewedBy", "name username avatar")
+    .populate("viewedBy", "name username avatar avatarType avatarParts")
     .lean();
   if (!story) throw new HttpError(404, "Story not found", ErrorCode.NOT_FOUND);
   sendOk(res, { viewers: story.viewedBy, count: story.viewedBy.length });
@@ -132,7 +132,7 @@ storiesRouter.post("/stories/:storyId/comments", requireAuth, validateBody(comme
   story.replyCount += 1;
   await story.save();
 
-  const populated = await comment.populate("userId", "name username avatar");
+  const populated = await comment.populate("userId", "name username avatar avatarType avatarParts");
 
   if (story.userId.toString() !== req.user!._id.toString()) {
     await createNotification(story.userId.toString(), "COMMENT", "New comment", `${req.user!.name} commented on your story`, {
@@ -150,13 +150,13 @@ storiesRouter.get("/stories/:storyId/comments", requireAuth, asyncHandler(async 
     .sort({ createdAt: -1 })
     .skip(Number(req.query.skip) || 0)
     .limit(Math.min(Number(req.query.limit) || 20, 50))
-    .populate("userId", "name username avatar")
+    .populate("userId", "name username avatar avatarType avatarParts")
     .lean();
 
   const commentIds = comments.map((c) => c._id);
   const replies = await StoryComment.find({ parentId: { $in: commentIds } })
     .sort({ createdAt: 1 })
-    .populate("userId", "name username avatar")
+    .populate("userId", "name username avatar avatarType avatarParts")
     .lean();
 
   const replyMap: Record<string, any[]> = {};
@@ -191,7 +191,7 @@ storiesRouter.post("/stories/:storyId/comments/:commentId/reply", requireAuth, v
     await story.save();
   }
 
-  const populated = await reply.populate("userId", "name username avatar");
+  const populated = await reply.populate("userId", "name username avatar avatarType avatarParts");
 
   if (parent.userId.toString() !== req.user!._id.toString()) {
     await createNotification(parent.userId.toString(), "COMMENT", "New reply", `${req.user!.name} replied to your comment`, {

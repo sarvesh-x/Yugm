@@ -63,7 +63,7 @@ subscriptionRouter.delete("/subscriptions/:creatorId", asyncHandler(async (req: 
 
 subscriptionRouter.get("/subscriptions", asyncHandler(async (req: AuthRequest, res) => {
   const subscriptions = await Subscription.find({ subscriberId: req.user!._id })
-    .populate("creatorId", "name username avatar")
+    .populate("creatorId", "name username avatar avatarType avatarParts")
     .sort({ createdAt: -1 })
     .lean();
 
@@ -72,7 +72,7 @@ subscriptionRouter.get("/subscriptions", asyncHandler(async (req: AuthRequest, r
 
 subscriptionRouter.get("/subscriptions/subscribers", asyncHandler(async (req: AuthRequest, res) => {
   const subscriptions = await Subscription.find({ creatorId: req.user!._id })
-    .populate("subscriberId", "name username avatar")
+    .populate("subscriberId", "name username avatar avatarType avatarParts")
     .sort({ createdAt: -1 })
     .lean();
 

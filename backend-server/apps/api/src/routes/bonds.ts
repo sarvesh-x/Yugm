@@ -41,8 +41,8 @@ const people = async (ids: string[]) => {
   const users = await User.find({ _id: { $in: [...new Set(ids)] } }).select(bondPeopleFields).lean();
   return new Map(users.map(user => [String(user._id), user]));
 };
-function person(user?: { _id: unknown; name: string; username?: string; avatar?: string | null }) {
-  return user ? { id: String(user._id), name: user.name, username: user.username, avatar: user.avatar } : null;
+function person(user?: { _id: unknown; name: string; username?: string; avatar?: string | null; avatarType?: string | null; avatarParts?: Record<string, number> | null }) {
+  return user ? { id: String(user._id), name: user.name, username: user.username, avatar: user.avatar, avatarType: user.avatarType, avatarParts: user.avatarParts } : null;
 }
 const partnerId = (bond: BondRecord, user: string) => bond.users.map(String).find(id => id !== user) ?? "";
 

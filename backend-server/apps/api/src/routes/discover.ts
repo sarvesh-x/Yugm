@@ -22,7 +22,7 @@ discoverRouter.get("/discover/trending", asyncHandler(async (req: AuthRequest, r
     .sort({ participants: -1, createdAt: -1 })
     .skip((page - 1) * limit)
     .limit(limit)
-    .populate("host", "name avatar username activeCosmetics level")
+    .populate("host", "name avatar avatarType avatarParts username activeCosmetics level")
     .lean();
 
   sendOk(res, { rooms, page, limit });
@@ -48,7 +48,7 @@ discoverRouter.get("/discover/recommended", asyncHandler(async (req: AuthRequest
     })
       .sort({ participants: -1 })
       .limit(10)
-      .populate("host", "name avatar username activeCosmetics level")
+      .populate("host", "name avatar avatarType avatarParts username activeCosmetics level")
       .lean(),
     User.find({
       _id: { $ne: req.user!.id },
@@ -57,7 +57,7 @@ discoverRouter.get("/discover/recommended", asyncHandler(async (req: AuthRequest
         ...(languages.length ? [{ languages: { $in: languages } }] : []),
       ]
     })
-      .select("_id name avatar username level levelTitle city isOnline")
+      .select("_id name avatar avatarType avatarParts username level levelTitle city isOnline")
       .limit(10)
       .lean(),
   ]);
@@ -78,7 +78,7 @@ discoverRouter.get("/discover/online-now", asyncHandler(async (req: AuthRequest,
     _id: { $ne: req.user!.id },
     lastSeen: { $gte: new Date(Date.now() - 10 * 60 * 1000) }, // online in last 10 min
   })
-    .select("_id name avatar username level levelTitle city activeCosmetics")
+    .select("_id name avatar avatarType avatarParts username level levelTitle city activeCosmetics")
     .sort({ lastSeen: -1 })
     .skip((page - 1) * limit)
     .limit(limit)
@@ -130,7 +130,7 @@ discoverRouter.get("/discover/hub/:key", asyncHandler(async (req: AuthRequest, r
     .sort({ participants: -1 })
     .skip((page - 1) * limit)
     .limit(limit)
-    .populate("host", "name avatar username activeCosmetics level")
+    .populate("host", "name avatar avatarType avatarParts username activeCosmetics level")
     .lean();
 
   sendOk(res, { items: rooms, page, limit });

@@ -59,7 +59,7 @@ eventsRouter.get("/events", asyncHandler(async (req, res) => {
     Event.find(filter)
       .sort({ featured: -1, eventDate: 1, _id: 1 })
       .skip(skip).limit(limit)
-      .populate("hostId", "name username avatar")
+      .populate("hostId", "name username avatar avatarType avatarParts")
       .lean(),
     Event.countDocuments(filter)
   ]);
@@ -69,8 +69,8 @@ eventsRouter.get("/events", asyncHandler(async (req, res) => {
 
 eventsRouter.get("/events/:eventId", asyncHandler(async (req, res) => {
   const event = await Event.findById(req.params.eventId)
-    .populate("hostId", "name username avatar")
-    .populate("participantIds", "name username avatar")
+    .populate("hostId", "name username avatar avatarType avatarParts")
+    .populate("participantIds", "name username avatar avatarType avatarParts")
     .lean();
   if (!event) throw new HttpError(404, "Event not found", ErrorCode.NOT_FOUND);
   sendOk(res, { event });

@@ -104,7 +104,9 @@ private fun HostRow(host: Host, onClick: () -> Unit) {
             initial = host.name.firstOrNull()?.toString() ?: "?",
             size = 48,
             imageUrl = host.avatar,
-            cosmetics = host.activeCosmetics
+            cosmetics = host.activeCosmetics,
+            avatarType = host.avatarType,
+            avatarParts = host.avatarParts
         )
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {

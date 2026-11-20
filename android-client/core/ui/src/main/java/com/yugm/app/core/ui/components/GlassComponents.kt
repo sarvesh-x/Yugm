@@ -167,11 +167,7 @@ fun GlassButton(
             }
         }
         if (loading) {
-            androidx.compose.material3.CircularProgressIndicator(
-                color = textColor,
-                modifier = Modifier.size(24.dp),
-                strokeWidth = 2.dp
-            )
+            YugmLoadingSpinner(size = 24.dp)
         } else {
             Text(text, color = textColor, fontWeight = FontWeight.Black, fontSize = 16.sp)
         }

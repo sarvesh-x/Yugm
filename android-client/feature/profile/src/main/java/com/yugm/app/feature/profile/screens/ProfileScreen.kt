@@ -45,7 +45,9 @@ fun ProfileScreen(
                     initial = host.name.firstOrNull()?.toString() ?: "?",
                     size = 84,
                     imageUrl = host.avatar,
-                    cosmetics = host.activeCosmetics
+                    cosmetics = host.activeCosmetics,
+                    avatarType = host.avatarType,
+                    avatarParts = host.avatarParts
                 )
                 Column {
                     Text(host.name, color = TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.Black)

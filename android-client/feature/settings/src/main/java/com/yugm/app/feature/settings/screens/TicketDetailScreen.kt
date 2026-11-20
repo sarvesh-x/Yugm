@@ -24,6 +24,7 @@ import com.yugm.app.feature.settings.viewmodel.SupportViewModel
 import com.yugm.app.core.util.UiState
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import kotlinx.coroutines.launch
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,7 +81,7 @@ fun TicketDetailScreen(
     ) { innerPadding ->
         when {
             isLoading && (ticket == null) -> Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = PrimaryPink)
+                YugmLoadingSpinner(size = 40.dp)
             }
             ticket == null -> Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
                 Text(errorMessage ?: "Ticket not found", color = Color(0xFFFF4444))
@@ -166,7 +167,7 @@ fun TicketDetailScreen(
                                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
                             ) {
                                 if (isSending) {
-                                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    YugmLoadingSpinner(size = 16.dp)
                                 } else {
                                     Text("Send", fontWeight = FontWeight.Bold)
                                 }

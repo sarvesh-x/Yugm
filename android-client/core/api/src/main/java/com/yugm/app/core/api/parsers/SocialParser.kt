@@ -1,5 +1,6 @@
 package com.yugm.app.core.api.parsers
 
+import com.yugm.app.core.api.resolveMediaUrl
 import com.yugm.app.core.model.Clan
 import com.yugm.app.core.model.ClanMemberRole
 import com.yugm.app.core.model.ClanMessage
@@ -41,7 +42,9 @@ fun JSONObject.toClan(): Clan = Clan(
     name = optString("name", "Family"),
     slug = optString("slug", ""),
     description = optString("description", ""),
-    avatar = if (has("avatar") && !isNull("avatar")) optString("avatar") else null,
+    avatar = if (has("avatar") && !isNull("avatar")) resolveMediaUrl(optString("avatar")) ?: optString("avatar").ifBlank { null } else null,
+    avatarType = parseAvatarTypeField(),
+    avatarParts = parseAvatarPartsField(),
     familyLabel = optString("familyLabel", "Family"),
     privacy = optString("privacy", "PUBLIC"),
     memberCount = optInt("memberCount", 0),
@@ -95,7 +98,9 @@ fun JSONArray.toClanReactions(): List<ClanReaction> = buildList {
     id = optString("_id", optString("id", "")),
     name = optString("name", "Family"),
     slug = optString("slug", ""),
-    avatar = if (has("avatar") && !isNull("avatar")) optString("avatar") else null,
+    avatar = if (has("avatar") && !isNull("avatar")) resolveMediaUrl(optString("avatar")) ?: optString("avatar").ifBlank { null } else null,
+    avatarType = parseAvatarTypeField(),
+    avatarParts = parseAvatarPartsField(),
     familyLabel = optString("familyLabel", ""),
     memberCount = optInt("memberCount", 0)
 )

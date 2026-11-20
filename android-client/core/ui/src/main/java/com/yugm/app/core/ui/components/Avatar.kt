@@ -55,6 +55,9 @@ import com.yugm.app.core.ui.theme.Pink
 import com.yugm.app.core.ui.theme.Purple
 import com.yugm.app.core.ui.theme.LocalMotionEnabled
 import com.yugm.app.core.ui.cosmetics.CosmeticArtwork
+import com.yugm.app.core.ui.avatar.GeneratedAvatar
+import com.yugm.app.core.ui.avatar.AvatarDescriptor
+import com.yugm.app.core.ui.avatar.AvatarParts
 import com.yugm.app.core.ui.cosmetics.CosmeticFrameOverlay
 import com.yugm.app.core.ui.cosmetics.CosmeticWaveOverlay
 
@@ -69,7 +72,9 @@ fun Avatar(
     showEntry: Boolean = false,
     accessibilityLabel: String? = null,
     voiceRoomPresence: VoiceRoomPresence? = null,
-    onLiveClick: (() -> Unit)? = null
+    onLiveClick: (() -> Unit)? = null,
+    avatarType: String? = null,
+    avatarParts: com.yugm.app.core.model.AvatarPartsPayload? = null
 ) {
     val avatarAsset = avatarAssetUrl(cosmetics.avatarAsset)
     // Resolve relative upload paths centrally so avatars from every API-backed
@@ -131,7 +136,20 @@ fun Avatar(
                     .border(1.dp, Ink.copy(alpha = 0.72f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                if (!finalImageUrl.isNullOrBlank()) {
+                if (avatarType == "GENERATED" && avatarParts != null) {
+                    GeneratedAvatar(
+                        descriptor = AvatarDescriptor(parts = AvatarParts(
+                            background = avatarParts.background,
+                            clothes = avatarParts.clothes,
+                            head = avatarParts.head,
+                            mouth = avatarParts.mouth,
+                            eyes = avatarParts.eyes,
+                            top = avatarParts.top
+                        )),
+                        size = size.dp,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else if (!finalImageUrl.isNullOrBlank()) {
                     // Keep a visible fallback underneath while Coil loads or if the URL fails.
                     // AsyncImage must be composed immediately so its request can start; gating
                     // Image on rememberAsyncImagePainter.State.Success leaves the painter stuck

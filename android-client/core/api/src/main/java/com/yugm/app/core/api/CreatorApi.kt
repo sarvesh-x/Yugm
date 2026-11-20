@@ -1,18 +1,18 @@
 package com.yugm.app.core.api
 
 import com.yugm.app.core.api.parsers.*
+import com.yugm.app.core.model.Achievement
+import com.yugm.app.core.model.BadgeGallery
+import com.yugm.app.core.model.ClaimAchievementResult
 import com.yugm.app.core.model.CreatorEarningBalance
 import com.yugm.app.core.model.CreatorPayoutKycStatus
-import com.yugm.app.core.model.ClaimAchievementResult
 import com.yugm.app.core.model.ExperienceHome
 import com.yugm.app.core.model.PayoutRequirements
 import com.yugm.app.core.model.TrustVerificationStatus
 import com.yugm.app.core.model.WithdrawalEligibility
 import com.yugm.app.core.model.WithdrawalRequestResult
-import com.yugm.app.core.model.Achievement
-import com.yugm.app.core.model.BadgeGallery
-import org.json.JSONObject
 import org.json.JSONArray
+import org.json.JSONObject
 
 object CreatorApi {
     suspend fun experienceHome(token: String): ExperienceHome {
@@ -150,7 +150,9 @@ object CreatorApi {
         val worn = data.optJSONArray("wornIds") ?: JSONArray()
         return BadgeGallery(
             name = user?.optString("name").orEmpty(),
-            avatar = user?.optString("avatar").orEmpty(),
+            avatar = user?.parseAvatarUrlField("avatar").orEmpty(),
+            avatarType = user?.parseAvatarTypeField(),
+            avatarParts = user?.parseAvatarPartsField(),
             wornIds = List(worn.length()) { worn.getString(it) },
             badges = data.optJSONArray("badges")?.toAchievements().orEmpty()
         )

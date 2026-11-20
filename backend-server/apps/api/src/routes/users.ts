@@ -322,6 +322,8 @@ function publicUser(user: any) {
     name: user.name,
     username: user.username,
     avatar: user.avatar,
+    avatarType: user.avatarType,
+    avatarParts: user.avatarParts,
     role: user.role,
     walletBalance: user.walletBalance,
     xp: levelStatus.xp,
@@ -394,6 +396,8 @@ usersRouter.delete("/me", asyncHandler(async (req: AuthRequest, res) => {
         phone: "",
         firebaseUid: "",
         avatar: "",
+        avatarType: "",
+        avatarParts: "",
         bio: "",
         vibeLine: "",
         city: "",
@@ -441,8 +445,8 @@ usersRouter.patch("/me", validateBody(profileSchema.partial()), asyncHandler(asy
 
 usersRouter.get("/me/friends", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   const rows = await Friendship.find({ $or: [{ userId: req.user!._id }, { friendId: req.user!._id }], status: "ACCEPTED" })
-    .populate("userId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
-    .populate("friendId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .populate("userId", "name username avatar avatarType avatarParts city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .populate("friendId", "name username avatar avatarType avatarParts city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .sort({ updatedAt: -1 }).limit(100).lean();
   const users = rows.map((row: any) => row.userId?._id?.toString() === req.user!.id ? row.friendId : row.userId).filter(Boolean);
   sendOk(res, { users });
@@ -450,7 +454,7 @@ usersRouter.get("/me/friends", requireAuth, asyncHandler(async (req: AuthRequest
 
 usersRouter.get("/me/close-friends", asyncHandler(async (req: AuthRequest, res) => {
   const user = await User.findById(req.user!.id)
-    .populate("closeFriendIds", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .populate("closeFriendIds", "name username avatar avatarType avatarParts city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .select("closeFriendIds")
     .lean();
   const users = (user?.closeFriendIds ?? []).filter(Boolean);
@@ -506,7 +510,7 @@ usersRouter.get("/me/level", (req: AuthRequest, res) => {
 
 usersRouter.get("/me/level-overview", asyncHandler(async (req: AuthRequest, res) => {
   const user = await User.findById(req.user!.id)
-    .select("name username avatar xp level levelTitle lastDailyCheckInAt streakCount walletBalance activeCosmetics wealthExp charmExp")
+    .select("name username avatar avatarType avatarParts xp level levelTitle lastDailyCheckInAt streakCount walletBalance activeCosmetics wealthExp charmExp")
     .lean();
   if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
 
@@ -533,7 +537,7 @@ usersRouter.get("/me/level-overview", asyncHandler(async (req: AuthRequest, res)
     User.find({ isBlocked: { $ne: true } })
       .sort({ level: -1, xp: -1, _id: 1 })
       .limit(10)
-      .select("name username avatar level levelTitle xp activeCosmetics")
+      .select("name username avatar avatarType avatarParts level levelTitle xp activeCosmetics")
       .lean(),
     User.countDocuments({
       isBlocked: { $ne: true },
@@ -587,6 +591,8 @@ usersRouter.get("/me/level-overview", asyncHandler(async (req: AuthRequest, res)
       name: u.name,
       username: u.username,
       avatar: u.avatar,
+      avatarType: (u as any).avatarType,
+      avatarParts: (u as any).avatarParts,
       level: getLevelStatus(u).level,
       levelTitle: getLevelStatus(u).title,
       xp: getLevelStatus(u).xp,
@@ -757,7 +763,7 @@ usersRouter.get("/search", asyncHandler(async (req: AuthRequest, res) => {
       : [{ name: regex }, { username: regex }, { interests: regex }, { city: regex }],
     isBlocked: { $ne: true }
   })
-    .select("name username avatar city followersCount interests role activeCosmetics vipTier vipStartedAt vipExpiresAt xp level levelTitle lastDailyCheckInAt")
+    .select("name username avatar avatarType avatarParts city followersCount interests role activeCosmetics vipTier vipStartedAt vipExpiresAt xp level levelTitle lastDailyCheckInAt")
     .sort({ vipExpiresAt: -1, level: -1, followersCount: -1, createdAt: -1 })
     .limit(limit)
     .lean();
@@ -775,7 +781,7 @@ usersRouter.get("/hosts/suggested", asyncHandler(async (req: AuthRequest, res) =
     isBlocked: { $ne: true },
     role: { $in: ["HOST", "MODERATOR", "ADMIN"] }
   })
-    .select("name username avatar city followersCount interests role activeCosmetics vipTier vipStartedAt vipExpiresAt xp level levelTitle lastDailyCheckInAt")
+    .select("name username avatar avatarType avatarParts city followersCount interests role activeCosmetics vipTier vipStartedAt vipExpiresAt xp level levelTitle lastDailyCheckInAt")
     .sort({ vipExpiresAt: -1, level: -1, followersCount: -1, createdAt: -1 })
     .limit(limit)
     .lean();
@@ -805,7 +811,7 @@ usersRouter.get("/recommended-chat", asyncHandler(async (req: AuthRequest, res) 
       deletionRequestedAt: { $exists: false }
     } },
     { $sample: { size: limit } },
-    { $project: { name: 1, username: 1, avatar: 1, activeCosmetics: 1, vipTier: 1, vipExpiresAt: 1, xp: 1, level: 1, levelTitle: 1 } }
+    { $project: { name: 1, username: 1, avatar: 1, avatarType: 1, avatarParts: 1, activeCosmetics: 1, vipTier: 1, vipExpiresAt: 1, xp: 1, level: 1, levelTitle: 1 } }
   ]);
   const users = sampledUsers.map((user: any) => ({
     ...user,
@@ -837,7 +843,7 @@ usersRouter.get("/messages", asyncHandler(async (req: AuthRequest, res) => {
   };
   if (beforeDate) filter.createdAt = { $lt: beforeDate };
   const rows = await DirectMessage.find(filter)
-    .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .populate("senderId receiverId", "name username avatar avatarType avatarParts activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .sort({ createdAt: -1, _id: -1 })
     .limit(limit + 1)
     .lean();
@@ -974,7 +980,7 @@ usersRouter.get("/messages/:userId", asyncHandler(async (req: AuthRequest, res) 
   if (beforeDate) baseFilter.createdAt = { $lt: beforeDate };
 
   const messages = await DirectMessage.find(baseFilter)
-    .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .populate("senderId receiverId", "name username avatar avatarType avatarParts activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .sort({ createdAt: -1, _id: -1 })
     .limit(limit + 1)
     .lean();
@@ -1013,7 +1019,7 @@ usersRouter.put("/messages/:userId/:messageId", requireNotMuted, requireNotChatR
   message.isEdited = true;
   message.editedAt = new Date();
   await message.save();
-  await message.populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle");
+  await message.populate("senderId receiverId", "name username avatar avatarType avatarParts activeCosmetics vipTier vipExpiresAt xp level levelTitle");
   const safeMessage = message.toObject ? message.toObject() : message;
   emitUser(req.params.userId, socketEvents.directMessageNew, { message: safeMessage, partnerId: req.user!.id, updated: true });
   emitUser(req.user!.id, socketEvents.directMessageNew, { message: safeMessage, partnerId: req.params.userId, updated: true });
@@ -1038,7 +1044,7 @@ usersRouter.post("/messages/:userId/forward", requireNotMuted, requireNotChatRes
     message: source.message, mediaUrl: source.mediaUrl, mediaType: source.mediaType,
     duration: source.duration, forwarded: true
   });
-  const message: any = await DirectMessage.findById(created._id).populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle").lean();
+  const message: any = await DirectMessage.findById(created._id).populate("senderId receiverId", "name username avatar avatarType avatarParts activeCosmetics vipTier vipExpiresAt xp level levelTitle").lean();
   emitUser(req.params.userId, socketEvents.directMessageNew, { message, partnerId: req.user!.id });
   emitUser(req.user!.id, socketEvents.directMessageNew, { message, partnerId: req.params.userId });
   const targetMuted = await ConversationMute.exists({ ownerId: req.params.userId, partnerId: req.user!._id, muted: true });
@@ -1164,7 +1170,7 @@ usersRouter.post("/messages/:userId", requireAuth, requireNotMuted, requireNotCh
     replyTo
   });
   const message = await DirectMessage.findById(created._id)
-    .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .populate("senderId receiverId", "name username avatar avatarType avatarParts activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .lean();
 
   // Mark other messages from them as read
@@ -1193,7 +1199,7 @@ usersRouter.post("/messages/:userId/call", requireAuth, requireNotMuted, validat
   if (receiverId === req.user!.id) throw new HttpError(400, "Cannot call yourself", ErrorCode.VALIDATION);
 
   const [receiver, caller] = await Promise.all([
-    User.findById(receiverId).select("name username avatar").lean(),
+    User.findById(receiverId).select("name username avatar avatarType avatarParts").lean(),
     User.findById(req.user!.id).select("vipTier vipExpiresAt vipStartedAt").lean()
   ]);
   if (!receiver) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
@@ -1245,7 +1251,7 @@ usersRouter.post("/messages/:userId/call", requireAuth, requireNotMuted, validat
     session.endSession();
 
     const safeMessage = await DirectMessage.findById(createdMessage[0]._id)
-      .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+      .populate("senderId receiverId", "name username avatar avatarType avatarParts activeCosmetics vipTier vipExpiresAt xp level levelTitle")
       .lean();
 
     await createNotification(
@@ -1293,7 +1299,7 @@ usersRouter.post("/messages/:userId/:messageId/reactions", chatLimiter, validate
       { $pull: { reactions: { userId: req.user!.id } } },
       { new: true }
     )
-      .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+      .populate("senderId receiverId", "name username avatar avatarType avatarParts activeCosmetics vipTier vipExpiresAt xp level levelTitle")
       .lean();
   } else {
     const catalogReaction = await findActiveRoomReaction(requestedType);
@@ -1307,7 +1313,7 @@ usersRouter.post("/messages/:userId/:messageId/reactions", chatLimiter, validate
       { $push: { reactions: { userId: req.user!.id, type: requestedType, createdAt: new Date() } } },
       { new: true }
     )
-      .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+      .populate("senderId receiverId", "name username avatar avatarType avatarParts activeCosmetics vipTier vipExpiresAt xp level levelTitle")
       .lean();
   }
 
@@ -1322,7 +1328,7 @@ usersRouter.post("/messages/:userId/:messageId/reactions", chatLimiter, validate
 
 usersRouter.get("/me/blocked", requireAuth, asyncHandler(async (req: AuthRequest, res) => {
   const blockedRows = await Block.find({ blockerId: req.user!.id })
-    .populate("blockedUserId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .populate("blockedUserId", "name username avatar avatarType avatarParts city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .lean();
   const users = blockedRows.map((row) => row.blockedUserId).filter(Boolean);
   sendOk(res, { users });
@@ -1335,7 +1341,7 @@ usersRouter.get("/leaderboard/levels", asyncHandler(async (req: AuthRequest, res
   if (!requester) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
   const [users, total] = await Promise.all([
     User.find({ isBlocked: { $ne: true } })
-    .select("name username avatar city followersCount activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .select("name username avatar avatarType avatarParts city followersCount activeCosmetics vipTier vipExpiresAt xp level levelTitle")
       .sort({ level: -1, xp: -1, _id: 1 })
       .skip((page - 1) * pageSize)
       .limit(pageSize)
@@ -1531,7 +1537,7 @@ usersRouter.get("/:id/rooms", asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
   const limit = Math.min(Number(req.query.limit) || 20, 50);
   const rooms = await Room.find({ hostId: req.params.id, status: "LIVE" })
-    .populate("hostId", "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .populate("hostId", "name username avatar avatarType avatarParts city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean();
@@ -1542,7 +1548,7 @@ usersRouter.get("/:id/followers", asyncHandler(async (req: AuthRequest, res) => 
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
   const limit = Math.min(Number(req.query.limit) || 50, 100);
   const followers = await Follow.find({ followingId: req.params.id })
-    .populate("followerId", "name username avatar city followersCount activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .populate("followerId", "name username avatar avatarType avatarParts city followersCount activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean();
@@ -1554,7 +1560,7 @@ usersRouter.get("/:id/following", asyncHandler(async (req: AuthRequest, res) => 
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
   const limit = Math.min(Number(req.query.limit) || 50, 100);
   const following = await Follow.find({ followerId: req.params.id })
-    .populate("followingId", "name username avatar city followersCount activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+    .populate("followingId", "name username avatar avatarType avatarParts city followersCount activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .sort({ createdAt: -1 })
     .limit(limit)
     .lean();
@@ -1565,8 +1571,8 @@ usersRouter.get("/:id/following", asyncHandler(async (req: AuthRequest, res) => 
 usersRouter.get("/:id/friends", asyncHandler(async (req: AuthRequest, res) => {
   if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
   const rows = await Friendship.find({ status: "ACCEPTED", $or: [{ userId: req.params.id }, { friendId: req.params.id }] })
-    .populate("userId", "name username avatar city followersCount activeCosmetics vipTier vipLevel vipExp vipExpiresAt xp level levelTitle")
-    .populate("friendId", "name username avatar city followersCount activeCosmetics vipTier vipLevel vipExp vipExpiresAt xp level levelTitle")
+    .populate("userId", "name username avatar avatarType avatarParts city followersCount activeCosmetics vipTier vipLevel vipExp vipExpiresAt xp level levelTitle")
+    .populate("friendId", "name username avatar avatarType avatarParts city followersCount activeCosmetics vipTier vipLevel vipExp vipExpiresAt xp level levelTitle")
     .sort({ updatedAt: -1 }).limit(100).lean();
   const friends = rows.map((row: any) => String(row.userId?._id ?? row.userId) === req.params.id ? row.friendId : row.userId).filter(Boolean);
   sendOk(res, { users: friends });
@@ -1577,7 +1583,7 @@ usersRouter.get("/:id/visitors", asyncHandler(async (req: AuthRequest, res) => {
   if (req.params.id !== req.user!.id) throw new HttpError(403, "You can only view your own visitors", ErrorCode.FORBIDDEN);
   if (!getVipStatus(req.user).isVip) throw new HttpError(403, "All Visitors is a VIP benefit", ErrorCode.FORBIDDEN);
   const visits = await ProfileVisit.find({ profileId: req.params.id })
-    .populate("visitorId", "name username avatar city followersCount activeCosmetics vipTier vipLevel vipExp vipExpiresAt xp level levelTitle")
+    .populate("visitorId", "name username avatar avatarType avatarParts city followersCount activeCosmetics vipTier vipLevel vipExp vipExpiresAt xp level levelTitle")
     .sort({ lastVisitedAt: -1 }).limit(100).lean();
   sendOk(res, { users: visits.map((visit: any) => ({ ...visit.visitorId, visitedAt: visit.lastVisitedAt })).filter((user: any) => user.id || user._id) });
 }));

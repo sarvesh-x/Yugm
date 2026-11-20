@@ -1,5 +1,14 @@
 package com.yugm.app.core.model
 
+data class AvatarPartsPayload(
+    val background: Int = 0,
+    val clothes: Int = 0,
+    val head: Int = 0,
+    val mouth: Int = 0,
+    val eyes: Int = 0,
+    val top: Int = 0
+)
+
 data class Host(
     val id: String = "",
     val name: String = "",
@@ -16,6 +25,8 @@ data class Host(
     val diamondBalance: Int = 0,
     val bio: String = "",
     val avatar: String? = null,
+    val avatarType: String? = null,
+    val avatarParts: AvatarPartsPayload? = null,
     val isVip: Boolean = false,
     val vipTier: String = "",
     val vipLevel: Int = 0,
@@ -71,6 +82,9 @@ data class YugmUser(
     val name: String = "",
     val username: String = "",
     val email: String = "",
+    val avatar: String? = null,
+    val avatarType: String? = null,
+    val avatarParts: AvatarPartsPayload? = null,
     val profileCompleted: Boolean = false,
     val emailVerified: Boolean = false,
     val walletBalance: Int = 0,
@@ -103,6 +117,8 @@ data class AuthProfileUpdate(
     val age: Int,
     val lookingFor: String?,
     val avatar: String?,
+    val avatarType: String? = null,
+    val avatarPartsJson: String? = null,
     val acceptTerms: Boolean,
     val vibeLine: String?,
     val state: String? = null,

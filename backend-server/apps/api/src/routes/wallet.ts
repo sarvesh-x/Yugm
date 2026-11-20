@@ -597,7 +597,7 @@ walletRouter.post("/rooms/:id/send-gift", giftLimiter, requireWalletNotFrozen, v
       message: `sent ${gift.name} to ${receiver.name}`,
       type: "GIFT"
     });
-    return message.populate("senderId", "name username avatar");
+    return message.populate("senderId", "name username avatar avatarType avatarParts");
   });
   if (giftChatMessage) {
     emitRoom(room._id.toString(), socketEvents.roomChatMessage, { message: giftChatMessage });
@@ -668,7 +668,7 @@ walletRouter.post("/direct-send-gift", requireWalletNotFrozen, validateBody(send
     }));
 
     const message = createdMessage ? await DirectMessage.findById(createdMessage._id)
-      .populate("senderId receiverId", "name username avatar activeCosmetics vipTier vipExpiresAt xp level levelTitle")
+      .populate("senderId receiverId", "name username avatar avatarType avatarParts activeCosmetics vipTier vipExpiresAt xp level levelTitle")
       .lean() : null;
 
     if (message) {

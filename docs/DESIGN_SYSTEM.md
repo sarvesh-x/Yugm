@@ -18,6 +18,8 @@ Use `MaterialTheme.colorScheme`, `MaterialTheme.typography`, `YugmColors`, `Yugm
 
 Spacing is not yet a complete central token scale: screens and shared components still contain many direct `dp` values. New shared components should use a consistent spacing scale; a broad migration needs its own scoped task and visual review. Animation should respect `LocalMotionEnabled` where meaningful.
 
+Loading spinners use the single approved Lottie animation via `core/ui`'s `YugmLoadingSpinner` (`res/raw/loading_spinner.json`). Do not introduce new `CircularProgressIndicator` spinners or alternate spinner animations; scale `YugmLoadingSpinner` with its `size`/`modifier` parameters. Determinate `LinearProgressIndicator` progress bars remain separate where they represent real progress.
+
 ## Migration direction
 
 Consolidate existing equivalents before adding components. Migrate frequently used screens incrementally and check light/dark, font scaling, accessibility, and loading/error/empty states. The login, phone/OTP, and profile-setup auth screens were made palette-aware in the 2026-11-19 auth theme repair; this does not establish system-theme readiness for the rest of the app. See [auth flow audit](features/auth-flow-audit.md).

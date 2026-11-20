@@ -114,6 +114,18 @@ fun NavGraph(
             expiresIn = session.expiresIn,
             emailVerified = session.user.emailVerified,
             profileCompleted = session.user.profileCompleted,
+            avatar = session.user.avatar,
+            avatarType = session.user.avatarType,
+            avatarPartsJson = session.user.avatarParts?.let {
+                org.json.JSONObject()
+                    .put("background", it.background)
+                    .put("clothes", it.clothes)
+                    .put("head", it.head)
+                    .put("mouth", it.mouth)
+                    .put("eyes", it.eyes)
+                    .put("top", it.top)
+                    .toString()
+            },
         )
         val dest = if (!session.user.profileCompleted) {
             Screen.ProfileSetup.route
@@ -244,6 +256,23 @@ fun NavGraph(
             usernameProvider = { mainViewModel.username },
             userEmailProvider = { mainViewModel.userEmail },
             emailVerifiedProvider = { mainViewModel.emailVerified },
+            userAvatarProvider = { mainViewModel.userAvatar },
+            userAvatarTypeProvider = { mainViewModel.userAvatarType },
+            userAvatarPartsProvider = {
+                mainViewModel.userAvatarPartsJson?.let { raw ->
+                    runCatching {
+                        val parts = org.json.JSONObject(raw)
+                        com.yugm.app.core.model.AvatarPartsPayload(
+                            background = parts.optInt("background", 0),
+                            clothes = parts.optInt("clothes", 0),
+                            head = parts.optInt("head", 0),
+                            mouth = parts.optInt("mouth", 0),
+                            eyes = parts.optInt("eyes", 0),
+                            top = parts.optInt("top", 0)
+                        )
+                    }.getOrNull()
+                }
+            },
             onVerifyEmail = {
                 mainViewModel.syncEmailVerification { verified ->
                     if (!verified) {
@@ -261,7 +290,24 @@ fun NavGraph(
         chatNavGraph(
             navController = navController,
             authTokenProvider = { mainViewModel.authToken },
-            currentUserIdProvider = { mainViewModel.currentUserId }
+            currentUserIdProvider = { mainViewModel.currentUserId },
+            userAvatarProvider = { mainViewModel.userAvatar },
+            userAvatarTypeProvider = { mainViewModel.userAvatarType },
+            userAvatarPartsProvider = {
+                mainViewModel.userAvatarPartsJson?.let { raw ->
+                    runCatching {
+                        val parts = org.json.JSONObject(raw)
+                        com.yugm.app.core.model.AvatarPartsPayload(
+                            background = parts.optInt("background", 0),
+                            clothes = parts.optInt("clothes", 0),
+                            head = parts.optInt("head", 0),
+                            mouth = parts.optInt("mouth", 0),
+                            eyes = parts.optInt("eyes", 0),
+                            top = parts.optInt("top", 0)
+                        )
+                    }.getOrNull()
+                }
+            }
         )
         creatorNavGraph(
             navController = navController,
@@ -378,7 +424,9 @@ private fun RoomMinimizedBubble(
                 initial = room.host?.name?.take(1) ?: room.title.take(1),
                 size = if (isVideo) 62 else 56,
                 imageUrl = room.coverImage ?: room.host?.avatar,
-                cosmetics = room.host?.activeCosmetics ?: com.yugm.app.core.model.ActiveCosmetics()
+                cosmetics = room.host?.activeCosmetics ?: com.yugm.app.core.model.ActiveCosmetics(),
+                avatarType = room.host?.avatarType,
+                avatarParts = room.host?.avatarParts
             )
         }
         if (isVideo) {

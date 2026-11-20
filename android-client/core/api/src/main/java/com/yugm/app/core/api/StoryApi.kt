@@ -71,7 +71,18 @@ object StoryApi {
             viewers.add(StoryUser(
                 _id = v.optString("_id", ""),
                 name = v.optString("name", ""),
-                avatar = v.optString("avatar", "").ifEmpty { null }
+                avatar = v.optString("avatar", "").ifEmpty { null }?.let { com.yugm.app.core.api.resolveMediaUrl(it) ?: it },
+                avatarType = v.optString("avatarType", "").ifEmpty { null },
+                avatarParts = v.optJSONObject("avatarParts")?.let { parts ->
+                    com.yugm.app.core.model.AvatarPartsPayload(
+                        background = parts.optInt("background", 0),
+                        clothes = parts.optInt("clothes", 0),
+                        head = parts.optInt("head", 0),
+                        mouth = parts.optInt("mouth", 0),
+                        eyes = parts.optInt("eyes", 0),
+                        top = parts.optInt("top", 0)
+                    )
+                }
             ))
         }
         return viewers
@@ -113,7 +124,18 @@ object StoryApi {
             user = StoryUser(
                 _id = userObj.optString("_id", ""),
                 name = userObj.optString("name", ""),
-                avatar = userObj.optString("avatar", "").ifEmpty { null }
+                avatar = userObj.optString("avatar", "").ifEmpty { null }?.let { com.yugm.app.core.api.resolveMediaUrl(it) ?: it },
+                avatarType = userObj.optString("avatarType", "").ifEmpty { null },
+                avatarParts = userObj.optJSONObject("avatarParts")?.let { parts ->
+                    com.yugm.app.core.model.AvatarPartsPayload(
+                        background = parts.optInt("background", 0),
+                        clothes = parts.optInt("clothes", 0),
+                        head = parts.optInt("head", 0),
+                        mouth = parts.optInt("mouth", 0),
+                        eyes = parts.optInt("eyes", 0),
+                        top = parts.optInt("top", 0)
+                    )
+                }
             ),
             stories = stories
         )
@@ -125,7 +147,18 @@ object StoryApi {
             _id = obj.optString("_id", ""),
             userId = userObj?.optString("_id", "") ?: obj.optString("userId", ""),
             userName = userObj?.optString("name", "") ?: "",
-            userAvatar = userObj?.optString("avatar", "")?.ifEmpty { null },
+            userAvatar = userObj?.optString("avatar", "")?.ifEmpty { null }?.let { com.yugm.app.core.api.resolveMediaUrl(it) ?: it },
+            userAvatarType = userObj?.optString("avatarType", "")?.ifEmpty { null },
+            userAvatarParts = userObj?.optJSONObject("avatarParts")?.let { parts ->
+                com.yugm.app.core.model.AvatarPartsPayload(
+                    background = parts.optInt("background", 0),
+                    clothes = parts.optInt("clothes", 0),
+                    head = parts.optInt("head", 0),
+                    mouth = parts.optInt("mouth", 0),
+                    eyes = parts.optInt("eyes", 0),
+                    top = parts.optInt("top", 0)
+                )
+            },
             mediaUrl = obj.optString("mediaUrl", ""),
             mediaType = obj.optString("mediaType", "IMAGE"),
             caption = obj.optString("caption", "").ifEmpty { null },
@@ -156,7 +189,18 @@ object StoryApi {
             storyId = obj.optString("storyId", ""),
             userId = userObj?.optString("_id", "") ?: obj.optString("userId", ""),
             userName = userObj?.optString("name", "") ?: "",
-            userAvatar = userObj?.optString("avatar", "")?.ifEmpty { null },
+            userAvatar = userObj?.optString("avatar", "")?.ifEmpty { null }?.let { com.yugm.app.core.api.resolveMediaUrl(it) ?: it },
+            userAvatarType = userObj?.optString("avatarType", "")?.ifEmpty { null },
+            userAvatarParts = userObj?.optJSONObject("avatarParts")?.let { parts ->
+                com.yugm.app.core.model.AvatarPartsPayload(
+                    background = parts.optInt("background", 0),
+                    clothes = parts.optInt("clothes", 0),
+                    head = parts.optInt("head", 0),
+                    mouth = parts.optInt("mouth", 0),
+                    eyes = parts.optInt("eyes", 0),
+                    top = parts.optInt("top", 0)
+                )
+            },
             parentId = if (parentId.isNullOrBlank() || parentId == "null") null else parentId,
             text = obj.optString("text", ""),
             replies = replies,

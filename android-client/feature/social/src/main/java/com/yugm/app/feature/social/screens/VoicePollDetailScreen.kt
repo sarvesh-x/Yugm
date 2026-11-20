@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,6 +39,7 @@ import com.yugm.app.core.ui.components.YugmAmbientBackground
 import com.yugm.app.core.ui.theme.*
 import com.yugm.app.core.util.DateUtils
 import kotlinx.coroutines.launch
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 @Composable
 fun VoicePollDetailScreen(
@@ -174,7 +174,7 @@ fun VoicePollDetailScreen(
                                         )
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                             if (votingIndex == idx) {
-                                                CircularProgressIndicator(modifier = Modifier.height(14.dp).padding(end = 0.dp), strokeWidth = 2.dp, color = Gold)
+                                                YugmLoadingSpinner(size = 14.dp, modifier = Modifier.padding(end = 0.dp))
                                             }
                                             Text("${opt.votes} votes", color = TextMuted, fontSize = 12.sp)
                                         }

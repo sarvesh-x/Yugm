@@ -74,6 +74,10 @@ import com.yugm.app.core.model.PkSideType
 import com.yugm.app.core.model.PkStats
 import com.yugm.app.core.model.Room
 import com.yugm.app.core.ui.components.*
+import com.yugm.app.core.ui.avatar.AvatarDescriptor
+import com.yugm.app.core.ui.avatar.AvatarGeneratorDialog
+import com.yugm.app.core.ui.avatar.AvatarParts
+import com.yugm.app.core.ui.avatar.GeneratedAvatar
 import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.core.ui.cosmetics.StyledName
 import com.yugm.app.core.ui.cosmetics.profileThemeAccent
@@ -81,6 +85,7 @@ import com.yugm.app.core.ui.cosmetics.profileThemeColors
 import com.yugm.app.core.ui.cosmetics.profileBannerColors
 import com.yugm.app.core.ui.theme.*
 import kotlinx.coroutines.launch
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -138,6 +143,7 @@ fun ProfileDetailScreen(
     var hobbiesDraft by remember { mutableStateOf<List<String>>(emptyList()) }
     var customInterestInput by remember { mutableStateOf("") }
     var customHobbyInput by remember { mutableStateOf("") }
+    var generatedAvatarDraft by remember { mutableStateOf<AvatarDescriptor?>(null) }
 
     val openProfileEditor: () -> Unit = {
         viewModel.profile?.let {
@@ -153,6 +159,16 @@ fun ProfileDetailScreen(
             hobbiesDraft = it.hobbies
             customInterestInput = ""
             customHobbyInput = ""
+            generatedAvatarDraft = if (it.avatarType == "GENERATED" && it.avatarParts != null) {
+                AvatarDescriptor(parts = AvatarParts(
+                    background = it.avatarParts!!.background,
+                    clothes = it.avatarParts!!.clothes,
+                    head = it.avatarParts!!.head,
+                    mouth = it.avatarParts!!.mouth,
+                    eyes = it.avatarParts!!.eyes,
+                    top = it.avatarParts!!.top
+                ))
+            } else null
             showEditProfileScreen = true
         }
     }
@@ -183,6 +199,7 @@ fun ProfileDetailScreen(
                         com.yugm.app.core.api.YugmApi.uploadAvatar(token, bytes, mime)
                     }
                 }.onSuccess { url ->
+                    generatedAvatarDraft = null
                     viewModel.setOwnAvatar(url)
                     android.widget.Toast.makeText(context, "Profile photo updated", android.widget.Toast.LENGTH_SHORT).show()
                 }.onFailure { accountError = it.message ?: "Could not update your photo." }
@@ -408,7 +425,7 @@ fun ProfileDetailScreen(
                                 }
                             } else {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Avatar(clan.name.take(1).uppercase(), 58, clan.avatar)
+                                    Avatar(clan.name.take(1).uppercase(), 58, clan.avatar, avatarType = clan.avatarType, avatarParts = clan.avatarParts)
                                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                         Text(clan.name, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         Text("${clan.familyLabel.ifBlank { "Clan" }} • ${clan.memberCount} members", color = TextMuted, fontSize = 12.sp)
@@ -628,32 +645,54 @@ fun ProfileDetailScreen(
             customInterest = customInterestInput, onCustomInterestChange = { customInterestInput = it.take(24) },
             customHobby = customHobbyInput, onCustomHobbyChange = { customHobbyInput = it.take(24) },
             error = accountError, isBusy = accountBusy,
+            generatedAvatar = generatedAvatarDraft,
+            onGeneratedAvatarChange = { generatedAvatarDraft = it },
             onClose = { if (!accountBusy) { showEditProfileScreen = false; accountError = null } },
             onChangePhoto = { avatarPicker.launch("image/*") },
             onChangePassword = { if (!accountBusy) { showEditProfileScreen = false; accountError = null; showPasswordDialog = true } },
             onSave = {
                 val current = viewModel.profile
                 if (current != null) {
+                    val avatarDraft = generatedAvatarDraft
                     accountBusy = true
                     accountError = null
                     coroutineScope.launch {
                         runCatching {
                             withContext(Dispatchers.IO) {
+                                val avatarPartsJson = avatarDraft?.let { desc ->
+                                    "{\"background\":${desc.parts.background},\"clothes\":${desc.parts.clothes},\"head\":${desc.parts.head},\"mouth\":${desc.parts.mouth},\"eyes\":${desc.parts.eyes},\"top\":${desc.parts.top}}"
+                                }
                                 com.yugm.app.core.api.YugmApi.updateProfile(
                                     token = token,
                                     name = nameDraft.trim(),
                                     username = usernameDraft.trim().lowercase(java.util.Locale.ROOT),
                                     bio = bioDraft.trim(), city = cityDraft.trim(), state = stateDraft.trim(),
                                     vibeLine = vibeLineDraft.trim(), interests = interestsDraft, hobbies = hobbiesDraft,
-                                    gender = genderDraft, age = ageDraft.toIntOrNull()
+                                    gender = genderDraft, age = ageDraft.toIntOrNull(),
+                                    avatar = if (avatarDraft != null) null else null,
+                                    avatarType = if (avatarDraft != null) "GENERATED" else null,
+                                    avatarPartsJson = avatarPartsJson
                                 )
                             }
                         }.onSuccess { user ->
+                            val savedAvatarParts = avatarDraft?.let { desc ->
+                                com.yugm.app.core.model.AvatarPartsPayload(
+                                    background = desc.parts.background,
+                                    clothes = desc.parts.clothes,
+                                    head = desc.parts.head,
+                                    mouth = desc.parts.mouth,
+                                    eyes = desc.parts.eyes,
+                                    top = desc.parts.top
+                                )
+                            }
                             viewModel.setOwnProfile(
                                 name = user.name, username = user.username, bio = bioDraft.trim(),
                                 vibeLine = vibeLineDraft.trim(), city = cityDraft.trim(), state = stateDraft.trim(),
                                 gender = genderDraft, age = ageDraft.toIntOrNull() ?: 0,
-                                interests = interestsDraft, hobbies = hobbiesDraft
+                                interests = interestsDraft, hobbies = hobbiesDraft,
+                                avatar = if (avatarDraft != null) null else viewModel.profile?.avatar,
+                                avatarType = if (avatarDraft != null) "GENERATED" else viewModel.profile?.avatarType,
+                                avatarParts = if (avatarDraft != null) savedAvatarParts else viewModel.profile?.avatarParts
                             )
                             onProfileUpdated(user)
                             showEditProfileScreen = false
@@ -822,12 +861,26 @@ private fun EditProfilePage(
     customInterest: String, onCustomInterestChange: (String) -> Unit,
     customHobby: String, onCustomHobbyChange: (String) -> Unit,
     error: String?, isBusy: Boolean,
+    generatedAvatar: AvatarDescriptor?,
+    onGeneratedAvatarChange: (AvatarDescriptor) -> Unit,
     onClose: () -> Unit, onChangePhoto: () -> Unit,
     onChangePassword: () -> Unit, onSave: () -> Unit
 ) {
     val clipboard = LocalClipboardManager.current
     val colors = LocalYugmColors.current
     val canSave = !isBusy && profile != null && name.trim().length in 2..60 && username.trim().length in 3..24 && (age.isBlank() || age.toIntOrNull()?.let { it in 18..100 } == true)
+    var showAvatarGenerator by remember { mutableStateOf(false) }
+
+    if (showAvatarGenerator) {
+        AvatarGeneratorDialog(
+            initialAvatar = generatedAvatar,
+            onConfirm = { descriptor ->
+                onGeneratedAvatarChange(descriptor)
+                showAvatarGenerator = false
+            },
+            onDismiss = { showAvatarGenerator = false }
+        )
+    }
     Column(
         Modifier.fillMaxSize().background(colors.background).systemBarsPadding(),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -859,7 +912,18 @@ private fun EditProfilePage(
             Column(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(contentAlignment = Alignment.BottomEnd) {
                     Box(Modifier.size(104.dp).clip(CircleShape).background(colors.surfaceElevated).border(3.dp, colors.border, CircleShape), contentAlignment = Alignment.Center) {
-                        Avatar(name.take(1).ifBlank { "?" }, 96, profile?.avatar, profile?.activeCosmetics ?: com.yugm.app.core.model.ActiveCosmetics())
+                        if (generatedAvatar != null) {
+                            GeneratedAvatar(descriptor = generatedAvatar, size = 96.dp)
+                        } else {
+                            Avatar(
+                                initial = name.take(1).ifBlank { "?" },
+                                size = 96,
+                                imageUrl = profile?.avatar,
+                                cosmetics = profile?.activeCosmetics ?: com.yugm.app.core.model.ActiveCosmetics(),
+                                avatarType = profile?.avatarType,
+                                avatarParts = profile?.avatarParts
+                            )
+                        }
                     }
                     IconButton(
                         onClick = onChangePhoto,
@@ -868,6 +932,7 @@ private fun EditProfilePage(
                     ) { Icon(Icons.Filled.CameraAlt, contentDescription = "Change photo", tint = Color.White, modifier = Modifier.size(17.dp)) }
                 }
                 Text("Change Photo", color = colors.textSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 9.dp).clickable(onClick = onChangePhoto))
+                Text("Generate avatar", color = colors.primary, fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 4.dp).clickable { showAvatarGenerator = true })
             }
 
             Row(
@@ -1041,7 +1106,9 @@ private fun ProfileHero(
                     imageUrl = profile.avatar,
                     cosmetics = profile.activeCosmetics,
                     voiceRoomPresence = profile.voiceRoomPresence,
-                    onLiveClick = onJoinVoiceParty
+                    onLiveClick = onJoinVoiceParty,
+                    avatarType = profile.avatarType,
+                    avatarParts = profile.avatarParts
                 )
                 if (profile.isVip) {
                     Box(Modifier.align(Alignment.BottomEnd).clip(RoundedCornerShape(10.dp)).background(Brush.linearGradient(listOf(Color(0xFFFFE7A1), Color(0xFFFFB84D)))).padding(horizontal = 7.dp, vertical = 3.dp)) {
@@ -1201,7 +1268,9 @@ private fun ProfileHeroLegacy(
                             initial = profile.name.firstOrNull()?.toString() ?: "?",
                             size = 86,
                             imageUrl = profile.avatar,
-                            cosmetics = profile.activeCosmetics
+                            cosmetics = profile.activeCosmetics,
+                            avatarType = profile.avatarType,
+                            avatarParts = profile.avatarParts
                         )
                     }
 
@@ -1449,7 +1518,7 @@ private fun ProfileAction(
             contentAlignment = Alignment.Center
         ) {
             if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.size(19.dp), color = Color.White, strokeWidth = 2.dp)
+                YugmLoadingSpinner(size = 19.dp)
             } else {
                 Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
             }

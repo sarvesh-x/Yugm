@@ -41,6 +41,7 @@ import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.core.util.cosmeticDisplayName
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -193,7 +194,7 @@ fun AchievementsScreen(token: String, onBack: () -> Unit) {
                                 Text(error.orEmpty(), color = colors.textSecondary, textAlign = TextAlign.Center)
                                 TextButton(onClick = { scope.launch { refresh() } }) { Text("Try again") }
                             }
-                            data == null -> CircularProgressIndicator(color = colors.primary)
+                            data == null -> YugmLoadingSpinner(size = 40.dp)
                             honor -> Text("No honor badges are available yet.", color = colors.textSecondary)
                             else -> Text("No achievements in this category yet.", color = colors.textSecondary)
                         }
@@ -309,7 +310,7 @@ private fun BadgeShowcase(data: BadgeGallery, onEmptySlot: () -> Unit, onBadge: 
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Avatar(initial = data.name.take(1), size = 42, imageUrl = data.avatar)
+            Avatar(initial = data.name.take(1), size = 42, imageUrl = data.avatar, avatarType = data.avatarType, avatarParts = data.avatarParts)
             Column(Modifier.weight(1f)) {
                 Text(data.name.ifBlank { "Your collection" }, color = ink, fontWeight = FontWeight.Bold, maxLines = 1)
                 Text("${data.wornIds.size} of 3 badges worn", color = Color(0xFF6A5144), fontSize = 12.sp)

@@ -148,7 +148,9 @@ private fun RecordingItem(recording: RoomRecording, onClick: () -> Unit) {
         Avatar(
             initial = recording.hostName.firstOrNull()?.toString() ?: "?",
             size = 44,
-            imageUrl = recording.hostAvatar
+            imageUrl = recording.hostAvatar,
+            avatarType = recording.hostAvatarType,
+            avatarParts = recording.hostAvatarParts
         )
         Column(Modifier.weight(1f)) {
             Text(

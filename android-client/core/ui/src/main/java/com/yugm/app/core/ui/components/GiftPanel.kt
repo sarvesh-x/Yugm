@@ -124,7 +124,7 @@ fun GiftPanel(
                             verticalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
                             Box {
-                                Avatar(participant.user.name, 38, participant.user.avatar, participant.user.activeCosmetics)
+                                Avatar(participant.user.name, 38, participant.user.avatar, participant.user.activeCosmetics, avatarType = participant.user.avatarType, avatarParts = participant.user.avatarParts)
                                 if (selected) Box(Modifier.align(Alignment.BottomEnd).size(14.dp).clip(CircleShape).background(Color(0xFFFFBB36)), contentAlignment = Alignment.Center) {
                                     Text("✓", color = Color(0xFF251A00), fontSize = 9.sp, fontWeight = FontWeight.Black)
                                 }

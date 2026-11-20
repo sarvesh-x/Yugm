@@ -197,7 +197,7 @@ fun PkSideCard(side: PkSide, sideType: PkSideType, leading: Boolean, modifier: M
             if (leading) {
                 Canvas(Modifier.size(76.dp)) { drawCircle(Gold.copy(alpha = alpha)) }
             }
-            Avatar(side.hostName.firstOrNull()?.toString() ?: "?", 52, imageUrl = side.hostAvatar, cosmetics = side.activeCosmetics, isSpeaking = leading, showEntry = true)
+            Avatar(side.hostName.firstOrNull()?.toString() ?: "?", 52, imageUrl = side.hostAvatar, cosmetics = side.activeCosmetics, isSpeaking = leading, showEntry = true, avatarType = side.hostAvatarType, avatarParts = side.hostAvatarParts)
         }
         Text(side.hostName, color = TextPrimary, fontWeight = FontWeight.Black, textAlign = TextAlign.Center, maxLines = 1)
         Text(side.roomTitle, color = TextMuted, fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
@@ -342,7 +342,7 @@ fun PkOpponentSearchSheet(
                 items(opponents, key = { it.roomId }) { opponent ->
                     GlassCard(Modifier.fillMaxWidth().clickable { onInvite(opponent) }) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Avatar(opponent.hostName.firstOrNull()?.toString() ?: "?", 44, imageUrl = opponent.hostAvatar, cosmetics = opponent.activeCosmetics)
+                            Avatar(opponent.hostName.firstOrNull()?.toString() ?: "?", 44, imageUrl = opponent.hostAvatar, cosmetics = opponent.activeCosmetics, avatarType = opponent.hostAvatarType, avatarParts = opponent.hostAvatarParts)
                             Column(Modifier.weight(1f)) {
                                 Text(opponent.hostName, color = TextPrimary, fontWeight = FontWeight.Black)
                                 Text("${opponent.roomTitle} / ${opponent.participantCount} live", color = TextMuted, fontSize = 12.sp)

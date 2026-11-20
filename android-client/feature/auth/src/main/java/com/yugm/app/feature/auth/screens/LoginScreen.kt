@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.Public
 import com.yugm.app.core.ui.components.*
 import com.yugm.app.core.ui.theme.*
 import com.yugm.app.feature.auth.R
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 @Composable
 fun LoginScreen(
@@ -443,11 +444,7 @@ private fun LoginMethodButton(
         contentAlignment = Alignment.Center
     ) {
         if (loading) {
-            CircularProgressIndicator(
-                color = Color.White,
-                modifier = Modifier.size(24.dp),
-                strokeWidth = 2.dp
-            )
+            YugmLoadingSpinner(size = 24.dp)
         } else {
             Row(
                 verticalAlignment = Alignment.CenterVertically,

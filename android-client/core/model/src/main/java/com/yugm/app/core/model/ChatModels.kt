@@ -15,6 +15,8 @@ data class ChatMessage(
     val id: String = "",
     val authorId: String = "",
     val authorAvatar: String? = null,
+    val authorAvatarType: String? = null,
+    val authorAvatarParts: AvatarPartsPayload? = null,
     val createdAt: String = "",
     val mediaUrl: String? = null,
     val mediaType: String? = null,

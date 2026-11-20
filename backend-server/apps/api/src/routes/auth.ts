@@ -169,6 +169,8 @@ function publicUser(user: any) {
     username: user.username,
     email: user.email,
     avatar: user.avatar,
+    avatarType: user.avatarType,
+    avatarParts: user.avatarParts,
     isVerified: Boolean(user.isVerified),
     emailVerified: Boolean(user.emailVerified),
     role: user.role,

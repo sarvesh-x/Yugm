@@ -63,7 +63,7 @@ referralsRouter.get("/referrals/stats", requireAuth, asyncHandler(async (req: Au
   ]);
 
   const referrals = await Referral.find({ referrerId: req.user!._id })
-    .populate("referredUserId", "name username avatar")
+    .populate("referredUserId", "name username avatar avatarType avatarParts")
     .sort({ createdAt: -1 })
     .limit(50)
     .lean();

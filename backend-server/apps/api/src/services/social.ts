@@ -85,7 +85,7 @@ export async function getWaves(userId: string, unreadOnly = false) {
   const waves = await WaveNudge.find(filter)
     .sort({ createdAt: -1 })
     .limit(50)
-    .populate("senderId", "name username avatar")
+    .populate("senderId", "name username avatar avatarType avatarParts")
     .lean();
 
   return { waves };
@@ -157,7 +157,7 @@ export async function answerDailyQuestion(userId: string, questionId: string, an
 
 export async function getDailyQuestionAnswers(questionId: string, userId: string) {
   const answers = await UserDailyAnswer.find({ questionId, isPublic: true })
-    .populate("userId", "name username avatar")
+    .populate("userId", "name username avatar avatarType avatarParts")
     .sort({ createdAt: -1 })
     .limit(50)
     .lean();
@@ -199,14 +199,14 @@ export async function getActiveVoicePolls(page = 1, limit = 20) {
   const polls = await VoicePoll.find({ isActive: true, expiresAt: { $gt: new Date() } })
     .sort({ createdAt: -1 })
     .skip((page - 1) * limit).limit(limit)
-    .populate("userId", "name username avatar")
+    .populate("userId", "name username avatar avatarType avatarParts")
     .lean();
   const total = await VoicePoll.countDocuments({ isActive: true, expiresAt: { $gt: new Date() } });
   return { polls, total, page, limit };
 }
 
 export async function getVoicePollById(pollId: string) {
-  const poll = await VoicePoll.findById(pollId).populate("userId", "name username avatar").lean();
+  const poll = await VoicePoll.findById(pollId).populate("userId", "name username avatar avatarType avatarParts").lean();
   if (!poll) throw new HttpError(404, "Poll not found", ErrorCode.NOT_FOUND);
   return { poll };
 }
@@ -240,7 +240,7 @@ export async function voteVoicePoll(pollId: string, userId: string, optionIndex:
       $push: { ballots: { userId, optionIndex } }
     },
     { new: true }
-  ).populate("userId", "name username avatar");
+  ).populate("userId", "name username avatar avatarType avatarParts");
 
   if (poll) return { poll };
 
@@ -266,10 +266,10 @@ export async function closeVoicePoll(pollId: string, userId: string) {
   if (!poll) throw new HttpError(404, "Poll not found", ErrorCode.NOT_FOUND);
   const ownerId = (poll.userId as any)?._id?.toString?.() ?? poll.userId?.toString?.();
   if (ownerId !== userId) throw new HttpError(403, "Only the poll creator can close this poll", ErrorCode.FORBIDDEN);
-  if (!poll.isActive) return { poll: await VoicePoll.findById(pollId).populate("userId", "name username avatar").lean() };
+  if (!poll.isActive) return { poll: await VoicePoll.findById(pollId).populate("userId", "name username avatar avatarType avatarParts").lean() };
   poll.isActive = false;
   await poll.save();
-  const populated = await VoicePoll.findById(pollId).populate("userId", "name username avatar").lean();
+  const populated = await VoicePoll.findById(pollId).populate("userId", "name username avatar avatarType avatarParts").lean();
   return { poll: populated };
 }
 

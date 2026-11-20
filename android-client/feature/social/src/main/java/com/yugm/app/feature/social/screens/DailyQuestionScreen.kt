@@ -148,7 +148,7 @@ fun DailyQuestionScreen(
                                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Avatar(ans.userName.firstOrNull()?.toString() ?: "?", 34, imageUrl = ans.userAvatar)
+                                        Avatar(ans.userName.firstOrNull()?.toString() ?: "?", 34, imageUrl = ans.userAvatar, avatarType = ans.userAvatarType, avatarParts = ans.userAvatarParts)
                                         Column {
                                             Text(ans.userName, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                             Text(ans.answer, color = TextMuted, fontSize = 14.sp)

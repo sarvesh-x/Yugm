@@ -110,6 +110,8 @@ data class VibeTargetUser(
     val id: String = "",
     val name: String = "",
     val avatar: String? = null,
+    val avatarType: String? = null,
+    val avatarParts: AvatarPartsPayload? = null,
     val username: String = "",
     val level: Int = 1,
     val levelTitle: String = "New Vibe"

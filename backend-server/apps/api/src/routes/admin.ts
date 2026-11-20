@@ -640,7 +640,7 @@ adminRouter.get("/dashboard/overview", requirePermission("analytics.read"), asyn
 }));
 
 adminRouter.get("/dashboard/live-rooms", requirePermission("rooms.read"), asyncHandler(async (_req, res) => {
-  const rooms = await Room.find({ status: "LIVE" }).populate("hostId", "name username avatar isBlocked suspendedUntil").sort({ participantCount: -1 }).limit(50).lean();
+  const rooms = await Room.find({ status: "LIVE" }).populate("hostId", "name username avatar avatarType avatarParts isBlocked suspendedUntil").sort({ participantCount: -1 }).limit(50).lean();
   adminOk(res, rooms);
 }));
 
@@ -703,7 +703,7 @@ adminRouter.get("/dashboard/user-growth", requirePermission("analytics.read"), a
 
 adminRouter.get("/dashboard/top-hosts", requirePermission("analytics.read"), asyncHandler(async (_req, res) => {
   const hosts = await Room.aggregate([{ $group: { _id: "$hostId", rooms: { $sum: 1 }, liveRooms: { $sum: { $cond: [{ $eq: ["$status", "LIVE"] }, 1, 0] } } } }, { $sort: { rooms: -1 } }, { $limit: 20 }]);
-  await User.populate(hosts, { path: "_id", select: "name username avatar followersCount" });
+  await User.populate(hosts, { path: "_id", select: "name username avatar avatarType avatarParts followersCount" });
   adminOk(res, hosts);
 }));
 
@@ -743,11 +743,11 @@ adminRouter.get("/dashboard/experience", requirePermission("analytics.read"), as
       { $sort: { coins: -1 } },
       { $limit: 8 }
     ]),
-    User.find({ isBlocked: { $ne: true } }).select("name username avatar level xp followersCount").sort({ level: -1, xp: -1 }).limit(8).lean(),
+    User.find({ isBlocked: { $ne: true } }).select("name username avatar avatarType avatarParts level xp followersCount").sort({ level: -1, xp: -1 }).limit(8).lean(),
     ModerationQueue.countDocuments({ status: { $in: ["OPEN", "IN_REVIEW", "ESCALATED"] } })
   ]);
   const creatorIds = topCreators.map((row) => row._id);
-  const creators = await User.find({ _id: { $in: creatorIds } }).select("name username avatar city").lean();
+  const creators = await User.find({ _id: { $in: creatorIds } }).select("name username avatar avatarType avatarParts city").lean();
   const creatorMap = new Map(creators.map((creator) => [creator._id.toString(), creator]));
   const giftSummary = giftIncome[0] ?? { coins: 0, count: 0 };
   adminOk(res, {
@@ -961,17 +961,17 @@ adminRouter.get("/rooms", requirePermission("rooms.read"), asyncHandler(async (r
   const search = textRegex(req.query.search);
   if (search) filter.$or = [{ title: search }, { description: search }, { tags: search }];
   const [rooms, total] = await Promise.all([
-    Room.find(filter).populate("hostId", "name username avatar isBlocked").sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    Room.find(filter).populate("hostId", "name username avatar avatarType avatarParts isBlocked").sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
     Room.countDocuments(filter)
   ]);
   adminOk(res, rooms, paginationMeta(page, limit, total));
 }));
-adminRouter.get("/rooms/live", requirePermission("rooms.read"), asyncHandler(async (_req, res) => adminOk(res, await Room.find({ status: "LIVE" }).populate("hostId", "name username avatar").sort({ participantCount: -1 }).limit(100).lean())));
+adminRouter.get("/rooms/live", requirePermission("rooms.read"), asyncHandler(async (_req, res) => adminOk(res, await Room.find({ status: "LIVE" }).populate("hostId", "name username avatar avatarType avatarParts").sort({ participantCount: -1 }).limit(100).lean())));
 adminRouter.get("/rooms/:roomId", requirePermission("rooms.read"), asyncHandler(async (req, res) => {
   const [room, participants, messages, gifts, reports] = await Promise.all([
-    Room.findById(req.params.roomId).populate("hostId", "name username avatar activeCosmetics").lean(),
-    RoomParticipant.find({ roomId: req.params.roomId, leftAt: null }).populate("userId", "name username avatar").lean(),
-    ChatMessage.find({ roomId: req.params.roomId }).populate("senderId", "name username avatar").sort({ createdAt: -1 }).limit(100).lean(),
+    Room.findById(req.params.roomId).populate("hostId", "name username avatar avatarType avatarParts activeCosmetics").lean(),
+    RoomParticipant.find({ roomId: req.params.roomId, leftAt: null }).populate("userId", "name username avatar avatarType avatarParts").lean(),
+    ChatMessage.find({ roomId: req.params.roomId }).populate("senderId", "name username avatar avatarType avatarParts").sort({ createdAt: -1 }).limit(100).lean(),
     GiftTransaction.find({ roomId: req.params.roomId }).populate("senderId receiverId giftId").sort({ createdAt: -1 }).limit(100).lean(),
     Report.find({ roomId: req.params.roomId }).sort({ createdAt: -1 }).limit(50).lean()
   ]);
@@ -1022,8 +1022,8 @@ adminRouter.post("/rooms/:roomId/ban-user-from-room", requirePermission("rooms.m
   await auditLog({ adminId: req.admin!.id, action: "room.user_banned", entityType: "room", entityId: req.params.roomId, targetUserId: req.body.userId, metadata: { reason: req.body.reason }, req });
   adminOk(res, { banned: true });
 }));
-adminRouter.get("/rooms/:roomId/participants", requirePermission("rooms.read"), asyncHandler(async (req, res) => adminOk(res, await RoomParticipant.find({ roomId: req.params.roomId }).populate("userId", "name username avatar").lean())));
-adminRouter.get("/rooms/:roomId/messages", requirePermission("messages.read"), asyncHandler(async (req, res) => adminOk(res, await ChatMessage.find({ roomId: req.params.roomId }).populate("senderId", "name username avatar").sort({ createdAt: -1 }).limit(200).lean())));
+adminRouter.get("/rooms/:roomId/participants", requirePermission("rooms.read"), asyncHandler(async (req, res) => adminOk(res, await RoomParticipant.find({ roomId: req.params.roomId }).populate("userId", "name username avatar avatarType avatarParts").lean())));
+adminRouter.get("/rooms/:roomId/messages", requirePermission("messages.read"), asyncHandler(async (req, res) => adminOk(res, await ChatMessage.find({ roomId: req.params.roomId }).populate("senderId", "name username avatar avatarType avatarParts").sort({ createdAt: -1 }).limit(200).lean())));
 adminRouter.get("/rooms/:roomId/gifts", requirePermission("wallet.read"), asyncHandler(async (req, res) => adminOk(res, await GiftTransaction.find({ roomId: req.params.roomId }).populate("senderId receiverId giftId").sort({ createdAt: -1 }).limit(200).lean())));
 adminRouter.get("/rooms/:roomId/reports", requirePermission("reports.read"), asyncHandler(async (req, res) => adminOk(res, await Report.find({ roomId: req.params.roomId }).sort({ createdAt: -1 }).limit(100).lean())));
 
@@ -1158,7 +1158,7 @@ adminRouter.get("/referrals/stats", requirePermission("analytics.read"), asyncHa
       { $limit: 20 },
       { $lookup: { from: "users", localField: "_id", foreignField: "_id", as: "user" } },
       { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
-      { $project: { _id: 1, count: 1, coins: 1, "user.name": 1, "user.username": 1, "user.avatar": 1 } }
+      { $project: { _id: 1, count: 1, coins: 1, "user.name": 1, "user.username": 1, "user.avatar": 1, "user.avatarType": 1, "user.avatarParts": 1 } }
     ])
   ]);
   adminOk(res, { totalReferrals, rewardedReferrals, totalCoins: totalCoins[0]?.totalCoins ?? 0, topReferrers });
@@ -1171,8 +1171,8 @@ adminRouter.get("/referrals", requirePermission("analytics.read"), asyncHandler(
   if (req.query.referralCode) filter.referralCode = String(req.query.referralCode).toUpperCase();
   const [rows, total] = await Promise.all([
     Referral.find(filter)
-      .populate("referrerId", "name username avatar")
-      .populate("referredUserId", "name username avatar")
+      .populate("referrerId", "name username avatar avatarType avatarParts")
+      .populate("referredUserId", "name username avatar avatarType avatarParts")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -1420,14 +1420,14 @@ adminRouter.get("/withdrawals", requirePermission("withdrawals.read"), asyncHand
   const { page, limit, skip } = pageParams(req.query);
   const filter = req.query.status ? { status: String(req.query.status) } : {};
   const [withdrawals, total] = await Promise.all([
-    WithdrawalRequest.find(filter).populate("userId", "name username avatar role").sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    WithdrawalRequest.find(filter).populate("userId", "name username avatar avatarType avatarParts role").sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
     WithdrawalRequest.countDocuments(filter)
   ]);
   adminOk(res, { withdrawals }, paginationMeta(page, limit, total));
 }));
 adminRouter.get("/withdrawals/:withdrawalId", requirePermission("withdrawals.read"), asyncHandler(async (req, res) => {
   if (!isValidObjectId(req.params.withdrawalId)) throw new HttpError(400, "Invalid withdrawal ID", ErrorCode.VALIDATION);
-  const withdrawal = await WithdrawalRequest.findById(req.params.withdrawalId).populate("userId", "name username avatar role").lean();
+  const withdrawal = await WithdrawalRequest.findById(req.params.withdrawalId).populate("userId", "name username avatar avatarType avatarParts role").lean();
   if (!withdrawal) throw new HttpError(404, "Withdrawal not found", ErrorCode.NOT_FOUND);
   const payoutReview = await PayoutReview.findOne({ withdrawalRequestId: req.params.withdrawalId }).lean();
   adminOk(res, { withdrawal, payoutReview });
@@ -1612,7 +1612,7 @@ for (const key of ["users", "rooms", "matches", "messages", "wallet", "gifts", "
   }));
 }
 
-adminRouter.get("/fraud/suspicious-users", requirePermission("analytics.read"), asyncHandler(async (_req, res) => adminOk(res, await UserSafetyStatus.find({ riskLevel: { $in: ["HIGH", "CRITICAL"] } }).populate("userId", "name username avatar").sort({ trustScore: 1 }).limit(100).lean())));
+adminRouter.get("/fraud/suspicious-users", requirePermission("analytics.read"), asyncHandler(async (_req, res) => adminOk(res, await UserSafetyStatus.find({ riskLevel: { $in: ["HIGH", "CRITICAL"] } }).populate("userId", "name username avatar avatarType avatarParts").sort({ trustScore: 1 }).limit(100).lean())));
 adminRouter.get("/fraud/suspicious-wallets", requirePermission("wallet.read"), asyncHandler(async (_req, res) => adminOk(res, await UserSafetyStatus.find({ $or: [{ isWalletFrozen: true }, { riskLevel: "CRITICAL" }] }).populate("userId", "name username walletBalance").sort({ trustScore: 1 }).limit(100).lean())));
 adminRouter.get("/fraud/suspicious-rooms", requirePermission("rooms.read"), asyncHandler(async (_req, res) => adminOk(res, await Room.find({ status: "LIVE", participantCount: { $gte: 50 } }).populate("hostId", "name username").sort({ participantCount: -1 }).limit(100).lean())));
 adminRouter.post("/fraud/users/:userId/review", requirePermission("reports.resolve"), validateBody(z.object({ notes: z.string().max(1000).optional() })), asyncHandler(async (req: AdminAuthRequest, res) => {

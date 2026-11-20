@@ -30,7 +30,7 @@ giftLeaderboardRouter.get("/gift-leaderboard", requireAuth, asyncHandler(async (
     { $limit: limit },
     { $lookup: { from: "users", localField: "_id", foreignField: "_id", as: "user" } },
     { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
-    { $project: { totalCoins: 1, giftCount: 1, "user.name": 1, "user.username": 1, "user.avatar": 1, "user._id": 1 } },
+    { $project: { totalCoins: 1, giftCount: 1, "user.name": 1, "user.username": 1, "user.avatar": 1, "user.avatarType": 1, "user.avatarParts": 1, "user._id": 1 } },
   ]);
 
   const topReceivers = await GiftTransaction.aggregate([
@@ -41,7 +41,7 @@ giftLeaderboardRouter.get("/gift-leaderboard", requireAuth, asyncHandler(async (
     { $limit: limit },
     { $lookup: { from: "users", localField: "_id", foreignField: "_id", as: "user" } },
     { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
-    { $project: { totalCoins: 1, giftCount: 1, "user.name": 1, "user.username": 1, "user.avatar": 1, "user._id": 1 } },
+    { $project: { totalCoins: 1, giftCount: 1, "user.name": 1, "user.username": 1, "user.avatar": 1, "user.avatarType": 1, "user.avatarParts": 1, "user._id": 1 } },
   ]);
 
   sendOk(res, { topSenders, topReceivers, period });

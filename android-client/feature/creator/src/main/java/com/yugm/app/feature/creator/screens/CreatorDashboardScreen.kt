@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -50,6 +49,7 @@ import com.yugm.app.core.ui.theme.TextMuted
 import com.yugm.app.core.ui.theme.TextPrimary
 import com.yugm.app.feature.creator.viewmodel.CreatorUiState
 import com.yugm.app.feature.creator.viewmodel.CreatorViewModel
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 @Composable
 fun CreatorDashboardScreen(
@@ -114,7 +114,7 @@ fun CreatorDashboardScreen(
                 when (val current = state) {
                     is CreatorUiState.Loading -> {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = SaffronGold)
+                            YugmLoadingSpinner(size = 40.dp)
                         }
                     }
                     is CreatorUiState.Error -> {

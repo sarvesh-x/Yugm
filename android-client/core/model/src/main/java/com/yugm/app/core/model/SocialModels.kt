@@ -5,6 +5,8 @@ data class FriendUser(
     val name: String = "",
     val username: String = "",
     val avatar: String? = null,
+    val avatarType: String? = null,
+    val avatarParts: AvatarPartsPayload? = null,
     val bio: String? = null,
     val level: Int = 1,
     val levelTitle: String = "",
@@ -49,7 +51,9 @@ data class LeaderboardUser(
     val _id: String = "",
     val name: String? = null,
     val username: String? = null,
-    val avatar: String? = null
+    val avatar: String? = null,
+    val avatarType: String? = null,
+    val avatarParts: AvatarPartsPayload? = null
 )
 
 data class ReferralStatsResponse(
@@ -77,7 +81,9 @@ data class ReferralDetail(
 data class ReferralUser(
     val name: String? = null,
     val username: String? = null,
-    val avatar: String? = null
+    val avatar: String? = null,
+    val avatarType: String? = null,
+    val avatarParts: AvatarPartsPayload? = null
 )
 
 data class WishlistItem(

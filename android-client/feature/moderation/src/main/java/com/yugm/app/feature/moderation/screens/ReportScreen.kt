@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.yugm.app.feature.moderation.viewmodel.ModerationAction
 import com.yugm.app.feature.moderation.viewmodel.ModerationViewModel
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -109,7 +110,7 @@ fun ReportScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFCC3333)),
             ) {
                 if (state.isLoading) {
-                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
+                    YugmLoadingSpinner(size = 20.dp)
                 } else {
                     Text("Submit Report")
                 }

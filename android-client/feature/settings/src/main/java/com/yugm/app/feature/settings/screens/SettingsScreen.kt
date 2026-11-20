@@ -28,7 +28,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -72,6 +71,7 @@ import com.yugm.app.core.ui.components.*
 import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.core.ui.theme.Danger
 import com.yugm.app.feature.settings.viewmodel.SettingsViewModel
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 private enum class SettingsPane { Home, Blocked, Notifications, Feedback, About, Terms, Privacy, Guidelines, Appearance }
 
@@ -92,6 +92,9 @@ fun SettingsScreen(
     username: String,
     userEmail: String = "",
     emailVerified: Boolean = true,
+    userAvatar: String? = null,
+    userAvatarType: String? = null,
+    userAvatarParts: com.yugm.app.core.model.AvatarPartsPayload? = null,
     onVerifyEmail: (() -> Unit)? = null,
     onLogout: () -> Unit,
     onBack: () -> Unit,
@@ -202,6 +205,9 @@ fun SettingsScreen(
                     userName = userName,
                     username = username,
                     userEmail = userEmail,
+                    userAvatar = userAvatar,
+                    userAvatarType = userAvatarType,
+                    userAvatarParts = userAvatarParts,
                     blockedCount = viewModel.blockedUsers.size,
                     error = error,
                     emailVerified = emailVerified,
@@ -315,6 +321,9 @@ private fun SettingsHome(
     userName: String,
     username: String,
     userEmail: String = "",
+    userAvatar: String? = null,
+    userAvatarType: String? = null,
+    userAvatarParts: com.yugm.app.core.model.AvatarPartsPayload? = null,
     blockedCount: Int,
     error: String?,
     emailVerified: Boolean = true,
@@ -346,7 +355,7 @@ private fun SettingsHome(
             AnimatedEntrance(delay = 100) {
                 WhiteCard(modifier = Modifier.fillMaxWidth()) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Avatar(userName.firstOrNull()?.toString() ?: "Y", 52)
+                        Avatar(userName.firstOrNull()?.toString() ?: "Y", 52, imageUrl = userAvatar, avatarType = userAvatarType, avatarParts = userAvatarParts)
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(userName.ifBlank { "Yugm User" }, color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp)
                             Text("@${username.ifBlank { "yugm" }}", color = LocalYugmColors.current.textPrimary.copy(alpha = 0.74f), fontWeight = FontWeight.Bold)
@@ -516,7 +525,7 @@ private fun BlockedPane(modifier: Modifier, blockedUsers: List<Host>, busy: Bool
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Avatar(user.name.firstOrNull()?.toString() ?: "?", 44, imageUrl = user.avatar, cosmetics = user.activeCosmetics)
+                    Avatar(user.name.firstOrNull()?.toString() ?: "?", 44, imageUrl = user.avatar, cosmetics = user.activeCosmetics, avatarType = user.avatarType, avatarParts = user.avatarParts)
                     Column(Modifier.weight(1f)) {
                         Text(user.name, color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text("@${user.username.ifBlank { user.city }}", color = LocalYugmColors.current.textSecondary, fontSize = 12.sp)
@@ -612,7 +621,7 @@ private fun FeedbackPane(
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.fillMaxWidth().height(48.dp)
             ) {
-                if (busy) CircularProgressIndicator(color = LocalYugmColors.current.textPrimary, strokeWidth = 2.dp, modifier = Modifier.height(18.dp))
+                if (busy) YugmLoadingSpinner(size = 18.dp)
                 else Text("Send feedback", color = Color.White, fontWeight = FontWeight.Black)
             }
         }
@@ -682,10 +691,17 @@ private fun AboutPane(
                 AboutLinkRow("Terms of use", "▤", colors.textPrimary, colors.secondary, onTerms)
             }
             Text(
+                "Avatars by Multiavatar",
+                color = colors.textSecondary,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(top = 24.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            Text(
                 "Copyright © 2026 Yugm. All rights reserved.",
                 color = colors.textSecondary,
                 fontSize = 13.sp,
-                modifier = Modifier.padding(top = 24.dp, bottom = 24.dp),
+                modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
         }

@@ -71,8 +71,8 @@ friendsRouter.post("/friends/unfriend/:userId", asyncHandler(async (req: AuthReq
 
 friendsRouter.get("/friends", asyncHandler(async (req: AuthRequest, res) => {
   const friendships = await Friendship.find({ $or: [{ userId: req.user!.id }, { friendId: req.user!.id }], status: "ACCEPTED" })
-    .populate("friendId", "name username avatar bio level levelTitle isVerified")
-    .populate("userId", "name username avatar bio level levelTitle isVerified")
+    .populate("friendId", "name username avatar avatarType avatarParts bio level levelTitle isVerified")
+    .populate("userId", "name username avatar avatarType avatarParts bio level levelTitle isVerified")
     .lean();
   const friends = friendships.map((f) => {
     const isUserId = f.userId && typeof f.userId === "object" && "_id" in f.userId && (f.userId as any)._id.toString() === req.user!.id;
@@ -83,7 +83,7 @@ friendsRouter.get("/friends", asyncHandler(async (req: AuthRequest, res) => {
 
 friendsRouter.get("/friends/requests", asyncHandler(async (req: AuthRequest, res) => {
   const requests = await Friendship.find({ friendId: req.user!.id, status: "PENDING" })
-    .populate("userId", "name username avatar")
+    .populate("userId", "name username avatar avatarType avatarParts")
     .sort({ createdAt: -1 })
     .lean();
   sendOk(res, { requests });
@@ -91,7 +91,7 @@ friendsRouter.get("/friends/requests", asyncHandler(async (req: AuthRequest, res
 
 friendsRouter.get("/friends/sent", asyncHandler(async (req: AuthRequest, res) => {
   const sent = await Friendship.find({ userId: req.user!.id, status: "PENDING" })
-    .populate("friendId", "name username avatar")
+    .populate("friendId", "name username avatar avatarType avatarParts")
     .sort({ createdAt: -1 })
     .lean();
   sendOk(res, { sent });
@@ -124,7 +124,7 @@ friendsRouter.get("/friends/mutual/:userId", asyncHandler(async (req: AuthReques
   const theirFriendIds = new Set(theirFriends.map((f) => f.userId.toString() === req.params.userId ? f.friendId.toString() : f.userId.toString()));
   const mutualIds = [...myFriendIds].filter((id) => theirFriendIds.has(id));
   const mutualCount = mutualIds.length;
-  const mutual = await User.find({ _id: { $in: mutualIds } }).select("name username avatar").limit(6).lean();
+  const mutual = await User.find({ _id: { $in: mutualIds } }).select("name username avatar avatarType avatarParts").limit(6).lean();
   sendOk(res, { mutualCount, mutual });
 }));
 

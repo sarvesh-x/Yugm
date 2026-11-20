@@ -200,6 +200,10 @@ fun NavGraphBuilder.authNavGraph(
                         age = profileData.age,
                         lookingFor = profileData.lookingFor,
                         avatar = null,
+                        avatarType = if (profileData.generatedAvatar != null) "GENERATED" else null,
+                        avatarPartsJson = profileData.generatedAvatar?.let { desc ->
+                            "{\"background\":${desc.parts.background},\"clothes\":${desc.parts.clothes},\"head\":${desc.parts.head},\"mouth\":${desc.parts.mouth},\"eyes\":${desc.parts.eyes},\"top\":${desc.parts.top}}"
+                        },
                         acceptTerms = profileData.acceptTerms,
                         vibeLine = profileData.vibeLine.ifBlank { null },
                     ),

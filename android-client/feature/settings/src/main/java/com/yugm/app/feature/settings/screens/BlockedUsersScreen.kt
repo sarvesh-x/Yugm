@@ -80,7 +80,9 @@ fun BlockedUsersScreen(
                             initial = user.name.firstOrNull()?.toString() ?: "?",
                             size = 46,
                             imageUrl = user.avatar,
-                            cosmetics = user.activeCosmetics
+                            cosmetics = user.activeCosmetics,
+                            avatarType = user.avatarType,
+                            avatarParts = user.avatarParts
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(user.name, color = Color.White, fontWeight = FontWeight.Bold)

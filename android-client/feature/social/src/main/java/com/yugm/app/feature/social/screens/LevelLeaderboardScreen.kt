@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -43,6 +42,7 @@ import com.yugm.app.core.model.LevelLeaderboardPage
 import com.yugm.app.core.ui.components.Avatar
 import com.yugm.app.core.ui.theme.LocalYugmColors
 import kotlinx.coroutines.launch
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -113,7 +113,7 @@ fun LevelLeaderboardScreen(
                 Modifier.fillMaxSize().padding(padding),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
-            ) { CircularProgressIndicator(color = colors.primary) }
+            ) { YugmLoadingSpinner(size = 40.dp) }
 
             entries.isEmpty() -> Column(
                 Modifier.fillMaxSize().padding(padding).padding(24.dp),
@@ -174,7 +174,9 @@ fun LevelLeaderboardScreen(
                                 initial = entry.user.name.firstOrNull()?.toString() ?: "?",
                                 size = 43,
                                 imageUrl = entry.user.avatar,
-                                cosmetics = entry.user.activeCosmetics
+                                cosmetics = entry.user.activeCosmetics,
+                                avatarType = entry.user.avatarType,
+                                avatarParts = entry.user.avatarParts
                             )
                             Column(Modifier.weight(1f)) {
                                 Text(entry.user.name.ifBlank { "Yugm member" }, color = colors.textPrimary, fontWeight = FontWeight.Bold, maxLines = 1)
@@ -190,7 +192,7 @@ fun LevelLeaderboardScreen(
                 error?.let { message -> item { Text(message, color = colors.danger, fontSize = 12.sp, modifier = Modifier.padding(vertical = 4.dp)) } }
                 if (pageInfo.hasMore) item {
                     Button(onClick = ::loadMore, enabled = !loadingMore, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                        if (loadingMore) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = colors.primaryOn)
+                        if (loadingMore) YugmLoadingSpinner(size = 18.dp)
                         else Text("Load more · ${entries.size} of ${pageInfo.total}")
                     }
                 }

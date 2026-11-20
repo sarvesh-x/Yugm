@@ -35,7 +35,6 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
@@ -73,6 +72,7 @@ import com.yugm.app.core.ui.components.LoadingState
 import com.yugm.app.feature.social.viewmodel.ClanViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 // Theme-aware palette is read via LocalYugmColors inside composables.
 private val clanReactionTypes = listOf("heart", "fire", "laugh", "clap", "wow", "crown", "stars", "party")
@@ -282,7 +282,7 @@ fun ClanChatScreen(
                     if (viewModel.hasMoreOlder) item {
                         Box(Modifier.fillMaxWidth().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
                             if (viewModel.isLoadingOlder) {
-                                CircularProgressIndicator(color = LocalYugmColors.current.secondary, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                YugmLoadingSpinner(size = 20.dp)
                             } else {
                                 TextButton(onClick = { viewModel.loadOlderMessages(token, clanId) }) {
                                     Text("Load older messages", color = LocalYugmColors.current.secondary, fontSize = 12.sp)
@@ -292,7 +292,7 @@ fun ClanChatScreen(
                     }
                     if (chatItems.isEmpty()) item {
                         Column(Modifier.fillMaxWidth().padding(vertical = 55.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Avatar((clanName.ifBlank { "C" }).take(1).uppercase(), 58, clan?.avatar)
+                            Avatar((clanName.ifBlank { "C" }).take(1).uppercase(), 58, clan?.avatar, avatarType = clan?.avatarType, avatarParts = clan?.avatarParts)
                             Text("Start your clan conversation", color = LocalYugmColors.current.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                             Text("Say hello and bring everyone together.", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp)
                         }
@@ -394,7 +394,7 @@ fun ClanChatScreen(
                 contentAlignment = Alignment.Center
             ) {
                 if (viewModel.isSendingMessage) {
-                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    YugmLoadingSpinner(size = 20.dp)
                 } else {
                     Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send message", tint = Color.White, modifier = Modifier.size(21.dp))
                 }
@@ -426,7 +426,7 @@ private fun ClanChatMessageRow(
     ) {
         if (!mine) {
             if (showAvatar) {
-                Avatar(sender?.name?.take(1)?.uppercase() ?: "?", 34, sender?.avatar, sender?.activeCosmetics ?: com.yugm.app.core.model.ActiveCosmetics())
+                Avatar(sender?.name?.take(1)?.uppercase() ?: "?", 34, sender?.avatar, sender?.activeCosmetics ?: com.yugm.app.core.model.ActiveCosmetics(), avatarType = sender?.avatarType, avatarParts = sender?.avatarParts)
             } else {
                 Spacer(Modifier.width(34.dp))
             }

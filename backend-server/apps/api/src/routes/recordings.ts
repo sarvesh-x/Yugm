@@ -92,7 +92,7 @@ recordingsRouter.get("/room/:roomId", asyncHandler(async (req: AuthRequest, res)
   const filter = { roomId: req.params.roomId, status: "PUBLISHED" };
   const [recordings, total] = await Promise.all([
     RoomRecording.find(filter)
-      .populate("hostId", "name username avatar")
+      .populate("hostId", "name username avatar avatarType avatarParts")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -105,7 +105,7 @@ recordingsRouter.get("/room/:roomId", asyncHandler(async (req: AuthRequest, res)
 
 recordingsRouter.get("/:id", asyncHandler(async (req: AuthRequest, res) => {
   const recording = await RoomRecording.findById(req.params.id)
-    .populate("hostId", "name username avatar")
+    .populate("hostId", "name username avatar avatarType avatarParts")
     .populate("roomId", "title type")
     .lean();
   if (!recording) throw new HttpError(404, "Recording not found", ErrorCode.NOT_FOUND);

@@ -54,7 +54,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -146,6 +145,7 @@ import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 // Theme-aware palette is read via LocalYugmColors inside composables.
 
@@ -156,6 +156,9 @@ fun ChatScreen(
     partner: Host?,
     currentUserId: String,
     myActiveCosmetics: ActiveCosmetics = ActiveCosmetics(),
+    myAvatarUrl: String? = null,
+    myAvatarType: String? = null,
+    myAvatarParts: com.yugm.app.core.model.AvatarPartsPayload? = null,
     messages: List<DirectMessage>,
     relationship: RelationshipStatus?,
     gifts: List<GiftItem> = emptyList(),
@@ -773,7 +776,7 @@ fun ChatScreen(
                     if (loading && visibleMessages.isEmpty()) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                androidx.compose.material3.CircularProgressIndicator(color = LocalYugmColors.current.secondary)
+                                YugmLoadingSpinner(size = 40.dp)
                                 Text("Loading conversation…", color = LocalYugmColors.current.textSecondary, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp))
                             }
                         }
@@ -905,6 +908,9 @@ fun ChatScreen(
                                     partner = partner,
                                     currentUserId = currentUserId,
                                     myActiveCosmetics = myActiveCosmetics,
+                                    myAvatarUrl = myAvatarUrl,
+                                    myAvatarType = myAvatarType,
+                                    myAvatarParts = myAvatarParts,
                                     showIncomingAvatar = !mine && !groupedWithNext,
                                     showOutgoingAvatar = mine && !groupedWithNext,
                                     groupedWithPrev = groupedWithPrev,
@@ -962,7 +968,7 @@ fun ChatScreen(
                             }
                             if (isPartnerTyping) item {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Avatar(partner?.name?.take(1) ?: "?", 30, partner?.avatar, partner?.activeCosmetics ?: com.yugm.app.core.model.ActiveCosmetics(), accessibilityLabel = stringResource(R.string.a11y_profile_picture, partner?.name ?: defaultMatchName))
+                                    Avatar(partner?.name?.take(1) ?: "?", 30, partner?.avatar, partner?.activeCosmetics ?: com.yugm.app.core.model.ActiveCosmetics(), avatarType = partner?.avatarType, avatarParts = partner?.avatarParts, accessibilityLabel = stringResource(R.string.a11y_profile_picture, partner?.name ?: defaultMatchName))
                                     Column(Modifier.padding(start = 8.dp)) {
                                         TypingBubble()
                                         Text("${partner?.name ?: "Your match"} is typing…", color = LocalYugmColors.current.textSecondary, fontSize = 10.sp)

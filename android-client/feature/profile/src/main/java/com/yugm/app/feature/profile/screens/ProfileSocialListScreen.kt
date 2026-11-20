@@ -25,6 +25,7 @@ import com.yugm.app.core.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -114,7 +115,7 @@ fun ProfileSocialListScreen(
                     }
                 }
                 when {
-                    loading && (users.isEmpty()) -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Pink) }
+                    loading && (users.isEmpty()) -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { YugmLoadingSpinner(size = 40.dp) }
                     error != null && users.isEmpty() -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text(error.orEmpty(), color = Danger)
@@ -145,6 +146,8 @@ fun ProfileSocialListScreen(
                                     size = 48,
                                     imageUrl = person.avatar,
                                     cosmetics = person.activeCosmetics,
+                                    avatarType = person.avatarType,
+                                    avatarParts = person.avatarParts,
                                     accessibilityLabel = "${person.name.ifBlank { person.username }} profile photo"
                                 )
                                 Column(
@@ -165,7 +168,7 @@ fun ProfileSocialListScreen(
                                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                                     ) {
                                         if (busyUserId == person.id) {
-                                            CircularProgressIndicator(Modifier.size(16.dp), color = Pink, strokeWidth = 2.dp)
+                                            YugmLoadingSpinner(size = 16.dp)
                                         } else {
                                             Text(if (selectedList == "followers") "Remove" else "Unfollow", color = TextPrimary, fontSize = 12.sp)
                                         }
