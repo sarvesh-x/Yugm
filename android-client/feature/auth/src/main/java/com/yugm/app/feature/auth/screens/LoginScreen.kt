@@ -225,7 +225,17 @@ fun LoginScreen(
                                 }
                             )
                         }
-                        TextButton(onClick = { passwordVisible = !passwordVisible }) { Text(if (passwordVisible) "Hide" else "Show", color = authAccent) }
+                        TextButton(
+                            onClick = { passwordVisible = !passwordVisible },
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) {
+                            Text(
+                                if (passwordVisible) "Hide" else "Show",
+                                color = authAccent,
+                                modifier = Modifier.semantics { contentDescription = if (passwordVisible) "Hide password" else "Show password" }
+                            )
+                        }
                     }
                     if (createAccount && password.isNotBlank() && !passwordStrong) FieldHint("Use at least 8 characters with a letter and a number.")
                     if (createAccount) {
@@ -252,31 +262,40 @@ fun LoginScreen(
                 } else {
                     Text("Choose how you want to sign in", color = TextMuted, fontSize = 13.sp, modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 12.dp))
                     LoginMethodButton(
-                        text = if (googleLoading) "Connecting…" else " Google",
+                        text = if (googleLoading) "Connecting…" else "Continue with Google",
                         icon = Icons.Filled.Public,
                         onClick = { if (acceptTerms) onGoogleSignIn(acceptTerms) else localError = "Accept the terms to continue." },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !loading && !googleLoading && !facebookLoading && acceptTerms,
+                        enabled = !loading && !googleLoading && !facebookLoading,
                         loading = googleLoading
                     )
                     Spacer(Modifier.height(10.dp))
                     LoginMethodButton(
-                        text = if (facebookLoading) "Connecting…" else " Facebook",
+                        text = if (facebookLoading) "Connecting…" else "Continue with Facebook",
                         icon = null,
                         brandMark = "f",
                         onClick = { if (acceptTerms) onFacebookSignIn(acceptTerms) else localError = "Accept the terms to continue." },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !loading && !googleLoading && !facebookLoading && acceptTerms,
+                        enabled = !loading && !googleLoading && !facebookLoading,
                         loading = facebookLoading
                     )
                     Spacer(Modifier.height(10.dp))
                     LoginMethodButton(
-                        text = " Phone",
+                        text = "Continue with phone",
                         icon = Icons.Filled.Phone,
-                        onClick = onPhoneSignIn,
+                        onClick = { if (acceptTerms) onPhoneSignIn() else localError = "Accept the terms to continue." },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !loading && !googleLoading && !facebookLoading && acceptTerms
+                        enabled = !loading && !googleLoading && !facebookLoading
                     )
+                    if (!acceptTerms) {
+                        Text(
+                            "Accept the terms above to enable Google, Facebook, and phone sign-in.",
+                            color = TextMuted,
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                        )
+                    }
                     TextButton(onClick = { manualLogin = true; clearErrors() }, enabled = !loading && !googleLoading && !facebookLoading, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                         Text("Login manually instead", color = authAccent, fontWeight = FontWeight.SemiBold)
                     }
@@ -324,7 +343,7 @@ fun LoginScreen(
                         enabled = !loading && !googleLoading && !facebookLoading,
                         modifier = Modifier.semantics { contentDescription = "I am 18 or older and accept Yugm's terms and privacy policy" }
                     )
-                    Column(Modifier.weight(1f).padding(top = 10.dp)) {
+                    Column(Modifier.weight(1f).padding(top = 10.dp).clickable(role = Role.Checkbox, onClickLabel = "Accept terms and privacy policy") { acceptTerms = !acceptTerms; clearErrors() }) {
                         Text("I am 18+ and accept the", color = TextPrimary, fontSize = 13.sp)
                         Row {
                         Text("Terms of Service", color = authAccent, fontSize = 13.sp, modifier = Modifier
@@ -336,7 +355,7 @@ fun LoginScreen(
                     }
                 }
                 Spacer(Modifier.height(16.dp))
-                Text("Your account is protected with Firebase sign-in.", color = TextMuted, fontSize = 11.sp, textAlign = TextAlign.Center)
+                Text("Your account is protected with Firebase sign-in.", color = TextMuted, fontSize = 12.sp, textAlign = TextAlign.Center)
             } else {
                 Spacer(Modifier.height(8.dp))
             }
@@ -378,7 +397,7 @@ private fun LoginMethodButton(
     } else {
         Modifier.border(
             1.dp,
-            Brush.horizontalGradient(listOf(colors.secondary.copy(alpha = 0.48f), colors.primary.copy(alpha = 0.42f))),
+            Brush.horizontalGradient(listOf(colors.secondary.copy(alpha = if (enabled) 0.48f else 0.22f), colors.primary.copy(alpha = if (enabled) 0.42f else 0.18f))),
             shape
         )
     }
@@ -417,7 +436,7 @@ private fun LoginMethodButton(
                 modifier = Modifier.padding(horizontal = 16.dp)
             ) {
                 if (brandMark != null) {
-                    Text(brandMark, color = Color(0xFF68A7FF), fontWeight = FontWeight.Black, fontSize = 22.sp)
+                    Text(brandMark, color = Color(0xFF1877F2), fontWeight = FontWeight.Black, fontSize = 22.sp)
                 } else if (icon != null) {
                     Icon(
                         imageVector = icon,

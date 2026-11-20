@@ -6,9 +6,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,6 +29,7 @@ fun SplashScreen(onTimeout: suspend () -> Unit) {
     val scale = remember { Animatable(0.6f) }
     val motionEnabled = LocalMotionEnabled.current
     val colors = LocalYugmColors.current
+    var showProgress by remember { mutableStateOf(false) }
 
     // Keyed on Unit: navigation must happen exactly once. Re-keying on the motion
     // preference would re-run the timer and issue a second navigate().
@@ -34,6 +39,7 @@ fun SplashScreen(onTimeout: suspend () -> Unit) {
         } else {
             scale.snapTo(1f)
         }
+        showProgress = true
         onTimeout()
     }
 
@@ -79,6 +85,14 @@ fun SplashScreen(onTimeout: suspend () -> Unit) {
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )
+            if (showProgress) {
+                Spacer(modifier = Modifier.height(20.dp))
+                CircularProgressIndicator(
+                    color = colors.accent,
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.dp
+                )
+            }
         }
     }
 }

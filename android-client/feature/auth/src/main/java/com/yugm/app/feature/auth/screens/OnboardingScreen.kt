@@ -154,7 +154,8 @@ fun OnboardingScreen(onStart: () -> Unit) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(if (compactLayout) 220.dp else 290.dp),
+                                .height(if (compactLayout) 220.dp else 290.dp)
+                                .clearAndSetSemantics { },
                             contentAlignment = Alignment.Center
                         ) {
                             when (page) {
@@ -337,7 +338,7 @@ private fun OnboardingHeader(
         if (showSkip) {
             TextButton(
                 onClick = onSkip,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
             ) {
                 Text(
                     text = "Skip",
@@ -937,35 +938,22 @@ private fun OnboardingPrimaryButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var isPressed by remember { mutableStateOf(false) }
-
+    val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(54.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(Brush.horizontalGradient(onboardingBrandGradient))
-            .scale(if (isPressed) 0.98f else 1f)
             .semantics { contentDescription = text }
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = {
-                    if (!isPressed) {
-                        isPressed = true
-                        onClick()
-                    }
-                }
+                interactionSource = interactionSource,
+                role = androidx.compose.ui.semantics.Role.Button,
+                onClickLabel = text,
+                onClick = onClick
             ),
         contentAlignment = Alignment.Center
     ) {
-        LaunchedEffect(isPressed) {
-            if (isPressed) {
-                delay(150)
-                isPressed = false
-            }
-        }
-
         Text(
             text = text,
             color = Color.White,

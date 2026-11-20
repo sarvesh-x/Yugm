@@ -67,6 +67,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -111,7 +112,7 @@ fun BrandHeader(compact: Boolean = false) {
         }
         Column {
             Text("Yugm", color = TextPrimary, fontSize = if (compact) 22.sp else 32.sp, fontWeight = FontWeight.Black)
-            if (!compact) Text("Match the vibe.", color = Gold, fontWeight = FontWeight.Bold)
+            if (!compact) Text("Match the vibe.", color = LocalYugmColors.current.accent, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -527,7 +528,9 @@ fun PrimaryButton(text: String, modifier: Modifier = Modifier, enabled: Boolean 
             .fillMaxWidth()
             .height(56.dp)
             .clip(RoundedCornerShape(18.dp))
+            .alpha(if (enabled) 1f else 0.42f)
             .background(Brush.horizontalGradient(listOf(Purple, com.yugm.app.core.ui.theme.AccessiblePrimaryPink, com.yugm.app.core.ui.theme.AccessibleSaffron)))
+            .semantics { contentDescription = text }
     ) {
         Text(text, color = Color.White, fontWeight = FontWeight.Black, fontSize = 16.sp)
     }
@@ -572,9 +575,10 @@ fun YugmTextField(
     keyboardType: KeyboardType = KeyboardType.Text,
     minLines: Int = 1,
     modifier: Modifier = Modifier,
-    accentColor: Color = Gold,
+    accentColor: Color? = null,
     borderColor: Color = Line
 ) {
+    val resolvedAccent = accentColor ?: LocalYugmColors.current.accent
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
@@ -584,11 +588,11 @@ fun YugmTextField(
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = TextPrimary,
             unfocusedTextColor = TextPrimary,
-            focusedLabelColor = accentColor,
+            focusedLabelColor = resolvedAccent,
             unfocusedLabelColor = TextMuted,
-            focusedBorderColor = accentColor,
+            focusedBorderColor = resolvedAccent,
             unfocusedBorderColor = borderColor,
-            cursorColor = accentColor,
+            cursorColor = resolvedAccent,
             focusedContainerColor = Panel,
             unfocusedContainerColor = Panel
         ),

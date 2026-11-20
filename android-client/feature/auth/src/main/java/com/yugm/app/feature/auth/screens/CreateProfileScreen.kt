@@ -240,7 +240,7 @@ fun CreateProfileScreen(
                 text = "Step $step of 5",
                 color = profileAccent,
                 fontWeight = FontWeight.Bold,
-                fontSize = 12.sp,
+                fontSize = 13.sp,
                 modifier = Modifier.semantics {
                     progressBarRangeInfo = ProgressBarRangeInfo(step.toFloat(), 1f..5f)
                     contentDescription = "Profile setup, step $step of 5"
@@ -387,6 +387,13 @@ fun CreateProfileScreen(
                                 fontSize = 14.sp,
                             )
                             Text("Optional. You can change it later.", color = TextMuted, fontSize = 12.sp)
+                            if (isUploadingAvatar) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = profileAccent
+                                )
+                            }
                             OutlinedButton(
                                 onClick = { avatarPicker.launch("image/*") },
                                 enabled = !isUploadingAvatar && !isSubmitting,
@@ -402,7 +409,7 @@ fun CreateProfileScreen(
                         }
                     }
                 }
-                item { ProfileSetupTextField(bio, { bio = it.take(180); errorMessage = "" }, "Bio (up to 180 characters)", minLines = 3) }
+                item { ProfileSetupTextField(bio, { bio = it.take(180); errorMessage = "" }, "Bio (required, up to 180 characters)", minLines = 3) }
                 item { ProfileSetupTextField(vibeLine, { vibeLine = it.take(120); errorMessage = "" }, "Short vibe line (optional)") }
             }
             5 -> {
@@ -443,7 +450,7 @@ fun CreateProfileScreen(
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = termsAccepted, onCheckedChange = { termsAccepted = it })
-                        Text("I agree to the Yugm Terms of Use and Community Guidelines.", color = TextMuted, fontSize = 13.sp)
+                        Text("I agree to the Yugm Terms of Use and Community Guidelines.", color = TextPrimary, fontSize = 14.sp, modifier = Modifier.padding(start = 8.dp))
                     }
                     TextButton(onClick = {
                         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(resolveMediaUrl("/legal/terms")))) }

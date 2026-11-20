@@ -1,5 +1,23 @@
 ﻿# Development progress
 
+## 2026-11-20 -- Decompose ChatScreen into smaller composables
+
+- Extracted `ChatTimelineMessageItem` (per-message swipe-to-reply + MessageBubble rendering) into `ChatScreenMessageItem.kt`.
+- Extracted `ChatScreenHeader` (header/selection-mode bar) into `ChatScreenHeader.kt`.
+- Extracted `ChatScreenComposer` (emoji bar + input/composer) into `ChatScreenComposer.kt`.
+- `ChatScreen.kt` reduced from ~1388 lines to ~1091 lines; behavior/wiring/state ownership unchanged (state stays in ChatScreen, subcomposables receive values/callbacks).
+- Verification: `:feature:chat:compileDebugKotlin` BUILD SUCCESSFUL; `:feature:chat:testDebugUnitTest` 3/3; `:app:compileDebugKotlin` BUILD SUCCESSFUL; `git diff --check` clean (aside from pre-existing LF/CRLF note).
+
+## 2026-11-20 -- Frontend UI/UX polish for pre-Home auth flow
+
+- **Shared primitives:** `PrimaryButton` now dims clearly when disabled and exposes a content description; `BrandHeader` tagline uses the active theme accent (preserves gold in dark mode, improves light-mode contrast); `YugmTextField`'s default accent resolves to `LocalYugmColors.current.accent` instead of a fixed gold (nullable default keeps existing callers working).
+- **Onboarding:** primary CTA uses proper button role/ripple instead of a manual press-timing guard; Skip target enlarged; illustration container marked decorative for screen readers.
+- **Splash:** added a subtle, motion-aware progress indicator after the reveal while session validation runs.
+- **Login:** provider actions are tappable to surface the consent error; labels clarified ("Continue with …"); inline helper appears when terms are unchecked; password toggle has semantics and a 48dp target; consent label toggles the checkbox; footer text enlarged; Facebook mark color standardized; disabled borders dim.
+- **Phone auth:** consent row uses primary text with accent legal links and whole-row toggle; fields have descriptive labels plus format helper text; resend/back actions use the accent color.
+- **Profile setup:** step and consent text enlarged/promoted; bio marked required; avatar upload shows a spinner.
+- **Verification:** auth compile and unit tests pass (14/14); app compile passes; `git diff --check` clean. Visual/TalkBack/accessibility-scanner checks remain unrun.
+
 ## 2026-11-20 -- Pre-Home onboarding/auth audit: restore self email, consent, and flow edge cases
 
 - **Self email wiring:** `apps/api/src/middleware/auth.ts` now selects `+email` for the authenticated user, so `/auth/me` and `/auth/verify-email` actually include the address that `User` marks `select: false`. `apps/api/src/services/profileUpdate.ts` does the same on both reads, and `apps/api/src/routes/auth.ts` selects `+email` for existing and phone-linked Firebase identities. `handlePublicProfile`/`users.publicUser` still exclude email for other users.

@@ -1,5 +1,22 @@
 ﻿# Current task
 
+## YUGM-PREHOME-UIUX-007 — Frontend UI/UX polish for pre-Home auth flow
+
+- **Scope:** frontend only, pre-Home path (splash, onboarding, login/email-verification, phone auth, profile setup). Improve readability, accessibility, visibility, and consistency without changing backend wiring, state ownership, or business rules.
+- **Changes applied (uncommitted):**
+  - Shared `PrimaryButton`: visible disabled treatment (alpha) + content description; `BrandHeader` tagline uses theme accent for light-mode contrast; `YugmTextField` default accent now resolves to `LocalYugmColors.current.accent` (backward compatible via nullable default).
+  - `OnboardingPrimaryButton`: proper button role, focus/press indication via default ripple, removed manual press-timing guard; Skip touch target/padding increased; illustration container marked decorative for screen readers.
+  - `SplashScreen`: subtle motion-aware progress indicator after the reveal while session validation runs.
+  - `LoginScreen`: provider actions are tappable to surface the consent error instead of silently disabled; clearer labels ("Continue with Google/Facebook/phone"); inline helper when terms are unchecked; password toggle has semantics + 48dp target; consent label toggles the checkbox; footer text size bumped; Facebook brand color standardized; disabled border dimming.
+  - `PhoneAuthScreen`: consent row uses primary text + accent legal links and whole-row toggle; descriptive field labels with format helper text; resend/back actions use accent color; imports added.
+  - `CreateProfileScreen`: step text and consent text enlarged/promoted; bio marked required; avatar upload shows a spinner; progress/labels unchanged otherwise.
+- **Verification (run):**
+  - `.\gradlew.bat :feature:auth:compileDebugKotlin :core:ui:compileDebugKotlin :app:compileDebugKotlin` — BUILD SUCCESSFUL.
+  - `.\gradlew.bat :feature:auth:testDebugUnitTest` — 14/14 passed.
+  - `git diff --check` — clean.
+- **Not run:** light/dark Compose previews, Accessibility Scanner/TalkBack, emulator instrumentation, device visual review.
+- **Status:** Source polish complete; verification gates above remain for visual/accessibility confirmation.
+
 ## YUGM-PREHOME-AUDIT-006 — Deep-audit the pre-Home onboarding/auth/profile-setup path
 
 - **Scope:** splash → onboarding → login/signup (email, Google, Facebook, phone) → email verification → profile setup. Verify UI, state, API wiring, realtime/persistence, permissions, errors, edge cases, and design consistency without changing unrelated features.

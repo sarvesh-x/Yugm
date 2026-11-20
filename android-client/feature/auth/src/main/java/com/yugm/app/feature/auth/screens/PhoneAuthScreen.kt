@@ -6,8 +6,12 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.clickable
@@ -28,6 +32,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.yugm.app.core.api.resolveMediaUrl
 import com.yugm.app.core.model.Session
 import com.yugm.app.feature.auth.viewmodel.AuthViewModel
@@ -36,6 +41,7 @@ import com.yugm.app.core.ui.components.AuthShell
 import com.yugm.app.core.ui.components.PrimaryButton
 import com.yugm.app.core.ui.components.YugmTextField
 import com.yugm.app.core.ui.theme.TextMuted
+import com.yugm.app.core.ui.theme.TextPrimary
 import com.google.firebase.FirebaseException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
@@ -164,17 +170,26 @@ fun PhoneAuthScreen(
         title = if (step == "phone") "Enter phone number" else "Verify phone number",
         subtitle = if (step == "phone") "Firebase will send a one-time code via SMS." else "Code sent to $phone"
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = acceptTerms, onCheckedChange = { acceptTerms = it }, enabled = !loadingNow)
-            Text("I am 18+ and accept the Terms and Privacy Policy", color = TextMuted)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(role = androidx.compose.ui.semantics.Role.Checkbox, onClickLabel = "Accept terms and privacy policy") {
+                    if (!loadingNow) acceptTerms = !acceptTerms
+                }
+                .padding(vertical = 4.dp)
+        ) {
+            Checkbox(checked = acceptTerms, onCheckedChange = { if (!loadingNow) acceptTerms = it }, enabled = !loadingNow)
+            Text("I am 18+ and accept the Terms and Privacy Policy", color = TextPrimary, fontSize = 13.sp, modifier = Modifier.padding(start = 8.dp))
         }
-        Row {
-            TextButton(onClick = { openPhoneLegal(context, "terms") }) { Text("Read Terms", color = TextMuted) }
-            TextButton(onClick = { openPhoneLegal(context, "privacy") }) { Text("Read Privacy Policy", color = TextMuted) }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = { openPhoneLegal(context, "terms") }, modifier = Modifier.heightIn(min = 40.dp)) { Text("Read Terms", color = authColors.accent) }
+            TextButton(onClick = { openPhoneLegal(context, "privacy") }, modifier = Modifier.heightIn(min = 40.dp)) { Text("Read Privacy Policy", color = authColors.accent) }
         }
         if (step == "phone") {
-            YugmTextField(value = phone, onValueChange = { phone = it; error = null; authViewModel.clearError() }, label = "+911234567890", keyboardType = KeyboardType.Phone,
+            YugmTextField(value = phone, onValueChange = { phone = it; error = null; authViewModel.clearError() }, label = "Phone number", keyboardType = KeyboardType.Phone,
                 accentColor = authColors.accent, borderColor = androidx.compose.material3.MaterialTheme.colorScheme.outline)
+            Text("Include your country code, for example +919876543210.", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(start = 4.dp, top = 4.dp))
             if (displayedError != null) {
                 Spacer(Modifier.height(4.dp))
                 Text(displayedError!!, color = authColors.danger, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
@@ -182,8 +197,9 @@ fun PhoneAuthScreen(
             Spacer(Modifier.height(12.dp))
             PrimaryButton(text = if (loadingNow) "Sending code..." else "Send code", onClick = { sendCode() }, enabled = !loadingNow && phone.length >= 8 && acceptTerms)
         } else {
-            YugmTextField(value = otp, onValueChange = { otp = it.filter(Char::isDigit).take(6); error = null; authViewModel.clearError() }, label = "6-digit code", keyboardType = KeyboardType.Number,
+            YugmTextField(value = otp, onValueChange = { otp = it.filter(Char::isDigit).take(6); error = null; authViewModel.clearError() }, label = "Verification code", keyboardType = KeyboardType.Number,
                 accentColor = authColors.accent, borderColor = androidx.compose.material3.MaterialTheme.colorScheme.outline)
+            Text("Enter the 6-digit code sent to your phone.", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(start = 4.dp, top = 4.dp))
             if (displayedError != null) {
                 Spacer(Modifier.height(4.dp))
                 Text(displayedError!!, color = authColors.danger, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
@@ -196,7 +212,7 @@ fun PhoneAuthScreen(
             ) {
                 Text(
                     if (resendCooldown > 0) "Resend code in ${resendCooldown}s" else "Resend code",
-                    color = TextMuted
+                    color = if (resendCooldown > 0) TextMuted else authColors.accent
                 )
             }
         }
@@ -213,7 +229,7 @@ fun PhoneAuthScreen(
                 onBack()
             }
         }, enabled = !loadingNow) {
-            Text(if (step == "otp") "Change number" else "Back", color = TextMuted)
+            Text(if (step == "otp") "Change number" else "Back", color = authColors.accent)
         }
     }
 }
