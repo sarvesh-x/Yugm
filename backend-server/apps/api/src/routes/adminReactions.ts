@@ -7,7 +7,7 @@ import { adminOk, pageParams, paginationMeta } from "../modules/admin/http.js";
 import { requirePermission, type AdminAuthRequest } from "../middleware/adminAuth.js";
 import { asyncHandler, HttpError, sendOk } from "../utils/http.js";
 import { RoomReaction } from "../models/RoomReaction.js";
-import { AdminAuditLog } from "../models/AdminAuditLog.js";
+import { auditLog } from "../services/adminAudit.js";
 import { deleteStoredFile, persistUploadedFile, safeUploadName } from "../services/storage.js";
 import { ensureDefaultRoomReactions, normalizeReactionId, toPublicRoomReaction } from "../services/reactions.js";
 import { env } from "../config/env.js";
@@ -117,7 +117,7 @@ adminReactionsRouter.post("/reactions", reactionUpload.single("asset"), asyncHan
     mimeType: file?.mimetype ?? "",
     createdBy: req.admin!._id
   });
-  await AdminAuditLog.create({ adminId: req.admin!._id, action: "CREATE_REACTION", entityType: "RoomReaction", entityId: reaction._id, metadata: { access: reaction.access, assetKind: reaction.assetKind, hasAsset: Boolean(file || externalAssetUrl), hasEmoji: Boolean(emoji), assetSource: file ? "upload" : externalAssetUrl ? "url" : "emoji" } });
+  await auditLog({ adminId: req.admin!.id, action: "CREATE_REACTION", entityType: "RoomReaction", entityId: reaction._id, metadata: { access: reaction.access, assetKind: reaction.assetKind, hasAsset: Boolean(file || externalAssetUrl), hasEmoji: Boolean(emoji), assetSource: file ? "upload" : externalAssetUrl ? "url" : "emoji" }, req });
   adminOk(res, { reaction: { ...toPublicRoomReaction(reaction), isActive: reaction.isActive } }, {}, 201);
 }));
 
@@ -153,7 +153,7 @@ adminReactionsRouter.patch("/reactions/:id", reactionUpload.single("asset"), asy
   if (parsed.isActive !== undefined) reaction.isActive = parsed.isActive;
   if (parsed.sortOrder !== undefined) reaction.sortOrder = parsed.sortOrder;
   await reaction.save();
-  await AdminAuditLog.create({ adminId: req.admin!._id, action: "UPDATE_REACTION", entityType: "RoomReaction", entityId: reaction._id, metadata: { updates: Object.keys(req.body || {}), replacedAsset: Boolean(file) } });
+  await auditLog({ adminId: req.admin!.id, action: "UPDATE_REACTION", entityType: "RoomReaction", entityId: reaction._id, metadata: { updates: Object.keys(req.body || {}), replacedAsset: Boolean(file) }, req });
   adminOk(res, { reaction: { ...toPublicRoomReaction(reaction), isActive: reaction.isActive } });
 }));
 
@@ -164,6 +164,6 @@ adminReactionsRouter.delete("/reactions/:id", asyncHandler(async (req: AdminAuth
   if (!reaction) throw new HttpError(404, "Reaction not found");
   await RoomReaction.deleteOne({ _id: id });
   await deleteStoredFile("reactions", reaction.assetStorageKey || reaction.assetUrl);
-  await AdminAuditLog.create({ adminId: req.admin!._id, action: "DELETE_REACTION", entityType: "RoomReaction", entityId: id, metadata: { label: reaction.label } });
+  await auditLog({ adminId: req.admin!.id, action: "DELETE_REACTION", entityType: "RoomReaction", entityId: id, metadata: { label: reaction.label }, req });
   adminOk(res, { deleted: true, id });
 }));

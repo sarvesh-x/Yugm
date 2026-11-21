@@ -1,3 +1,4 @@
+import { AssetObject } from "../models/AssetObject.js";
 import { Bond, BondRequest, BondPoint, BondRankingSnapshot, BondReward } from "../models/Bond.js";
 import { Block } from "../models/Block.js";
 import { ChatMessage } from "../models/ChatMessage.js";
@@ -43,6 +44,7 @@ import { WalletTransaction } from "../models/WalletTransaction.js";
 import { WithdrawalRequest } from "../models/WithdrawalRequest.js";
 
 const indexedModels = [
+  AssetObject,
   Bond, BondRequest, BondPoint, BondRankingSnapshot, BondReward,
   User,
   Room,

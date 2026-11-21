@@ -23,6 +23,7 @@ Use this index as the map; source code remains authoritative for implemented beh
 - [Machine generated schema inventory](production/schema-inventory.csv)
 - [API OpenAPI source](../backend-server/apps/api/openapi.yaml)
 - [First-launch splash and onboarding audit](features/onboarding-audit.md)
+- [Cosmetics, assets, store, inventory, gifts and achievements audit](features/cosmetics-ecosystem-audit.md)
 
 The production audit documents explain their baselines and verification limits. Use them as evidence, not as proof of deployment state. Recheck source for current behavior.
 

@@ -18,6 +18,11 @@ android-client/.idea/
 /build
 android-client/build
 android-client/app/build
+# Local build output captures
+/android-client/build_log.txt
+/android-client/errors.txt
+/android-client/out.txt
+/build_out.txt
 android-client/app/release/
 /captures
 .externalNativeBuild

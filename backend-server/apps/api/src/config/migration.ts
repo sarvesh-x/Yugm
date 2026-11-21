@@ -87,3 +87,16 @@ defineMigration(5, "create_wallet_transactions_indexes", async (db) => {
   await db.collection("wallettransactions").createIndex({ userId: 1, createdAt: -1 });
   await db.collection("wallettransactions").createIndex({ source: 1, createdAt: -1 });
 });
+
+// Additive only: creates indexes for the new asset registry. No existing
+// cosmetic, achievement, gift or user document is read or rewritten here.
+defineMigration(6, "create_asset_objects_indexes", async (db) => {
+  const assets = db.collection("assetobjects");
+  await assets.createIndex({ ownerType: 1, ownerId: 1, version: 1 }, { unique: true, name: "asset_owner_version" });
+  await assets.createIndex({ ownerType: 1, ownerId: 1, sha256: 1 }, { name: "asset_owner_sha256" });
+  await assets.createIndex({ status: 1, createdAt: -1 }, { name: "asset_status_created" });
+}, async (db) => {
+  await db.collection("assetobjects").dropIndex("asset_owner_version").catch(() => {});
+  await db.collection("assetobjects").dropIndex("asset_owner_sha256").catch(() => {});
+  await db.collection("assetobjects").dropIndex("asset_status_created").catch(() => {});
+});

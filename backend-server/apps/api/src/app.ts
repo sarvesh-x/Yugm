@@ -12,6 +12,7 @@ import { env } from "./config/env.js";
 import { adminRouter } from "./routes/admin.js";
 import { adminSupportRouter } from "./routes/adminSupport.js";
 import { adminCosmeticsRouter } from "./routes/adminCosmetics.js";
+import { adminAssetsRouter } from "./routes/adminAssets.js";
 import { adminDmReviewsRouter } from "./routes/adminDmReviews.js";
 import { adminReactionsRouter } from "./routes/adminReactions.js";
 import { adminBadgesRouter, badgeArtRouter } from "./routes/adminBadges.js";
@@ -266,6 +267,7 @@ export function createApp() {
   app.use("/api/admin", adminRouter);
   app.use("/api/admin", adminSupportRouter);
   app.use("/api/admin", adminCosmeticsRouter);
+  app.use("/api/admin", adminAssetsRouter);
   app.use("/api/admin", adminBadgesRouter);
   app.use("/api/admin", adminReactionsRouter);
   app.use("/api/badge-art", badgeArtRouter);

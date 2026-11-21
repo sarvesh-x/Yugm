@@ -5,7 +5,7 @@ import { requirePermission, type AdminAuthRequest } from "../middleware/adminAut
 import { validateBody } from "../middleware/validate.js";
 import { asyncHandler, HttpError } from "../utils/http.js";
 import { Cosmetic } from "../models/Cosmetic.js";
-import { AdminAuditLog } from "../models/AdminAuditLog.js";
+import { auditLog } from "../services/adminAudit.js";
 import { syncDefaultCosmetics } from "../services/cosmetics.js";
 
 const adminCosmeticsRouter = Router();
@@ -84,12 +84,13 @@ adminCosmeticsRouter.post("/cosmetics", requirePermission("cosmetics.write"),
     if (existing) throw new HttpError(409, "Cosmetic with this ID already exists");
 
     const cosmetic = await Cosmetic.create({ _id: req.body.id, ...req.body });
-    await AdminAuditLog.create({
-      adminId: req.admin!._id,
+    await auditLog({
+      adminId: req.admin!.id,
       action: "CREATE_COSMETIC",
       entityType: "Cosmetic",
       entityId: cosmetic._id,
-      metadata: { name: cosmetic.name, type: cosmetic.type }
+      metadata: { name: cosmetic.name, type: cosmetic.type },
+      req
     });
 
     adminOk(res, { data: cosmetic }, {}, 201);
@@ -106,12 +107,13 @@ adminCosmeticsRouter.put("/cosmetics/:id", requirePermission("cosmetics.write"),
     ).lean();
     if (!cosmetic) throw new HttpError(404, "Cosmetic not found");
 
-    await AdminAuditLog.create({
-      adminId: req.admin!._id,
+    await auditLog({
+      adminId: req.admin!.id,
       action: "UPDATE_COSMETIC",
       entityType: "Cosmetic",
       entityId: cosmetic._id,
-      metadata: { id: cosmetic._id, updates: Object.keys(req.body) }
+      metadata: { id: cosmetic._id, updates: Object.keys(req.body) },
+      req
     });
 
     adminOk(res, { data: cosmetic });
@@ -123,12 +125,13 @@ adminCosmeticsRouter.delete("/cosmetics/:id", requirePermission("cosmetics.write
     const cosmetic = await Cosmetic.findByIdAndDelete(req.params.id).lean();
     if (!cosmetic) throw new HttpError(404, "Cosmetic not found");
 
-    await AdminAuditLog.create({
-      adminId: req.admin!._id,
+    await auditLog({
+      adminId: req.admin!.id,
       action: "DELETE_COSMETIC",
       entityType: "Cosmetic",
       entityId: cosmetic._id,
-      metadata: { id: cosmetic._id, name: cosmetic.name }
+      metadata: { id: cosmetic._id, name: cosmetic.name },
+      req
     });
 
     adminOk(res, { data: { deleted: true, id: cosmetic._id } });
@@ -138,11 +141,12 @@ adminCosmeticsRouter.delete("/cosmetics/:id", requirePermission("cosmetics.write
 adminCosmeticsRouter.post("/cosmetics/seed", requirePermission("cosmetics.write"),
   asyncHandler(async (req: AdminAuthRequest, res) => {
     const seeded = await syncDefaultCosmetics();
-    await AdminAuditLog.create({
-      adminId: req.admin!._id,
+    await auditLog({
+      adminId: req.admin!.id,
       action: "SEED_COSMETICS",
       entityType: "Cosmetic",
-      metadata: { seeded }
+      metadata: { seeded },
+      req
     });
 
     adminOk(res, { data: { seeded } });

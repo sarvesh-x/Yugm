@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import { createReadStream } from "fs";
 import path from "path";
 import { pipeline } from "stream/promises";
+import { Readable } from "stream";
 import mongoose from "mongoose";
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { env } from "../config/env.js";
@@ -27,6 +28,37 @@ function assertS3Ready() {
   if (!env.S3_BUCKET || !env.S3_REGION) {
     throw new Error("S3 storage requires S3_BUCKET and S3_REGION");
   }
+}
+
+/** Folders owned by this deployment. Never derive a storage key from a client value. */
+export type ManagedFolder =
+  | "avatars"
+  | "covers"
+  | "profile-media"
+  | "trust-verification"
+  | "stories"
+  | "voice-notes"
+  | "recordings"
+  | "reactions"
+  | "assets"
+  | "assets-staging";
+
+const privateFolders = new Set<ManagedFolder>(["trust-verification", "assets-staging"]);
+
+function privateRouteFor(folder: ManagedFolder): string {
+  return folder === "trust-verification" ? "/api/trust-verification/media" : "/api/admin/assets/staging";
+}
+
+export function isPrivateManagedFolder(folder: ManagedFolder): boolean {
+  return privateFolders.has(folder);
+}
+
+function assertManagedKey(folder: ManagedFolder, key: string): string {
+  const clean = key.replace(/^\/+/, "");
+  if (!clean.startsWith(`${folder}/`) || clean.includes("..") || path.basename(clean) !== clean.slice(folder.length + 1)) {
+    throw new HttpError(400, "Invalid managed object key");
+  }
+  return clean;
 }
 
 interface PublicStorageConfig {
@@ -122,7 +154,8 @@ async function releaseMongoMedia(bytes: number) {
   );
 }
 
-export async function persistUploadedFile(file: Express.Multer.File, folder: "avatars" | "covers" | "profile-media" | "trust-verification" | "stories" | "voice-notes" | "recordings" | "reactions") {
+export async function persistUploadedFile(file: Express.Multer.File, folder: ManagedFolder) {
+  const isPrivate = isPrivateManagedFolder(folder);
   if (env.STORAGE_DRIVER === "mongodb") {
     const key = `${folder}/${file.filename}`;
     const bucket = getMediaBucket();
@@ -132,7 +165,7 @@ export async function persistUploadedFile(file: Express.Multer.File, folder: "av
       await reserveMongoMedia(file.size);
       reserved = true;
       upload = bucket.openUploadStream(key, {
-        metadata: { contentType: file.mimetype, publicName: file.filename, private: folder === "trust-verification" }
+        metadata: { contentType: file.mimetype, publicName: file.filename, private: isPrivate }
       });
       await pipeline(createReadStream(file.path), upload);
     } catch (error) {
@@ -152,15 +185,15 @@ export async function persistUploadedFile(file: Express.Multer.File, folder: "av
       await fs.unlink(file.path).catch(() => {});
     }
     return {
-      url: folder === "trust-verification" ? `/api/trust-verification/media/${file.filename}` : `/uploads/${file.filename}`,
-      storage: folder === "trust-verification" ? "private-mongodb" as const : "mongodb" as const,
+      url: isPrivate ? `${privateRouteFor(folder)}/${file.filename}` : `/uploads/${file.filename}`,
+      storage: isPrivate ? "private-mongodb" as const : "mongodb" as const,
       key
     };
   }
   if (env.STORAGE_DRIVER !== "s3") {
     return {
-      url: folder === "trust-verification" ? `/api/trust-verification/media/${file.filename}` : `/uploads/${file.filename}`,
-      storage: folder === "trust-verification" ? "private-local" as const : "local" as const
+      url: isPrivate ? `${privateRouteFor(folder)}/${file.filename}` : `/uploads/${file.filename}`,
+      storage: isPrivate ? "private-local" as const : "local" as const
     };
   }
   assertS3Ready();
@@ -168,17 +201,17 @@ export async function persistUploadedFile(file: Express.Multer.File, folder: "av
   try {
     // Resolve the public URL before the upload so a misconfigured public base
     // fails before writing an unreachable object.
-    const publicUrl = folder === "trust-verification" ? undefined : buildPublicStorageUrl(key);
+    const publicUrl = isPrivate ? undefined : buildPublicStorageUrl(key);
     const body = await fs.readFile(file.path);
     await getS3Client().send(new PutObjectCommand({
       Bucket: env.S3_BUCKET,
       Key: key,
       Body: body,
       ContentType: file.mimetype,
-      CacheControl: folder === "trust-verification" ? "private, no-store" : "public, max-age=31536000, immutable"
+      CacheControl: isPrivate ? "private, no-store" : "public, max-age=31536000, immutable"
     }));
-    if (folder === "trust-verification") {
-      return { url: `/api/trust-verification/media/${file.filename}`, storage: "private-s3" as const, key };
+    if (isPrivate) {
+      return { url: `${privateRouteFor(folder)}/${file.filename}`, storage: "private-s3" as const, key };
     }
     return { url: publicUrl!, storage: "s3" as const, key };
   } finally {
@@ -216,7 +249,118 @@ export async function loadTrustVerificationFile(fileName: string) {
   return { body: Buffer.from(await object.Body.transformToByteArray()), contentType: object.ContentType ?? "application/octet-stream" };
 }
 
-export async function deleteStoredFile(folder: "reactions" | "avatars", fileNameOrKey?: string) {
+const assetStagingNamePattern = /^[a-z0-9_-]{1,96}_v\d+_[a-z0-9]{8}\.(?:png|jpe?g|webp|gif)$/i;
+
+export function assertAssetStagingFileName(fileName: string) {
+  if (!assetStagingNamePattern.test(fileName) || path.basename(fileName) !== fileName) {
+    throw new HttpError(400, "Invalid asset staging reference");
+  }
+  return fileName;
+}
+
+async function loadManagedPrivateFile(folder: ManagedFolder, fileName: string) {
+  if (!isPrivateManagedFolder(folder)) throw new HttpError(400, "Folder is not private");
+  const key = `${folder}/${fileName}`;
+  if (env.STORAGE_DRIVER === "mongodb") {
+    const bucket = getMediaBucket();
+    const files = await bucket.find({ filename: key, "metadata.private": true }).sort({ uploadDate: -1 }).limit(1).toArray();
+    if (!files.length) throw new HttpError(404, "Managed object not found");
+    const chunks: Buffer[] = [];
+    for await (const chunk of bucket.openDownloadStream(files[0]._id)) chunks.push(Buffer.from(chunk));
+    return { body: Buffer.concat(chunks), contentType: files[0].metadata?.contentType ?? "application/octet-stream" };
+  }
+  if (env.STORAGE_DRIVER !== "s3") {
+    const filePath = path.join(process.cwd(), "private-uploads", folder, fileName);
+    try {
+      await fs.access(filePath);
+    } catch {
+      throw new HttpError(404, "Managed object not found");
+    }
+    return { filePath };
+  }
+  assertS3Ready();
+  const object = await getS3Client().send(new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }));
+  if (!object.Body) throw new HttpError(404, "Managed object not found");
+  return { body: Buffer.from(await object.Body.transformToByteArray()), contentType: object.ContentType ?? "application/octet-stream" };
+}
+
+export function loadAssetStagingFile(fileName: string) {
+  return loadManagedPrivateFile("assets-staging", assertAssetStagingFileName(fileName));
+}
+
+/**
+ * Persist an already-validated buffer under an explicit managed key. Used by
+ * the asset service to publish immutable, versioned variants without creating
+ * a second object-storage client or exposing credentials outside this module.
+ */
+export async function persistManagedBuffer(input: {
+  buffer: Buffer;
+  key: string;
+  contentType: string;
+  isPrivate?: boolean;
+}) {
+  const folder = input.key.split("/", 1)[0] as ManagedFolder;
+  const key = assertManagedKey(folder, input.key);
+  const fileName = path.basename(key);
+  const isPrivate = input.isPrivate ?? isPrivateManagedFolder(folder);
+  if (env.STORAGE_DRIVER === "mongodb") {
+    const bucket = getMediaBucket();
+    let reserved = false;
+    let upload: ReturnType<typeof bucket.openUploadStream> | undefined;
+    try {
+      await reserveMongoMedia(input.buffer.length);
+      reserved = true;
+      upload = bucket.openUploadStream(key, {
+        metadata: { contentType: input.contentType, publicName: fileName, private: isPrivate }
+      });
+      await pipeline(Readable.from(input.buffer), upload);
+    } catch (error) {
+      let cleanupComplete = !upload;
+      if (upload) {
+        try {
+          await bucket.delete(upload.id);
+          cleanupComplete = true;
+        } catch {
+          // Keep the reservation when cleanup is uncertain; undercounting could
+          // let media fill the database and block wallet or chat writes.
+        }
+      }
+      if (reserved && cleanupComplete) await releaseMongoMedia(input.buffer.length).catch(() => {});
+      throw error;
+    }
+    return {
+      url: isPrivate ? `${privateRouteFor(folder)}/${fileName}` : `/uploads/${fileName}`,
+      storage: isPrivate ? "private-mongodb" as const : "mongodb" as const,
+      key
+    };
+  }
+  if (env.STORAGE_DRIVER !== "s3") {
+    const directory = path.join(process.cwd(), isPrivate ? path.join("private-uploads", folder) : "uploads");
+    await fs.mkdir(directory, { recursive: true });
+    await fs.writeFile(path.join(directory, fileName), input.buffer);
+    return {
+      url: isPrivate ? `${privateRouteFor(folder)}/${fileName}` : `/uploads/${fileName}`,
+      storage: isPrivate ? "private-local" as const : "local" as const,
+      key
+    };
+  }
+  assertS3Ready();
+  const publicUrl = isPrivate ? undefined : buildPublicStorageUrl(key);
+  await getS3Client().send(new PutObjectCommand({
+    Bucket: env.S3_BUCKET,
+    Key: key,
+    Body: input.buffer,
+    ContentType: input.contentType,
+    CacheControl: isPrivate ? "private, no-store" : "public, max-age=31536000, immutable"
+  }));
+  return {
+    url: isPrivate ? `${privateRouteFor(folder)}/${fileName}` : publicUrl!,
+    storage: isPrivate ? "private-s3" as const : "s3" as const,
+    key
+  };
+}
+
+export async function deleteStoredFile(folder: ManagedFolder, fileNameOrKey?: string) {
   if (!fileNameOrKey) return;
   const fileName = path.basename(fileNameOrKey);
   if (!fileName) return;
@@ -234,7 +378,8 @@ export async function deleteStoredFile(folder: "reactions" | "avatars", fileName
     return;
   }
   if (env.STORAGE_DRIVER !== "s3") {
-    await fs.unlink(path.join(process.cwd(), "uploads", fileName)).catch(() => {});
+    const directory = isPrivateManagedFolder(folder) ? path.join(process.cwd(), "private-uploads", folder) : path.join(process.cwd(), "uploads");
+    await fs.unlink(path.join(directory, fileName)).catch(() => {});
     return;
   }
   assertS3Ready();

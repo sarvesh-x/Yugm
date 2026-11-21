@@ -1,5 +1,22 @@
 ﻿# Development progress
 
+## 2026-11-22 -- Cosmetics asset foundation Phase 1 (YUGM-COSMETICS-001)
+
+- **Backend:** extended the shared storage service with a generic `assets` namespace and private `assets-staging` area (no second object-storage client). Added the additive `AssetObject` registry and asset service: MIME/signature/dimension validation, 8 MB cap, SHA-256 dedupe, atomic version allocation, private staging, immutable versioned WebP `full`/`preview` variants on publish, and archive cleanup. Added permission-audited `/api/admin/assets` routes (stage, read, staging read, publish, archive) using existing `cosmetics.read`/`cosmetics.write` and `auditLog()`. Registered additive migration 6 (index-only) and mounted the router.
+- **Audit follow-ups (third audit reconciled):** `adminAudit.ts` now records non-ObjectId string/UUID entity IDs in `metadata.entityId` instead of silently losing the entry to an ObjectId cast error; `adminCosmetics.ts` and `adminReactions.ts` now use the shared `auditLog()` helper (with request IP/UA) instead of direct `AdminAuditLog.create()`; `archiveAsset()` clears the DB reference before deleting objects; `AssetObject` added to the explicit `productionIndexes.ts` set. Covered by a new `adminAudit.test.ts`.
+- **Contracts/docs:** `API_CONTRACTS.md`, `DATABASE_SCHEMA.md`, `openapi.yaml`, audit document (incl. §7 reconciliation), `CURRENT_TASK.md`, and a new handoff.
+- **Dependencies:** promoted `sharp` from transitive to an explicit `@yugm/api` dependency in `package.json` and the workspace lock.
+- **Verification:** `npm.cmd --workspace @yugm/api run typecheck` exit 0; `npm.cmd --workspace @yugm/api test` 186/186 passing (six asset + one audit test); `npm.cmd --workspace @yugm/api run test:hardening` 34/34 passing; `git diff --check` clean apart from LF/CRLF notices.
+- **Decisions resolved (user):** keep seeded external avatar URLs as provenance, keep store SKUs static, retire the disconnected bundle-purchase path. Still open: target environment/storage driver, and separate approval for the badge `imageData` cleanup.
+- **Remaining:** live upload/migration verification, admin UI, Android renderer migration, Phase 2/3 backfill, asset route/integration tests. No migration applied, no commit/push/deploy, no production data changed.
+
+## 2026-11-22 -- Cosmetics ecosystem Phase 1 audit (YUGM-COSMETICS-001)
+
+- **Docs:** added [cosmetics ecosystem audit](features/cosmetics-ecosystem-audit.md) with a per-feature status matrix (fully implemented / backend-driven / partial / hardcoded / disconnected), architecture findings, a six-phase additive migration plan, data-preservation rules, rollback gates, and open decisions. Updated `CURRENT_TASK.md` and `INDEX.md`.
+- **Key findings:** server authority for catalogue/ownership/balances/gifts/badges is already correct; the visual layer is hardcoded procedural art; there is no generic store/product/category catalogue; badge artwork uses a second upload path and is stored as `imageData` in the primary DB; admin mutations are excluded from sync invalidation; migrations 1–5 exist but cover only indexes/TTLs.
+- **Verification:** read-only source audit plus completed Android and backend audit reports. No source, schema or database changes. No typecheck/test/build was run for this documentation-only step.
+- **Remaining at the time:** outstanding data/admin/test audit; user decisions on re-hosting seeded external avatars, granular permissions, store catalogue, bundle purchase and badge-blob cleanup; then Phase 1 implementation. (Superseded by the Phase 1 implementation entry above, which records the audit reconciliation and resolved decisions.)
+
 ## 2026-11-22 -- Compact empty Clans card (YUGM-CLAN-EMPTY-021)
 
 - **Android:** the own-profile clan card's empty state now mirrors the compact Bonds card: a horizontal `GlassCard` (18dp radius, ~76–84dp tall) with a **Clans** title, "Find a clan that feels like home." subtitle, and a small themed **Explore clans** primary button. Removed the "User has not joined clan yet" text, outlined button, and tall stacked layout. The populated clan card and both navigation callbacks are unchanged.

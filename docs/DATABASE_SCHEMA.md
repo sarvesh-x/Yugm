@@ -5,3 +5,9 @@ The backend uses MongoDB through Mongoose. Model definitions are in `backend-ser
 The [generated schema inventory](production/schema-inventory.csv) records discovered declarations and explicit indexes. It is a static source inventory, not a report of live collections, installed indexes, data quality, or migration safety. The production architecture and finding register document startup index changes, transaction requirements, and unverified deployment state.
 
 Before schema/index changes: inspect all readers/writers, old-client compatibility, duplicate existing keys, backfill strategy, rollback behavior, and whether a production-safe preflight is needed. Never run a migration against an unknown database. Do not represent standalone local Mongo as proof of transaction support.
+
+## Asset registry (YUGM-COSMETICS-001, Phase 1)
+
+`AssetObject` (`assetobjects`) is an additive registry for admin-managed image assets. Each document owns a stable UUID, `ownerType` (`cosmetic|badge|gift`), `ownerId`, monotonic `version`, `status` (`staging|published|archived`), SHA-256, MIME type, byte size, dimensions, private `stagingKey`/`stagingUrl`, published `publicKey`/`publicUrl`, derived WebP `variants`, creator and timestamps. Indexes: unique `(ownerType, ownerId, version)`, `(ownerType, ownerId, sha256)`, `(status, createdAt)`. Versions are allocated atomically in `asset.counters`.
+
+Objects live in object storage under `assets-staging/` (private, backend-read only) and `assets/` (public, immutable versioned keys); the primary DB holds metadata only. Migration 6 creates the indexes and is additive only — it must not be run against an unknown environment. No existing cosmetic, achievement, gift or user field was removed, rewritten or backfilled in Phase 1.

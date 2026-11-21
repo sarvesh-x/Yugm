@@ -27,6 +27,15 @@ The API has more than one response envelope in existing paths. Inspect `src/util
 - `PUT /experience/badges/showcase` accepts `{ badgeIds: string[] }` for the authenticated actor only. The server rejects more than five IDs, duplicate IDs, unknown or unearned/expired IDs; a successful response returns the committed `badgeIds` order. There is no client-side proof of wear: public readers re-fetch `/experience/badges/showcase/:userId`.
 - Successful badge mutations invalidate `TASKS` and `PROFILE` sync topics for the actor and broadcast a topic-only `PROFILE` invalidation to connected viewers, so an open viewing profile re-reads the changed user's badges. Both the Achievements screen and profile header re-read their scoped endpoints instead of applying an optimistic badge result as authoritative.
 
+## Centralized asset contract (Phase 1)
+
+- `/api/admin/assets` is the single admin-managed asset registry for cosmetic, badge and gift art. It requires `cosmetics.read` for reads and `cosmetics.write` for staging, publishing and archiving; every mutation writes an `AdminAuditLog` entry through `auditLog()`.
+- `POST /api/admin/assets` accepts multipart `asset` plus `ownerType` (`cosmetic|badge|gift`) and `ownerId`. JPEG, PNG, WebP and GIF up to 8 MB are accepted after signature/dimension validation with `sharp`. The file is written to **private** `assets-staging/` storage and returns a `staging` asset with a version, SHA-256 and dimensions. No public URL is returned at this stage.
+- `GET /api/admin/assets/staging/:fileName` is authenticated and serves staging bytes with `Cache-Control: private, no-store`. Staging filenames are validated against a fixed pattern; external URLs and arbitrary paths are rejected.
+- `POST /api/admin/assets/:id/publish` produces immutable `full` (1600px) and `preview` (512px) WebP variants under versioned `assets/` keys and sets `publicUrl`. Published keys and URLs are never overwritten; a new upload allocates a new version. `DELETE /api/admin/assets/:id` archives an asset and removes its objects.
+- Consumers must store the asset reference, not mint URLs. `resolvePublishedAsset(ownerType, ownerId)` returns the newest published asset for a cosmetic/badge/gift; Phase 1 does not yet change cosmetic/badge read responses, so legacy `assetUrl`/`imageUrl` remain authoritative until Phase 2–3 backfill.
+- Migration 6 creates only `assetobjects` indexes; it does not rewrite catalogue or user documents. No migration has been applied to any deployment as part of this work.
+
 ## Authentication and profile setup notes
 
 - `/api/auth/google`, `/api/auth/facebook`, and `/api/auth/phone` are mounted behind `requireAppCheck`; the client sends a limited-use App Check token in `X-Firebase-AppCheck`. The API consumes tokens during verification and rejects a replay result. Do not cache the limited-use token or a successful consume verification.

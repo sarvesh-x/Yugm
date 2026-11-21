@@ -546,6 +546,83 @@ paths:
                   type: { type: string, enum: [IMAGE, VIDEO] }
 
   # ─── ADMIN ─────────────────────────────────────────────
+  /admin/assets:
+    get:
+      tags: [Admin / Assets]
+      summary: List managed assets (cosmetics.read)
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: ownerType, in: query, schema: { type: string, enum: [cosmetic, badge, gift] } }
+        - { name: ownerId, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [staging, published, archived] } }
+      responses:
+        "200": { description: Paginated asset registry }
+    post:
+      tags: [Admin / Assets]
+      summary: Stage an image in private storage (cosmetics.write)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [asset, ownerType, ownerId]
+              properties:
+                asset: { type: string, format: binary }
+                ownerType: { type: string, enum: [cosmetic, badge, gift] }
+                ownerId: { type: string, maxLength: 64 }
+                originalName: { type: string, maxLength: 200 }
+      responses:
+        "201": { description: Staged asset metadata; no public URL yet }
+        "400": { description: Unsupported type, invalid image, or invalid owner }
+        "413": { description: Asset exceeds 8 MB }
+  /admin/assets/staging/{fileName}:
+    get:
+      tags: [Admin / Assets]
+      summary: Read a private staging file (cosmetics.read)
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: fileName, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Staging bytes with private, no-store cache headers }
+        "404": { description: Staging object not found }
+  /admin/assets/{id}:
+    get:
+      tags: [Admin / Assets]
+      summary: Get asset metadata (cosmetics.read)
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Asset metadata }
+        "404": { description: Asset not found }
+    delete:
+      tags: [Admin / Assets]
+      summary: Archive an asset and remove its objects (cosmetics.write)
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Archived asset metadata }
+  /admin/assets/{id}/publish:
+    post:
+      tags: [Admin / Assets]
+      summary: Publish immutable versioned variants (cosmetics.write)
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Published asset with publicUrl and variants }
+        "409": { description: Archived assets cannot be published }
   /admin/notifications/campaigns:
     get:
       tags: [Admin / Campaigns]
