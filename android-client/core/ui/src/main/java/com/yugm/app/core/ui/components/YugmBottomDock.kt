@@ -15,12 +15,12 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChatBubble
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.SportsEsports
-import androidx.compose.material.icons.outlined.ChatBubble
+import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Person
@@ -109,7 +109,7 @@ fun YugmBottomDock(
             MainDockItem(YugmDockTab.GAME_ZONE, Icons.Outlined.SportsEsports, Icons.Filled.SportsEsports, "Yugm Arcade", compactLabel = "Arcade", accessibilityLabel = "Yugm Arcade"),
             MainDockItem(YugmDockTab.LIVE, Icons.Outlined.Mic, Icons.Filled.Mic, "Party"),
             MainDockItem(YugmDockTab.DISCOVER, Icons.Outlined.Explore, Icons.Filled.Explore, "Discover"),
-            MainDockItem(YugmDockTab.CHAT, Icons.Outlined.ChatBubble, Icons.Filled.ChatBubble, "Chat"),
+            MainDockItem(YugmDockTab.CHAT, Icons.Outlined.Chat, Icons.Outlined.Chat, "Chat"),
             MainDockItem(YugmDockTab.PROFILE, Icons.Outlined.Person, Icons.Filled.Person, "Profile"),
         )
     }
