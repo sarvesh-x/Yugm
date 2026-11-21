@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -375,108 +376,117 @@ private fun MatchVibeIllustration(compact: Boolean) {
         offset
     } else 0f
 
+    // Larger card dimensions with consistent 3:4 portrait aspect ratio
+    val cardWidth = if (compact) 118.dp else 138.dp
+    val cardHeight = if (compact) 158.dp else 184.dp
+    val cardCorner = 20.dp
+    val cardBorder = 1.5.dp
+
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         // Orbit ring line behind cards
-        Canvas(modifier = Modifier.size(if (compact) 230.dp else 290.dp)) {
+        Canvas(modifier = Modifier.size(if (compact) 260.dp else 320.dp)) {
             drawCircle(
-                color = OnboardingBrandStart.copy(alpha = 0.12f),
-                radius = size.width * 0.44f,
+                color = OnboardingBrandStart.copy(alpha = 0.10f),
+                radius = size.width * 0.46f,
                 style = Stroke(width = 1.5.dp.toPx())
             )
         }
 
-        // Left Card (Tilted -8 deg, Gaming)
+        // Left Card (Tilted -10 deg, Gaming)
         Box(
             modifier = Modifier
-                .offset(x = (-68).dp, y = ((-8) + floatOffset).dp)
-                .graphicsLayer { rotationZ = -8f }
-                .shadow(8.dp, RoundedCornerShape(18.dp))
-                .clip(RoundedCornerShape(18.dp))
+                .offset(x = (-82).dp, y = ((-6) + floatOffset * 0.6f).dp)
+                .graphicsLayer { rotationZ = -10f }
+                .shadow(10.dp, RoundedCornerShape(cardCorner))
+                .clip(RoundedCornerShape(cardCorner))
                 .background(Color.White)
-                .border(2.dp, Color.White, RoundedCornerShape(18.dp))
-                .size(width = if (compact) 92.dp else 108.dp, height = if (compact) 122.dp else 142.dp)
+                .border(cardBorder, Color.White.copy(alpha = 0.6f), RoundedCornerShape(cardCorner))
+                .size(width = cardWidth, height = cardHeight)
         ) {
             Image(
                 painter = painterResource(id = R.drawable.ic_onboarding_avatar_1),
                 contentDescription = null,
+                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
-            // Gaming badge
+            // Gaming badge — top start, away from overlap zone
             InterestBadge(
                 text = "Gaming",
                 icon = "🎮",
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(6.dp)
+                    .align(Alignment.TopStart)
+                    .padding(8.dp)
             )
         }
 
-        // Right Card (Tilted +8 deg, Travel)
+        // Right Card (Tilted +10 deg, Travel)
         Box(
             modifier = Modifier
-                .offset(x = 68.dp, y = ((-8) - floatOffset).dp)
-                .graphicsLayer { rotationZ = 8f }
-                .shadow(8.dp, RoundedCornerShape(18.dp))
-                .clip(RoundedCornerShape(18.dp))
+                .offset(x = 82.dp, y = ((-6) - floatOffset * 0.6f).dp)
+                .graphicsLayer { rotationZ = 10f }
+                .shadow(10.dp, RoundedCornerShape(cardCorner))
+                .clip(RoundedCornerShape(cardCorner))
                 .background(Color.White)
-                .border(2.dp, Color.White, RoundedCornerShape(18.dp))
-                .size(width = if (compact) 92.dp else 108.dp, height = if (compact) 122.dp else 142.dp)
+                .border(cardBorder, Color.White.copy(alpha = 0.6f), RoundedCornerShape(cardCorner))
+                .size(width = cardWidth, height = cardHeight)
         ) {
             Image(
                 painter = painterResource(id = R.drawable.ic_onboarding_avatar_3),
                 contentDescription = null,
+                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
-            // Travel badge
+            // Travel badge — top end, away from overlap zone
             InterestBadge(
                 text = "Travel",
                 icon = "🏔️",
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(6.dp)
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
             )
         }
 
         // Center Card (Straight, Music, in front)
         Box(
             modifier = Modifier
-                .offset(y = (12 + floatOffset * 0.7f).dp)
-                .shadow(12.dp, RoundedCornerShape(20.dp))
-                .clip(RoundedCornerShape(20.dp))
+                .offset(y = (14 + floatOffset * 0.7f).dp)
+                .shadow(14.dp, RoundedCornerShape(cardCorner))
+                .clip(RoundedCornerShape(cardCorner))
                 .background(Color.White)
-                .border(2.5.dp, Color.White, RoundedCornerShape(20.dp))
-                .size(width = if (compact) 102.dp else 122.dp, height = if (compact) 134.dp else 156.dp)
+                .border(2.dp, Color.White.copy(alpha = 0.8f), RoundedCornerShape(cardCorner))
+                .size(width = cardWidth + 16.dp, height = cardHeight + 20.dp)
         ) {
             Image(
                 painter = painterResource(id = R.drawable.ic_onboarding_avatar_2),
                 contentDescription = null,
+                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
-            // Music badge
+            // Music badge — top start
             InterestBadge(
                 text = "Music",
                 icon = "🎵",
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
+                    .align(Alignment.TopStart)
                     .padding(8.dp)
             )
         }
 
-        // Bottom Yugm Lightning Match Symbol
+        // Bottom Yugm Lightning Match Symbol — centered beneath the card stack
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .offset(y = ((-4) - floatOffset * 0.5f).dp)
-                .shadow(6.dp, RoundedCornerShape(14.dp))
-                .clip(RoundedCornerShape(14.dp))
+                .offset(y = ((-2) - floatOffset * 0.4f).dp)
+                .shadow(8.dp, CircleShape)
+                .clip(CircleShape)
                 .background(Brush.linearGradient(onboardingBrandGradient))
-                .size(if (compact) 36.dp else 42.dp),
+                .size(if (compact) 40.dp else 48.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text("⚡", fontSize = if (compact) 18.sp else 22.sp, color = Color.White)
+            Text("⚡", fontSize = if (compact) 20.sp else 24.sp, color = Color.White)
         }
     }
 }
