@@ -125,6 +125,7 @@ fun AchievementsScreen(token: String, onBack: () -> Unit) {
         isBusy = { loading || saving }) { refresh() }
 
     val data = gallery
+    val capacity = (data?.capacity ?: BadgeGallery.FALLBACK_CAPACITY).coerceAtLeast(1)
     val worn = data?.wornIds.orEmpty()
     val achievements = data?.badges.orEmpty().filterNot { it.badgeKind == "HONOR" }
     val categories = achievements.map { it.category }.filter(String::isNotBlank).distinct().sorted()
@@ -162,7 +163,7 @@ fun AchievementsScreen(token: String, onBack: () -> Unit) {
         ) {
             if (data != null) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
-                    BadgeShowcase(data, onEmptySlot = { wearPicker = true }, onBadge = { selectedId = it })
+                    BadgeShowcase(data, capacity, onEmptySlot = { wearPicker = true }, onBadge = { selectedId = it })
                 }
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     TabRow(
@@ -228,7 +229,7 @@ fun AchievementsScreen(token: String, onBack: () -> Unit) {
                 if (availableToWear.isEmpty()) Text("Earn an achievement or honor badge to fill this slot.")
                 availableToWear.forEach { badge ->
                     Row(
-                        Modifier.fillMaxWidth().clickable(enabled = !saving && !loading && worn.size < 3) {
+                        Modifier.fillMaxWidth().clickable(enabled = !saving && !loading && worn.size < capacity) {
                             setBadgeWorn(worn + badge.id)
                         }.padding(vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -248,7 +249,7 @@ fun AchievementsScreen(token: String, onBack: () -> Unit) {
         title = { Text("Badge rules") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("You can wear up to three earned badges. New badges fill empty slots automatically. Worn badges appear on your profile and in your room profile card.")
+                Text("You can wear up to $capacity earned badges. Adding a badge to a slot means you are wearing it. New badges fill empty slots automatically. Worn badges appear as a row on your profile under your ID and level, and in your room profile card.")
                 Text("Achievement badges can have up to six levels. Keep progressing to raise your badge level and claim available rewards.")
                 Text("Honor badges are awarded each Sunday at 00:00 UTC for activity in the previous week. They expire the following Sunday.")
             }
@@ -286,12 +287,12 @@ fun AchievementsScreen(token: String, onBack: () -> Unit) {
                             Text("Share")
                         }
                     }
-                    if (selected.badgeUnlocked && !isWorn && worn.size >= 3) Text("Remove a worn badge to free a slot.")
+                    if (selected.badgeUnlocked && !isWorn && worn.size >= capacity) Text("Remove a worn badge to free a slot.")
                 }
             },
             confirmButton = {
                 if (selected.badgeUnlocked) {
-                    TextButton(enabled = !saving && !loading && (isWorn || worn.size < 3), onClick = {
+                    TextButton(enabled = !saving && !loading && (isWorn || worn.size < capacity), onClick = {
                         setBadgeWorn(if (isWorn) worn - selected.id else worn + selected.id)
                     }) { Text(if (isWorn) "Unwear" else "Wear badge") }
                 }
@@ -302,7 +303,7 @@ fun AchievementsScreen(token: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun BadgeShowcase(data: BadgeGallery, onEmptySlot: () -> Unit, onBadge: (String) -> Unit) {
+private fun BadgeShowcase(data: BadgeGallery, capacity: Int, onEmptySlot: () -> Unit, onBadge: (String) -> Unit) {
     val shape = RoundedCornerShape(24.dp)
     val ink = Color(0xFF39261F)
     Column(
@@ -313,11 +314,11 @@ private fun BadgeShowcase(data: BadgeGallery, onEmptySlot: () -> Unit, onBadge: 
             Avatar(initial = data.name.take(1), size = 42, imageUrl = data.avatar, avatarType = data.avatarType, avatarParts = data.avatarParts)
             Column(Modifier.weight(1f)) {
                 Text(data.name.ifBlank { "Your collection" }, color = ink, fontWeight = FontWeight.Bold, maxLines = 1)
-                Text("${data.wornIds.size} of 3 badges worn", color = Color(0xFF6A5144), fontSize = 12.sp)
+                Text("${data.wornIds.size} of $capacity badges worn", color = Color(0xFF6A5144), fontSize = 12.sp)
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            repeat(3) { slot ->
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            repeat(capacity) { slot ->
                 val current = data.badges.firstOrNull { it.id == data.wornIds.getOrNull(slot) }
                 Surface(
                     modifier = Modifier.weight(1f).height(90.dp).clickable(
@@ -328,9 +329,9 @@ private fun BadgeShowcase(data: BadgeGallery, onEmptySlot: () -> Unit, onBadge: 
                     shape = RoundedCornerShape(16.dp), color = Color.White.copy(alpha = .64f)
                 ) {
                     Column(Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                        if (current == null) Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(30.dp), tint = Color(0xFF986D59))
-                        else BadgeArtwork(current, Modifier.size(38.dp))
-                        Text(current?.title ?: "Add badge", color = ink, fontSize = 11.sp, maxLines = 1, modifier = Modifier.padding(top = 5.dp))
+                        if (current == null) Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(26.dp), tint = Color(0xFF986D59))
+                        else BadgeArtwork(current, Modifier.size(34.dp))
+                        Text(current?.title ?: "Add badge", color = ink, fontSize = 10.sp, maxLines = 1, modifier = Modifier.padding(top = 5.dp))
                     }
                 }
             }

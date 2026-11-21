@@ -41,9 +41,9 @@ The own profile has one unified **Bonds** section backed by `/api/bonds/me`; the
 - **Transparent host:** the section renders inside the Profile tab's existing `LazyColumn` at the same full width as sibling cards (no extra horizontal padding on top of the list's 16dp content padding); it must not draw a full-screen background, so the shared main-tab ambient background stays visible in light/dark themes.
 - **States:** loading spinner, retryable error, empty invitation, and populated slots reuse shared `YugmLoadingSpinner`, `GlassCard`, and `Avatar`. Other users' profiles keep the existing bond showcase with public cards only.
 
-## Profile achievements access
+## Profile achievements and worn badges
 
-The own profile does not render the former **Achievements & badges** card. Achievements are reached from the **Your Yugm** profile-shortcut menu via the existing `Achievements` tile, which routes to `Screen.Achievements`. Other users' profiles keep their public **Badges** showcase; that card is not a navigation shortcut.
+The own profile does not render the former **Achievements & badges** card. Achievements are reached from the **Your Yugm** profile-shortcut menu via the existing `Achievements` tile, which routes to `Screen.Achievements`. Worn badges are a cosmetic: adding an earned badge to a slot means the user is wearing it. The profile header shows up to five worn badge icons as a centered horizontal `WornBadgeRow` immediately below the ID/level label and above the description, on both own and public profiles; empty slots are not rendered in the header. No separate public **Badges** card remains.
 
 ## Migration direction
 

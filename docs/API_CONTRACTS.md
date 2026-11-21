@@ -21,6 +21,12 @@ The API has more than one response envelope in existing paths. Inspect `src/util
 - Public profile responses derive `bondsCount` from active `Bond` rows and `isBonded` from a caller-target active bond; neither is a persisted `User` flag. `GET /api/users/:id` exposes both, and `PATCH /api/users/me` returns an authoritative `bondsCount`. `bonds:changed` is an invalidation, so clients must re-read scoped `/api/bonds` state instead of treating a card or event as proof of a commit.
 - Invitations, acceptance/decline/cancel, gifts, type changes, and ending remain under `/api/bonds/...` with bilateral consent, transaction-fenced slots, and authorization at the resource boundary. See [Bonds](bonds.md) for the command contract.
 
+## Badge showcase contract
+
+- Worn badges are earned cosmetic slots, not claimable progression state. `/api/experience/badges/showcase` uses the server-authoritative capacity of five: `GET /experience/badges`, `GET /experience/badges/showcase/:userId`, and `PUT /experience/badges/showcase` return `data.capacity`. Android falls back to five only when an older API omits the field.
+- `PUT /experience/badges/showcase` accepts `{ badgeIds: string[] }` for the authenticated actor only. The server rejects more than five IDs, duplicate IDs, unknown or unearned/expired IDs; a successful response returns the committed `badgeIds` order. There is no client-side proof of wear: public readers re-fetch `/experience/badges/showcase/:userId`.
+- Successful badge mutations invalidate `TASKS` and `PROFILE` sync topics for the actor and broadcast a topic-only `PROFILE` invalidation to connected viewers, so an open viewing profile re-reads the changed user's badges. Both the Achievements screen and profile header re-read their scoped endpoints instead of applying an optimistic badge result as authoritative.
+
 ## Authentication and profile setup notes
 
 - `/api/auth/google`, `/api/auth/facebook`, and `/api/auth/phone` are mounted behind `requireAppCheck`; the client sends a limited-use App Check token in `X-Firebase-AppCheck`. The API consumes tokens during verification and rejects a replay result. Do not cache the limited-use token or a successful consume verification.

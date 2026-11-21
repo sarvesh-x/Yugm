@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.SubcomposeAsyncImage
 import com.yugm.app.core.api.resolveMediaUrl
 import com.yugm.app.core.model.Achievement
+import com.yugm.app.core.model.BadgeGallery
 import com.yugm.app.core.ui.theme.LocalYugmColors
 
 @Composable
@@ -77,8 +78,12 @@ fun BadgeArtwork(badge: Achievement, modifier: Modifier = Modifier, locked: Bool
 }
 
 @Composable
-fun WornBadgeRow(badges: List<Achievement>, modifier: Modifier = Modifier) {
+fun WornBadgeRow(
+    badges: List<Achievement>,
+    modifier: Modifier = Modifier,
+    capacity: Int = BadgeGallery.FALLBACK_CAPACITY
+) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        badges.take(3).forEach { BadgeArtwork(it, Modifier.size(36.dp)) }
+        badges.take(capacity.coerceAtLeast(0)).forEach { BadgeArtwork(it, Modifier.size(36.dp)) }
     }
 }

@@ -39,7 +39,7 @@ object AppSync {
             "clans", "groups" -> SyncTopic.CLANS
             "wallet", "diamonds", "subscriptions", "creator", "withdrawals", "payouts" -> SyncTopic.WALLET
             "gifts", "inventory", "mystery-box" -> SyncTopic.GIFTS
-            "missions", "battle-pass", "achievements", "referrals" -> SyncTopic.TASKS
+            "missions", "battle-pass", "achievements", "experience", "referrals" -> SyncTopic.TASKS
             "events" -> SyncTopic.EVENTS
             "notifications" -> SyncTopic.NOTIFICATIONS
             "bonds" -> SyncTopic.BONDS

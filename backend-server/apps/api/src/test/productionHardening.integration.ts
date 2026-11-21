@@ -165,7 +165,7 @@ test("reaction catalog and room submission agree on VIP access", async () => {
   assert.equal(free.body.data.reaction.reactionId, "wave");
 });
 
-test("badge gallery grants qualifying levels once, caps automatic wear, and preserves an unwear choice", async () => {
+test("badge gallery grants qualifying levels once, caps automatic wear at five, and preserves an unwear choice", async () => {
   const actor = await user();
   const viewer = await user();
   const [token, viewerToken] = await Promise.all([actor, viewer].map(tokenFor));
@@ -173,31 +173,36 @@ test("badge gallery grants qualifying levels once, caps automatic wear, and pres
     tier, target: (index + 1) * 10, rewardCoins: 0
   }));
   // Name and username are two of the seven profile fields. Add enough
-  // progress to hit all six tiers on one badge and have a locked badge too.
+  // progress to hit all six tiers and earn six badges, with one locked badge.
   await User.updateOne({ _id: actor._id }, { $set: { bio: "Test", city: "Test", avatar: "https://example.com/avatar.png" } });
-  await Achievement.insertMany(["first", "second", "third", "fourth", "locked"].map((id, i) => ({
+  await Achievement.insertMany(["first", "second", "third", "fourth", "fifth", "sixth", "locked"].map((id, i) => ({
     id, title: id, description: "Complete the profile", metric: "profile_complete", order: i,
-    tiers: i === 4 ? [{ tier: "BRONZE", target: 100, rewardCoins: 0 }] : tiers
+    tiers: i === 6 ? [{ tier: "BRONZE", target: 100, rewardCoins: 0 }] : tiers
   })));
   const gallery = await Promise.all([get("/experience/badges", token), get("/experience/badges", token)]);
   for (const result of gallery) {
     assert.equal(result.status, 200);
-    assert.deepEqual(result.body.data.wornIds, ["first", "second", "third"]);
+    assert.equal(result.body.data.capacity, 5);
+    assert.deepEqual(result.body.data.wornIds, ["first", "second", "third", "fourth", "fifth"]);
     assert.equal(result.body.data.badges[3].tier, "MASTER");
-    assert.equal(result.body.data.badges[4].unlocked, false);
+    assert.equal(result.body.data.badges[5].unlocked, true);
+    assert.equal(result.body.data.badges[6].unlocked, false);
   }
-  assert.equal((await User.findById(actor._id).lean())?.badgeGrants.length, 4);
+  assert.equal((await User.findById(actor._id).lean())?.badgeGrants.length, 6);
   const wear = (badgeIds: string[]) => fetch(`${baseUrl}/experience/badges/showcase`, {
     method: "PUT", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
     body: JSON.stringify({ badgeIds })
   });
-  assert.equal((await wear(["first", "second", "third", "fourth"])).status, 422);
+  assert.equal((await wear(["first", "second", "third", "fourth", "fifth", "sixth"])).status, 422);
   assert.equal((await wear(["first", "first"])).status, 422);
   assert.equal((await wear(["locked"])).status, 400);
-  assert.equal((await wear(["fourth", "second"])).status, 200);
-  assert.deepEqual((await get("/experience/badges", token)).body.data.wornIds, ["fourth", "second"]);
+  assert.equal((await wear(["sixth", "second"])).status, 200);
+  const updated = await get("/experience/badges", token);
+  assert.equal(updated.body.data.capacity, 5);
+  assert.deepEqual(updated.body.data.wornIds, ["sixth", "second"]);
   const publicProfile = await get(`/experience/badges/showcase/${actor.id}`, viewerToken);
-  assert.deepEqual(publicProfile.body.data.badges.map((badge: { id: string }) => badge.id), ["fourth", "second"]);
+  assert.equal(publicProfile.body.data.capacity, 5);
+  assert.deepEqual(publicProfile.body.data.badges.map((badge: { id: string }) => badge.id), ["sixth", "second"]);
 });
 
 test("Sunday honors only count the previous week and expire at the next Sunday boundary", async () => {

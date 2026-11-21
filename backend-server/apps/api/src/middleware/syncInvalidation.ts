@@ -15,7 +15,7 @@ export function mutationTopics(method: string, originalPath: string): string[] {
   else if (/^\/(clans|groups)\b/.test(path)) topic = "CLANS";
   else if (/^\/(wallet|diamonds|subscriptions|creator|withdrawals|payouts)\b/.test(path)) topic = "WALLET";
   else if (/^\/(gifts|inventory|mystery-box)\b/.test(path)) topic = "GIFTS";
-  else if (/^\/(missions|battle-pass|achievements|referrals)\b/.test(path)) topic = "TASKS";
+  else if (/^\/(missions|battle-pass|achievements|experience|referrals)\b/.test(path)) topic = "TASKS";
   else if (path.startsWith("/events")) topic = "EVENTS";
   else if (path.startsWith("/notifications")) topic = "NOTIFICATIONS";
   else if (/^\/(support|settings|moderation|safety|trust-verification)\b/.test(path)) topic = "SETTINGS";
@@ -31,6 +31,7 @@ export function createSyncInvalidation(emit = emitUser, broadcast = invalidatePu
       emit(req.user.id, "sync:invalidate", { topics });
       const path = req.originalUrl.split("?")[0];
       if (/^\/api\/rooms(?:\/[^/]+)?(?:\/(?:join|leave|end))?$/.test(path)) broadcast("ROOMS");
+      if (/^\/api\/experience\/badges\/showcase(?:\/|$)/.test(path)) broadcast("PROFILE");
       if (/^\/api\/events(?:\/|$)/.test(path)) broadcast("EVENTS");
       if (/^\/api\/(feed|stories|voice-polls|countdowns)(?:\/|$)/.test(path)) broadcast("SOCIAL");
       const profileTarget = path.match(/^\/api\/users\/([a-f0-9]{24})\/(?:follow|unfollow)$/i)?.[1];

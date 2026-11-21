@@ -34,6 +34,20 @@ test("only successful authenticated responses invalidate and publish no mutation
   assert.equal(JSON.stringify(privateEvents).includes("secret"), false);
 });
 
+test("experience badge updates sync profile and task readers", () => {
+  assert.deepEqual(mutationTopics("PUT", "/api/experience/badges/showcase"), ["TASKS", "PROFILE"]);
+  assert.deepEqual(mutationTopics("POST", "/api/experience/achievements/claim"), ["TASKS", "PROFILE"]);
+
+  const recipients: string[] = [];
+  const broadcasts: string[][] = [];
+  const middleware = createSyncInvalidation((id) => { recipients.push(id); }, (...topics) => { broadcasts.push(topics); });
+  const response = Object.assign(new EventEmitter(), { statusCode: 200 });
+  middleware({ method: "PUT", originalUrl: "/api/experience/badges/showcase", user: { id: "actor" } } as any, response as any, () => {});
+  response.emit("finish");
+  assert.deepEqual(recipients, ["actor"]);
+  assert.deepEqual(broadcasts, [["PROFILE"]]);
+});
+
 test("wallet and clan updates stay scoped to the authenticated actor", () => {
   const recipients: string[] = [];
   const broadcasts: string[] = [];

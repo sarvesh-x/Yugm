@@ -219,7 +219,7 @@ fun ProfileDetailScreen(
 
     com.yugm.app.core.ui.components.AutomaticSyncEffect(userId, token, topics = setOf(com.yugm.app.core.api.SyncTopic.PROFILE, com.yugm.app.core.api.SyncTopic.WALLET, com.yugm.app.core.api.SyncTopic.ROOMS), enabled = token.isNotBlank() && !showEditProfileScreen) {
         viewModel.loadProfile(token, userId, force = true).join()
-        if (!isOwnProfile) runCatching { YugmApi.getUserBadges(token, userId) }.onSuccess { showcasedBadges = it }
+        runCatching { YugmApi.getUserBadges(token, userId) }.onSuccess { showcasedBadges = it }
         if (token.isNotBlank()) {
             runCatching { VibeApi.match(token, userId) }.onSuccess { vibeMatch = it }
         }
@@ -358,6 +358,7 @@ fun ProfileDetailScreen(
                     AnimatedEntrance(delay = 100) {
                         ProfileHero(
                             profile = profile,
+                            wornBadges = showcasedBadges,
                             compatibilityScore = vibeMatch?.compatibility?.score?.takeUnless { isOwnProfile },
                             isOwnProfile = isOwnProfile,
                             visitorsCount = viewModel.visitors.size,
@@ -384,17 +385,6 @@ fun ProfileDetailScreen(
                         onManage = onOpenBonds,
                         onProfile = onBondPartnerProfile
                     )
-                }
-
-                if (!isOwnProfile && showcasedBadges.isNotEmpty()) item {
-                    GlassCard(Modifier.fillMaxWidth()) {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Badges", modifier = Modifier.weight(1f), color = TextPrimary,
-                                fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                            com.yugm.app.core.ui.components.WornBadgeRow(showcasedBadges)
-                        }
-                    }
                 }
 
                 if (isOwnProfile) {
@@ -1140,6 +1130,7 @@ private fun readProfileImageUpload(context: android.content.Context, uri: androi
 @Composable
 private fun ProfileHero(
     profile: Host,
+    wornBadges: List<Achievement> = emptyList(),
     compatibilityScore: Int?,
     isOwnProfile: Boolean = false,
     visitorsCount: Int = 0,
@@ -1203,6 +1194,9 @@ private fun ProfileHero(
             Box(Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFF9AD968)).padding(horizontal = 8.dp, vertical = 2.dp)) {
                 Text("Lv.${profile.level}", color = Color(0xFF18240E), fontSize = 10.sp, fontWeight = FontWeight.Black)
             }
+        }
+        if (wornBadges.isNotEmpty()) {
+            WornBadgeRow(wornBadges, Modifier.padding(top = 8.dp))
         }
         val headline = profile.vibeLine.ifBlank { profile.bio }
         if (headline.isNotBlank()) {

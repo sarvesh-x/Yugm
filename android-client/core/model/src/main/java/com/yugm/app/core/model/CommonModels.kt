@@ -76,9 +76,15 @@ data class BadgeGallery(
     val avatar: String = "",
     val avatarType: String? = null,
     val avatarParts: AvatarPartsPayload? = null,
+    val capacity: Int = FALLBACK_CAPACITY,
     val wornIds: List<String> = emptyList(),
     val badges: List<Achievement> = emptyList()
-)
+) {
+    companion object {
+        /** Used only when an older API omits the server-sourced capacity. */
+        const val FALLBACK_CAPACITY = 5
+    }
+}
 
 data class AchievementTier(
     val tier: String = "BRONZE",

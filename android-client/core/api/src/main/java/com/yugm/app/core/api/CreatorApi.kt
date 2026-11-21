@@ -153,6 +153,7 @@ object CreatorApi {
             avatar = user?.parseAvatarUrlField("avatar").orEmpty(),
             avatarType = user?.parseAvatarTypeField(),
             avatarParts = user?.parseAvatarPartsField(),
+            capacity = data.optInt("capacity", BadgeGallery.FALLBACK_CAPACITY).coerceAtLeast(1),
             wornIds = List(worn.length()) { worn.getString(it) },
             badges = data.optJSONArray("badges")?.toAchievements().orEmpty()
         )

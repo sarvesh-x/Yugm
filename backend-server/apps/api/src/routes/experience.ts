@@ -209,6 +209,7 @@ async function loadBadgeGallery(userId: string, user: Pick<IUser, "name" | "avat
       avatarType: (user as any).avatarType ?? null,
       avatarParts: (user as any).avatarParts ?? null
     },
+    capacity: maxWornBadges,
     wornIds: state.wornIds,
     badges: state.badges.map(badge => ({ ...progress.get(badge.id), ...badge }))
   };
@@ -479,7 +480,7 @@ experienceRouter.get("/badges/showcase/:userId", asyncHandler(async (req: AuthRe
   if (userId === req.user!.id) {
     const gallery = await loadBadgeGallery(userId, await User.findById(userId).lean());
     const badges = new Map(gallery.badges.map(badge => [badge.id, badge]));
-    sendOk(res, { badges: gallery.wornIds.map(id => badges.get(id)).filter(Boolean) });
+    sendOk(res, { capacity: maxWornBadges, badges: gallery.wornIds.map(id => badges.get(id)).filter(Boolean) });
     return;
   }
   const [user, definitions] = await Promise.all([
@@ -487,7 +488,7 @@ experienceRouter.get("/badges/showcase/:userId", asyncHandler(async (req: AuthRe
     badgeCatalog()
   ]);
   if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
-  sendOk(res, { badges: wornBadges(user, definitions) });
+  sendOk(res, { capacity: maxWornBadges, badges: wornBadges(user, definitions) });
 }));
 
 experienceRouter.post("/achievements/:id/share", asyncHandler(async (req: AuthRequest, res) => {

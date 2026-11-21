@@ -1106,6 +1106,48 @@ paths:
       responses:
         "200": { description: Home experience data }
 
+  /experience/badges:
+    get:
+      tags: [Experience]
+      summary: Get the authenticated user's badge gallery and worn slots
+      responses:
+        "200": { description: Badge gallery with capacity 5, wornIds, and badges }
+
+  /experience/badges/showcase:
+    put:
+      tags: [Experience]
+      summary: Set the authenticated user's worn badge slots
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [badgeIds]
+              properties:
+                badgeIds:
+                  type: array
+                  maxItems: 5
+                  uniqueItems: true
+                  items: { type: string }
+      responses:
+        "200": { description: Committed worn badge IDs }
+        "400": { description: A badge is not earned or active }
+        "422": { description: More than five or duplicate badge IDs }
+
+  /experience/badges/showcase/{userId}:
+    get:
+      tags: [Experience]
+      summary: Get another user's worn badges
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Worn badge list with capacity 5 }
+        "404": { description: User not found }
+
   /admin/clans/{clanId}/clean-messages:
     post:
       tags: [Admin / Moderation]

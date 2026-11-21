@@ -5,7 +5,7 @@ import { Room } from "../models/Room.js";
 import { User, type IUser } from "../models/User.js";
 import { ErrorCode, HttpError } from "../utils/http.js";
 
-export const maxWornBadges = 3;
+export const maxWornBadges = 5;
 const weekMs = 7 * 86400_000;
 type Definition = Pick<IAchievement, "id" | "title" | "description" | "category" | "kind" | "icon" | "imageUrl" | "metric" | "weeklyTarget" | "tiers" | "order">;
 type Grant = IUser["badgeGrants"][number];

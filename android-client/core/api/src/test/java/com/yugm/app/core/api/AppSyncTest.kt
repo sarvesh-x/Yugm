@@ -93,4 +93,12 @@ class AppSyncTest {
         AppSync.onMutation("POST", "/users/messages/partner")
         assertTrue(AppSync.changes(setOf(SyncTopic.CHAT)).first() > before)
     }
+
+    @Test fun badgeShowcaseMutationsRefreshProfileAndTasks() = runBlocking {
+        val profileBefore = AppSync.changes(setOf(SyncTopic.PROFILE)).first()
+        val tasksBefore = AppSync.changes(setOf(SyncTopic.TASKS)).first()
+        AppSync.onMutation("PUT", "/experience/badges/showcase")
+        assertTrue(AppSync.changes(setOf(SyncTopic.PROFILE)).first() > profileBefore)
+        assertTrue(AppSync.changes(setOf(SyncTopic.TASKS)).first() > tasksBefore)
+    }
 }

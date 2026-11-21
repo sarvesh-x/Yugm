@@ -25,7 +25,7 @@ Synchronous XP-earning endpoints include an additive `xpGrant` field where avail
 
 ## Achievements and badges
 
-`GET /experience/achievements` returns `achievements`. Each item contains identity/display fields, `progress`/`total`, `currentTier`, `highestClaimedTier`, `nextTier`, `canClaim`, `canUpgrade`, `complete`, and per-tier target, reward, reached, and claimed state. `POST /experience/achievements/claim` atomically claims the next reached tier and returns its reward. A concurrent/repeated claim returns HTTP 409. `PUT /experience/badges/showcase` accepts at most five earned badge IDs; public profile badge data includes each earned tier. `POST /experience/achievements/:id/share` returns share text only after a tier has been earned.
+`GET /experience/achievements` returns `achievements`. Each item contains identity/display fields, `progress`/`total`, `currentTier`, `highestClaimedTier`, `nextTier`, `canClaim`, `canUpgrade`, `complete`, and per-tier target, reward, reached, and claimed state. `POST /experience/achievements/claim` atomically claims the next reached tier and returns its reward. A concurrent/repeated claim returns HTTP 409. `GET /experience/badges`, `GET /experience/badges/showcase/:userId`, and `PUT /experience/badges/showcase` expose `capacity: 5`. The showcase accepts at most five earned, active, distinct badge IDs for the authenticated actor; public profile badge data includes each earned tier. `POST /experience/achievements/:id/share` returns share text only after a tier has been earned.
 
 ## Seasonal pass
 
