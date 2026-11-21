@@ -127,7 +127,7 @@ Dead routes (no composable/callers as audited): `Screen.OtpVerify`, `Screen.User
   surface top boundary so the lower half is embedded in the cradle rather than floating above it.
   Active indicator uses the signature brand gradient (purple→pink). Icon-to-label gap is 2dp.
 - **Icon system:** rounded custom vector family in `core/ui/.../BottomDockIcons.kt` (game controller,
-  studio mic, compass, chat bubble, user silhouette) with outlined inactive and filled active
+  studio mic, compass, chat, user silhouette) with outlined inactive and filled active
   variants on a shared 24-unit grid, consistent stroke weight and rounded caps/joins. Theme tinting
   via Yugm tokens.
 - **Layout/labels:** icon-first, minimal bar — inactive icons share a fixed baseline and rise/fade
