@@ -395,7 +395,7 @@ private fun MatchVibeIllustration(compact: Boolean) {
             )
         }
 
-        // Left Card (Tilted -10 deg, Gaming)
+        // Left Card (Tilted -10 deg, Music)
         Box(
             modifier = Modifier
                 .offset(x = (-82).dp, y = ((-6) + floatOffset * 0.6f).dp)
@@ -407,15 +407,15 @@ private fun MatchVibeIllustration(compact: Boolean) {
                 .size(width = cardWidth, height = cardHeight)
         ) {
             Image(
-                painter = painterResource(id = R.drawable.ic_onboarding_avatar_1),
+                painter = painterResource(id = R.drawable.ic_onboarding_avatar_2),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
-            // Gaming badge — top start, away from overlap zone
+            // Music badge — top start, away from overlap zone
             InterestBadge(
-                text = "Gaming",
-                icon = "🎮",
+                text = "Music",
+                icon = "🎵",
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(8.dp)
@@ -449,7 +449,7 @@ private fun MatchVibeIllustration(compact: Boolean) {
             )
         }
 
-        // Center Card (Straight, Music, in front)
+        // Center Card (Straight, Gaming, in front) — gaming card in between
         Box(
             modifier = Modifier
                 .offset(y = (14 + floatOffset * 0.7f).dp)
@@ -460,15 +460,15 @@ private fun MatchVibeIllustration(compact: Boolean) {
                 .size(width = cardWidth + 16.dp, height = cardHeight + 20.dp)
         ) {
             Image(
-                painter = painterResource(id = R.drawable.ic_onboarding_avatar_2),
+                painter = painterResource(id = R.drawable.ic_onboarding_avatar_1),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
-            // Music badge — top start
+            // Gaming badge — top start
             InterestBadge(
-                text = "Music",
-                icon = "🎵",
+                text = "Gaming",
+                icon = "🎮",
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(8.dp)
@@ -510,8 +510,8 @@ private fun InterestBadge(text: String, icon: String, modifier: Modifier = Modif
 /** Page 2 — Find your people: Voice waveform center + 5 orbital avatars */
 @Composable
 private fun FindPeopleIllustration(compact: Boolean) {
-    val sizePx = if (compact) 220.dp else 270.dp
-    val radiusPx = if (compact) 85.dp else 105.dp
+    val sizePx = if (compact) 270.dp else 330.dp
+    val radiusPx = if (compact) 105.dp else 130.dp
     val motionEnabled = LocalMotionEnabled.current
 
     val (avatarFloatY, waveformPhase) = if (motionEnabled) {
@@ -561,7 +561,7 @@ private fun FindPeopleIllustration(compact: Boolean) {
                 .shadow(12.dp, CircleShape)
                 .clip(CircleShape)
                 .background(Brush.linearGradient(onboardingBrandGradient))
-                .size(if (compact) 60.dp else 72.dp),
+                .size(if (compact) 72.dp else 88.dp),
             contentAlignment = Alignment.Center
         ) {
             // Audio Waveform Lines
@@ -606,7 +606,7 @@ private fun FindPeopleIllustration(compact: Boolean) {
                     .clip(CircleShape)
                     .background(Color.White)
                     .border(2.dp, Color.White, CircleShape)
-                    .size(if (compact) 44.dp else 52.dp)
+                    .size(if (compact) 52.dp else 64.dp)
             ) {
                 Image(
                     painter = painterResource(id = avatarResources[index]),
@@ -806,7 +806,7 @@ private fun BuildBondsIllustration(compact: Boolean) {
         contentAlignment = Alignment.Center
     ) {
         // Orbit arc line behind paired cards
-        Canvas(modifier = Modifier.size(if (compact) 230.dp else 280.dp)) {
+        Canvas(modifier = Modifier.size(if (compact) 290.dp else 350.dp)) {
             drawCircle(
                 color = OnboardingBrandStart.copy(alpha = 0.15f),
                 radius = size.width * 0.44f,
@@ -823,7 +823,7 @@ private fun BuildBondsIllustration(compact: Boolean) {
                 .clip(RoundedCornerShape(20.dp))
                 .background(Color.White)
                 .border(2.dp, Color.White, RoundedCornerShape(20.dp))
-                .size(width = if (compact) 105.dp else 125.dp, height = if (compact) 135.dp else 160.dp)
+                .size(width = if (compact) 130.dp else 155.dp, height = if (compact) 165.dp else 195.dp)
         ) {
             Image(
                 painter = painterResource(id = R.drawable.ic_onboarding_avatar_4),
@@ -841,7 +841,7 @@ private fun BuildBondsIllustration(compact: Boolean) {
                 .clip(RoundedCornerShape(20.dp))
                 .background(Color.White)
                 .border(2.dp, Color.White, RoundedCornerShape(20.dp))
-                .size(width = if (compact) 105.dp else 125.dp, height = if (compact) 135.dp else 160.dp)
+                .size(width = if (compact) 130.dp else 155.dp, height = if (compact) 165.dp else 195.dp)
         ) {
             Image(
                 painter = painterResource(id = R.drawable.ic_onboarding_avatar_5),
