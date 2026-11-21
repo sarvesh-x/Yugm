@@ -13,13 +13,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yugm.app.core.api.YugmApi
 import com.yugm.app.core.model.Host
 import com.yugm.app.core.ui.components.Avatar
-import com.yugm.app.core.ui.components.AuroraBackground
+import com.yugm.app.core.ui.components.YugmBackground
+import com.yugm.app.core.ui.components.YugmBackgroundStyle
 import com.yugm.app.core.ui.components.YugmPageHeader
 import com.yugm.app.core.ui.theme.*
 import kotlinx.coroutines.Dispatchers
@@ -86,10 +88,9 @@ fun ProfileSocialListScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
-        AuroraBackground(speed = 0.8f)
+    YugmBackground(style = YugmBackgroundStyle.Ambient) {
         Scaffold(
-            containerColor = Background,
+            containerColor = Color.Transparent,
             topBar = {
                 YugmPageHeader(
                     title = selectedList.replaceFirstChar { it.uppercase() },

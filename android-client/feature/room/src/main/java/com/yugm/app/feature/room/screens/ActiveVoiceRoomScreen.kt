@@ -170,8 +170,9 @@ import com.yugm.app.core.model.RoomPoll
 import com.yugm.app.core.model.RoomReaction
 import com.yugm.app.core.model.RoomReactionEvent
 import com.yugm.app.core.model.SpeakerRequest
-import com.yugm.app.core.ui.components.AuroraBackground
 import com.yugm.app.core.ui.components.Avatar
+import com.yugm.app.core.ui.components.YugmBackground
+import com.yugm.app.core.ui.components.YugmBackgroundStyle
 import com.yugm.app.core.ui.components.FloatingEmoji
 import com.yugm.app.core.ui.components.FloatingEmojiOverlay
 import com.yugm.app.core.ui.components.GiftPanel
@@ -739,8 +740,8 @@ fun ActiveVoiceRoomScreen(
                 .background(Brush.verticalGradient(if (room.host?.isVip == true) listOf(Color(0x775B2B85), Color(0x9952174A), Color(0xB31C132B), Color(0xF00A0915)) else listOf(Color(0x772B1055), Color(0x9952174A), Color(0xB31C132B), Color(0xF00A0915))))
         )
 
-        // Subtle aurora shimmer for extra polish
-        AuroraBackground(speed = 0.25f)
+        // Subtle ambient glow
+        YugmBackground(style = YugmBackgroundStyle.Ambient)
 
         Column(
             modifier = Modifier

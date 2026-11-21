@@ -40,6 +40,8 @@ import coil.compose.AsyncImage
 import com.yugm.app.core.model.Host
 import com.yugm.app.core.ui.components.Avatar
 import com.yugm.app.core.ui.components.GlassCard
+import com.yugm.app.core.ui.components.YugmBackground
+import com.yugm.app.core.ui.components.YugmBackgroundStyle
 import com.yugm.app.core.ui.components.LoadingState
 import com.yugm.app.core.ui.components.BrandHeader
 import com.yugm.app.core.ui.components.RoundAction
@@ -88,11 +90,7 @@ fun DatingDiscoveryScreen(
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Background)
-    ) {
+    YugmBackground(style = YugmBackgroundStyle.Ambient) {
         Column(modifier = Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier

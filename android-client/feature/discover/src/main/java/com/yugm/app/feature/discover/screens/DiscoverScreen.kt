@@ -74,11 +74,14 @@ import coil.compose.AsyncImage
 import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.ui.components.Avatar
+import com.yugm.app.core.ui.components.YugmBackground
+import com.yugm.app.core.ui.components.YugmBackgroundStyle
 import com.yugm.app.core.ui.components.YugmBottomDock
 import com.yugm.app.core.ui.components.YugmBottomDockDefaults
 import com.yugm.app.core.ui.components.YugmDockTab
 import com.yugm.app.core.ui.theme.Background
 import com.yugm.app.core.ui.theme.BorderColor
+import com.yugm.app.core.ui.theme.BrandGradients
 import com.yugm.app.core.ui.theme.Danger
 import com.yugm.app.core.ui.theme.Pink
 import com.yugm.app.core.ui.theme.PrimaryPurple
@@ -176,7 +179,8 @@ fun DiscoverScreen(
         }
     }
 
-    Column(Modifier.fillMaxSize().background(Background)) {
+    YugmBackground(style = YugmBackgroundStyle.Ambient) {
+        Column(Modifier.fillMaxSize()) {
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(
                 state = listState,
@@ -314,6 +318,7 @@ fun DiscoverScreen(
             containerColor = SurfaceElevated
         )
     }
+    }
 }
 
 private fun filterDiscoveryRooms(rooms: List<Room>, filter: String, city: String): List<Room> = when (filter) {
@@ -344,16 +349,8 @@ private fun DiscoverHero(
             .heightIn(min = 238.dp)
             .shadow(16.dp, RoundedCornerShape(30.dp), ambientColor = PrimaryPurple.copy(alpha = 0.25f))
             .clip(RoundedCornerShape(30.dp))
-            .background(Brush.linearGradient(listOf(Color(0xFF7139E8), Color(0xFF8525C9), Color(0xFFD92BA4))))
+            .background(BrandGradients.horizontal)
     ) {
-        Box(
-            Modifier.align(Alignment.TopEnd).size(190.dp).offset(x = 46.dp, y = (-55).dp)
-                .clip(CircleShape).background(Color.White.copy(alpha = 0.08f))
-        )
-        Box(
-            Modifier.align(Alignment.BottomStart).size(150.dp).offset(x = (-50).dp, y = 68.dp)
-                .clip(CircleShape).background(Color(0xFFFF69C7).copy(alpha = 0.18f))
-        )
         Column(Modifier.fillMaxWidth().padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(

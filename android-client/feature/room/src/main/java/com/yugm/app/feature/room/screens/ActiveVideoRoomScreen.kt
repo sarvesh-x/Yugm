@@ -165,8 +165,7 @@ fun ActiveVideoRoomScreen(
             floatingEmojis.removeFirstOrNull()
         }
     }
-    Box(Modifier.fillMaxSize()) {
-        AuroraBackground(speed = 0.4f)
+    YugmBackground(style = YugmBackgroundStyle.Ambient) {
         RoomShell(
             room = room,
             chat = chat,

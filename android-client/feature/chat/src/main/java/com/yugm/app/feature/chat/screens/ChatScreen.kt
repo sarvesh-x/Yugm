@@ -88,6 +88,8 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import com.yugm.app.core.ui.components.YugmBackground
+import com.yugm.app.core.ui.components.YugmBackgroundStyle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -708,7 +710,7 @@ fun ChatScreen(
     }
     // Scroll behavior is handled by the visible-messages auto-scroll effect above.
 
-    Box(Modifier.fillMaxSize().background(chatCanvas(LocalYugmColors.current.isDark))) {
+    YugmBackground(style = YugmBackgroundStyle.Minimal) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
                 ChatScreenHeader(
                     selectionMode = selectionMode,

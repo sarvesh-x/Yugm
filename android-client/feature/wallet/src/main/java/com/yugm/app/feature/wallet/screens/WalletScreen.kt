@@ -93,9 +93,7 @@ fun WalletScreen(
         viewModel.error?.let { status = it }
     }
 
-    YugmAmbientBackground {
-        Box(Modifier.fillMaxSize()) {
-            AuroraBackground(speed = 0.8f)
+    YugmBackground(style = YugmBackgroundStyle.Minimal) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 30.dp),
@@ -196,7 +194,6 @@ fun WalletScreen(
                 }
             )
         }
-    }
     }
 }
 

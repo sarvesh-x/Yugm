@@ -50,25 +50,11 @@ fun AuroraBackground(
     speed: Float = 1f,
     colors: List<Color> = auroraGradient,
 ) {
-    // Static backdrop: the animated aurora caused continuous redraw/composition
-    // cost on room/profile/discover screens. Keep a lightweight fixed render.
-    Canvas(modifier = modifier.fillMaxSize()) {
-        val w = size.width
-        val h = size.height
-        val cx = w / 2
-        val cy = h / 2
-        val maxR = kotlin.math.sqrt(w * w + h * h) / 2
-        for (i in colors.indices) {
-            val offset = i * 120f * (PI.toFloat() / 180f)
-            val rx = cx + maxR * 0.6f * cos(offset)
-            val ry = cy + maxR * 0.6f * sin(offset * 0.7f)
-            drawCircle(
-                color = colors[i].copy(alpha = 0.08f),
-                radius = maxR * 0.55f,
-                center = Offset(rx, ry)
-            )
-        }
-    }
+    // Delegated to the centralized Yugm background system (soft static ambient glow)
+    YugmBackground(
+        modifier = modifier,
+        style = YugmBackgroundStyle.Ambient
+    )
 }
 
 @Composable

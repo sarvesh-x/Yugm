@@ -26,8 +26,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
-import com.yugm.app.core.ui.theme.*
+import com.yugm.app.core.ui.components.YugmBackground
+import com.yugm.app.core.ui.components.YugmBackgroundStyle
 import com.yugm.app.core.ui.components.YugmLoadingSpinner
+import com.yugm.app.core.ui.theme.*
 
 @Composable
 fun SplashScreen(onTimeout: suspend () -> Unit) {
@@ -54,12 +56,11 @@ fun SplashScreen(onTimeout: suspend () -> Unit) {
         onTimeout()
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Background),
-        contentAlignment = Alignment.Center
-    ) {
+    YugmBackground(style = YugmBackgroundStyle.Aurora) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.scale(scale.value)
@@ -110,4 +111,5 @@ fun SplashScreen(onTimeout: suspend () -> Unit) {
             }
         }
     }
+}
 }

@@ -222,8 +222,7 @@ fun ProfileDetailScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
-        AuroraBackground(speed = 0.8f)
+    YugmBackground(style = YugmBackgroundStyle.Ambient) {
         Scaffold(
             // Root NavGraph owns safe-area insets; avoid nested-Scaffold inset duplication that
             // created extra empty space and double padding on the main Profile tab.

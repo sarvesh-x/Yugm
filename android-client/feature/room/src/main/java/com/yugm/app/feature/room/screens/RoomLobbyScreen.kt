@@ -78,9 +78,10 @@ import com.yugm.app.core.model.RoomDetail
 import com.yugm.app.core.model.RoomMission
 import com.yugm.app.core.model.RoomPoll
 import com.yugm.app.core.model.RoomType
-import com.yugm.app.core.ui.components.AuroraBackground
 import com.yugm.app.core.ui.components.Avatar
 import com.yugm.app.core.ui.components.GlassCard
+import com.yugm.app.core.ui.components.YugmBackground
+import com.yugm.app.core.ui.components.YugmBackgroundStyle
 import com.yugm.app.core.ui.components.LoadingState
 import com.yugm.app.core.ui.theme.Background
 import com.yugm.app.core.ui.theme.DangerRed
@@ -138,8 +139,7 @@ fun RoomLobbyScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Background)) {
-        AuroraBackground(speed = 0.4f)
+    YugmBackground(style = YugmBackgroundStyle.Ambient) {
 
         Column(
             modifier = Modifier

@@ -14,6 +14,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -45,6 +50,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
+import com.yugm.app.core.ui.components.YugmBackground
+import com.yugm.app.core.ui.components.YugmBackgroundStyle
 import com.yugm.app.core.ui.theme.*
 
 import com.yugm.app.feature.auth.R
@@ -100,11 +107,8 @@ fun OnboardingScreen(onStart: () -> Unit) {
         val isVeryShort = maxHeight < 420.dp
         val horizontalPadding = if (compactLayout) 16.dp else 24.dp
 
-        // Ambient soft lavender/pink glow background behind the central illustration
-        OnboardingBackground(
-            glowLavender = colors.onboardingGlowLavender,
-            glowPink = colors.onboardingGlowPink,
-        )
+        // Shared Aurora Background style for onboarding and auth
+        YugmBackground(style = YugmBackgroundStyle.Aurora)
 
         Column(
             modifier = Modifier
@@ -220,73 +224,7 @@ fun OnboardingScreen(onStart: () -> Unit) {
     }
 }
 
-@Composable
-private fun OnboardingBackground(
-    glowLavender: Color,
-    glowPink: Color,
-) {
-    val motionEnabled = LocalMotionEnabled.current
-    val (floatY1, floatY2, alpha1, alpha2) = if (motionEnabled) {
-        val infiniteTransition = rememberInfiniteTransition(label = "bg_glow_floating")
-        val y1 by infiniteTransition.animateFloat(
-            initialValue = -14f,
-            targetValue = 14f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(4500, easing = LinearOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "floatY1"
-        )
-        val y2 by infiniteTransition.animateFloat(
-            initialValue = 14f,
-            targetValue = -14f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(5500, easing = LinearOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "floatY2"
-        )
-        val a1 by infiniteTransition.animateFloat(
-            initialValue = 0.45f,
-            targetValue = 0.65f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(3800, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "alpha1"
-        )
-        val a2 by infiniteTransition.animateFloat(
-            initialValue = 0.35f,
-            targetValue = 0.55f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(4200, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "alpha2"
-        )
-        listOf(y1, y2, a1, a2)
-    } else {
-        listOf(0f, 0f, 0.55f, 0.45f)
-    }
 
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val w = size.width
-        val h = size.height
-        val centerX = w * 0.5f
-        val centerY = h * 0.38f
-
-        drawCircle(
-            color = glowLavender.copy(alpha = alpha1),
-            radius = w * 0.55f,
-            center = Offset(centerX - w * 0.1f, centerY - h * 0.05f + floatY1.dp.toPx())
-        )
-        drawCircle(
-            color = glowPink.copy(alpha = alpha2),
-            radius = w * 0.45f,
-            center = Offset(centerX + w * 0.12f, centerY + h * 0.06f + floatY2.dp.toPx())
-        )
-    }
-}
 
 @Composable
 private fun OnboardingHeader(
@@ -325,7 +263,7 @@ private fun OnboardingHeader(
                     modifier = Modifier
                         .size(if (compact) 32.dp else 34.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Brush.linearGradient(onboardingBrandGradient)),
+                        .background(BrandGradients.horizontal),
                     contentAlignment = Alignment.Center
                 ) {
                     Text("Y", color = Color.White, fontWeight = FontWeight.Black)
@@ -482,7 +420,7 @@ private fun MatchVibeIllustration(compact: Boolean) {
                 .offset(y = ((-2) - floatOffset * 0.4f).dp)
                 .shadow(8.dp, CircleShape)
                 .clip(CircleShape)
-                .background(Brush.linearGradient(onboardingBrandGradient))
+                .background(BrandGradients.horizontal)
                 .size(if (compact) 40.dp else 48.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -493,17 +431,18 @@ private fun MatchVibeIllustration(compact: Boolean) {
 
 @Composable
 private fun InterestBadge(text: String, icon: String, modifier: Modifier = Modifier) {
+    val colors = LocalYugmColors.current
     Row(
         modifier = modifier
             .shadow(4.dp, RoundedCornerShape(12.dp))
             .clip(RoundedCornerShape(12.dp))
-            .background(Color.White.copy(alpha = 0.92f))
+            .background(if (colors.isDark) colors.surfaceVariant.copy(alpha = 0.95f) else Color.White.copy(alpha = 0.92f))
             .padding(horizontal = 7.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(3.dp)
     ) {
         Text(icon, fontSize = 10.sp)
-        Text(text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = OnboardingTextPrimaryLight)
+        Text(text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
     }
 }
 
@@ -544,12 +483,12 @@ private fun FindPeopleIllustration(compact: Boolean) {
         // Concentric Orbital Rings
         Canvas(modifier = Modifier.size(sizePx)) {
             drawCircle(
-                color = OnboardingBrandStart.copy(alpha = 0.15f),
+                color = BrandStart.copy(alpha = 0.15f),
                 radius = size.width * 0.44f,
                 style = Stroke(width = 1.5.dp.toPx())
             )
             drawCircle(
-                color = OnboardingBrandStart.copy(alpha = 0.25f),
+                color = BrandMiddle.copy(alpha = 0.25f),
                 radius = size.width * 0.28f,
                 style = Stroke(width = 1.5.dp.toPx())
             )
@@ -560,7 +499,7 @@ private fun FindPeopleIllustration(compact: Boolean) {
             modifier = Modifier
                 .shadow(12.dp, CircleShape)
                 .clip(CircleShape)
-                .background(Brush.linearGradient(onboardingBrandGradient))
+                .background(BrandGradients.horizontal)
                 .size(if (compact) 72.dp else 88.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -643,68 +582,134 @@ private fun ShareMomentsIllustration(compact: Boolean) {
         // Main Landscape Video Player Container
         Box(
             modifier = Modifier
-                .shadow(10.dp, RoundedCornerShape(20.dp))
+                .shadow(14.dp, RoundedCornerShape(20.dp), spotColor = Color.Black.copy(alpha = 0.2f))
                 .clip(RoundedCornerShape(20.dp))
-                .background(Color.White)
-                .border(1.5.dp, Color.White.copy(alpha = 0.9f), RoundedCornerShape(20.dp))
+                .background(Color.Black)
+                .border(1.5.dp, Color.White.copy(alpha = 0.85f), RoundedCornerShape(20.dp))
                 .size(width = if (compact) 260.dp else 300.dp, height = if (compact) 150.dp else 175.dp)
         ) {
             // Video Thumbnail Backdrop
             Image(
                 painter = painterResource(id = R.drawable.ic_onboarding_video_thumb),
                 contentDescription = null,
+                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Top-left Overlay Pill: Watch Party
+            // Top-left Overlay Pill: Watch Party & Live Indicator
             Row(
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(8.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color.Black.copy(alpha = 0.45f))
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                    .padding(10.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .border(0.8.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 9.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                Text("👥", fontSize = 10.sp)
-                Text("Watch party • 6 online", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Medium)
+                // Pulsing Live Dot
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFFF3B4F))
+                )
+                Text(
+                    "Watch Party • 6 watching",
+                    fontSize = 10.sp,
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
 
+
+
             // Bottom Playback Controls Overlay
-            Row(
+            Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .background(
                         Brush.verticalGradient(
-                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.65f))
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.80f))
                         )
                     )
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .padding(start = 12.dp, end = 12.dp, top = 14.dp, bottom = 8.dp)
             ) {
-                Text("⏸", fontSize = 12.sp, color = Color.White)
-                // Progress bar
+                // Progress Bar with Scrubber Knob
                 Box(
                     modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 8.dp)
-                        .height(3.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(Color.White.copy(alpha = 0.35f))
+                        .fillMaxWidth()
+                        .height(10.dp),
+                    contentAlignment = Alignment.CenterStart
                 ) {
+                    // Track Background
                     Box(
                         modifier = Modifier
-                            .fillMaxHeight()
-                            .fillMaxWidth(0.6f)
-                            .background(Brush.horizontalGradient(onboardingBrandGradient))
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(Color.White.copy(alpha = 0.30f))
+                    )
+                    // Active Progress Track
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.62f)
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(BrandGradients.horizontal)
+                    )
+                    // Scrubber Handle Knob
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .offset(x = (if (compact) 260.dp else 300.dp) * 0.62f - 18.dp)
+                            .shadow(4.dp, CircleShape)
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(Color.White)
                     )
                 }
-                Text("1:24:37", fontSize = 9.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("⛶", fontSize = 11.sp, color = Color.White)
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                // Control Icons & Time Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Pause,
+                            contentDescription = "Pause",
+                            tint = Color.White,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Text(
+                            "18:42 / 1:24:37",
+                            fontSize = 9.sp,
+                            color = Color.White.copy(alpha = 0.9f),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Fullscreen,
+                            contentDescription = "Fullscreen",
+                            tint = Color.White,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
             }
         }
 
@@ -744,7 +749,7 @@ private fun ShareMomentsIllustration(compact: Boolean) {
                 modifier = Modifier
                     .shadow(4.dp, CircleShape)
                     .clip(CircleShape)
-                    .background(Brush.linearGradient(onboardingBrandGradient))
+                    .background(BrandGradients.horizontal)
                     .border(1.5.dp, Color.White, CircleShape)
                     .size(if (compact) 32.dp else 36.dp),
                 contentAlignment = Alignment.Center
@@ -792,7 +797,7 @@ private fun ReactionPill(emoji: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** Page 4 — Build meaningful bonds: Two prominent paired tilted cards with Yugm Y-badge */
+/** Page 4 — Build meaningful bonds: Two symmetric portrait cards with -8° / +8° rotation, animated connection arc, and central Yugm badge below */
 @Composable
 private fun BuildBondsIllustration(compact: Boolean) {
     val context = LocalContext.current
@@ -801,91 +806,167 @@ private fun BuildBondsIllustration(compact: Boolean) {
             context.packageManager.getApplicationIcon(context.packageName).toBitmap(128, 128).asImageBitmap()
         }.getOrNull()
     }
+    
+    val motionEnabled = LocalMotionEnabled.current
+    val (floatY, arcAnim) = if (motionEnabled) {
+        val infiniteTransition = rememberInfiniteTransition(label = "build_bonds_motion")
+        val y by infiniteTransition.animateFloat(
+            initialValue = -4f,
+            targetValue = 4f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(3600, easing = LinearOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "bondsFloatY"
+        )
+        val arc by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(2500, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "arcAnim"
+        )
+        Pair(y, arc)
+    } else Pair(0f, 0f)
+
+    val cardWidth = if (compact) 124.dp else 144.dp
+    val cardHeight = if (compact) 160.dp else 188.dp
+    val cardCorner = 22.dp
+    val cardBorder = 2.dp
+
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        // Orbit arc line behind paired cards
+        // Orbit background ring & animated connection arc
         Canvas(modifier = Modifier.size(if (compact) 290.dp else 350.dp)) {
+            val cx = size.width / 2f
+            val cy = size.height / 2f
+            
+            // Soft background circle
             drawCircle(
-                color = OnboardingBrandStart.copy(alpha = 0.15f),
+                color = OnboardingBrandStart.copy(alpha = 0.12f),
                 radius = size.width * 0.44f,
                 style = Stroke(width = 1.5.dp.toPx())
             )
+
+            // Connection arc between cards (gentle smile arc)
+            val arcStartX = cx - (if (compact) 44.dp else 52.dp).toPx()
+            val arcEndX = cx + (if (compact) 44.dp else 52.dp).toPx()
+            val arcY = cy + (if (compact) 36.dp else 42.dp).toPx()
+            
+            val path = Path().apply {
+                moveTo(arcStartX, arcY - 10f)
+                quadraticTo(cx, arcY + 25f, arcEndX, arcY - 10f)
+            }
+            drawPath(
+                path = path,
+                brush = BrandGradients.horizontal,
+                style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round)
+            )
+
+            // Animated glowing pulse particle along the arc
+            if (motionEnabled) {
+                val t = arcAnim
+                val ptX = (1 - t) * (1 - t) * arcStartX + 2 * (1 - t) * t * cx + t * t * arcEndX
+                val ptY = (1 - t) * (1 - t) * (arcY - 10f) + 2 * (1 - t) * t * (arcY + 25f) + t * t * (arcY - 10f)
+                drawCircle(
+                    color = Color.White,
+                    radius = 4.dp.toPx(),
+                    center = Offset(ptX, ptY)
+                )
+                drawCircle(
+                    color = BrandStart.copy(alpha = 0.6f),
+                    radius = 8.dp.toPx(),
+                    center = Offset(ptX, ptY)
+                )
+            }
         }
 
-        // Left Card (Tilted -6 deg)
+        // Left Card (Tilted -8°)
         Box(
             modifier = Modifier
-                .offset(x = (-46).dp, y = (-6).dp)
-                .graphicsLayer { rotationZ = -6f }
-                .shadow(10.dp, RoundedCornerShape(20.dp))
-                .clip(RoundedCornerShape(20.dp))
+                .offset(x = (-50).dp, y = ((-4) + floatY).dp)
+                .graphicsLayer { 
+                    rotationZ = -8f 
+                    scaleX = 1.02f
+                    scaleY = 1.02f
+                }
+                .shadow(14.dp, RoundedCornerShape(cardCorner), spotColor = BrandStart.copy(alpha = 0.25f))
+                .clip(RoundedCornerShape(cardCorner))
                 .background(Color.White)
-                .border(2.dp, Color.White, RoundedCornerShape(20.dp))
-                .size(width = if (compact) 130.dp else 155.dp, height = if (compact) 165.dp else 195.dp)
+                .border(cardBorder, Color.White, RoundedCornerShape(cardCorner))
+                .size(width = cardWidth, height = cardHeight)
         ) {
             Image(
                 painter = painterResource(id = R.drawable.ic_onboarding_avatar_4),
                 contentDescription = null,
-                modifier = Modifier.fillMaxSize()
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { scaleX = 1.08f; scaleY = 1.08f }
             )
         }
 
-        // Right Card (Tilted +6 deg)
+        // Right Card (Tilted +8°)
         Box(
             modifier = Modifier
-                .offset(x = 46.dp, y = (-6).dp)
-                .graphicsLayer { rotationZ = 6f }
-                .shadow(10.dp, RoundedCornerShape(20.dp))
-                .clip(RoundedCornerShape(20.dp))
+                .offset(x = 50.dp, y = ((-4) - floatY).dp)
+                .graphicsLayer { 
+                    rotationZ = 8f 
+                    scaleX = 1.02f
+                    scaleY = 1.02f
+                }
+                .shadow(14.dp, RoundedCornerShape(cardCorner), spotColor = BrandStart.copy(alpha = 0.25f))
+                .clip(RoundedCornerShape(cardCorner))
                 .background(Color.White)
-                .border(2.dp, Color.White, RoundedCornerShape(20.dp))
-                .size(width = if (compact) 130.dp else 155.dp, height = if (compact) 165.dp else 195.dp)
+                .border(cardBorder, Color.White, RoundedCornerShape(cardCorner))
+                .size(width = cardWidth, height = cardHeight)
         ) {
             Image(
                 painter = painterResource(id = R.drawable.ic_onboarding_avatar_5),
                 contentDescription = null,
-                modifier = Modifier.fillMaxSize()
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { scaleX = 1.08f; scaleY = 1.08f }
             )
         }
 
-        // Central Yugm Bond badge overlapping between cards (uses the original app icon)
-        if (appIcon != null) {
-            Image(
-                bitmap = appIcon,
-                contentDescription = "Yugm",
-                modifier = Modifier
-                    .offset(y = 52.dp)
-                    .shadow(10.dp, CircleShape)
-                    .clip(CircleShape)
-                    .border(2.5.dp, Color.White, CircleShape)
-                    .size(if (compact) 40.dp else 48.dp)
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .offset(y = 52.dp)
-                    .shadow(10.dp, CircleShape)
-                    .clip(CircleShape)
-                    .background(Brush.linearGradient(onboardingBrandGradient))
-                    .border(2.5.dp, Color.White, CircleShape)
-                    .size(if (compact) 40.dp else 48.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("Y", fontSize = if (compact) 20.sp else 24.sp, fontWeight = FontWeight.Black, color = Color.White)
+        // Central Yugm connection badge positioned centrally beneath both cards, without obstructing portraits
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .offset(y = if (compact) (-12).dp else (-18).dp)
+        ) {
+            if (appIcon != null) {
+                Image(
+                    bitmap = appIcon,
+                    contentDescription = "Yugm connection",
+                    modifier = Modifier
+                        .shadow(12.dp, CircleShape)
+                        .clip(CircleShape)
+                        .border(2.5.dp, Color.White, CircleShape)
+                        .size(if (compact) 44.dp else 52.dp)
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .shadow(12.dp, CircleShape)
+                        .clip(CircleShape)
+                        .background(BrandGradients.horizontal)
+                        .border(2.5.dp, Color.White, CircleShape)
+                        .size(if (compact) 44.dp else 52.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Y", fontSize = if (compact) 22.sp else 26.sp, fontWeight = FontWeight.Black, color = Color.White)
+                }
             }
         }
 
-        // Top Sparkle Lines
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .offset(y = if (compact) 10.dp else 18.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text("✨", fontSize = 16.sp)
-        }
+
     }
 }
 
@@ -935,6 +1016,7 @@ private fun OnboardingPageIndicator(
     currentPage: Int,
     modifier: Modifier = Modifier,
 ) {
+    val colors = LocalYugmColors.current
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -955,9 +1037,15 @@ private fun OnboardingPageIndicator(
                     .clip(CircleShape)
                     .then(
                         if (active) {
-                            Modifier.background(Brush.horizontalGradient(onboardingBrandGradient))
+                            Modifier.background(BrandGradients.horizontal)
                         } else {
-                            Modifier.background(OnboardingBrandStart.copy(alpha = 0.2f))
+                            Modifier.background(
+                                if (colors.isDark) {
+                                    Color.White.copy(alpha = 0.22f)
+                                } else {
+                                    Color(0xFF20182A).copy(alpha = 0.16f)
+                                }
+                            )
                         }
                     )
             )
@@ -978,7 +1066,7 @@ private fun OnboardingPrimaryButton(
             .fillMaxWidth()
             .height(54.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(Brush.horizontalGradient(onboardingBrandGradient))
+            .background(BrandGradients.horizontal)
             .semantics { contentDescription = text }
             .clickable(
                 interactionSource = interactionSource,

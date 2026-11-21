@@ -41,7 +41,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.yugm.app.core.model.ActiveCosmetics
 import com.yugm.app.core.model.ProfileCosmetic
-import com.yugm.app.core.ui.components.AuroraBackground
+import com.yugm.app.core.ui.components.YugmBackground
+import com.yugm.app.core.ui.components.YugmBackgroundStyle
 import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.core.ui.components.LoadingState
 import com.yugm.app.core.ui.cosmetics.CosmeticArtwork
@@ -134,8 +135,7 @@ fun CosmeticsStoreScreen(
 
     val selectedCategory = storeCategories.firstOrNull { it.type == selectedCategoryType } ?: storeCategories.first()
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        AuroraBackground(speed = 0.5f)
+    YugmBackground(style = YugmBackgroundStyle.Ambient) {
 
         Scaffold(
             topBar = {

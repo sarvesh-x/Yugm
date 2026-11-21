@@ -36,8 +36,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.yugm.app.core.ui.components.AuroraBackground
 import com.yugm.app.core.ui.components.GlassCard
+import com.yugm.app.core.ui.components.YugmBackground
+import com.yugm.app.core.ui.components.YugmBackgroundStyle
 import com.yugm.app.core.ui.theme.Background
 import com.yugm.app.core.ui.theme.Gold
 import com.yugm.app.core.ui.theme.Pink
@@ -65,13 +66,7 @@ fun CreatorDashboardScreen(
 
     val state by viewModel.uiState.collectAsState()
 
-    Box(Modifier.fillMaxSize()) {
-        AuroraBackground(speed = 0.5f)
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Background.copy(alpha = 0.92f))
-        ) {
+    YugmBackground(style = YugmBackgroundStyle.Ambient) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -258,7 +253,6 @@ fun CreatorDashboardScreen(
             }
         }
     }
-}
 
 @Composable
 private fun StatBox(

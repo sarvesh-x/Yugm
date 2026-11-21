@@ -166,8 +166,7 @@ fun SettingsScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize().background(LocalYugmColors.current.background))
+    YugmBackground(style = YugmBackgroundStyle.Minimal) {
         Scaffold(
             topBar = {
                 if (pane == SettingsPane.About) {
@@ -180,19 +179,21 @@ fun SettingsScreen(
                                 }
                             }
                         },
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = LocalYugmColors.current.background)
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
                     )
-                } else TopAppBar(
-                    title = { Text(paneTitle(pane), color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Black) },
-                    navigationIcon = {
-                        TextButton(onClick = { if (pane == SettingsPane.Home) onBack() else pane = SettingsPane.Home }) {
-                            Text("Back", color = LocalYugmColors.current.secondary, fontWeight = FontWeight.Bold)
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = LocalYugmColors.current.background)
-                )
+                } else {
+                    TopAppBar(
+                        title = { Text(paneTitle(pane), color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Black) },
+                        navigationIcon = {
+                            TextButton(onClick = { if (pane == SettingsPane.Home) onBack() else pane = SettingsPane.Home }) {
+                                Text("Back", color = LocalYugmColors.current.secondary, fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                    )
+                }
             },
-            containerColor = LocalYugmColors.current.background
+            containerColor = Color.Transparent
         ) { innerPadding ->
         if (viewModel.isLoading && pane == SettingsPane.Home) {
             Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {

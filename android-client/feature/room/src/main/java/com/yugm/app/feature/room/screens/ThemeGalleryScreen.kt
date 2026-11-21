@@ -40,9 +40,10 @@ import com.yugm.app.core.api.YugmApi
 import com.yugm.app.core.model.EquippedThemes
 import com.yugm.app.core.model.ImmersiveTheme
 import com.yugm.app.core.ui.components.AnimatedEntrance
-import com.yugm.app.core.ui.components.AuroraBackground
 import com.yugm.app.core.ui.components.GlassButton
 import com.yugm.app.core.ui.components.GlassCard
+import com.yugm.app.core.ui.components.YugmBackground
+import com.yugm.app.core.ui.components.YugmBackgroundStyle
 import com.yugm.app.core.ui.components.LoadingState
 import com.yugm.app.core.ui.components.PrimaryButton
 import com.yugm.app.core.ui.theme.Gold
@@ -79,8 +80,7 @@ fun ThemeGalleryScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
-        AuroraBackground(speed = 0.5f)
+    YugmBackground(style = YugmBackgroundStyle.Ambient) {
         Column(Modifier.fillMaxSize().padding(top = 18.dp)) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 TextButton(onClick = onBack) { Text("Back", color = TextMuted) }

@@ -26,6 +26,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.yugm.app.core.ui.components.YugmBackground
+import com.yugm.app.core.ui.components.YugmBackgroundStyle
 import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.feature.social.R
 
@@ -40,14 +42,14 @@ fun GamesScreen(modifier: Modifier = Modifier, reselectSignal: Int = 0) {
         }
     }
 
-    Column(
-        modifier
-            .fillMaxSize()
-            .background(colors.background)
-            .statusBarsPadding()
-            // Compact natural end clearance; the main-tabs dock is rendered in-flow below.
-            .padding(bottom = 12.dp)
-    ) {
+    YugmBackground(style = YugmBackgroundStyle.Arcade) {
+        Column(
+            modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                // Compact natural end clearance; the main-tabs dock is rendered in-flow below.
+                .padding(bottom = 12.dp)
+        ) {
         Text(
             text = stringResource(R.string.arcade_title),
             color = colors.textPrimary,
@@ -84,4 +86,5 @@ fun GamesScreen(modifier: Modifier = Modifier, reselectSignal: Int = 0) {
             }
         }
     }
+}
 }

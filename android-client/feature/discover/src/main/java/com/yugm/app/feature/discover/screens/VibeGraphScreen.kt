@@ -46,9 +46,10 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.yugm.app.core.model.VibeDimensionInfo
 import com.yugm.app.core.model.VibeMatchUser
-import com.yugm.app.core.ui.components.AuroraBackground
 import com.yugm.app.core.ui.components.Avatar
 import com.yugm.app.core.ui.components.GlassCard
+import com.yugm.app.core.ui.components.YugmBackground
+import com.yugm.app.core.ui.components.YugmBackgroundStyle
 import com.yugm.app.core.ui.theme.Background
 import com.yugm.app.core.ui.theme.Gold
 import com.yugm.app.core.ui.theme.Pink
@@ -77,13 +78,7 @@ fun VibeGraphScreen(
 
     val state by viewModel.uiState.collectAsState()
 
-    Box(Modifier.fillMaxSize()) {
-        AuroraBackground(speed = 0.6f)
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Background.copy(alpha = 0.93f))
-        ) {
+    YugmBackground(style = YugmBackgroundStyle.Ambient) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -215,7 +210,6 @@ fun VibeGraphScreen(
             }
         }
     }
-}
 
 @Composable
 private fun VibeRadarCanvas(dimensions: List<VibeDimensionInfo>, modifier: Modifier = Modifier) {

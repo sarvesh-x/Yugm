@@ -114,8 +114,7 @@ fun LoginScreen(
         onClearError()
     }
 
-    Box(Modifier.fillMaxSize().background(Background)) {
-        AuroraBackground(colors = if (authColors.isDark) auroraGradient else listOf(authColors.secondary, authColors.primary, authColors.accent))
+    YugmBackground(style = YugmBackgroundStyle.Aurora) {
         Column(
             Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).imePadding().padding(horizontal = 22.dp, vertical = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,

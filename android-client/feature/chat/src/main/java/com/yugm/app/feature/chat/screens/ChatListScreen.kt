@@ -41,6 +41,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
+import com.yugm.app.core.ui.components.YugmBackground
+import com.yugm.app.core.ui.components.YugmBackgroundStyle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -212,7 +214,7 @@ fun ChatListScreen(
         else -> "following"
     }
 
-    Box(Modifier.fillMaxSize().background(LocalYugmColors.current.background)) {
+    YugmBackground(style = YugmBackgroundStyle.Minimal) {
         Column(Modifier.fillMaxSize()) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 Column(Modifier.fillMaxSize()) {

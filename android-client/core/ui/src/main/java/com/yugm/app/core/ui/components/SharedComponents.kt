@@ -100,7 +100,7 @@ fun BrandHeader(compact: Boolean = false) {
             modifier = Modifier
                 .size(if (compact) 38.dp else 54.dp)
                 .clip(RoundedCornerShape(if (compact) 12.dp else 18.dp))
-                .background(Brush.linearGradient(listOf(Saffron, Pink, Purple))),
+                .background(BrandGradients.horizontal),
             contentAlignment = Alignment.Center
         ) {
             Canvas(Modifier.fillMaxSize().padding(9.dp)) {
@@ -119,23 +119,25 @@ fun BrandHeader(compact: Boolean = false) {
 
 @Composable
 fun AuthShell(title: String, subtitle: String, content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .imePadding()
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
-    ) {
-        BrandHeader(compact = true)
-        Column {
-            Text(title, color = TextPrimary, fontSize = 32.sp, fontWeight = FontWeight.Black)
-            Text(subtitle, color = TextMuted, modifier = Modifier.padding(top = 8.dp, bottom = 24.dp))
-            content()
+    YugmBackground(style = YugmBackgroundStyle.Aurora) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            BrandHeader(compact = true)
+            Column {
+                Text(title, color = TextPrimary, fontSize = 32.sp, fontWeight = FontWeight.Black)
+                Text(subtitle, color = TextMuted, modifier = Modifier.padding(top = 8.dp, bottom = 24.dp))
+                content()
+            }
+            Spacer(Modifier.height(1.dp))
         }
-        Spacer(Modifier.height(1.dp))
     }
 }
 
@@ -543,7 +545,7 @@ fun PrimaryButton(text: String, modifier: Modifier = Modifier, enabled: Boolean 
             .height(56.dp)
             .clip(RoundedCornerShape(18.dp))
             .alpha(if (enabled) 1f else 0.42f)
-            .background(Brush.horizontalGradient(listOf(Purple, com.yugm.app.core.ui.theme.AccessiblePrimaryPink, com.yugm.app.core.ui.theme.AccessibleSaffron)))
+            .background(BrandGradients.horizontal)
             .semantics { contentDescription = text }
     ) {
         Text(text, color = Color.White, fontWeight = FontWeight.Black, fontSize = 16.sp)

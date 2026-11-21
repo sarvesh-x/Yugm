@@ -28,9 +28,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yugm.app.core.ui.components.BrandHeader
-import com.yugm.app.core.ui.components.AuroraBackground
 import com.yugm.app.core.ui.components.GlassCard
 import com.yugm.app.core.ui.components.PrimaryButton
+import com.yugm.app.core.ui.components.YugmBackground
+import com.yugm.app.core.ui.components.YugmBackgroundStyle
 import com.yugm.app.core.ui.components.YugmTextField
 import com.yugm.app.core.ui.theme.*
 import android.content.Intent
@@ -223,8 +224,7 @@ fun CreateProfileScreen(
         return true
     }
 
-    Box(Modifier.fillMaxSize().background(Background)) {
-      AuroraBackground(Modifier.fillMaxSize())
+    YugmBackground(style = YugmBackgroundStyle.Aurora) {
       LazyColumn(
         contentPadding = PaddingValues(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),

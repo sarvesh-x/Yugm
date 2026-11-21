@@ -32,6 +32,8 @@ import com.yugm.app.core.model.ActiveCosmetics
 import com.yugm.app.core.model.ProfileCosmetic
 import com.yugm.app.core.ui.components.Avatar
 import com.yugm.app.core.ui.components.GlassCard
+import com.yugm.app.core.ui.components.YugmBackground
+import com.yugm.app.core.ui.components.YugmBackgroundStyle
 import com.yugm.app.core.ui.components.LoadingState
 import com.yugm.app.core.ui.components.YugmPageHeader
 import com.yugm.app.core.ui.cosmetics.StyledName
@@ -112,25 +114,26 @@ fun CustomizeProfileScreen(
     val activeCosmetics = catalog?.activeCosmetics ?: ActiveCosmetics()
     val userProfile = profileVm.profile
 
-    Scaffold(
-        topBar = {
-            YugmPageHeader(
-                title = "Customize Profile",
-                onBack = onBack,
-                trailing = {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        IconButton(onClick = onOpenPublicProfile) {
-                            Icon(Icons.Filled.Visibility, contentDescription = "View public profile", tint = Gold)
-                        }
-                        IconButton(onClick = onOpenStore) {
-                            Icon(Icons.Filled.ShoppingBag, contentDescription = "Cosmetics store", tint = TextPrimary)
+    YugmBackground(style = YugmBackgroundStyle.Minimal) {
+        Scaffold(
+            topBar = {
+                YugmPageHeader(
+                    title = "Customize Profile",
+                    onBack = onBack,
+                    trailing = {
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            IconButton(onClick = onOpenPublicProfile) {
+                                Icon(Icons.Filled.Visibility, contentDescription = "View public profile", tint = Gold)
+                            }
+                            IconButton(onClick = onOpenStore) {
+                                Icon(Icons.Filled.ShoppingBag, contentDescription = "Cosmetics store", tint = TextPrimary)
+                            }
                         }
                     }
-                }
-            )
-        },
-        containerColor = Background
-    ) { innerPadding ->
+                )
+            },
+            containerColor = Color.Transparent
+        ) { innerPadding ->
         if (cosmeticsVm.isLoading && catalog == null) {
             Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
                 LoadingState("Opening wardrobe...")
@@ -245,6 +248,7 @@ fun CustomizeProfileScreen(
             }
         }
     }
+}
 }
 
 @Composable
