@@ -28,7 +28,7 @@ Redesign the own-profile Close friends area (empty, populated, unoccupied slots,
 - No device/emulator visual QA of card proportions, light/dark themes, font scaling, TalkBack, narrow screens, or realtime refresh after mutations in another client.
 - No MongoDB integration test of the atomic 409 race; coverage is the pure decision helper plus server typecheck/full unit suite.
 - OpenAPI paths were added by hand; no YAML parser was available locally for machine validation.
-- Untracked local build logs were left untouched; nothing was committed, pushed, or deployed.
+- Untracked local build logs were left untouched; committed and pushed as `76dbfe8`, with no deploy.
 
 ## Handoff
 

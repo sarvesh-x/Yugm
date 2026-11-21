@@ -19,4 +19,4 @@ Make the single app-wide Lottie spinner visibly larger everywhere without touchi
 
 - No device/emulator visual review of the larger spinner in tight inline slots (message rows, list item actions) or at large font scale; if any slot clips, adjust that call-site baseline or the global scale after visual sign-off.
 - Motion-off behavior and content description are unchanged; determinate progress bars remain untouched.
-- No commit, push, or deploy was made.
+- Committed and pushed as `76dbfe8`; no deploy was made.

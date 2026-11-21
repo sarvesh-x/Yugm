@@ -31,4 +31,4 @@ Merge the separate Close Friends feature into Bonds: the own profile shows one t
 - MongoDB concurrent-slot integration was not rerun; the existing `productionHardening.integration.ts` capacity case remains the source-level coverage. No migration/backfill was run for legacy `closeFriendIds` data.
 - OpenAPI paths were edited by hand; no YAML parser was available locally. Full lint/assemble was not run.
 - `docs/production/endpoint-inventory.csv` and `schema-inventory.csv` are dated baselines and still list the removed routes/field as historical evidence; they were not regenerated.
-- Untracked local build logs were left untouched. Nothing was committed, pushed, or deployed.
+- Untracked local build logs were left untouched. Committed and pushed as `76dbfe8`; no deploy was performed.

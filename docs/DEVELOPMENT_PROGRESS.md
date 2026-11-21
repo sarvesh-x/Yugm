@@ -1,11 +1,15 @@
 ﻿# Development progress
 
+## 2026-11-22 -- Commit record
+
+- `76dbfe8` — `feat(profile): unify Bonds and add profile shortcuts`. Pushed to `origin/master`; no deploy. Included the Bonds merge, Close Friends API/storage removal, profile shortcut changes, global spinner scale, tests, docs, and 2026-11-22 handoffs. Untracked local build logs remain untouched.
+
 ## 2026-11-22 -- Achievements shortcut in Your Yugm (YUGM-PROFILE-SHORTCUT-018)
 
 - **Android:** removed the own-profile **Achievements & badges** card and its self-profile badge fetch. Added a trophy **Achievements** tile to the `Your Yugm` profile-shortcut menu, wired through the existing `onOpenAchievements` callback to `Screen.Achievements`. Other users' public **Badges** showcase remains unchanged.
 - **Docs:** `DESIGN_SYSTEM.md`, `CURRENT_TASK.md`, and new [handoff](handoffs/2026-11-22-profile-achievements-shortcut.md).
 - **Verification:** Android JBR `:feature:profile:compileDebugKotlin` BUILD SUCCESSFUL (pre-existing deprecation warnings only).
-- **Remaining:** device/emulator visual and touch-target QA for the Your Yugm grid. No commit/push/deploy.
+- **Remaining:** device/emulator visual and touch-target QA for the Your Yugm grid. Committed/pushed as `76dbfe8`; no deploy.
 
 ## 2026-11-22 -- Unified Bonds profile section (YUGM-BONDS-MERGE-017)
 
@@ -14,7 +18,7 @@
 - **Docs:** `API_CONTRACTS.md`, `DESIGN_SYSTEM.md`, `NAVIGATION_MAP.md`, `bonds.md`, `CURRENT_TASK.md`, prior handoff marked superseded, and new [handoff](handoffs/2026-11-22-bonds-merge.md).
 - **Verification:** backend `tsc` exit 0; API tests 178/178 passed. Android JBR compiles passed (including a final `:feature:profile:compileDebugKotlin` recheck); `BondsProfileRulesTest` 4/4, `core:navigation` 12/12, `MainTabsNavigationTest` 4/4. `git diff --check` clean apart from LF/CRLF notices.
 - **Follow-up fix:** matched the profile Bonds card width to sibling cards by removing duplicate horizontal padding under the LazyColumn padding; removed the `slot` route argument and auto-opened invite sheet so opening Bonds from the profile lands on Bonds home. Android compile and the same targeted unit suites were re-run and passed.
-- **Remaining:** device/emulator visual and realtime QA, MongoDB concurrent-slot integration rerun, OpenAPI YAML parser validation, full lint/assemble. No commit/push/deploy.
+- **Remaining:** device/emulator visual and realtime QA, MongoDB concurrent-slot integration rerun, OpenAPI YAML parser validation, full lint/assemble. Committed/pushed as `76dbfe8`; no deploy.
 
 ## 2026-11-22 -- Profile close-friends section and three-person cap (YUGM-PROFILE-CLOSEFRIENDS-015, superseded)
 
@@ -22,14 +26,14 @@
 - **Backend:** shared `closeFriendsLimit = 3`; atomic conditional add enforces the cap, verifies accepted friendship and no block, returns 409 when full, and is idempotent without duplicate notifications. Added transient `isOnline` to close-friend/friend payloads.
 - **Verification:** backend typecheck and full API test suite (182/182) passed; Android JBR compile, `CloseFriendsRulesTest` (7/7), `core:navigation` navigation tests, and `MainTabsNavigationTest` passed.
 - **Docs/handoff:** `API_CONTRACTS.md`, OpenAPI, design system, component registry, navigation map, `CURRENT_TASK.md`, [handoff](handoffs/2026-11-22-close-friends-section.md).
-- **Remaining:** device/emulator visual QA, Mongo integration test for concurrent cap adds; no commit/push/deploy.
+- **Remaining:** device/emulator visual QA and Mongo integration test for concurrent cap adds. Historical record; committed/pushed as `76dbfe8`.
 
 ## 2026-11-22 -- Global Lottie loading-spinner scale (YUGM-UI-SPINNER-SCALE-016)
 
 - **Source:** `YugmLoadingSpinnerDefaults` now owns `BaselineSize = 40.dp` and global `SizeScale = 1.25f`; `YugmLoadingSpinner` scales every caller-supplied baseline once for the box and animation (16dp renders 20dp, 40dp renders 50dp). No call-site churn; determinate progress bars untouched.
 - **Verification:** Android JBR compile passed; `:core:ui:testDebugUnitTest` 8/8 passed (new spinner test 2/2, geometry tests 6/6).
 - **Docs/handoff:** root/Android design system and component registry updated; [handoff](handoffs/2026-11-22-loading-spinner-global-scale.md).
-- **Remaining:** visual review of dense inline slots and large font scale.
+- **Remaining:** visual review of dense inline slots and large font scale. Committed/pushed as `76dbfe8`; no deploy.
 
 ## 2026-11-21 -- Premium curved-dock polish: geometry, icon family, motion, feedback (YUGM-NAV-DOCK-PREMIUM-013)
 
