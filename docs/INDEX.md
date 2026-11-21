@@ -30,6 +30,7 @@ The production audit documents explain their baselines and verification limits. 
 
 - [Coding standards](CODING_STANDARDS.md)
 - [State management](STATE_MANAGEMENT.md)
+- [Navigation architecture](NAVIGATION_ARCHITECTURE.md)
 - [Navigation map](NAVIGATION_MAP.md)
 - [Database schema](DATABASE_SCHEMA.md)
 - [Design system](DESIGN_SYSTEM.md)

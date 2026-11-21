@@ -64,6 +64,11 @@ fun DatingDiscoveryScreen(
     onWallet: () -> Unit = {},
     onSelfProfile: () -> Unit = {},
     onGameZone: () -> Unit = {},
+    /**
+     * The main-tabs host renders the centralized dock itself (`MainTabsScreen`). The dating
+     * discovery screen is a secondary route, so the bottom-nav whitelist hides its dock.
+     */
+    showBottomDock: Boolean = false,
     viewModel: DatingViewModel = hiltViewModel()
 ) {
     var matchedCandidate by remember { mutableStateOf<Host?>(null) }
@@ -222,19 +227,21 @@ fun DatingDiscoveryScreen(
             }
             }
 
-            YugmBottomDock(
-                selected = YugmDockTab.DISCOVER,
-                modifier = Modifier.fillMaxWidth(),
-                onTabSelected = { tab ->
-                    when (tab) {
-                        YugmDockTab.DISCOVER -> onDiscover()
-                        YugmDockTab.LIVE -> onLive()
-                        YugmDockTab.CHAT -> onMatches()
-                        YugmDockTab.PROFILE -> onSelfProfile()
-                        YugmDockTab.GAME_ZONE -> onGameZone()
+            if (showBottomDock) {
+                YugmBottomDock(
+                    selected = YugmDockTab.DISCOVER,
+                    modifier = Modifier.fillMaxWidth(),
+                    onTabSelected = { tab ->
+                        when (tab) {
+                            YugmDockTab.DISCOVER -> onDiscover()
+                            YugmDockTab.LIVE -> onLive()
+                            YugmDockTab.CHAT -> onMatches()
+                            YugmDockTab.PROFILE -> onSelfProfile()
+                            YugmDockTab.GAME_ZONE -> onGameZone()
+                        }
                     }
-                }
-            )
+                )
+            }
         }
 
         // Mutual Match Overlay Dialog

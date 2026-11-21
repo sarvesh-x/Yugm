@@ -45,7 +45,8 @@ fun GamesScreen(modifier: Modifier = Modifier, reselectSignal: Int = 0) {
             .fillMaxSize()
             .background(colors.background)
             .statusBarsPadding()
-            .padding(bottom = 24.dp)
+            // Compact natural end clearance; the main-tabs dock is rendered in-flow below.
+            .padding(bottom = 12.dp)
     ) {
         Text(
             text = stringResource(R.string.arcade_title),

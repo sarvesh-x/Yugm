@@ -123,7 +123,8 @@ fun VoiceRoomsScreen(
                 state = listState,
                 contentPadding = PaddingValues(
                     top = 14.dp,
-                    bottom = 24.dp
+                    // Dock is in-flow; small natural end-of-list clearance only.
+                    bottom = 12.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
                 modifier = Modifier.fillMaxSize()

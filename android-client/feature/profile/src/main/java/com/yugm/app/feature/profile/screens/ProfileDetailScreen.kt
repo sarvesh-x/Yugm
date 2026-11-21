@@ -119,7 +119,11 @@ fun ProfileDetailScreen(
     onOpenClan: (String) -> Unit = {},
     onOpenClanList: () -> Unit = {},
     onGameZone: () -> Unit = {},
-    showBottomDock: Boolean = true,
+    /**
+     * The main-tabs host renders the centralized dock itself (`MainTabsScreen`). Standalone
+     * (secondary) profile detail screens never render it, per the bottom-navigation whitelist.
+     */
+    showBottomDock: Boolean = false,
     onOpenBonds: (String) -> Unit = {},
     onBondPartnerProfile: (String) -> Unit = {}
 ) {
@@ -221,6 +225,9 @@ fun ProfileDetailScreen(
     Box(Modifier.fillMaxSize()) {
         AuroraBackground(speed = 0.8f)
         Scaffold(
+            // Root NavGraph owns safe-area insets; avoid nested-Scaffold inset duplication that
+            // created extra empty space and double padding on the main Profile tab.
+            contentWindowInsets = WindowInsets(0.dp),
             topBar = {
                 Column {
                     val voicePresence = viewModel.profile?.voiceRoomPresence
@@ -282,7 +289,6 @@ fun ProfileDetailScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .navigationBarsPadding()
                             .padding(horizontal = 10.dp, vertical = 9.dp),
                         horizontalArrangement = Arrangement.SpaceAround
                     ) {
@@ -337,7 +343,10 @@ fun ProfileDetailScreen(
                     start = 16.dp,
                     end = 16.dp,
                     top = 12.dp,
-                    bottom = if (isOwnProfile && showBottomDock) 24.dp else 104.dp
+                    // Natural end-of-scroll clearance; the main-tabs dock is rendered in-flow and
+                    // already reserves its own height. Standalone profiles use the same modest
+                    // clearance instead of the legacy 104dp reservation.
+                    bottom = if (isOwnProfile && showBottomDock) 12.dp else 24.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {

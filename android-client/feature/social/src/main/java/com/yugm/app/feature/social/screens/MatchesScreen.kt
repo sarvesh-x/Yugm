@@ -26,8 +26,6 @@ import com.yugm.app.core.model.Host
 import com.yugm.app.core.ui.components.Avatar
 import com.yugm.app.core.ui.components.BrandHeader
 import com.yugm.app.core.ui.components.LoadingState
-import com.yugm.app.core.ui.components.YugmBottomDock
-import com.yugm.app.core.ui.components.YugmDockTab
 import com.yugm.app.core.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -71,22 +69,7 @@ fun MatchesScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
             )
         },
-        containerColor = Background,
-        bottomBar = {
-            YugmBottomDock(
-                selected = YugmDockTab.CHAT,
-                modifier = Modifier.fillMaxWidth(),
-                onTabSelected = { tab ->
-                    when (tab) {
-                        YugmDockTab.DISCOVER -> onDiscover()
-                        YugmDockTab.LIVE -> onLive()
-                        YugmDockTab.CHAT -> Unit
-                        YugmDockTab.PROFILE -> onProfile()
-                        YugmDockTab.GAME_ZONE -> onGameZone()
-                    }
-                }
-            )
-        }
+        containerColor = Background
     ) { innerPadding ->
         if (isLoading && (matches.isEmpty())) {
             Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {

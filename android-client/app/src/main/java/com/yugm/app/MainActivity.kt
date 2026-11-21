@@ -146,7 +146,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                 val pushRoute = pendingPushRoute.value
                 LaunchedEffect(pushRoute, mainViewModel.authToken, mainViewModel.profileCompleted, mainViewModel.startupSessionCheckComplete) {
                     if (!pushRoute.isNullOrBlank() && mainViewModel.authToken.isNotBlank() && mainViewModel.startupSessionCheckComplete && mainViewModel.profileCompleted) {
-                        navController.navigate(pushRoute)
+                        navController.navigate(pushRoute) { launchSingleTop = true }
                         pendingPushRoute.value = null
                     }
                 }
@@ -285,16 +285,17 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                             modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp)
                                 .fillMaxWidth().clickable {
                                     mainViewModel.dismissInAppNotification()
-                                    when {
-                                        notification.actionType == "BONDS" -> navController.navigate(Screen.Bonds.createRoute(center = true))
-                                        notification.callType.equals("VIDEO", true) && notification.roomId.isNotBlank() -> navController.navigate(Screen.VideoRoom.createRoute(notification.roomId))
-                                        notification.callType.equals("VOICE", true) && notification.roomId.isNotBlank() -> navController.navigate(Screen.VoiceRoom.createRoute(notification.roomId))
-                                        notification.clanId.isNotBlank() -> navController.navigate(Screen.ClanDetail.createRoute(notification.clanId))
-                                        notification.roomId.isNotBlank() -> navController.navigate(Screen.RoomLobby.createRoute(notification.roomId))
-                                        notification.partnerId.isNotBlank() -> navController.navigate(Screen.Chat.createRoute(notification.partnerId))
-                                        notification.actorId.isNotBlank() -> navController.navigate(Screen.ProfileDetail.createRoute(notification.actorId))
-                                        else -> navController.navigate(Screen.Notifications.route)
+                                    val notificationRoute = when {
+                                        notification.actionType == "BONDS" -> Screen.Bonds.createRoute(center = true)
+                                        notification.callType.equals("VIDEO", true) && notification.roomId.isNotBlank() -> Screen.VideoRoom.createRoute(notification.roomId)
+                                        notification.callType.equals("VOICE", true) && notification.roomId.isNotBlank() -> Screen.VoiceRoom.createRoute(notification.roomId)
+                                        notification.clanId.isNotBlank() -> Screen.ClanDetail.createRoute(notification.clanId)
+                                        notification.roomId.isNotBlank() -> Screen.RoomLobby.createRoute(notification.roomId)
+                                        notification.partnerId.isNotBlank() -> Screen.Chat.createRoute(notification.partnerId)
+                                        notification.actorId.isNotBlank() -> Screen.ProfileDetail.createRoute(notification.actorId)
+                                        else -> Screen.Notifications.route
                                     }
+                                    navController.navigate(notificationRoute) { launchSingleTop = true }
                                 },
                             shape = RoundedCornerShape(18.dp),
                             color = colors.surfaceElevated,

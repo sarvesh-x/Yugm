@@ -412,12 +412,11 @@ fun SegmentedTabs(
     }
 }
 
-private class CurvedDockShape(
+internal class CurvedDockShape(
     private val notchX: Float,
     private val topPaddingPx: Float,
     private val notchWidthPx: Float,
     private val notchDepthPx: Float,
-    private val cornerRadiusPx: Float,
 ) : Shape {
     override fun createOutline(
         size: Size,
@@ -428,322 +427,43 @@ private class CurvedDockShape(
             val w = size.width
             val h = size.height
             val topY = topPaddingPx
-            val r = cornerRadiusPx
 
             val halfNotch = notchWidthPx / 2f
-            val notchLeft = notchX - halfNotch
-            val notchRight = notchX + halfNotch
 
-            // Bottom-left start
+            // Symmetrical shoulder widths: both shoulders have equal width from notch
+            // center to the shoulder point. Adapt proportionally near screen edges.
+            val maxShoulder = (notchX).coerceAtMost(w - notchX)
+            val shoulderWidth = (halfNotch * 1.2f).coerceAtMost(maxShoulder)
+            val leftShoulder = (notchX - shoulderWidth).coerceAtLeast(0f)
+            val rightShoulder = (notchX + shoulderWidth).coerceAtMost(w)
+
+            // Square full-width surface: straight left edge up to top boundary.
             moveTo(0f, h)
+            lineTo(0f, topY)
 
-            // Left vertical side
-            lineTo(0f, topY + r)
+            // Flat top edge to left shoulder.
+            if (leftShoulder > 0f) lineTo(leftShoulder, topY)
 
-            // Top-left corner arc
-            quadraticTo(0f, topY, r, topY)
-
-            // Flat top edge to notch left shoulder
-            if (notchLeft > r) {
-                lineTo(notchLeft, topY)
-            } else {
-                lineTo(r.coerceAtMost(notchX), topY)
-            }
-
-            // Smooth cubic Bézier forming concave cradle with shoulders
+            // Mirrored cubic Béziers: left and right use identical control-point
+            // proportions, guaranteeing continuous tangents and symmetry.
             cubicTo(
-                notchLeft + notchWidthPx * 0.25f, topY,
-                notchX - notchWidthPx * 0.25f, topY + notchDepthPx,
+                leftShoulder + (notchX - leftShoulder) * 0.5f, topY,
+                notchX - halfNotch * 0.5f, topY + notchDepthPx,
                 notchX, topY + notchDepthPx
             )
             cubicTo(
-                notchX + notchWidthPx * 0.25f, topY + notchDepthPx,
-                notchRight - notchWidthPx * 0.25f, topY,
-                notchRight, topY
+                notchX + halfNotch * 0.5f, topY + notchDepthPx,
+                rightShoulder - (rightShoulder - notchX) * 0.5f, topY,
+                rightShoulder, topY
             )
 
-            // Flat top edge to top-right corner
-            if (notchRight < w - r) {
-                lineTo(w - r, topY)
-            } else {
-                lineTo((w - r).coerceAtLeast(notchX), topY)
-            }
-
-            // Top-right corner arc
-            quadraticTo(w, topY, w, topY + r)
-
-            // Right vertical side
+            // Flat top edge to right edge.
+            lineTo(w, topY)
             lineTo(w, h)
-
-            // Bottom edge across to bottom-left
             lineTo(0f, h)
-
             close()
         }
         return Outline.Generic(path)
     }
 }
 
-private data class MainDockItem(
-    val tab: YugmDockTab,
-    val icon: ImageVector,
-    val label: String,
-    val compactLabel: String = label,
-    val accessibilityLabel: String = label,
-)
-
-@Composable
-fun YugmBottomDock(
-    selected: YugmDockTab,
-    modifier: Modifier = Modifier,
-    onTabSelected: (YugmDockTab) -> Unit = {},
-    onTabReselected: (YugmDockTab) -> Unit = {},
-    chatUnreadCount: Int = 0,
-) {
-    val items = remember {
-        listOf(
-            MainDockItem(YugmDockTab.GAME_ZONE, Icons.Filled.SportsEsports, "Yugm Arcade", compactLabel = "Arcade", accessibilityLabel = "Yugm Arcade"),
-            MainDockItem(YugmDockTab.LIVE, Icons.Filled.Mic, "Party"),
-            MainDockItem(YugmDockTab.DISCOVER, Icons.Filled.Home, "Discover"),
-            MainDockItem(YugmDockTab.CHAT, Icons.Filled.ChatBubble, "Chat"),
-            MainDockItem(YugmDockTab.PROFILE, Icons.Filled.Person, "Profile"),
-        )
-    }
-
-    val colors = LocalYugmColors.current
-    val motionEnabled = LocalMotionEnabled.current
-    val density = LocalDensity.current
-
-    val targetIndex = items.indexOfFirst { it.tab == selected }.coerceAtLeast(0)
-    val animatedIndex by animateFloatAsState(
-        targetValue = targetIndex.toFloat(),
-        animationSpec = if (motionEnabled) {
-            spring(
-                dampingRatio = 0.78f,
-                stiffness = 350f
-            )
-        } else {
-            snap()
-        },
-        label = "curvedDockAnimatedIndex"
-    )
-
-    val topPadding = 22.dp
-    val barHeight = 60.dp
-    val activeCircleSize = 48.dp
-    val notchWidth = 72.dp
-    val notchDepth = 32.dp
-    val cornerRadius = 24.dp
-
-    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val totalDockHeight = topPadding + barHeight + bottomInset
-
-    val dockColor = colors.surface
-    val ringColor = if (colors.isDark) colors.surface else Color.White
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(totalDockHeight),
-        contentAlignment = Alignment.BottomCenter
-    ) {
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(totalDockHeight)
-        ) {
-            val totalWidthPx = constraints.maxWidth.toFloat()
-            val tabWidthPx = totalWidthPx / items.size
-            val notchXPx = (animatedIndex + 0.5f) * tabWidthPx
-
-            val topPaddingPx = with(density) { topPadding.toPx() }
-            val notchWidthPx = with(density) { notchWidth.toPx() }
-            val notchDepthPx = with(density) { notchDepth.toPx() }
-            val cornerRadiusPx = with(density) { cornerRadius.toPx() }
-            val circleSizePx = with(density) { activeCircleSize.toPx() }
-            val offset4Px = with(density) { 4.dp.toPx() }
-
-            // Parabolic spring lift during transition
-            val fractionalDist = kotlin.math.abs(animatedIndex - kotlin.math.round(animatedIndex.toDouble()).toFloat())
-            val liftPx = if (motionEnabled) {
-                with(density) { (kotlin.math.sin(fractionalDist * Math.PI.toFloat()) * 6.dp.toPx()) }
-            } else {
-                0f
-            }
-
-            val curvedShape = remember(notchXPx, topPaddingPx, notchWidthPx, notchDepthPx, cornerRadiusPx, constraints.maxHeight) {
-                CurvedDockShape(
-                    notchX = notchXPx,
-                    topPaddingPx = topPaddingPx,
-                    notchWidthPx = notchWidthPx,
-                    notchDepthPx = notchDepthPx,
-                    cornerRadiusPx = cornerRadiusPx
-                )
-            }
-
-            // 1. Integrated Navigation Surface Background (flat, no bar shadow)
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(curvedShape)
-                    .background(dockColor)
-            )
-
-            // 2. Elevated Active 48dp Circular Button with Contrasting Ring & 4dp Clearance
-            val circleX = (notchXPx - circleSizePx / 2f).roundToInt()
-            val circleY = (topPaddingPx - circleSizePx / 2f + offset4Px - liftPx).roundToInt()
-
-            Box(
-                modifier = Modifier
-                    .offset { IntOffset(circleX, circleY) }
-                    .size(activeCircleSize)
-                    .shadow(if (colors.isDark) 6.dp else 3.dp, CircleShape, clip = false)
-                    .clip(CircleShape)
-                    .background(colors.primary)
-                    .border(2.dp, ringColor, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                items.forEachIndexed { i, item ->
-                    val factor = (1f - kotlin.math.abs(animatedIndex - i)).coerceIn(0f, 1f)
-                    if (factor > 0f) {
-                        Icon(
-                            imageVector = item.icon,
-                            contentDescription = null,
-                            tint = colors.primaryOn,
-                            modifier = Modifier
-                                .size(24.dp)
-                                .graphicsLayer {
-                                    alpha = factor
-                                    scaleX = 0.75f + 0.25f * factor
-                                    scaleY = 0.75f + 0.25f * factor
-                                }
-                        )
-                    }
-                }
-            }
-
-            // 3. Tab Destinations Row (24dp Icons, 11sp Labels, Badges & Clean Touch Targets)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(topPadding + barHeight)
-                    .align(Alignment.TopCenter)
-                    .selectableGroup(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom
-            ) {
-                items.forEachIndexed { i, item ->
-                    val isSelected = item.tab == selected
-                    val factor = (1f - kotlin.math.abs(animatedIndex - i)).coerceIn(0f, 1f)
-                    val badgeCount = if (item.tab == YugmDockTab.CHAT) chatUnreadCount.coerceAtLeast(0) else 0
-                    val badgeText = when {
-                        badgeCount <= 0 -> null
-                        badgeCount > 99 -> "99+"
-                        else -> badgeCount.toString()
-                    }
-                    val description = if (badgeCount > 0) {
-                        "${item.accessibilityLabel}, $badgeCount unread messages"
-                    } else {
-                        item.accessibilityLabel
-                    }
-                    val itemInteractionSource = remember { MutableInteractionSource() }
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .heightIn(min = 48.dp)
-                            .selectable(
-                                selected = isSelected,
-                                interactionSource = itemInteractionSource,
-                                indication = null,
-                                role = Role.Tab,
-                                onClick = {
-                                    if (isSelected) onTabReselected(item.tab) else onTabSelected(item.tab)
-                                }
-                            )
-                            .semantics(mergeDescendants = true) {
-                                contentDescription = description
-                                selectedSemantics = isSelected
-                            },
-                        contentAlignment = Alignment.BottomCenter
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Bottom
-                        ) {
-                            // Unselected 24dp icon slot
-                            Box(
-                                modifier = Modifier
-                                    .height(28.dp)
-                                    .fillMaxWidth(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (factor < 0.99f) {
-                                    Box(
-                                        modifier = Modifier.graphicsLayer {
-                                            alpha = 1f - factor
-                                            scaleX = 0.85f + 0.15f * (1f - factor)
-                                            scaleY = 0.85f + 0.15f * (1f - factor)
-                                        }
-                                    ) {
-                                        Icon(
-                                            imageVector = item.icon,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(24.dp),
-                                            tint = colors.textSecondary
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(2.dp))
-
-                            // Uniformly aligned destination label
-                            val labelColor = lerp(colors.textSecondary, colors.primary, factor)
-                            Text(
-                                text = item.compactLabel,
-                                color = labelColor,
-                                fontSize = 11.sp,
-                                fontWeight = if (factor > 0.5f) FontWeight.Bold else FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.graphicsLayer {
-                                    scaleX = 1f + 0.06f * factor
-                                    scaleY = 1f + 0.06f * factor
-                                }
-                            )
-                        }
-
-                        // Unread Notification Badge
-                        if (badgeText != null) {
-                            val badgeYOffset = if (factor > 0.5f) 2.dp else 12.dp
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopCenter)
-                                    .padding(start = 24.dp, top = badgeYOffset)
-                                    .clip(CircleShape)
-                                    .background(colors.secondary)
-                                    .heightIn(min = 16.dp)
-                                    .widthIn(min = 16.dp)
-                                    .padding(horizontal = 4.dp, vertical = 1.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = badgeText,
-                                    color = Color.White,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}

@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.size
@@ -43,6 +45,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -61,6 +64,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.round
+import com.yugm.app.core.navigation.MainTabsRoutes
 import com.yugm.app.core.navigation.Screen
 import com.yugm.app.feature.auth.navigation.authNavGraph
 import com.yugm.app.feature.auth.navigation.startupDestination
@@ -141,10 +145,22 @@ fun NavGraph(
         }
     }
 
+    // System-inset ownership (bottom navigation): the main tabs host paints the navigation
+    // surface all the way to the physical bottom edge, including the system navigation inset,
+    // and pads only its interactive content above that inset. The global container therefore
+    // consumes only top/horizontal/cutout insets while a main tab is current. Every other
+    // destination keeps the full safe-area inset, preserving existing screen behavior.
+    val currentEntry by navController.currentBackStackEntryAsState()
+    val rootInsets = if (MainTabsRoutes.isMainTabs(currentEntry?.destination?.route)) {
+        WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+    } else {
+        WindowInsets.safeDrawing
+    }
+
     // The app runs edge-to-edge on modern Android versions. Keep every destination
     // inside the status/navigation bars and display cutouts, while allowing child
     // screens to draw their backgrounds normally within that safe area.
-    Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+    Box(Modifier.fillMaxSize().windowInsetsPadding(rootInsets)) {
       NavHost(
           navController = navController,
           startDestination = Screen.Splash.route

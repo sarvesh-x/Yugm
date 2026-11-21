@@ -183,7 +183,8 @@ fun DiscoverScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     top = 8.dp,
-                    bottom = 24.dp
+                    // Dock is laid out in-flow; reserve only natural end-of-list breathing room.
+                    bottom = 12.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {

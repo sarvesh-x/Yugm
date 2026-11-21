@@ -131,7 +131,9 @@ fun ChatListScreen(
 
     com.yugm.app.core.ui.components.AutomaticSyncEffect(token, currentUserId, topics = setOf(com.yugm.app.core.api.SyncTopic.CHAT, com.yugm.app.core.api.SyncTopic.CLANS, com.yugm.app.core.api.SyncTopic.SOCIAL), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) { viewModel.load(token, currentUserId) }
     val dockVisible = showBottomDock && mainTab != 1
-    val listBottomPadding = 24.dp
+    // Clearance applied exactly once: the dock is rendered in-flow by MainTabsScreen, so lists
+    // only need natural end-of-content spacing rather than reserved navigation space.
+    val listBottomPadding = 12.dp
 
     val conversations = remember(viewModel.recentMessages, viewModel.matches, currentUserId) {
         viewModel.recentMessages.groupBy { if (it.senderId == currentUserId) it.receiverId else it.senderId }

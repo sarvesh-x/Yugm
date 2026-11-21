@@ -44,4 +44,5 @@ dependencies {
     implementation(libs.coil.svg)
     implementation(libs.lottie.compose)
     implementation(libs.timber)
+    testImplementation(libs.junit)
 }

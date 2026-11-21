@@ -1,10 +1,7 @@
 package com.yugm.app.ui.screens
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
@@ -23,8 +20,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.compose.currentBackStackEntryAsState
 import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomType
+import com.yugm.app.core.navigation.MainTabDestination
+import com.yugm.app.core.navigation.MainTabsRoutes
 import com.yugm.app.core.navigation.Screen
 import com.yugm.app.core.navigation.navigateTopLevel
 import com.yugm.app.core.ui.components.YugmBottomDock
@@ -37,21 +37,23 @@ import com.yugm.app.feature.room.screens.VoiceRoomsScreen
 import com.yugm.app.feature.social.screens.GamesScreen
 import kotlinx.coroutines.launch
 
-private const val TAB_GAME_ZONE = 0
-private const val TAB_PARTY = 1
-private const val TAB_DISCOVER = 2
-private const val TAB_CHAT = 3
-private const val TAB_PROFILE = 4
+internal const val TAB_GAME_ZONE = 0
+internal const val TAB_PARTY = 1
+internal const val TAB_DISCOVER = 2
+internal const val TAB_CHAT = 3
+internal const val TAB_PROFILE = 4
+internal const val TAB_PAGE_COUNT = 5
+internal const val MAIN_TAB_PAGE_KEY = "main_tab_page"
 
-private fun normalizeMainTab(tab: String): Int = when (tab.lowercase()) {
-    "game", "games", "game_zone", "gamezone" -> TAB_GAME_ZONE
-    "party", "live", "voice_rooms", "voicerooms" -> TAB_PARTY
-    "chat", "chats", "chat_list", "chatlist" -> TAB_CHAT
-    "profile", "mine" -> TAB_PROFILE
-    else -> TAB_DISCOVER
+internal fun normalizeMainTab(tab: String): Int = when (MainTabsRoutes.normalizeTab(tab)) {
+    MainTabDestination.GAME_ZONE -> TAB_GAME_ZONE
+    MainTabDestination.PARTY -> TAB_PARTY
+    MainTabDestination.CHAT -> TAB_CHAT
+    MainTabDestination.PROFILE -> TAB_PROFILE
+    MainTabDestination.DISCOVER -> TAB_DISCOVER
 }
 
-private fun pageToDockTab(page: Int): YugmDockTab = when (page) {
+internal fun pageToDockTab(page: Int): YugmDockTab = when (page) {
     TAB_GAME_ZONE -> YugmDockTab.GAME_ZONE
     TAB_PARTY -> YugmDockTab.LIVE
     TAB_CHAT -> YugmDockTab.CHAT
@@ -59,13 +61,17 @@ private fun pageToDockTab(page: Int): YugmDockTab = when (page) {
     else -> YugmDockTab.DISCOVER
 }
 
-private fun dockTabToPage(tab: YugmDockTab): Int = when (tab) {
+internal fun dockTabToPage(tab: YugmDockTab): Int = when (tab) {
     YugmDockTab.GAME_ZONE -> TAB_GAME_ZONE
     YugmDockTab.LIVE -> TAB_PARTY
     YugmDockTab.CHAT -> TAB_CHAT
     YugmDockTab.PROFILE -> TAB_PROFILE
     YugmDockTab.DISCOVER -> TAB_DISCOVER
 }
+
+/** Target page to animate to, or null when the requested page is already active (idempotent). */
+internal fun tabScrollTarget(currentPage: Int, requestedPage: Int): Int? =
+    requestedPage.takeIf { it != currentPage && it in 0 until TAB_PAGE_COUNT }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -79,9 +85,22 @@ fun MainTabsScreen(
     onProfileUpdated: (com.yugm.app.core.model.YugmUser) -> Unit = {},
 ) {
     val requestedPage = normalizeMainTab(initialTab)
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    // Process-death/configuration restoration: the last selected page is persisted on the
+    // main-tabs back stack entry so the pager resumes on the tab the user was on.
+    val restoredTabPage = remember(backStackEntry) {
+        val saved = backStackEntry?.savedStateHandle?.get<Int>(MAIN_TAB_PAGE_KEY)
+        if (saved != null && saved in 0 until TAB_PAGE_COUNT) saved else -1
+    }
     var appliedInitialTab by rememberSaveable { mutableStateOf<String?>(null) }
-    val pagerState = rememberPagerState(initialPage = requestedPage, pageCount = { 5 })
+    val pagerState = rememberPagerState(
+        initialPage = if (restoredTabPage >= 0) restoredTabPage else requestedPage,
+        pageCount = { TAB_PAGE_COUNT }
+    )
     val scope = rememberCoroutineScope()
+    LaunchedEffect(pagerState.settledPage) {
+        backStackEntry?.savedStateHandle?.set(MAIN_TAB_PAGE_KEY, pagerState.settledPage)
+    }
     val chatListViewModel: ChatListViewModel = hiltViewModel()
     val chatUnreadBadge = remember(chatListViewModel.unreadCounts, chatListViewModel.mutedPartnerIds) {
         chatListViewModel.unreadCounts.filterKeys { it !in chatListViewModel.mutedPartnerIds }.values.sum()
@@ -97,9 +116,14 @@ fun MainTabsScreen(
 
     LaunchedEffect(initialTab) {
         // Apply the route's initial tab only once for this destination instance so returning
-        // from pushed screens preserves the user's last selected tab.
+        // from pushed screens preserves the user's last selected tab. On recreation the
+        // restored saved page is already the pager's initial page, so do not scroll away from it.
         if (appliedInitialTab == initialTab) return@LaunchedEffect
         val target = normalizeMainTab(initialTab)
+        if (restoredTabPage >= 0) {
+            appliedInitialTab = initialTab
+            return@LaunchedEffect
+        }
         if (pagerState.currentPage != target) {
             pagerState.scrollToPage(target)
         }
@@ -117,7 +141,9 @@ fun MainTabsScreen(
     }
 
     fun goTo(page: Int) {
-        scope.launch { pagerState.animateScrollToPage(page) }
+        // Idempotent: repeated taps on an already-active tab never stack or animate extra pages.
+        val target = tabScrollTarget(pagerState.currentPage, page) ?: return
+        scope.launch { pagerState.animateScrollToPage(target) }
     }
 
     fun handleTabSelect(tab: YugmDockTab) {
@@ -168,12 +194,31 @@ fun MainTabsScreen(
     }
 
     val selectedTab = pageToDockTab(pagerState.currentPage)
-    val showDock = !(pagerState.currentPage == TAB_CHAT && isClanChatActive)
+    // Centralized visibility: the dock renders only while this screen hosts the five main
+    // tabs (explicit destination whitelist from MainTabsRoutes). The Chat tab additionally
+    // hides the dock while the clan-chat subtab is active; secondary/detail/immersive
+    // screens are separate routes and never render this dock.
+    val showDock = MainTabsRoutes.isDockVisible(
+        currentRoute = backStackEntry?.destination?.route,
+        chatTabActive = pagerState.currentPage == TAB_CHAT,
+        clanChatActive = isClanChatActive,
+    )
 
+    // Overlay layout: the dock is bottom-aligned so screen content extends behind the
+    // transparent cradle region. Only the painted surface (bar + system inset) determines
+    // content clearance. No duplicate Scaffold padding or bottom spacers.
+    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val paintedSurfaceHeight = com.yugm.app.core.ui.components.YugmBottomDockBarHeight + bottomInset
     Box(Modifier.fillMaxSize()) {
+        val pagerModifier = if (showDock) {
+            // Content extends behind the transparent cradle; clearance = painted surface only.
+            Modifier.fillMaxSize().padding(bottom = paintedSurfaceHeight)
+        } else {
+            Modifier.fillMaxSize().navigationBarsPadding()
+        }
         HorizontalPager(
             state = pagerState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = pagerModifier,
             beyondViewportPageCount = 1,
             userScrollEnabled = true
         ) { page ->
@@ -289,9 +334,7 @@ fun MainTabsScreen(
         if (showDock) {
             YugmBottomDock(
                 selected = selectedTab,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter),
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
                 onTabSelected = ::handleTabSelect,
                 onTabReselected = ::handleTabReselect,
                 chatUnreadCount = chatUnreadBadge
