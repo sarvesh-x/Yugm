@@ -6,10 +6,11 @@
 - **Android:** parsed server `capacity` with a five-slot fallback; Achievements wear slots and copy use that capacity. `WornBadgeRow` no longer truncates to three. Own and public profile headers load badges and render the shared horizontal icon row between ID/level and description; the separate public Badges card is removed and the Your Yugm Achievements shortcut remains.
 - **Docs:** `API_CONTRACTS.md`, `REALTIME_EVENTS.md`, `DESIGN_SYSTEM.md`, `COMPONENT_REGISTRY.md`, backend `progression-contract.md`, OpenAPI badge endpoints, `CURRENT_TASK.md`, and a new [handoff](handoffs/2026-11-22-five-worn-badges.md).
 - **Verification:** backend typecheck exit 0, API unit tests 179/179, hardening integration 34/34. Android JBR compile of affected modules plus app and `:core:api:testDebugUnitTest` BUILD SUCCESSFUL (30/30 core API tests); `git diff --check` clean.
-- **Remaining:** device/emulator visual QA, live two-client realtime refresh, full lint/assemble, OpenAPI parser validation. Changes are uncommitted; no deploy.
+- **Remaining:** device/emulator visual QA, live two-client realtime refresh, full lint/assemble, OpenAPI parser validation. Committed and pushed as `10cf4d7`; no deploy.
 
 ## 2026-11-22 -- Commit record
 
+- `10cf4d7` — `feat(badges): expand worn showcase to five slots`. Pushed to `origin/master`; no deploy. Included the five-slot backend cap, server-sourced capacity, sync invalidation, profile-header badge row, tests, and docs. Untracked local build logs remain untouched.
 - `76dbfe8` — `feat(profile): unify Bonds and add profile shortcuts`. Pushed to `origin/master`; no deploy. Included the Bonds merge, Close Friends API/storage removal, profile shortcut changes, global spinner scale, tests, docs, and 2026-11-22 handoffs. Untracked local build logs remain untouched.
 
 ## 2026-11-22 -- Achievements shortcut in Your Yugm (YUGM-PROFILE-SHORTCUT-018)

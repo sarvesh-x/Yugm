@@ -32,4 +32,4 @@ The server remains authoritative: selection capacity, earned/active validation, 
 - No device/emulator visual QA of the header row: five-icon spacing, narrow screens, light/dark/system themes, font scaling, TalkBack labels, and image-loading/error fallback.
 - No live two-client realtime check after a badge wear change; only invalidation routing and scoped re-read contracts were unit/integration tested.
 - Full lint/assemble and OpenAPI YAML parser validation were not run.
-- Changes are uncommitted. Do not commit/push/deploy without explicit authorization.
+- Committed and pushed as `10cf4d7`; no deploy was performed.
