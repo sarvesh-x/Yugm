@@ -8,7 +8,7 @@
 - **Dependencies:** promoted `sharp` from transitive to an explicit `@yugm/api` dependency in `package.json` and the workspace lock.
 - **Verification:** `npm.cmd --workspace @yugm/api run typecheck` exit 0; `npm.cmd --workspace @yugm/api test` 186/186 passing (six asset + one audit test); `npm.cmd --workspace @yugm/api run test:hardening` 34/34 passing; `git diff --check` clean apart from LF/CRLF notices.
 - **Decisions resolved (user):** keep seeded external avatar URLs as provenance, keep store SKUs static, retire the disconnected bundle-purchase path. Still open: target environment/storage driver, and separate approval for the badge `imageData` cleanup.
-- **Remaining:** live upload/migration verification, admin UI, Android renderer migration, Phase 2/3 backfill, asset route/integration tests. No migration applied, no commit/push/deploy, no production data changed.
+- **Remaining:** live upload/migration verification, admin UI, Android renderer migration, Phase 2/3 backfill, asset route/integration tests. Committed and pushed as `e0c9c42`; no deploy, no migration applied, no production data changed.
 
 ## 2026-11-22 -- Cosmetics ecosystem Phase 1 audit (YUGM-COSMETICS-001)
 
@@ -41,6 +41,7 @@
 
 ## 2026-11-22 -- Commit record
 
+- `e0c9c42` — `feat(assets): centralized asset registry and admin upload pipeline`. Pushed to `origin/master`; no deploy. Included the additive asset registry/storage/admin routes, migration 6, audit-ID fix, explicit production indexes, seven unit tests, and all audit/contract/handoff docs. Local Gradle output captures are now gitignored; files left untouched.
 - `e182854` — `feat(profile): compact empty Bonds and Clans cards`. Pushed to `origin/master`; no deploy. Included the compact horizontal empty cards, string cleanup, design/task/progress docs, and both 2026-11-22 handoffs. Untracked local build logs remain untouched.
 - `10cf4d7` — `feat(badges): expand worn showcase to five slots`. Pushed to `origin/master`; no deploy. Included the five-slot backend cap, server-sourced capacity, sync invalidation, profile-header badge row, tests, and docs. Untracked local build logs remain untouched.
 - `76dbfe8` — `feat(profile): unify Bonds and add profile shortcuts`. Pushed to `origin/master`; no deploy. Included the Bonds merge, Close Friends API/storage removal, profile shortcut changes, global spinner scale, tests, docs, and 2026-11-22 handoffs. Untracked local build logs remain untouched.
