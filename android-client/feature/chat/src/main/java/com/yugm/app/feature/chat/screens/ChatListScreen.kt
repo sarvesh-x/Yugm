@@ -41,8 +41,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
-import com.yugm.app.core.ui.components.YugmBackground
-import com.yugm.app.core.ui.components.YugmBackgroundStyle
+/* Shared ambient background provided by MainTabsScreen. */
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -79,12 +78,13 @@ import com.yugm.app.core.model.FriendRequest
 import com.yugm.app.core.model.FriendUser
 import com.yugm.app.core.model.Host
 import com.yugm.app.core.ui.components.Avatar
+import com.yugm.app.feature.social.screens.ClanChatScreen
 import com.yugm.app.core.ui.theme.LocalYugmColors
+import com.yugm.app.core.ui.components.LocalMainDockBottomClearance
 import com.yugm.app.core.ui.components.YugmBottomDock
 import com.yugm.app.core.ui.components.YugmBottomDockDefaults
 import com.yugm.app.core.ui.components.YugmDockTab
 import com.yugm.app.feature.chat.viewmodel.ChatListViewModel
-import com.yugm.app.feature.social.screens.ClanChatScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -135,7 +135,7 @@ fun ChatListScreen(
     val dockVisible = showBottomDock && mainTab != 1
     // Clearance applied exactly once: the dock is rendered in-flow by MainTabsScreen, so lists
     // only need natural end-of-content spacing rather than reserved navigation space.
-    val listBottomPadding = 12.dp
+    val listBottomPadding = if (showBottomDock) 12.dp else LocalMainDockBottomClearance.current
 
     val conversations = remember(viewModel.recentMessages, viewModel.matches, currentUserId) {
         viewModel.recentMessages.groupBy { if (it.senderId == currentUserId) it.receiverId else it.senderId }
@@ -214,7 +214,8 @@ fun ChatListScreen(
         else -> "following"
     }
 
-    YugmBackground(style = YugmBackgroundStyle.Minimal) {
+    // Shared background is provided by MainTabsScreen; keep this root transparent.
+    Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 Column(Modifier.fillMaxSize()) {
@@ -261,7 +262,7 @@ fun ChatListScreen(
             PrimaryTabRow(
                 selectedTabIndex = mainTab,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                containerColor = LocalYugmColors.current.background,
+                containerColor = Color.Transparent,
                 contentColor = LocalYugmColors.current.textPrimary
             ) {
                 listOf("Chats", "Clan", "Contacts").forEachIndexed { index, fallback ->

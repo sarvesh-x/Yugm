@@ -3,8 +3,11 @@ package com.yugm.app.feature.social.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -26,8 +29,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.yugm.app.core.ui.components.YugmBackground
-import com.yugm.app.core.ui.components.YugmBackgroundStyle
+import com.yugm.app.core.ui.components.LocalMainDockBottomClearance
+/* Shared ambient background provided by MainTabsScreen. */
 import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.feature.social.R
 
@@ -42,13 +45,13 @@ fun GamesScreen(modifier: Modifier = Modifier, reselectSignal: Int = 0) {
         }
     }
 
-    YugmBackground(style = YugmBackgroundStyle.Arcade) {
+    // Shared background is provided by MainTabsScreen; keep this root transparent.
+    Box(Modifier.fillMaxSize()) {
+        val bottomClearance = LocalMainDockBottomClearance.current
         Column(
             modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                // Compact natural end clearance; the main-tabs dock is rendered in-flow below.
-                .padding(bottom = 12.dp)
         ) {
         Text(
             text = stringResource(R.string.arcade_title),
@@ -62,7 +65,7 @@ fun GamesScreen(modifier: Modifier = Modifier, reselectSignal: Int = 0) {
             contentAlignment = Alignment.Center
         ) {
             Column(
-                modifier = Modifier.verticalScroll(scrollState),
+                modifier = Modifier.verticalScroll(scrollState).padding(bottom = bottomClearance),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Box(

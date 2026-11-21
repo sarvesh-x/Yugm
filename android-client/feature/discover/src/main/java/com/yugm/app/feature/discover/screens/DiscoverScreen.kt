@@ -74,9 +74,10 @@ import coil.compose.AsyncImage
 import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.ui.components.Avatar
-import com.yugm.app.core.ui.components.YugmBackground
-import com.yugm.app.core.ui.components.YugmBackgroundStyle
+/* Shared ambient background provided by MainTabsScreen. */
+import com.yugm.app.core.ui.components.LocalMainDockBottomClearance
 import com.yugm.app.core.ui.components.YugmBottomDock
+import com.yugm.app.core.ui.components.YugmBottomDockBarHeight
 import com.yugm.app.core.ui.components.YugmBottomDockDefaults
 import com.yugm.app.core.ui.components.YugmDockTab
 import com.yugm.app.core.ui.theme.Background
@@ -179,7 +180,8 @@ fun DiscoverScreen(
         }
     }
 
-    YugmBackground(style = YugmBackgroundStyle.Ambient) {
+    // Shared background is provided by MainTabsScreen; keep this root transparent.
+    Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(
@@ -187,8 +189,7 @@ fun DiscoverScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     top = 8.dp,
-                    // Dock is laid out in-flow; reserve only natural end-of-list breathing room.
-                    bottom = 12.dp
+                    bottom = if (showBottomDock) 12.dp else LocalMainDockBottomClearance.current
                 ),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {

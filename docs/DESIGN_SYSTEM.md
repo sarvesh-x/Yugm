@@ -20,6 +20,17 @@ Spacing is not yet a complete central token scale: screens and shared components
 
 Loading spinners use the single approved Lottie animation via `core/ui`'s `YugmLoadingSpinner` (`res/raw/loading_spinner.json`). Do not introduce new `CircularProgressIndicator` spinners or alternate spinner animations; scale `YugmLoadingSpinner` with its `size`/`modifier` parameters. Determinate `LinearProgressIndicator` progress bars remain separate where they represent real progress.
 
+## Main tab background architecture
+
+The five primary main tabs (`Arcade`, `Party`, `Discover`, `Chat`, `Profile`) share one stationary ambient background rendered by `MainTabsScreen`.
+
+- **One background:** `MainTabsScreen` renders a single full-screen `YugmBackground(style = YugmBackgroundStyle.Ambient)` as the first child of its root `Box`, behind the `HorizontalPager` and bottom dock. This background is stationary during horizontal swipes and animated tab switches.
+- **Transparent tab containers:** Main-tab page roots must not draw independent full-screen backgrounds, opaque `Scaffold` container colors, or per-page gradients. Use `YugmBackgroundStyle.None` or a transparent root when a screen can be hosted inside `MainTabsScreen`; standalone/secondary routes may use an appropriate `YugmBackground` variant.
+- **One persistent dock:** The bottom navigation dock is overlaid on the shared root layout and extends the shared background behind the transparent notch/cradle. Scrollable tab content applies shared bottom clearance via `LocalMainDockBottomClearance`/`mainDockBottomClearance()`; do not shrink the pager viewport or duplicate system insets.
+- **Pastel mesh + grain:** Ambient uses `LocalYugmColors.current.background` as base and brand tokens (`BrandViolet`, `BrandPink`, `BrandOrange`) for low-contrast radial mesh glows positioned relative to the shared root viewport. A cached 128x128 monochrome grain BitmapShader is tiled at very low opacity (light ~2.5%, dark ~2%) and must not be regenerated per frame/recomposition.
+- **Dock tokens:** Bottom dock uses centralized semantic tokens on `YugmColors`: `bottomDockSurface`, `bottomDockInactiveContent`, `bottomDockActiveContent`, `bottomDockOutline`, `bottomDockShadow`. Dock shadow must follow the curved dock shape (including notch) and must not fill the transparent notch or obscure the active indicator.
+- **Performance:** One shared background layer, cached brushes/grain, no per-page background recomposition during pager scroll, no animated/decorative background blobs, no expensive real-time blur.
+
 ## Migration direction
 
 Consolidate existing equivalents before adding components. Migrate frequently used screens incrementally and check light/dark, font scaling, accessibility, and loading/error/empty states. The login, phone/OTP, and profile-setup auth screens were made palette-aware in the 2026-11-19 auth theme repair; this does not establish system-theme readiness for the rest of the app. See [auth flow audit](features/auth-flow-audit.md).

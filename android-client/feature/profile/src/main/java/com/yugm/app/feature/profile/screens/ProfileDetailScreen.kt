@@ -86,6 +86,7 @@ import com.yugm.app.core.ui.cosmetics.profileThemeColors
 import com.yugm.app.core.ui.cosmetics.profileBannerColors
 import com.yugm.app.core.ui.theme.*
 import kotlinx.coroutines.launch
+import com.yugm.app.core.ui.components.LocalMainDockBottomClearance
 import com.yugm.app.core.ui.components.YugmBottomDockDefaults
 import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
@@ -124,6 +125,8 @@ fun ProfileDetailScreen(
      * (secondary) profile detail screens never render it, per the bottom-navigation whitelist.
      */
     showBottomDock: Boolean = false,
+    /** Null when rendered inside MainTabsScreen, which provides the shared ambient background. */
+    backgroundStyle: YugmBackgroundStyle? = YugmBackgroundStyle.Ambient,
     onOpenBonds: (String) -> Unit = {},
     onBondPartnerProfile: (String) -> Unit = {}
 ) {
@@ -222,7 +225,7 @@ fun ProfileDetailScreen(
         }
     }
 
-    YugmBackground(style = YugmBackgroundStyle.Ambient) {
+    YugmBackground(style = backgroundStyle ?: YugmBackgroundStyle.None) {
         Scaffold(
             // Root NavGraph owns safe-area insets; avoid nested-Scaffold inset duplication that
             // created extra empty space and double padding on the main Profile tab.
@@ -306,7 +309,7 @@ fun ProfileDetailScreen(
                 }
             }
         },
-        containerColor = Background
+        containerColor = Color.Transparent
     ) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
         if (viewModel.isLoading && viewModel.profile == null) {
@@ -342,10 +345,11 @@ fun ProfileDetailScreen(
                     start = 16.dp,
                     end = 16.dp,
                     top = 12.dp,
-                    // Natural end-of-scroll clearance; the main-tabs dock is rendered in-flow and
-                    // already reserves its own height. Standalone profiles use the same modest
-                    // clearance instead of the legacy 104dp reservation.
-                    bottom = if (isOwnProfile && showBottomDock) 12.dp else 24.dp
+                    bottom = when {
+                        isOwnProfile && showBottomDock -> 12.dp
+                        LocalMainDockBottomClearance.current > 0.dp -> LocalMainDockBottomClearance.current
+                        else -> 24.dp
+                    }
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {

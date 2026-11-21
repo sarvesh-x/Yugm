@@ -30,29 +30,40 @@ internal object BottomDockGeometry {
         return (safe + 0.5f) * tabWidthPx(totalWidthPx, tabCount)
     }
 
-    /**
-     * Where the flat top edge may end and the concave notch may begin. Clamped to the corner
-     * arc start and never past the notch centre, so the first tab cannot fold back over itself.
-     */
-    fun leftShoulderPx(notchLeftPx: Float, cornerRadiusPx: Float, centerPx: Float): Float =
-        maxOf(notchLeftPx, cornerRadiusPx).coerceAtMost(centerPx)
+    /** Junction angle (radians) where the circular cradle meets the shoulder cubic. */
+    const val CRADLE_THETA_RAD: Double = 38.0 * Math.PI / 180.0
+
+    /** Horizontal offset from center to the cradle-shoulder junction, before edge scaling. */
+    fun junctionOffsetPx(cradleRadiusPx: Float): Float =
+        (cradleRadiusPx * kotlin.math.cos(CRADLE_THETA_RAD)).toFloat()
+
+    /** Vertical depth of the cradle-shoulder junction below topY, before edge scaling. */
+    fun junctionDepthPx(cradleRadiusPx: Float): Float =
+        (cradleRadiusPx * kotlin.math.sin(CRADLE_THETA_RAD)).toFloat()
 
     /**
-     * Where the concave notch ends and the flat top edge (or top-right corner arc) resumes.
-     * Never before the notch centre, so the last tab cannot fold back over itself.
+     * Symmetric scale factor applied to the notch when near screen edges. Both sides scale
+     * equally so the cradle remains centered and mirrored.
      */
-    fun rightShoulderPx(
-        notchRightPx: Float,
-        totalWidthPx: Float,
-        cornerRadiusPx: Float,
-        centerPx: Float,
-    ): Float = minOf(notchRightPx, totalWidthPx - cornerRadiusPx).coerceAtLeast(centerPx)
+    fun edgeScale(centerPx: Float, totalWidthPx: Float, cradleRadiusPx: Float, shoulderWidthPx: Float): Float {
+        val available = minOf(centerPx, totalWidthPx - centerPx)
+        val fullExtent = junctionOffsetPx(cradleRadiusPx) + shoulderWidthPx
+        return if (fullExtent > 0f) (available / fullExtent).coerceIn(0f, 1f) else 1f
+    }
+
+    /** Left shoulder start on the flat top edge (screen coords). */
+    fun leftShoulderPx(centerPx: Float, cradleRadiusPx: Float, shoulderWidthPx: Float, totalWidthPx: Float): Float {
+        val scale = edgeScale(centerPx, totalWidthPx, cradleRadiusPx, shoulderWidthPx)
+        return (centerPx - (junctionOffsetPx(cradleRadiusPx) + shoulderWidthPx) * scale).coerceIn(0f, totalWidthPx)
+    }
+
+    /** Right shoulder start on the flat top edge (screen coords). */
+    fun rightShoulderPx(centerPx: Float, cradleRadiusPx: Float, shoulderWidthPx: Float, totalWidthPx: Float): Float {
+        val scale = edgeScale(centerPx, totalWidthPx, cradleRadiusPx, shoulderWidthPx)
+        return (centerPx + (junctionOffsetPx(cradleRadiusPx) + shoulderWidthPx) * scale).coerceIn(0f, totalWidthPx)
+    }
 
     /** Top edge of the elevated active circle, relative to the dock container. */
-    fun circleTopPx(
-        topPaddingPx: Float,
-        circleSizePx: Float,
-        clearancePx: Float,
-        liftPx: Float,
-    ): Float = topPaddingPx - circleSizePx / 2f + clearancePx - liftPx
+    fun circleTopPx(topPaddingPx: Float, circleSizePx: Float, liftPx: Float = 0f): Float =
+        topPaddingPx - circleSizePx / 2f - liftPx
 }

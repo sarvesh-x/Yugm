@@ -18,6 +18,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -27,8 +28,12 @@ import com.yugm.app.core.navigation.MainTabDestination
 import com.yugm.app.core.navigation.MainTabsRoutes
 import com.yugm.app.core.navigation.Screen
 import com.yugm.app.core.navigation.navigateTopLevel
+import com.yugm.app.core.ui.components.LocalMainDockBottomClearance
+import com.yugm.app.core.ui.components.YugmBackground
+import com.yugm.app.core.ui.components.YugmBackgroundStyle
 import com.yugm.app.core.ui.components.YugmBottomDock
 import com.yugm.app.core.ui.components.YugmDockTab
+import com.yugm.app.core.ui.components.mainDockBottomClearance
 import com.yugm.app.feature.chat.screens.ChatListScreen
 import com.yugm.app.feature.chat.viewmodel.ChatListViewModel
 import com.yugm.app.feature.discover.screens.DiscoverScreen
@@ -83,6 +88,9 @@ fun MainTabsScreen(
     requestedTab: String? = null,
     onRequestedTabConsumed: () -> Unit = {},
     onProfileUpdated: (com.yugm.app.core.model.YugmUser) -> Unit = {},
+    userAvatar: String? = null,
+    userAvatarType: String? = null,
+    userAvatarParts: com.yugm.app.core.model.AvatarPartsPayload? = null,
 ) {
     val requestedPage = normalizeMainTab(initialTab)
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -204,15 +212,16 @@ fun MainTabsScreen(
         clanChatActive = isClanChatActive,
     )
 
-    // Overlay layout: the dock is bottom-aligned so screen content extends behind the
-    // transparent cradle region. Only the painted surface (bar + system inset) determines
-    // content clearance. No duplicate Scaffold padding or bottom spacers.
-    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val paintedSurfaceHeight = com.yugm.app.core.ui.components.YugmBottomDockBarHeight + bottomInset
+    // Overlay layout: content fills the full viewport and extends behind the dock,
+    // including the transparent notch/cradle. The dock is overlaid at BottomCenter.
+    // Scrollable tab content reads LocalMainDockBottomClearance for bottom contentPadding.
+    val dockBottomClearance = if (showDock) mainDockBottomClearance() else 0.dp
     Box(Modifier.fillMaxSize()) {
+        // Single shared background for all five main tabs — stationary behind the pager.
+        YugmBackground(style = YugmBackgroundStyle.Ambient)
+
         val pagerModifier = if (showDock) {
-            // Content extends behind the transparent cradle; clearance = painted surface only.
-            Modifier.fillMaxSize().padding(bottom = paintedSurfaceHeight)
+            Modifier.fillMaxSize()
         } else {
             Modifier.fillMaxSize().navigationBarsPadding()
         }
@@ -222,7 +231,10 @@ fun MainTabsScreen(
             beyondViewportPageCount = 1,
             userScrollEnabled = true
         ) { page ->
-            androidx.compose.runtime.CompositionLocalProvider(com.yugm.app.core.ui.components.LocalAutomaticSyncEnabled provides (pagerState.currentPage == page)) {
+            androidx.compose.runtime.CompositionLocalProvider(
+                com.yugm.app.core.ui.components.LocalAutomaticSyncEnabled provides (pagerState.currentPage == page),
+                LocalMainDockBottomClearance provides dockBottomClearance
+            ) {
                 when (page) {
                     TAB_GAME_ZONE -> GamesScreen(reselectSignal = gamesReselect)
 
@@ -323,7 +335,8 @@ fun MainTabsScreen(
                                 onOpenClan = { clanId -> navController.navigate(Screen.ClanDetail.createRoute(clanId)) },
                                 onOpenClanList = { navController.navigate(Screen.ClanList.route) },
                                 onGameZone = { goTo(TAB_GAME_ZONE) },
-                                showBottomDock = false
+                                showBottomDock = false,
+                                backgroundStyle = YugmBackgroundStyle.None
                             )
                         }
                     }
@@ -337,7 +350,10 @@ fun MainTabsScreen(
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
                 onTabSelected = ::handleTabSelect,
                 onTabReselected = ::handleTabReselect,
-                chatUnreadCount = chatUnreadBadge
+                chatUnreadCount = chatUnreadBadge,
+                userAvatar = userAvatar,
+                userAvatarType = userAvatarType,
+                userAvatarParts = userAvatarParts
             )
         }
     }

@@ -9,9 +9,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -55,11 +58,12 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.api.YugmApi
-import com.yugm.app.core.ui.components.YugmBackground
-import com.yugm.app.core.ui.components.YugmBackgroundStyle
+/* Shared ambient background provided by MainTabsScreen. */
 import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.core.ui.components.Avatar
+import com.yugm.app.core.ui.components.LocalMainDockBottomClearance
 import com.yugm.app.core.ui.components.YugmBottomDock
+import com.yugm.app.core.ui.components.YugmBottomDockBarHeight
 import com.yugm.app.core.ui.components.YugmDockTab
 import com.yugm.app.feature.room.viewmodel.RoomViewModel
 import coil.compose.AsyncImage
@@ -114,14 +118,15 @@ fun VoiceRoomsScreen(
     }
     val liveRooms = viewModel.rooms.filter { it.type == RoomType.Voice && it.status == "LIVE" }
     val liveVideoRooms = viewModel.rooms.filter { it.type == RoomType.Video && it.status == "LIVE" }
-    YugmBackground(style = YugmBackgroundStyle.Ambient) {
+    // Shared background is provided by MainTabsScreen; keep this root transparent.
+    Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 LazyColumn(
                     state = listState,
                     contentPadding = PaddingValues(
                         top = 14.dp,
-                        bottom = 12.dp
+                        bottom = if (showBottomDock) 12.dp else LocalMainDockBottomClearance.current
                     ),
                     verticalArrangement = Arrangement.spacedBy(18.dp),
                     modifier = Modifier.fillMaxSize()

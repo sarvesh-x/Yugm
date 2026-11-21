@@ -1,5 +1,18 @@
 ﻿# Current task
 
+## YUGM-MAINTABS-BG-014 — Unified main-tab background and seamless transitions
+
+- **Scope:** One shared stationary ambient background for the five primary tabs (Arcade, Party, Discover, Chat, Profile) behind a transparent HorizontalPager; remove per-tab full-screen backgrounds; centralize safe bottom dock clearance; keep dock overlay/geometry/behavior intact.
+- **Changes applied (Android, source):**
+  - **Shared background owner:** `MainTabsScreen` now renders a single `YugmBackground(style = YugmBackgroundStyle.Ambient)` as the first child of the root `Box`, behind the `HorizontalPager` and dock overlay. Background is stationary relative to root viewport during swipes/tab switches.
+  - **Tab transparency:** Removed per-tab `YugmBackground` wrappers from `DiscoverScreen`, `VoiceRoomsScreen`, `GamesScreen`, and `ChatListScreen` (main-tab-only screens); replaced with transparent roots. `ChatListScreen` `PrimaryTabRow` container color set to `Color.Transparent`. `ProfileDetailScreen` gained `backgroundStyle: YugmBackgroundStyle? = YugmBackgroundStyle.Ambient` (MainTabs passes `None`) and uses transparent `Scaffold` container so shared/own background shows through.
+  - **Background system:** `YugmBackground` Ambient refined to use `LocalYugmColors.current.background` base + restrained brand radial glows (violet upper-right, pink lower-left, subtle orange warmth), stationary draw. Added `YugmBackgroundStyle.None` for shared-background hosts.
+  - **Dock clearance:** Centralized `mainDockBottomClearance()` / `LocalMainDockBottomClearance` in `core/ui` (`bar + activeIconProtrusion + navBarInset + breathingSpace`); MainTabs provides it; Discover/Party/Chat/Games/Profile consume it for scrollable `contentPadding`/trailing padding. Dock touch targets limited to bar area; active indicator remains clickable for reselect.
+  - **Notch geometry (same task thread):** `CurvedDockShape` redesigned to a circular cradle derived from the active indicator (50dp circle, 2dp border, 3.5dp clearance, 28.5dp cradle radius, 22dp shoulders, 38° junction, G1 cubic shoulders, symmetric edge scaling). `BottomDockGeometry`/tests updated.
+- **Verification (run):** `:core:ui:compileDebugKotlin :core:ui:compileDebugUnitTestKotlin :feature:discover:compileDebugKotlin :feature:room:compileDebugKotlin :feature:chat:compileDebugKotlin :feature:profile:compileDebugKotlin :feature:social:compileDebugKotlin :app:compileDebugKotlin` — **BUILD SUCCESSFUL** (Android Studio JBR, `--console=plain --max-workers=2`). `:core:ui:testDebugUnitTest --tests BottomDockGeometryTest` — **BUILD SUCCESSFUL**.
+- **Not run / remaining:** Device/emulator visual verification: no seam during pager swipe/animated tab switch across all 5 tabs, stationary background behind transparent notch, light/dark/system theme, 3-button/gesture nav, keyboard/IME, font scaling, TalkBack, edge-tab notch geometry, last-item accessibility above dock, no touch interception regressions. `:app:lintDebug` / broader tests not run. Task changes committed and pushed; local build-log `.txt` files remain untracked.
+- **Status:** Implemented and compile/unit-verified; runtime visual sign-off pending. Handoff: [2026-11-21 main-tab shared background](handoffs/2026-11-21-main-tab-shared-background.md).
+
 ## YUGM-NAV-DOCK-PREMIUM-013 — Premium curved-dock polish (geometry, icons, motion, feedback)
 
 - **Scope:** Refine the existing centralized curved bottom dock (`core/ui`) toward the Figma-style premium target; preserve architecture, destinations, visibility logic, theme system, behavior, and accessibility.

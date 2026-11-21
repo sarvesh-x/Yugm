@@ -1,6 +1,8 @@
 package com.yugm.app.core.ui.components
 
 import android.view.HapticFeedbackConstants
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
@@ -8,6 +10,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -37,6 +40,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.asAndroidPath
+import androidx.compose.ui.graphics.ClipOp
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
@@ -52,8 +61,17 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.yugm.app.core.api.resolveMediaUrl
+import com.yugm.app.core.model.AvatarPartsPayload
+import com.yugm.app.core.ui.avatar.AvatarDescriptor
+import com.yugm.app.core.ui.avatar.AvatarParts
+import com.yugm.app.core.ui.avatar.GeneratedAvatar
 import com.yugm.app.core.ui.theme.*
 import kotlin.math.roundToInt
 
@@ -85,7 +103,32 @@ import kotlin.math.roundToInt
 
 // Painted surface height (bar only) — bottomInset is added at runtime by MainTabsScreen.
 // The transparent cradle zone (topPadding) is NOT included; content extends behind it.
-val YugmBottomDockBarHeight = 50.dp
+val YugmBottomDockBarHeight = 55.dp
+
+// Active circle protrudes this much above the painted surface top.
+val YugmBottomDockActiveIconProtrusion = 25.dp
+
+// Extra breathing room so the last item clears the dock comfortably.
+val YugmBottomDockBreathingSpace = 12.dp
+
+/**
+ * Bottom content clearance for scrollable containers in main tabs where the dock is visible.
+ * Ensures the last interactive item can scroll fully above the highest point of the dock.
+ *
+ * Clearance = painted bar height + active icon protrusion + system nav inset + breathing space.
+ * Use as LazyColumn/LazyGrid contentPadding bottom, or as trailing padding in verticalScroll.
+ */
+@Composable
+fun mainDockBottomClearance(): androidx.compose.ui.unit.Dp {
+    val navBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    return YugmBottomDockBarHeight + YugmBottomDockActiveIconProtrusion + navBarInset + YugmBottomDockBreathingSpace
+}
+
+/**
+ * CompositionLocal providing the dock bottom clearance for main tabs. 0.dp when dock is not shown.
+ * Prefer [mainDockBottomClearance] or read this local in tab screens to keep padding consistent.
+ */
+val LocalMainDockBottomClearance = androidx.compose.runtime.compositionLocalOf { 0.dp }
 
 private data class MainDockItem(
     val tab: YugmDockTab,
@@ -103,6 +146,9 @@ fun YugmBottomDock(
     onTabSelected: (YugmDockTab) -> Unit = {},
     onTabReselected: (YugmDockTab) -> Unit = {},
     chatUnreadCount: Int = 0,
+    userAvatar: String? = null,
+    userAvatarType: String? = null,
+    userAvatarParts: AvatarPartsPayload? = null,
 ) {
     val items = remember {
         listOf(
@@ -119,22 +165,58 @@ fun YugmBottomDock(
     val density = LocalDensity.current
 
     val targetIndex = items.indexOfFirst { it.tab == selected }.coerceAtLeast(0)
+    var previousIndex by remember { androidx.compose.runtime.mutableIntStateOf(targetIndex) }
+    val direction = when {
+        targetIndex > previousIndex -> 1f
+        targetIndex < previousIndex -> -1f
+        else -> 0f
+    }
+
+    // Position: notch/circle slide — responsive spring.
     val animatedIndex by animateFloatAsState(
         targetValue = targetIndex.toFloat(),
-        animationSpec = if (motionEnabled) spring(dampingRatio = 0.85f, stiffness = 280f) else snap(),
-        label = "curvedDockAnimatedIndex"
+        animationSpec = if (motionEnabled) spring(dampingRatio = 0.84f, stiffness = 320f) else snap(),
+        label = "curvedDockPositionIndex"
     )
 
+    // Content: icon/label crossfade — slightly softer so it settles after the circle arrives.
+    val contentIndex by animateFloatAsState(
+        targetValue = targetIndex.toFloat(),
+        animationSpec = if (motionEnabled) spring(dampingRatio = 0.88f, stiffness = 260f) else snap(),
+        label = "curvedDockContentIndex"
+    )
+
+    // Subtle settle scale on the active circle when selection lands.
+    val settleScale = remember { Animatable(1f) }
+    LaunchedEffect(targetIndex, motionEnabled) {
+        if (previousIndex != targetIndex) {
+            previousIndex = targetIndex
+        }
+        if (!motionEnabled) {
+            settleScale.snapTo(1f)
+        } else {
+            settleScale.snapTo(0.96f)
+            settleScale.animateTo(
+                1f,
+                animationSpec = spring(dampingRatio = 0.55f, stiffness = 500f)
+            )
+        }
+    }
+
     // === Dimensions (single source of truth) ===
-    // Suggested geometry from the task spec.
+    // All notch geometry is derived from the active indicator to keep circle and cradle in sync.
     val activeCircleSize = 50.dp
+    val activeBorderWidth = 2.dp
+    val notchClearance = 3.5.dp
+    val cradleRadius = activeCircleSize / 2 + notchClearance // 28.5dp — includes clearance around indicator
+    val shoulderWidth = 22.dp
+
     val topPadding = activeCircleSize / 2 + 3.dp   // 28dp: circle center on surface top
-    val notchDepth = 28.dp
     val labelFontSize = 12.sp
     val labelLineHeight = 14.sp
 
-    // Label positioned directly beneath active circle/notch.
-    val labelTop = topPadding + maxOf(activeCircleSize / 2, notchDepth) + 4.dp
+    // Label positioned beneath the cradle's deepest point.
+    val labelTop = topPadding + cradleRadius + 4.dp
 
     // Bar height from label position + measured text height + bottom clearance.
     val labelSlotHeight = labelLineHeight.value.toInt().dp
@@ -143,15 +225,15 @@ fun YugmBottomDock(
 
     val activeIconSize = 32.dp
     val inactiveIconSize = 30.dp
-    val notchWidth = 78.dp
     val touchTargetMin = 48.dp
 
     // Reactive inset handling: use Compose WindowInsets directly (no cached view lookup).
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val totalDockHeight = topPadding + barHeight + bottomInset
 
-    val dockColor = colors.surface
-    val ringColor = colors.surface
+    val dockColor = colors.bottomDockSurface
+    val ringColor = colors.bottomDockSurface
+    val shadowElevation = if (colors.isDark) 5.dp else 7.dp
     val view = LocalView.current
 
     val brandGradient = remember {
@@ -180,19 +262,19 @@ fun YugmBottomDock(
             val notchXPx = BottomDockGeometry.animatedNotchCenterPx(animatedIndex, totalWidthPx, items.size)
 
             val topPaddingPx = with(density) { topPadding.toPx() }
-            val notchWidthPx = with(density) { notchWidth.toPx() }
-            val notchDepthPx = with(density) { notchDepth.toPx() }
+            val cradleRadiusPx = with(density) { cradleRadius.toPx() }
+            val shoulderWidthPx = with(density) { shoulderWidth.toPx() }
             val circleSizePx = with(density) { activeCircleSize.toPx() }
 
             // No additional vertical spring lift: circle stays on the surface top boundary.
             val liftPx = 0f
 
-            val curvedShape = remember(notchXPx, topPaddingPx, notchWidthPx, notchDepthPx, constraints.maxHeight) {
+            val curvedShape = remember(notchXPx, topPaddingPx, cradleRadiusPx, shoulderWidthPx, constraints.maxWidth, constraints.maxHeight) {
                 CurvedDockShape(
-                    notchX = notchXPx,
-                    topPaddingPx = topPaddingPx,
-                    notchWidthPx = notchWidthPx,
-                    notchDepthPx = notchDepthPx
+                    centerX = notchXPx,
+                    topY = topPaddingPx,
+                    cradleRadiusPx = cradleRadiusPx,
+                    shoulderWidthPx = shoulderWidthPx
                 )
             }
 
@@ -200,6 +282,9 @@ fun YugmBottomDock(
             DockBackground(
                 curvedShape = curvedShape,
                 dockColor = dockColor,
+                shadowColor = colors.bottomDockShadow,
+                shadowElevationPx = with(density) { shadowElevation.toPx() },
+                outlineColor = colors.bottomDockOutline,
                 modifier = Modifier.fillMaxSize()
             )
 
@@ -213,16 +298,23 @@ fun YugmBottomDock(
                 ringColor = ringColor,
                 activeIconSize = activeIconSize,
                 items = items,
-                animatedIndex = animatedIndex,
+                contentIndex = contentIndex,
                 colors = colors,
-                motionEnabled = motionEnabled
+                motionEnabled = motionEnabled,
+                userAvatar = userAvatar,
+                userAvatarType = userAvatarType,
+                userAvatarParts = userAvatarParts,
+                selectedTab = selected,
+                onTabReselected = onTabReselected,
+                settleScale = settleScale.value,
+                direction = direction
             )
 
             // 3 & 4. Tab row with icons, labels, badges, and touch targets.
             TabRow(
                 items = items,
                 selected = selected,
-                animatedIndex = animatedIndex,
+                contentIndex = contentIndex,
                 topPadding = topPadding,
                 barHeight = barHeight,
                 inactiveIconSize = inactiveIconSize,
@@ -237,7 +329,11 @@ fun YugmBottomDock(
                 density = density,
                 view = view,
                 onTabSelected = onTabSelected,
-                onTabReselected = onTabReselected
+                onTabReselected = onTabReselected,
+                userAvatar = userAvatar,
+                userAvatarType = userAvatarType,
+                userAvatarParts = userAvatarParts,
+                direction = direction
             )
         }
     }
@@ -251,15 +347,39 @@ fun YugmBottomDock(
 private fun DockBackground(
     curvedShape: CurvedDockShape,
     dockColor: Color,
+    shadowColor: Color,
+    shadowElevationPx: Float,
+    outlineColor: Color,
     modifier: Modifier = Modifier
 ) {
     Canvas(modifier = modifier) {
         val outline = curvedShape.createOutline(size, layoutDirection, this)
         if (outline is Outline.Generic) {
-            drawPath(outline.path, color = dockColor)
+            val path = outline.path
+            // Shape-aware soft shadow: follows the dock curve but not the transparent notch opening.
+            val notchOpening = curvedShape.createNotchOpeningPath(size)
+            clipPath(notchOpening, clipOp = ClipOp.Difference) {
+                drawIntoCanvas { canvas ->
+                    val frameworkPaint = androidx.compose.ui.graphics.Paint().asFrameworkPaint().apply {
+                        isAntiAlias = true
+                        color = android.graphics.Color.TRANSPARENT
+                        setShadowLayer(shadowElevationPx, 0f, 0f, shadowColor.toArgb())
+                    }
+                    canvas.nativeCanvas.drawPath(path.asAndroidPath(), frameworkPaint)
+                }
+            }
+            drawPath(path, color = dockColor)
+            drawPath(path, color = outlineColor, style = Stroke(width = 1.dp.toPx()))
         }
     }
 }
+
+private fun Color.toArgb(): Int = android.graphics.Color.argb(
+    (alpha * 255f).roundToInt(),
+    (red * 255f).roundToInt(),
+    (green * 255f).roundToInt(),
+    (blue * 255f).roundToInt()
+)
 
 @Composable
 private fun ActiveIndicator(
@@ -271,9 +391,16 @@ private fun ActiveIndicator(
     ringColor: Color,
     activeIconSize: androidx.compose.ui.unit.Dp,
     items: List<MainDockItem>,
-    animatedIndex: Float,
+    contentIndex: Float,
     colors: YugmColors,
-    motionEnabled: Boolean
+    motionEnabled: Boolean,
+    userAvatar: String? = null,
+    userAvatarType: String? = null,
+    userAvatarParts: AvatarPartsPayload? = null,
+    selectedTab: YugmDockTab = YugmDockTab.DISCOVER,
+    onTabReselected: (YugmDockTab) -> Unit = {},
+    settleScale: Float = 1f,
+    direction: Float = 0f,
 ) {
     val circleX = (notchXPx - circleSizePx / 2f).roundToInt()
     val circleY = (topPaddingPx - circleSizePx / 2f - liftPx).roundToInt()
@@ -282,28 +409,112 @@ private fun ActiveIndicator(
         modifier = Modifier
             .offset { IntOffset(circleX, circleY) }
             .size(with(LocalDensity.current) { circleSizePx.toDp() })
+            .graphicsLayer {
+                scaleX = settleScale
+                scaleY = settleScale
+            }
             .shadow(if (colors.isDark) 3.dp else 1.5.dp, CircleShape, clip = false)
             .clip(CircleShape)
             .background(brandGradient)
-            .border(2.dp, ringColor, CircleShape),
+            .border(2.dp, ringColor, CircleShape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onTabReselected(selectedTab) },
         contentAlignment = Alignment.Center
     ) {
         items.forEachIndexed { i, item ->
-            val factor = (1f - kotlin.math.abs(animatedIndex - i)).coerceIn(0f, 1f)
+            val factor = (1f - kotlin.math.abs(contentIndex - i)).coerceIn(0f, 1f)
             if (factor > 0f) {
-                Icon(
-                    imageVector = item.activeIcon,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier
-                        .size(activeIconSize)
-                        .graphicsLayer {
-                            alpha = factor
-                            scaleX = 0.82f + 0.18f * factor
-                            scaleY = 0.82f + 0.18f * factor
-                        }
+                val isProfileWithAvatar = item.tab == YugmDockTab.PROFILE && (
+                    (userAvatarType == "GENERATED" && userAvatarParts != null) ||
+                    !userAvatar.isNullOrBlank()
                 )
+                val iconShiftPx = with(LocalDensity.current) { 6.dp.toPx() }
+                if (isProfileWithAvatar) {
+                    DockAvatar(
+                        avatar = userAvatar,
+                        avatarType = userAvatarType,
+                        avatarParts = userAvatarParts,
+                        size = with(LocalDensity.current) { circleSizePx.toDp() },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                alpha = factor
+                                val s = 0.84f + 0.16f * factor
+                                scaleX = s
+                                scaleY = s
+                                translationX = direction * (1f - factor) * iconShiftPx
+                            }
+                    )
+                } else {
+                    Icon(
+                        imageVector = item.activeIcon,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier
+                            .size(activeIconSize)
+                            .graphicsLayer {
+                                alpha = factor
+                                val s = 0.84f + 0.16f * factor
+                                scaleX = s
+                                scaleY = s
+                                translationX = direction * (1f - factor) * iconShiftPx
+                            }
+                    )
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun DockAvatar(
+    avatar: String?,
+    avatarType: String?,
+    avatarParts: AvatarPartsPayload?,
+    size: androidx.compose.ui.unit.Dp,
+    modifier: Modifier = Modifier,
+    borderColor: Color = Color.Transparent,
+    borderWidth: androidx.compose.ui.unit.Dp = 0.dp,
+) {
+    val resolvedUrl = remember(avatar) { resolveMediaUrl(avatar) }
+    val shape = CircleShape
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(shape)
+            .then(if (borderWidth > 0.dp) Modifier.border(borderWidth, borderColor, shape) else Modifier),
+        contentAlignment = Alignment.Center
+    ) {
+        if (avatarType == "GENERATED" && avatarParts != null) {
+            GeneratedAvatar(
+                descriptor = AvatarDescriptor(
+                    parts = AvatarParts(
+                        background = avatarParts.background,
+                        clothes = avatarParts.clothes,
+                        head = avatarParts.head,
+                        mouth = avatarParts.mouth,
+                        eyes = avatarParts.eyes,
+                        top = avatarParts.top
+                    )
+                ),
+                size = size,
+                shape = shape,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else if (!resolvedUrl.isNullOrBlank()) {
+            val context = LocalContext.current
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(resolvedUrl)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
         }
     }
 }
@@ -312,7 +523,7 @@ private fun ActiveIndicator(
 private fun TabRow(
     items: List<MainDockItem>,
     selected: YugmDockTab,
-    animatedIndex: Float,
+    contentIndex: Float,
     topPadding: androidx.compose.ui.unit.Dp,
     barHeight: androidx.compose.ui.unit.Dp,
     inactiveIconSize: androidx.compose.ui.unit.Dp,
@@ -327,7 +538,11 @@ private fun TabRow(
     density: Density,
     view: android.view.View,
     onTabSelected: (YugmDockTab) -> Unit,
-    onTabReselected: (YugmDockTab) -> Unit
+    onTabReselected: (YugmDockTab) -> Unit,
+    userAvatar: String? = null,
+    userAvatarType: String? = null,
+    userAvatarParts: AvatarPartsPayload? = null,
+    direction: Float = 0f,
 ) {
     Row(
         modifier = Modifier
@@ -339,7 +554,7 @@ private fun TabRow(
     ) {
         items.forEachIndexed { i, item ->
             val isSelected = item.tab == selected
-            val factor = (1f - kotlin.math.abs(animatedIndex - i)).coerceIn(0f, 1f)
+            val factor = (1f - kotlin.math.abs(contentIndex - i)).coerceIn(0f, 1f)
             val badgeCount = if (item.tab == YugmDockTab.CHAT) chatUnreadCount.coerceAtLeast(0) else 0
             val badgeText = when {
                 badgeCount <= 0 -> null
@@ -359,28 +574,35 @@ private fun TabRow(
                 label = "dockTabTouch"
             )
 
-            // Touch target — full bar height, min 48dp.
+            // Touch target — bar area only; cradle zone above stays transparent to scroll/touch-through.
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxHeight()
-                    .heightIn(min = touchTargetMin)
-                    .selectable(
-                        selected = isSelected,
-                        interactionSource = itemInteractionSource,
-                        indication = null,
-                        role = Role.Tab,
-                        onClick = {
-                            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                            if (isSelected) onTabReselected(item.tab) else onTabSelected(item.tab)
-                        }
-                    )
-                    .semantics(mergeDescendants = true) {
-                        contentDescription = description
-                        selectedSemantics = isSelected
-                    },
+                    .fillMaxHeight(),
                 contentAlignment = Alignment.TopCenter
             ) {
+                Box(
+                    modifier = Modifier
+                        .padding(top = topPadding)
+                        .fillMaxWidth()
+                        .height(barHeight)
+                        .heightIn(min = touchTargetMin)
+                        .selectable(
+                            selected = isSelected,
+                            interactionSource = itemInteractionSource,
+                            indication = null,
+                            role = Role.Tab,
+                            onClick = {
+                                view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                if (isSelected) onTabReselected(item.tab) else onTabSelected(item.tab)
+                            }
+                        )
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = description
+                            selectedSemantics = isSelected
+                        }
+                )
+
                 // Inactive icon — vertically centered in the bar content area.
                 // Bar content area is [topPadding .. topPadding + barHeight) within the Row.
                 // The Row starts at dock top (0), so bar content starts at topPadding.
@@ -400,18 +622,39 @@ private fun TabRow(
                         )
                     }
                     if (factor < 0.995f) {
-                        Icon(
-                            imageVector = item.icon,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(inactiveIconSize)
-                                .graphicsLayer {
-                                    alpha = 1f - factor
-                                    scaleX = 0.92f + 0.08f * (1f - factor)
-                                    scaleY = 0.92f + 0.08f * (1f - factor)
-                                },
-                            tint = colors.textSecondary
+                        val isProfileWithAvatar = item.tab == YugmDockTab.PROFILE && (
+                            (userAvatarType == "GENERATED" && userAvatarParts != null) ||
+                            !userAvatar.isNullOrBlank()
                         )
+                        if (isProfileWithAvatar) {
+                            DockAvatar(
+                                avatar = userAvatar,
+                                avatarType = userAvatarType,
+                                avatarParts = userAvatarParts,
+                                size = inactiveIconSize,
+                                modifier = Modifier
+                                    .graphicsLayer {
+                                        alpha = 1f - factor
+                                        scaleX = 0.92f + 0.08f * (1f - factor)
+                                        scaleY = 0.92f + 0.08f * (1f - factor)
+                                        translationX = -direction * factor * with(density) { 4.dp.toPx() }
+                                    }
+                            )
+                        } else {
+                            Icon(
+                                imageVector = item.icon,
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(inactiveIconSize)
+                                    .graphicsLayer {
+                                        alpha = 1f - factor
+                                        scaleX = 0.92f + 0.08f * (1f - factor)
+                                        scaleY = 0.92f + 0.08f * (1f - factor)
+                                        translationX = -direction * factor * with(density) { 4.dp.toPx() }
+                                    },
+                                tint = colors.bottomDockInactiveContent
+                            )
+                        }
                     }
                 }
 
@@ -431,6 +674,7 @@ private fun TabRow(
                             .graphicsLayer {
                                 alpha = factor
                                 translationY = (1f - factor) * with(density) { 4.dp.toPx() }
+                                translationX = direction * (1f - factor) * with(density) { 6.dp.toPx() }
                             }
                     )
                 }

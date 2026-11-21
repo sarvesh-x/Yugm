@@ -413,10 +413,10 @@ fun SegmentedTabs(
 }
 
 internal class CurvedDockShape(
-    private val notchX: Float,
-    private val topPaddingPx: Float,
-    private val notchWidthPx: Float,
-    private val notchDepthPx: Float,
+    private val centerX: Float,
+    private val topY: Float,
+    private val cradleRadiusPx: Float,
+    private val shoulderWidthPx: Float,
 ) : Shape {
     override fun createOutline(
         size: Size,
@@ -426,44 +426,115 @@ internal class CurvedDockShape(
         val path = Path().apply {
             val w = size.width
             val h = size.height
-            val topY = topPaddingPx
+            val R = cradleRadiusPx
+            val S = shoulderWidthPx
 
-            val halfNotch = notchWidthPx / 2f
+            // Junction angle from horizontal where the circular arc meets the shoulder.
+            // Lower angle = wider, gentler shoulders for a natural wave-like contour.
+            val theta = Math.toRadians(38.0)
+            val sinT = kotlin.math.sin(theta).toFloat()
+            val cosT = kotlin.math.cos(theta).toFloat()
 
-            // Symmetrical shoulder widths: both shoulders have equal width from notch
-            // center to the shoulder point. Adapt proportionally near screen edges.
-            val maxShoulder = (notchX).coerceAtMost(w - notchX)
-            val shoulderWidth = (halfNotch * 1.2f).coerceAtMost(maxShoulder)
-            val leftShoulder = (notchX - shoulderWidth).coerceAtLeast(0f)
-            val rightShoulder = (notchX + shoulderWidth).coerceAtMost(w)
+            // Junction points on the circular cradle arc (centered at centerX, topY).
+            val jx = R * cosT    // horizontal offset from center to junction
+            val jy = R * sinT    // vertical depth at junction
 
-            // Square full-width surface: straight left edge up to top boundary.
+            // Symmetric shoulder adaptation for edge tabs: shrink both sides equally.
+            val availableLeft = centerX
+            val availableRight = w - centerX
+            val available = minOf(availableLeft, availableRight)
+            val fullExtent = jx + S
+            val scale = if (fullExtent > 0f) (available / fullExtent).coerceIn(0f, 1f) else 1f
+            val s = S * scale
+            val r = R * scale
+            val jxS = jx * scale
+            val jyS = jy * scale
+
+            // Shoulder start/end on the flat top edge.
+            val leftShoulder = centerX - jxS - s
+            val rightShoulder = centerX + jxS + s
+
+            // Arc junction points on the cradle circle.
+            val leftJx = centerX - jxS
+            val leftJy = topY + jyS
+            val rightJx = centerX + jxS
+            val rightJy = topY + jyS
+
+            // Control-point distance for G1-continuous cubic shoulder-to-arc transition.
+            val cp = s * 0.55f
+
             moveTo(0f, h)
             lineTo(0f, topY)
 
             // Flat top edge to left shoulder.
-            if (leftShoulder > 0f) lineTo(leftShoulder, topY)
+            lineTo(leftShoulder.coerceAtLeast(0f), topY)
 
-            // Mirrored cubic Béziers: left and right use identical control-point
-            // proportions, guaranteeing continuous tangents and symmetry.
+            // Left shoulder: cubic from flat edge down to circular arc junction.
+            // Start tangent: horizontal (1,0). End tangent: along circle (sinT, cosT).
             cubicTo(
-                leftShoulder + (notchX - leftShoulder) * 0.5f, topY,
-                notchX - halfNotch * 0.5f, topY + notchDepthPx,
-                notchX, topY + notchDepthPx
+                leftShoulder + cp, topY,
+                leftJx - cp * sinT, leftJy - cp * cosT,
+                leftJx, leftJy
             )
+
+            // Circular cradle arc through the bottom. Use arcTo for true circular contour.
+            val arcRect = androidx.compose.ui.geometry.Rect(
+                centerX - r, topY - r,
+                centerX + r, topY + r
+            )
+            val startAngleDeg = (180.0 - Math.toDegrees(theta)).toFloat()
+            val sweepDeg = -(180f - 2f * Math.toDegrees(theta).toFloat())
+            arcTo(arcRect, startAngleDeg, sweepDeg, forceMoveTo = false)
+
+            // Right shoulder: mirror of left, cubic from arc junction up to flat edge.
+            // Start tangent: along circle (-sinT, cosT) mirrored -> end tangent horizontal (1,0).
             cubicTo(
-                notchX + halfNotch * 0.5f, topY + notchDepthPx,
-                rightShoulder - (rightShoulder - notchX) * 0.5f, topY,
-                rightShoulder, topY
+                rightJx + cp * sinT, rightJy - cp * cosT,
+                rightShoulder - cp, topY,
+                rightShoulder.coerceAtMost(w), topY
             )
 
             // Flat top edge to right edge.
             lineTo(w, topY)
             lineTo(w, h)
-            lineTo(0f, h)
             close()
         }
         return Outline.Generic(path)
+    }
+
+    /** Path of the notch opening (cradle bowl) used to prevent shadow bleed into the transparent notch. */
+    fun createNotchOpeningPath(size: Size): Path = Path().apply {
+        val w = size.width
+        val R = cradleRadiusPx
+        val S = shoulderWidthPx
+        val theta = Math.toRadians(38.0)
+        val sinT = kotlin.math.sin(theta).toFloat()
+        val cosT = kotlin.math.cos(theta).toFloat()
+        val jx = R * cosT
+        val jy = R * sinT
+        val available = minOf(centerX, w - centerX)
+        val fullExtent = jx + S
+        val scale = if (fullExtent > 0f) (available / fullExtent).coerceIn(0f, 1f) else 1f
+        val s = S * scale
+        val r = R * scale
+        val jxS = jx * scale
+        val jyS = jy * scale
+        val leftShoulder = centerX - jxS - s
+        val rightShoulder = centerX + jxS + s
+        val leftJx = centerX - jxS
+        val leftJy = topY + jyS
+        val rightJx = centerX + jxS
+        val rightJy = topY + jyS
+        val cp = s * 0.55f
+
+        moveTo(leftShoulder.coerceAtLeast(0f), topY)
+        cubicTo(leftShoulder + cp, topY, leftJx - cp * sinT, leftJy - cp * cosT, leftJx, leftJy)
+        val arcRect = androidx.compose.ui.geometry.Rect(centerX - r, topY - r, centerX + r, topY + r)
+        val startAngleDeg = (180.0 - Math.toDegrees(theta)).toFloat()
+        val sweepDeg = -(180f - 2f * Math.toDegrees(theta).toFloat())
+        arcTo(arcRect, startAngleDeg, sweepDeg, forceMoveTo = false)
+        cubicTo(rightJx + cp * sinT, rightJy - cp * cosT, rightShoulder - cp, topY, rightShoulder.coerceAtMost(w), topY)
+        close()
     }
 }
 

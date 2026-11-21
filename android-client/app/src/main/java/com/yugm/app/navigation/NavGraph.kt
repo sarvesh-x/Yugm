@@ -215,7 +215,22 @@ fun NavGraph(
                 initialTab = tab,
                 requestedTab = requestedTab,
                 onRequestedTabConsumed = { backStackEntry.savedStateHandle["tab_request"] = null },
-                onProfileUpdated = mainViewModel::validateAndUpdate
+                onProfileUpdated = mainViewModel::validateAndUpdate,
+                userAvatar = mainViewModel.userAvatar,
+                userAvatarType = mainViewModel.userAvatarType,
+                userAvatarParts = mainViewModel.userAvatarPartsJson?.let { raw ->
+                    runCatching {
+                        val parts = org.json.JSONObject(raw)
+                        com.yugm.app.core.model.AvatarPartsPayload(
+                            background = parts.optInt("background", 0),
+                            clothes = parts.optInt("clothes", 0),
+                            head = parts.optInt("head", 0),
+                            mouth = parts.optInt("mouth", 0),
+                            eyes = parts.optInt("eyes", 0),
+                            top = parts.optInt("top", 0)
+                        )
+                    }.getOrNull()
+                }
             )
         }
         discoverNavGraph(

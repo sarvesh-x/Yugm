@@ -46,6 +46,7 @@ dependencies {
     implementation(project(":core:navigation"))
 
     implementation(platform(libs.androidx.compose.bom))
+    implementation(project(":feature:social"))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
@@ -58,6 +59,5 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.timber)
     implementation(libs.coil.compose)
-    implementation(project(":feature:social"))
     testImplementation(libs.junit)
 }

@@ -120,11 +120,13 @@ Dead routes (no composable/callers as audited): `Screen.OtpVerify`, `Screen.User
 - **Geometry:** full-width edge-to-edge surface with a genuine sculpted concave notch around the
   elevated active circle; only the active circle is elevated. Pure math in
   `core/ui/.../BottomDockGeometry.kt` (tab/notch centers, clamped shoulders, circle placement)
-  keeps first/last-tab edges correct and unit-testable. Content bar height 50dp, top cradle padding
-  20dp, active circle 50dp, notch cradle 78dp × 30dp, inactive/active icons 28dp/30dp, selected
-  label 11sp (active destination only), minimum 48dp touch targets. Outer top-left/right corners are
-  square (no rounded corners) for a continuous full-width surface. The circle's center sits on the
-  surface top boundary so the lower half is embedded in the cradle rather than floating above it.
+  keeps first/last-tab edges correct and unit-testable. Content bar height 55dp, top cradle padding
+  28dp, active circle 50dp (2dp border), circular cradle radius 28.5dp (3.5dp clearance) with 22dp
+  shoulders at a 38° junction — roughly an 89dp opening and 28.5dp depth at full width, scaled
+  symmetrically near first/last tabs. Inactive/active icons 30dp/32dp, selected label 12sp (active
+  destination only), minimum 48dp touch targets. Outer top-left/right corners are square (no rounded
+  corners) for a continuous full-width surface. The circle's center sits on the surface top boundary
+  so the lower half is embedded in the cradle rather than floating above it.
   Active indicator uses the signature brand gradient (purple→pink). Icon-to-label gap is 2dp.
 - **Icon system:** rounded custom vector family in `core/ui/.../BottomDockIcons.kt` (game controller,
   studio mic, compass, chat, user silhouette) with outlined inactive and filled active
@@ -160,19 +162,23 @@ layers:
 ### Single coordinate system
 
 All dimensions are defined once at the top of `YugmBottomDock`:
-- `topPadding` (20dp): space above bar for elevated circle
-- `barHeight` (50dp): bar content height (icons + labels)
-- `activeCircleSize` (50dp): elevated active indicator
-- `activeIconSize` (30dp): icon inside active circle
-- `inactiveIconSize` (28dp): inactive tab icons
-- `notchWidth` (78dp): horizontal span of concave cradle
-- `notchDepth` (30dp): depth of concave cradle
-- `labelSlotHeight` (14dp): reserved label space
-- `iconLabelGap` (4dp): gap between icon and label
+- `topPadding` (28dp): space above the surface for the elevated circle (`activeCircleSize / 2 + 3dp`)
+- `barHeight` (`YugmBottomDockBarHeight`, 55dp): painted bar content height (icons + labels)
+- `activeCircleSize` (50dp): elevated active indicator with a 2dp border
+- `activeIconSize` (32dp): icon inside active circle
+- `inactiveIconSize` (30dp): inactive tab icons
+- `notchClearance` (3.5dp): clearance between indicator and cradle
+- `cradleRadius` (28.5dp): derived from `activeCircleSize / 2 + notchClearance`
+- `shoulderWidth` (22dp): G1 shoulder run per side (`CRADLE_THETA_RAD` = 38°)
+- `notchOpening` (~89dp full width): `2 × (cradleRadius × cos38° + shoulderWidth)`, scaled symmetrically at edges
+- `notchDepth` (28.5dp): cradle radius below the flat surface top edge
+- `cradleToLabelGap` (4dp): gap below the cradle's deepest point
+- `labelSlotHeight` (14dp): reserved label space at 12sp
+- `bottomClearance` (8dp): gap below the label
 
 Regions:
-- `[0, topPadding)`: cradle zone — active circle center at y=topPadding
-- `[topPadding, topPadding+barHeight)`: bar content area (icons + labels)
+- `[0, topPadding)`: transparent protrusion zone above the surface; circle center at y=topPadding
+- `[topPadding, topPadding+barHeight)`: painted bar area; cradle cut into its upper 28.5dp
 - `[topPadding+barHeight, totalDockHeight)`: system nav inset (filled by surface color)
 
 ### Compose Previews
@@ -181,17 +187,13 @@ Previews are included for all 5 selected states in both light and dark themes:
 - `PreviewDockLightDiscover`, `PreviewDockDarkChat`, `PreviewDockLightArcade`,
   `PreviewDockDarkParty`, `PreviewDockLightProfile`
 
-### Notch geometry improvement suggestions (when active icon looks floating)
+### Notch geometry invariants
 
-When the active icon appears to float rather than embed in the cradle, consider:
-
-1. **Increase notch depth** (30dp → 34-36dp) so the cradle wraps more of the circle's lower half.
-2. **Reduce circle elevation** (shadow 1.5dp/3dp → 1dp/2dp) to decrease floating perception.
-3. **Adjust circle vertical offset** — center should sit on surface top boundary (`circleY = topPadding - circleSize/2`).
-4. **Widen the notch** (78dp → 82-84dp) for more clearance around the 50dp circle.
-5. **Add subtle inner shadow** on the concave curve for depth/recessed feel.
-6. **Animate notch depth** during transitions (2-4dp extra) for a "breathing" cradle effect.
-7. **Align circle bottom with cradle deepest point** for a "sitting in pocket" look.
+- Cradle radius, opening, and depth are derived from the active indicator; do not hardcode a separate notch width/depth.
+- Shoulders use G1-continuous cubics; `CRADLE_THETA_RAD` (38°) must stay in sync between `CurvedDockShape.createOutline` and `CurvedDockShape.createNotchOpeningPath`.
+- Edge scaling shrinks both shoulders symmetrically so first/last tabs never clip the cradle.
+- Keep the circle center on the surface top boundary (`circleY = topPadding - circleSize/2`) and the notch opening transparent.
+- The dock shadow is clipped against the notch opening path; never draw a rectangular shadow overlay over the cradle.
 
 ## Accessibility
 

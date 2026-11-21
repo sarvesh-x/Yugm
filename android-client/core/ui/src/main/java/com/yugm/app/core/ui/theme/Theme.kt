@@ -89,6 +89,11 @@ data class YugmColors(
     val onboardingGlowPink: Color = OnboardingGlowPink,
     val onboardingTextPrimary: Color = OnboardingTextPrimaryLight,
     val onboardingTextSecondary: Color = OnboardingTextSecondaryLight,
+    val bottomDockSurface: Color = Color(0xFFFCF9FF),
+    val bottomDockInactiveContent: Color = Color(0xFF62586D),
+    val bottomDockActiveContent: Color = Color.White,
+    val bottomDockOutline: Color = Color(0x66D9CDDF),
+    val bottomDockShadow: Color = Color(0x1A8A5CFF),
 )
 
 /** Shared message colors keep direct and clan conversations visually aligned. */
@@ -123,6 +128,11 @@ val DarkYugmColors = YugmColors(
     onboardingGlowPink = Color(0xFF3D192C),
     onboardingTextPrimary = Color(0xFFF8F4FC),
     onboardingTextSecondary = Color(0xFFBDB3CA),
+    bottomDockSurface = Color(0xFF191624),
+    bottomDockInactiveContent = Color(0xFFBDB3CA),
+    bottomDockActiveContent = Color.White,
+    bottomDockOutline = Color(0x33FFFFFF),
+    bottomDockShadow = Color(0x26000000),
 )
 
 val LightYugmColors = YugmColors(
@@ -147,6 +157,11 @@ val LightYugmColors = YugmColors(
     onboardingGlowPink = Color(0xFFF9E7F1),
     onboardingTextPrimary = Color(0xFF20182A),
     onboardingTextSecondary = Color(0xFF62586D),
+    bottomDockSurface = Color(0xFFFCF9FF),
+    bottomDockInactiveContent = Color(0xFF62586D),
+    bottomDockActiveContent = Color.White,
+    bottomDockOutline = Color(0x40D9CDDF),
+    bottomDockShadow = Color(0x148A5CFF),
 )
 
 val LocalYugmColors = staticCompositionLocalOf { DarkYugmColors }
