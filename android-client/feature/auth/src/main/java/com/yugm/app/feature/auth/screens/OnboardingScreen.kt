@@ -45,9 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import com.yugm.app.core.ui.theme.*
-import com.yugm.app.core.ui.avatar.GeneratedAvatar
-import com.yugm.app.core.ui.avatar.AvatarDescriptor
-import com.yugm.app.core.ui.avatar.AvatarParts
+
 import com.yugm.app.feature.auth.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -401,10 +399,9 @@ private fun MatchVibeIllustration(compact: Boolean) {
                 .border(2.dp, Color.White, RoundedCornerShape(18.dp))
                 .size(width = if (compact) 92.dp else 108.dp, height = if (compact) 122.dp else 142.dp)
         ) {
-            GeneratedAvatar(
-                descriptor = AvatarDescriptor(parts = AvatarParts(background = 5, clothes = 12, head = 8, mouth = 3, eyes = 17, top = 22)),
-                size = if (compact) 92.dp else 108.dp,
-                shape = RoundedCornerShape(18.dp),
+            Image(
+                painter = painterResource(id = R.drawable.ic_onboarding_avatar_1),
+                contentDescription = null,
                 modifier = Modifier.fillMaxSize()
             )
             // Gaming badge
@@ -428,10 +425,9 @@ private fun MatchVibeIllustration(compact: Boolean) {
                 .border(2.dp, Color.White, RoundedCornerShape(18.dp))
                 .size(width = if (compact) 92.dp else 108.dp, height = if (compact) 122.dp else 142.dp)
         ) {
-            GeneratedAvatar(
-                descriptor = AvatarDescriptor(parts = AvatarParts(background = 10, clothes = 20, head = 15, mouth = 7, eyes = 25, top = 30)),
-                size = if (compact) 92.dp else 108.dp,
-                shape = RoundedCornerShape(18.dp),
+            Image(
+                painter = painterResource(id = R.drawable.ic_onboarding_avatar_3),
+                contentDescription = null,
                 modifier = Modifier.fillMaxSize()
             )
             // Travel badge
@@ -454,10 +450,9 @@ private fun MatchVibeIllustration(compact: Boolean) {
                 .border(2.5.dp, Color.White, RoundedCornerShape(20.dp))
                 .size(width = if (compact) 102.dp else 122.dp, height = if (compact) 134.dp else 156.dp)
         ) {
-            GeneratedAvatar(
-                descriptor = AvatarDescriptor(parts = AvatarParts(background = 15, clothes = 28, head = 22, mouth = 12, eyes = 33, top = 38)),
-                size = if (compact) 102.dp else 122.dp,
-                shape = RoundedCornerShape(20.dp),
+            Image(
+                painter = painterResource(id = R.drawable.ic_onboarding_avatar_2),
+                contentDescription = null,
                 modifier = Modifier.fillMaxSize()
             )
             // Music badge
@@ -579,12 +574,12 @@ private fun FindPeopleIllustration(compact: Boolean) {
         }
 
         // 5 Orbital Avatars positioned around the central waveform
-        val avatarDescriptors = listOf(
-            AvatarDescriptor(parts = AvatarParts(background = 5, clothes = 12, head = 8, mouth = 3, eyes = 17, top = 22)),
-            AvatarDescriptor(parts = AvatarParts(background = 10, clothes = 20, head = 15, mouth = 7, eyes = 25, top = 30)),
-            AvatarDescriptor(parts = AvatarParts(background = 20, clothes = 35, head = 30, mouth = 18, eyes = 40, top = 45)),
-            AvatarDescriptor(parts = AvatarParts(background = 15, clothes = 28, head = 22, mouth = 12, eyes = 33, top = 38)),
-            AvatarDescriptor(parts = AvatarParts(background = 25, clothes = 42, head = 38, mouth = 25, eyes = 47, top = 5)),
+        val avatarResources = listOf(
+            R.drawable.ic_onboarding_avatar_1,
+            R.drawable.ic_onboarding_avatar_2,
+            R.drawable.ic_onboarding_avatar_4,
+            R.drawable.ic_onboarding_avatar_3,
+            R.drawable.ic_onboarding_avatar_5,
         )
         val angles = listOf(-90.0, -18.0, 54.0, 126.0, 198.0) // 5 points around 360 deg
 
@@ -603,10 +598,9 @@ private fun FindPeopleIllustration(compact: Boolean) {
                     .border(2.dp, Color.White, CircleShape)
                     .size(if (compact) 44.dp else 52.dp)
             ) {
-                GeneratedAvatar(
-                    descriptor = avatarDescriptors[index],
-                    size = if (compact) 44.dp else 52.dp,
-                    shape = CircleShape,
+                Image(
+                    painter = painterResource(id = avatarResources[index]),
+                    contentDescription = null,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -713,12 +707,12 @@ private fun ShareMomentsIllustration(compact: Boolean) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             val avatars = listOf(
-                AvatarDescriptor(parts = AvatarParts(background = 5, clothes = 12, head = 8, mouth = 3, eyes = 17, top = 22)),
-                AvatarDescriptor(parts = AvatarParts(background = 10, clothes = 20, head = 15, mouth = 7, eyes = 25, top = 30)),
-                AvatarDescriptor(parts = AvatarParts(background = 20, clothes = 35, head = 30, mouth = 18, eyes = 40, top = 45)),
-                AvatarDescriptor(parts = AvatarParts(background = 30, clothes = 3, head = 45, mouth = 32, eyes = 8, top = 12)),
+                R.drawable.ic_onboarding_avatar_1,
+                R.drawable.ic_onboarding_avatar_2,
+                R.drawable.ic_onboarding_avatar_4,
+                R.drawable.ic_onboarding_avatar_6,
             )
-            avatars.forEach { avatar ->
+            avatars.forEach { resId ->
                 Box(
                     modifier = Modifier
                         .shadow(4.dp, CircleShape)
@@ -727,10 +721,9 @@ private fun ShareMomentsIllustration(compact: Boolean) {
                         .border(1.5.dp, Color.White, CircleShape)
                         .size(if (compact) 32.dp else 36.dp)
                 ) {
-                    GeneratedAvatar(
-                        descriptor = avatar,
-                        size = if (compact) 32.dp else 36.dp,
-                        shape = CircleShape,
+                    Image(
+                        painter = painterResource(id = resId),
+                        contentDescription = null,
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -822,10 +815,9 @@ private fun BuildBondsIllustration(compact: Boolean) {
                 .border(2.dp, Color.White, RoundedCornerShape(20.dp))
                 .size(width = if (compact) 105.dp else 125.dp, height = if (compact) 135.dp else 160.dp)
         ) {
-            GeneratedAvatar(
-                descriptor = AvatarDescriptor(parts = AvatarParts(background = 20, clothes = 35, head = 30, mouth = 18, eyes = 40, top = 45)),
-                size = if (compact) 105.dp else 125.dp,
-                shape = RoundedCornerShape(20.dp),
+            Image(
+                painter = painterResource(id = R.drawable.ic_onboarding_avatar_4),
+                contentDescription = null,
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -841,10 +833,9 @@ private fun BuildBondsIllustration(compact: Boolean) {
                 .border(2.dp, Color.White, RoundedCornerShape(20.dp))
                 .size(width = if (compact) 105.dp else 125.dp, height = if (compact) 135.dp else 160.dp)
         ) {
-            GeneratedAvatar(
-                descriptor = AvatarDescriptor(parts = AvatarParts(background = 30, clothes = 3, head = 45, mouth = 32, eyes = 8, top = 12)),
-                size = if (compact) 105.dp else 125.dp,
-                shape = RoundedCornerShape(20.dp),
+            Image(
+                painter = painterResource(id = R.drawable.ic_onboarding_avatar_5),
+                contentDescription = null,
                 modifier = Modifier.fillMaxSize()
             )
         }
