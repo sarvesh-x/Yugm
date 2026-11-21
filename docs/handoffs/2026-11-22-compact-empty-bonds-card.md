@@ -21,4 +21,4 @@ When at least one active bond or pending request exists, the existing profile ca
 
 - No device/emulator visual QA of the empty card: exact 76–84dp height, spacing, light/dark/system themes, font scaling, narrow widths, TalkBack labels, and the **Add bond** tap target.
 - Full lint/assemble and compose/preview rendering were not run.
-- Changes are uncommitted. Do not commit/push/deploy without explicit authorization.
+- Committed and pushed as `e182854`; no deploy was performed.
