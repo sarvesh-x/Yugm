@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -433,17 +434,13 @@ fun ProfileDetailScreen(
 
                 if (isOwnProfile) {
                     item {
-                        GlassCard(Modifier.fillMaxWidth()) {
-                            Text("Clan details", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp)
-                            Spacer(Modifier.height(10.dp))
-                            val clan = viewModel.ownClan
-                            if (clan == null) {
-                                Text("User has not joined clan yet", color = TextMuted, fontSize = 13.sp)
+                        val clan = viewModel.ownClan
+                        if (clan == null) {
+                            ClanEmptyCard(onExplore = onOpenClanList)
+                        } else {
+                            GlassCard(Modifier.fillMaxWidth()) {
+                                Text("Clan details", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp)
                                 Spacer(Modifier.height(10.dp))
-                                OutlinedButton(onClick = onOpenClanList) {
-                                    Text("Explore clans", color = TextPrimary)
-                                }
-                            } else {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Avatar(clan.name.take(1).uppercase(), 58, clan.avatar, avatarType = clan.avatarType, avatarParts = clan.avatarParts)
                                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -863,6 +860,36 @@ fun ProfileDetailScreen(
     }
 }
 }
+}
+
+@Composable
+private fun ClanEmptyCard(onExplore: () -> Unit) {
+    val colors = LocalYugmColors.current
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 18.dp,
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Clans", color = colors.textPrimary,
+                    fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Spacer(Modifier.height(4.dp))
+                Text("Find a clan that feels like home.", color = colors.textSecondary,
+                    fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            Spacer(Modifier.width(12.dp))
+            Button(onClick = onExplore, shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp)) {
+                Icon(Icons.Default.Explore, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Explore clans", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            }
+        }
+    }
 }
 
 @Composable

@@ -1,5 +1,19 @@
 ﻿# Development progress
 
+## 2026-11-22 -- Compact empty Clans card (YUGM-CLAN-EMPTY-021)
+
+- **Android:** the own-profile clan card's empty state now mirrors the compact Bonds card: a horizontal `GlassCard` (18dp radius, ~76–84dp tall) with a **Clans** title, "Find a clan that feels like home." subtitle, and a small themed **Explore clans** primary button. Removed the "User has not joined clan yet" text, outlined button, and tall stacked layout. The populated clan card and both navigation callbacks are unchanged.
+- **Docs:** `DESIGN_SYSTEM.md`, `CURRENT_TASK.md`, and a new [handoff](handoffs/2026-11-22-compact-empty-clans-card.md).
+- **Verification:** Android Studio JBR `:feature:profile:compileDebugKotlin --console=plain --max-workers=2` BUILD SUCCESSFUL (pre-existing deprecation warnings only); `git diff --check` clean (LF/CRLF notices only).
+- **Remaining:** device/emulator visual QA of the empty card in light/dark/system themes, font scaling, narrow widths, TalkBack, and the button tap target; full lint/assemble. No backend changes; not committed.
+
+## 2026-11-22 -- Compact empty Bonds card (YUGM-BONDS-EMPTY-020)
+
+- **Android:** the completely empty own-profile Bonds state now renders a single compact horizontal `GlassCard` (18dp radius, ~76–84dp tall) with the **Bonds** title, inline `0/capacity` counter, subtitle "Add people you feel connected to.", and a small theme-colored **Add bond** button. Removed the centered heart icon, "Add your bonds" heading, separate pill/badge, reserved slots, and decorative padding. Populated/pending states keep the existing three-slot layout; invite/accept/manage flows are untouched. Repurposed `bonds_profile_empty` and removed the unused `bonds_profile_hint`.
+- **Docs:** `DESIGN_SYSTEM.md`, `CURRENT_TASK.md`, and a new [handoff](handoffs/2026-11-22-compact-empty-bonds-card.md).
+- **Verification:** Android Studio JBR `:feature:profile:compileDebugKotlin --console=plain --max-workers=2` BUILD SUCCESSFUL (pre-existing deprecation warnings only); `git diff --check` clean (LF/CRLF notices only).
+- **Remaining:** device/emulator visual QA of the empty card in light/dark/system themes, font scaling, narrow widths, TalkBack, and the button tap target; full lint/assemble. No backend changes; not committed.
+
 ## 2026-11-22 -- Five worn badges in the profile header (YUGM-BADGE-SLOTS-019)
 
 - **Backend:** raised the authoritative worn-badge cap from 3 to 5 for automatic grants, stored `showcasedBadgeIds`, validation, and public reads. Badge responses now expose `capacity`; `/experience` mutations invalidate `TASKS` and `PROFILE` for the actor and broadcast topic-only `PROFILE` to connected viewers. Hardening test now covers six earned badges, automatic wear capped at five, invalid sixth/duplicate/unearned selections, and public/persisted capacity and order.

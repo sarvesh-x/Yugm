@@ -437,6 +437,11 @@ private fun OwnBondsSection(
     val count = activeBondCount(slots)
     val hasAny = slots.any { it != ProfileBondSlot.Empty }
 
+    if (!hasAny && error == null) {
+        BondsEmptyCard(count, home.capacity, onAdd = { onManage("") })
+        return
+    }
+
     GlassCard(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(sectionTitle, modifier = Modifier.weight(1f), color = colors.textPrimary,
@@ -454,8 +459,6 @@ private fun OwnBondsSection(
         Spacer(Modifier.height(10.dp))
         if (error != null) {
             BondsLoadError(error, onRetry)
-        } else if (!hasAny) {
-            BondsEmpty(home.capacity, colors, onAdd = { onManage("") })
         } else {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 slots.forEachIndexed { index, slot ->
@@ -534,24 +537,37 @@ private fun ProfileBondSlotCard(
 }
 
 @Composable
-private fun BondsEmpty(capacity: Int, colors: YugmColors, onAdd: () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(46.dp).clip(CircleShape).background(colors.primary.copy(alpha = 0.10f)),
-            contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.FavoriteBorder, null, tint = colors.primary, modifier = Modifier.size(22.dp))
-        }
-        Spacer(Modifier.height(9.dp))
-        Text(stringResource(R.string.bonds_profile_empty), color = colors.textPrimary,
-            fontWeight = FontWeight.Bold, fontSize = 15.sp)
-        Spacer(Modifier.height(3.dp))
-        Text(stringResource(R.string.bonds_profile_hint, capacity), color = colors.textSecondary,
-            fontSize = 12.sp, textAlign = TextAlign.Center, lineHeight = 16.sp)
-        Spacer(Modifier.height(10.dp))
-        Button(onClick = onAdd, shape = RoundedCornerShape(12.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp)) {
-            Icon(Icons.Default.Add, null, modifier = Modifier.size(17.dp))
-            Spacer(Modifier.width(5.dp))
-            Text(stringResource(R.string.bonds_add), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+private fun BondsEmptyCard(count: Int, capacity: Int, onAdd: () -> Unit) {
+    val colors = LocalYugmColors.current
+    val sectionTitle = stringResource(R.string.bonds_profile_section)
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 18.dp,
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(sectionTitle, color = colors.textPrimary,
+                        fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("$count/$capacity", color = colors.textSecondary,
+                        fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(stringResource(R.string.bonds_profile_empty), color = colors.textSecondary,
+                    fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            Spacer(Modifier.width(12.dp))
+            Button(onClick = onAdd, shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp)) {
+                Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(R.string.bonds_add), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            }
         }
     }
 }

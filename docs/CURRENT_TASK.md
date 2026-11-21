@@ -1,5 +1,21 @@
 ﻿# Current task
 
+## YUGM-CLAN-EMPTY-021 - Compact empty Clans card on the profile
+
+- **Scope:** apply the same compact horizontal glass-card treatment as the Bonds empty state to the own-profile **Clan details** card when the user has no clan. The user confirmed this target over the separate Clans screen tabs. Populated clan state, `onOpenClan`/`onOpenClanList` callbacks, and view-model loading are unchanged.
+- **Changes applied (Android):** `ProfileDetailScreen` now branches on `viewModel.ownClan` before rendering the card: `null` renders the new private `ClanEmptyCard`, otherwise the existing populated `GlassCard` is unchanged. `ClanEmptyCard` mirrors `BondsEmptyCard`: `GlassCard(cornerRadius = 18.dp, contentPadding = 16dp horizontal / 14dp vertical)` with a centered `Row(heightIn(min = 48.dp))` (~76dp total, expandable for font scaling), a left **Clans** title + "Find a clan that feels like home." subtitle, and a right compact themed `Button` with an Explore icon and "Explore clans" label wired to `onOpenClanList`. Removed the "User has not joined clan yet" text, the outlined button, and the tall stacked layout.
+- **Verification (run):** Android Studio JBR, `.\gradlew.bat :feature:profile:compileDebugKotlin --console=plain --max-workers=2` — BUILD SUCCESSFUL (only pre-existing `LocalClipboardManager` / `ArrowBack` deprecation warnings). `git diff --check` clean (LF/CRLF notices only).
+- **Not run / remaining:** device/emulator visual QA of the empty card in light/dark/system themes, font scaling, narrow widths, TalkBack, and the button tap target; full lint/assemble. No backend/API changes. Not committed.
+- **Status:** Implemented and compile-verified in the working tree; runtime visual sign-off pending. Handoff: [2026-11-22 compact empty Clans card](handoffs/2026-11-22-compact-empty-clans-card.md).
+
+## YUGM-BONDS-EMPTY-020 - Compact empty Bonds card on the profile
+
+- **Scope:** optimize only the completely empty own-profile Bonds state. Show a compact horizontal glass card (~76–84dp) with the **Bonds** title, an inline `0/3` counter, the subtitle "Add people you feel connected to.", and a small primary-themed **+ Add bond** button. Remove the centered heart icon, "Add your bonds" heading, separate counter badge/pill, centered layout, reserved empty slots, and decorative padding. Keep the existing populated layout (max three server-sized slots), all invite/accept/pending/manage behavior, and theme tokens.
+- **Changes applied (Android):** `OwnBondsSection` short-circuits the empty/error-free case to a new `BondsEmptyCard` instead of the header-plus-empty-body structure; no `ProfileBondSlotCard` slots are composed when empty. `BondsEmptyCard` uses `GlassCard(cornerRadius = 18.dp, contentPadding = 16dp horizontal / 14dp vertical)` with a centered `Row(heightIn(min = 48.dp))`, inline `count/capacity` text, the new subtitle string, and a compact standard `Button` (current theme colors, white/contrasting foreground). Repurposed `bonds_profile_empty` to the new subtitle and removed the unused `bonds_profile_hint`.
+- **Verification (run):** Android Studio JBR, `.\gradlew.bat :feature:profile:compileDebugKotlin --console=plain --max-workers=2` — BUILD SUCCESSFUL (only pre-existing `hiltViewModel` / `HelpOutline` deprecation warnings). `git diff --check` clean (LF/CRLF notices only).
+- **Not run / remaining:** device/emulator visual QA of the empty card at 76–84dp, light/dark/system themes, font scaling, narrow widths, TalkBack, and the Add bond tap target; full lint/assemble. No backend/API changes. Not committed.
+- **Status:** Implemented and compile-verified in the working tree; runtime visual sign-off pending. Handoff: [2026-11-22 compact empty Bonds card](handoffs/2026-11-22-compact-empty-bonds-card.md).
+
 ## YUGM-BADGE-SLOTS-019 - Five worn badges in the profile header
 
 - **Scope:** make a worn badge an earned cosmetic shown as a centered horizontal icon row on the profile header under the ID/level label and above the description. Increase worn capacity from three to five across server rules, API/persistence, Achievements slots, and profile rendering. Preserve the **Your Yugm → Achievements** shortcut; do not restore the removed Achievements card.
