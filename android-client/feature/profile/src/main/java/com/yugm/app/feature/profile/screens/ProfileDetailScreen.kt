@@ -219,7 +219,7 @@ fun ProfileDetailScreen(
 
     com.yugm.app.core.ui.components.AutomaticSyncEffect(userId, token, topics = setOf(com.yugm.app.core.api.SyncTopic.PROFILE, com.yugm.app.core.api.SyncTopic.WALLET, com.yugm.app.core.api.SyncTopic.ROOMS), enabled = token.isNotBlank() && !showEditProfileScreen) {
         viewModel.loadProfile(token, userId, force = true).join()
-        runCatching { YugmApi.getUserBadges(token, userId) }.onSuccess { showcasedBadges = it }
+        if (!isOwnProfile) runCatching { YugmApi.getUserBadges(token, userId) }.onSuccess { showcasedBadges = it }
         if (token.isNotBlank()) {
             runCatching { VibeApi.match(token, userId) }.onSuccess { vibeMatch = it }
         }
@@ -377,17 +377,22 @@ fun ProfileDetailScreen(
                 }
 
                 item {
-                    com.yugm.app.feature.profile.bonds.ProfileBondsSection(token, userId, isOwnProfile, onOpenBonds, onBondPartnerProfile)
+                    com.yugm.app.feature.profile.bonds.ProfileBondsSection(
+                        token = token,
+                        userId = userId,
+                        own = isOwnProfile,
+                        onManage = onOpenBonds,
+                        onProfile = onBondPartnerProfile
+                    )
                 }
 
-                if (isOwnProfile || showcasedBadges.isNotEmpty()) item {
+                if (!isOwnProfile && showcasedBadges.isNotEmpty()) item {
                     GlassCard(Modifier.fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(if (isOwnProfile) "Achievements & badges" else "Badges",
-                                modifier = Modifier.weight(1f), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                            Text("Badges", modifier = Modifier.weight(1f), color = TextPrimary,
+                                fontWeight = FontWeight.Bold, fontSize = 17.sp)
                             com.yugm.app.core.ui.components.WornBadgeRow(showcasedBadges)
-                            if (isOwnProfile) TextButton(onClick = onOpenAchievements) { Text("View") }
                         }
                     }
                 }
@@ -406,6 +411,7 @@ fun ProfileDetailScreen(
                             onStore = onOpenStore,
                             onVip = onOpenVip,
                             onTasks = onOpenTasks,
+                            onAchievements = onOpenAchievements,
                             onLevel = onOpenLevel,
                             onWallet = onOpenWallet,
                             onPayments = onOpenPayments,
@@ -1500,6 +1506,7 @@ private fun ProfileMenuCard(
     onStore: () -> Unit,
     onVip: () -> Unit,
     onTasks: () -> Unit,
+    onAchievements: () -> Unit,
     onLevel: () -> Unit,
     onWallet: () -> Unit,
     onPayments: () -> Unit,
@@ -1509,7 +1516,7 @@ private fun ProfileMenuCard(
     val actions = listOf(
         Triple("🎨", "Customize", onCustomize), Triple("🛍️", "Store", onStore),
         Triple("👑", "VIP", onVip), Triple("⭐", "Level", onLevel),
-        Triple("✅", "Tasks", onTasks),
+        Triple("✅", "Tasks", onTasks), Triple("🏆", "Achievements", onAchievements),
         Triple("💰", "Wallet", onWallet), Triple("💳", "Payments", onPayments),
         Triple("🎒", "Inventory", onInventory), Triple("⚙️", "Settings", onSettings)
     )

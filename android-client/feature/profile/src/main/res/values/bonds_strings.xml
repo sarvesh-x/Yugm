@@ -1,9 +1,15 @@
 <resources>
     <string name="bonds_title">My Bonds</string>
     <string name="bonds_center">Relationship Center</string>
-    <string name="bonds_close_friends">Close friends</string>
+    <string name="bonds_profile_section">Bonds</string>
     <string name="bonds_rankings">Bond rankings</string>
     <string name="bonds_help">About Bonds</string>
     <string name="bonds_invite">Invite</string>
     <string name="bonds_manage">Manage</string>
+    <string name="bonds_add">Add bond</string>
+    <string name="bonds_request_received">Request</string>
+    <string name="bonds_request_sent">Sent</string>
+    <string name="bonds_profile_empty">Add your bonds</string>
+    <string name="bonds_profile_hint">Invite up to %1$d people. A bond starts when they accept.</string>
+    <string name="bonds_try_again">Try again</string>
 </resources>

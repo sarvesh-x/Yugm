@@ -9,6 +9,7 @@ import { chatLimiter } from "../middleware/rateLimit.js";
 import { requireNotChatRestricted } from "../middleware/requireSafety.js";
 import { validateBody } from "../middleware/validate.js";
 import { Block } from "../models/Block.js";
+import { Bond } from "../models/Bond.js";
 import { DirectMessage } from "../models/DirectMessage.js";
 import { ConversationMute } from "../models/ConversationMute.js";
 import { Follow } from "../models/Follow.js";
@@ -55,17 +56,18 @@ async function handlePublicProfile(identifier: string, isUsername: boolean, req:
 
   // Relationship counters on User are denormalized and can be stale after
   // legacy data imports or account cleanup. Read the actual relationship rows.
-  const [followersCount, followingCount, friendsCount] = await Promise.all([
+  const [followersCount, followingCount, friendsCount, bondsCount] = await Promise.all([
     Follow.countDocuments({ followingId: user._id }),
     Follow.countDocuments({ followerId: user._id }),
     Friendship.countDocuments({
       status: "ACCEPTED",
       $or: [{ userId: user._id }, { friendId: user._id }]
-    })
+    }),
+    Bond.countDocuments({ users: user._id, status: "ACTIVE" })
   ]);
 
   let isFollowing = false;
-  let isCloseFriend = false;
+  let isBonded = false;
   if (req.user) {
     const callerId = req.user.id;
     const targetId = user._id.toString();
@@ -79,8 +81,8 @@ async function handlePublicProfile(identifier: string, isUsername: boolean, req:
 
     if (callerId !== targetId) {
       isFollowing = Boolean(await Follow.exists({ followerId: callerId, followingId: targetId }));
-      const closeFriendIds = (req.user.closeFriendIds ?? []).map((id: any) => id.toString());
-      isCloseFriend = closeFriendIds.includes(targetId);
+      // The Bond collections are the single source of truth for the inner circle.
+      isBonded = Boolean(await Bond.exists({ users: { $all: [callerId, targetId] }, status: "ACTIVE" }));
     }
   }
 
@@ -108,7 +110,8 @@ async function handlePublicProfile(identifier: string, isUsername: boolean, req:
       followersCount,
       followingCount,
       isFollowing,
-      isCloseFriend,
+      isBonded,
+      bondsCount,
       friendsCount,
       isOnline: isUserOnline(user._id.toString()),
       verificationLevel,
@@ -337,7 +340,7 @@ function publicUser(user: any) {
     hobbies: user.hobbies,
     languages: user.languages,
     profileMedia: user.profileMedia,
-    closeFriendsCount: user.closeFriendIds?.length ?? 0,
+    bondsCount: user.bondsCount ?? 0,
     clanId: user.clanId?.toString?.() ?? user.clanId,
     isOnline: user.isOnline ?? isUserOnline(user._id?.toString?.() ?? user.id),
     city: user.city,
@@ -356,7 +359,7 @@ function publicUser(user: any) {
     datingAgeMin: user.datingAgeMin,
     datingAgeMax: user.datingAgeMax,
     isFollowing: user.isFollowing,
-    isCloseFriend: user.isCloseFriend, isVerified: Boolean(user.isVerified), verificationLevel: user.verificationLevel ?? (user.isVerified ? "BASIC" : "NONE"), showcasedBadgeIds: user.showcasedBadgeIds ?? []
+    isBonded: user.isBonded, isVerified: Boolean(user.isVerified), verificationLevel: user.verificationLevel ?? (user.isVerified ? "BASIC" : "NONE"), showcasedBadgeIds: user.showcasedBadgeIds ?? []
   };
 }
 
@@ -434,11 +437,12 @@ usersRouter.delete("/me", asyncHandler(async (req: AuthRequest, res) => {
 
 usersRouter.patch("/me", validateBody(profileSchema.partial()), asyncHandler(async (req: AuthRequest, res) => {
   const { user, xpGrant } = await updateProfileForUser(req.user!.id, req.body);
+  const bondsCount = await Bond.countDocuments({ users: req.user!._id, status: "ACTIVE" });
   // This response is self-only, so include the email and verification state
   // that `publicUser` deliberately omits for other users' profiles. The Android
   // client keeps the cached signed-in identity from this payload.
   sendOk(res, {
-    user: { ...publicUser(user), email: user?.email, emailVerified: Boolean(user?.emailVerified) },
+    user: { ...publicUser({ ...user, bondsCount }), email: user?.email, emailVerified: Boolean(user?.emailVerified) },
     xpGrant
   });
 }));
@@ -448,16 +452,10 @@ usersRouter.get("/me/friends", requireAuth, asyncHandler(async (req: AuthRequest
     .populate("userId", "name username avatar avatarType avatarParts city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .populate("friendId", "name username avatar avatarType avatarParts city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
     .sort({ updatedAt: -1 }).limit(100).lean();
-  const users = rows.map((row: any) => row.userId?._id?.toString() === req.user!.id ? row.friendId : row.userId).filter(Boolean);
-  sendOk(res, { users });
-}));
-
-usersRouter.get("/me/close-friends", asyncHandler(async (req: AuthRequest, res) => {
-  const user = await User.findById(req.user!.id)
-    .populate("closeFriendIds", "name username avatar avatarType avatarParts city activeCosmetics vipTier vipExpiresAt xp level levelTitle")
-    .select("closeFriendIds")
-    .lean();
-  const users = (user?.closeFriendIds ?? []).filter(Boolean);
+  const users = rows
+    .map((row: any) => row.userId?._id?.toString() === req.user!.id ? row.friendId : row.userId)
+    .filter(Boolean)
+    .map((friend: any) => ({ ...friend, isOnline: isUserOnline(friend._id.toString()) }));
   sendOk(res, { users });
 }));
 
@@ -1448,29 +1446,6 @@ usersRouter.post("/:id/follow", asyncHandler(async (req: AuthRequest, res) => {
     ? await grantXp(req.user!.id, "FOLLOW_USER", { targetId: req.params.id, idempotencyKey: `follow:${req.user!.id}:${req.params.id}` })
     : undefined;
   sendOk(res, { following: true, xpGrant });
-}));
-
-usersRouter.post("/:id/close-friend", asyncHandler(async (req: AuthRequest, res) => {
-  if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
-  if (req.params.id === req.user!.id) throw new HttpError(400, "You cannot add yourself as a close friend", ErrorCode.VALIDATION);
-  const blocked = await Block.exists({
-    $or: [
-      { blockerId: req.user!.id, blockedUserId: req.params.id },
-      { blockerId: req.params.id, blockedUserId: req.user!.id }
-    ]
-  });
-  if (blocked) throw new HttpError(403, "Cannot add this user", ErrorCode.FORBIDDEN);
-  const target = await User.findById(req.params.id).select("_id name").lean();
-  if (!target) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
-  await User.findByIdAndUpdate(req.user!.id, { $addToSet: { closeFriendIds: req.params.id } });
-  await createNotification(req.params.id, "SYSTEM", "Close friend", `${req.user!.name} added you as a close friend`, { userId: req.user!.id });
-  sendOk(res, { closeFriend: true });
-}));
-
-usersRouter.delete("/:id/close-friend", asyncHandler(async (req: AuthRequest, res) => {
-  if (!isValidObjectId(req.params.id)) throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
-  await User.findByIdAndUpdate(req.user!.id, { $pull: { closeFriendIds: req.params.id } });
-  sendOk(res, { closeFriend: false });
 }));
 
 usersRouter.delete("/:id/follow", asyncHandler(async (req: AuthRequest, res) => {

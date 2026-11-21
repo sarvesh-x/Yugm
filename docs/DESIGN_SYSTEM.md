@@ -18,7 +18,7 @@ Use `MaterialTheme.colorScheme`, `MaterialTheme.typography`, `YugmColors`, `Yugm
 
 Spacing is not yet a complete central token scale: screens and shared components still contain many direct `dp` values. New shared components should use a consistent spacing scale; a broad migration needs its own scoped task and visual review. Animation should respect `LocalMotionEnabled` where meaningful.
 
-Loading spinners use the single approved Lottie animation via `core/ui`'s `YugmLoadingSpinner` (`res/raw/loading_spinner.json`). Do not introduce new `CircularProgressIndicator` spinners or alternate spinner animations; scale `YugmLoadingSpinner` with its `size`/`modifier` parameters. Determinate `LinearProgressIndicator` progress bars remain separate where they represent real progress.
+Loading spinners use the single approved Lottie animation via `core/ui`'s `YugmLoadingSpinner` (`res/raw/loading_spinner.json`). Do not introduce new `CircularProgressIndicator` spinners or alternate spinner animations. Callers pass a **baseline** `size` (default `YugmLoadingSpinnerDefaults.BaselineSize`, 40dp) and `modifier`; the component multiplies it by the single global `YugmLoadingSpinnerDefaults.SizeScale` (1.25) for the rendered box and Lottie animation. To change spinner size everywhere, change that one global value rather than editing call sites. Determinate `LinearProgressIndicator` progress bars remain separate where they represent real progress.
 
 ## Main tab background architecture
 
@@ -30,6 +30,20 @@ The five primary main tabs (`Arcade`, `Party`, `Discover`, `Chat`, `Profile`) sh
 - **Pastel mesh + grain:** Ambient uses `LocalYugmColors.current.background` as base and brand tokens (`BrandViolet`, `BrandPink`, `BrandOrange`) for low-contrast radial mesh glows positioned relative to the shared root viewport. A cached 128x128 monochrome grain BitmapShader is tiled at very low opacity (light ~2.5%, dark ~2%) and must not be regenerated per frame/recomposition.
 - **Dock tokens:** Bottom dock uses centralized semantic tokens on `YugmColors`: `bottomDockSurface`, `bottomDockInactiveContent`, `bottomDockActiveContent`, `bottomDockOutline`, `bottomDockShadow`. Dock shadow must follow the curved dock shape (including notch) and must not fill the transparent notch or obscure the active indicator.
 - **Performance:** One shared background layer, cached brushes/grain, no per-page background recomposition during pager scroll, no animated/decorative background blobs, no expensive real-time blur.
+
+## Profile Bonds section
+
+The own profile has one unified **Bonds** section backed by `/api/bonds/me`; there is no separate Close Friends card or route.
+
+- **Server-sized slots:** render exactly `capacity` equal-width cards (three by default). Capacity comes from the Bonds response (`YUGM_BOND_SLOTS` / `bondConfig.capacity`), never a second client constant. Active bonds keep their server slot, outgoing requests keep their reserved slot, and incoming requests use the first free display slot. The header pill uses `active/capacity`.
+- **Card content:** occupied slots show a 50dp avatar, bond kind/name, and day/level or request expiry; empty slots show a plus affordance. Manage opens Relationship Center; occupied/pending cards target the existing Bonds flow at that partner, and plus cards open Bonds home without auto-opening the invite sheet.
+- **Tokens only:** card tints derive from `BrandStart`/`BrandMiddle`/`BrandEnd` at low alpha composited over `colors.surfaceElevated`; borders use `colors.border`, and text uses `colors.textPrimary`/`textSecondary` with `colors.primary` for actions. No competing theme, heavy shadows, or local background wrappers.
+- **Transparent host:** the section renders inside the Profile tab's existing `LazyColumn` at the same full width as sibling cards (no extra horizontal padding on top of the list's 16dp content padding); it must not draw a full-screen background, so the shared main-tab ambient background stays visible in light/dark themes.
+- **States:** loading spinner, retryable error, empty invitation, and populated slots reuse shared `YugmLoadingSpinner`, `GlassCard`, and `Avatar`. Other users' profiles keep the existing bond showcase with public cards only.
+
+## Profile achievements access
+
+The own profile does not render the former **Achievements & badges** card. Achievements are reached from the **Your Yugm** profile-shortcut menu via the existing `Achievements` tile, which routes to `Screen.Achievements`. Other users' profiles keep their public **Badges** showcase; that card is not a navigation shortcut.
 
 ## Migration direction
 

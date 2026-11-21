@@ -1,5 +1,36 @@
 ﻿# Development progress
 
+## 2026-11-22 -- Achievements shortcut in Your Yugm (YUGM-PROFILE-SHORTCUT-018)
+
+- **Android:** removed the own-profile **Achievements & badges** card and its self-profile badge fetch. Added a trophy **Achievements** tile to the `Your Yugm` profile-shortcut menu, wired through the existing `onOpenAchievements` callback to `Screen.Achievements`. Other users' public **Badges** showcase remains unchanged.
+- **Docs:** `DESIGN_SYSTEM.md`, `CURRENT_TASK.md`, and new [handoff](handoffs/2026-11-22-profile-achievements-shortcut.md).
+- **Verification:** Android JBR `:feature:profile:compileDebugKotlin` BUILD SUCCESSFUL (pre-existing deprecation warnings only).
+- **Remaining:** device/emulator visual and touch-target QA for the Your Yugm grid. No commit/push/deploy.
+
+## 2026-11-22 -- Unified Bonds profile section (YUGM-BONDS-MERGE-017)
+
+- **Android:** one own-profile Bonds card reads `/bonds/me` and renders server-sized active/pending/empty slots, `active/capacity` pill, Manage, and empty/loading/error/retry. Occupied/pending slots open the Bonds flow at that partner; empty slots open Bonds home. Added `BondsProfileRules` + 4 unit tests. Removed `feature/profile/closefriends`, `Screen.CloseFriends`, its nav/callbacks, and close-friend API wrappers; `closeFriendsCount` became `bondsCount`.
+- **Backend:** removed close-friend routes/service/tests/shared constant and `User.closeFriendIds` (including the block-pair `$pull`). Public profiles derive `bondsCount`/`isBonded` from active `Bond` rows; `PATCH /me` returns authoritative `bondsCount`. OpenAPI replaced removed paths with Bonds endpoints. Breaking API removal was user-approved.
+- **Docs:** `API_CONTRACTS.md`, `DESIGN_SYSTEM.md`, `NAVIGATION_MAP.md`, `bonds.md`, `CURRENT_TASK.md`, prior handoff marked superseded, and new [handoff](handoffs/2026-11-22-bonds-merge.md).
+- **Verification:** backend `tsc` exit 0; API tests 178/178 passed. Android JBR compiles passed (including a final `:feature:profile:compileDebugKotlin` recheck); `BondsProfileRulesTest` 4/4, `core:navigation` 12/12, `MainTabsNavigationTest` 4/4. `git diff --check` clean apart from LF/CRLF notices.
+- **Follow-up fix:** matched the profile Bonds card width to sibling cards by removing duplicate horizontal padding under the LazyColumn padding; removed the `slot` route argument and auto-opened invite sheet so opening Bonds from the profile lands on Bonds home. Android compile and the same targeted unit suites were re-run and passed.
+- **Remaining:** device/emulator visual and realtime QA, MongoDB concurrent-slot integration rerun, OpenAPI YAML parser validation, full lint/assemble. No commit/push/deploy.
+
+## 2026-11-22 -- Profile close-friends section and three-person cap (YUGM-PROFILE-CLOSEFRIENDS-015, superseded)
+
+- **Android:** added `feature/profile/closefriends` with a compact own-profile section (count pill, empty invitation, three equal brand-pastel slots with avatar/name/presence, plus-slots, loading/error/retry) and a management screen (accepted-friend picker, remove confirmation, max-3 guard, immediate refresh after authoritative add/remove). Added `Screen.CloseFriends` secondary route and wired Profile/MainTabs callers; occupied cards open member profiles. Renamed the Bonds profile section/hero to avoid confusion while preserving the Bonds route.
+- **Backend:** shared `closeFriendsLimit = 3`; atomic conditional add enforces the cap, verifies accepted friendship and no block, returns 409 when full, and is idempotent without duplicate notifications. Added transient `isOnline` to close-friend/friend payloads.
+- **Verification:** backend typecheck and full API test suite (182/182) passed; Android JBR compile, `CloseFriendsRulesTest` (7/7), `core:navigation` navigation tests, and `MainTabsNavigationTest` passed.
+- **Docs/handoff:** `API_CONTRACTS.md`, OpenAPI, design system, component registry, navigation map, `CURRENT_TASK.md`, [handoff](handoffs/2026-11-22-close-friends-section.md).
+- **Remaining:** device/emulator visual QA, Mongo integration test for concurrent cap adds; no commit/push/deploy.
+
+## 2026-11-22 -- Global Lottie loading-spinner scale (YUGM-UI-SPINNER-SCALE-016)
+
+- **Source:** `YugmLoadingSpinnerDefaults` now owns `BaselineSize = 40.dp` and global `SizeScale = 1.25f`; `YugmLoadingSpinner` scales every caller-supplied baseline once for the box and animation (16dp renders 20dp, 40dp renders 50dp). No call-site churn; determinate progress bars untouched.
+- **Verification:** Android JBR compile passed; `:core:ui:testDebugUnitTest` 8/8 passed (new spinner test 2/2, geometry tests 6/6).
+- **Docs/handoff:** root/Android design system and component registry updated; [handoff](handoffs/2026-11-22-loading-spinner-global-scale.md).
+- **Remaining:** visual review of dense inline slots and large font scale.
+
 ## 2026-11-21 -- Premium curved-dock polish: geometry, icon family, motion, feedback (YUGM-NAV-DOCK-PREMIUM-013)
 
 - **Source (`core/ui`):** added `BottomDockIcons.kt` — rounded custom vector family (outlined inactive / filled active) for Arcade game controller, Party studio mic, Discover compass, Chat bubble, Profile silhouette. Reworked `YugmBottomDock`: embedded 50dp active circle (center on surface top boundary, 28dp active icon, 2dp ring) inside a genuine 78×36dp concave cradle; selected-only 11sp label in a reserved slot with fade+slide (no clipping/layout shift); inactive icons on a fixed baseline rising/fading into the notch; controlled spring (~300ms)/reduced-motion snap driving notch+circle+icons+label; circular press feedback, chat badge, light haptic; clamped shoulders for first/last tabs/narrow widths.

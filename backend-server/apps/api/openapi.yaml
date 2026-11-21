@@ -952,6 +952,32 @@ paths:
       summary: List friends
       responses:
         "200": { description: Friend list }
+  /users/me/friends:
+    get:
+      tags: [Friends]
+      summary: List accepted friends with transient socket presence
+      responses:
+        "200": { description: Accepted friend list }
+  /bonds/me:
+    get:
+      tags: [Bonds]
+      summary: List the caller's bond slots, active bonds, requests, and server capacity (YUGM_BOND_SLOTS)
+      responses:
+        "200": { description: Bond home state }
+  /bonds/eligible-friends:
+    get:
+      tags: [Bonds]
+      summary: List accepted friends who can receive a bond invitation
+      responses:
+        "200": { description: Eligible friends }
+  /bonds/invitations:
+    post:
+      tags: [Bonds]
+      summary: Invite an accepted friend into a free bond slot (bilateral consent)
+      responses:
+        "200": { description: Invitation created }
+        "403": { description: Pair or slot is ineligible }
+        "409": { description: Slot unavailable or request already pending }
 
   # ─── WATCH PARTY ───────────────────────────────────────
   /rooms/{roomId}/watch-party:

@@ -24,7 +24,8 @@ sealed class Screen(val route: String) {
     }
     object Matches : Screen("matches")
     object Bonds : Screen("bonds?partner={partner}&center={center}") {
-        fun createRoute(partner: String = "", center: Boolean = false) = "bonds?partner=${Uri.encode(partner)}&center=$center"
+        fun createRoute(partner: String = "", center: Boolean = false) =
+            "bonds?partner=${Uri.encode(partner)}&center=$center"
     }
     object ChatList : Screen("chat_list")
     object Chat : Screen("chat/{partnerId}?call={call}") {

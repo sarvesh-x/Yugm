@@ -24,12 +24,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -39,9 +42,16 @@ import com.yugm.app.core.api.AppSync
 import com.yugm.app.core.api.SyncTopic
 import com.yugm.app.core.api.runAutomaticSync
 import com.yugm.app.core.ui.components.Avatar
+import com.yugm.app.core.ui.components.GlassCard
+import com.yugm.app.core.ui.theme.BrandEnd
+import com.yugm.app.core.ui.theme.BrandMiddle
+import com.yugm.app.core.ui.theme.BrandStart
+import com.yugm.app.core.ui.theme.LocalYugmColors
+import com.yugm.app.core.ui.theme.YugmColors
 import com.yugm.app.feature.profile.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -76,7 +86,7 @@ internal fun BondsScreen(
     }
     val home = state.home
     LaunchedEffect(home, initialPartner) {
-        if (home == null || initialPartner.isBlank() || targetHandled) return@LaunchedEffect
+        if (home == null || targetHandled || initialPartner.isBlank()) return@LaunchedEffect
         targetHandled = true
         val existing = home.active.firstOrNull { it.partner.id == initialPartner }
         if (existing != null) {
@@ -203,7 +213,7 @@ private fun BondsDashboard(
                 Image(painterResource(R.drawable.bonds_garden), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize())
                 Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xE01B1733)))))
                 Column(Modifier.align(Alignment.BottomStart).padding(22.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Text(stringResource(R.string.bonds_close_friends), color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.bonds_title), color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     Text("${home.active.size} of ${home.capacity} slots active", color = Color(0xFFEEE2FD), style = MaterialTheme.typography.bodyMedium)
                 }
             }
@@ -337,33 +347,253 @@ internal fun timeOfReset(iso: String): String = localTime(iso)?.let {
 }.orEmpty()
 
 @Composable
-internal fun ProfileBondsSection(token: String, userId: String, own: Boolean, onManage: (String) -> Unit, onProfile: (String) -> Unit) {
-    var showcase by remember(token, userId) { mutableStateOf<BondsShowcase?>(null) }
-    LaunchedEffect(token, userId) {
-        AppSync.changes(setOf(SyncTopic.BONDS, SyncTopic.PROFILE)).collect {
-            try {
-                showcase = BondsApi.showcase(token, userId)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                showcase = null
+internal fun ProfileBondsSection(
+    token: String,
+    userId: String,
+    own: Boolean,
+    onManage: (String) -> Unit,
+    onProfile: (String) -> Unit
+) {
+    var home by remember(token, userId, own) { mutableStateOf<BondsHome?>(null) }
+    var showcase by remember(token, userId, own) { mutableStateOf<BondsShowcase?>(null) }
+    var error by remember(token, userId, own) { mutableStateOf<String?>(null) }
+    var loading by remember(token, userId, own) { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
+
+    suspend fun load() {
+        loading = true
+        try {
+            if (own) home = BondsApi.home(token) else showcase = BondsApi.showcase(token, userId)
+            error = null
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            error = failure.message?.takeIf { it.isNotBlank() } ?: "Couldn't load Bonds"
+        } finally {
+            loading = false
+        }
+    }
+
+    LaunchedEffect(token, userId, own) {
+        AppSync.changes(setOf(SyncTopic.BONDS, SyncTopic.PROFILE)).collect { load() }
+    }
+    val retry = {
+        scope.launch { load() }
+        Unit
+    }
+
+    val title = stringResource(R.string.bonds_profile_section)
+    if (own) {
+        OwnBondsSection(home, error, loading, retry, onManage)
+    } else {
+        val data = showcase
+        when {
+            data == null && error != null -> ProfileBondSectionCard(title) {
+                BondsLoadError(error.orEmpty(), retry)
+            }
+            data == null -> ProfileBondSectionCard(title) { BondsLoading() }
+            data.bonds.isEmpty() && !data.canInvite -> Unit
+            else -> ProfileBondSectionCard(title) {
+                data.bonds.forEach { bond ->
+                    ListItem(headlineContent = { Text(bond.partner.name) },
+                        supportingContent = { Text(listOfNotNull(bond.kind, bond.days?.let { "$it days" }, bond.level?.let { "Level $it" },
+                            bond.weeklyRank?.let { "Weekly #$it" }).joinToString(" · ")) },
+                        leadingContent = { BondAvatar(bond.partner, 38) },
+                        trailingContent = if (bond.showBadge) {{ Icon(Icons.Default.FavoriteBorder, "${bond.kind} badge", tint = MaterialTheme.colorScheme.primary) }} else null,
+                        modifier = Modifier.clickable { onProfile(bond.partner.id) })
+                }
+                if (data.canInvite) TextButton(onClick = { onManage(userId) }) { Text("Invite to Bonds") }
             }
         }
     }
-    val data = showcase ?: return
-    if (!own && data.bonds.isEmpty() && !data.canInvite) return
-    BondSection(stringResource(R.string.bonds_close_friends)) {
-        data.bonds.forEach { bond ->
-            ListItem(headlineContent = { Text(bond.partner.name) },
-                supportingContent = { Text(listOfNotNull(bond.kind, bond.days?.let { "$it days" }, bond.level?.let { "Level $it" },
-                    bond.weeklyRank?.let { "Weekly #$it" }).joinToString(" · ")) },
-                leadingContent = { BondAvatar(bond.partner, 38) },
-                trailingContent = if (bond.showBadge) {{ Icon(Icons.Default.FavoriteBorder, "${bond.kind} badge", tint = MaterialTheme.colorScheme.primary) }} else null,
-                modifier = Modifier.clickable { if (own) onManage(bond.partner.id) else onProfile(bond.partner.id) })
+}
+
+@Composable
+private fun ProfileBondSectionCard(title: String, content: @Composable ColumnScope.() -> Unit) {
+    GlassCard(Modifier.fillMaxWidth(), contentPadding = PaddingValues(14.dp)) {
+        Text(title, color = LocalYugmColors.current.textPrimary,
+            fontWeight = FontWeight.Bold, fontSize = 17.sp)
+        content()
+    }
+}
+
+@Composable
+private fun OwnBondsSection(
+    home: BondsHome?,
+    error: String?,
+    loading: Boolean,
+    onRetry: () -> Unit,
+    onManage: (String) -> Unit
+) {
+    val colors = LocalYugmColors.current
+    val sectionTitle = stringResource(R.string.bonds_profile_section)
+    if (home == null) {
+        ProfileBondSectionCard(sectionTitle) {
+            if (error != null) BondsLoadError(error, onRetry) else BondsLoading()
         }
-        if (own || data.canInvite) TextButton(onClick = { onManage(if (own) "" else userId) }) {
-            Text(if (own) stringResource(R.string.bonds_manage) else "Invite to Bonds")
+        return
+    }
+    val slots = profileBondSlots(home.active, home.requests, home.capacity)
+    val count = activeBondCount(slots)
+    val hasAny = slots.any { it != ProfileBondSlot.Empty }
+
+    GlassCard(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(sectionTitle, modifier = Modifier.weight(1f), color = colors.textPrimary,
+                fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            BondCountPill(count, home.capacity, colors)
+            if (hasAny) {
+                Spacer(Modifier.width(2.dp))
+                TextButton(onClick = { onManage("") }, contentPadding = PaddingValues(horizontal = 8.dp),
+                    modifier = Modifier.heightIn(min = 40.dp)) {
+                    Text(stringResource(R.string.bonds_manage), color = colors.primary,
+                        fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        if (error != null) {
+            BondsLoadError(error, onRetry)
+        } else if (!hasAny) {
+            BondsEmpty(home.capacity, colors, onAdd = { onManage("") })
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                slots.forEachIndexed { index, slot ->
+                    ProfileBondSlotCard(
+                        slot = slot,
+                        index = index,
+                        modifier = Modifier.weight(1f),
+                        colors = colors,
+                        onClick = when (slot) {
+                            is ProfileBondSlot.Active -> ({ onManage(slot.bond.partner.id) })
+                            is ProfileBondSlot.Pending -> ({ onManage(slot.request.partner.id) })
+                            ProfileBondSlot.Empty -> ({ onManage("") })
+                        }
+                    )
+                }
+            }
+            if (loading) {
+                Spacer(Modifier.height(8.dp))
+                BondsLoading()
+            }
         }
     }
+}
+
+@Composable
+private fun ProfileBondSlotCard(
+    slot: ProfileBondSlot,
+    index: Int,
+    modifier: Modifier,
+    colors: YugmColors,
+    onClick: () -> Unit
+) {
+    val person = when (slot) {
+        is ProfileBondSlot.Active -> slot.bond.partner
+        is ProfileBondSlot.Pending -> slot.request.partner
+        ProfileBondSlot.Empty -> null
+    }
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(132.dp),
+        shape = RoundedCornerShape(15.dp),
+        color = bondSlotTint(index, colors),
+        border = BorderStroke(1.dp, colors.border.copy(alpha = 0.55f))
+    ) {
+        Column(
+            Modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            if (person != null) BondAvatar(person, 50) else Box(
+                Modifier.size(50.dp).clip(CircleShape).background(colors.primary.copy(alpha = 0.10f)),
+                contentAlignment = Alignment.Center
+            ) { Icon(Icons.Default.Add, null, tint = colors.primary, modifier = Modifier.size(22.dp)) }
+            Spacer(Modifier.height(7.dp))
+            Text(
+                when (slot) {
+                    is ProfileBondSlot.Active -> slot.bond.kindName.ifBlank { "Bond" }
+                    is ProfileBondSlot.Pending -> stringResource(if (slot.request.incoming) R.string.bonds_request_received else R.string.bonds_request_sent)
+                    ProfileBondSlot.Empty -> stringResource(R.string.bonds_add)
+                },
+                color = colors.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(
+                when (slot) {
+                    is ProfileBondSlot.Active -> "${slot.bond.days} days · Lv ${slot.bond.level}"
+                    is ProfileBondSlot.Pending -> bondExpiry(slot.request.expiresAt)
+                    ProfileBondSlot.Empty -> ""
+                },
+                color = colors.textSecondary, fontSize = 10.sp, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+private fun BondsEmpty(capacity: Int, colors: YugmColors, onAdd: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.size(46.dp).clip(CircleShape).background(colors.primary.copy(alpha = 0.10f)),
+            contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.FavoriteBorder, null, tint = colors.primary, modifier = Modifier.size(22.dp))
+        }
+        Spacer(Modifier.height(9.dp))
+        Text(stringResource(R.string.bonds_profile_empty), color = colors.textPrimary,
+            fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        Spacer(Modifier.height(3.dp))
+        Text(stringResource(R.string.bonds_profile_hint, capacity), color = colors.textSecondary,
+            fontSize = 12.sp, textAlign = TextAlign.Center, lineHeight = 16.sp)
+        Spacer(Modifier.height(10.dp))
+        Button(onClick = onAdd, shape = RoundedCornerShape(12.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp)) {
+            Icon(Icons.Default.Add, null, modifier = Modifier.size(17.dp))
+            Spacer(Modifier.width(5.dp))
+            Text(stringResource(R.string.bonds_add), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+        }
+    }
+}
+
+@Composable
+private fun BondCountPill(count: Int, capacity: Int, colors: YugmColors) {
+    Surface(shape = RoundedCornerShape(50), color = colors.primary.copy(alpha = 0.10f),
+        border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.18f))) {
+        Text("$count/$capacity", modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
+            color = colors.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun BondsLoading() {
+    val colors = LocalYugmColors.current
+    Row(Modifier.fillMaxWidth().heightIn(min = 100.dp), horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically) {
+        YugmLoadingSpinner(size = 22.dp)
+        Spacer(Modifier.width(8.dp))
+        Text("Loading Bonds…", color = colors.textSecondary, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun BondsLoadError(message: String, onRetry: () -> Unit) {
+    val colors = LocalYugmColors.current
+    Column(Modifier.fillMaxWidth().heightIn(min = 100.dp), horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center) {
+        Text(message, color = colors.textSecondary, fontSize = 12.sp, textAlign = TextAlign.Center,
+            maxLines = 3, overflow = TextOverflow.Ellipsis)
+        TextButton(onRetry) { Text(stringResource(R.string.bonds_try_again), color = colors.primary, fontSize = 12.sp) }
+    }
+}
+
+@Composable
+private fun bondSlotTint(index: Int, colors: YugmColors): Color {
+    val brand = when (index % 3) {
+        0 -> BrandMiddle
+        1 -> BrandEnd
+        else -> BrandStart
+    }
+    return brand.copy(alpha = if (colors.isDark) 0.18f else 0.10f).compositeOver(colors.surfaceElevated)
 }
 

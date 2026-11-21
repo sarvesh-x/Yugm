@@ -391,7 +391,6 @@ export async function blockBondPair(actor: string, target: string) {
     await lockUsers(ids, session);
     await Block.updateOne({ blockerId: actor, blockedUserId: target },
       { $setOnInsert: { blockerId: actor, blockedUserId: target } }, { upsert: true, session });
-    await User.updateOne({ _id: actor }, { $pull: { closeFriendIds: target } }, { session });
     await endPair(pair, actor, "TERMINATED_BY_BLOCK", session);
   });
   publishBonds(ids);

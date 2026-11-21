@@ -162,11 +162,6 @@ object UserApi {
         return data.getJSONArray("users").toHosts()
     }
 
-    suspend fun closeFriends(token: String): List<Host> {
-        val data = YugmHttpClient.get("/users/me/close-friends", token).getJSONObject("data")
-        return data.optJSONArray("users")?.toHosts() ?: emptyList()
-    }
-
     suspend fun getNotifications(token: String): Pair<List<NotificationItem>, Int> {
         val data = YugmHttpClient.get("/notifications", token).getJSONObject("data")
         val list = data.getJSONArray("notifications").toNotificationItems()
@@ -431,14 +426,6 @@ object UserApi {
             hasMore = data.optBoolean("hasMore", false),
             nextBefore = data.optString("nextBefore").takeIf { it.isNotBlank() && it != "null" }
         )
-    }
-
-    suspend fun addCloseFriend(token: String, userId: String) {
-        YugmHttpClient.post("/users/$userId/close-friend", token, JSONObject())
-    }
-
-    suspend fun removeCloseFriend(token: String, userId: String) {
-        YugmHttpClient.delete("/users/$userId/close-friend", token)
     }
 
     suspend fun addProfileMedia(token: String, mediaUrl: String, mediaType: String) {

@@ -25,6 +25,7 @@ Durable contract and rules: [NAVIGATION_ARCHITECTURE.md](NAVIGATION_ARCHITECTURE
 - **Route/selection:** `Screen.MainTabs.createRoute(tab)` carries the initial tab arg; `TopLevelNavigation.navigateTopLevel` maps legacy top-level routes to `MainTabs` tab routes and uses `savedStateHandle["tab_request"]` to switch tabs when `MainTabs` is already on the back stack (explicit destination check: already MainTabs → set request; else pop to MainTabs entry if present; else `navigate(launchSingleTop)`).
 - **Visibility:** dock visible on the five main roots only; hidden on chat clan subtab (`isClanChatActive`), and structurally so on every secondary/detail/immersive/auth route.
 - **Unread badge:** chat tab badge sourced in `MainTabsScreen` from `ChatListViewModel` unread counts excluding muted partners, surfaced via dock semantics.
+- **Bonds:** `Screen.Bonds` (`bonds?partner={partner}&center={center}`) is a secondary Profile destination in `profileNavGraph`; it hides the dock and back returns to the main-tabs Profile page. `partner` opens an existing bond or pending request (or the existing invite flow for an explicit invite target), and `center=true` opens Relationship Center (notification taps). Opening Bonds from the profile — including Add bond/empty slots — lands on Bonds home; no invite sheet is opened automatically. The former `Screen.CloseFriends` / `close_friends` route was removed.
 
 ## Visibility matrix
 

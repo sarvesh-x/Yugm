@@ -321,9 +321,6 @@ suspend fun leaderboard(): RoomLeaderboard
     suspend fun blockUser(userId: String, token: String)
     suspend fun unblockUser(userId: String, token: String)
     suspend fun getBlockedUsers(token: String): List<Host>
-    suspend fun closeFriends(token: String): List<Host>
-    suspend fun addCloseFriend(token: String, userId: String)
-    suspend fun removeCloseFriend(token: String, userId: String)
     suspend fun addProfileMedia(token: String, mediaUrl: String, mediaType: String)
     suspend fun deleteProfileMedia(token: String, mediaId: String)
     suspend fun suggestedHosts(token: String): List<Host>

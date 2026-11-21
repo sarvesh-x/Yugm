@@ -67,6 +67,7 @@ Yugm's legacy background implementation (floating circles, animated blobs, and i
 - **Primary Action Buttons**: `YugmGradientButton` uses `BrandGradients.horizontal` with `OnBrand = Color.White`.
 - **App-Wide Loading Spinner (`YugmLoadingSpinner`)**:
   - Renders the Lottie fluid vector animation (`R.raw.loading_spinner`) recolored with Yugm's official brand gradient (`BrandOrange` -> `BrandPink` -> `BrandViolet`).
+  - Sizing is global: `YugmLoadingSpinnerDefaults.BaselineSize` (40dp) and `YugmLoadingSpinnerDefaults.SizeScale` (1.25). Every caller-supplied `size` is treated as a baseline and scaled once in the component (40dp renders as 50dp); adjust the global value, not individual call sites.
   - High saturation and contrast ensure vivid visibility against both Light (`#FBF8FC`) and Dark (`#090A15`) backgrounds.
 
 ---

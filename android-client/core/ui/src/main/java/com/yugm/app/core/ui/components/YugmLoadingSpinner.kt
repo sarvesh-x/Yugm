@@ -18,6 +18,17 @@ import com.airbnb.lottie.compose.rememberLottieComposition
 import com.yugm.app.core.ui.R
 import com.yugm.app.core.ui.theme.LocalMotionEnabled
 
+object YugmLoadingSpinnerDefaults {
+    /** Global rendered-size multiplier for every `YugmLoadingSpinner` in the app. */
+    const val SizeScale = 1.25f
+
+    /** Baseline (pre-scale) size used when a caller does not provide one. */
+    val BaselineSize: Dp = 40.dp
+}
+
+/** Call-site sizes are design baselines; the global scale is applied exactly once here. */
+internal fun spinnerDisplaySize(requestedSize: Dp): Dp = requestedSize * YugmLoadingSpinnerDefaults.SizeScale
+
 /**
  * App-wide loading spinner rendered with the official Yugm Lottie fluid animation,
  * styled with the canonical Yugm brand gradient palette (Sunset Orange -> Vibe Pink -> Electric Violet).
@@ -26,7 +37,7 @@ import com.yugm.app.core.ui.theme.LocalMotionEnabled
 @Composable
 fun YugmLoadingSpinner(
     modifier: Modifier = Modifier,
-    size: Dp = 40.dp,
+    size: Dp = YugmLoadingSpinnerDefaults.BaselineSize,
     contentDescription: String = "Loading"
 ) {
     val motionEnabled = LocalMotionEnabled.current
@@ -35,17 +46,18 @@ fun YugmLoadingSpinner(
         composition = composition,
         iterations = if (motionEnabled) LottieConstants.IterateForever else 1
     )
+    val displaySize = spinnerDisplaySize(size)
 
     Box(
         modifier = modifier
-            .size(size)
+            .size(displaySize)
             .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center
     ) {
         LottieAnimation(
             composition = composition,
             progress = { if (motionEnabled) progress else 0f },
-            modifier = Modifier.size(size)
+            modifier = Modifier.size(displaySize)
         )
     }
 }

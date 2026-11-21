@@ -34,7 +34,6 @@ export interface IUser extends mongoose.Document {
     caption?: string;
     createdAt: Date;
   }>;
-  closeFriendIds: mongoose.Types.ObjectId[];
   clanId?: mongoose.Types.ObjectId;
   role: UserRole;
   isVerified: boolean;
@@ -157,7 +156,6 @@ const userSchema = new Schema<IUser>(
       caption: { type: String, trim: true },
       createdAt: { type: Date, default: Date.now }
     }],
-    closeFriendIds: [{ type: Schema.Types.ObjectId, ref: "User" }],
     clanId: { type: Schema.Types.ObjectId, ref: "Clan" },
     role: { type: String, enum: ["USER", "HOST", "MODERATOR", "ADMIN"], default: "USER" },
     isVerified: { type: Boolean, default: false },
