@@ -62,7 +62,16 @@ Yugm's legacy background implementation (floating circles, animated blobs, and i
 
 ---
 
-## 3. White Foreground Rule on Branded Components
+## 3. Brand Components & Loading Spinner
+
+- **Primary Action Buttons**: `YugmGradientButton` uses `BrandGradients.horizontal` with `OnBrand = Color.White`.
+- **App-Wide Loading Spinner (`YugmLoadingSpinner`)**:
+  - Renders a rotating sweep gradient arc featuring the official brand palette (`BrandOrange` -> `BrandPink` -> `BrandViolet` -> `BrandOrange`).
+  - Includes a theme-aware background track (`Color.White.copy(alpha = 0.15f)` in Dark Mode, `Color(0xFF20182A).copy(alpha = 0.12f)` in Light Mode) to ensure full contrast and visibility across all surfaces in both theme modes.
+
+---
+
+## 4. White Foreground Rule on Branded Components
 
 All primary branded gradient components MUST use white text and white icons (`OnBrand = Color.White`) in **both Light and Dark themes**.
 
@@ -74,7 +83,7 @@ Applied to:
 
 ---
 
-## 4. Coordinated Light & Dark Theme Palettes (`YugmColors`)
+## 5. Coordinated Light & Dark Theme Palettes (`YugmColors`)
 
 | Token | Light Theme | Dark Theme |
 | :--- | :--- | :--- |
@@ -91,7 +100,7 @@ Applied to:
 
 ---
 
-## 5. Architectural & Performance Rules
+## 6. Architectural & Performance Rules
 
 - **Zero Allocation**: Gradients are rendered using `Modifier.drawWithCache` to avoid allocations during scrolling or recomposition.
 - **No Floating Circles**: Do NOT reintroduce floating animated circles, canvas loops, or hard-edged background shapes.
