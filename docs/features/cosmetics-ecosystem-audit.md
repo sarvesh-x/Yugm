@@ -126,7 +126,7 @@ Backend first, then admin, then a bounded Android consumer.
 
 ## 5. Immediate next action
 
-Proceed to Phase 2 (cosmetic asset references) and Phase 3 (badge artwork migration) with the resolved decisions above. Do not apply migration 6 or publish assets against an unconfirmed environment.
+Proceed to Phase 3 (badge artwork migration) with the resolved decisions above. Do not apply migrations 6/7 or publish assets against an unconfirmed environment.
 
 ## 6. Phase 1 implementation record (completed after this audit)
 
@@ -165,4 +165,14 @@ The third audit was completed after the Phase 1 code was written. Its findings w
 - **Startup maintenance failures are non-fatal:** `index.ts` logs post-listen migration/index failures. Migration 6 must be verified explicitly against the target environment.
 - **`autoIndex` is not disabled in production DB config:** existing behavior, not altered here.
 - **Reaction asset ownership:** room reactions remain a separate asset path; the registry intentionally starts with cosmetic/badge/gift owners only.
-- **`PROFILE_BANNER`:** verified present in the backend `adminCosmetics.ts` type list; the audit's omission finding did not reproduce against current source. Admin UI list was not changed.
+- **`PROFILE_BANNER`:** verified present in the backend `adminCosmetics.ts` type list; the audit's omission finding did not reproduce against current source. Admin UI list was not changed; Phase 2 also added it to the admin UI dropdown.
+
+## 8. Phase 2 implementation record (cosmetic asset references)
+
+- **Schema:** `Cosmetic.assetRef` (optional string) plus additive migration 7 (sparse `cosmetic_asset_ref` index, index-only down). No cosmetic/user document was rewritten. `Cosmetic` was added to the explicit `productionIndexes.ts` set.
+- **Read path:** `toPublicCosmetic()` now accepts a published `PublicAsset` and exposes `assetId`, `assetVersion` and client-safe `assetVariants`. `listPublicCosmetics()`/`listCosmeticsByIds()` batch-resolve refs in one query; a new `toPublicCosmeticWithAsset()` covers the two single-cosmetic wallet purchase responses. Legacy `assetUrl` remains the fallback for legacy-only, staging, archived and missing assets.
+- **Write path:** admin create/update accept `assetRef` and validate owner type/id, published status and a usable URL/variant. `archiveAsset()` returns `409` while a cosmetic still references it.
+- **Admin UI:** new **Managed Assets** page (stage, publish, archive, published-variant link); Cosmetics drawer links a published cosmetic asset and now includes `PROFILE_BANNER`.
+- **Verification run:** API typecheck exit 0; API tests 192/192 (six new cosmetic mapping tests + one archive-guard test); hardening 34/34; admin typecheck exit 0 and admin production build succeeded. Not run: live DB/storage flow, migration 7 application, Android builds, runtime admin QA.
+
+**Phase 2 deviations from the plan:** `assetVariants` is not duplicated onto the `Cosmetic` document — the `AssetObject` registry is the single source of truth and variants are resolved at read time. The four seeded external avatar URLs were not backfilled into the registry, per the user's decision to keep them as provenance-only links.

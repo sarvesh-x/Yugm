@@ -26,6 +26,7 @@ import {
   Wallet
 } from "lucide-react";
 import { Admin, adminApi, adminApiMultipart, adminApiWithMeta, formatDate, formatNumber, login, refreshAdminSession, Session } from "./api";
+import { AssetsPage } from "./AssetsPage";
 import { BadgesPage } from "./BadgesPage";
 
 type ViewKey =
@@ -43,6 +44,7 @@ type ViewKey =
   | "payments"
   | "gifts"
   | "cosmetics"
+  | "assets"
   | "badges"
   | "reactions"
   | "notifications"
@@ -75,6 +77,7 @@ const navItems: Array<{ key: ViewKey; label: string; icon: ReactNode; group: str
   { key: "payments", label: "Payments", icon: <Coins />, group: "Money" },
   { key: "gifts", label: "Gifts", icon: <Gift />, group: "Money" },
   { key: "cosmetics", label: "Cosmetics", icon: <Palette />, group: "Money" },
+  { key: "assets", label: "Managed Assets", icon: <Palette />, group: "Operations", requiredPermission: "cosmetics.write" },
   { key: "badges", label: "Badges", icon: <Crown />, group: "Operations", requiredPermission: "cosmetics.write" },
   { key: "reactions", label: "Live Reactions", icon: <Sparkles />, group: "Money", requiredPermission: "cosmetics.write" },
   { key: "notifications", label: "Notifications", icon: <Bell />, group: "Operations" },
@@ -338,6 +341,7 @@ function ViewRenderer({ view, session, setNotice, onLogout }: { view: ViewKey; s
   if (view === "payments") return <SimpleResource token={session.accessToken} title="Recharges" endpoint="/payments/recharges" columns={paymentColumns} />;
   if (view === "gifts") return <GiftsPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "cosmetics") return <CosmeticsPage token={session.accessToken} setNotice={setNotice} />;
+  if (view === "assets") return <AssetsPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "badges") return <BadgesPage token={session.accessToken} />;
   if (view === "reactions") return <LiveReactionsPage token={session.accessToken} admin={session.admin} setNotice={setNotice} />;
   if (view === "notifications") return <NotificationsPage token={session.accessToken} setNotice={setNotice} />;
@@ -981,11 +985,24 @@ function CosmeticsPage({ token, setNotice }: { token: string; setNotice: (notice
     preview: "",
     isActive: true,
     assetKind: "",
-    assetUrl: ""
+    assetUrl: "",
+    assetRef: ""
   });
 
+  const [assetOptions, setAssetOptions] = useState<Array<{ id: string; ownerId: string; version: number; publicUrl?: string }>>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    adminApiWithMeta<{ assets: Array<{ id: string; ownerId: string; version: number; publicUrl?: string }> }>(
+      "/assets?ownerType=cosmetic&status=published&limit=100", { token }
+    ).then(({ data }) => {
+      if (!cancelled) setAssetOptions(data.assets ?? []);
+    }).catch(() => { if (!cancelled) setAssetOptions([]); });
+    return () => { cancelled = true; };
+  }, [token, resource.loading]);
+
   const openNew = () => {
-    setForm({ id: "", type: "AVATAR_FRAME", name: "", coinPrice: 100, rarity: "COMMON", preview: "", isActive: true, assetKind: "", assetUrl: "" });
+    setForm({ id: "", type: "AVATAR_FRAME", name: "", coinPrice: 100, rarity: "COMMON", preview: "", isActive: true, assetKind: "", assetUrl: "", assetRef: "" });
     setEditMode(true);
     setSelected(null);
   };
@@ -1000,7 +1017,8 @@ function CosmeticsPage({ token, setNotice }: { token: string; setNotice: (notice
       preview: cosmetic.preview || "",
       isActive: cosmetic.isActive !== false,
       assetKind: cosmetic.assetKind || "",
-      assetUrl: cosmetic.assetUrl || ""
+      assetUrl: cosmetic.assetUrl || "",
+      assetRef: cosmetic.assetRef || ""
     });
     setEditMode(true);
     setSelected(cosmetic);
@@ -1046,7 +1064,7 @@ function CosmeticsPage({ token, setNotice }: { token: string; setNotice: (notice
     }
   };
 
-  const types = ["AVATAR_ASSET", "AVATAR_FRAME", "SPEAKING_WAVE", "PROFILE_THEME", "ENTRANCE_EFFECT", "PROFILE_BADGE", "NAME_STYLE", "ROOM_ENTRY", "MOOD_STATUS", "PROFILE_MUSIC", "VOICE_BADGE", "ROOM_THEME", "AVATAR_DECORATION", "REACTION_PACK", "PROFILE_LAYOUT", "INTRO_CARD", "COLLECTIBLE_TITLE", "GIFT_SHELF", "CHAT_BUBBLE", "SEASONAL_EVENT", "CALL_SCREEN", "ROOM_BADGE", "ROOM_AMBIENCE"];
+  const types = ["AVATAR_ASSET", "AVATAR_FRAME", "SPEAKING_WAVE", "PROFILE_THEME", "ENTRANCE_EFFECT", "PROFILE_BADGE", "NAME_STYLE", "ROOM_ENTRY", "MOOD_STATUS", "PROFILE_MUSIC", "VOICE_BADGE", "ROOM_THEME", "AVATAR_DECORATION", "REACTION_PACK", "PROFILE_LAYOUT", "PROFILE_BANNER", "INTRO_CARD", "COLLECTIBLE_TITLE", "GIFT_SHELF", "CHAT_BUBBLE", "SEASONAL_EVENT", "CALL_SCREEN", "ROOM_BADGE", "ROOM_AMBIENCE"];
 
   return (
     <div className="page-grid">
@@ -1070,6 +1088,7 @@ function CosmeticsPage({ token, setNotice }: { token: string; setNotice: (notice
             { key: "rarity", label: "Rarity", render: (row) => <RiskBadge value={row.rarity} /> },
             { key: "coinPrice", label: "Price", render: (row) => formatNumber(row.coinPrice) },
             { key: "isActive", label: "Active", render: (row) => <StatusBadge value={row.isActive ? "ACTIVE" : "DISABLED"} /> },
+            { key: "assetRef", label: "Managed art", render: (row) => row.assetRef ? <StatusBadge value="LINKED" /> : <span>—</span> },
             { key: "createdAt", label: "Created" }
           ]}
           actions={(row) => (
@@ -1094,7 +1113,18 @@ function CosmeticsPage({ token, setNotice }: { token: string; setNotice: (notice
           <label>Active<select value={String(form.isActive)} onChange={(e) => setForm({ ...form, isActive: e.target.value === "true" })}><option value="true">Yes</option><option value="false">No</option></select></label>
           <label>Asset kind<input value={form.assetKind} onChange={(e) => setForm({ ...form, assetKind: e.target.value })} placeholder="STATIC, ANIMATED" /></label>
           <label className="full">Asset URL<input value={form.assetUrl} onChange={(e) => setForm({ ...form, assetUrl: e.target.value })} placeholder="https://..." /></label>
+          <label className="full">Managed art
+            <select value={form.assetRef} onChange={(e) => setForm({ ...form, assetRef: e.target.value })}>
+              <option value="">None (use legacy URL)</option>
+              {assetOptions.map((asset) => (
+                <option key={asset.id} value={asset.id}>
+                  {asset.ownerId} · v{asset.version}{asset.publicUrl ? "" : " (missing variant)"}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
+        <p className="eyebrow">Stage and publish art in Managed Assets, then link the published version here. Unpublished assets cannot be linked.</p>
         <button className="primary-action compact" onClick={save} style={{ marginTop: "12px" }}>{selected ? "Update" : "Create"}</button>
       </Drawer>
     </div>

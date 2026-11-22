@@ -8,6 +8,8 @@ Before schema/index changes: inspect all readers/writers, old-client compatibili
 
 ## Asset registry (YUGM-COSMETICS-001, Phase 1)
 
+`Cosmetic.assetRef` (Phase 2) is an optional string reference to a published `AssetObject` id. It is additive and does not replace `assetUrl`/`assetKind`; the public DTO resolves the published `publicUrl` and variants from the registry, falling back to the legacy field. Migration 7 creates a sparse index `cosmetic_asset_ref` on `cosmetics` and has not been applied. No cosmetic document is rewritten.
+
 `AssetObject` (`assetobjects`) is an additive registry for admin-managed image assets. Each document owns a stable UUID, `ownerType` (`cosmetic|badge|gift`), `ownerId`, monotonic `version`, `status` (`staging|published|archived`), SHA-256, MIME type, byte size, dimensions, private `stagingKey`/`stagingUrl`, published `publicKey`/`publicUrl`, derived WebP `variants`, creator and timestamps. Indexes: unique `(ownerType, ownerId, version)`, `(ownerType, ownerId, sha256)`, `(status, createdAt)`. Versions are allocated atomically in `asset.counters`.
 
 Objects live in object storage under `assets-staging/` (private, backend-read only) and `assets/` (public, immutable versioned keys); the primary DB holds metadata only. Migration 6 creates the indexes and is additive only — it must not be run against an unknown environment. No existing cosmetic, achievement, gift or user field was removed, rewritten or backfilled in Phase 1.

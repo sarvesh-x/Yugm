@@ -612,6 +612,7 @@ paths:
         - { name: id, in: path, required: true, schema: { type: string } }
       responses:
         "200": { description: Archived asset metadata }
+        "409": { description: Asset is still referenced by a cosmetic; clear the reference first }
   /admin/assets/{id}/publish:
     post:
       tags: [Admin / Assets]

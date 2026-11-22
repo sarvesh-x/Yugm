@@ -7,6 +7,7 @@ import { asyncHandler, HttpError } from "../utils/http.js";
 import { Cosmetic } from "../models/Cosmetic.js";
 import { auditLog } from "../services/adminAudit.js";
 import { syncDefaultCosmetics } from "../services/cosmetics.js";
+import { getAsset } from "../services/assets.js";
 
 const adminCosmeticsRouter = Router();
 
@@ -28,7 +29,8 @@ const createCosmeticSchema = z.object({
   preview: z.string().max(120).default(""),
   isActive: z.boolean().default(true),
   assetKind: z.string().max(20).optional(),
-  assetUrl: z.string().max(500).optional()
+  assetUrl: z.string().max(500).optional(),
+  assetRef: z.string().max(64).optional()
 });
 
 const updateCosmeticSchema = z.object({
@@ -39,8 +41,20 @@ const updateCosmeticSchema = z.object({
   preview: z.string().max(120).optional(),
   isActive: z.boolean().optional(),
   assetKind: z.string().max(20).optional(),
-  assetUrl: z.string().max(500).optional()
+  assetUrl: z.string().max(500).optional(),
+  assetRef: z.string().max(64).optional()
 });
+
+/** A cosmetic may only reference a published asset owned by that same cosmetic. */
+async function assertCosmeticAssetRef(assetRef: string, cosmeticId: string) {
+  const asset = await getAsset(assetRef);
+  if (asset.ownerType !== "cosmetic" || asset.ownerId !== cosmeticId) {
+    throw new HttpError(400, "Asset does not belong to this cosmetic");
+  }
+  if (asset.status !== "published" || !(asset.publicUrl || asset.variants.some((variant) => variant.name === "full"))) {
+    throw new HttpError(400, "Asset is not published and cannot be used by a cosmetic");
+  }
+}
 
 adminCosmeticsRouter.get("/cosmetics", requirePermission("cosmetics.read"),
   asyncHandler(async (req: AdminAuthRequest, res) => {
@@ -82,6 +96,7 @@ adminCosmeticsRouter.post("/cosmetics", requirePermission("cosmetics.write"),
   asyncHandler(async (req: AdminAuthRequest, res) => {
     const existing = await Cosmetic.findById(req.body.id).lean();
     if (existing) throw new HttpError(409, "Cosmetic with this ID already exists");
+    if (req.body.assetRef) await assertCosmeticAssetRef(req.body.assetRef, req.body.id);
 
     const cosmetic = await Cosmetic.create({ _id: req.body.id, ...req.body });
     await auditLog({
@@ -100,6 +115,7 @@ adminCosmeticsRouter.post("/cosmetics", requirePermission("cosmetics.write"),
 adminCosmeticsRouter.put("/cosmetics/:id", requirePermission("cosmetics.write"),
   validateBody(updateCosmeticSchema),
   asyncHandler(async (req: AdminAuthRequest, res) => {
+    if (req.body.assetRef) await assertCosmeticAssetRef(req.body.assetRef, req.params.id);
     const cosmetic = await Cosmetic.findByIdAndUpdate(
       req.params.id,
       { $set: req.body },

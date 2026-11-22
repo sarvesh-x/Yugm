@@ -1,5 +1,13 @@
 ﻿# Development progress
 
+## 2026-11-22 -- Cosmetic asset references Phase 2 (YUGM-COSMETICS-001)
+
+- **Backend:** `Cosmetic.assetRef` (optional published `AssetObject` id) with additive migration 7 (sparse index only, no document rewrite) and explicit production indexing. Public cosmetic DTOs now resolve managed art through a batched published-asset lookup and expose `assetId`, `assetVersion` and `assetVariants[]`, with legacy `assetUrl` as fallback; single-cosmetic wallet purchase responses use the same resolver. Admin cosmetic create/update validate that a linked asset is published and owned by that cosmetic, and archive now returns `409` while a cosmetic still references the asset.
+- **Admin UI:** new **Managed Assets** page (stage/publish/archive, published-variant link), Cosmetics drawer asset selector with LINKED status, and `PROFILE_BANNER` in the type dropdown.
+- **Contracts/docs:** `API_CONTRACTS.md`, `DATABASE_SCHEMA.md`, OpenAPI (`409` on archive), audit §8, `CURRENT_TASK.md`, and a new [handoff](handoffs/2026-11-22-cosmetic-asset-references.md).
+- **Verification:** API typecheck exit 0; API tests 192/192; hardening 34/34; admin typecheck exit 0; admin production build succeeded (generated `dist/` artifacts reverted to `HEAD` afterwards). `git diff --check` clean apart from LF/CRLF notices.
+- **Remaining:** live DB/storage flow, migration 6/7 application, admin integration tests, runtime UI QA, OpenAPI parser validation, Phase 3 badge migration and Phase 4 Android renderer. Uncommitted; no deploy, no migration applied, no production data changed.
+
 ## 2026-11-22 -- Cosmetics asset foundation Phase 1 (YUGM-COSMETICS-001)
 
 - **Backend:** extended the shared storage service with a generic `assets` namespace and private `assets-staging` area (no second object-storage client). Added the additive `AssetObject` registry and asset service: MIME/signature/dimension validation, 8 MB cap, SHA-256 dedupe, atomic version allocation, private staging, immutable versioned WebP `full`/`preview` variants on publish, and archive cleanup. Added permission-audited `/api/admin/assets` routes (stage, read, staging read, publish, archive) using existing `cosmetics.read`/`cosmetics.write` and `auditLog()`. Registered additive migration 6 (index-only) and mounted the router.

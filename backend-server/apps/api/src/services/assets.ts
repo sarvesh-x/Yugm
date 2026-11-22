@@ -9,6 +9,7 @@ import {
   type AssetOwner,
   type AssetVariant
 } from "../models/AssetObject.js";
+import { Cosmetic } from "../models/Cosmetic.js";
 import {
   deleteStoredFile,
   loadAssetStagingFile,
@@ -245,11 +246,19 @@ export async function publishAsset(assetId: string): Promise<PublicAsset> {
   return toPublicAsset(asset);
 }
 
+/** Reject archive while a catalogue document still advertises this asset. */
+export function assertNoPublishedReferences(referenceCount: number) {
+  if (referenceCount > 0) {
+    throw new HttpError(409, "Asset is still referenced by a catalog item; clear the reference first");
+  }
+}
+
 /** Archive an asset and remove its objects. Published references must be cleared first. */
 export async function archiveAsset(assetId: string): Promise<PublicAsset> {
   const asset = await AssetObject.findById(assetId);
   if (!asset) throw new HttpError(404, "Asset not found");
   if (asset.status === "archived") return toPublicAsset(asset);
+  assertNoPublishedReferences(await Cosmetic.countDocuments({ assetRef: assetId }));
 
   // Clear the published reference first. If object deletion fails afterwards,
   // the registry no longer advertises a URL whose object may be gone.
@@ -278,6 +287,18 @@ export async function resolvePublishedAsset(ownerType: AssetOwner, ownerId: stri
     .sort({ version: -1 })
     .lean();
   return asset ? toPublicAsset(asset as unknown as AssetDocument) : undefined;
+}
+
+/**
+ * Batch-resolve published assets by id so catalogue reads do not issue one
+ * query per cosmetic. Only published assets are returned; a staging or
+ * archived reference falls back to the legacy cosmetic field.
+ */
+export async function findPublishedAssetsByIds(ids: string[]): Promise<Map<string, PublicAsset>> {
+  const uniqueIds = [...new Set(ids.filter((id) => typeof id === "string" && id.length > 0))].slice(0, 500);
+  if (uniqueIds.length === 0) return new Map();
+  const assets = await AssetObject.find({ _id: { $in: uniqueIds }, status: "published" }).lean();
+  return new Map(assets.map((asset) => [String(asset._id), toPublicAsset(asset as unknown as AssetDocument)]));
 }
 
 export async function listAssets(filter: { ownerType?: AssetOwner; ownerId?: string; status?: AssetDocument["status"] }, skip: number, limit: number) {

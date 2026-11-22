@@ -10,6 +10,8 @@ export interface CosmeticDocument extends Document<string> {
   rewardOnly?: boolean;
   assetKind?: string;
   assetUrl?: string;
+  /** Published AssetObject id. The registry remains the source of truth for variants/URLs. */
+  assetRef?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -25,7 +27,8 @@ const cosmeticSchema = new Schema<CosmeticDocument>(
     isActive: { type: Boolean, default: true },
     rewardOnly: { type: Boolean, default: false },
     assetKind: { type: String },
-    assetUrl: { type: String }
+    assetUrl: { type: String },
+    assetRef: { type: String }
   },
   { timestamps: true, _id: false }
 );

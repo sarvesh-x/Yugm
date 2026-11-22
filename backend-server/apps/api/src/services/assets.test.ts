@@ -11,9 +11,16 @@ const {
   assetExtensionFor,
   assetPublicKey,
   assetStagingFileName,
+  assertNoPublishedReferences,
   toPublicAsset
 } = await import("./assets.js");
 const { assertAssetStagingFileName } = await import("./storage.js");
+
+test("archive rejects an asset that a catalog item still references", () => {
+  assert.doesNotThrow(() => assertNoPublishedReferences(0));
+  assert.throws(() => assertNoPublishedReferences(1), /still referenced/);
+  assert.throws(() => assertNoPublishedReferences(3), /still referenced/);
+});
 
 test("asset owner validation accepts catalogue owners only", () => {
   assert.equal(assertAssetOwner("cosmetic"), "cosmetic");

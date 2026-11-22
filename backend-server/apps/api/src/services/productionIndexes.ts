@@ -2,6 +2,7 @@ import { AssetObject } from "../models/AssetObject.js";
 import { Bond, BondRequest, BondPoint, BondRankingSnapshot, BondReward } from "../models/Bond.js";
 import { Block } from "../models/Block.js";
 import { ChatMessage } from "../models/ChatMessage.js";
+import { Cosmetic } from "../models/Cosmetic.js";
 import { Clan } from "../models/Clan.js";
 import { ClanMessage } from "../models/ClanMessage.js";
 import { DeviceToken } from "../models/DeviceToken.js";
@@ -61,6 +62,7 @@ const indexedModels = [
   Relationship,
   Clan,
   ClanMessage,
+  Cosmetic,
   RoomActivity,
   RoomInvite,
   SpeakerRequest,

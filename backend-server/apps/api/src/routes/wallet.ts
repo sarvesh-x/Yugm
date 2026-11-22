@@ -24,7 +24,7 @@ import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId } from "../
 import { env } from "../config/env.js";
 import { getCachedJson, setCachedJson } from "../services/redis.js";
 import { addVipDays, findVipPlan, getVipStatus, VIP_CYCLE_DAYS, VIP_LEVEL_REQUIREMENTS } from "../services/vip.js";
-import { activeCosmeticKey, ensureDefaultCosmetics, findProfileCosmetic, listPublicCosmetics, toPublicCosmetic } from "../services/cosmetics.js";
+import { activeCosmeticKey, ensureDefaultCosmetics, findProfileCosmetic, listPublicCosmetics, toPublicCosmeticWithAsset } from "../services/cosmetics.js";
 import { getLevelStatus, grantXp } from "../services/levels.js";
 import { grantRelationshipXp } from "../services/relationships.js";
 import { assertUsersCanInteract } from "../services/safety.js";
@@ -224,7 +224,7 @@ walletRouter.post("/wallet/cosmetics/purchase", requireWalletNotFrozen, validate
   if (cosmetic?.rewardOnly) throw new HttpError(403, "This cosmetic is earned through Bonds", ErrorCode.FORBIDDEN);
   if (!cosmetic || !cosmetic.isActive) throw new HttpError(400, "Invalid profile cosmetic", ErrorCode.VALIDATION);
   if ((req.user!.ownedCosmeticIds ?? []).includes(req.body.cosmeticId)) {
-    return sendOk(res, { cosmetic: toPublicCosmetic(cosmetic), ownedCosmeticIds: req.user!.ownedCosmeticIds, activeCosmetics: req.user!.activeCosmetics, balance: req.user!.walletBalance, cosmetics: await listPublicCosmetics() });
+    return sendOk(res, { cosmetic: await toPublicCosmeticWithAsset(cosmetic), ownedCosmeticIds: req.user!.ownedCosmeticIds, activeCosmetics: req.user!.activeCosmetics, balance: req.user!.walletBalance, cosmetics: await listPublicCosmetics() });
   }
 
   const session = await mongoose.startSession();
@@ -239,7 +239,7 @@ walletRouter.post("/wallet/cosmetics/purchase", requireWalletNotFrozen, validate
     session.endSession();
     const level = await runWalletSideEffect("cosmetic purchase XP", () => grantXp(req.user!.id, "COSMETIC_PURCHASE", { cosmeticId: req.body.cosmeticId, idempotencyKey: `wallet-txn:${purchaseDebit._id}` }));
     const user = await User.findById(req.user!.id).select("walletBalance ownedCosmeticIds activeCosmetics xp level levelTitle lastDailyCheckInAt").lean();
-    sendOk(res, { cosmetic: toPublicCosmetic(cosmetic), balance: user?.walletBalance ?? 0, ownedCosmeticIds: user?.ownedCosmeticIds ?? [], activeCosmetics: user?.activeCosmetics ?? {}, level: level?.level ?? getLevelStatus(user), xpGrant: level, cosmetics: await listPublicCosmetics() }, 201);
+    sendOk(res, { cosmetic: await toPublicCosmeticWithAsset(cosmetic), balance: user?.walletBalance ?? 0, ownedCosmeticIds: user?.ownedCosmeticIds ?? [], activeCosmetics: user?.activeCosmetics ?? {}, level: level?.level ?? getLevelStatus(user), xpGrant: level, cosmetics: await listPublicCosmetics() }, 201);
   } catch (err) {
     await session.abortTransaction();
     session.endSession();

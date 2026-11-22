@@ -100,3 +100,11 @@ defineMigration(6, "create_asset_objects_indexes", async (db) => {
   await db.collection("assetobjects").dropIndex("asset_owner_sha256").catch(() => {});
   await db.collection("assetobjects").dropIndex("asset_status_created").catch(() => {});
 });
+
+// Additive only: index for the optional cosmetic -> published asset reference.
+// No cosmetic document is rewritten; legacy assetUrl values stay untouched.
+defineMigration(7, "create_cosmetic_asset_ref_index", async (db) => {
+  await db.collection("cosmetics").createIndex({ assetRef: 1 }, { name: "cosmetic_asset_ref", sparse: true });
+}, async (db) => {
+  await db.collection("cosmetics").dropIndex("cosmetic_asset_ref").catch(() => {});
+});

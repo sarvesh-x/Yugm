@@ -1,5 +1,6 @@
 import { profileCosmetics } from "@yugm/shared";
 import { Cosmetic, type CosmeticDocument } from "../models/Cosmetic.js";
+import { findPublishedAssetsByIds, type PublicAsset } from "./assets.js";
 
 const activeCosmeticKeys = {
   AVATAR_ASSET: "avatarAsset",
@@ -30,8 +31,16 @@ const activeCosmeticKeys = {
 
 type RawCosmetic = Pick<
   CosmeticDocument,
-  "type" | "name" | "coinPrice" | "rarity" | "preview" | "isActive" | "assetKind" | "assetUrl"
+  "type" | "name" | "coinPrice" | "rarity" | "preview" | "isActive" | "assetKind" | "assetUrl" | "assetRef"
 > & { _id: unknown };
+
+export interface PublicAssetVariant {
+  name: string;
+  url: string;
+  contentType: string;
+  width?: number;
+  height?: number;
+}
 
 export interface PublicCosmetic {
   id: string;
@@ -42,11 +51,23 @@ export interface PublicCosmetic {
   preview: string;
   assetKind?: string;
   assetUrl?: string;
+  /** Published AssetObject id, when the cosmetic uses managed art. */
+  assetId?: string;
+  assetVersion?: number;
+  assetVariants?: PublicAssetVariant[];
 }
 
 let defaultsPromise: Promise<void> | null = null;
 
-export function toPublicCosmetic(cosmetic: RawCosmetic): PublicCosmetic {
+/**
+ * Map a catalogue document to its public DTO. A published managed asset wins;
+ * the legacy `assetUrl` remains the compatibility fallback so older documents
+ * and old clients keep working. The asset registry owns variants/version.
+ */
+export function toPublicCosmetic(cosmetic: RawCosmetic, asset?: PublicAsset): PublicCosmetic {
+  const assetUrl = asset?.publicUrl
+    ?? asset?.variants.find((variant) => variant.name === "full")?.url
+    ?? cosmetic.assetUrl;
   return {
     id: String(cosmetic._id),
     type: cosmetic.type,
@@ -55,7 +76,18 @@ export function toPublicCosmetic(cosmetic: RawCosmetic): PublicCosmetic {
     rarity: cosmetic.rarity,
     preview: cosmetic.preview ?? "",
     ...(cosmetic.assetKind ? { assetKind: cosmetic.assetKind } : {}),
-    ...(cosmetic.assetUrl ? { assetUrl: cosmetic.assetUrl } : {})
+    ...(assetUrl ? { assetUrl } : {}),
+    ...(asset ? {
+      assetId: asset.id,
+      assetVersion: asset.version,
+      assetVariants: asset.variants.map((variant) => ({
+        name: variant.name,
+        url: variant.url,
+        contentType: variant.contentType,
+        ...(variant.width !== undefined ? { width: variant.width } : {}),
+        ...(variant.height !== undefined ? { height: variant.height } : {})
+      }))
+    } : {})
   };
 }
 
@@ -100,11 +132,19 @@ export async function findProfileCosmetic(cosmeticId: string) {
   return Cosmetic.findById(cosmeticId).lean();
 }
 
+async function mapWithResolvedAssets(cosmetics: RawCosmetic[]): Promise<PublicCosmetic[]> {
+  const assets = await findPublishedAssetsByIds(cosmetics.map((cosmetic) => cosmetic.assetRef ?? ""));
+  return cosmetics.map((cosmetic) => toPublicCosmetic(
+    cosmetic,
+    cosmetic.assetRef ? assets.get(cosmetic.assetRef) : undefined
+  ));
+}
+
 export async function listPublicCosmetics(ownedIds: string[] = []): Promise<PublicCosmetic[]> {
   const cosmetics = await Cosmetic.find({ isActive: true, $or: [{ rewardOnly: { $ne: true } }, { _id: { $in: ownedIds } }] })
     .sort({ type: 1, coinPrice: 1, name: 1 })
     .lean();
-  return cosmetics.map((cosmetic) => toPublicCosmetic(cosmetic as unknown as RawCosmetic));
+  return mapWithResolvedAssets(cosmetics as unknown as RawCosmetic[]);
 }
 
 export async function listCosmeticsByIds(ids: string[]): Promise<PublicCosmetic[]> {
@@ -112,7 +152,13 @@ export async function listCosmeticsByIds(ids: string[]): Promise<PublicCosmetic[
   const cosmetics = await Cosmetic.find({ _id: { $in: ids } })
     .sort({ type: 1, coinPrice: 1, name: 1 })
     .lean();
-  return cosmetics.map((cosmetic) => toPublicCosmetic(cosmetic as unknown as RawCosmetic));
+  return mapWithResolvedAssets(cosmetics as unknown as RawCosmetic[]);
+}
+
+/** Single-cosmetic variant of the list mappers, for purchase responses. */
+export async function toPublicCosmeticWithAsset(cosmetic: RawCosmetic): Promise<PublicCosmetic> {
+  const assets = await findPublishedAssetsByIds(cosmetic.assetRef ? [cosmetic.assetRef] : []);
+  return toPublicCosmetic(cosmetic, cosmetic.assetRef ? assets.get(cosmetic.assetRef) : undefined);
 }
 
 export function activeCosmeticKey(type: string) {

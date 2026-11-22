@@ -33,8 +33,17 @@ The API has more than one response envelope in existing paths. Inspect `src/util
 - `POST /api/admin/assets` accepts multipart `asset` plus `ownerType` (`cosmetic|badge|gift`) and `ownerId`. JPEG, PNG, WebP and GIF up to 8 MB are accepted after signature/dimension validation with `sharp`. The file is written to **private** `assets-staging/` storage and returns a `staging` asset with a version, SHA-256 and dimensions. No public URL is returned at this stage.
 - `GET /api/admin/assets/staging/:fileName` is authenticated and serves staging bytes with `Cache-Control: private, no-store`. Staging filenames are validated against a fixed pattern; external URLs and arbitrary paths are rejected.
 - `POST /api/admin/assets/:id/publish` produces immutable `full` (1600px) and `preview` (512px) WebP variants under versioned `assets/` keys and sets `publicUrl`. Published keys and URLs are never overwritten; a new upload allocates a new version. `DELETE /api/admin/assets/:id` archives an asset and removes its objects.
-- Consumers must store the asset reference, not mint URLs. `resolvePublishedAsset(ownerType, ownerId)` returns the newest published asset for a cosmetic/badge/gift; Phase 1 does not yet change cosmetic/badge read responses, so legacy `assetUrl`/`imageUrl` remain authoritative until Phase 2–3 backfill.
+- Consumers must store the asset reference, not mint URLs. `resolvePublishedAsset(ownerType, ownerId)` returns the newest published asset for a cosmetic/badge/gift. Phase 1 did not change read responses; Phase 2 now resolves cosmetic references (see below). Badge art is still Phase 3.
 - Migration 6 creates only `assetobjects` indexes; it does not rewrite catalogue or user documents. No migration has been applied to any deployment as part of this work.
+
+## Cosmetic asset references (Phase 2)
+
+- `Cosmetic.assetRef` is an optional `AssetObject` id. It is additive: legacy `assetUrl`/`assetKind` documents are untouched and remain the fallback. Migration 7 creates the sparse `cosmetic_asset_ref` index only; it rewrites no documents and has not been applied to any deployment.
+- `POST /api/admin/cosmetics` and `PUT /api/admin/cosmetics/:id` accept `assetRef` (an empty string detaches managed art in read responses). The server rejects a reference whose asset is not `published`, is not owned by `ownerType=cosmetic`/`ownerId=<that cosmetic>`, or has neither `publicUrl` nor a `full` variant. Passing an asset id never changes ownership, balance or equipment.
+- Public cosmetic DTOs (`/wallet/cosmetics`, `/wallet/cosmetics/purchase` responses, `/users` inventory) may now include `assetId`, `assetVersion` and `assetVariants[]` (`name`, `url`, `contentType`, `width`, `height`). `assetUrl` resolves to the published `publicUrl` (or `full` variant URL) when a valid reference exists, otherwise to the legacy value. Android's `ProfileCosmetic`/`InventoryCosmetic` ignore unknown fields, so no client change is required.
+- Catalogue reads batch-resolve published assets by id (one query per list, not per item). A staging/archived/missing asset silently falls back to the legacy URL; no published URL is rewritten in place.
+- `DELETE /api/admin/assets/:id` now returns `409` while any `Cosmetic.assetRef` still points at that asset. Clear the cosmetic reference (or switch it to a newer version) before archiving.
+- Admin UI: **Managed Assets** stages/uploads, publishes and archives; the Cosmetics drawer links a published cosmetic asset. The seeded external DiceBear/Giphy URLs remain unchanged and are not re-hosted, per the resolved product decision.
 
 ## Authentication and profile setup notes
 
