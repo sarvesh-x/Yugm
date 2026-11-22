@@ -49,7 +49,7 @@ test("achievements keep six tiers, provenance and soft-quarantine inline binary"
   assert.equal(result.rejected, false);
   assert.equal(row.id, "badge-host");
   assert.equal(row.category, "SOCIAL");
-  assert.equal(row.image_data, null);
+  assert.equal("image_data" in row, false);
   assert.equal(row.asset_ref, "asset-1");
   assert.equal(row.hidden, 0);
   assert.equal(tiers.length, 2);

@@ -6,6 +6,13 @@ const NODE_HTTP_PORT = 8787;
 const MAINTENANCE_INTERVAL_MS = 15 * 60 * 1000;
 const MAINTENANCE_KEY = "maintenance-due";
 
+function errorDetails(error: unknown) {
+  return {
+    name: error instanceof Error ? error.name : "Error",
+    message: error instanceof Error ? error.message : String(error)
+  };
+}
+
 export interface YugmWorkerEnv {
   API_SERVICE: DurableObjectNamespace<YugmApi>;
   [name: string]: unknown;
@@ -21,22 +28,48 @@ export class YugmApi extends DurableObject<YugmWorkerEnv> {
   private alarmScheduling: Promise<void> = Promise.resolve();
 
   async fetch(request: Request): Promise<Response> {
-    await this.ensureReady();
     const url = new URL(request.url);
-    if ((url.pathname === "/socket.io/" || url.pathname === "/socket.io") &&
-        request.headers.get("Upgrade")?.toLowerCase() === "websocket") {
-      const [runtime, bridge] = await Promise.all([import("./runtime.js"), import("./socketBridge.js")]);
-      return bridge.handleSocketUpgrade(request, await runtime.getSocketEngine());
+    // Liveness must stay cheap and must not depend on the Node runtime or a
+    // database connection. Readiness is served by Express at /ready.
+    if (request.method === "GET" && url.pathname === "/health") {
+      return Response.json({
+        ok: true,
+        service: "yugm-api",
+        runtime: "cloudflare",
+        initialized: this.ready !== undefined,
+        ready: "/ready"
+      });
     }
-    const mutatesPk = request.method !== "GET" && url.pathname.startsWith("/api/pk/");
-    // Persist a fallback wake-up before a PK write. If the Worker stops after
-    // the database commit but before the response, an alarm still recovers it.
-    if (mutatesPk) await this.scheduleNoLaterThan(Date.now() + 15_000);
-    const response = await handleAsNodeRequest(NODE_HTTP_PORT, request);
-    if (mutatesPk) {
-      await this.scheduleAlarm();
+    try {
+      await this.ensureReady();
+      if ((url.pathname === "/socket.io/" || url.pathname === "/socket.io") &&
+          request.headers.get("Upgrade")?.toLowerCase() === "websocket") {
+        const [runtime, bridge] = await Promise.all([import("./runtime.js"), import("./socketBridge.js")]);
+        return bridge.handleSocketUpgrade(request, await runtime.getSocketEngine());
+      }
+      const mutatesPk = request.method !== "GET" && url.pathname.startsWith("/api/pk/");
+      // Persist a fallback wake-up before a PK write. If the Worker stops after
+      // the database commit but before the response, an alarm still recovers it.
+      if (mutatesPk) await this.scheduleNoLaterThan(Date.now() + 15_000);
+      const response = await handleAsNodeRequest(NODE_HTTP_PORT, request);
+      if (mutatesPk) {
+        await this.scheduleAlarm();
+      }
+      return response;
+    } catch (error) {
+      // Return an explicit, non-sensitive failure instead of letting the
+      // Durable Object throw an opaque Cloudflare 1101.
+      console.error(JSON.stringify({
+        level: "error",
+        event: "worker_request_failed",
+        path: url.pathname,
+        ...errorDetails(error)
+      }));
+      return Response.json({
+        ok: false,
+        error: { code: "WORKER_UNAVAILABLE", message: "API runtime is not ready" }
+      }, { status: 503 });
     }
-    return response;
   }
 
   async alarm(): Promise<void> {
@@ -52,7 +85,12 @@ export class YugmApi extends DurableObject<YugmWorkerEnv> {
       await this.scheduleAlarm();
     } catch (error) {
       // Avoid losing durable work after the platform's finite retry window.
-      console.error("Scheduled room work failed; retrying", error);
+      console.error(JSON.stringify({
+        level: "error",
+        event: "scheduled_room_work_failed",
+        retryMs: 30_000,
+        ...errorDetails(error)
+      }));
       await this.ctx.storage.setAlarm(Date.now() + 30_000);
     }
   }
@@ -124,7 +162,20 @@ export class YugmApi extends DurableObject<YugmWorkerEnv> {
 
 export default {
   async fetch(request: Request, env: YugmWorkerEnv): Promise<Response> {
-    const id = env.API_SERVICE.idFromName("yugm-global-api");
-    return env.API_SERVICE.get(id).fetch(request);
+    try {
+      const id = env.API_SERVICE.idFromName("yugm-global-api");
+      return await env.API_SERVICE.get(id).fetch(request);
+    } catch (error) {
+      console.error(JSON.stringify({
+        level: "error",
+        event: "worker_binding_failed",
+        path: new URL(request.url).pathname,
+        ...errorDetails(error)
+      }));
+      return Response.json({
+        ok: false,
+        error: { code: "WORKER_UNAVAILABLE", message: "API binding is not available" }
+      }, { status: 503 });
+    }
   }
 };

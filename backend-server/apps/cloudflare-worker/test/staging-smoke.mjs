@@ -31,8 +31,8 @@ try {
   await db.collection("rooms").insertOne({ _id: roomId, hostId: users[0], title: "Temporary staging fixture", category: "test", language: "en", type: "VOICE", status: "LIVE", visibility: "PUBLIC", livekitRoomName: `fixture-${suffix}`, createdAt: new Date() });
   await db.collection("roomparticipants").insertMany(users.slice(0, 2).map((userId, i) => ({ roomId, userId, leftAt: null, role: i ? "SPEAKER" : "HOST", seatIndex: i, micEnabled: true, moderatorMuted: false })));
 
-  const health = await fetch(`${address}/health`, { signal: AbortSignal.timeout(30000) });
-  assert.equal(health.status, 200, "Staging health check failed");
+  const ready = await fetch(`${address}/ready`, { signal: AbortSignal.timeout(30000) });
+  assert.equal(ready.status, 200, "Staging readiness check failed");
   function token(i) { return jwt.sign({ sub: users[i].toString(), sid: sessions[i].toString(), typ: "access", tokenVersion: 1 }, vars.JWT_SECRET, { algorithm: "HS256", expiresIn: "1h" }); }
   async function connect(authToken) {
     const socket = io(address, { transports: ["websocket"], forceNew: true, reconnection: false, auth: { token: authToken }, timeout: 15000 });

@@ -5,7 +5,7 @@
 
 ## Scope and evidence
 
-This audit inspected `backend-server/apps/cloudflare-worker` directly, including its README, package scripts, three Wrangler configurations, TypeScript sources and test scripts. The existing [Cloudflare migration audit](../cloudflare-migration/audit.md) was used as background, not as proof.
+This audit inspected `backend-server/apps/cloudflare-worker` directly, including its README, package scripts, three Wrangler configurations, TypeScript sources and test scripts. The existing [Cloudflare migration audit](../cloudflare-migration/audit.md) was used as background, not as proof. The 2026-11-22 runtime/image remediation is documented separately in [Worker runtime and image processing boundary](worker-runtime-image-processing.md).
 
 ## Current implementation
 

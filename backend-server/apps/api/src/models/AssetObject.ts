@@ -80,8 +80,11 @@ const assetObjectSchema = new Schema<AssetDocument>(
   { timestamps: true, _id: false }
 );
 
-assetObjectSchema.index({ ownerType: 1, ownerId: 1, version: 1 }, { unique: true });
-assetObjectSchema.index({ ownerType: 1, ownerId: 1, sha256: 1 });
-assetObjectSchema.index({ status: 1, createdAt: -1 });
+// Names match migration v6. Without them Mongoose autoIndex can create the
+// same keys under default names and make the additive migration fail with
+// IndexOptionsConflict on a fresh deployment.
+assetObjectSchema.index({ ownerType: 1, ownerId: 1, version: 1 }, { unique: true, name: "asset_owner_version" });
+assetObjectSchema.index({ ownerType: 1, ownerId: 1, sha256: 1 }, { name: "asset_owner_sha256" });
+assetObjectSchema.index({ status: 1, createdAt: -1 }, { name: "asset_status_created" });
 
 export const AssetObject = mongoose.model<AssetDocument>("AssetObject", assetObjectSchema);

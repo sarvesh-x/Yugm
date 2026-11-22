@@ -1,7 +1,7 @@
 # Handoff: R2 backend configuration pending owner values
 
 **Date:** 2026-11-22  
-**Status:** Unfinished; storage is still unconfigured. No credentials, buckets, domains, deploys or production data were changed.
+**Status:** Local configuration completed and validated. The ignored local `.env` now has `STORAGE_DRIVER=s3`, all five R2 buckets, credentials, and both public URLs; `env:check` passes with no storage errors. No credentials, buckets, domains, deploys or production data were changed by this agent.
 
 ## What was done
 

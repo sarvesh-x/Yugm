@@ -88,9 +88,14 @@ const mediaObjectSchema = new Schema<MediaDocument>(
   { timestamps: true, _id: false }
 );
 
-mediaObjectSchema.index({ ownerType: 1, ownerId: 1, category: 1, version: 1 }, { unique: true });
-mediaObjectSchema.index({ checksum: 1 });
+// Names/options match migration v9 so autoIndex and the additive migration
+// can coexist without an IndexOptionsConflict on a fresh deployment.
+mediaObjectSchema.index(
+  { ownerType: 1, ownerId: 1, category: 1, version: 1 },
+  { unique: true, name: "media_owner_category_version" }
+);
+mediaObjectSchema.index({ checksum: 1 }, { name: "media_checksum" });
 mediaObjectSchema.index({ visibility: 1, processingStatus: 1 });
-mediaObjectSchema.index({ deletedAt: 1 });
+mediaObjectSchema.index({ deletedAt: 1 }, { name: "media_deleted_at", sparse: true });
 
 export const MediaObject = mongoose.model<MediaDocument>("MediaObject", mediaObjectSchema);

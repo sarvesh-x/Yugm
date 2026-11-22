@@ -41,8 +41,9 @@ try {
   });
   worker = await startWorker(0);
   const address = `http://127.0.0.1:${worker.port}`;
-  const health = await fetch(`${address}/health`);
-  assert.equal(health.status, 200, "Worker must start with isolated MongoDB");
+  // /health is liveness only; /ready proves the Node runtime and dependencies started.
+  const ready = await fetch(`${address}/ready`);
+  assert.equal(ready.status, 200, "Worker must start with isolated MongoDB");
 
   function token(i) {
     return jwt.sign({ sub: users[i].toString(), sid: sessions[i].toString(), typ: "access", tokenVersion: 1 }, secret, { algorithm: "HS256", expiresIn: "1h" });
@@ -189,7 +190,7 @@ try {
   worker = undefined;
   await db.collection("pkbattles").updateOne({ _id: battleId }, { $set: { startedAt: new Date(Date.now() - 61000) } });
   worker = await startWorker(port);
-  assert.equal((await fetch(`${address}/health`)).status, 200);
+  assert.equal((await fetch(`${address}/ready`)).status, 200);
   const restoredCover = await fetch(`${address}${cover.url}`);
   assert.equal(restoredCover.status, 200);
   assert.deepEqual(Buffer.from(await restoredCover.arrayBuffer()), png);

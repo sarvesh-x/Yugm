@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS "achievement_tiers" (
 );
 CREATE INDEX IF NOT EXISTS "idx_achievement_tiers_parent" ON "achievement_tiers" ("achievements_id", position);
 
+-- Achievement: imageData legacy binary is not stored in D1; use imageUrl/assetRef and an approved R2 provenance step
 -- Achievement: tiers normalized into achievement_tiers (no JSON column on parent)
 -- Model: Achievement
 CREATE TABLE IF NOT EXISTS "achievements" (
@@ -29,7 +30,6 @@ CREATE TABLE IF NOT EXISTS "achievements" (
   "category" TEXT NOT NULL CHECK ("category" IN ('SOCIAL', 'CONTENT', 'ENGAGEMENT', 'LOYALTY', 'MISC')),
   "icon" TEXT NOT NULL,
   "image_url" TEXT,
-  "image_data" TEXT,
   "image_mime" TEXT,
   "asset_ref" TEXT,
   "kind" TEXT NOT NULL CHECK ("kind" IN ('ACHIEVEMENT', 'HONOR')),
@@ -239,6 +239,16 @@ CREATE TABLE IF NOT EXISTS "blocks" (
   "updated_at" TEXT
 );
 
+-- Bond.milestoneDays: source_id is <parent source_id>:<field>:<position>; primitive element stored in value
+-- Model: Bond.milestoneDays
+CREATE TABLE IF NOT EXISTS "bond_milestones" (
+  source_id TEXT PRIMARY KEY,
+  "value" INTEGER,
+  "bonds_id" TEXT NOT NULL REFERENCES "bonds"("source_id"),
+  position INTEGER NOT NULL CHECK (position >= 0)
+);
+CREATE INDEX IF NOT EXISTS "idx_bond_milestones_parent" ON "bond_milestones" ("bonds_id", position);
+
 -- Model: BondPoint
 CREATE TABLE IF NOT EXISTS "bond_points" (
   source_id TEXT PRIMARY KEY,
@@ -252,12 +262,33 @@ CREATE TABLE IF NOT EXISTS "bond_points" (
   "updated_at" TEXT
 );
 
+-- Bond.preferences: source_id is <parent source_id>:<field>:<position>; primitive element stored in value
+-- Model: Bond.preferences
+CREATE TABLE IF NOT EXISTS "bond_preferences" (
+  source_id TEXT PRIMARY KEY,
+  "value" TEXT NOT NULL,
+  "bonds_id" TEXT NOT NULL REFERENCES "bonds"("source_id"),
+  position INTEGER NOT NULL CHECK (position >= 0)
+);
+CREATE INDEX IF NOT EXISTS "idx_bond_preferences_parent" ON "bond_preferences" ("bonds_id", position);
+
+-- Model: BondRankingSnapshot.entries
+CREATE TABLE IF NOT EXISTS "bond_ranking_entries" (
+  source_id TEXT PRIMARY KEY,
+  "bond_id" TEXT,
+  "score" INTEGER,
+  "rank" INTEGER,
+  "bond_ranking_snapshots_id" TEXT NOT NULL REFERENCES "bond_ranking_snapshots"("source_id"),
+  position INTEGER NOT NULL CHECK (position >= 0)
+);
+CREATE INDEX IF NOT EXISTS "idx_bond_ranking_entries_parent" ON "bond_ranking_entries" ("bond_ranking_snapshots_id", position);
+
+-- BondRankingSnapshot: entries normalized into bond_ranking_entries (no JSON column on parent)
 -- Model: BondRankingSnapshot
 CREATE TABLE IF NOT EXISTS "bond_ranking_snapshots" (
   source_id TEXT PRIMARY KEY,
   "period" TEXT NOT NULL,
   "category" TEXT NOT NULL,
-  "entries" TEXT NOT NULL,
   "finalized_at" TEXT NOT NULL
 );
 
@@ -320,6 +351,8 @@ CREATE INDEX IF NOT EXISTS "idx_bond_users_parent" ON "bond_users" ("bonds_id", 
 -- Bond: preferences.$* collapsed onto existing column preferences; Map wildcard path suppressed
 -- Bond: users normalized into bond_users (no JSON column on parent)
 -- Bond: slots normalized into bond_slots (no JSON column on parent)
+-- Bond: milestoneDays normalized into bond_milestones (no JSON column on parent)
+-- Bond: preferences normalized into bond_preferences (no JSON column on parent)
 -- Model: Bond
 CREATE TABLE IF NOT EXISTS "bonds" (
   source_id TEXT PRIMARY KEY,
@@ -331,10 +364,8 @@ CREATE TABLE IF NOT EXISTS "bonds" (
   "ended_by" TEXT,
   "points" INTEGER NOT NULL,
   "version" INTEGER NOT NULL,
-  "milestone_days" TEXT NOT NULL,
   "next_milestone_at" TEXT,
   "anniversary_reminder_at" TEXT,
-  "preferences" TEXT NOT NULL,
   "created_at" TEXT,
   "updated_at" TEXT
 );
@@ -364,6 +395,26 @@ CREATE TABLE IF NOT EXISTS "clan_invites" (
   "updated_at" TEXT
 );
 
+-- Model: Clan.memberRoles
+CREATE TABLE IF NOT EXISTS "clan_member_roles" (
+  source_id TEXT PRIMARY KEY,
+  "user_id" TEXT NOT NULL REFERENCES "users"("source_id"),
+  "role" TEXT NOT NULL CHECK ("role" IN ('LEADER', 'CO_LEADER', 'OFFICER', 'MEMBER')),
+  "clans_id" TEXT NOT NULL REFERENCES "clans"("source_id"),
+  position INTEGER NOT NULL CHECK (position >= 0)
+);
+CREATE INDEX IF NOT EXISTS "idx_clan_member_roles_parent" ON "clan_member_roles" ("clans_id", position);
+
+-- Clan.memberIds: source_id is <parent source_id>:<field>:<position>; primitive element stored in value
+-- Model: Clan.memberIds
+CREATE TABLE IF NOT EXISTS "clan_members" (
+  source_id TEXT PRIMARY KEY,
+  "value" TEXT REFERENCES "users"("source_id"),
+  "clans_id" TEXT NOT NULL REFERENCES "clans"("source_id"),
+  position INTEGER NOT NULL CHECK (position >= 0)
+);
+CREATE INDEX IF NOT EXISTS "idx_clan_members_parent" ON "clan_members" ("clans_id", position);
+
 -- ClanMessage.reactions: source_id is derived from element _id when present, otherwise <parent source_id>:<field>:<position>
 -- Model: ClanMessage.reactions
 CREATE TABLE IF NOT EXISTS "clan_message_reactions" (
@@ -387,6 +438,8 @@ CREATE TABLE IF NOT EXISTS "clan_messages" (
   "updated_at" TEXT
 );
 
+-- Clan: memberIds normalized into clan_members (no JSON column on parent)
+-- Clan: memberRoles normalized into clan_member_roles (no JSON column on parent)
 -- Model: Clan
 CREATE TABLE IF NOT EXISTS "clans" (
   source_id TEXT PRIMARY KEY,
@@ -397,8 +450,6 @@ CREATE TABLE IF NOT EXISTS "clans" (
   "avatar" TEXT,
   "privacy" TEXT NOT NULL CHECK ("privacy" IN ('PUBLIC', 'PRIVATE')),
   "family_label" TEXT NOT NULL,
-  "member_ids" TEXT NOT NULL,
-  "member_roles" TEXT NOT NULL,
   "member_count" INTEGER NOT NULL,
   "created_at" TEXT,
   "updated_at" TEXT
@@ -531,6 +582,7 @@ CREATE TABLE IF NOT EXISTS "direct_message_reactions" (
 );
 CREATE INDEX IF NOT EXISTS "idx_direct_message_reactions_parent" ON "direct_message_reactions" ("direct_messages_id", position);
 
+-- DirectMessage: replyTo promoted into columns: reply_to_message_id, reply_to_author, reply_to_author_id, reply_to_text, reply_to_media_url
 -- DirectMessage: reactions normalized into direct_message_reactions (no JSON column on parent)
 -- DirectMessage: hiddenFor normalized into message_hidden_for (no JSON column on parent)
 -- Model: DirectMessage
@@ -543,13 +595,17 @@ CREATE TABLE IF NOT EXISTS "direct_messages" (
   "media_url" TEXT NOT NULL,
   "media_type" TEXT NOT NULL CHECK ("media_type" IN ('', 'IMAGE', 'VIDEO', 'AUDIO')),
   "duration" INTEGER NOT NULL,
-  "reply_to" TEXT,
   "forwarded" INTEGER NOT NULL,
   "is_edited" INTEGER NOT NULL,
   "edited_at" TEXT,
   "read" INTEGER NOT NULL,
   "created_at" TEXT,
-  "updated_at" TEXT
+  "updated_at" TEXT,
+  "reply_to_message_id" TEXT NOT NULL,
+  "reply_to_author" TEXT NOT NULL,
+  "reply_to_author_id" TEXT REFERENCES "users"("source_id"),
+  "reply_to_text" TEXT NOT NULL,
+  "reply_to_media_url" TEXT NOT NULL
 );
 
 -- Event.participantIds: source_id is <parent source_id>:<field>:<position>; primitive element stored in value
@@ -695,6 +751,17 @@ CREATE TABLE IF NOT EXISTS "gift_transactions" (
   "updated_at" TEXT
 );
 
+-- Gift.upgradePath: source_id is <parent source_id>:<field>:<position>; primitive element stored in value
+-- Model: Gift.upgradePath
+CREATE TABLE IF NOT EXISTS "gift_upgrade_paths" (
+  source_id TEXT PRIMARY KEY,
+  "value" TEXT REFERENCES "gifts"("source_id"),
+  "gifts_id" TEXT NOT NULL REFERENCES "gifts"("source_id"),
+  position INTEGER NOT NULL CHECK (position >= 0)
+);
+CREATE INDEX IF NOT EXISTS "idx_gift_upgrade_paths_parent" ON "gift_upgrade_paths" ("gifts_id", position);
+
+-- Gift: upgradePath normalized into gift_upgrade_paths (no JSON column on parent)
 -- Model: Gift
 CREATE TABLE IF NOT EXISTS "gifts" (
   source_id TEXT PRIMARY KEY,
@@ -723,7 +790,6 @@ CREATE TABLE IF NOT EXISTS "gifts" (
   "collection_id" TEXT NOT NULL REFERENCES "gift_collections"("source_id"),
   "tradable" INTEGER NOT NULL,
   "upgradeable" INTEGER NOT NULL,
-  "upgrade_path" TEXT NOT NULL,
   "achievement_gift" INTEGER NOT NULL,
   "pet_gift" INTEGER NOT NULL,
   "vehicle_gift" INTEGER NOT NULL,
@@ -1005,6 +1071,7 @@ CREATE TABLE IF NOT EXISTS "notifications" (
   "updated_at" TEXT
 );
 
+-- PayoutReview: payout promoted into columns: provider_payout_id, provider_status, processed_at, failure_reason
 -- Model: PayoutReview
 CREATE TABLE IF NOT EXISTS "payout_reviews" (
   source_id TEXT PRIMARY KEY,
@@ -1020,13 +1087,16 @@ CREATE TABLE IF NOT EXISTS "payout_reviews" (
   "fraud_safe" INTEGER NOT NULL,
   "risk_score" INTEGER,
   "risk_flags" TEXT NOT NULL,
-  "payout" TEXT,
   "reviewed_by_admin_id" TEXT REFERENCES "admin_users"("source_id"),
   "admin_notes" TEXT,
   "rejection_reason" TEXT,
   "reviewed_at" TEXT,
   "created_at" TEXT,
-  "updated_at" TEXT
+  "updated_at" TEXT,
+  "provider_payout_id" TEXT,
+  "provider_status" TEXT,
+  "processed_at" TEXT,
+  "failure_reason" TEXT
 );
 
 -- Model: PkBattle
@@ -1134,6 +1204,17 @@ CREATE TABLE IF NOT EXISTS "pk_votes" (
   "updated_at" TEXT
 );
 
+-- Poll.options: source_id is derived from element _id when present, otherwise <parent source_id>:<field>:<position>
+-- Model: Poll.options
+CREATE TABLE IF NOT EXISTS "poll_options" (
+  source_id TEXT PRIMARY KEY,
+  "text" TEXT NOT NULL,
+  "votes" INTEGER NOT NULL,
+  "polls_id" TEXT NOT NULL REFERENCES "polls"("source_id"),
+  position INTEGER NOT NULL CHECK (position >= 0)
+);
+CREATE INDEX IF NOT EXISTS "idx_poll_options_parent" ON "poll_options" ("polls_id", position);
+
 -- Poll.voters: source_id is <parent source_id>:<field>:<position>; primitive element stored in value
 -- Model: Poll.voters
 CREATE TABLE IF NOT EXISTS "poll_votes" (
@@ -1145,13 +1226,13 @@ CREATE TABLE IF NOT EXISTS "poll_votes" (
 CREATE INDEX IF NOT EXISTS "idx_poll_votes_parent" ON "poll_votes" ("polls_id", position);
 
 -- Poll: voters normalized into poll_votes (no JSON column on parent)
+-- Poll: options normalized into poll_options (no JSON column on parent)
 -- Model: Poll
 CREATE TABLE IF NOT EXISTS "polls" (
   source_id TEXT PRIMARY KEY,
   "room_id" TEXT NOT NULL REFERENCES "rooms"("source_id"),
   "created_by" TEXT NOT NULL REFERENCES "users"("source_id"),
   "question" TEXT NOT NULL,
-  "options" TEXT NOT NULL,
   "is_active" INTEGER NOT NULL,
   "created_at" TEXT,
   "updated_at" TEXT
@@ -1269,6 +1350,26 @@ CREATE TABLE IF NOT EXISTS "room_activities" (
   "updated_at" TEXT
 );
 
+-- Room.roomAdminIds: source_id is <parent source_id>:<field>:<position>; primitive element stored in value
+-- Model: Room.roomAdminIds
+CREATE TABLE IF NOT EXISTS "room_admins" (
+  source_id TEXT PRIMARY KEY,
+  "value" TEXT REFERENCES "users"("source_id"),
+  "rooms_id" TEXT NOT NULL REFERENCES "rooms"("source_id"),
+  position INTEGER NOT NULL CHECK (position >= 0)
+);
+CREATE INDEX IF NOT EXISTS "idx_room_admins_parent" ON "room_admins" ("rooms_id", position);
+
+-- Room.coHostIds: source_id is <parent source_id>:<field>:<position>; primitive element stored in value
+-- Model: Room.coHostIds
+CREATE TABLE IF NOT EXISTS "room_cohosts" (
+  source_id TEXT PRIMARY KEY,
+  "value" TEXT REFERENCES "users"("source_id"),
+  "rooms_id" TEXT NOT NULL REFERENCES "rooms"("source_id"),
+  position INTEGER NOT NULL CHECK (position >= 0)
+);
+CREATE INDEX IF NOT EXISTS "idx_room_cohosts_parent" ON "room_cohosts" ("rooms_id", position);
+
 -- Model: RoomFollow
 CREATE TABLE IF NOT EXISTS "room_follows" (
   source_id TEXT PRIMARY KEY,
@@ -1289,6 +1390,16 @@ CREATE TABLE IF NOT EXISTS "room_invites" (
   "updated_at" TEXT
 );
 
+-- Room.lockedSeatIndices: source_id is <parent source_id>:<field>:<position>; primitive element stored in value
+-- Model: Room.lockedSeatIndices
+CREATE TABLE IF NOT EXISTS "room_locked_seats" (
+  source_id TEXT PRIMARY KEY,
+  "value" INTEGER,
+  "rooms_id" TEXT NOT NULL REFERENCES "rooms"("source_id"),
+  position INTEGER NOT NULL CHECK (position >= 0)
+);
+CREATE INDEX IF NOT EXISTS "idx_room_locked_seats_parent" ON "room_locked_seats" ("rooms_id", position);
+
 -- RoomModeState.participants: source_id is <parent source_id>:<field>:<position>; primitive element stored in value
 -- Model: RoomModeState.participants
 CREATE TABLE IF NOT EXISTS "room_mode_participants" (
@@ -1299,8 +1410,19 @@ CREATE TABLE IF NOT EXISTS "room_mode_participants" (
 );
 CREATE INDEX IF NOT EXISTS "idx_room_mode_participants_parent" ON "room_mode_participants" ("room_mode_states_id", position);
 
+-- RoomModeState.scores: source_id is <parent source_id>:<field>:<position>; primitive element stored in value
+-- Model: RoomModeState.scores
+CREATE TABLE IF NOT EXISTS "room_mode_scores" (
+  source_id TEXT PRIMARY KEY,
+  "value" TEXT NOT NULL,
+  "room_mode_states_id" TEXT NOT NULL REFERENCES "room_mode_states"("source_id"),
+  position INTEGER NOT NULL CHECK (position >= 0)
+);
+CREATE INDEX IF NOT EXISTS "idx_room_mode_scores_parent" ON "room_mode_scores" ("room_mode_states_id", position);
+
 -- RoomModeState: scores.$* collapsed onto existing column scores; Map wildcard path suppressed
 -- RoomModeState: participants normalized into room_mode_participants (no JSON column on parent)
+-- RoomModeState: scores normalized into room_mode_scores (no JSON column on parent)
 -- Model: RoomModeState
 CREATE TABLE IF NOT EXISTS "room_mode_states" (
   source_id TEXT PRIMARY KEY,
@@ -1308,7 +1430,6 @@ CREATE TABLE IF NOT EXISTS "room_mode_states" (
   "mode" TEXT NOT NULL CHECK ("mode" IN ('coffee_date', 'blind_date', 'truth_or_dare', 'never_have_i_ever', 'would_you_rather')),
   "round" INTEGER NOT NULL,
   "status" TEXT NOT NULL CHECK ("status" IN ('WAITING', 'ACTIVE', 'ROUND_END', 'FINISHED')),
-  "scores" TEXT NOT NULL,
   "current_turn_user_id" TEXT REFERENCES "users"("source_id"),
   "current_question" TEXT,
   "current_options" TEXT NOT NULL,
@@ -1318,6 +1439,16 @@ CREATE TABLE IF NOT EXISTS "room_mode_states" (
   "created_at" TEXT,
   "updated_at" TEXT
 );
+
+-- Room.moderatorIds: source_id is <parent source_id>:<field>:<position>; primitive element stored in value
+-- Model: Room.moderatorIds
+CREATE TABLE IF NOT EXISTS "room_moderators" (
+  source_id TEXT PRIMARY KEY,
+  "value" TEXT REFERENCES "users"("source_id"),
+  "rooms_id" TEXT NOT NULL REFERENCES "rooms"("source_id"),
+  position INTEGER NOT NULL CHECK (position >= 0)
+);
+CREATE INDEX IF NOT EXISTS "idx_room_moderators_parent" ON "room_moderators" ("rooms_id", position);
 
 -- Model: RoomParticipant
 CREATE TABLE IF NOT EXISTS "room_participants" (
@@ -1364,6 +1495,21 @@ CREATE TABLE IF NOT EXISTS "room_recordings" (
   "updated_at" TEXT
 );
 
+-- Room.speakerIds: source_id is <parent source_id>:<field>:<position>; primitive element stored in value
+-- Model: Room.speakerIds
+CREATE TABLE IF NOT EXISTS "room_speakers" (
+  source_id TEXT PRIMARY KEY,
+  "value" TEXT REFERENCES "users"("source_id"),
+  "rooms_id" TEXT NOT NULL REFERENCES "rooms"("source_id"),
+  position INTEGER NOT NULL CHECK (position >= 0)
+);
+CREATE INDEX IF NOT EXISTS "idx_room_speakers_parent" ON "room_speakers" ("rooms_id", position);
+
+-- Room: speakerIds normalized into room_speakers (no JSON column on parent)
+-- Room: moderatorIds normalized into room_moderators (no JSON column on parent)
+-- Room: roomAdminIds normalized into room_admins (no JSON column on parent)
+-- Room: coHostIds normalized into room_cohosts (no JSON column on parent)
+-- Room: lockedSeatIndices normalized into room_locked_seats (no JSON column on parent)
 -- Model: Room
 CREATE TABLE IF NOT EXISTS "rooms" (
   source_id TEXT PRIMARY KEY,
@@ -1379,16 +1525,11 @@ CREATE TABLE IF NOT EXISTS "rooms" (
   "visibility" TEXT NOT NULL CHECK ("visibility" IN ('PUBLIC', 'PRIVATE')),
   "max_speakers" INTEGER NOT NULL,
   "participant_count" INTEGER NOT NULL,
-  "speaker_ids" TEXT NOT NULL,
-  "moderator_ids" TEXT NOT NULL,
-  "room_admin_ids" TEXT NOT NULL,
   "active_pk_id" TEXT REFERENCES "pk_battles"("source_id"),
-  "co_host_ids" TEXT NOT NULL,
   "is_duet" INTEGER NOT NULL,
   "livekit_room_name" TEXT NOT NULL,
   "allow_audience_mic_requests" INTEGER NOT NULL,
   "mic_locked" INTEGER NOT NULL,
-  "locked_seat_indices" TEXT NOT NULL,
   "theme" TEXT,
   "vip_only" INTEGER NOT NULL,
   "badge" TEXT,
@@ -1473,13 +1614,23 @@ CREATE TABLE IF NOT EXISTS "story_comments" (
   "updated_at" TEXT
 );
 
+-- StoryHighlight.storyIds: source_id is <parent source_id>:<field>:<position>; primitive element stored in value
+-- Model: StoryHighlight.storyIds
+CREATE TABLE IF NOT EXISTS "story_highlight_stories" (
+  source_id TEXT PRIMARY KEY,
+  "value" TEXT REFERENCES "stories"("source_id"),
+  "story_highlights_id" TEXT NOT NULL REFERENCES "story_highlights"("source_id"),
+  position INTEGER NOT NULL CHECK (position >= 0)
+);
+CREATE INDEX IF NOT EXISTS "idx_story_highlight_stories_parent" ON "story_highlight_stories" ("story_highlights_id", position);
+
+-- StoryHighlight: storyIds normalized into story_highlight_stories (no JSON column on parent)
 -- Model: StoryHighlight
 CREATE TABLE IF NOT EXISTS "story_highlights" (
   source_id TEXT PRIMARY KEY,
   "user_id" TEXT NOT NULL REFERENCES "users"("source_id"),
   "title" TEXT NOT NULL,
   "cover_media_url" TEXT,
-  "story_ids" TEXT NOT NULL,
   "created_at" TEXT,
   "updated_at" TEXT
 );
@@ -1912,6 +2063,18 @@ CREATE TABLE IF NOT EXISTS "voice_poll_ballots" (
 );
 CREATE INDEX IF NOT EXISTS "idx_voice_poll_ballots_parent" ON "voice_poll_ballots" ("voice_polls_id", position);
 
+-- VoicePoll.options: source_id is derived from element _id when present, otherwise <parent source_id>:<field>:<position>
+-- Model: VoicePoll.options
+CREATE TABLE IF NOT EXISTS "voice_poll_options" (
+  source_id TEXT PRIMARY KEY,
+  "text" TEXT NOT NULL,
+  "audio_url" TEXT,
+  "votes" INTEGER NOT NULL,
+  "voice_polls_id" TEXT NOT NULL REFERENCES "voice_polls"("source_id"),
+  position INTEGER NOT NULL CHECK (position >= 0)
+);
+CREATE INDEX IF NOT EXISTS "idx_voice_poll_options_parent" ON "voice_poll_options" ("voice_polls_id", position);
+
 -- VoicePoll.voters: source_id is <parent source_id>:<field>:<position>; primitive element stored in value
 -- Model: VoicePoll.voters
 CREATE TABLE IF NOT EXISTS "voice_poll_votes" (
@@ -1924,6 +2087,7 @@ CREATE INDEX IF NOT EXISTS "idx_voice_poll_votes_parent" ON "voice_poll_votes" (
 
 -- VoicePoll: voters normalized into voice_poll_votes (no JSON column on parent)
 -- VoicePoll: ballots normalized into voice_poll_ballots (no JSON column on parent)
+-- VoicePoll: options normalized into voice_poll_options (no JSON column on parent)
 -- Model: VoicePoll
 CREATE TABLE IF NOT EXISTS "voice_polls" (
   source_id TEXT PRIMARY KEY,
@@ -1931,7 +2095,6 @@ CREATE TABLE IF NOT EXISTS "voice_polls" (
   "question" TEXT NOT NULL,
   "audio_url" TEXT NOT NULL,
   "duration" INTEGER NOT NULL,
-  "options" TEXT NOT NULL,
   "is_active" INTEGER NOT NULL,
   "expires_at" TEXT,
   "created_at" TEXT,
@@ -2058,51 +2221,3 @@ CREATE TABLE IF NOT EXISTS "xp_grants" (
   "created_at" TEXT,
   "updated_at" TEXT
 );
-
--- Review warnings:
--- Achievement.imageData: binary field stored as TEXT; migration must replace with R2 bucket/key reference
--- AdminAuditLog.metadata: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- AdminModerationAction.metadata: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- AppConfig.value: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- Bond.milestoneDays: array stored as JSON TEXT; child-table candidate per mapping spec
--- Bond.preferences: Map stored as JSON TEXT
--- BondRankingSnapshot.entries: array stored as JSON TEXT; child-table candidate per mapping spec
--- Clan.memberIds: array stored as JSON TEXT; child-table candidate per mapping spec
--- Clan.memberRoles: array stored as JSON TEXT; child-table candidate per mapping spec
--- CreatorPayoutKyc.metadata: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- DiamondTransaction.metadata: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- DirectMessage.replyTo: embedded document stored as JSON TEXT; child-table candidate per mapping spec
--- Event.tags: array stored as JSON TEXT; child-table candidate per mapping spec
--- FaceVerificationSubmission.providerResponse: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- Gift.upgradePath: array stored as JSON TEXT; child-table candidate per mapping spec
--- GiftTransaction.metadata: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- ImmersiveTheme.colors: array stored as JSON TEXT; child-table candidate per mapping spec
--- ImmersiveTheme.animation: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- MiniGameScore.metadata: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- Notification.data: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- NotificationCampaign.filters: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- PayoutReview.riskFlags: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- PayoutReview.payout: embedded document stored as JSON TEXT; child-table candidate per mapping spec
--- PkEvent.metadata: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- Poll.options: array stored as JSON TEXT; child-table candidate per mapping spec
--- Purchase.metadata: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- Report.evidence: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- Room.tags: array stored as JSON TEXT; child-table candidate per mapping spec
--- Room.speakerIds: array stored as JSON TEXT; child-table candidate per mapping spec
--- Room.moderatorIds: array stored as JSON TEXT; child-table candidate per mapping spec
--- Room.roomAdminIds: array stored as JSON TEXT; child-table candidate per mapping spec
--- Room.coHostIds: array stored as JSON TEXT; child-table candidate per mapping spec
--- Room.lockedSeatIndices: array stored as JSON TEXT; child-table candidate per mapping spec
--- RoomActivity.metadata: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- RoomModeState.scores: Map stored as JSON TEXT
--- RoomModeState.currentOptions: array stored as JSON TEXT; child-table candidate per mapping spec
--- RoomModeState.metadata: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- Season.rewards.freeReward: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- Season.rewards.premiumReward: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- StoryHighlight.storyIds: array stored as JSON TEXT; child-table candidate per mapping spec
--- SupportMessage.attachments: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- VoicePoll.options: array stored as JSON TEXT; child-table candidate per mapping spec
--- VoiceVerificationSubmission.providerResponse: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- WalletTransaction.metadata: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- WithdrawalRequest.metadata: Mixed stored as JSON TEXT; normalize if the field is queried or joined
--- XpGrant.receipt: Mixed stored as JSON TEXT; normalize if the field is queried or joined

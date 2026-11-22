@@ -107,7 +107,11 @@ test("direct messages preserve reply provenance, hidden-for and reaction childre
   assert.equal(root.forwarded, 1);
   assert.equal(root.is_edited, 1);
   assert.equal(root.read, 0);
-  assert.equal(root.reply_to, JSON.stringify({ author: "nick", authorId: C, mediaUrl: "", messageId: C, text: "quote" }));
+  assert.equal(root.reply_to_message_id, C);
+  assert.equal(root.reply_to_author, "nick");
+  assert.equal(root.reply_to_author_id, C);
+  assert.equal(root.reply_to_text, "quote");
+  assert.equal(root.reply_to_media_url, "");
   assert.equal(hidden.value, C);
   assert.equal(hidden.direct_messages_id, MSG);
   assert.equal(reactions.length, 1);
@@ -183,12 +187,15 @@ test("story highlights keep deterministic story-id JSON and quarantine non-array
   });
   const row = table(result, "story_highlights")[0];
   assert.equal(result.rejected, false);
-  assert.equal(row.story_ids, JSON.stringify([B, C]));
+  assert.deepEqual(table(result, "story_highlight_stories"), [
+    { source_id: `${STORY}:storyIds:0`, value: B, story_highlights_id: STORY, position: 0 },
+    { source_id: `${STORY}:storyIds:1`, value: C, story_highlights_id: STORY, position: 1 }
+  ]);
   assert.deepEqual(context.quarantine, []);
 
   const odd = map("story_highlights", { _id: STORY, userId: A, title: "Odd", storyIds: { not: "an array" } });
   assert.equal(odd.result.rejected, false);
-  assert.equal(table(odd.result, "story_highlights")[0].story_ids, "[]");
+  assert.deepEqual(table(odd.result, "story_highlight_stories"), []);
   assert.deepEqual(odd.context.quarantine.map((entry) => entry.reason), ["INVALID_REFERENCE"]);
 });
 

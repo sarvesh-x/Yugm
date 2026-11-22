@@ -13,6 +13,11 @@ export function defineMigration(version: number, name: string, up: (db: mongoose
   migrations.push({ version, name, up, down });
 }
 
+/** Removes Mongoose's legacy default-named equivalents before named indexes are created. */
+async function dropLegacyIndexes(collection: mongoose.mongo.Collection, names: string[]) {
+  for (const name of names) await collection.dropIndex(name).catch(() => {});
+}
+
 async function getAppliedVersions(db: mongoose.mongo.Db): Promise<number[]> {
   try {
     const docs = await db.collection("_migrations").find().sort({ version: 1 }).toArray();
@@ -92,6 +97,11 @@ defineMigration(5, "create_wallet_transactions_indexes", async (db) => {
 // cosmetic, achievement, gift or user document is read or rewritten here.
 defineMigration(6, "create_asset_objects_indexes", async (db) => {
   const assets = db.collection("assetobjects");
+  await dropLegacyIndexes(assets, [
+    "ownerType_1_ownerId_1_version_1",
+    "ownerType_1_ownerId_1_sha256_1",
+    "status_1_createdAt_-1"
+  ]);
   await assets.createIndex({ ownerType: 1, ownerId: 1, version: 1 }, { unique: true, name: "asset_owner_version" });
   await assets.createIndex({ ownerType: 1, ownerId: 1, sha256: 1 }, { name: "asset_owner_sha256" });
   await assets.createIndex({ status: 1, createdAt: -1 }, { name: "asset_status_created" });
@@ -121,6 +131,11 @@ defineMigration(8, "create_badge_asset_ref_index", async (db) => {
 // No existing media URL or user document is rewritten by this migration.
 defineMigration(9, "create_media_registry_indexes", async (db) => {
   const media = db.collection("mediaobjects");
+  await dropLegacyIndexes(media, [
+    "ownerType_1_ownerId_1_category_1_version_1",
+    "checksum_1",
+    "deletedAt_1"
+  ]);
   await media.createIndex(
     { ownerType: 1, ownerId: 1, category: 1, version: 1 },
     { unique: true, name: "media_owner_category_version" }

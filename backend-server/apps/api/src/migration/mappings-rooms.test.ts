@@ -172,7 +172,10 @@ test("polls keep option JSON with integer votes and voter children", () => {
   });
   const row = table(result, "polls")[0];
   assert.equal(result.rejected, false);
-  assert.equal(row.options, '[{"text":"one","votes":2},{"text":"two","votes":0}]');
+  assert.deepEqual(table(result, "poll_options"), [
+    { source_id: `${POLL}:options:0`, text: "one", votes: 2, polls_id: POLL, position: 0 },
+    { source_id: `${POLL}:options:1`, text: "two", votes: 0, polls_id: POLL, position: 1 }
+  ]);
   assert.deepEqual(table(result, "poll_votes").map((vote) => vote.value), [B, C]);
   assert.equal(table(result, "poll_votes")[0].polls_id, POLL);
   assert.equal(row.is_active, 1);
@@ -194,7 +197,10 @@ test("voice polls keep option JSON, voter and ballot children", () => {
   const row = table(result, "voice_polls")[0];
   assert.equal(result.rejected, false);
   assert.equal(row.audio_url, "");
-  assert.equal(row.options, '[{"text":"one","votes":1},{"audioUrl":"https://cdn.test/o.mp3","text":"two","votes":0}]');
+  assert.deepEqual(table(result, "voice_poll_options"), [
+    { source_id: `${POLL}:options:0`, text: "one", audio_url: "", votes: 1, voice_polls_id: POLL, position: 0 },
+    { source_id: `${POLL}:options:1`, text: "two", audio_url: "https://cdn.test/o.mp3", votes: 0, voice_polls_id: POLL, position: 1 }
+  ]);
   assert.deepEqual(table(result, "voice_poll_votes").map((vote) => vote.value), [B]);
   const ballots = table(result, "voice_poll_ballots");
   assert.equal(ballots.length, 1);
@@ -206,7 +212,7 @@ test("voice polls keep option JSON, voter and ballot children", () => {
 
   const bad = map("voice_polls", { _id: POLL, userId: A, question: "q", options: "not-an-array" });
   assert.equal(bad.result.rejected, false);
-  assert.equal(table(bad.result, "voice_polls")[0].options, "[]");
+  assert.deepEqual(table(bad.result, "voice_poll_options"), []);
   assert.deepEqual(bad.context.quarantine.map((entry) => entry.reason), ["INVALID_REFERENCE"]);
 });
 

@@ -58,16 +58,67 @@ const CHILD_TABLES: Record<string, Record<string, string>> = {
   ClanMessage: { reactions: "clan_message_reactions" },
   DirectMessage: { reactions: "direct_message_reactions", hiddenFor: "message_hidden_for" },
   GroupChat: { participantIds: "conversation_participants" },
-  Poll: { voters: "poll_votes" },
-  VoicePoll: { voters: "voice_poll_votes", ballots: "voice_poll_ballots" },
+  Poll: { voters: "poll_votes", options: "poll_options" },
+  VoicePoll: { voters: "voice_poll_votes", ballots: "voice_poll_ballots", options: "voice_poll_options" },
   SupportTicket: { messages: "support_ticket_messages" },
   Event: { participantIds: "event_participants" },
   Story: { viewedBy: "story_views" },
-  Bond: { users: "bond_users", slots: "bond_slots" },
+  Bond: { users: "bond_users", slots: "bond_slots", milestoneDays: "bond_milestones", preferences: "bond_preferences" },
   Match: { users: "match_users" },
   Relationship: { users: "relationship_users" },
-  RoomModeState: { participants: "room_mode_participants" }
+  RoomModeState: { participants: "room_mode_participants", scores: "room_mode_scores" },
+  BondRankingSnapshot: { entries: "bond_ranking_entries" },
+  Clan: { memberIds: "clan_members", memberRoles: "clan_member_roles" },
+  Gift: { upgradePath: "gift_upgrade_paths" },
+  Room: { speakerIds: "room_speakers", moderatorIds: "room_moderators", roomAdminIds: "room_admins", coHostIds: "room_cohosts", lockedSeatIndices: "room_locked_seats" },
+  StoryHighlight: { storyIds: "story_highlight_stories" }
 };
+
+/**
+ * Embedded documents promoted to columns on the parent table. The key is the
+ * source field; the value is the column-name prefix for its promoted fields.
+ */
+const PROMOTED_EMBEDDED: Record<string, Record<string, string>> = {
+  DirectMessage: { replyTo: "reply_to_" },
+  PayoutReview: { payout: "" }
+};
+
+/**
+ * Validated JSON TEXT fields approved by the owner triage. These remain JSON
+ * TEXT, but do not emit a review warning.
+ */
+const VALIDATED_JSON_FIELDS = new Set<string>([
+  "AdminAuditLog.metadata",
+  "AdminModerationAction.metadata",
+  "AppConfig.value",
+  "CreatorPayoutKyc.metadata",
+  "DiamondTransaction.metadata",
+  "Event.tags",
+  "FaceVerificationSubmission.providerResponse",
+  "GiftTransaction.metadata",
+  "ImmersiveTheme.colors",
+  "ImmersiveTheme.animation",
+  "MiniGameScore.metadata",
+  "Bond.preferences",
+  "Notification.data",
+  "NotificationCampaign.filters",
+  "PkEvent.metadata",
+  "Purchase.metadata",
+  "Report.evidence",
+  "Room.tags",
+  "RoomActivity.metadata",
+  "PayoutReview.riskFlags",
+  "RoomModeState.currentOptions",
+  "RoomModeState.metadata",
+  "RoomModeState.scores",
+  "Season.rewards.freeReward",
+  "Season.rewards.premiumReward",
+  "SupportMessage.attachments",
+  "VoiceVerificationSubmission.providerResponse",
+  "WalletTransaction.metadata",
+  "WithdrawalRequest.metadata",
+  "XpGrant.receipt"
+]);
 
 const warnings: Warning[] = [];
 const allTables: Table[] = [];
@@ -104,6 +155,7 @@ function columnName(name: string): string {
 
 function sqlType(schemaType: any, model: string, field: string): string {
   const instance: string = schemaType?.instance || schemaType?.constructor?.name || "Unknown";
+  const validated = VALIDATED_JSON_FIELDS.has(`${model}.${field}`);
   switch (instance) {
     case "String":
     case "ObjectID":
@@ -119,26 +171,26 @@ function sqlType(schemaType: any, model: string, field: string): string {
     case "Date":
       return "TEXT";
     case "Decimal128":
-      warn(model, field, "Decimal128 stored as TEXT; convert to integer minor units during transform");
+      if (!validated) warn(model, field, "Decimal128 stored as TEXT; convert to integer minor units during transform");
       return "TEXT";
     case "Buffer":
-      warn(model, field, "binary field stored as TEXT; migration must replace with R2 bucket/key reference");
+      if (!validated) warn(model, field, "binary field stored as TEXT; migration must replace with R2 bucket/key reference");
       return "TEXT";
     case "Mixed":
-      warn(model, field, "Mixed stored as JSON TEXT; normalize if the field is queried or joined");
+      if (!validated) warn(model, field, "Mixed stored as JSON TEXT; normalize if the field is queried or joined");
       return "TEXT";
     case "Array":
-      warn(model, field, "array stored as JSON TEXT; child-table candidate per mapping spec");
+      if (!validated) warn(model, field, "array stored as JSON TEXT; child-table candidate per mapping spec");
       return "TEXT";
     case "Embedded":
     case "Subdocument":
-      warn(model, field, "embedded document stored as JSON TEXT; child-table candidate per mapping spec");
+      if (!validated) warn(model, field, "embedded document stored as JSON TEXT; child-table candidate per mapping spec");
       return "TEXT";
     case "Map":
-      warn(model, field, "Map stored as JSON TEXT");
+      if (!validated) warn(model, field, "Map stored as JSON TEXT");
       return "TEXT";
     default:
-      warn(model, field, `unmapped Mongoose type '${instance}' defaulted to TEXT; review before use`);
+      if (!validated) warn(model, field, `unmapped Mongoose type '${instance}' defaulted to TEXT; review before use`);
       return "TEXT";
   }
 }
@@ -248,10 +300,24 @@ function buildTables(modelName: string, schema: mongoose.Schema): Table[] {
   columns.push("  source_id TEXT PRIMARY KEY");
 
   const childSpecs = CHILD_TABLES[modelName] || {};
+  const promotedSpecs = PROMOTED_EMBEDDED[modelName] || {};
   const seenColumns = new Set<string>(["source_id"]);
   for (const [name, schemaType] of Object.entries(schema.paths)) {
     if (name === "_id" || name === "__v") continue;
-    if (childSpecs[name]) continue;
+
+    if (childSpecs[name]) {
+      seenColumns.add(columnName(name));
+      continue;
+    }
+    if (Object.prototype.hasOwnProperty.call(promotedSpecs, name)) {
+      seenColumns.add(columnName(name));
+      continue;
+    }
+    if (`${modelName}.${name}` === "Achievement.imageData") {
+      seenColumns.add(columnName(name));
+      notes.push(`${name} legacy binary is not stored in D1; use imageUrl/assetRef and an approved R2 provenance step`);
+      continue;
+    }
     const col = columnName(name);
     // Mongoose Map fields expose both `field` and `field.$*` paths; both
     // sanitize to the same column. Emit it once so the draft is valid SQLite.
@@ -268,6 +334,29 @@ function buildTables(modelName: string, schema: mongoose.Schema): Table[] {
     if (!seenColumns.has("updated_at")) columns.push('  "updated_at" TEXT');
     seenColumns.add("created_at");
     seenColumns.add("updated_at");
+  }
+
+  for (const [field, prefix] of Object.entries(promotedSpecs)) {
+    const schemaType = schema.path(field);
+    if (!schemaType) {
+      warn(modelName, field, `promoted columns configured but path does not exist`);
+      continue;
+    }
+    const childSchema = schemaType?.schema as mongoose.Schema | undefined;
+    if (!childSchema) {
+      warn(modelName, field, "promoted field is not an embedded document");
+      continue;
+    }
+    const promoted: string[] = [];
+    for (const [name, subType] of Object.entries(childSchema.paths)) {
+      if (name === "__v") continue;
+      const col = `${prefix}${columnName(name)}`;
+      if (seenColumns.has(col)) continue;
+      seenColumns.add(col);
+      columns.push(columnDefinition(modelName, `${field}.${name}`, subType, col));
+      promoted.push(col);
+    }
+    notes.push(`${field} promoted into columns: ${promoted.join(", ")}`);
   }
 
   for (const [field, childTable] of Object.entries(childSpecs)) {

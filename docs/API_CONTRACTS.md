@@ -14,6 +14,12 @@ Do not hand-maintain a second route list as authoritative. The CSV is generated 
 
 The API has more than one response envelope in existing paths. Inspect `src/utils/http.ts`, app error middleware, and the specific route before assuming a universal shape. `requestId` is included by the central app error path. New or modified paths should use the existing helpers consistently and preserve client compatibility deliberately.
 
+## Health and readiness
+
+- `GET /health` and `GET /api/health` are lightweight liveness probes. They return process metadata and a pointer to `/ready` without querying MongoDB, storage or the image processor. Platform health checks and cheap uptime probes should use these paths.
+- `GET /ready` and `GET /api/ready` are dependency readiness probes. They verify database connectivity, storage configuration and that an image processor is installed, while reporting Redis/job state without requiring it. They return `503` until those dependencies are ready. The response contains only non-sensitive configuration status, never secrets or signed URLs.
+- On the Cloudflare Worker, `/health` is answered by the Durable Object shell before runtime startup; `/ready` is served by Express and therefore also proves that the Worker runtime initialized.
+
 ## Bonds contract (single inner-circle state)
 
 - `/api/bonds` is the only source of truth for the unified three-slot Bonds circle. `GET /api/bonds/me` returns the server `capacity` (`YUGM_BOND_SLOTS` / `bondConfig.capacity`, default `3`), active bonds, pending requests, ended history, and preferences. The former `GET /api/users/me/close-friends` and `POST|DELETE /api/users/:id/close-friend` routes are removed; `User.closeFriendIds` is removed.
@@ -30,7 +36,7 @@ The API has more than one response envelope in existing paths. Inspect `src/util
 ## Centralized asset contract (Phase 1)
 
 - `/api/admin/assets` is the single admin-managed asset registry for cosmetic, badge and gift art. It requires `cosmetics.read` for reads and `cosmetics.write` for staging, publishing and archiving; every mutation writes an `AdminAuditLog` entry through `auditLog()`.
-- `POST /api/admin/assets` accepts multipart `asset` plus `ownerType` (`cosmetic|badge|gift`) and `ownerId`. JPEG, PNG, WebP and GIF up to 8 MB are accepted after signature/dimension validation with `sharp`. The file is written to **private** `assets-staging/` storage and returns a `staging` asset with a version, SHA-256 and dimensions. No public URL is returned at this stage.
+- `POST /api/admin/assets` accepts multipart `asset` plus `ownerType` (`cosmetic|badge|gift`) and `ownerId`. JPEG, PNG, WebP and GIF up to 8 MB pass signature/dimension validation through the host-neutral image processor: Sharp on Node, Cloudflare Images transformations on the Worker. The file is written to **private** `assets-staging/` storage and returns a `staging` asset with a version, SHA-256 and dimensions. No public URL is returned at this stage.
 - `GET /api/admin/assets/staging/:fileName` is authenticated and serves staging bytes with `Cache-Control: private, no-store`. Staging filenames are validated against a fixed pattern; external URLs and arbitrary paths are rejected.
 - `POST /api/admin/assets/:id/publish` produces immutable `full` (1600px) and `preview` (512px) WebP variants under versioned `assets/` keys and sets `publicUrl`. Published keys and URLs are never overwritten; a new upload allocates a new version. `DELETE /api/admin/assets/:id` archives an asset and removes its objects.
 - Consumers must store the asset reference, not mint URLs. `resolvePublishedAsset(ownerType, ownerId)` returns the newest published asset for a cosmetic/badge/gift. Phase 1 did not change read responses; Phase 2 resolves cosmetic references and Phase 3 resolves badge references (see below). The legacy `/api/badge-art/:id/:version` route remains for existing blobs until an approved cutover.

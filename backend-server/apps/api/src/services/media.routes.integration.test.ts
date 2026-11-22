@@ -57,6 +57,8 @@ let outsiderToken: string;
 before(async () => {
   mongod = await MongoMemoryServer.create();
   await mongoose.connect(mongod.getUri("yugm-r2-http-routes"));
+  const { installSharpImageProcessor } = await import("./imageProcessor.node.js");
+  installSharpImageProcessor();
   const { mediaRouter } = await import("../routes/media.js");
   const { getManagedS3Client } = await import("./storage.js");
   ({ signAccessToken } = await import("../services/tokens.js"));

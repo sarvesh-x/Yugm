@@ -1,7 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import fs from "fs/promises";
 import mongoose from "mongoose";
-import sharp from "sharp";
 import {
   AssetObject,
   assetOwners,
@@ -16,6 +15,7 @@ import {
   loadAssetStagingFile,
   persistManagedBuffer
 } from "./storage.js";
+import { getImageProcessor } from "./imageProcessor.js";
 import { HttpError } from "../utils/http.js";
 
 const MAX_ASSET_BYTES = 8 * 1024 * 1024;
@@ -150,7 +150,7 @@ export async function createStagingAsset(input: AssetInput): Promise<PublicAsset
   assertAssetSize(input.bytes);
   if (input.content.length !== input.bytes) throw new HttpError(400, "Asset size does not match the uploaded file");
 
-  const metadata = await sharp(input.content, { animated: true }).metadata().catch(() => null);
+  const metadata = await getImageProcessor().metadata(input.content, { animated: true }).catch(() => null);
   if (!metadata) throw new HttpError(400, "Uploaded file is not a supported image");
   if (!metadata.width || !metadata.height || metadata.width > MAX_ASSET_DIMENSION || metadata.height > MAX_ASSET_DIMENSION) {
     throw new HttpError(400, "Asset dimensions are outside the supported range");
@@ -198,11 +198,12 @@ async function buildVariants(asset: AssetDocument, content: Buffer): Promise<Ass
   ];
   const variants: AssetVariant[] = [];
   for (const definition of definitions) {
-    const output = await sharp(content, { animated: true })
-      .rotate()
-      .resize({ width: definition.width, withoutEnlargement: true })
-      .webp({ quality: 84 })
-      .toBuffer({ resolveWithObject: true });
+    const output = await getImageProcessor().resizeToWebp(content, {
+      width: definition.width,
+      withoutEnlargement: true,
+      quality: 84,
+      animated: true
+    });
     const key = assetPublicKey(asset.ownerType, asset.ownerId, asset.version, definition.name);
     const stored = await persistManagedBuffer({
       buffer: output.data,

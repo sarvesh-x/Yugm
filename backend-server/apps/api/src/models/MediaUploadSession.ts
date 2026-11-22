@@ -46,7 +46,7 @@ const mediaUploadSessionSchema = new Schema<MediaUploadSessionDocument>(
   { timestamps: true, _id: false }
 );
 
-mediaUploadSessionSchema.index({ userId: 1, status: 1 });
-mediaUploadSessionSchema.index({ expiresAt: 1 });
+mediaUploadSessionSchema.index({ userId: 1, status: 1 }, { name: "media_session_user_status" });
+mediaUploadSessionSchema.index({ expiresAt: 1 }, { name: "media_session_expiry" });
 
 export const MediaUploadSession = mongoose.model<MediaUploadSessionDocument>("MediaUploadSession", mediaUploadSessionSchema);

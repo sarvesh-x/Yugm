@@ -51,6 +51,8 @@ let userId: string;
 before(async () => {
   mongod = await MongoMemoryServer.create();
   await mongoose.connect(mongod.getUri("yugm-r2-integration"));
+  const { installSharpImageProcessor } = await import("./imageProcessor.node.js");
+  installSharpImageProcessor();
   media = await import("./media.js");
   mediaModels = {
     MediaObject: (await import("../models/MediaObject.js")).MediaObject,

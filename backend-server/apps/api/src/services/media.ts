@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import mongoose from "mongoose";
-import sharp from "sharp";
 import { Block } from "../models/Block.js";
 import { DirectMessage } from "../models/DirectMessage.js";
 import { MediaObject, type MediaDocument } from "../models/MediaObject.js";
@@ -8,6 +7,7 @@ import { MediaQuotaReservation } from "../models/MediaQuotaReservation.js";
 import { MediaUploadSession } from "../models/MediaUploadSession.js";
 import { User } from "../models/User.js";
 import { HttpError } from "../utils/http.js";
+import { getImageProcessor, hasImageProcessor } from "./imageProcessor.js";
 import {
   buildMediaKey,
   buildStagingKey,
@@ -160,6 +160,10 @@ async function releaseReservation(userId: string, bytes: number) {
 /** Session creation never trusts client-supplied keys or owner identifiers. */
 export async function createUploadSession(input: UploadSessionInput) {
   const { category, contentType, extension } = validateUploadRequest(input);
+  // Managed uploads cannot be completed without a processor. Report the
+  // capability up front so clients can use the documented legacy fallback
+  // instead of staging bytes that can never be published.
+  if (!hasImageProcessor()) throw new HttpError(503, "Managed media uploads are unavailable on this host");
   const sessionId = randomUUID();
   const stagingKey = buildStagingKey(sessionId, extension);
   const ownerType: MediaOwnerType = "USER";
@@ -249,11 +253,15 @@ async function buildAvatarVariants(input: {
   for (const size of [64, 128, 256]) {
     // Avatars use the first frame and strip metadata; the private original
     // keeps provenance for moderation and rollback.
-    const output = await sharp(input.content, { limitInputPixels: MAX_IMAGE_PIXELS })
-      .rotate()
-      .resize({ width: size, height: size, fit: "inside", withoutEnlargement: true })
-      .webp({ quality: 82, effort: 4 })
-      .toBuffer({ resolveWithObject: true });
+    const output = await getImageProcessor().resizeToWebp(input.content, {
+      width: size,
+      height: size,
+      fit: "inside",
+      withoutEnlargement: true,
+      quality: 82,
+      animated: false,
+      limitInputPixels: MAX_IMAGE_PIXELS
+    });
     const key = buildMediaKey({
       bucket: "public-media",
       ownerType: "USER",
@@ -339,7 +347,10 @@ export async function completeUploadSession(sessionId: string, actorId: string) 
   try {
     const staged = await getObject("staging", claimed.stagingKey);
     assertStagedUpload(claimed.expectedBytes, staged);
-    const metadata = await sharp(staged.body, { animated: true, limitInputPixels: MAX_IMAGE_PIXELS }).metadata();
+    const metadata = await getImageProcessor().metadata(staged.body, {
+      animated: true,
+      limitInputPixels: MAX_IMAGE_PIXELS
+    });
     if (!metadata.width || !metadata.height || metadata.width > MAX_IMAGE_DIMENSION || metadata.height > MAX_IMAGE_DIMENSION) {
       throw new HttpError(400, "Uploaded image dimensions are outside the supported range");
     }

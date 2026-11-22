@@ -57,8 +57,8 @@ jobs:
             exit 1
           fi
           npm --workspace apps/cloudflare-worker run deploy:staging
-          curl -fsS --retry 4 --retry-all-errors --max-time 30 "$STAGING_API/health" |
-            jq -e '.ok and .db.ready and (.db.name == "YugmStaging") and .storage.ready'
+          curl -fsS --retry 4 --retry-all-errors --max-time 30 "$STAGING_API/ready" |
+            jq -e '.ok and .db.ready and (.db.name == "YugmStaging") and .storage.ready and .images.configured'
       - name: Deploy and verify staging admin
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}

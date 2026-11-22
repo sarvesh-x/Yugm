@@ -160,6 +160,19 @@ if (process.env.STORAGE_DRIVER === "s3") {
     || process.env.S3_PUBLIC_BASE_URL?.trim();
   if (!publicBase) {
     storageErrors.push("R2_ASSETS_PUBLIC_URL or R2_MEDIA_PUBLIC_URL (or S3_PUBLIC_BASE_URL) is required for public media URLs");
+  } else {
+    for (const key of ["R2_ASSETS_PUBLIC_URL", "R2_MEDIA_PUBLIC_URL", "S3_PUBLIC_BASE_URL"]) {
+      const value = process.env[key]?.trim();
+      if (!value) continue;
+      try {
+        const url = new URL(value);
+        if (url.protocol !== "https:" && url.protocol !== "http:") {
+          storageErrors.push(`${key} must use an http:// or https:// URL`);
+        }
+      } catch {
+        storageErrors.push(`${key} must be a valid URL`);
+      }
+    }
   }
 } else if (r2BucketKeys.some((key) => Boolean(process.env[key]?.trim())) || process.env.R2_ACCOUNT_ID?.trim()) {
   storageHints.push("R2_* values are set but STORAGE_DRIVER is not 's3'; managed media uploads will return 503");

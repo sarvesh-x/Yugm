@@ -15,6 +15,7 @@ Start every session with this file, then read [docs/INDEX.md](docs/INDEX.md) and
 
 - Android source is a modular Kotlin/Jetpack Compose app. Reuse the existing `:core:ui` theme and components; do not add a competing theme or navigation system. Follow [docs/NAVIGATION_ARCHITECTURE.md](docs/NAVIGATION_ARCHITECTURE.md) for the single-host bottom-dock whitelist, inset ownership, and route/back-stack rules; new destinations hide the dock by default unless explicitly registered as main roots.
 - Backend source is a Node.js/TypeScript npm workspace with an Express API, MongoDB/Mongoose, shared contracts, Socket.IO, and a React admin app. Follow existing route, service, schema, and middleware boundaries.
+- Cloudflare Worker source must not import native or natively loaded Node libraries (for example `sharp`) directly or transitively. Use the host-neutral image processor registry and Worker bindings; keep Node-only providers out of every module reachable by the Worker, including dynamic imports and scheduled maintenance.
 - Keep balances, purchases, permissions, memberships, and other authoritative state on the server. Validate authorization at the resource and operation boundary; a client result is not proof of commit.
 - Treat `docs/production/` as detailed, evidence-linked audit material. Its dated baselines are not automatically current; check `current-progress.md` and source before relying on a finding.
 - Do not expose credentials, run migrations/seeds against unknown environments, or commit, push, deploy, or release without explicit authorization.

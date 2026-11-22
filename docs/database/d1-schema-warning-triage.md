@@ -1,7 +1,8 @@
 # D1 schema warning triage ( proposal — owner decision required )
 
 **Date:** 2026-11-22  
-**Status:** Local review package for the 46 warnings in `backend-server/apps/api/migrations/d1/0001_initial.manifest.json`. This is **not** schema approval and changes no schema policy. It applies the rules in [the mapping specification](mongo-to-relational-mapping.md) and source checks under `backend-server/apps/api/src/`. The generated SQL remains a review draft.
+**Status:** Owner-approved triage package for the 46 warnings in `backend-server/apps/api/migrations/d1/0001_initial.manifest.json`. This records disposition decisions only; it is not approval of the generated DDL and changes no schema policy or DDL.
+**Approval recorded:** 2026-11-22 by owner selection. Dispositions in this document are approved for later implementation; DDL regeneration still requires a separate explicit step. It applies the rules in [the mapping specification](mongo-to-relational-mapping.md) and source checks under `backend-server/apps/api/src/`. The generated SQL remains a review draft.
 
 **Generator defect found and fixed (2026-11-22):** Mongoose Map fields expose both `field` and `field.$*` paths, and both sanitized to the same SQL column, producing invalid duplicate columns `bonds.preferences` and `room_mode_states.scores`. `generate-d1-schema.ts` now suppresses the duplicate wildcard column and records a note in the generated SQL. This purely mechanical fix removed one now-obsolete warning (`Bond.preferences.$*`) from the manifest; no field was dropped and no schema policy changed. This document was updated from 47 to 46 warnings to match.
 

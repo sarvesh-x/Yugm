@@ -14,6 +14,12 @@ import { connectRedis } from "./services/redis.js";
 import { closeSocketInfrastructure, initSocket } from "./services/socket.js";
 import { ensureOfficialRooms } from "./services/officialRooms.js";
 import { ensureMongoMediaIndexes } from "./services/storage.js";
+import { installSharpImageProcessor } from "./services/imageProcessor.node.js";
+
+// Node deployments process images in-process with Sharp. The Cloudflare
+// Worker installs its own Images-binding processor instead, so Sharp is never
+// part of the Worker module graph.
+installSharpImageProcessor();
 
 process.on("unhandledRejection", (err) => {
   console.error("Unhandled rejection:", err);

@@ -12,6 +12,7 @@
     "bindings": [{ "name": "API_SERVICE", "class_name": "YugmApi" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["YugmApi"] }],
+  "images": { "binding": "IMAGES" },
   "vars": {
     "YUGM_STAGE": "production",
     "NODE_ENV": "production",

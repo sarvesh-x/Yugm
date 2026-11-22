@@ -60,6 +60,7 @@ import { missionsRouter } from "./routes/missions.js";
 import { battlePassRouter } from "./routes/battlePass.js";
 import { wishlistRouter } from "./routes/wishlist.js";
 import { getJobHealth } from "./services/jobs.js";
+import { getImageProcessorHealth } from "./services/imageProcessor.js";
 import { getMetricsSnapshot, recordHttpRequest } from "./services/metrics.js";
 import { getRedisHealth } from "./services/redis.js";
 import { getPublicMongoMedia, getStorageHealth } from "./services/storage.js";
@@ -242,11 +243,31 @@ export function createApp() {
       "/api/admin/* (admin panel)", "/api/payments/webhook/payout (webhook)"
     ]
   }));
-  const healthHandler = (_req: express.Request, res: express.Response) => {
+  // Liveness answers without touching infrastructure. Readiness below is the
+  // endpoint callers and deployment probes should use for dependency checks.
+  const livenessHandler = (_req: express.Request, res: express.Response) => {
+    res.status(200).json({
+      ok: true,
+      service: "yugm-api",
+      version: "0.1.0",
+      runtime: env.YUGM_RUNTIME,
+      uptimeSeconds: Math.round(process.uptime()),
+      ready: "/ready"
+    });
+  };
+  app.get("/health", livenessHandler);
+  app.get("/api/health", livenessHandler);
+
+  const readinessHandler = (_req: express.Request, res: express.Response) => {
     const mongoReady = mongoose.connection.readyState === 1;
-    const redis = getRedisHealth();
-    res.status(mongoReady ? 200 : 503).json({
-      ok: mongoReady,
+    const storage = getStorageHealth();
+    const images = getImageProcessorHealth();
+    // Redis and queue mode are reported but not required: both hosts support
+    // an inline fallback. Database, storage and image processing are required.
+    const ready = mongoReady && storage.ready && images.configured;
+    res.status(ready ? 200 : 503).json({
+      ok: ready,
+      ready,
       service: "yugm-api",
       uptimeSeconds: Math.round(process.uptime()),
       db: {
@@ -254,14 +275,15 @@ export function createApp() {
         name: mongoose.connection.name,
         state: mongoose.connection.readyState
       },
-      redis,
+      redis: getRedisHealth(),
       jobs: getJobHealth(),
-      storage: getStorageHealth(),
+      storage,
+      images,
       metrics: getMetricsSnapshot()
     });
   };
-  app.get("/health", healthHandler);
-  app.get("/api/health", healthHandler);
+  app.get("/ready", readinessHandler);
+  app.get("/api/ready", readinessHandler);
   app.use("/api", syncInvalidation);
   app.use("/api/admin", adminVerificationRouter);
   app.use("/api/admin", adminDmReviewsRouter);
@@ -320,12 +342,18 @@ export function createApp() {
     const { status, message, code } = responseError(error);
     console.error(JSON.stringify({
       level: "error",
+      event: "request_error",
+      runtime: env.YUGM_RUNTIME,
       requestId: (req as any).requestId,
       method: req.method,
       path: req.path,
       status,
       code,
-      message
+      errorName: error instanceof Error ? error.name : "Error",
+      message,
+      ...(env.NODE_ENV === "production" || !(error instanceof Error) || !error.stack
+        ? {}
+        : { stack: error.stack })
     }));
     if (req.originalUrl.startsWith("/api/admin")) {
       res.status(status).json({ success: false, error: { message, code, requestId: (req as any).requestId } });

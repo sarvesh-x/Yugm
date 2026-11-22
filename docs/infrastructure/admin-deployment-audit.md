@@ -104,7 +104,7 @@ Render does not declare `CORS_ORIGIN`/`ADMIN_PANEL_ORIGIN`, `REDIS_URL`, R2 vari
 | Workflow | Trigger and behavior |
 |---|---|
 | `.github/workflows/ci.yml` | Push/PR to `master`. Runs backend `npm ci`, typecheck, unit tests with dummy `MONGODB_URI`, hardening, Worker staging dry-run, Worker realtime test against isolated MongoDB, and Android lint/unit tests/assemble. Admin is typechecked via workspace `typecheck` but not built or tested in PR CI. |
-| `.github/workflows/cloudflare-staging.yml` | Push to `master` in the `cloudflare-staging` environment. Runs typecheck/unit/hardening/realtime, builds admin with staging API URL and root base path, deploys the Worker, then gates on `/health` asserting `ok`, DB readiness, `YugmStaging` name and storage readiness before deploying Pages admin and checking it. |
+| `.github/workflows/cloudflare-staging.yml` | Push to `master` in the `cloudflare-staging` environment. Runs typecheck/unit/hardening/realtime, builds admin with staging API URL and root base path, deploys the Worker, then gates on `/ready` asserting `ok`, DB readiness, `YugmStaging` name, storage readiness and image processor configuration before deploying Pages admin and checking it. |
 | `.github/workflows/cloudflare-pages.yml` | Manual `workflow_dispatch` with staging/production target and explicit production validation checkbox. Gates on `CLOUDFLARE_PAGES_READY`, all Cloudflare vars, HTTPS admin API URL ending `/api/admin`, rejection of `.onrender.com` and rejection of embedded credentials. Deploys only the Pages admin. |
 | `.github/workflows/android-release.yml` | Tag-triggered signed APK using keystore secrets. Builds against staging Worker URLs. Release lint is disabled in Gradle. |
 

@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { installCloudflareImageProcessor } from "./imageProcessor.js";
 
 let initialized = false;
 
@@ -8,6 +9,11 @@ class WorkerUpgradeServer { close() {} }
 
 export async function startApiRuntime(bindings: Record<string, unknown>, trackBackground: (work: Promise<unknown>) => void): Promise<void> {
   if (initialized) return;
+
+  // Install media processing before API modules load. When the Images binding
+  // is absent, managed uploads report 503 instead of crashing the Worker on a
+  // native Sharp import.
+  installCloudflareImageProcessor(bindings.IMAGES);
 
   const [db, appModule, authIndexes, firebase, jobs, achievementSeeder, cosmetics, productionIndexes, migration, redis, socket, officialRooms, storage, roomLifecycle, livekit, bonds] = await Promise.all([
     import("../../api/src/config/db.js"),

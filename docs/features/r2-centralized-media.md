@@ -33,6 +33,10 @@ Values are supplied by the owner and written locally; they must not be pasted in
 4. **Cloudflare-side prerequisites (owner action):** create one bucket per logical class per environment, set the staging bucket to expire incomplete objects, allow the app origin for presigned PUT on the staging bucket, and bind custom domains/CDN for the two public buckets. No bucket, credential, domain or CORS change is made by this repository.
 5. **Verification after values are in place:** `npm run env:check`, `npm run test --workspace apps/api`, `npm run typecheck --workspace apps/api`, then a live create→PUT→complete→download→cancel cycle against the intended environment with the signed URL kept out of logs. A green preflight is not proof that buckets, CORS or credentials are valid at runtime.
 
+### Release clients
+
+Release APK/AAB builds contain **no** R2 credentials, bucket names, keys or signed URLs. They only need the HTTPS API and socket URLs plus signing/version/App Check configuration; the API host they point at must have managed storage enabled. See [release APK/AAB configuration](release-build-configuration.md) for the exact Gradle properties, enforced checks, build commands, server-side environment, expected upload sequence and failure map. In particular, the release build has a staging API default; if `YUGM_API_BASE_URL` is omitted, the artifact points at the staging Worker, which still uses `STORAGE_DRIVER=mongodb` and therefore does not publish managed media to R2.
+
 ## Storage service
 
 `backend-server/apps/api/src/services/r2.ts` is the only implementation of object operations:
