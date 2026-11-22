@@ -67,6 +67,9 @@ fun CreateProfileScreen(
     initialUsername: String,
     isSubmitting: Boolean,
     isUploadingAvatar: Boolean,
+    avatarUploadProgress: Float = 0f,
+    activeAvatarUploadSessionId: String? = null,
+    onCancelAvatarUpload: () -> Unit = {},
     onExit: () -> Unit,
     onUploadAvatar: (Uri, (String?, String?) -> Unit) -> Unit,
     onDone: (ProfileSetupData, (String?) -> Unit) -> Unit
@@ -412,7 +415,18 @@ fun CreateProfileScreen(
                             )
                             Text("Optional. You can change it later.", color = TextMuted, fontSize = 12.sp)
                             if (isUploadingAvatar) {
-                                YugmLoadingSpinner(size = 20.dp)
+                                LinearProgressIndicator(
+                                    progress = { avatarUploadProgress.coerceIn(0f, 1f) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 8.dp)
+                                        .semantics {
+                                            progressBarRangeInfo = ProgressBarRangeInfo(
+                                                current = avatarUploadProgress.coerceIn(0f, 1f),
+                                                range = 0f..1f
+                                            )
+                                        }
+                                )
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
                                 OutlinedButton(
@@ -434,6 +448,11 @@ fun CreateProfileScreen(
                                     enabled = !isUploadingAvatar && !isSubmitting,
                                 ) {
                                     Text("Generate avatar")
+                                }
+                                if (isUploadingAvatar && activeAvatarUploadSessionId != null) {
+                                    TextButton(onClick = onCancelAvatarUpload) {
+                                        Text("Cancel")
+                                    }
                                 }
                             }
                         }

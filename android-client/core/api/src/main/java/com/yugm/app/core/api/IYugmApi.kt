@@ -204,6 +204,15 @@ suspend fun leaderboard(): RoomLeaderboard
     suspend fun searchRooms(query: String): List<Room>
     suspend fun uploadCover(token: String, bytes: ByteArray, mimeType: String, fileName: String): String
     suspend fun uploadAvatar(token: String, bytes: ByteArray, mimeType: String): String
+    /** Managed R2 avatar upload with progress and cancellation support. */
+    suspend fun uploadAvatarWithProgress(
+        token: String,
+        bytes: ByteArray,
+        mimeType: String,
+        onProgress: (MediaUploadProgress) -> Unit,
+        isCancelled: () -> Boolean
+    ): String
+    suspend fun cancelMediaUpload(token: String, sessionId: String)
     suspend fun uploadMessageMedia(token: String, bytes: ByteArray, mimeType: String, fileName: String): Pair<String, String>
     suspend fun uploadTrustVerificationMedia(token: String, bytes: ByteArray, mimeType: String, purpose: String): String
 

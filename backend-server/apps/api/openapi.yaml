@@ -28,6 +28,52 @@ components:
         level: { type: integer }
         xp: { type: integer }
         referralCode: { type: string, nullable: true }
+    MediaVariant:
+      type: object
+      properties:
+        name: { type: string }
+        url: { type: string, description: Versioned public CDN URL; absent for private/original objects }
+        contentType: { type: string }
+        width: { type: integer }
+        height: { type: integer }
+    MediaObject:
+      type: object
+      properties:
+        id: { type: string }
+        ownerType: { type: string, enum: [USER, ROOM, CLAN, MESSAGE, COSMETIC, ACHIEVEMENT, EVENT, APPLICATION] }
+        ownerId: { type: string }
+        mediaType: { type: string, enum: [IMAGE, VIDEO, AUDIO, FILE] }
+        category: { type: string, enum: [AVATAR, COVER, GALLERY, CHAT_IMAGE, CHAT_VIDEO, VOICE_MESSAGE, ATTACHMENT, BADGE, COSMETIC, STICKER, APPLICATION_ART] }
+        visibility: { type: string, enum: [PUBLIC, PRIVATE] }
+        version: { type: integer }
+        processingStatus: { type: string, enum: [PENDING, PROCESSING, READY, FAILED] }
+        moderationStatus: { type: string, enum: [PENDING, APPROVED, REJECTED] }
+        fileSize: { type: integer }
+        checksum: { type: string, description: SHA-256 of the staged original }
+        variants:
+          type: array
+          items: { $ref: "#/components/schemas/MediaVariant" }
+    MediaUploadGrant:
+      type: object
+      properties:
+        sessionId: { type: string }
+        uploadUrl: { type: string, format: uri, description: Short-lived presigned PUT URL; never log or persist }
+        method: { type: string, enum: [PUT] }
+        requiredHeaders:
+          type: object
+          properties:
+            Content-Type: { type: string }
+        expiresAt: { type: string, format: date-time }
+        expiresIn: { type: integer }
+        category: { type: string }
+        maxBytes: { type: integer }
+    MediaCompletion:
+      type: object
+      properties:
+        mediaId: { type: string }
+        avatarUrl: { type: string, description: Versioned public URL for the committed avatar }
+        mediaType: { type: string }
+        version: { type: integer }
     RoomRecording:
       type: object
       properties:
@@ -196,7 +242,7 @@ paths:
                 email: { type: string }
                 otp: { type: string }
       responses:
-        "200": { description: Login success, returns session }
+        "200": { description: "Login success, returns session" }
   /auth/logout:
     post:
       tags: [Auth]
@@ -434,6 +480,7 @@ paths:
       summary: Generate referral code
       responses:
         "200":
+          description: Referral code returned
           content:
             application/json:
               schema:
@@ -445,6 +492,7 @@ paths:
       summary: Get existing or auto-generate referral code
       responses:
         "200":
+          description: Existing or newly generated referral code returned
           content:
             application/json:
               schema:
@@ -480,6 +528,7 @@ paths:
       summary: Get referral stats and history
       responses:
         "200":
+          description: Referral statistics and history returned
           content:
             application/json:
               schema:
@@ -519,7 +568,81 @@ paths:
         "200":
           description: Click tracked
 
-  # ─── UPLOAD ────────────────────────────────────────────
+  # ─── MEDIA (CENTRALIZED R2) ────────────────────────────
+  /media/uploads:
+    post:
+      tags: [Media]
+      summary: Create a private staging grant for a managed R2 upload
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category, contentType, fileName, bytes]
+              properties:
+                category: { type: string, enum: [AVATAR] }
+                contentType: { type: string, example: image/jpeg }
+                fileName: { type: string, example: avatar.jpg }
+                bytes: { type: integer, minimum: 1 }
+      responses:
+        "201":
+          description: Staging upload session created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MediaUploadGrant" }
+        "503": { description: R2 storage is not configured for this deployment }
+  /media/uploads/{sessionId}/complete:
+    post:
+      tags: [Media]
+      summary: Verify staged bytes, publish variants and commit the owning reference
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: sessionId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Media committed; repeat calls are idempotent
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MediaCompletion" }
+        "409": { description: Session is no longer pending }
+        "410": { description: Session expired }
+  /media/uploads/{sessionId}:
+    delete:
+      tags: [Media]
+      summary: Cancel a pending upload and remove its staging object
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: sessionId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Session cancelled }
+  /media/{mediaId}/download:
+    get:
+      tags: [Media]
+      summary: Authorize private media and return a short-lived signed download URL
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: mediaId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Authorized media metadata and short-lived URL (never stored)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  media: { $ref: "#/components/schemas/MediaObject" }
+                  downloadUrl: { type: string, format: uri }
+                  expiresIn: { type: integer }
+        "403": { description: Resource-level access denied }
+        "404": { description: "Missing, deleted, rejected or unprocessed media" }
+
+  # ─── UPLOAD (LEGACY FALLBACK) ──────────────────────────
   /upload/story:
     post:
       tags: [Upload]
@@ -579,7 +702,7 @@ paths:
                 originalName: { type: string, maxLength: 200 }
       responses:
         "201": { description: Staged asset metadata; no public URL yet }
-        "400": { description: Unsupported type, invalid image, or invalid owner }
+        "400": { description: "Unsupported type, invalid image, or invalid owner" }
         "413": { description: Asset exceeds 8 MB }
   /admin/assets/staging/{fileName}:
     get:
@@ -590,7 +713,7 @@ paths:
       parameters:
         - { name: fileName, in: path, required: true, schema: { type: string } }
       responses:
-        "200": { description: Staging bytes with private, no-store cache headers }
+        "200": { description: "Staging bytes with private, no-store cache headers" }
         "404": { description: Staging object not found }
   /admin/assets/{id}:
     get:
@@ -1189,7 +1312,7 @@ paths:
       tags: [Experience]
       summary: Get the authenticated user's badge gallery and worn slots
       responses:
-        "200": { description: Badge gallery with capacity 5, wornIds, and badges; badge art may expose assetId, assetVersion and assetVariants }
+        "200": { description: "Badge gallery with capacity 5, wornIds, and badges; badge art may expose assetId, assetVersion and assetVariants" }
 
   /experience/badges/showcase:
     put:

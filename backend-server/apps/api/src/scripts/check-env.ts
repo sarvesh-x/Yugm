@@ -40,6 +40,17 @@ const keys: EnvKey[] = [
   { key: "S3_ACCESS_KEY_ID", group: "storage", required: false, note: "optional IAM/access key" },
   { key: "S3_SECRET_ACCESS_KEY", group: "storage", required: false, note: "optional IAM/access secret" },
   { key: "S3_PUBLIC_BASE_URL", group: "storage", required: false, note: "optional CDN/public base URL" },
+  { key: "R2_ACCOUNT_ID", group: "storage-r2", required: false, note: "derives the account-scoped S3 endpoint unless S3_ENDPOINT is set" },
+  { key: "R2_ACCESS_KEY_ID", group: "storage-r2", required: false, note: "server-only R2 API token ID" },
+  { key: "R2_SECRET_ACCESS_KEY", group: "storage-r2", required: false, note: "server-only R2 API token secret" },
+  { key: "R2_ASSETS_BUCKET", group: "storage-r2", required: false, note: "published assets bucket" },
+  { key: "R2_PUBLIC_MEDIA_BUCKET", group: "storage-r2", required: false, note: "public media bucket" },
+  { key: "R2_PRIVATE_MEDIA_BUCKET", group: "storage-r2", required: false, note: "authenticated private media bucket" },
+  { key: "R2_ORIGINALS_BUCKET", group: "storage-r2", required: false, note: "private provenance originals bucket" },
+  { key: "R2_STAGING_BUCKET", group: "storage-r2", required: false, note: "short-lived upload staging bucket" },
+  { key: "R2_ASSETS_PUBLIC_URL", group: "storage-r2", required: false, note: "CDN/public URL for the assets bucket" },
+  { key: "R2_MEDIA_PUBLIC_URL", group: "storage-r2", required: false, note: "CDN/public URL for the public media bucket" },
+  { key: "R2_SIGNED_URL_TTL_SECONDS", group: "storage-r2", required: false, note: "defaults to 900 seconds (60-3600)" },
   { key: "CORS_ORIGIN", group: "http", required: false, note: "defaults to *" }
 ];
 
@@ -113,6 +124,50 @@ if (isProduction) {
 
 if (productionErrors.length) {
   console.error(`Production env problems:\n- ${productionErrors.join("\n- ")}`);
+  process.exit(1);
+}
+
+// Managed media needs R2/S3 configuration in every environment, not only in
+// production. Report key names and status only; never print values.
+const r2BucketKeys = [
+  "R2_ASSETS_BUCKET",
+  "R2_PUBLIC_MEDIA_BUCKET",
+  "R2_PRIVATE_MEDIA_BUCKET",
+  "R2_ORIGINALS_BUCKET",
+  "R2_STAGING_BUCKET"
+] as const;
+const storageErrors: string[] = [];
+const storageHints: string[] = [];
+const legacyBucket = process.env.S3_BUCKET?.trim();
+
+if (process.env.STORAGE_DRIVER === "s3") {
+  if (!process.env.R2_ACCOUNT_ID?.trim() && !process.env.S3_ENDPOINT?.trim()) {
+    storageErrors.push("R2_ACCOUNT_ID (or explicit S3_ENDPOINT) is required when STORAGE_DRIVER=s3");
+  }
+  const accessKey = process.env.R2_ACCESS_KEY_ID?.trim() || process.env.S3_ACCESS_KEY_ID?.trim();
+  const secretKey = process.env.R2_SECRET_ACCESS_KEY?.trim() || process.env.S3_SECRET_ACCESS_KEY?.trim();
+  if (!accessKey || !secretKey) {
+    storageErrors.push("R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY (or explicit S3_* credentials) are required when STORAGE_DRIVER=s3");
+  }
+  const missingBuckets = r2BucketKeys.filter((key) => !process.env[key]?.trim());
+  if (missingBuckets.length && !legacyBucket) {
+    storageErrors.push(`Set these buckets when STORAGE_DRIVER=s3: ${missingBuckets.join(", ")}`);
+  } else if (missingBuckets.length && legacyBucket) {
+    storageHints.push(`S3_BUCKET is used as the fallback for: ${missingBuckets.join(", ")}; use separate buckets per storage class`);
+  }
+  const publicBase = process.env.R2_ASSETS_PUBLIC_URL?.trim()
+    || process.env.R2_MEDIA_PUBLIC_URL?.trim()
+    || process.env.S3_PUBLIC_BASE_URL?.trim();
+  if (!publicBase) {
+    storageErrors.push("R2_ASSETS_PUBLIC_URL or R2_MEDIA_PUBLIC_URL (or S3_PUBLIC_BASE_URL) is required for public media URLs");
+  }
+} else if (r2BucketKeys.some((key) => Boolean(process.env[key]?.trim())) || process.env.R2_ACCOUNT_ID?.trim()) {
+  storageHints.push("R2_* values are set but STORAGE_DRIVER is not 's3'; managed media uploads will return 503");
+}
+
+if (storageHints.length) console.log(`Storage configuration notes:\n- ${storageHints.join("\n- ")}`);
+if (storageErrors.length) {
+  console.error(`Storage configuration problems:\n- ${storageErrors.join("\n- ")}`);
   process.exit(1);
 }
 

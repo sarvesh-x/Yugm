@@ -49,6 +49,7 @@ import moderationRouter from "./routes/moderation.js";
 import { vibeRouter } from "./routes/vibe.js";
 import { discoverRouter } from "./routes/discover.js";
 import { uploadRouter } from "./routes/upload.js";
+import { mediaRouter } from "./routes/media.js";
 import { usersRouter } from "./routes/users.js";
 import { legalRouter } from "./routes/legal.js";
 import { walletRouter } from "./routes/wallet.js";
@@ -295,6 +296,7 @@ export function createApp() {
   app.use("/api", giftLeaderboardRouter);
   app.use("/api", wishlistRouter);
   app.use("/api", giftsRouter);
+  app.use("/api", mediaRouter);
   app.use("/api", uploadRouter);
   app.use("/api", reportsRouter);
   app.use("/api", reactionsRouter);

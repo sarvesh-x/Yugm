@@ -15,6 +15,10 @@ test("avatar upload invalidates the actor profile while other upload routes stay
   assert.deepEqual(mutationTopics("POST", "/api/upload/avatar"), ["PROFILE", "TASKS"]);
   assert.deepEqual(mutationTopics("POST", "/api/upload/profile-media"), []);
   assert.deepEqual(mutationTopics("POST", "/api/upload/cover"), []);
+  assert.deepEqual(mutationTopics("POST", "/api/media/uploads/session-1/complete"), ["PROFILE", "TASKS"]);
+  assert.deepEqual(mutationTopics("POST", "/api/media/uploads"), []);
+  assert.deepEqual(mutationTopics("DELETE", "/api/media/uploads/session-1"), []);
+  assert.deepEqual(mutationTopics("GET", "/api/media/media-1/download"), []);
 });
 
 test("only successful authenticated responses invalidate and publish no mutation payload", () => {

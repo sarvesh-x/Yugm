@@ -185,6 +185,9 @@ fun NavGraphBuilder.authNavGraph(
             initialUsername = profileUsername.takeUnless { it == "vibe_user" }.orEmpty(),
             isSubmitting = profileSetupViewModel.isSubmitting,
             isUploadingAvatar = profileSetupViewModel.avatarUploadState == com.yugm.app.feature.auth.viewmodel.AvatarUploadState.UPLOADING,
+            avatarUploadProgress = profileSetupViewModel.avatarUploadProgress,
+            activeAvatarUploadSessionId = profileSetupViewModel.activeAvatarUploadSessionId,
+            onCancelAvatarUpload = profileSetupViewModel::cancelAvatarUpload,
             onExit = onProfileExit,
             onUploadAvatar = profileSetupViewModel::uploadAvatar,
             onDone = { profileData, onResult ->

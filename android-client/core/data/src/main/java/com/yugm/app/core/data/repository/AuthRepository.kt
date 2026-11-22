@@ -1,6 +1,7 @@
 package com.yugm.app.core.data.repository
 
 import com.yugm.app.core.api.IYugmApi
+import com.yugm.app.core.api.MediaUploadProgress
 import com.yugm.app.core.model.Session
 import com.yugm.app.core.model.AuthProfileUpdate
 import javax.inject.Inject
@@ -21,6 +22,16 @@ class AuthRepository @Inject constructor(private val api: IYugmApi) {
 
     suspend fun uploadAvatar(token: String, bytes: ByteArray, mimeType: String): String =
         api.uploadAvatar(token, bytes, mimeType)
+
+    suspend fun uploadAvatarWithProgress(
+        token: String,
+        bytes: ByteArray,
+        mimeType: String,
+        onProgress: (MediaUploadProgress) -> Unit,
+        isCancelled: () -> Boolean
+    ): String = api.uploadAvatarWithProgress(token, bytes, mimeType, onProgress, isCancelled)
+
+    suspend fun cancelMediaUpload(token: String, sessionId: String) = api.cancelMediaUpload(token, sessionId)
 
     suspend fun updateProfile(token: String, update: AuthProfileUpdate) = api.updateProfile(
         token = token,

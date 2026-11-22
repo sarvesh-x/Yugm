@@ -53,6 +53,14 @@ The API has more than one response envelope in existing paths. Inspect `src/util
 - `DELETE /api/admin/assets/:id` now returns `409` while either a `Cosmetic.assetRef` or an `Achievement.assetRef` still points at that asset.
 - Admin UI: the Badges form links a published badge asset from **Managed Assets**; managed art overrides an uploaded image. Bulk clearing of `Achievement.imageData`/`imageMime` and retirement of the dedicated badge upload remain gated on a separately approved cutover.
 
+## Centralized R2 media contract (foundation + avatar slice)
+
+- `POST /api/media/uploads` creates a private staging grant from only `category` (currently `AVATAR`), `contentType`, `fileName` and integer `bytes`. `fileName` is used only for its extension and must not contain path separators. Owner, bucket, key and expiry are server-derived. The response carries a short-lived presigned PUT URL; never log, persist or return it in other endpoints.
+- `POST /api/media/uploads/{sessionId}/complete` is idempotent after success. It re-reads and verifies staged bytes, writes immutable public variants and a private original, creates a `MediaObject`, then commits the owning reference. Repeat calls after commit return the same media id/version/URL; invalid, expired, cancelled or foreign sessions return `400`/`409`/`410`/`404`.
+- `DELETE /api/media/uploads/{sessionId}` cancels an owned pending session and best-effort removes its staging object. `GET /api/media/{mediaId}/download` only returns a short-lived signed URL after ownership/message-participation, block, deletion, moderation and processing checks; the URL is never stored.
+- Public media DTOs resolve delivery URLs from canonical keys at read time. Do not persist signed URLs in the registry or expose private buckets. `STORAGE_DRIVER=s3` is required; unsupported categories return `400`, and unconfigured storage returns `503`.
+- `/api/upload/avatar` remains the legacy fallback used by Android only when managed session creation returns `503`/`501`. See [Centralized R2 media](features/r2-centralized-media.md).
+
 ## Authentication and profile setup notes
 
 - `/api/auth/google`, `/api/auth/facebook`, and `/api/auth/phone` are mounted behind `requireAppCheck`; the client sends a limited-use App Check token in `X-Firebase-AppCheck`. The API consumes tokens during verification and rejects a replay result. Do not cache the limited-use token or a successful consume verification.

@@ -216,6 +216,14 @@ object YugmApi : IYugmApi {
     override suspend fun searchRooms(query: String): List<Room> = RoomApi.searchRooms(query)
     override suspend fun uploadCover(token: String, bytes: ByteArray, mimeType: String, fileName: String): String = RoomApi.uploadCover(token, bytes, mimeType, fileName)
     override suspend fun uploadAvatar(token: String, bytes: ByteArray, mimeType: String): String = RoomApi.uploadAvatar(token, bytes, mimeType)
+    override suspend fun uploadAvatarWithProgress(
+        token: String,
+        bytes: ByteArray,
+        mimeType: String,
+        onProgress: (MediaUploadProgress) -> Unit,
+        isCancelled: () -> Boolean
+    ): String = RoomApi.uploadAvatarWithProgress(token, bytes, mimeType, onProgress, isCancelled)
+    override suspend fun cancelMediaUpload(token: String, sessionId: String) = MediaUploadApi.cancel(token, sessionId)
     override suspend fun uploadMessageMedia(token: String, bytes: ByteArray, mimeType: String, fileName: String): Pair<String, String> = RoomApi.uploadMessageMedia(token, bytes, mimeType, fileName)
     override suspend fun uploadTrustVerificationMedia(token: String, bytes: ByteArray, mimeType: String, purpose: String): String = RoomApi.uploadTrustVerificationMedia(token, bytes, mimeType, purpose)
 

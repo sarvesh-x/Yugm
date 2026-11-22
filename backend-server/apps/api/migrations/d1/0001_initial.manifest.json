@@ -1,0 +1,375 @@
+{
+  "generatedAt": "2026-11-22T08:59:00.082Z",
+  "source": "Mongoose model introspection (local source only)",
+  "modelsImported": 91,
+  "importFailures": [],
+  "rootTableCount": 97,
+  "totalTableCount": 131,
+  "childTables": [
+    "achievement_tiers",
+    "admin_role_permissions",
+    "asset_variants",
+    "battle_pass_rewards",
+    "bond_slots",
+    "bond_users",
+    "clan_message_reactions",
+    "conversation_participants",
+    "direct_message_reactions",
+    "event_participants",
+    "gift_collection_items",
+    "match_users",
+    "media_variants",
+    "message_hidden_for",
+    "poll_votes",
+    "relationship_users",
+    "room_mode_participants",
+    "season_rewards",
+    "story_views",
+    "support_ticket_messages",
+    "user_badge_grants",
+    "user_claimed_achievement_tiers",
+    "user_claimed_achievements",
+    "user_hobbies",
+    "user_interests",
+    "user_languages",
+    "user_owned_cosmetics",
+    "user_owned_titles",
+    "user_profile_media",
+    "user_showcased_badges",
+    "vibe_graph_interests",
+    "vibe_graph_languages",
+    "voice_poll_ballots",
+    "voice_poll_votes"
+  ],
+  "modelToTable": {
+    "Achievement": "achievements",
+    "AdminAuditLog": "admin_audit_logs",
+    "AdminModerationAction": "admin_moderation_actions",
+    "AdminSession": "admin_sessions",
+    "AdminUser": "admin_users",
+    "AppConfig": "app_config",
+    "AssetObject": "assets",
+    "AuthSession": "auth_sessions",
+    "BattlePass": "battle_passes",
+    "BattlePassXpGrant": "battle_pass_xp_grants",
+    "Block": "blocks",
+    "Bond": "bonds",
+    "BondPoint": "bond_points",
+    "BondRankingSnapshot": "bond_ranking_snapshots",
+    "BondRequest": "bond_requests",
+    "BondReward": "bond_rewards",
+    "ChatMessage": "chat_messages",
+    "Clan": "clans",
+    "ClanInvite": "clan_invites",
+    "ClanMessage": "clan_messages",
+    "ConversationMute": "conversation_mutes",
+    "Cosmetic": "cosmetics",
+    "CountdownEvent": "countdown_events",
+    "CreatorPayoutKyc": "creator_payout_kycs",
+    "DailyQuestion": "daily_questions",
+    "DeviceToken": "device_tokens",
+    "DiamondTransaction": "diamond_transactions",
+    "DirectMessage": "direct_messages",
+    "Event": "events",
+    "FaceVerificationSubmission": "face_verification_submissions",
+    "Follow": "follows",
+    "FriendMatchRequest": "friend_match_requests",
+    "Friendship": "friendships",
+    "Gift": "gifts",
+    "GiftCollection": "gift_collections",
+    "GiftInventory": "gift_inventories",
+    "GiftTransaction": "gift_transactions",
+    "GroupChat": "group_chats",
+    "GroupMessage": "group_messages",
+    "ImmersiveTheme": "immersive_themes",
+    "Like": "likes",
+    "Match": "matches",
+    "MediaObject": "media_objects",
+    "MediaQuotaReservation": "media_quota_reservations",
+    "MediaUploadSession": "media_upload_sessions",
+    "MiniGameChallenge": "mini_game_challenges",
+    "MiniGameScore": "mini_game_scores",
+    "Mission": "missions",
+    "ModerationAction": "moderation_actions",
+    "ModerationQueue": "moderation_queues",
+    "Notification": "notifications",
+    "NotificationCampaign": "notification_campaigns",
+    "PayoutReview": "payout_reviews",
+    "PkBattle": "pk_battles",
+    "PkEvent": "pk_events",
+    "PkInvite": "pk_invites",
+    "PkLeaderboardEntry": "pk_leaderboard_entries",
+    "PkParticipant": "pk_participants",
+    "PkVote": "pk_votes",
+    "Poll": "polls",
+    "ProfileVisit": "profile_visits",
+    "Purchase": "purchases",
+    "Referral": "referrals",
+    "Relationship": "relationships",
+    "Report": "reports",
+    "Room": "rooms",
+    "RoomActivity": "room_activities",
+    "RoomFollow": "room_follows",
+    "RoomInvite": "room_invites",
+    "RoomModeState": "room_mode_states",
+    "RoomParticipant": "room_participants",
+    "RoomReaction": "room_reactions",
+    "RoomRecording": "room_recordings",
+    "Season": "seasons",
+    "SpeakerRequest": "speaker_requests",
+    "Story": "stories",
+    "StoryComment": "story_comments",
+    "StoryHighlight": "story_highlights",
+    "Subscription": "subscriptions",
+    "SupportMessage": "support_messages",
+    "SupportTicket": "support_tickets",
+    "TrustVerification": "trust_verifications",
+    "User": "users",
+    "UserDailyAnswer": "user_daily_answers",
+    "UserMission": "user_missions",
+    "UserMood": "user_moods",
+    "UserSafetyStatus": "user_safety_statuses",
+    "VibeGraph": "vibe_graphs",
+    "VoicePoll": "voice_polls",
+    "VoiceVerificationSubmission": "voice_verification_submissions",
+    "WalletTransaction": "wallet_transactions",
+    "WatchParty": "watch_parties",
+    "WaveNudge": "wave_nudges",
+    "WishlistItem": "wishlist_items",
+    "WithdrawalRequest": "withdrawal_requests",
+    "XpDailyCap": "xp_daily_caps",
+    "XpGrant": "xp_grants"
+  },
+  "warnings": [
+    {
+      "model": "Achievement",
+      "field": "imageData",
+      "reason": "binary field stored as TEXT; migration must replace with R2 bucket/key reference"
+    },
+    {
+      "model": "AdminAuditLog",
+      "field": "metadata",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "AdminModerationAction",
+      "field": "metadata",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "AppConfig",
+      "field": "value",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "Bond",
+      "field": "milestoneDays",
+      "reason": "array stored as JSON TEXT; child-table candidate per mapping spec"
+    },
+    {
+      "model": "Bond",
+      "field": "preferences",
+      "reason": "Map stored as JSON TEXT"
+    },
+    {
+      "model": "BondRankingSnapshot",
+      "field": "entries",
+      "reason": "array stored as JSON TEXT; child-table candidate per mapping spec"
+    },
+    {
+      "model": "Clan",
+      "field": "memberIds",
+      "reason": "array stored as JSON TEXT; child-table candidate per mapping spec"
+    },
+    {
+      "model": "Clan",
+      "field": "memberRoles",
+      "reason": "array stored as JSON TEXT; child-table candidate per mapping spec"
+    },
+    {
+      "model": "CreatorPayoutKyc",
+      "field": "metadata",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "DiamondTransaction",
+      "field": "metadata",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "DirectMessage",
+      "field": "replyTo",
+      "reason": "embedded document stored as JSON TEXT; child-table candidate per mapping spec"
+    },
+    {
+      "model": "Event",
+      "field": "tags",
+      "reason": "array stored as JSON TEXT; child-table candidate per mapping spec"
+    },
+    {
+      "model": "FaceVerificationSubmission",
+      "field": "providerResponse",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "Gift",
+      "field": "upgradePath",
+      "reason": "array stored as JSON TEXT; child-table candidate per mapping spec"
+    },
+    {
+      "model": "GiftTransaction",
+      "field": "metadata",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "ImmersiveTheme",
+      "field": "colors",
+      "reason": "array stored as JSON TEXT; child-table candidate per mapping spec"
+    },
+    {
+      "model": "ImmersiveTheme",
+      "field": "animation",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "MiniGameScore",
+      "field": "metadata",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "Notification",
+      "field": "data",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "NotificationCampaign",
+      "field": "filters",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "PayoutReview",
+      "field": "riskFlags",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "PayoutReview",
+      "field": "payout",
+      "reason": "embedded document stored as JSON TEXT; child-table candidate per mapping spec"
+    },
+    {
+      "model": "PkEvent",
+      "field": "metadata",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "Poll",
+      "field": "options",
+      "reason": "array stored as JSON TEXT; child-table candidate per mapping spec"
+    },
+    {
+      "model": "Purchase",
+      "field": "metadata",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "Report",
+      "field": "evidence",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "Room",
+      "field": "tags",
+      "reason": "array stored as JSON TEXT; child-table candidate per mapping spec"
+    },
+    {
+      "model": "Room",
+      "field": "speakerIds",
+      "reason": "array stored as JSON TEXT; child-table candidate per mapping spec"
+    },
+    {
+      "model": "Room",
+      "field": "moderatorIds",
+      "reason": "array stored as JSON TEXT; child-table candidate per mapping spec"
+    },
+    {
+      "model": "Room",
+      "field": "roomAdminIds",
+      "reason": "array stored as JSON TEXT; child-table candidate per mapping spec"
+    },
+    {
+      "model": "Room",
+      "field": "coHostIds",
+      "reason": "array stored as JSON TEXT; child-table candidate per mapping spec"
+    },
+    {
+      "model": "Room",
+      "field": "lockedSeatIndices",
+      "reason": "array stored as JSON TEXT; child-table candidate per mapping spec"
+    },
+    {
+      "model": "RoomActivity",
+      "field": "metadata",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "RoomModeState",
+      "field": "scores",
+      "reason": "Map stored as JSON TEXT"
+    },
+    {
+      "model": "RoomModeState",
+      "field": "currentOptions",
+      "reason": "array stored as JSON TEXT; child-table candidate per mapping spec"
+    },
+    {
+      "model": "RoomModeState",
+      "field": "metadata",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "Season",
+      "field": "rewards.freeReward",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "Season",
+      "field": "rewards.premiumReward",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "StoryHighlight",
+      "field": "storyIds",
+      "reason": "array stored as JSON TEXT; child-table candidate per mapping spec"
+    },
+    {
+      "model": "SupportMessage",
+      "field": "attachments",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "VoicePoll",
+      "field": "options",
+      "reason": "array stored as JSON TEXT; child-table candidate per mapping spec"
+    },
+    {
+      "model": "VoiceVerificationSubmission",
+      "field": "providerResponse",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "WalletTransaction",
+      "field": "metadata",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "WithdrawalRequest",
+      "field": "metadata",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    },
+    {
+      "model": "XpGrant",
+      "field": "receipt",
+      "reason": "Mixed stored as JSON TEXT; normalize if the field is queried or joined"
+    }
+  ]
+}

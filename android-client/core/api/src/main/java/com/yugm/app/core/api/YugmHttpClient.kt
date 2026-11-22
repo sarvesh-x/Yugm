@@ -8,11 +8,14 @@ import kotlinx.coroutines.withContext
 import okhttp3.Cache
 import okhttp3.ConnectionPool
 import okhttp3.Dispatcher
+import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import okio.BufferedSink
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
@@ -53,7 +56,7 @@ object YugmHttpClient {
         client = buildClient(directory)
     }
 
-    private fun buildClient(cacheDir: File?): OkHttpClient =
+    private fun buildClient(cacheDir: File?, logRequests: Boolean = true): OkHttpClient =
         OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
             // The production API may need time to wake its hosting instance before
@@ -72,7 +75,9 @@ object YugmHttpClient {
                 if (cacheDir != null) cache(Cache(cacheDir, 50L * 1024 * 1024))
             }
             .apply {
-                if (ApiConfig.isDebug) {
+                // Presigned storage URLs are bearer credentials. Never log them,
+                // even in debug builds; the managed-upload client is separate.
+                if (ApiConfig.isDebug && logRequests) {
                     addInterceptor { chain ->
                         val request = chain.request()
                         Timber.tag(TAG).d("→ %s %s", request.method, request.url)
@@ -85,6 +90,7 @@ object YugmHttpClient {
             .build()
 
     @Volatile private var client: OkHttpClient = buildClient(null)
+    private val presignedClient: OkHttpClient = buildClient(null, logRequests = false)
     val baseCandidates: List<String>
         get() = buildList {
             val configuredBase = ApiConfig.apiBaseUrl.trim().trimEnd('/')
@@ -343,5 +349,50 @@ throw ApiHttpException(response.code, errorContext)
             }
         }
         throw lastIoError ?: IllegalStateException("API unavailable")
+    }
+
+    /**
+     * PUTs directly to a short-lived R2 grant. This uses a separate client with
+     * no logging interceptor so the presigned URL is never written to logcat.
+     */
+    suspend fun uploadToPresignedUrl(
+        url: String,
+        bytes: ByteArray,
+        contentType: String,
+        onProgress: (uploaded: Long, total: Long) -> Unit,
+        isCancelled: () -> Boolean
+    ) = withContext(Dispatchers.IO) {
+        if (!isOnline) throw IllegalStateException("No internet connection")
+        val request = Request.Builder()
+            .url(url)
+            .header("Content-Type", contentType)
+            .put(ProgressRequestBody(bytes, contentType.toMediaType(), onProgress, isCancelled))
+            .build()
+        presignedClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw ApiHttpException(response.code, "Storage upload failed")
+        }
+    }
+}
+
+internal class ProgressRequestBody(
+    private val bytes: ByteArray,
+    private val mediaType: MediaType,
+    private val onProgress: (uploaded: Long, total: Long) -> Unit,
+    private val isCancelled: () -> Boolean
+) : RequestBody() {
+    override fun contentType(): MediaType = mediaType
+    override fun contentLength(): Long = bytes.size.toLong()
+
+    override fun writeTo(sink: BufferedSink) {
+        val total = bytes.size.toLong()
+        onProgress(0L, total)
+        var sent = 0
+        while (sent < bytes.size) {
+            if (isCancelled()) throw IOException("Upload cancelled")
+            val chunk = minOf(32 * 1024, bytes.size - sent)
+            sink.write(bytes, sent, chunk)
+            sent += chunk
+            onProgress(sent.toLong(), total)
+        }
     }
 }

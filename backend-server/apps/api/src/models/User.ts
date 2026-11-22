@@ -8,6 +8,8 @@ export interface IUser extends mongoose.Document {
   phone?: string;
   firebaseUid?: string;
   avatar?: string;
+  /** Registry id for an R2-managed avatar; legacy URLs leave this unset. */
+  avatarMediaId?: string;
   avatarType?: "UPLOADED" | "GENERATED" | "DEFAULT";
   avatarParts?: {
     background: number;
@@ -130,6 +132,7 @@ const userSchema = new Schema<IUser>(
     phone: { type: String, trim: true, select: false },
     firebaseUid: String,
     avatar: String,
+    avatarMediaId: { type: String },
     avatarType: { type: String, enum: ["UPLOADED", "GENERATED", "DEFAULT"] },
     avatarParts: {
       background: { type: Number, min: 0, max: 47 },

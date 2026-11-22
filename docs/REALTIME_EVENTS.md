@@ -17,3 +17,7 @@ The inventory lists only syntactically discovered registrations and is not proof
 ## Badge showcase invalidation
 
 A successful authenticated `PUT /api/experience/badges/showcase` emits `sync:invalidate` with `{ topics: ["TASKS", "PROFILE"] }` to the actor's user room and broadcasts a topic-only `{ topics: ["PROFILE"] }` to connected clients. The payload contains no badge IDs, user IDs, or other user data. This is an ephemeral invalidation, not proof of commit and not a badge snapshot: Android `AppSync` coalesces it by topic revision, and the Achievements/profile screens re-read their scoped badge endpoints. Reconnect handling performs the same authorized re-read through `AutomaticSyncEffect`.
+
+## Managed R2 media invalidation
+
+A successful `POST /api/media/uploads/{sessionId}/complete` emits the same actor-scoped `sync:invalidate` topics as legacy `/api/upload/avatar`: `PROFILE` and `TASKS`. Session creation, cancellation and download are silent. The invalidation contains no media IDs, keys, signed URLs or user data; clients re-read the authoritative profile. The HTTP completion response remains the proof of commit.

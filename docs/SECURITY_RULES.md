@@ -10,5 +10,6 @@
 - Apply equivalent authorization/session policy to HTTP commands and protected realtime subscriptions/events. Clean up sockets/media/work on account change or lifecycle end.
 - Treat payment/provider callbacks as untrusted until signature, ownership, amount, and state transition checks pass. Preserve terminal/refund states.
 - Do not run seeds, migrations, destructive queries, production calls, or publish changes without explicit authorization and a known target.
+- R2 credentials and bucket names are server-only. Presigned upload/download URLs are bearer grants: generate them server-side with short TTLs, return them only to the authorized actor in the creating/authorized response, never log them, and never persist them in the media registry or client state. Validate staged bytes on the server before changing any public reference; derive all keys/owners from authenticated identity. See [Centralized R2 media](features/r2-centralized-media.md).
 
 Use [permissions](permissions.md), [admin system](admin-system.md), payout/trust docs, and the [source finding register](production/findings.md) for feature-specific rules and open questions.

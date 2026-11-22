@@ -10,7 +10,8 @@ import { ErrorCode, HttpError } from "../utils/http.js";
 
 let s3: S3Client | undefined;
 
-function getS3Client() {
+/** Shared S3-compatible client used by legacy uploads and centralized R2 operations. */
+export function getManagedS3Client() {
   if (!s3) {
     s3 = new S3Client({
       region: env.S3_REGION,
@@ -203,7 +204,7 @@ export async function persistUploadedFile(file: Express.Multer.File, folder: Man
     // fails before writing an unreachable object.
     const publicUrl = isPrivate ? undefined : buildPublicStorageUrl(key);
     const body = await fs.readFile(file.path);
-    await getS3Client().send(new PutObjectCommand({
+    await getManagedS3Client().send(new PutObjectCommand({
       Bucket: env.S3_BUCKET,
       Key: key,
       Body: body,
@@ -244,7 +245,7 @@ export async function loadTrustVerificationFile(fileName: string) {
     return { filePath };
   }
   assertS3Ready();
-  const object = await getS3Client().send(new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: `trust-verification/${safeName}` }));
+  const object = await getManagedS3Client().send(new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: `trust-verification/${safeName}` }));
   if (!object.Body) throw new Error("Verification media not found");
   return { body: Buffer.from(await object.Body.transformToByteArray()), contentType: object.ContentType ?? "application/octet-stream" };
 }
@@ -279,7 +280,7 @@ async function loadManagedPrivateFile(folder: ManagedFolder, fileName: string) {
     return { filePath };
   }
   assertS3Ready();
-  const object = await getS3Client().send(new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }));
+  const object = await getManagedS3Client().send(new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }));
   if (!object.Body) throw new HttpError(404, "Managed object not found");
   return { body: Buffer.from(await object.Body.transformToByteArray()), contentType: object.ContentType ?? "application/octet-stream" };
 }
@@ -346,7 +347,7 @@ export async function persistManagedBuffer(input: {
   }
   assertS3Ready();
   const publicUrl = isPrivate ? undefined : buildPublicStorageUrl(key);
-  await getS3Client().send(new PutObjectCommand({
+  await getManagedS3Client().send(new PutObjectCommand({
     Bucket: env.S3_BUCKET,
     Key: key,
     Body: input.buffer,
@@ -384,7 +385,7 @@ export async function deleteStoredFile(folder: ManagedFolder, fileNameOrKey?: st
   }
   assertS3Ready();
   const { DeleteObjectCommand } = await import("@aws-sdk/client-s3");
-  await getS3Client().send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: key })).catch(() => {});
+  await getManagedS3Client().send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: key })).catch(() => {});
 }
 
 export function safeUploadName(userId: string, originalName: string) {

@@ -1,0 +1,52 @@
+{
+  "cases": [
+    {
+      "name": "valid user record",
+      "input": {
+        "_id": "507f1f77bcf86cd799439011",
+        "createdAt": "2026-01-02T03:04:05Z",
+        "coins": 250,
+        "visibility": "PUBLIC"
+      },
+      "expected": {
+        "sourceId": "507f1f77bcf86cd799439011",
+        "createdAt": "2026-01-02T03:04:05.000Z",
+        "coins": 250,
+        "visibility": "PUBLIC"
+      },
+      "quarantine": []
+    },
+    {
+      "name": "fractional money, unknown enum and invalid timestamp",
+      "input": {
+        "_id": "507f1f77bcf86cd799439012",
+        "createdAt": "not-a-date",
+        "coins": 1.25,
+        "visibility": "HIDDEN"
+      },
+      "expected": {
+        "sourceId": "507f1f77bcf86cd799439012",
+        "createdAt": null,
+        "coins": null,
+        "visibility": null
+      },
+      "quarantine": ["INVALID_TIMESTAMP", "NON_INTEGER_MONEY", "UNKNOWN_ENUM"]
+    },
+    {
+      "name": "non-canonical object id",
+      "input": {
+        "_id": "507F1F77BCF86CD799439013",
+        "createdAt": 1767323045000,
+        "coins": 0,
+        "visibility": "PRIVATE"
+      },
+      "expected": {
+        "sourceId": null,
+        "createdAt": "2026-01-02T03:04:05.000Z",
+        "coins": 0,
+        "visibility": "PRIVATE"
+      },
+      "quarantine": ["INVALID_ID"]
+    }
+  ]
+}

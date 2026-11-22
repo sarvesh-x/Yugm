@@ -116,3 +116,27 @@ defineMigration(8, "create_badge_asset_ref_index", async (db) => {
 }, async (db) => {
   await db.collection("achievements").dropIndex("badge_asset_ref").catch(() => {});
 });
+
+// Additive only: indexes for the unified media registry and upload sessions.
+// No existing media URL or user document is rewritten by this migration.
+defineMigration(9, "create_media_registry_indexes", async (db) => {
+  const media = db.collection("mediaobjects");
+  await media.createIndex(
+    { ownerType: 1, ownerId: 1, category: 1, version: 1 },
+    { unique: true, name: "media_owner_category_version" }
+  );
+  await media.createIndex({ checksum: 1 }, { name: "media_checksum" });
+  await media.createIndex({ supersededById: 1 }, { name: "media_superseded_by", sparse: true });
+  await media.createIndex({ deletedAt: 1 }, { name: "media_deleted_at", sparse: true });
+
+  const sessions = db.collection("mediauploadsessions");
+  await sessions.createIndex({ userId: 1, status: 1 }, { name: "media_session_user_status" });
+  await sessions.createIndex({ expiresAt: 1 }, { name: "media_session_expiry" });
+}, async (db) => {
+  for (const [collection, indexes] of [
+    ["mediaobjects", ["media_owner_category_version", "media_checksum", "media_superseded_by", "media_deleted_at"]],
+    ["mediauploadsessions", ["media_session_user_status", "media_session_expiry"]]
+  ] as const) {
+    for (const index of indexes) await db.collection(collection).dropIndex(index).catch(() => {});
+  }
+});

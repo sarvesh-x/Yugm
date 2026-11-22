@@ -1,11 +1,16 @@
 package com.yugm.app.feature.profile.viewmodel
 
+import android.content.Context
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yugm.app.core.api.IYugmApi
+import com.yugm.app.core.api.MediaUploadProgress
 import com.yugm.app.core.api.SocketManager
 import com.yugm.app.core.api.SocketEvent
 import com.yugm.app.core.api.VoiceRoomJoinCoordinator
@@ -15,6 +20,8 @@ import com.yugm.app.core.model.PkBattle
 import com.yugm.app.core.model.PkStats
 import com.yugm.app.core.model.Room
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.io.ByteArrayOutputStream
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -57,6 +64,17 @@ class ProfileViewModel @Inject constructor(
         private set
     var isJoiningVoiceParty by mutableStateOf(false)
         private set
+    var avatarUploadBusy by mutableStateOf(false)
+        private set
+    var avatarUploadProgress by mutableStateOf(0f)
+        private set
+    var activeAvatarUploadSessionId by mutableStateOf<String?>(null)
+        private set
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var avatarUploadJob: Job? = null
+    private var avatarUploadToken: String = ""
+    @Volatile private var cancelAvatarUploadRequested = false
 
     init {
         viewModelScope.launch {
@@ -79,6 +97,88 @@ class ProfileViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    /** Own-profile avatar upload owned here so screens never perform network work. */
+    fun uploadOwnAvatar(
+        context: Context,
+        token: String,
+        uri: Uri,
+        onSuccess: (String) -> Unit,
+        onFailure: (String) -> Unit
+    ) {
+        if (avatarUploadBusy) return
+        avatarUploadBusy = true
+        avatarUploadProgress = 0f
+        activeAvatarUploadSessionId = null
+        cancelAvatarUploadRequested = false
+        avatarUploadToken = token
+        avatarUploadJob = viewModelScope.launch {
+            try {
+                val (mime, bytes) = withContext(Dispatchers.IO) { readImage(context, uri) }
+                val url = withContext(Dispatchers.IO) {
+                    yugmApi.uploadAvatarWithProgress(
+                        token = token,
+                        bytes = bytes,
+                        mimeType = mime,
+                        onProgress = { progress: MediaUploadProgress ->
+                            mainHandler.post {
+                                if (activeAvatarUploadSessionId == null) {
+                                    activeAvatarUploadSessionId = progress.sessionId
+                                }
+                                avatarUploadProgress = if (progress.totalBytes > 0) {
+                                    (progress.uploadedBytes.toFloat() / progress.totalBytes).coerceIn(0f, 1f)
+                                } else 0f
+                            }
+                        },
+                        isCancelled = { cancelAvatarUploadRequested }
+                    )
+                }
+                onSuccess(url)
+            } catch (cancelled: CancellationException) {
+                if (cancelAvatarUploadRequested) onFailure("Upload cancelled")
+                throw cancelled
+            } catch (error: Exception) {
+                onFailure(error.message ?: "Could not update your photo.")
+            } finally {
+                avatarUploadBusy = false
+                avatarUploadProgress = 0f
+                activeAvatarUploadSessionId = null
+                avatarUploadJob = null
+                avatarUploadToken = ""
+                cancelAvatarUploadRequested = false
+            }
+        }
+    }
+
+    fun cancelOwnAvatarUpload() {
+        val sessionId = activeAvatarUploadSessionId ?: return
+        cancelAvatarUploadRequested = true
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { yugmApi.cancelMediaUpload(avatarUploadToken, sessionId) } }
+            avatarUploadJob?.cancel()
+            avatarUploadBusy = false
+        }
+    }
+
+    private fun readImage(context: Context, uri: Uri): Pair<String, ByteArray> {
+        val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+        require(mime.startsWith("image/", ignoreCase = true)) { "Choose an image file." }
+        val input = context.contentResolver.openInputStream(uri) ?: error("Could not read the selected image")
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(8 * 1024)
+        var total = 0
+        input.use { stream ->
+            while (true) {
+                val count = stream.read(buffer)
+                if (count < 0) break
+                total += count
+                require(total <= 5 * 1024 * 1024) { "Choose an image smaller than 5 MB." }
+                output.write(buffer, 0, count)
+            }
+        }
+        require(total > 0) { "The selected image is empty." }
+        return mime to output.toByteArray()
     }
 
     fun joinVoiceParty(

@@ -16,6 +16,8 @@ import { GiftInventory } from "../models/GiftInventory.js";
 import { GiftTransaction } from "../models/GiftTransaction.js";
 import { XpGrant } from "../models/XpGrant.js";
 import { Match } from "../models/Match.js";
+import { MediaObject } from "../models/MediaObject.js";
+import { MediaUploadSession } from "../models/MediaUploadSession.js";
 import { MiniGameChallenge } from "../models/MiniGameChallenge.js";
 import { MiniGameScore } from "../models/MiniGameScore.js";
 import { Notification } from "../models/Notification.js";
@@ -61,6 +63,8 @@ const indexedModels = [
   FriendMatchRequest,
   Block,
   Match,
+  MediaObject,
+  MediaUploadSession,
   Relationship,
   Clan,
   ClanMessage,

@@ -199,22 +199,24 @@ fun ProfileDetailScreen(
     var reportReason by remember { mutableStateOf("") }
     var showBlockConfirm by remember { mutableStateOf(false) }
     val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null && isOwnProfile && !accountBusy) {
-            coroutineScope.launch {
-                accountBusy = true
-                accountError = null
-                runCatching {
-                    withContext(Dispatchers.IO) {
-                        val (mime, bytes) = readProfileImageUpload(context, uri)
-                        com.yugm.app.core.api.YugmApi.uploadAvatar(token, bytes, mime)
-                    }
-                }.onSuccess { url ->
+        if (uri != null && isOwnProfile && !accountBusy && !viewModel.avatarUploadBusy) {
+            accountBusy = true
+            accountError = null
+            viewModel.uploadOwnAvatar(
+                context = context,
+                token = token,
+                uri = uri,
+                onSuccess = { url ->
                     generatedAvatarDraft = null
                     viewModel.setOwnAvatar(url)
+                    accountBusy = false
                     android.widget.Toast.makeText(context, "Profile photo updated", android.widget.Toast.LENGTH_SHORT).show()
-                }.onFailure { accountError = it.message ?: "Could not update your photo." }
-                accountBusy = false
-            }
+                },
+                onFailure = { message ->
+                    accountError = message
+                    accountBusy = false
+                }
+            )
         }
     }
 
@@ -1132,26 +1134,6 @@ private fun EditProfileAddRow(label: String, value: String, onValueChange: (Stri
             Text("Add", color = Color.White, fontWeight = FontWeight.Bold)
         }
     }
-}
-
-private fun readProfileImageUpload(context: android.content.Context, uri: android.net.Uri): Pair<String, ByteArray> {
-    val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
-    require(mime.startsWith("image/", ignoreCase = true)) { "Choose an image file." }
-    val input = context.contentResolver.openInputStream(uri) ?: error("Could not read the selected image")
-    val output = java.io.ByteArrayOutputStream()
-    val buffer = ByteArray(8 * 1024)
-    var totalBytes = 0
-    input.use { stream ->
-        while (true) {
-            val count = stream.read(buffer)
-            if (count < 0) break
-            totalBytes += count
-            require(totalBytes <= 5 * 1024 * 1024) { "Choose an image smaller than 5 MB." }
-            output.write(buffer, 0, count)
-        }
-    }
-    require(totalBytes > 0) { "The selected image is empty." }
-    return mime to output.toByteArray()
 }
 
 @Composable

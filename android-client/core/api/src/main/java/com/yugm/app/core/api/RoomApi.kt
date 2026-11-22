@@ -16,6 +16,8 @@ import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.model.SpeakerRequest
 import com.yugm.app.core.model.VoiceRoomPresence
 import com.yugm.app.core.model.RoomJoinResult
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
@@ -381,10 +383,46 @@ object RoomApi {
         return data.optJSONArray("battles")?.toPkBattles() ?: emptyList()
     }
 
-    suspend fun uploadAvatar(token: String, bytes: ByteArray, mimeType: String): String {
+    suspend fun uploadAvatar(token: String, bytes: ByteArray, mimeType: String): String =
+        uploadAvatarWithProgress(token, bytes, mimeType, { _ -> }, { false })
+
+    /**
+     * R2 is the primary avatar store. Deployments without R2 configured return
+     * 503/501 at session creation, so only that narrow case falls back to the
+     * legacy multipart path; failures after a grant is issued are surfaced to
+     * the caller instead of being retried against a different storage system.
+     */
+    suspend fun uploadAvatarWithProgress(
+        token: String,
+        bytes: ByteArray,
+        mimeType: String,
+        onProgress: (MediaUploadProgress) -> Unit,
+        isCancelled: () -> Boolean
+    ): String = withContext(Dispatchers.IO) {
         val (uploadBytes, uploadMime, ext) = prepareAvatarThumbnail(bytes, mimeType)
+        val grant = try {
+            MediaUploadApi.createAvatarSession(token, uploadBytes, uploadMime, "avatar.$ext")
+        } catch (error: ApiHttpException) {
+            if (error.statusCode == 503 || error.statusCode == 501) {
+                return@withContext uploadLegacyAvatar(token, uploadBytes, uploadMime, ext)
+            }
+            throw error
+        }
+        onProgress(MediaUploadProgress(grant.sessionId, 0L, uploadBytes.size.toLong()))
+        MediaUploadApi.uploadToStorage(grant, uploadBytes, { uploaded, total ->
+            onProgress(MediaUploadProgress(grant.sessionId, uploaded, total))
+        }, isCancelled)
+        MediaUploadApi.completeAvatar(token, grant.sessionId)
+    }
+
+    private suspend fun uploadLegacyAvatar(
+        token: String,
+        bytes: ByteArray,
+        mimeType: String,
+        extension: String
+    ): String {
         val data = YugmHttpClient.multipartUpload("/upload/avatar", token) {
-            addFormDataPart("avatar", "avatar.$ext", uploadBytes.toRequestBody(uploadMime.toMediaType()))
+            addFormDataPart("avatar", "avatar.$extension", bytes.toRequestBody(mimeType.toMediaType()))
         }
         val url = data.getJSONObject("data").optString("url")
         if (url.isBlank()) throw ApiProtocolException("Avatar upload returned no URL")

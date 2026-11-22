@@ -2,6 +2,8 @@ package com.yugm.app.feature.auth.viewmodel
 
 import android.content.Context
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -15,8 +17,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.ByteArrayOutputStream
 import javax.inject.Inject
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -26,32 +29,80 @@ enum class AvatarUploadState { IDLE, UPLOADING, SUCCEEDED, FAILED }
 class ProfileSetupViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val sessionManager: SessionManager,
-    @param:ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context
 ) : ViewModel() {
     var avatarUploadState by mutableStateOf(AvatarUploadState.IDLE)
         private set
+    var avatarUploadProgress by mutableStateOf(0f)
+        private set
+    var activeAvatarUploadSessionId by mutableStateOf<String?>(null)
+        private set
     var isSubmitting by mutableStateOf(false)
         private set
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var avatarUploadJob: Job? = null
+    @Volatile private var cancelUploadRequested = false
+
     fun uploadAvatar(uri: Uri, onResult: (String?, String?) -> Unit) {
         if (avatarUploadState == AvatarUploadState.UPLOADING || isSubmitting) return
         avatarUploadState = AvatarUploadState.UPLOADING
-        viewModelScope.launch {
+        avatarUploadProgress = 0f
+        activeAvatarUploadSessionId = null
+        cancelUploadRequested = false
+        avatarUploadJob = viewModelScope.launch {
             try {
                 val (mime, bytes) = withContext(Dispatchers.IO) { readImage(uri) }
                 val token = requireSessionToken()
-                val url = withContext(Dispatchers.IO) { authRepository.uploadAvatar(token, bytes, mime) }
+                val url = withContext(Dispatchers.IO) {
+                    authRepository.uploadAvatarWithProgress(
+                        token = token,
+                        bytes = bytes,
+                        mimeType = mime,
+                        onProgress = { progress ->
+                            mainHandler.post {
+                                if (activeAvatarUploadSessionId == null) {
+                                    activeAvatarUploadSessionId = progress.sessionId
+                                }
+                                avatarUploadProgress = if (progress.totalBytes > 0) {
+                                    (progress.uploadedBytes.toFloat() / progress.totalBytes).coerceIn(0f, 1f)
+                                } else 0f
+                            }
+                        },
+                        isCancelled = { cancelUploadRequested }
+                    )
+                }
                 avatarUploadState = AvatarUploadState.SUCCEEDED
                 onResult(url, null)
             } catch (cancelled: CancellationException) {
+                if (cancelUploadRequested) onResult(null, "Upload cancelled")
                 throw cancelled
             } catch (failure: Exception) {
-                avatarUploadState = AvatarUploadState.FAILED
+                avatarUploadState = if (cancelUploadRequested) AvatarUploadState.IDLE else AvatarUploadState.FAILED
                 onResult(null, failure.message ?: "Could not upload that photo. Try another image.")
             } finally {
                 if (avatarUploadState == AvatarUploadState.UPLOADING) {
                     avatarUploadState = AvatarUploadState.IDLE
                 }
+                activeAvatarUploadSessionId = null
+                avatarUploadProgress = 0f
+                avatarUploadJob = null
+                cancelUploadRequested = false
             }
+        }
+    }
+
+    /** Cancels the staging grant first, then aborts the in-flight request. */
+    fun cancelAvatarUpload() {
+        val sessionId = activeAvatarUploadSessionId ?: return
+        cancelUploadRequested = true
+        val token = sessionManager.authToken
+        viewModelScope.launch {
+            if (token.isNotBlank()) {
+                runCatching { withContext(Dispatchers.IO) { authRepository.cancelMediaUpload(token, sessionId) } }
+            }
+            avatarUploadJob?.cancel()
+            avatarUploadState = AvatarUploadState.IDLE
         }
     }
 
