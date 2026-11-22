@@ -1189,7 +1189,7 @@ paths:
       tags: [Experience]
       summary: Get the authenticated user's badge gallery and worn slots
       responses:
-        "200": { description: Badge gallery with capacity 5, wornIds, and badges }
+        "200": { description: Badge gallery with capacity 5, wornIds, and badges; badge art may expose assetId, assetVersion and assetVariants }
 
   /experience/badges/showcase:
     put:

@@ -3,11 +3,15 @@ import { Achievement, ACHIEVEMENT_TIER_ORDER, type AchievementTier, type IAchiev
 import { GiftTransaction } from "../models/GiftTransaction.js";
 import { Room } from "../models/Room.js";
 import { User, type IUser } from "../models/User.js";
+import { findPublishedAssetsByIds, type PublicAsset } from "./assets.js";
 import { ErrorCode, HttpError } from "../utils/http.js";
 
 export const maxWornBadges = 5;
 const weekMs = 7 * 86400_000;
-type Definition = Pick<IAchievement, "id" | "title" | "description" | "category" | "kind" | "icon" | "imageUrl" | "metric" | "weeklyTarget" | "tiers" | "order">;
+type Definition = Pick<IAchievement, "id" | "title" | "description" | "category" | "kind" | "icon" | "imageUrl" | "assetRef" | "metric" | "weeklyTarget" | "tiers" | "order">;
+/** Read-time asset projection; the registry remains the source of truth for URLs. */
+export type BadgeArtAsset = Pick<PublicAsset, "id" | "version" | "publicUrl" | "variants">;
+export type BadgeDefinition = Definition & { asset?: BadgeArtAsset };
 type Grant = IUser["badgeGrants"][number];
 type BadgeUser = Pick<IUser, "badgeGrants" | "showcasedBadgeIds" | "badgeRevision" | "claimedAchievementTiers" | "claimedAchievementIds">;
 
@@ -16,8 +20,24 @@ export function weeklyHonorWindow(now: Date) {
   return { from: new Date(start.getTime() - weekMs), start, expiresAt: new Date(start.getTime() + weekMs) };
 }
 
-export function badgeCatalog() {
-  return Achievement.find({ hidden: { $ne: true } }).sort({ order: 1, id: 1 }).lean().exec();
+/** Load the visible badge catalogue, batch-resolving published art by asset id. */
+export async function badgeCatalog(): Promise<BadgeDefinition[]> {
+  const definitions = await Achievement.find({ hidden: { $ne: true } }).sort({ order: 1, id: 1 }).lean().exec();
+  const assets = await findPublishedAssetsByIds(definitions.map(def => def.assetRef ?? ""));
+  return definitions.map(def => {
+    const asset = def.assetRef ? assets.get(def.assetRef) : undefined;
+    return {
+      ...def,
+      ...(asset ? {
+        asset: {
+          id: asset.id,
+          version: asset.version,
+          ...(asset.publicUrl ? { publicUrl: asset.publicUrl } : {}),
+          variants: asset.variants
+        }
+      } : {})
+    } as BadgeDefinition;
+  });
 }
 
 function tierRank(tier?: string) {
@@ -46,17 +66,44 @@ function owned(definition: Definition, grant: Grant | undefined, now: Date) {
     : tierRank(grant.tier) >= 0 && !grant.expiresAt;
 }
 
-function publicBadge(definition: Definition, grant: Grant | undefined, now: Date) {
+/**
+ * Managed art wins over the legacy badge `imageUrl`; an unpublished or missing
+ * asset silently falls back. Variants come only from the registry, never from
+ * the badge document, so published URLs stay immutable.
+ */
+export function badgePublicArt(definition: Pick<BadgeDefinition, "imageUrl" | "asset">) {
+  const asset = definition.asset;
+  const imageUrl = asset?.publicUrl
+    ?? asset?.variants.find((variant) => variant.name === "full")?.url
+    ?? definition.imageUrl
+    ?? "";
+  return {
+    imageUrl,
+    ...(asset ? {
+      assetId: asset.id,
+      assetVersion: asset.version,
+      assetVariants: asset.variants.map((variant) => ({
+        name: variant.name,
+        url: variant.url,
+        contentType: variant.contentType,
+        ...(variant.width !== undefined ? { width: variant.width } : {}),
+        ...(variant.height !== undefined ? { height: variant.height } : {})
+      }))
+    } : {})
+  };
+}
+
+export function publicBadge(definition: BadgeDefinition, grant: Grant | undefined, now: Date) {
   const unlocked = owned(definition, grant, now);
   return {
     id: definition.id, title: definition.title, description: definition.description, icon: definition.icon,
-    kind: definition.kind ?? "ACHIEVEMENT", category: definition.category, imageUrl: definition.imageUrl ?? "",
+    kind: definition.kind ?? "ACHIEVEMENT", category: definition.category, ...badgePublicArt(definition),
     unlocked, tier: unlocked ? grant?.tier ?? null : null, expiresAt: unlocked ? grant?.expiresAt : undefined,
     weeklyTarget: definition.weeklyTarget
   };
 }
 
-export function wornBadges(user: BadgeUser, definitions: Definition[], now = new Date()) {
+export function wornBadges(user: BadgeUser, definitions: BadgeDefinition[], now = new Date()) {
   const grants = grantsFor(user, definitions);
   const byId = new Map(definitions.map(def => [def.id, def]));
   return [...new Set(user.showcasedBadgeIds ?? [])].flatMap(id => {
@@ -68,7 +115,7 @@ export function wornBadges(user: BadgeUser, definitions: Definition[], now = new
 
 export async function syncBadgeState(
   userId: string,
-  definitions: Definition[],
+  definitions: BadgeDefinition[],
   earned: Grant[],
   now: Date,
   selection?: string[]

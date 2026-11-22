@@ -10,6 +10,7 @@ import {
   type AssetVariant
 } from "../models/AssetObject.js";
 import { Cosmetic } from "../models/Cosmetic.js";
+import { Achievement } from "../models/Achievement.js";
 import {
   deleteStoredFile,
   loadAssetStagingFile,
@@ -258,7 +259,11 @@ export async function archiveAsset(assetId: string): Promise<PublicAsset> {
   const asset = await AssetObject.findById(assetId);
   if (!asset) throw new HttpError(404, "Asset not found");
   if (asset.status === "archived") return toPublicAsset(asset);
-  assertNoPublishedReferences(await Cosmetic.countDocuments({ assetRef: assetId }));
+  const [cosmeticRefs, badgeRefs] = await Promise.all([
+    Cosmetic.countDocuments({ assetRef: assetId }),
+    Achievement.countDocuments({ assetRef: assetId })
+  ]);
+  assertNoPublishedReferences(cosmeticRefs + badgeRefs);
 
   // Clear the published reference first. If object deletion fails afterwards,
   // the registry no longer advertises a URL whose object may be gone.

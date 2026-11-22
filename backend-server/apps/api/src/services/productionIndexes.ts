@@ -1,3 +1,4 @@
+import { Achievement } from "../models/Achievement.js";
 import { AssetObject } from "../models/AssetObject.js";
 import { Bond, BondRequest, BondPoint, BondRankingSnapshot, BondReward } from "../models/Bond.js";
 import { Block } from "../models/Block.js";
@@ -45,6 +46,7 @@ import { WalletTransaction } from "../models/WalletTransaction.js";
 import { WithdrawalRequest } from "../models/WithdrawalRequest.js";
 
 const indexedModels = [
+  Achievement,
   AssetObject,
   Bond, BondRequest, BondPoint, BondRankingSnapshot, BondReward,
   User,

@@ -176,3 +176,12 @@ The third audit was completed after the Phase 1 code was written. Its findings w
 - **Verification run:** API typecheck exit 0; API tests 192/192 (six new cosmetic mapping tests + one archive-guard test); hardening 34/34; admin typecheck exit 0 and admin production build succeeded. Not run: live DB/storage flow, migration 7 application, Android builds, runtime admin QA.
 
 **Phase 2 deviations from the plan:** `assetVariants` is not duplicated onto the `Cosmetic` document — the `AssetObject` registry is the single source of truth and variants are resolved at read time. The four seeded external avatar URLs were not backfilled into the registry, per the user's decision to keep them as provenance-only links.
+
+## 9. Phase 3 implementation record (additive badge asset references)
+
+- **Scope gate:** an additive slice only. No `imageData`/`imageMime` blob was read, rewritten or deleted; the dedicated multipart badge upload and `/api/badge-art/:id/:version` route stay intact for legacy badges. Bulk blob cleanup and upload retirement still require the separately approved cutover.
+- **Schema:** `Achievement.assetRef` (optional string) plus migration 8 (sparse `badge_asset_ref` index, index-only down). `Achievement` was added to the explicit `productionIndexes.ts` set. No badge document is rewritten.
+- **Read path:** `badgeCatalog()` batch-resolves published badge assets by id in one query and attaches a read-time projection. `badgePublicArt()`/`publicBadge()` expose `assetId`, `assetVersion` and `assetVariants[]`, and resolve `imageUrl` from managed `publicUrl` → `full` variant → legacy `imageUrl`. Earned/worn state and expirations are unchanged.
+- **Write path:** admin badge create/update accept `assetRef` and validate published status and `ownerType=badge`/`ownerId=<badge id>` through the pure `assertBadgeAssetTarget()` helper; "remove custom image" clears the managed reference too. `archiveAsset()` now counts both cosmetic and badge refs before returning `409`.
+- **Admin UI:** the Badges form links a published badge asset; managed art overrides an uploaded image.
+- **Verification run:** API typecheck exit 0; API tests 199/199 (seven new badge tests: four DTO mapping + three asset-reference validation); hardening 34/34 (existing badge artwork route still passes unchanged); admin typecheck exit 0 and production build succeeded; generated `dist/` artifacts reverted to `HEAD`. Not run: live DB/storage flow, migration 8 application, Android builds, runtime admin QA.

@@ -33,7 +33,7 @@ The API has more than one response envelope in existing paths. Inspect `src/util
 - `POST /api/admin/assets` accepts multipart `asset` plus `ownerType` (`cosmetic|badge|gift`) and `ownerId`. JPEG, PNG, WebP and GIF up to 8 MB are accepted after signature/dimension validation with `sharp`. The file is written to **private** `assets-staging/` storage and returns a `staging` asset with a version, SHA-256 and dimensions. No public URL is returned at this stage.
 - `GET /api/admin/assets/staging/:fileName` is authenticated and serves staging bytes with `Cache-Control: private, no-store`. Staging filenames are validated against a fixed pattern; external URLs and arbitrary paths are rejected.
 - `POST /api/admin/assets/:id/publish` produces immutable `full` (1600px) and `preview` (512px) WebP variants under versioned `assets/` keys and sets `publicUrl`. Published keys and URLs are never overwritten; a new upload allocates a new version. `DELETE /api/admin/assets/:id` archives an asset and removes its objects.
-- Consumers must store the asset reference, not mint URLs. `resolvePublishedAsset(ownerType, ownerId)` returns the newest published asset for a cosmetic/badge/gift. Phase 1 did not change read responses; Phase 2 now resolves cosmetic references (see below). Badge art is still Phase 3.
+- Consumers must store the asset reference, not mint URLs. `resolvePublishedAsset(ownerType, ownerId)` returns the newest published asset for a cosmetic/badge/gift. Phase 1 did not change read responses; Phase 2 resolves cosmetic references and Phase 3 resolves badge references (see below). The legacy `/api/badge-art/:id/:version` route remains for existing blobs until an approved cutover.
 - Migration 6 creates only `assetobjects` indexes; it does not rewrite catalogue or user documents. No migration has been applied to any deployment as part of this work.
 
 ## Cosmetic asset references (Phase 2)
@@ -44,6 +44,14 @@ The API has more than one response envelope in existing paths. Inspect `src/util
 - Catalogue reads batch-resolve published assets by id (one query per list, not per item). A staging/archived/missing asset silently falls back to the legacy URL; no published URL is rewritten in place.
 - `DELETE /api/admin/assets/:id` now returns `409` while any `Cosmetic.assetRef` still points at that asset. Clear the cosmetic reference (or switch it to a newer version) before archiving.
 - Admin UI: **Managed Assets** stages/uploads, publishes and archives; the Cosmetics drawer links a published cosmetic asset. The seeded external DiceBear/Giphy URLs remain unchanged and are not re-hosted, per the resolved product decision.
+
+## Badge asset references (Phase 3, additive slice)
+
+- `Achievement.assetRef` is an optional `AssetObject` id; migration 8 adds only the sparse `badge_asset_ref` index. Existing `imageData`/`imageMime` blobs and legacy `imageUrl` values are **not** read, migrated or deleted. Migration 8 has not been applied.
+- `POST /api/admin/badges` and `PUT /api/admin/badges/:id` accept `assetRef` in the JSON `definition`. The server rejects a reference that is not `published`, is not `ownerType=badge`/`ownerId=<that badge id>`, or has neither `publicUrl` nor a `full` variant. "Remove custom image" clears both the legacy fields and the managed reference. The existing multipart `image` upload still writes to the legacy blob path; no badge bytes are moved out of the primary DB in this slice.
+- Badge gallery/showcase DTOs (`/experience/badges`, `/experience/badges/showcase/:userId`, profile header badges) may now include `assetId`, `assetVersion` and `assetVariants[]`. `imageUrl` resolves to the published asset URL when a valid reference exists, otherwise to the legacy `imageUrl`. `badgeCatalog()` batch-resolves refs in one query. Android's `Achievement` model ignores unknown fields, so no client change is required.
+- `DELETE /api/admin/assets/:id` now returns `409` while either a `Cosmetic.assetRef` or an `Achievement.assetRef` still points at that asset.
+- Admin UI: the Badges form links a published badge asset from **Managed Assets**; managed art overrides an uploaded image. Bulk clearing of `Achievement.imageData`/`imageMime` and retirement of the dedicated badge upload remain gated on a separately approved cutover.
 
 ## Authentication and profile setup notes
 

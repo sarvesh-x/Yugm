@@ -1,14 +1,15 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Award } from "lucide-react";
-import { adminApi, adminApiMultipart } from "./api";
+import { adminApi, adminApiMultipart, adminApiWithMeta } from "./api";
 
 type Tier = { tier: string; target: number; rewardCoins: number; rewardCosmetic?: string };
 type Badge = {
   id: string; title: string; description: string; kind: "ACHIEVEMENT" | "HONOR";
-  metric: string; icon: string; order: number; hidden: boolean; imageUrl?: string;
+  metric: string; icon: string; order: number; hidden: boolean; imageUrl?: string; assetRef?: string;
   weeklyTarget?: number; tiers: Tier[];
 };
 type Catalog = { badges: Badge[]; metrics: string[]; honorMetrics: string[]; tierNames: string[]; icons: string[] };
+type AssetOption = { id: string; ownerId: string; version: number; publicUrl?: string };
 
 const activityNames: Record<string, string> = {
   profile_complete: "Profile completion (%)", daily_streak_3: "Check-in streak", follow_10: "Users followed",
@@ -28,6 +29,7 @@ export function BadgesPage({ token }: { token: string }) {
   const [image, setImage] = useState<File | null>(null);
   const [removeImage, setRemoveImage] = useState(false);
   const [assetInput, setAssetInput] = useState(0);
+  const [assetOptions, setAssetOptions] = useState<AssetOption[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -41,6 +43,14 @@ export function BadgesPage({ token }: { token: string }) {
     }).catch(failure => { if (!cancelled) setError(failure.message); });
     return () => { cancelled = true; };
   }, [token]);
+
+  useEffect(() => {
+    let cancelled = false;
+    adminApiWithMeta<{ assets: AssetOption[] }>("/assets?ownerType=badge&status=published&limit=100", { token })
+      .then(({ data }) => { if (!cancelled) setAssetOptions(data.assets ?? []); })
+      .catch(() => { if (!cancelled) setAssetOptions([]); });
+    return () => { cancelled = true; };
+  }, [token, catalog]);
 
   function edit(badge?: Badge) {
     setEditId(badge?.id ?? null);
@@ -104,7 +114,7 @@ export function BadgesPage({ token }: { token: string }) {
           <table>
             <thead><tr><th>Badge</th><th>Collection</th><th>Requirement</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>{catalog.badges.map(badge => <tr key={badge.id}>
-              <td><span className="badge-admin-image">{badge.imageUrl && !badge.hidden ? <img src={new URL(badge.imageUrl, origin).href} alt="" /> : <Award size={20} />}</span>{badge.title}</td>
+              <td><span className="badge-admin-image">{badge.imageUrl && !badge.hidden ? <img src={new URL(badge.imageUrl, origin).href} alt="" /> : <Award size={20} />}</span>{badge.title}{badge.assetRef ? " · managed art" : ""}</td>
               <td>{badge.kind === "HONOR" ? "Honor" : "Achievement"}</td>
               <td>{activityNames[badge.metric] ?? badge.metric}{badge.kind === "HONOR" ? ` · ${badge.weeklyTarget} per week` : ` · ${badge.tiers.length} levels`}</td>
               <td>{badge.hidden ? "Archived" : "Active"}</td>
@@ -132,7 +142,20 @@ export function BadgesPage({ token }: { token: string }) {
           <label>Sort order<input type="number" value={form.order} min={0} max={10000} required onChange={e => change("order", e.target.valueAsNumber)} /></label>
           <label>Image (PNG, JPEG, or WebP, up to 512 KB)<input key={assetInput} type="file" accept="image/png,image/jpeg,image/webp"
             onChange={e => { setImage(e.target.files?.[0] ?? null); setRemoveImage(false); }} /></label>
-          {form.imageUrl && <label><span><input type="checkbox" checked={removeImage} onChange={e => setRemoveImage(e.target.checked)} /> Remove custom image</span></label>}
+          <label>Managed artwork
+            <select value={form.assetRef ?? ""} onChange={e => {
+              change("assetRef", e.target.value);
+              setImage(null);
+              setRemoveImage(false);
+            }}>
+              <option value="">None (use uploaded/legacy image)</option>
+              {assetOptions.map(asset => (
+                <option key={asset.id} value={asset.id}>{asset.ownerId} · v{asset.version}{asset.publicUrl ? "" : " (missing variant)"}</option>
+              ))}
+            </select>
+          </label>
+          <p className="eyebrow full">Stage and publish badge art in Managed Assets, then link the version here. Managed art overrides an uploaded image.</p>
+          {(form.imageUrl || form.assetRef) && <label><span><input type="checkbox" checked={removeImage} onChange={e => setRemoveImage(e.target.checked)} /> Remove custom image</span></label>}
           {form.hidden && <label><span><input type="checkbox" checked={form.hidden} onChange={e => change("hidden", e.target.checked)} /> Archived</span></label>}
           {isHonor ? (
             <label>Weekly target<input type="number" min={1} max={1000000} value={form.weeklyTarget ?? 1} required

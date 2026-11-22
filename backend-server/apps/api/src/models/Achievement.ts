@@ -22,6 +22,8 @@ export interface IAchievement extends mongoose.Document {
   imageUrl?: string;
   imageData?: Buffer;
   imageMime?: string;
+  /** Published AssetObject id. Legacy imageData/imageUrl remain untouched until an approved cutover. */
+  assetRef?: string;
   kind?: "ACHIEVEMENT" | "HONOR";
   metric?: typeof badgeMetrics[number];
   weeklyTarget?: number;
@@ -46,6 +48,7 @@ const achievementSchema = new Schema<IAchievement>({
   imageUrl: String,
   imageData: { type: Buffer, select: false },
   imageMime: String,
+  assetRef: { type: String },
   kind: { type: String, enum: ["ACHIEVEMENT", "HONOR"], default: "ACHIEVEMENT" },
   metric: { type: String, enum: badgeMetrics },
   weeklyTarget: Number,

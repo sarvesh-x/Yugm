@@ -108,3 +108,11 @@ defineMigration(7, "create_cosmetic_asset_ref_index", async (db) => {
 }, async (db) => {
   await db.collection("cosmetics").dropIndex("cosmetic_asset_ref").catch(() => {});
 });
+
+// Additive only: index for the optional badge -> published asset reference.
+// Existing badge blobs and imageUrl values are not read or rewritten here.
+defineMigration(8, "create_badge_asset_ref_index", async (db) => {
+  await db.collection("achievements").createIndex({ assetRef: 1 }, { name: "badge_asset_ref", sparse: true });
+}, async (db) => {
+  await db.collection("achievements").dropIndex("badge_asset_ref").catch(() => {});
+});

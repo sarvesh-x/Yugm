@@ -6,6 +6,7 @@ import { requirePermission, type AdminAuthRequest } from "../middleware/adminAut
 import { Achievement, badgeIcons, badgeMetrics, badgeTiers, honorMetrics } from "../models/Achievement.js";
 import { adminOk } from "../modules/admin/http.js";
 import { auditLog } from "../services/adminAudit.js";
+import { getAsset, type PublicAsset } from "../services/assets.js";
 import { asyncHandler, HttpError } from "../utils/http.js";
 
 export const adminBadgesRouter = Router();
@@ -23,6 +24,7 @@ const definitionSchema = z.object({
   icon: z.enum(badgeIcons),
   order: z.number().int().min(0).max(10000),
   hidden: z.boolean().default(false),
+  assetRef: z.string().max(64).optional(),
   removeImage: z.boolean().optional(),
   weeklyTarget: z.number().int().min(1).max(1_000_000).optional(),
   tiers: z.array(z.object({
@@ -41,6 +43,24 @@ const definitionSchema = z.object({
     ctx.addIssue({ code: "custom", message: "Achievement tiers must start at Bronze and have strictly increasing targets." });
   }
 });
+
+/** Pure validation shared by create/update and unit tests. */
+export function assertBadgeAssetTarget(
+  asset: Pick<PublicAsset, "ownerType" | "ownerId" | "status" | "publicUrl" | "variants">,
+  badgeId: string
+) {
+  if (asset.ownerType !== "badge" || asset.ownerId !== badgeId) {
+    throw new HttpError(400, "Asset does not belong to this badge");
+  }
+  if (asset.status !== "published" || !(asset.publicUrl || asset.variants.some((variant) => variant.name === "full"))) {
+    throw new HttpError(400, "Asset is not published and cannot be used by a badge");
+  }
+}
+
+/** A badge may only reference a published asset owned by that same badge id. */
+async function assertBadgeAssetRef(assetRef: string, badgeId: string) {
+  assertBadgeAssetTarget(await getAsset(assetRef), badgeId);
+}
 
 function parseDefinition(req: AdminAuthRequest) {
   let body: unknown = req.body;
@@ -75,6 +95,7 @@ adminBadgesRouter.get("/badges", asyncHandler(async (_req, res) => {
 adminBadgesRouter.post("/badges", imageUpload.single("image"), asyncHandler(async (req: AdminAuthRequest, res) => {
   const { removeImage: _, ...definition } = parseDefinition(req);
   if (await Achievement.exists({ id: definition.id })) throw new HttpError(409, "This badge ID already exists.");
+  if (definition.assetRef) await assertBadgeAssetRef(definition.assetRef, definition.id);
   let entityId: string;
   try { entityId = (await Achievement.create({ ...definition, ...badgeImage(req.file, definition.id) }))._id.toString(); }
   catch (error) {
@@ -87,16 +108,20 @@ adminBadgesRouter.post("/badges", imageUpload.single("image"), asyncHandler(asyn
 
 adminBadgesRouter.put("/badges/:id", imageUpload.single("image"), asyncHandler(async (req: AdminAuthRequest, res) => {
   const { removeImage, ...definition } = parseDefinition(req);
+  // Removing art must clear the managed reference as well as the legacy blob
+  // fields; otherwise the public DTO would keep advertising the old asset.
+  if (removeImage && definition.assetRef) delete definition.assetRef;
   if (definition.id !== req.params.id) throw new HttpError(400, "Badge IDs cannot be changed.");
   const existing = await Achievement.findOne({ id: definition.id });
   if (!existing) throw new HttpError(404, "Badge not found.");
   if ((existing.kind ?? "ACHIEVEMENT") !== definition.kind) throw new HttpError(400, "Badge types cannot be changed after creation.");
+  if (definition.assetRef) await assertBadgeAssetRef(definition.assetRef, definition.id);
   const image = badgeImage(req.file, definition.id);
   await Achievement.updateOne({ id: definition.id }, {
     $set: { ...definition, ...image },
     $unset: {
       ...(definition.kind === "ACHIEVEMENT" ? { weeklyTarget: "" } : {}),
-      ...(removeImage && !image ? { imageData: "", imageMime: "", imageUrl: "" } : {})
+      ...(removeImage && !image ? { imageData: "", imageMime: "", imageUrl: "", assetRef: "" } : {})
     }
   });
   await auditLog({ adminId: req.admin!.id, action: "badge.updated", entityType: "achievement", entityId: existing._id.toString(), metadata: { badgeId: definition.id }, req });
