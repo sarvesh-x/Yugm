@@ -2,7 +2,7 @@
 
 **Date:** 2026-11-22  
 **Severity:** Critical, immediate remediation required before any further Cloudflare work.  
-**Status:** Observed during Phase 0; no credentials were used, transmitted, rotated, removed, or provisioned.
+**Status:** DCR-1 Option A accepted by the owner on 2026-11-22 ([ADR-0003](../decisions/0003-credential-remediation-approach.md)). Rotation and source removal remain pending owner action. No credential value has been used, transmitted, rotated, removed, printed or provisioned in this repository.
 
 ## Finding
 
@@ -30,3 +30,16 @@ Anyone with read access to this repository or its history may have usable creden
 6. Add a CI secret-scanning gate so a regression fails before deploy.
 
 No remediation was performed in Phase 0 because rotation, secret-store changes and history rewrites require owner authorization and provider access.
+
+## Preparation performed (2026-11-22)
+
+Under the owner's "owner rotates, agent prepares" instruction, a value-free regression guard was added without reading or reproducing any secret value:
+
+- `backend-server/scripts/check-tracked-secrets.mjs` — scans tracked config-like files via `git ls-files`; denylists known credential key names and sensitive suffixes; ignores placeholders, environment references, generated values and loopback endpoints. It reports **variable names and line numbers only**.
+- `backend-server/scripts/check-tracked-secrets.test.mjs` — 8 unit tests covering JSONC detection, remote connection strings, placeholders, allowlisted identifiers, sensitive suffixes, CI secret references and candidate-file selection.
+- npm scripts `secrets:check` (report), `secrets:check:strict` (fail on findings) and `test:secrets`.
+- `.github/workflows/ci.yml` — report-only guard steps. CI stays green until the owner confirms rotation; strict mode is then enabled by switching the step to `secrets:check:strict`.
+
+**Verification actually run:** `npm.cmd run test:secrets` passed 8/8; `npm.cmd run secrets:check` scanned 30 tracked config files and reported 8 findings, all in `backend-server/apps/cloudflare-worker/wrangler.jsonc`, by name and line only; `npm.cmd run secrets:check:strict` returned exit code 1 as designed. No build, deploy, provision or credential change was performed.
+
+**Not done:** provider rotation, removal of values from the tracked file, `.dev.vars*`/Wrangler secret configuration, ignore-rule verification, history rewrite, and enabling strict CI. These require owner action or confirmation.

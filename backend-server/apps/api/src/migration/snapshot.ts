@@ -22,7 +22,8 @@ export function checksum(records: readonly SourceRecord[]): string {
   return hash.digest("hex");
 }
 
-function fileName(name: string, batchIndex: number): string {
+/** Shared batch filename convention; the backup verifier uses this to locate declared files. */
+export function snapshotBatchFileName(name: string, batchIndex: number): string {
   return `${name}-${String(batchIndex).padStart(6, "0")}.jsonl`;
 }
 
@@ -33,7 +34,7 @@ export class FileSystemSnapshotStore implements SnapshotSink, SnapshotSource {
     await mkdir(this.directory, { recursive: true });
     const content = records.map((record) => stableStringify(record)).join("\n");
     const bytes = Buffer.byteLength(content, "utf8");
-    await writeFile(path.join(this.directory, fileName(name, batchIndex)), content, "utf8");
+    await writeFile(path.join(this.directory, snapshotBatchFileName(name, batchIndex)), content, "utf8");
     return { bytes, checksum: checksum(records) };
   }
 

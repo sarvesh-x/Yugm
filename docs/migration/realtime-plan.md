@@ -1,7 +1,7 @@
 # Realtime migration plan
 
 **Date:** 2026-11-22  
-**Status:** Phase 0 design and decision gate. No protocol cutover has been implemented or approved.
+**Status:** Phase 0 design and decision gate. DCR-3 Option C (staged hybrid) is selected in [ADR-0002](../decisions/0002-staged-hybrid-realtime-protocol.md), but the support window, hibernation requirement and event-inventory sign-off are still open. A local, unwired [native contract foundation](../../backend-server/packages/shared/src/realtimeProtocol.ts) exists. No protocol cutover has been implemented or approved.
 
 ## Current observed protocol
 
@@ -23,6 +23,8 @@ Choose one of two paths before implementation:
 2. **Versioned native protocol:** define a new event envelope on native Durable Object WebSockets, with a client migration window and dual support. This enables hibernation and explicit event IDs/dedupe but requires Android/admin changes and a cutover plan.
 
 Do not treat ordinary WebSockets as interchangeable with Socket.IO without this decision and a compatibility test suite. The source-verified [event inventory](realtime-event-inventory.md) is the input to this decision; the historical `docs/production/socket-inventory.csv` has only 11 `NOT VERIFIED` registrations in `services/socket.ts` and is not sufficient.
+
+The owner selected the staged hybrid path (Option C), so both paths are required during the support window. The native envelope, resume frame, command-ack shape, dedupe/replay state and event-coverage harness are defined locally in `backend-server/packages/shared/src/realtimeProtocol.ts` with 8 passing unit tests. That module is a **contract and test harness only**: no Durable Object, adapter, Android client or runtime path consumes it yet, and no event has been classified in code pending inventory sign-off. A companion transport-agnostic [parity matrix](../../backend-server/packages/shared/src/realtimeParity.ts) defines 6 executable scenarios and 10 documented requirements; it runs against a test double today and must be run against both real paths before cutover. Sign-off-dependent cases are skipped by default.
 
 ## Durable Object scoping
 

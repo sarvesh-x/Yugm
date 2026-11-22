@@ -18,6 +18,8 @@
     "env:check": "tsx src/scripts/check-env.ts",
     "schema:d1": "tsx src/scripts/generate-d1-schema.ts",
     "migrate:rehearse": "tsx src/scripts/rehearse-migration.ts",
+    "backup:verify": "tsx src/scripts/verify-backup.ts",
+    "inventory:media": "tsx src/scripts/media-inventory.ts",
     "test": "tsx --test \"src/**/*.test.ts\"",
     "test:hardening": "node test/run-hardening.mjs",
     "typecheck": "tsc --noEmit"

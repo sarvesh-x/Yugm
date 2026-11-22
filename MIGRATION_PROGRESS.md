@@ -7,10 +7,11 @@ This is the persistent, single-source tracker for the MongoDB/Render to Cloudfla
 | Field | Value |
 |---|---|
 | Phase | Phase 0 — audit, architecture decisions and implementation planning |
-| Status | Audit/planning complete; awaiting owner decisions |
+| Status | Audit/planning complete; DCR-1/DCR-2/DCR-3 and DCR-5 authorization answered; local code + tests authorized; DCR-4 and detailed inputs still open |
 | Started | 2026-11-22 |
 | Last updated | 2026-11-22 |
 | Overall gate | No production data, credentials, DNS, billing, deploy, migration or release has been changed or authorized |
+| Commit/push | Owner authorized commit and push of the current local-only changes on 2026-11-22; deploy, provision, migration and release remain unauthorized |
 
 ## Scope for Phase 0
 
@@ -21,6 +22,50 @@ This is the persistent, single-source tracker for the MongoDB/Render to Cloudfla
 - Stop before destructive production changes, paid provisioning, credential handling or significant unresolved architecture decisions.
 
 ## Work log
+
+### 2026-11-22 — Realtime parity matrix added (DCR-3 harness, unwired)
+
+- **Status:** local harness only. No adapter, Durable Object, client, deployment or data change. No commit or push.
+- **Added/updated files:** `backend-server/packages/shared/src/realtimeParity.ts`, `backend-server/packages/shared/src/realtimeParity.test.ts`, `backend-server/packages/shared/src/index.ts`, `docs/decisions/0002-staged-hybrid-realtime-protocol.md`, `docs/migration/realtime-plan.md`, `docs/INDEX.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-22-realtime-parity-matrix.md`.
+- **Verification performed:** `npm.cmd run test --workspace @yugm/shared` 12/12 passed; `npm.cmd run typecheck --workspace @yugm/shared` and `--workspace @yugm/api` passed; a broken test double was detected by the matrix.
+- **Issues:** no real adapter exists, so protocol interoperability is unproven. The `BONDS` and other sign-off-dependent checks are skipped by default; 10 requirements remain documented but not executable.
+- **Decisions:** implements the dual-test-matrix consequence of DCR-3 Option C (ADR-0002); no new product decision.
+- **Dependencies:** owner DCR-3 inputs, then concrete adapters before the matrix can run against real paths.
+- **Risks:** passing against a test double could be mistaken for adapter parity; scenario isolation depends on unique peer IDs and scopes.
+- **Next task:** after owner sign-off, implement the compatibility adapter and native DO protocol, then run this matrix against both paths before cutover.
+
+### 2026-11-22 — Read-only media inventory reporter added (DCR-4 input preparation)
+
+- **Status:** local tooling only; no export, provision, policy decision, deployment or data change. No commit or push.
+- **Added/updated files:** `backend-server/apps/api/src/migration/mediaInventory.ts`, `backend-server/apps/api/src/migration/mediaInventory.test.ts`, `backend-server/apps/api/src/scripts/media-inventory.ts`, `backend-server/apps/api/package.json`, `docs/cloudflare-migration/decision-request.md`, `docs/migration/BACKUP_AND_RECOVERY.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-22-media-inventory-reporter.md`.
+- **Verification performed:** `npm.cmd exec -- tsx --test src/migration/mediaInventory.test.ts src/migration/verifyBackup.test.ts` 10/10 passed; `npm.cmd run typecheck --workspace @yugm/api` passed; `inventory:media` CLI smoke on a generated JSONL fixture produced a complete report. No database, bucket or remote access.
+- **Issues:** no real media data was read; legacy `/uploads` coverage, binary verification and media backup remain unaddressed. Public/private bucket policy is deliberately not asserted because DCR-4 is still open.
+- **Decisions:** none; implements an input-preparation item from DCR-4 under DCR-5 local-code-and-tests authorization.
+- **Dependencies:** owner-approved media export before real numbers; DCR-4 environment inputs and option selection.
+- **Risks:** partial inventory could be mistaken for a complete media census or for proof that binaries exist and are restorable.
+- **Next task:** owner supplies DCR-4 scope/environment inputs and approves an export; then run the reporter on real data and cross-check against the legacy `/uploads` gap before any cutover.
+
+### 2026-11-22 — Snapshot-copy integrity verifier added (Phase 1 tooling)
+
+- **Status:** local read-only tooling only. No backup created, no restore rehearsed, no commit, push, provision, deploy, credential change or data migration.
+- **Added/updated files:** `backend-server/apps/api/src/migration/verifyBackup.ts`, `backend-server/apps/api/src/migration/verifyBackup.test.ts`, `backend-server/apps/api/src/scripts/verify-backup.ts`, `backend-server/apps/api/src/migration/snapshot.ts`, `backend-server/apps/api/package.json`, `docs/migration/BACKUP_AND_RECOVERY.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-22-backup-integrity-verifier.md`.
+- **Verification performed:** `npm.cmd exec -- tsx --test src/migration/verifyBackup.test.ts src/migration/adapters.test.ts` 9/9 passed; `npm.cmd run typecheck --workspace @yugm/api` passed; `backup:verify` CLI smoke on a generated fixture produced `PASS` with and without `--expect-digest`. No database, bucket or remote service access.
+- **Issues:** verification statuses in `BACKUP_AND_RECOVERY.md` section 5 are unchanged — no real backup or restore yet. The verifier proves copy integrity only, not recoverability.
+- **Decisions:** no new product decision; implements procedure step 7 from `docs/migration/BACKUP_AND_RECOVERY.md` under DCR-5 local-code-and-tests authorization.
+- **Dependencies:** owner approval and an explicitly identified source environment before any real export; then isolated restore rehearsal and financial/media reconciliation.
+- **Risks:** a digest match could be mistaken for a successful restore; manifest and data could be tampered with consistently unless the source digest is recorded independently.
+- **Next task:** owner approval for a specific export target, then create and verify a real backup and rehearse a restore before any destructive migration step.
+
+### 2026-11-22 — Native realtime contract foundation added (local, unwired)
+
+- **Status:** local DCR-3 foundation only; no protocol cutover, adapter or client change. No commit, push, provision, deploy, credential change or data migration.
+- **Added/updated files:** `backend-server/packages/shared/src/realtimeProtocol.ts`, `backend-server/packages/shared/src/realtimeProtocol.test.ts`, `backend-server/packages/shared/src/index.ts`, `backend-server/packages/shared/package.json`, `docs/migration/realtime-plan.md`, `docs/decisions/0002-staged-hybrid-realtime-protocol.md`, `docs/INDEX.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-22-native-realtime-contract.md`.
+- **Verification performed:** `npm.cmd run typecheck --workspace @yugm/shared` passed; `npm.cmd run test --workspace @yugm/shared` 8/8 passed; `npm.cmd run typecheck --workspace @yugm/api` passed. Event constants re-checked against the source-verified inventory (47 + 16 + 17 + 3 = 83 names).
+- **Issues:** contract is not consumed by any runtime path; event classification, support window, hibernation requirement, `BONDS` decision and inventory sign-off are still open. No interoperability between the Socket.IO adapter and native protocol has been demonstrated.
+- **Decisions:** follows DCR-3 Option C ([ADR-0002](docs/decisions/0002-staged-hybrid-realtime-protocol.md)) and DCR-5 local-code-and-tests ([ADR-0004](docs/decisions/0004-local-code-and-tests-authorization.md)); no new product decision made.
+- **Dependencies:** owner DCR-3 inputs, then adapter/parity tests and D1 DO integration design; credential rotation, backup/restore rehearsal and DCR-4 remain prerequisites for cutover.
+- **Risks:** an unwired contract could be mistaken for a working adapter; off-catalog literals remain the highest drift risk; dual-protocol maintenance cost until the support-window cutoff.
+- **Next task:** after owner sign-off, classify events and build the two-client parity matrix (reconnect, restart, ordering, dedupe, room/DM/gift/PK) before any adapter or cutover work.
 
 ### 2026-11-22 — Phase 0 started
 
@@ -140,13 +185,35 @@ This is the persistent, single-source tracker for the MongoDB/Render to Cloudfla
 - **Verification:** `npm.cmd run env:check` passed with current config and failed as designed with a temporary `s3` override; `npm.cmd run typecheck --workspace apps/api` passed; no R2/deploy/credential operation was performed.
 - **Next task:** Owner writes values into ignored local files, then rerun preflight/tests and a live media cycle only after the target environment is authorized.
 
+### 2026-11-22 — Owner decisions recorded; DCR-1 credential guard staged
+
+- **Status:** Phase 0 gates partially resolved. Local, non-destructive implementation and verification are authorized. No commit, push, provision, deploy, credential change or data migration.
+- **Added/updated files:** `docs/decisions/0002-staged-hybrid-realtime-protocol.md`, `docs/decisions/0003-credential-remediation-approach.md`, `docs/decisions/0004-local-code-and-tests-authorization.md`, `docs/cloudflare-migration/decision-request.md`, `docs/infrastructure/tracked-worker-credentials-finding.md`, `docs/INDEX.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `backend-server/scripts/check-tracked-secrets.mjs`, `backend-server/scripts/check-tracked-secrets.test.mjs`, `backend-server/package.json`, `.github/workflows/ci.yml`, `MIGRATION_PROGRESS.md`, `docs/handoffs/2026-11-22-dcr-decisions-and-credential-guard.md`.
+- **Verification performed:** `npm.cmd run test:secrets` 8/8 passed; `npm.cmd run secrets:check` scanned 30 tracked config files and reported 8 findings in `wrangler.jsonc` by variable name and line only; `npm.cmd run secrets:check:strict` returned exit code 1 as designed. No build, deploy, provision or production data operation.
+- **Issues:** tracked Worker credentials are still active and unrotated; strict CI gate is intentionally report-only; 8 findings remain until owner rotation and source removal. DCR-4, support window, event-inventory sign-off, capacity metrics and Workers Paid are still open.
+- **Decisions:** DCR-1 Option A (owner rotates, agent prepares, no history rewrite — ADR-0003); DCR-3 Option C staged hybrid (ADR-0002); DCR-5 local code + tests only (ADR-0004); DCR-2 D1 (ADR-0001, earlier).
+- **Dependencies:** owner provider rotation and confirmation, tracked-config cleanup, DCR-4 inputs, DCR-2 metrics, backup/restore rehearsal, separate approval for commit/push/deploy/provisioning.
+- **Risks:** false confidence from a report-only gate; stale active credentials; dual-protocol complexity; untested recovery.
+- **Next task:** owner rotates credentials and supplies remaining inputs; then remove tracked values, enable strict CI, verify backups/restore and continue local testable slices. Do not remove legacy services before validated replacement and explicit approval.
+
+### 2026-11-22 — Full migration directive reconciled; Phase 1 planning documents added
+
+- **Status:** Phase 0 audit remains complete but not accepted. Phase 1 preparation documentation added; recovery gate not satisfied. No implementation phase started.
+- **Added/updated files:** `docs/migration/DIRECTIVE_RECONCILIATION.md`, `docs/migration/BASELINE_REPORT.md`, `docs/migration/BACKUP_AND_RECOVERY.md`, `docs/migration/ROLLBACK_PLAN.md`, `docs/migration/DEPENDENCY_AUDIT.md`, `docs/INDEX.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `MIGRATION_PROGRESS.md`, `docs/handoffs/2026-11-22-migration-phase0-reconciliation.md`.
+- **Verification performed:** read-only source audits of backend, Android, admin and infrastructure; Git checkpoint `9b5081a` and version reads; three `curl` probes each for staging `/health`, `/ready`, `/api/health`, `/api/ready` (all HTTP 200, total 0.573–1.305 s). No build, test, migration, provision, deploy, credential read or production data operation.
+- **Issues:** no verified backup or restore rehearsal; DCR-1, DCR-3, DCR-4 and DCR-5 still open; DCR-2 capacity metrics and Workers Paid still missing. The directive's paid-plan restriction means production D1 cutover cannot proceed until Workers Paid is explicitly approved.
+- **Decisions:** none new. ADR-0001 (D1 + R2) remains the recorded owner decision. The directive is treated as scope definition, not authorization for commit, push, deploy, DNS, provisioning or destructive data work.
+- **Dependencies:** owner gate decisions, DCR-2 metrics, and a verified backup/restore rehearsal before any destructive step.
+- **Risks:** false confidence from documentation-only work; credential exposure; protocol and media-scope divergence; no recovery mechanism proven.
+- **Next task:** resolve DCR-1/DCR-3/DCR-4/DCR-5 and capacity inputs; then create and verify backups and rehearse a restore. Do not remove legacy infrastructure before validated replacement and explicit approval.
+
 ## Phase status table
 
 | Phase | Description | Status | Approval needed |
 |---|---|---|---|
-| 0 | Audit, architecture, capacity inputs and implementation plan | Audit/planning complete; decision gates open | Credential remediation; D1 vs Hyperdrive decision; realtime protocol; R2/media scope; plan acceptance |
-| 1 | Foundations, isolated environments, contracts and compatibility harnesses | Not started | Provisioning plan and secrets owner |
-| 2 | Authoritative data migration tooling and rehearsal | Not started | Production snapshot access and destructive-operation approval |
+| 0 | Audit, architecture, capacity inputs and implementation plan | Audit/planning complete and reconciled to the 26-phase directive; decision gates open | Credential remediation; realtime protocol; R2/media scope; plan acceptance; D1 capacity metrics |
+| 1 | Foundations, isolated environments, contracts and compatibility harnesses | Documentation prepared; recovery gate not satisfied; no implementation started | Provisioning plan, secrets owner, verified backup and restore rehearsal |
+| 2 | Authoritative data migration tooling and rehearsal | Local tooling exists; rehearsal only against generated fixtures | Production snapshot access and destructive-operation approval |
 | 3 | Workers API/repository cutovers by domain | Not started | Phase 2 validation |
 | 4 | Media/R2 and centralized asset platform cutovers | Not started | R2 provisioning and media inventory |
 | 5 | Realtime/Durable Objects protocol migration | Not started | Protocol decision and load test approval |

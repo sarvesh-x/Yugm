@@ -82,11 +82,18 @@ The production audit documents explain their baselines and verification limits. 
 - [Data migration tooling requirements](migration/data-migration-tooling.md)
 - [Realtime migration plan](migration/realtime-plan.md)
 - [Realtime event inventory](migration/realtime-event-inventory.md)
+- [Native realtime protocol contract (local, unwired)](../backend-server/packages/shared/src/realtimeProtocol.ts)
+- [Realtime parity matrix (local, unwired)](../backend-server/packages/shared/src/realtimeParity.ts)
 - [Repository-specific implementation plan](migration/implementation-plan.md)
 - [Migration test plan](testing/migration-test-plan.md)
+- [Directive-to-plan reconciliation](migration/DIRECTIVE_RECONCILIATION.md)
+- [Dependency audit and migration matrix](migration/DEPENDENCY_AUDIT.md)
+- [Baseline report](migration/BASELINE_REPORT.md)
+- [Backup and recovery inventory](migration/BACKUP_AND_RECOVERY.md)
+- [Rollback plan](migration/ROLLBACK_PLAN.md)
 - [Tracked Worker credentials finding](infrastructure/tracked-worker-credentials-finding.md)
 
-Phase 0 audit and planning are documented; the phase is not accepted until the five gates in the [decision request](cloudflare-migration/decision-request.md) are resolved. DCR-2 is resolved as D1 in [ADR-0001](decisions/0001-d1-and-r2-target.md); DCR-1 and DCR-3 through DCR-5 remain open. No implementation phase or production data operation is authorized.
+Phase 0 audit and planning are documented. DCR-1, DCR-2, DCR-3 and the DCR-5 authorization boundary were answered on 2026-11-22 ([ADR-0001](decisions/0001-d1-and-r2-target.md), [ADR-0002](decisions/0002-staged-hybrid-realtime-protocol.md), [ADR-0003](decisions/0003-credential-remediation-approach.md), [ADR-0004](decisions/0004-local-code-and-tests-authorization.md)); DCR-4 and the detailed inputs remain open. Local code and tests are authorized; commit, push, provision, deploy, credential rotation and data operations are not.
 
 ## Progress and follow up
 
@@ -94,6 +101,6 @@ Phase 0 audit and planning are documented; the phase is not accepted until the f
 - [Known issues](KNOWN_ISSUES.md)
 - [Technical debt and roadmap](TECHNICAL_DEBT.md)
 - [Current task](CURRENT_TASK.md)
-- [Architecture decision records](decisions/README.md) · [ADR-0001: D1 and R2 target](decisions/0001-d1-and-r2-target.md)
+- [Architecture decision records](decisions/README.md) · [ADR-0001: D1 and R2 target](decisions/0001-d1-and-r2-target.md) · [ADR-0002: staged hybrid realtime](decisions/0002-staged-hybrid-realtime-protocol.md) · [ADR-0003: credential remediation](decisions/0003-credential-remediation-approach.md) · [ADR-0004: local code and tests authorization](decisions/0004-local-code-and-tests-authorization.md)
 
 Create a handoff in `docs/handoffs/` only when work remains for another session. Record significant lasting architectural choices in `docs/decisions/` after they are evidenced or confirmed; do not invent product decisions.

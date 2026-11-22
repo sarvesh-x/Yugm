@@ -1,7 +1,7 @@
 # Cloudflare migration Phase 0 decision request
 
 **Date:** 2026-11-22  
-**Status:** DCR-2 resolved by the owner on 2026-11-22 as **D1** and recorded in [ADR-0001](../decisions/0001-d1-and-r2-target.md). DCR-1 and DCR-3 through DCR-5 remain open. This is documentation only — no credential, infrastructure, deploy or data change is authorized by this file. Capacity metrics, Workers Paid, backup/restore and cutover remain mandatory gates despite the database selection.
+**Status:** DCR-1, DCR-2, DCR-3 and the authorization portion of DCR-5 were answered by the owner on 2026-11-22: DCR-2 = D1 ([ADR-0001](../decisions/0001-d1-and-r2-target.md)), DCR-1 = Option A ([ADR-0003](../decisions/0003-credential-remediation-approach.md)), DCR-3 = Option C staged hybrid ([ADR-0002](../decisions/0002-staged-hybrid-realtime-protocol.md)), DCR-5 authorization = local code and tests only ([ADR-0004](../decisions/0004-local-code-and-tests-authorization.md)). DCR-4 and the detailed inputs in sections 3–5 remain open. Capacity metrics, Workers Paid, backup/restore and cutover remain mandatory gates. Rotation, source removal, provisioning, deploy and data migration are not authorized.
 
 ## Purpose
 
@@ -11,11 +11,11 @@ Phase 0 audits and planning are complete ([report](phase0-report.md)). Five gate
 
 | ID | Decision | Why it is blocked | Blocks |
 |---|---|---|---|
-| DCR-1 | Remediate tracked plaintext Worker credentials | Rotation, source removal and history decisions require owner authorization and provider access | All Cloudflare work |
+| DCR-1 | Remediate tracked plaintext Worker credentials | **Option A selected** ([ADR-0003](../decisions/0003-credential-remediation-approach.md)); owner rotation and source removal pending; guard staged | All Cloudflare work until rotation confirmed |
 | DCR-2 | Choose authoritative database: D1 vs PostgreSQL/Hyperdrive | **Resolved:** owner selected D1 ([ADR-0001](../decisions/0001-d1-and-r2-target.md)); capacity metrics and Workers Paid still gate rehearsal/cutover | Schema generation unblocked as a draft; production migration still gated |
-| DCR-3 | Choose realtime protocol path | Compatibility vs native protocol has different client and cost consequences | Phase 5; affects Phase 3/7 contracts |
+| DCR-3 | Choose realtime protocol path | **Option C (staged hybrid) selected** ([ADR-0002](../decisions/0002-staged-hybrid-realtime-protocol.md)); support window and event-inventory sign-off still needed | Phase 5 until inputs supplied |
 | DCR-4 | Fix and scope R2 media cutover | Buckets/domains/CORS/policies and private-media semantics are unconfirmed; Android wiring gap exists | Phase 4 |
-| DCR-5 | Accept the phased implementation plan and authorization boundaries | No explicit plan acceptance yet | Phase 1 onward |
+| DCR-5 | Accept the phased implementation plan and authorization boundaries | **Authorization = local code + tests** ([ADR-0004](../decisions/0004-local-code-and-tests-authorization.md)); full plan acceptance not separately recorded | Commit, push, deploy, provisioning, data work |
 
 ## 2. DCR-1 — Tracked Worker credentials
 
@@ -91,6 +91,8 @@ Phase 0 audits and planning are complete ([report](phase0-report.md)). Five gate
 
 **Environment inputs needed:** bucket names and account, custom domains and CDN policy, CORS origin allowlist, public/private visibility policy, credential owner and secret store, media inventory (categories, counts, bytes, legacy URLs), room/clan private-media participant rules, and who owns the missing admin media/registry/quota tooling.
 
+**Local tooling added 2026-11-22 (input preparation, not a decision):** `npm run inventory:media -- --input <records.jsonl>` in `apps/api` builds a read-only inventory from an exported MediaObject-shaped JSONL file. It reports counts and bytes by category, bucket, visibility, owner type, media type, bucket×visibility, processing/moderation status, variant storage, duplicate storage keys and a stable digest. It never reads MongoDB or R2 and deliberately does not assert a public/private bucket policy, since that policy is still an owner decision. This tool does **not** supply legacy `/uploads` URL coverage (those files are not fully represented in MediaObject) or fulfill the media backup requirement in [BACKUP_AND_RECOVERY.md](../migration/BACKUP_AND_RECOVERY.md); those remain open. An owner-approved export is still required before real numbers can be produced.
+
 **Options:**
 
 | Option | Meaning | Consequence |
@@ -133,3 +135,15 @@ DCR-5 plan acceptance: accept / changes requested (list) ; commit authorization:
 2. Update `docs/database/d1-capacity-assessment.md`, `docs/migration/realtime-plan.md` and the [implementation plan](../migration/implementation-plan.md) with the chosen options and any changed gates.
 3. Update [MIGRATION_PROGRESS.md](../../MIGRATION_PROGRESS.md) and `docs/CURRENT_TASK.md`; close Phase 0 only when all exit gates are met.
 4. Begin Phase 1 only after the valid approvals above are in place. Until then, no implementation work starts.
+
+## 9. Recorded owner responses (2026-11-22)
+
+| Gate | Owner response | Recorded as | Remaining |
+|---|---|---|---|
+| DCR-1 | "Owner rotates, I prepare" — Option A, no history rewrite | [ADR-0003](../decisions/0003-credential-remediation-approach.md) | Provider rotation, removal from tracked config, strict CI gate |
+| DCR-2 | D1 (earlier response) | [ADR-0001](../decisions/0001-d1-and-r2-target.md) | Capacity metrics, Workers Paid, restore rehearsal |
+| DCR-3 | "Hybrid bridge + native DO" — Option C | [ADR-0002](../decisions/0002-staged-hybrid-realtime-protocol.md) | Support window, hibernation requirement, event inventory sign-off, `BONDS` decision |
+| DCR-5 | "Local code + tests" — no commit, push, provision, deploy or data change | [ADR-0004](../decisions/0004-local-code-and-tests-authorization.md) | Full plan acceptance; separate approvals per action |
+| DCR-4 | No response yet | — | R2 scope and environment inputs (section 5) |
+
+Nothing is inferred from silence. DCR-4 and the remaining inputs above are still required before the corresponding phases can start.

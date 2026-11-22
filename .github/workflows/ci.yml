@@ -20,6 +20,12 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: backend-server/package-lock.json
+      - name: Credential guard unit tests
+        run: npm run test:secrets
+      - name: Report credential-bearing values in tracked configs
+        # Report-only until the owner confirms credential rotation (DCR-1);
+        # switch to `npm run secrets:check:strict` after rotation is verified.
+        run: npm run secrets:check
       - run: npm ci
       - run: npm run typecheck
       - name: Run backend unit tests

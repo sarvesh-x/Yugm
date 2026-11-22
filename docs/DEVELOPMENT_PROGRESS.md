@@ -1,5 +1,47 @@
 # Development progress
 
+## 2026-11-22 -- Realtime parity matrix added (DCR-3 harness, unwired)
+
+- **Scope:** encoded the accepted DCR-3 consequence that a dual-test matrix is required, without building an adapter or touching any runtime path.
+- **Implementation:** `backend-server/packages/shared/src/realtimeParity.ts` defines a transport-agnostic `ParityTransport`, 6 executable scenarios (reconnect/resume, duplicate ID, stale sequence, scope isolation, room-join ack and a sign-off-gated `BONDS` invalidation case) and 10 documented requirements sourced from the verified inventory. `runParityMatrix` skips sign-off scenarios unless enabled. Exported from `@yugm/shared` and covered by 4 new tests using a clearly marked in-memory test double.
+- **Verification (run):** `npm.cmd run test --workspace @yugm/shared` passed 12/12; `npm.cmd run typecheck --workspace @yugm/shared` and `--workspace @yugm/api` passed. A deliberately broken double was detected by the matrix. No build, deploy, provision, client change or data access.
+- **State/remaining:** the matrix has only been exercised against an in-memory test double. It is not evidence that the Socket.IO compatibility path and native protocol interoperate. DCR-3 inputs, DCR-4 scope, DCR-2 metrics, credential rotation and a tested restore remain open.
+
+## 2026-11-22 -- Read-only media inventory reporter added (DCR-4 input preparation)
+
+- **Scope:** added local tooling to prepare the media-inventory input requested in [DCR-4](cloudflare-migration/decision-request.md) without touching MongoDB or R2. No policy decision was made or encoded.
+- **Implementation:** `backend-server/apps/api/src/migration/mediaInventory.ts` aggregates exported MediaObject-shaped records into counts/bytes by category, bucket, visibility, owner type, media type and bucket×visibility, plus processing/moderation status, variant storage, duplicate storage keys and a stable digest. `src/scripts/media-inventory.ts` with npm script `inventory:media` reads a local JSONL export and writes JSON to stdout or `--out`. Added 6 unit tests.
+- **Verification (run):** `npm.cmd exec -- tsx --test src/migration/mediaInventory.test.ts src/migration/verifyBackup.test.ts` passed 10/10; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smoke on a generated JSONL fixture produced a complete report. No database, bucket, remote service, credential or production data access.
+- **State/remaining:** this does not supply legacy `/uploads` URL coverage, does not verify binaries exist, and does not create a media backup. DCR-4 environment inputs, option A/B/C selection and owner approval for any export or media change are still required. No commit, push or deploy was authorized.
+
+## 2026-11-22 -- Snapshot-copy integrity verifier added (Phase 1 tooling)
+
+- **Scope:** filled the missing backup-integrity piece identified in [BACKUP_AND_RECOVERY.md](migration/BACKUP_AND_RECOVERY.md) section 4, step 7. This is local, read-only tooling; no backup was created and no restore was rehearsed.
+- **Implementation:** added `backend-server/apps/api/src/migration/verifyBackup.ts` (batch presence, record/byte counts, per-batch checksums, unexpected batch files, optional top-level digest), a CLI at `src/scripts/verify-backup.ts` with npm script `backup:verify`, and 4 unit tests in `verifyBackup.test.ts`. Exported the shared batch-filename convention from `snapshot.ts` so the writer and verifier cannot drift.
+- **Verification (run):** `npm.cmd exec -- tsx --test src/migration/verifyBackup.test.ts src/migration/adapters.test.ts` passed 9/9; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smoke against a generated fixture printed `Verification: PASS` both with and without `--expect-digest`. No database, bucket, remote service, credential or production data was touched.
+- **State/remaining:** backup/recovery verification statuses are unchanged — no verified MongoDB, media or config backup and no tested restore. DCR-4, DCR-2 metrics, DCR-3 inputs and owner credential rotation remain open. No commit, push or deploy was authorized.
+
+## 2026-11-22 -- Native realtime protocol contract foundation (local, unwired)
+
+- **Scope:** took the next unblocked local slice under DCR-3 Option C ([ADR-0002](decisions/0002-staged-hybrid-realtime-protocol.md)) and the DCR-5 local-code-and-tests authorization. No runtime path, adapter, client or infrastructure was changed.
+- **Implementation:** added `backend-server/packages/shared/src/realtimeProtocol.ts` (version-1 envelope, resume frame, authoritative command-ack shape, bounded per-scope dedupe/replay state and event-coverage harness), exported it from `@yugm/shared`, and added 8 unit tests in `realtimeProtocol.test.ts`. The event constants were re-checked against `docs/migration/realtime-event-inventory.md` and source: 47 shared, 16 PK, 17 off-catalog literals and 3 Android-only listeners. Added a `test` script to the shared workspace so the root `npm test` aggregation picks it up.
+- **Verification (run):** `npm.cmd run typecheck --workspace @yugm/shared` passed; `npm.cmd run test --workspace @yugm/shared` passed 8/8; `npm.cmd run typecheck --workspace @yugm/api` passed. No build, deploy, provision, credential operation or data migration was run.
+- **State/remaining:** the contract is a harness only. Owner still owes the DCR-3 support window, hibernation/cost requirement, event-inventory sign-off and `BONDS` decision before classification, adapters or cutover work. DCR-4, DCR-2 capacity metrics, credential rotation and a tested restore remain open.
+
+## 2026-11-22 -- DCR decisions recorded and DCR-1 credential guard prepared
+
+- **Scope:** recorded the owner's answers as [ADR-0002](decisions/0002-staged-hybrid-realtime-protocol.md) (DCR-3 staged hybrid), [ADR-0003](decisions/0003-credential-remediation-approach.md) (DCR-1 Option A, owner rotates and agent prepares) and [ADR-0004](decisions/0004-local-code-and-tests-authorization.md) (DCR-5 local code + tests). Updated `docs/cloudflare-migration/decision-request.md`, `docs/infrastructure/tracked-worker-credentials-finding.md`, `docs/INDEX.md`, `docs/CURRENT_TASK.md`, `MIGRATION_PROGRESS.md` and a new dated handoff.
+- **Implementation:** added a value-free credential regression guard at `backend-server/scripts/check-tracked-secrets.mjs` with 8 unit tests, root npm scripts (`secrets:check`, `secrets:check:strict`, `test:secrets`) and report-only CI steps in `.github/workflows/ci.yml`. No secret value was read into output, printed, modified, rotated or removed; no tracked credential values were changed.
+- **Verification (run):** `npm.cmd run test:secrets` passed 8/8; `npm.cmd run secrets:check` scanned 30 tracked config files and reported exactly 8 findings in the tracked local Worker config by name and line only; `npm.cmd run secrets:check:strict` returned exit code 1 as designed. No build, deploy, provision, credential change or data migration was run.
+- **State/remaining:** DCR-4 R2 scope, DCR-3 support window/inventory sign-off, DCR-2 capacity metrics and Workers Paid, verified backups and restore rehearsal are still open. Owner must rotate credentials and confirm before tracked values are removed and the strict gate is enabled. No commit, push or deploy authorization was given.
+
+## 2026-11-22 -- Full Cloudflare migration: Phase 0 reconciliation and Phase 1 planning
+
+- **Scope:** reconciled the owner's 26-phase Cloudflare migration directive with the repository's existing Phase 0–8 plan, five decision gates and [ADR-0001](decisions/0001-d1-and-r2-target.md). No architecture was redefined and no duplicate implementation was created.
+- **Artifacts:** `docs/migration/DIRECTIVE_RECONCILIATION.md`, `docs/migration/DEPENDENCY_AUDIT.md`, `docs/migration/BASELINE_REPORT.md`, `docs/migration/BACKUP_AND_RECOVERY.md`, `docs/migration/ROLLBACK_PLAN.md`, plus links in `docs/INDEX.md`, status in `docs/CURRENT_TASK.md`, this record, `MIGRATION_PROGRESS.md` and a dated handoff.
+- **Verification (run):** read-only source audits, Git checkpoint and version reads, and three staging HTTP probes per health/readiness endpoint (all 200). No build, test, migration, provision, deploy, credential read or production data operation was run.
+- **State/remaining:** backups and restore rehearsal are unverified; DCR-1, DCR-3, DCR-4 and DCR-5 plus DCR-2 capacity inputs remain open. No commit, push, deploy, paid provisioning or legacy removal was authorized.
+
 ## 2026-11-22 -- Worker runtime compatibility and image processing boundary (YUGM-WORKER-1101)
 
 - **Root cause:** The deployed staging Worker's Error 1101 came from Sharp's native import chain: HTTP routes reached `media.ts`/`assets.ts`, and scheduled maintenance reached `assets.ts` through a dynamic `badges.ts` import. Dynamic imports still bundle reachable modules.
