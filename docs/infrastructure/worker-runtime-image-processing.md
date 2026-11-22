@@ -59,9 +59,13 @@ Only the Cloudflare Images **transformation/info binding** is used. No Images st
 
 Not run: deployed staging requests, live R2 upload cycle, D1/R2/Queue provisioning, production deployment, Android device QA. Do not mark Error 1101 fixed until deployed staging serves `/ready` with `images.configured=true` and stops producing 1101.
 
+## Deployment gate timing
+
+After a Worker deploy, an already-live Durable Object can briefly keep serving the previous script generation before it evicts and restarts. During that window the outer Worker catch returns a controlled `503 WORKER_UNAVAILABLE`, which can make a short readiness gate fail even though the deploy succeeded. On 2026-11-22 this took roughly 3-4 minutes on staging. The CI gate now retries `/ready` for up to 8 minutes (`--retry 40 --retry-delay 5 --retry-max-time 480`) rather than failing after a few seconds. Re-probe before concluding a deploy failed.
+
 ## Troubleshooting checklist
 
-1. Reproduce with `curl -fsS "$STAGING_API/ready"` and inspect `images.configured`; use `/health` only for liveness.
+1. Reproduce with `curl -fsS "$STAGING_API/ready"` and inspect `images.configured`; use `/health` only for liveness. If it returns `503 WORKER_UNAVAILABLE` immediately after a deploy, wait and retry because the Durable Object may still be restarting.
 2. Inspect structured logs for `worker_request_failed`, `worker_binding_failed` and `scheduled_room_work_failed`.
 3. Rebuild the dry-run bundle and grep the emitted JavaScript for Sharp paths before deploying.
 4. Search API/Worker sources for `from "sharp"`, `require("sharp")` and `imageProcessor.node`; only `imageProcessor.node.ts` may import it.

@@ -27,11 +27,20 @@
 
 Known non-blocking warning: `whatwg-url` default export from `unenv` during bundling (pre-existing).
 
+## Commit, push and staging deploy (2026-11-22)
+
+- Committed all work as `80d46af` and pushed to `origin/master`, triggering Cloudflare staging run #76 (`https://github.com/sarvesh-x/Yugm/actions/runs/45048524822`).
+- All pre-deploy CI steps passed: install, typecheck, unit tests, hardening (34/34), Worker realtime suite, and admin build.
+- The deploy step itself succeeded and the new Worker code went live. The CI gate failed because the already-live Durable Object kept serving the prior script generation for roughly 3-4 minutes, during which `/ready` returned the controlled `503 WORKER_UNAVAILABLE`. The gate's original short retry window elapsed first (exit code 4 from `jq` on empty input).
+- After the Durable Object restarted, direct probes passed with no Error 1101 and no error events in a fresh `wrangler tail`:
+  - `/health` → `ok: true`
+  - `/ready` → `ok: true`, `db.ready: true`, `db.name: YugmStaging`, `storage.ready: true`, `images.configured: true`, `images.provider: cloudflare-images`; scheduled `lastCronRun` present.
+- Fix applied: widened the CI `/ready` retry window to `--retry 40 --retry-delay 5 --retry-max-time 480` and documented the restart delay in the troubleshooting guide.
+
 ## Remaining / next
 
-1. Obtain explicit authorization to deploy `yugm-api-staging` with the new `IMAGES` binding.
-2. Verify deployed `/health`, `/ready` (`images.configured=true`, `db.ready=true`, `storage.ready=true`), representative auth/REST routes, media upload, scheduled maintenance, Durable Object init and realtime.
-3. Confirm staging no longer emits Error 1101 and review structured logs for `worker_request_failed`, `worker_binding_failed` and `scheduled_room_work_failed`.
-4. Live R2 managed-upload cycle, D1/R2/Queue binding decisions and production deployment remain separate approvals.
+1. Verify the next CI run goes green with the widened gate.
+2. Verify representative auth/REST routes, a media upload cycle, and realtime on deployed staging.
+3. Live R2 managed-upload cycle, D1/R2/Queue binding decisions and production deployment remain separate approvals.
 
-Do not commit, push, deploy, provision, migrate applied data, change credentials or publish a release without explicit authorization.
+Do not provision, migrate applied data, change credentials or publish a release without explicit authorization.
