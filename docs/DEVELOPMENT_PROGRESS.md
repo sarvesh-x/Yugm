@@ -6,7 +6,7 @@
 - **Admin UI:** new **Managed Assets** page (stage/publish/archive, published-variant link), Cosmetics drawer asset selector with LINKED status, and `PROFILE_BANNER` in the type dropdown.
 - **Contracts/docs:** `API_CONTRACTS.md`, `DATABASE_SCHEMA.md`, OpenAPI (`409` on archive), audit §8, `CURRENT_TASK.md`, and a new [handoff](handoffs/2026-11-22-cosmetic-asset-references.md).
 - **Verification:** API typecheck exit 0; API tests 192/192; hardening 34/34; admin typecheck exit 0; admin production build succeeded (generated `dist/` artifacts reverted to `HEAD` afterwards). `git diff --check` clean apart from LF/CRLF notices.
-- **Remaining:** live DB/storage flow, migration 6/7 application, admin integration tests, runtime UI QA, OpenAPI parser validation, Phase 3 badge migration and Phase 4 Android renderer. Uncommitted; no deploy, no migration applied, no production data changed.
+- **Remaining:** live DB/storage flow, migration 6/7 application, admin integration tests, runtime UI QA, OpenAPI parser validation, Phase 3 badge migration and Phase 4 Android renderer. Committed locally as `0e17033` (not pushed); no deploy, no migration applied, no production data changed.
 
 ## 2026-11-22 -- Cosmetics asset foundation Phase 1 (YUGM-COSMETICS-001)
 
