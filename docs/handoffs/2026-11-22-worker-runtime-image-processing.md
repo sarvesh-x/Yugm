@@ -39,7 +39,7 @@ Known non-blocking warning: `whatwg-url` default export from `unenv` during bund
 
 ## Remaining / next
 
-1. Verify the next CI run goes green with the widened gate.
+1. CI run #77 with the widened gate passed all 23 steps, including Worker and Pages admin deploys; final probes were `/health` 200, `/ready` 200 and admin `/` 200.
 2. Verify representative auth/REST routes, a media upload cycle, and realtime on deployed staging.
 3. Live R2 managed-upload cycle, D1/R2/Queue binding decisions and production deployment remain separate approvals.
 
