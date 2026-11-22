@@ -1,7 +1,7 @@
 # Handoff — YUGM-COSMETICS-001 Phase 3 additive badge asset references
 
 **Date:** 2026-11-22
-**Status:** Phase 3 backend + admin slice implemented and verified in the working tree; **not committed, not pushed**, no migration applied, no deploy. Program incomplete.
+**Status:** Phase 3 backend + admin slice implemented, verified and committed locally as `0d145c3`; **not pushed**, no migration applied, no deploy. Program incomplete.
 
 ## What was done
 
@@ -43,4 +43,4 @@ Not run: live DB/storage upload→publish→read→archive flow, migrations 6–
 
 ## Working-tree note
 
-Tracked admin `dist/` artifacts changed by the production build were reverted to `HEAD`. Phase 3 is a working-tree slice only; Phase 2 remains committed locally as `0e17033` with the status-doc follow-up `9dfe4ef`.
+Tracked admin `dist/` artifacts changed by the production build were reverted to `HEAD`. Phase 3 is committed locally as `0d145c3`; Phase 2 remains committed locally as `0e17033` with the status-doc follow-up `9dfe4ef`.

@@ -6,7 +6,7 @@
 - **Admin UI:** the Badges form links a published badge asset from **Managed Assets**; managed art overrides an uploaded image and the table marks linked badges.
 - **Contracts/docs:** `API_CONTRACTS.md`, `DATABASE_SCHEMA.md`, OpenAPI badge-gallery response note, `features/cosmetics-ecosystem-audit.md` (§9), `CURRENT_TASK.md`, and a new [handoff](handoffs/2026-11-22-badge-asset-references.md).
 - **Verification:** API typecheck exit 0; API tests 199/199 (seven new badge tests: four DTO mapping + three asset-reference validation); hardening 34/34; admin typecheck exit 0; admin production build succeeded (generated `dist/` artifacts reverted to `HEAD` afterwards).
-- **Remaining:** live DB/storage flow, migrations 6–8 application, admin integration tests, runtime UI QA, OpenAPI parser validation, Android renderer phase 4, and separately approved badge blob cleanup/upload retirement. **Not committed or pushed**; no deploy, no migration applied, no production data changed.
+- **Remaining:** live DB/storage flow, migrations 6–8 application, admin integration tests, runtime UI QA, OpenAPI parser validation, Android renderer phase 4, and separately approved badge blob cleanup/upload retirement. Committed locally as `0d145c3` (not pushed); no deploy, no migration applied, no production data changed.
 
 ## 2026-11-22 -- Cosmetic asset references Phase 2 (YUGM-COSMETICS-001)
 
