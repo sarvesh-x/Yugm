@@ -38,7 +38,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,10 +49,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.yugm.app.core.model.InventoryItem
-import com.yugm.app.core.api.YugmApi
+import com.yugm.app.core.ui.components.AssetArtwork
 import com.yugm.app.core.ui.theme.LocalYugmColors
 import com.yugm.app.feature.gift.viewmodel.GiftViewModel
-import kotlinx.coroutines.launch
 import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
 private enum class InventoryFilter { ALL, TRADABLE, UPGRADEABLE }
@@ -72,7 +70,6 @@ fun InventoryScreen(
     var query by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(InventoryFilter.ALL) }
     var tab by remember { mutableStateOf(InventoryTab.GIFTS) }
-    val scope = rememberCoroutineScope()
 
     AutomaticSyncEffect(token, topics = setOf(SyncTopic.GIFTS), enabled = token.isNotBlank(), isBusy = { state.isLoading }) { viewModel.loadInventory(token) }
 
@@ -388,14 +385,18 @@ fun InventoryScreen(
                                             Modifier.padding(16.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Box(
+                                            AssetArtwork(
+                                                assetUrl = cosmetic.assetUrl,
+                                                variants = cosmetic.assetVariants,
+                                                preferredVariant = "preview",
                                                 modifier = Modifier
                                                     .size(56.dp)
                                                     .clip(RoundedCornerShape(16.dp))
-                                                    .background(colors.primary.copy(alpha = 0.1f)),
-                                                contentAlignment = Alignment.Center
+                                                    .background(colors.primary.copy(alpha = 0.1f))
                                             ) {
-                                                Text("✦", color = colors.primary, fontSize = 26.sp)
+                                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                                    Text("✦", color = colors.primary, fontSize = 26.sp)
+                                                }
                                             }
                                             Column(
                                                 modifier = Modifier
@@ -423,16 +424,12 @@ fun InventoryScreen(
                                             }
                                             Button(
                                                 onClick = {
-                                                    scope.launch {
-                                                        runCatching {
-                                                            YugmApi.equipCosmetic(
-                                                                token,
-                                                                if (cosmetic.isEquipped) "" else cosmetic.id,
-                                                                cosmetic.type
-                                                            )
-                                                        }
-                                                        viewModel.loadInventory(token)
-                                                    }
+                                                    viewModel.equipCosmetic(
+                                                        token,
+                                                        cosmetic.id,
+                                                        cosmetic.type,
+                                                        cosmetic.isEquipped
+                                                    )
                                                 },
                                                 shape = CircleShape,
                                                 colors = ButtonDefaults.buttonColors(

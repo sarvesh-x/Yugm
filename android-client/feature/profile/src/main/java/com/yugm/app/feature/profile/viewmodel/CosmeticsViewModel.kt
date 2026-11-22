@@ -30,12 +30,21 @@ class CosmeticsViewModel @Inject constructor(
     fun refresh(token: String) {
         viewModelScope.launch {
             isLoading = true
+            error = null
             withContext(Dispatchers.IO) {
-                runCatching { yugmApi.cosmetics(token) }.onSuccess { catalog = it }
-                runCatching { yugmApi.wallet(token) }.onSuccess { balance = it }
+                runCatching { yugmApi.cosmetics(token) }
+                    .onSuccess { catalog = it }
+                    .onFailure { error = it.message ?: "Failed to load cosmetics" }
+                runCatching { yugmApi.wallet(token) }
+                    .onSuccess { balance = it }
+                    .onFailure { if (error == null) error = it.message ?: "Failed to load wallet" }
             }
             isLoading = false
         }
+    }
+
+    fun clearError() {
+        error = null
     }
 
     fun purchase(token: String, cosmeticId: String, onResult: (CosmeticCatalog) -> Unit = {}) {

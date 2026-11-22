@@ -31,14 +31,12 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import coil.compose.AsyncImage
 import com.yugm.app.core.model.ActiveCosmetics
 import com.yugm.app.core.model.ProfileCosmetic
 import com.yugm.app.core.ui.components.YugmBackground
@@ -382,7 +380,29 @@ fun CosmeticsStoreScreen(
                         else -> allInCategory
                     }
 
-                    if (filteredCosmetics.isEmpty()) {
+                    if (viewModel.error != null && catalog == null) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(
+                                    viewModel.error ?: "Failed to load the store.",
+                                    color = LocalYugmColors.current.textSecondary,
+                                    fontSize = 14.sp
+                                )
+                                Button(onClick = { viewModel.refresh(token) }) {
+                                    Text("Retry")
+                                }
+                            }
+                        }
+                    } else if (filteredCosmetics.isEmpty()) {
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -417,10 +437,8 @@ fun CosmeticsStoreScreen(
                                     isActive = isActive,
                                     onPurchaseClick = {
                                         if (isOwned) {
-                                            coroutineScope.launch {
-                                                val equipId = if (isActive) "" else cosmetic.id
-                                                viewModel.equip(token, equipId, cosmetic.type)
-                                            }
+                                            val equipId = if (isActive) "" else cosmetic.id
+                                            viewModel.equip(token, equipId, cosmetic.type)
                                         } else {
                                             showPurchaseDialogFor = cosmetic
                                         }
@@ -717,24 +735,16 @@ fun CosmeticPreviewBox(cosmetic: ProfileCosmetic, isActive: Boolean) {
         modifier = Modifier.size(size),
         contentAlignment = Alignment.Center
     ) {
-        if (cosmetic.assetUrl.isNotBlank()) {
-            AsyncImage(
-                model = cosmetic.assetUrl,
-                contentDescription = "Preview of ${cosmetic.name}",
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(CircleShape),
-                contentScale = ContentScale.Fit
-            )
-        } else {
-            CosmeticArtwork(
-                id = cosmetic.id,
-                type = cosmetic.type,
-                preview = cosmetic.preview,
-                modifier = Modifier.fillMaxSize(),
-                animate = isActive,
-                showBackdrop = true
-            )
-        }
+        CosmeticArtwork(
+            id = cosmetic.id,
+            type = cosmetic.type,
+            preview = cosmetic.preview,
+            modifier = Modifier.fillMaxSize().clip(CircleShape),
+            animate = isActive,
+            showBackdrop = true,
+            assetUrl = cosmetic.assetUrl,
+            assetVariants = cosmetic.assetVariants,
+            preferredAssetVariant = "preview"
+        )
     }
 }

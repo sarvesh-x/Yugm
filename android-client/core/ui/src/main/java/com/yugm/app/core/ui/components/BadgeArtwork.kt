@@ -18,10 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import coil.compose.SubcomposeAsyncImage
-import com.yugm.app.core.api.resolveMediaUrl
 import com.yugm.app.core.model.Achievement
 import com.yugm.app.core.model.BadgeGallery
 import com.yugm.app.core.ui.theme.LocalYugmColors
@@ -38,7 +35,6 @@ fun BadgeArtwork(badge: Achievement, modifier: Modifier = Modifier, locked: Bool
         "MASTER" -> Color(0xFF9D53BF)
         else -> if (badge.badgeKind == "HONOR") Color(0xFF8D59BE) else colors.primary
     }
-    val image = resolveMediaUrl(badge.imageUrl)
     val fallback: @Composable () -> Unit = {
         Icon(
             imageVector = when (badge.icon) {
@@ -63,15 +59,14 @@ fun BadgeArtwork(badge: Achievement, modifier: Modifier = Modifier, locked: Bool
     }
     Surface(modifier, shape = RoundedCornerShape(28), color = tint.copy(alpha = .12f), border = BorderStroke(1.dp, tint.copy(alpha = .25f))) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            if (image == null) fallback() else SubcomposeAsyncImage(
-                model = image,
-                contentDescription = badge.title,
+            AssetArtwork(
+                assetUrl = badge.imageUrl,
+                variants = badge.assetVariants,
+                preferredVariant = "preview",
                 modifier = Modifier.fillMaxSize().padding(4.dp),
-                contentScale = ContentScale.Fit,
+                contentDescription = badge.title,
                 colorFilter = if (locked) ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) }) else null,
-                alignment = Alignment.Center,
-                loading = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { fallback() } },
-                error = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { fallback() } }
+                fallback = fallback
             )
         }
     }

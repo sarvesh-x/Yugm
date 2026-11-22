@@ -36,10 +36,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.yugm.app.core.model.AssetVariant
+import com.yugm.app.core.ui.components.AssetArtwork
 import com.yugm.app.core.ui.components.SlimLineFrame
 import kotlin.math.cos
 import kotlin.math.sin
 
+/**
+ * Managed artwork wins when the public cosmetic DTO supplies a published asset;
+ * the existing procedural art is the fallback for legacy items and load failures.
+ */
 @Composable
 fun CosmeticArtwork(
     id: String,
@@ -47,7 +53,29 @@ fun CosmeticArtwork(
     preview: String = "",
     modifier: Modifier = Modifier,
     animate: Boolean = false,
-    showBackdrop: Boolean = true
+    showBackdrop: Boolean = true,
+    assetUrl: String = "",
+    assetVariants: List<AssetVariant> = emptyList(),
+    preferredAssetVariant: String = "preview"
+) {
+    AssetArtwork(
+        assetUrl = assetUrl,
+        variants = assetVariants,
+        preferredVariant = preferredAssetVariant,
+        modifier = modifier
+    ) {
+        CosmeticArtworkProcedural(id, type, preview, Modifier.fillMaxSize(), animate, showBackdrop)
+    }
+}
+
+@Composable
+private fun CosmeticArtworkProcedural(
+    id: String,
+    type: String,
+    preview: String,
+    modifier: Modifier,
+    animate: Boolean,
+    showBackdrop: Boolean
 ) {
     val visual = cosmeticVisual(id, type, preview)
     when (type) {

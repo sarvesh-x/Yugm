@@ -110,6 +110,23 @@ class GiftViewModel @Inject constructor() : ViewModel() {
         }
     }
 
+    /** Server-authoritative equip/unequip; inventory is reloaded only after the API accepts it. */
+    fun equipCosmetic(token: String, cosmeticId: String, type: String, isEquipped: Boolean) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isLoading = true, error = null)
+            runCatching {
+                YugmApi.equipCosmetic(token, if (isEquipped) "" else cosmeticId, type)
+            }.onSuccess {
+                loadInventory(token)
+            }.onFailure { e ->
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    error = e.message ?: "Failed to update cosmetic"
+                )
+            }
+        }
+    }
+
     fun clearSurpriseResult() {
         _state.value = _state.value.copy(surpriseResult = null)
     }

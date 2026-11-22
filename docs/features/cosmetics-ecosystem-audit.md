@@ -126,7 +126,7 @@ Backend first, then admin, then a bounded Android consumer.
 
 ## 5. Immediate next action
 
-Proceed to Phase 3 (badge artwork migration) with the resolved decisions above. Do not apply migrations 6/7 or publish assets against an unconfirmed environment.
+Proceed with the remaining Phase 4 items (public profile/chat/room asset pass where asset fields exist, device visual QA and full lint/assemble), then live verification against a confirmed environment. Do not apply migrations 6–8 or publish assets against an unconfirmed environment.
 
 ## 6. Phase 1 implementation record (completed after this audit)
 
@@ -185,3 +185,11 @@ The third audit was completed after the Phase 1 code was written. Its findings w
 - **Write path:** admin badge create/update accept `assetRef` and validate published status and `ownerType=badge`/`ownerId=<badge id>` through the pure `assertBadgeAssetTarget()` helper; "remove custom image" clears the managed reference too. `archiveAsset()` now counts both cosmetic and badge refs before returning `409`.
 - **Admin UI:** the Badges form links a published badge asset; managed art overrides an uploaded image.
 - **Verification run:** API typecheck exit 0; API tests 199/199 (seven new badge tests: four DTO mapping + three asset-reference validation); hardening 34/34 (existing badge artwork route still passes unchanged); admin typecheck exit 0 and production build succeeded; generated `dist/` artifacts reverted to `HEAD`. Not run: live DB/storage flow, migration 8 application, Android builds, runtime admin QA.
+
+## 10. Phase 4 implementation record (Android asset-aware renderer, first slice)
+
+- **Single entry point:** `core:ui` `AssetArtwork` uses the existing `resolveMediaUrl()`/Coil path. `selectAssetArtworkUrl()` picks the requested named variant, then `full`, then the direct URL; strings that are not URLs (emoji/gift keys) are treated as absent. `loading`/`error` draw the caller's fallback, so legacy-only items and failed downloads keep their procedural/icon/emoji art.
+- **DTO consumption:** shared `AssetVariant` model plus `AssetParser` helpers feed `ProfileCosmetic`, `InventoryCosmetic` and `Achievement` from the public DTOs' `assetId`, `assetVersion` and `assetVariants[]`. No variants are stored on consumer documents.
+- **Migrated consumers:** store and customize previews, inventory cosmetic tiles, badge art and gift tiles. The inventory equip coroutine moved to `GiftViewModel`; `CosmeticsViewModel.refresh()` clears `error`, surfaces failures and the store renders a Retry action. Merchandising copy/active-field maps remain static constants because the recorded product decision keeps SKUs static.
+- **Not in this slice:** public profile/chat/room consumers that do not yet expose asset fields, the separate animated reaction renderer (not part of the asset registry), device visual QA, and full lint/assemble.
+- **Verification run:** Android Studio JBR, `--console=plain --max-workers=2`: compiles of `:core:model`, `:core:api`, `:core:ui`, `:feature:profile`, `:feature:gift` — BUILD SUCCESSFUL; `:core:api:testDebugUnitTest` 33/33 and `:core:ui:testDebugUnitTest` 11/11 — BUILD SUCCESSFUL (six new tests: three parser, three variant selection). `git diff --check` clean. No backend source changed.

@@ -1,5 +1,13 @@
 ﻿# Development progress
 
+## 2026-11-22 -- Android asset-aware renderer Phase 4 first slice (YUGM-COSMETICS-001)
+
+- **Shared renderer:** new `AssetArtwork` in `core:ui` is the single asset-aware image entry point; `selectAssetArtworkUrl()` chooses a named variant, then `full`, then the direct URL, resolves relative paths with `resolveMediaUrl()` and ignores emoji/gift keys that are not URLs. No second image loader was introduced.
+- **Models/parsers:** `ProfileCosmetic`, `InventoryCosmetic` and `Achievement` gained `assetId`/`assetVersion`/`assetVariants[]`; `AssetParser` resolves URLs at read time and skips malformed variants. Managed URLs fall back to the existing procedural art, icon or emoji when absent or on load failure.
+- **Consumers:** store/customize previews, inventory cosmetic tiles, badge art and gift tiles now use `AssetArtwork`. Equip moved from the inventory composable into `GiftViewModel`; the store clears errors on refresh and shows an error/retry state. Store merchandising stays static by decision.
+- **Verification:** Android Studio JBR, `--console=plain --max-workers=2`: compiles of `:core:model`, `:core:api`, `:core:ui`, `:feature:profile`, `:feature:gift` — BUILD SUCCESSFUL; `:core:api:testDebugUnitTest` 33/33 and `:core:ui:testDebugUnitTest` 11/11 — BUILD SUCCESSFUL (six new tests: three parser + three renderer selection). `git diff --check` clean.
+- **Remaining:** device/emulator visual QA, full lint/assemble, public profile/chat/room asset pass, live DB/storage flow, migrations 6–8 application, OpenAPI parser validation, and separately approved badge blob cleanup/upload retirement. Uncommitted working-tree slice (local Phase 3 commit `0d145c3` is not pushed); no deploy, migration or production data change.
+
 ## 2026-11-22 -- Additive badge asset references Phase 3 (YUGM-COSMETICS-001)
 
 - **Backend:** `Achievement.assetRef` (optional published `AssetObject` id) with additive migration 8 (sparse index only, no document rewrite) and explicit production indexing. `badgeCatalog()` now batch-resolves published badge art by id; `badgePublicArt()`/`publicBadge()` expose `assetId`, `assetVersion` and `assetVariants[]`, resolving `imageUrl` from managed `publicUrl` → `full` variant → legacy `imageUrl`. Earned/worn state and expirations are unchanged. Admin badge create/update validate that a linked asset is published and owned by that badge; "remove custom image" clears both legacy fields and the managed reference. `archiveAsset()` returns `409` while a cosmetic or badge references the asset.

@@ -65,6 +65,9 @@ data class Achievement(
     val canUpgrade: Boolean = false,
     val badgeKind: String = "ACHIEVEMENT",
     val imageUrl: String = "",
+    val assetId: String = "",
+    val assetVersion: Int? = null,
+    val assetVariants: List<AssetVariant> = emptyList(),
     val earnedBadgeTier: String? = null,
     val badgeUnlocked: Boolean = false,
     val expiresAt: String? = null,
@@ -143,7 +146,10 @@ data class ProfileCosmetic(
     val coinPrice: Int = 0,
     val rarity: String = "",
     val preview: String = "",
-    val assetUrl: String = ""
+    val assetUrl: String = "",
+    val assetId: String = "",
+    val assetVersion: Int? = null,
+    val assetVariants: List<AssetVariant> = emptyList()
 )
 
 data class CosmeticCatalog(
@@ -186,6 +192,9 @@ data class InventoryCosmetic(
     val rarity: String = "COMMON",
     val preview: String = "",
     val assetUrl: String = "",
+    val assetId: String = "",
+    val assetVersion: Int? = null,
+    val assetVariants: List<AssetVariant> = emptyList(),
     val isEquipped: Boolean = false
 )
 

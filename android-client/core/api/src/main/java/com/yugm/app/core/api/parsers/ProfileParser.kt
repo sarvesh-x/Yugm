@@ -135,7 +135,10 @@ fun JSONObject.toCosmeticCatalog(): CosmeticCatalog {
                     coinPrice = item.optInt("coinPrice", 0),
                     rarity = item.optString("rarity", "COMMON"),
                     preview = item.optString("preview", ""),
-                    assetUrl = item.optString("assetUrl", "")
+                    assetUrl = item.optAssetUrl(),
+                    assetId = item.optString("assetId", ""),
+                    assetVersion = item.optAssetVersion(),
+                    assetVariants = item.optAssetVariants()
                 ))
             }
         },
@@ -204,6 +207,9 @@ fun JSONObject.toAchievement(): Achievement = Achievement(
     canUpgrade = optBoolean("canUpgrade", false),
     badgeKind = optString("kind", "ACHIEVEMENT"),
     imageUrl = optString("imageUrl"),
+    assetId = optString("assetId", ""),
+    assetVersion = optAssetVersion(),
+    assetVariants = optAssetVariants(),
     earnedBadgeTier = optString("tier").takeIf { it.isNotBlank() && it != "null" },
     badgeUnlocked = optBoolean("unlocked"),
     expiresAt = optString("expiresAt").takeIf { it.isNotBlank() && it != "null" },
@@ -280,7 +286,10 @@ fun JSONObject.toUserFullInventory(): UserFullInventory {
                     coinPrice = item.optInt("coinPrice", 0),
                     rarity = item.optString("rarity", "COMMON"),
                     preview = item.optString("preview", ""),
-                    assetUrl = item.optString("assetUrl", ""),
+                    assetUrl = item.optAssetUrl(),
+                    assetId = item.optString("assetId", ""),
+                    assetVersion = item.optAssetVersion(),
+                    assetVariants = item.optAssetVariants(),
                     isEquipped = item.optBoolean("isEquipped", false)
                 ))
             }

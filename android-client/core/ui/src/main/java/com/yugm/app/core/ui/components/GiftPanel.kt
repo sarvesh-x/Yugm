@@ -49,7 +49,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+
 import com.yugm.app.core.model.GiftItem
 import com.yugm.app.core.model.InventoryItem
 import com.yugm.app.core.model.RoomParticipant
@@ -285,10 +285,10 @@ private fun GiftTile(name: String, icon: String, priceLabel: String, selected: B
 
 @Composable
 private fun GiftArtwork(icon: String, modifier: Modifier = Modifier) {
-    if (icon.startsWith("http", true)) {
-        AsyncImage(model = icon, contentDescription = null, modifier = modifier.padding(4.dp))
-    } else {
-        Box(modifier, contentAlignment = Alignment.Center) { Text(icon.ifBlank { "🎁" }, fontSize = 38.sp) }
+    AssetArtwork(assetUrl = icon, modifier = modifier.padding(4.dp)) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(icon.ifBlank { "🎁" }, fontSize = 38.sp)
+        }
     }
 }
 
