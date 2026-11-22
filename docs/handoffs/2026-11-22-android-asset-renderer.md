@@ -1,7 +1,7 @@
 # Handoff — YUGM-COSMETICS-001 Phase 4 first slice (Android asset-aware renderer)
 
 **Date:** 2026-11-22
-**Status:** Android renderer slice implemented and verified in the working tree; **not committed, not pushed**, no backend change, no migration/deploy. Program incomplete.
+**Status:** Android renderer slice implemented, verified and committed locally as `7f7182f`; **not pushed**, no backend change, no migration/deploy. Program incomplete.
 
 ## What was done
 
@@ -21,7 +21,7 @@ Not run: device/emulator visual QA, full lint/assemble, live DB/storage flow, mi
 
 ## Next session
 
-1. Review the working-tree diff and commit locally only with explicit authorization; do not push/deploy.
+1. Phase 4 is committed locally as `7f7182f`; do not push/deploy without explicit authorization.
 2. Remaining Phase 4 consumer pass: public profile/chat/room artwork only where public DTOs expose asset fields; keep the animated reaction renderer separate because reactions are not part of the asset registry.
 3. Device/emulator QA: managed vs legacy art on store/customize/inventory/badge/gift, light/dark/system themes, font scaling, narrow widths, TalkBack, and failed/loading image states; then full lint/assemble.
 4. Live verification against a confirmed environment: apply migrations 6–8, exercise upload→publish→read→archive, add admin route/permission/audit integration tests for cosmetic and badge `assetRef`, and validate OpenAPI with a parser.

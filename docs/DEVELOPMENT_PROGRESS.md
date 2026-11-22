@@ -6,7 +6,7 @@
 - **Models/parsers:** `ProfileCosmetic`, `InventoryCosmetic` and `Achievement` gained `assetId`/`assetVersion`/`assetVariants[]`; `AssetParser` resolves URLs at read time and skips malformed variants. Managed URLs fall back to the existing procedural art, icon or emoji when absent or on load failure.
 - **Consumers:** store/customize previews, inventory cosmetic tiles, badge art and gift tiles now use `AssetArtwork`. Equip moved from the inventory composable into `GiftViewModel`; the store clears errors on refresh and shows an error/retry state. Store merchandising stays static by decision.
 - **Verification:** Android Studio JBR, `--console=plain --max-workers=2`: compiles of `:core:model`, `:core:api`, `:core:ui`, `:feature:profile`, `:feature:gift` — BUILD SUCCESSFUL; `:core:api:testDebugUnitTest` 33/33 and `:core:ui:testDebugUnitTest` 11/11 — BUILD SUCCESSFUL (six new tests: three parser + three renderer selection). `git diff --check` clean.
-- **Remaining:** device/emulator visual QA, full lint/assemble, public profile/chat/room asset pass, live DB/storage flow, migrations 6–8 application, OpenAPI parser validation, and separately approved badge blob cleanup/upload retirement. Uncommitted working-tree slice (local Phase 3 commit `0d145c3` is not pushed); no deploy, migration or production data change.
+- **Remaining:** device/emulator visual QA, full lint/assemble, public profile/chat/room asset pass, live DB/storage flow, migrations 6–8 application, OpenAPI parser validation, and separately approved badge blob cleanup/upload retirement. Committed locally as `7f7182f` (not pushed; Phase 3 `0d145c3` is also local); no deploy, migration or production data change.
 
 ## 2026-11-22 -- Additive badge asset references Phase 3 (YUGM-COSMETICS-001)
 
