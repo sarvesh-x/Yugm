@@ -37,8 +37,8 @@ The active migration objective is the full MongoDB/Render to Cloudflare move: Wo
 ### Admin, infrastructure and Android
 
 - Admin is a Vite/React SPA with its own typecheck/build scripts and no test script. It has 29 navigation items, inline reusable components in `App.tsx`, server-side RBAC, and several server actions without corresponding UI controls.
-- Admin router authentication depends implicitly on mount order: routers mounted after `adminRouter` rely on its `requireAdminAuth` middleware having populated `req.admin`. `GET /api/admin/progression/health` is registered before that guard and appears dead (401), not exposed. See [the admin/deployment audit](../infrastructure/admin-deployment-audit.md).
-- Staging Worker/admin are deployed; the production Worker is source-only and deliberately disabled. No D1, R2, Queues, KV or Cron binding exists in any Wrangler config. CI has staging gates but no admin build/test or secret-scanning gate.
+- Admin router authentication historically depended on mount order; explicit `requireAdminAuth` guards were added to the five formerly dependent routers on 2026-11-23, with 5 unauthenticated regression tests. `GET /api/admin/progression/health` is registered before the `adminRouter` guard and appears dead (401), not exposed. See [the admin/deployment audit](../infrastructure/admin-deployment-audit.md).
+- Staging Worker/admin are deployed; the production Worker is source-only and deliberately disabled. No D1, R2, Queues, KV or Cron binding exists in any Wrangler config. CI has staging gates. As of 2026-11-23 it also has an admin typecheck/build gate and a report-only credential guard; strict secret scanning and admin tests remain open.
 - Render remains a declared rollback host with auto-deploy off. Its Google Play package name differs from the production Worker config; reconcile before entitlement cutover.
 - Android is modular Kotlin/Jetpack Compose (6 core + 14 feature modules) reusing `:core:ui` and the documented single-host bottom-dock/navigation rules. See [the Android source audit](../architecture/android-source-audit.md). Key findings:
   - The R2 avatar slice added a non-logging presigned PUT client with progress/cancellation; `CreateProfileScreen` wires progress and Cancel, but `ProfileDetailScreen` reads only `avatarUploadBusy` and never consumes progress or calls `cancelOwnAvatarUpload()` — that API is dead from the screen.
@@ -81,7 +81,7 @@ Static inventory: 38 backend test files with 213 direct declarations; 34 hardeni
 
 Material gaps: live migration application, D1/Hyperdrive data validation, financial reconciliation under migrated constraints, live R2 provisioning/CORS/policy, admin/media integration, two-client Android realtime, duplicate/out-of-order event handling, device visual/accessibility QA, migration load/cost evidence, and backup/restore rehearsal.
 
-- Backend: no tests for high-value money/index paths (`payoutWebhook`, `payoutReview`, `purchaseCredit`, `battlePass`, `referrals`, `themePurchase`, `productionIndexes`, `config/migration.ts`) or for admin authorization across all mounted admin routers.
+- Backend: no tests for high-value money/index paths (`payoutWebhook`, `payoutReview`, `purchaseCredit`, `battlePass`, `referrals`, `themePurchase`, `productionIndexes`, `config/migration.ts`) or for real admin route-handler execution under a valid JWT; unauthenticated rejection and valid-JWT guard-layer tests were added 2026-11-23.
 - Android: no tests for media `create`/`complete`/`cancel` HTTP protocol, the `503`/`501` legacy fallback boundary, failed-upload cleanup/quota release, ViewModel progress/token/cancel behavior (including the pre-sessionId window), or catalog/policy parity with server values.
 
 See [the migration test plan](../testing/migration-test-plan.md).

@@ -131,7 +131,7 @@ No Render API base URL was found in the audited Android source; absence across g
 
 | Artifact | Status | Migration action |
 |---|---|---|
-| `.github/workflows/ci.yml` | Active; typecheck, unit, hardening, Worker dry-run/realtime, Android checks | Reuse; add admin build/test and secret scanning |
+| `.github/workflows/ci.yml` | Active; typecheck, unit, hardening, Worker dry-run/realtime, Android checks, report-only credential guard and admin typecheck/test/build (added 2026-11-23) | Reuse; admin runtime UI permission QA and strict secret scanning still open |
 | `.github/workflows/cloudflare-staging.yml` | Active; green runs #77/#78; deploys Worker and Pages admin | Consolidate duplicated gates with `ci.yml`; keep `/ready` gate |
 | `.github/workflows/cloudflare-pages.yml` | Manual Pages deploy; can redeploy staging | Consolidate with staging workflow; guard already rejects legacy/credential URLs |
 | `.github/workflows/android-release.yml` | Tag-triggered release to GitHub Release | Keep; release still defaults to staging Worker |

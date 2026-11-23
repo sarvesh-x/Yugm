@@ -2,7 +2,7 @@
 
 **Date:** 2026-11-22  
 **Severity:** Critical, immediate remediation required before any further Cloudflare work.  
-**Status:** DCR-1 Option A accepted by the owner on 2026-11-22 ([ADR-0003](../decisions/0003-credential-remediation-approach.md)). Rotation and source removal remain pending owner action. No credential value has been used, transmitted, rotated, removed, printed or provisioned in this repository.
+**Status:** DCR-1 Option A accepted by the owner on 2026-11-22 ([ADR-0003](../decisions/0003-credential-remediation-approach.md)). Owner confirmed provider rotation/revocation on 2026-11-23; tracked-source removal and strict CI were staged locally the same day. Changes remain uncommitted. No credential value has been printed, copied or stored by the assistant.
 
 ## Finding
 
@@ -42,4 +42,6 @@ Under the owner's "owner rotates, agent prepares" instruction, a value-free regr
 
 **Verification actually run:** `npm.cmd run test:secrets` passed 8/8; `npm.cmd run secrets:check` scanned 30 tracked config files and reported 8 findings, all in `backend-server/apps/cloudflare-worker/wrangler.jsonc`, by name and line only; `npm.cmd run secrets:check:strict` returned exit code 1 as designed. No build, deploy, provision or credential change was performed.
 
-**Not done:** provider rotation, removal of values from the tracked file, `.dev.vars*`/Wrangler secret configuration, ignore-rule verification, history rewrite, and enabling strict CI. These require owner action or confirmation.
+**Remediation staged 2026-11-23:** owner-confirmed provider rotation/revocation; secret-bearing `vars` removed from tracked `wrangler.jsonc` without exposing values; `.dev.vars*` ignore verified and additional local Wrangler overlay ignore rules added; CI guard switched to `secrets:check:strict`; strict guard reports zero findings across 30 tracked config files. No Git history was rewritten.
+
+**Still required:** commit/push after explicit approval, first CI run with strict mode active, and owner confirmation in the secret store that staging/production credentials are distinct. Broader entropy-based scanning remains an optional follow-up.

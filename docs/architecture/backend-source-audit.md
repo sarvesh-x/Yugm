@@ -80,11 +80,12 @@ Two source reads disagreed about the separate admin routers. Source inspection c
 
 - `adminRouter.use(requireAdminAuth)` is registered at `routes/admin.ts:603`, after many routes but before the router ends.
 - `app.ts` mounts `adminRouter` at `/api/admin` before `adminSupport`, `adminCosmetics`, `adminAssets`, `adminBadges` and `adminReactions`.
-- For a request entering `adminRouter`, the late `use(requireAdminAuth)` executes even when no earlier admin route matches, then the request continues to the next mounted `/api/admin` router with `req.admin` populated. Those routers are therefore **fail-closed and dependent on mount order**, not unauthenticated.
-- `adminVerification.ts` and `adminDmReviews.ts` are mounted before `adminRouter` and correctly apply their own auth.
+- Historically, for a request entering `adminRouter`, the late `use(requireAdminAuth)` executed even when no earlier admin route matched, then the request continued to the next mounted `/api/admin` router with `req.admin` populated. Those routers were fail-closed but **dependent on mount order**.
+- On 2026-11-23, explicit `router.use(requireAdminAuth)` guards were added to `adminAssets`, `adminBadges` (not the public `badgeArtRouter`), `adminCosmetics`, `adminReactions` and `adminSupport`. These routers now reject unauthenticated requests even when mounted alone; the late `adminRouter` guard remains as a second layer for its own routes.
+- `adminVerification.ts` and `adminDmReviews.ts` are mounted before `adminRouter` and apply their own per-route auth.
 - `GET /api/admin/progression/health` is registered at line 84, before the guard, so `requirePermission("analytics.read")` returns 401 for every real admin. It appears dead, not exposed.
 
-The dependency remains fragile. Add explicit `requireAdminAuth` at each admin router mount in a reviewed change; do not rely on implicit request-state population. Add an admin authorization test that proves a valid admin JWT can reach every mounted admin router.
+Five regression tests prove each formerly dependent router returns 401 without a token when mounted alone. Two more tests verify that `requireAdminAuth` accepts a signed super-admin JWT and that each formerly dependent router carries an explicit guard layer while the public badge-art router does not. These tests exercise the guard boundary, not the real route handlers; effective permissions were not changed.
 
 ## 5. Realtime
 
@@ -137,7 +138,7 @@ All index/migration steps are non-fatal on failure. There are no migration dry-r
 ## 9. Security observations
 
 1. Tracked plaintext credentials in the local Worker config (see [the finding](../infrastructure/tracked-worker-credentials-finding.md)).
-2. Admin auth is mount-order dependent; add explicit guards and tests.
+2. Admin auth is no longer mount-order dependent for the five routers guarded on 2026-11-23; unauthenticated rejection and valid-JWT guard acceptance are covered, though real route-handler execution remains untested.
 3. User auth cache can delay revocation for up to 20 seconds per process.
 4. Rate-limit IP trust and in-memory fallback weaken limits under header spoofing, Redis failure and horizontal scaling.
 5. App Check is off by default and narrowly applied.
@@ -148,7 +149,7 @@ All index/migration steps are non-fatal on failure. There are no migration dry-r
 
 ## 10. Test gaps
 
-The API has 38 `*.test.ts` files plus a hardening integration suite and three Worker smoke scripts. Gaps include no tests for `payoutWebhook`, `payoutReview`, `purchaseCredit`, `battlePass`, `referrals`, `themePurchase`, `productionIndexes`, `config/migration.ts`, admin authorization across all mounted routers, or webhook mounting. Media tests are uncommitted and require R2/S3 plus a replica set. There is no production-capacity or horizontal-scaling test for the singleton Worker.
+The API has 38 `*.test.ts` files plus a hardening integration suite and three Worker smoke scripts. Gaps include no tests for `payoutWebhook`, `payoutReview`, `purchaseCredit`, `battlePass`, `referrals`, `themePurchase`, `productionIndexes`, `config/migration.ts`, admin-router guard coverage is new (unauthenticated rejection plus valid-JWT/guard-layer acceptance tests), but real handler execution under a valid JWT is still untested, or webhook mounting. Media tests are uncommitted and require R2/S3 plus a replica set. There is no production-capacity or horizontal-scaling test for the singleton Worker.
 
 ## 11. Migration implications
 

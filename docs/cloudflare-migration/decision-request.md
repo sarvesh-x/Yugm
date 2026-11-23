@@ -11,7 +11,7 @@ Phase 0 audits and planning are complete ([report](phase0-report.md)). Five gate
 
 | ID | Decision | Why it is blocked | Blocks |
 |---|---|---|---|
-| DCR-1 | Remediate tracked plaintext Worker credentials | **Option A selected** ([ADR-0003](../decisions/0003-credential-remediation-approach.md)); owner rotation and source removal pending; guard staged | All Cloudflare work until rotation confirmed |
+| DCR-1 | Remediate tracked plaintext Worker credentials | **Option A selected** ([ADR-0003](../decisions/0003-credential-remediation-approach.md)); owner rotation confirmed 2026-11-23; tracked values removed and strict CI staged locally, uncommitted | Commit/push, first strict CI run, and all other Cloudflare work |
 | DCR-2 | Choose authoritative database: D1 vs PostgreSQL/Hyperdrive | **Resolved:** owner selected D1 ([ADR-0001](../decisions/0001-d1-and-r2-target.md)); capacity metrics and Workers Paid still gate rehearsal/cutover | Schema generation unblocked as a draft; production migration still gated |
 | DCR-3 | Choose realtime protocol path | **Option C (staged hybrid) selected** ([ADR-0002](../decisions/0002-staged-hybrid-realtime-protocol.md)); support window and event-inventory sign-off still needed | Phase 5 until inputs supplied |
 | DCR-4 | Fix and scope R2 media cutover | Buckets/domains/CORS/policies and private-media semantics are unconfirmed; Android wiring gap exists | Phase 4 |
@@ -19,7 +19,7 @@ Phase 0 audits and planning are complete ([report](phase0-report.md)). Five gate
 
 ## 2. DCR-1 — Tracked Worker credentials
 
-**Finding:** `backend-server/apps/cloudflare-worker/wrangler.jsonc` is tracked by Git, is not ignored, and contains plaintext credential-bearing `vars` (database, cache, JWT/admin, LiveKit, payments and related secrets). Values are deliberately not reproduced. Full evidence: [tracked Worker credentials finding](../infrastructure/tracked-worker-credentials-finding.md).
+**Finding (local remediation staged):** `backend-server/apps/cloudflare-worker/wrangler.jsonc` previously contained plaintext credential-bearing `vars` (database, cache, JWT/admin, LiveKit, payments and related secrets). After owner-confirmed rotation on 2026-11-23 those keys were removed from the tracked file without exposing values; strict CI is staged locally and awaiting commit/push. Full evidence: [tracked Worker credentials finding](../infrastructure/tracked-worker-credentials-finding.md).
 
 **Risk:** Anyone with repository or history read access may have usable credentials. Test labels are not evidence that values are harmless.
 
@@ -31,9 +31,9 @@ Phase 0 audits and planning are complete ([report](phase0-report.md)). Five gate
 | B | Same as A plus a coordinated Git history scrub | Requires explicit authorization and coordination with everyone holding clones; do not start unilaterally |
 | C | Keep values but restrict repository access | Not acceptable: does not remove exposure and does not satisfy the project's no-secrets-in-source rule |
 
-**Approval required:** explicit authorization to (1) rotate/revoke each provider credential, (2) edit the tracked config to remove values and add ignore rules, (3) choose A or B, and (4) confirm who owns the secret store and provider accounts.
+**Approval recorded:** Option A, owner-confirmed rotation/revocation on 2026-11-23, and local instruction to remove tracked values and add ignore rules. No history rewrite was selected.
 
-**After approval I will:** remove values without reproducing them, add ignore rules, update the finding with actions actually performed, and add the CI secret-scanning gate. I will not rewrite history unless option B is explicitly selected.
+**Completed locally:** values removed without reproducing them, ignore rules verified/added, finding and ADR updated, CI switched to `secrets:check:strict`, and strict guard reports zero findings. Still pending: explicit commit/push approval and observing the first strict CI run. No history was rewritten.
 
 ## 3. DCR-2 — Authoritative database decision (resolved: D1)
 
@@ -69,6 +69,8 @@ Phase 0 audits and planning are complete ([report](phase0-report.md)). Five gate
 
 **Owner selection:** A (D1), recorded in [ADR-0001](../decisions/0001-d1-and-r2-target.md). **Still required before production use:** the metrics above, Workers Paid confirmation, a reviewed schema, backup/restore rehearsal and destructive-operation approval. If any D1 capacity check fails, the ADR must be revisited and Option B re-evaluated.
 
+**Local input preparation (2026-11-23):** `npm run capacity:gate -- --input <metrics.json>` in `apps/api` screens supplied aggregates against documented D1 hard limits and reports five review items that stay open for owner judgment. It does not collect metrics or access any production system; see [the capacity assessment](../database/d1-capacity-assessment.md#local-hard-limit-screening-input-preparation-not-acceptance) for the input shape and interpretation.
+
 ## 4. DCR-3 — Realtime protocol path
 
 **Current state:** Android and the Worker prototype use Socket.IO/Engine.IO 4. The experimental bridge uses non-hibernating DO WebSockets, Engine.IO internals and has incomplete restart recovery; it is not a production design. Full evidence: [realtime plan](../migration/realtime-plan.md), [Worker prototype audit](../infrastructure/worker-prototype-audit.md) and [Android audit](../architecture/android-source-audit.md).
@@ -91,7 +93,9 @@ Phase 0 audits and planning are complete ([report](phase0-report.md)). Five gate
 
 **Environment inputs needed:** bucket names and account, custom domains and CDN policy, CORS origin allowlist, public/private visibility policy, credential owner and secret store, media inventory (categories, counts, bytes, legacy URLs), room/clan private-media participant rules, and who owns the missing admin media/registry/quota tooling.
 
-**Local tooling added 2026-11-22 (input preparation, not a decision):** `npm run inventory:media -- --input <records.jsonl>` in `apps/api` builds a read-only inventory from an exported MediaObject-shaped JSONL file. It reports counts and bytes by category, bucket, visibility, owner type, media type, bucket×visibility, processing/moderation status, variant storage, duplicate storage keys and a stable digest. It never reads MongoDB or R2 and deliberately does not assert a public/private bucket policy, since that policy is still an owner decision. This tool does **not** supply legacy `/uploads` URL coverage (those files are not fully represented in MediaObject) or fulfill the media backup requirement in [BACKUP_AND_RECOVERY.md](../migration/BACKUP_AND_RECOVERY.md); those remain open. An owner-approved export is still required before real numbers can be produced.
+**Local tooling added 2026-11-22 (input preparation, not a decision):** `npm run inventory:media -- --input <records.jsonl>` in `apps/api` builds a read-only inventory from an exported MediaObject-shaped JSONL file. It reports counts and bytes by category, bucket, visibility, owner type, media type, bucket×visibility, processing/moderation status, variant storage, duplicate storage keys and a stable digest. It never reads MongoDB or R2 and deliberately does not assert a public/private bucket policy, since that policy is still an owner decision. The MediaObject inventory itself does **not** supply legacy `/uploads` URL coverage, because those files are not fully represented in MediaObject. A companion read-only scanner added 2026-11-23, `npm run inventory:legacy-media -- --input <records.jsonl>` or `--snapshot <directory>`, counts source-verified legacy public/private URL forms, inline data URLs, badge-art routes and managed upload endpoints from exported records or a copied snapshot; it emits URL digests and field paths only, never raw URLs. It does not verify that binaries still exist. Neither tool fulfills the media backup requirement in [BACKUP_AND_RECOVERY.md](../migration/BACKUP_AND_RECOVERY.md); that remains open. An owner-approved export is still required before real numbers can be produced.
+
+**Source-backed authorization audit (2026-11-23):** [private-media-authorization.md](../migration/private-media-authorization.md) records the current `MediaObject` download rules and the latent room/clan gap: non-owner `PRIVATE` access is implemented only for `ownerType=MESSAGE` direct-message participants; `ROOM`, `CLAN` and other owner types are denied. It also documents the public-only legacy `/uploads` path and the admin-only trust-verification/asset-staging routes. No policy was chosen; owner definitions for room/clan participant rules are needed before any private media category cutover.
 
 **Options:**
 
@@ -109,13 +113,13 @@ Phase 0 audits and planning are complete ([report](phase0-report.md)). Five gate
 
 | Action | Authorization standing |
 |---|---|
-| Documentation, static audit, local dry run | Permitted now |
-| Local code changes behind flags, with no production data or credentials | Requires DCR-1 through DCR-4 resolved and plan acceptance |
+| Documentation, static audit, local dry run | Permitted now under [ADR-0004](../decisions/0004-local-code-and-tests-authorization.md) |
+| Local code changes with no production data or credentials | Permitted now under DCR-5; runtime wiring, provisioning and data work remain gated |
 | Cloudflare resource provisioning, paid plan/domains/DNS | Separate explicit approval per resource |
 | Credential rotation, secret-store change, history rewrite | DCR-1 selection and provider access |
 | Production snapshot export, transform, import, migration | Separate explicit approval after backup/restore rehearsal |
 | Deploy, DNS cutover, release, destructive production change | Separate explicit approval each time |
-| Commit / push | Explicit authorization required; none has been given |
+| Commit / push | The 2026-11-22 local-only slices were committed and pushed under one-time explicit authorization (`4af0b0d`). Later local slices remain uncommitted and require new explicit approval |
 
 ## 7. Owner response template
 

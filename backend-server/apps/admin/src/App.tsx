@@ -28,37 +28,7 @@ import {
 import { Admin, adminApi, adminApiMultipart, adminApiWithMeta, formatDate, formatNumber, login, refreshAdminSession, Session } from "./api";
 import { AssetsPage } from "./AssetsPage";
 import { BadgesPage } from "./BadgesPage";
-
-type ViewKey =
-  | "dashboard"
-  | "users"
-  | "reports"
-  | "queue"
-  | "trustVerifications"
-  | "creatorKyc"
-  | "payoutReviews"
-  | "rooms"
-  | "pk"
-  | "messages"
-  | "wallet"
-  | "payments"
-  | "gifts"
-  | "cosmetics"
-  | "assets"
-  | "badges"
-  | "reactions"
-  | "notifications"
-  | "campaigns"
-  | "growth"
-  | "support"
-  | "dmReviews"
-  | "referrals"
-  | "analytics"
-  | "fraud"
-  | "config"
-  | "audit"
-  | "admins"
-  | "settings";
+import { canAccessView, VIEW_PERMISSIONS, type ViewKey } from "./navigationPermissions";
 
 type Notice = { tone: "success" | "error" | "info"; text: string } | null;
 
@@ -67,25 +37,25 @@ const navItems: Array<{ key: ViewKey; label: string; icon: ReactNode; group: str
   { key: "users", label: "Users", icon: <Users />, group: "Control" },
   { key: "reports", label: "Reports", icon: <AlertTriangle />, group: "Safety" },
   { key: "queue", label: "Moderation queue", icon: <Shield />, group: "Safety" },
-  { key: "trustVerifications", label: "Trust verification", icon: <CheckCircle2 />, group: "Safety", requiredPermission: "trust_verification.read" },
+  { key: "trustVerifications", label: "Trust verification", icon: <CheckCircle2 />, group: "Safety", requiredPermission: VIEW_PERMISSIONS.trustVerifications },
   { key: "rooms", label: "Live rooms", icon: <Radio />, group: "Safety" },
   { key: "pk", label: "PK battles", icon: <Sparkles />, group: "Safety" },
   { key: "messages", label: "Messages", icon: <MessageSquare />, group: "Safety" },
   { key: "wallet", label: "Wallet", icon: <Wallet />, group: "Money" },
-  { key: "creatorKyc", label: "Creator payout KYC", icon: <Lock />, group: "Money", requiredPermission: "creator_kyc.read" },
-  { key: "payoutReviews", label: "Payout reviews", icon: <Coins />, group: "Money", requiredPermission: "payout_review.read" },
+  { key: "creatorKyc", label: "Creator payout KYC", icon: <Lock />, group: "Money", requiredPermission: VIEW_PERMISSIONS.creatorKyc },
+  { key: "payoutReviews", label: "Payout reviews", icon: <Coins />, group: "Money", requiredPermission: VIEW_PERMISSIONS.payoutReviews },
   { key: "payments", label: "Payments", icon: <Coins />, group: "Money" },
   { key: "gifts", label: "Gifts", icon: <Gift />, group: "Money" },
   { key: "cosmetics", label: "Cosmetics", icon: <Palette />, group: "Money" },
-  { key: "assets", label: "Managed Assets", icon: <Palette />, group: "Operations", requiredPermission: "cosmetics.write" },
-  { key: "badges", label: "Badges", icon: <Crown />, group: "Operations", requiredPermission: "cosmetics.write" },
-  { key: "reactions", label: "Live Reactions", icon: <Sparkles />, group: "Money", requiredPermission: "cosmetics.write" },
+  { key: "assets", label: "Managed Assets", icon: <Palette />, group: "Operations", requiredPermission: VIEW_PERMISSIONS.assets },
+  { key: "badges", label: "Badges", icon: <Crown />, group: "Operations", requiredPermission: VIEW_PERMISSIONS.assets },
+  { key: "reactions", label: "Live Reactions", icon: <Sparkles />, group: "Money", requiredPermission: VIEW_PERMISSIONS.assets },
   { key: "notifications", label: "Notifications", icon: <Bell />, group: "Operations" },
-  { key: "campaigns", label: "Campaigns", icon: <Bell />, group: "Operations", requiredPermission: "notifications.send" },
+  { key: "campaigns", label: "Campaigns", icon: <Bell />, group: "Operations", requiredPermission: VIEW_PERMISSIONS.campaigns },
   { key: "growth", label: "Growth OS", icon: <LineChart />, group: "Operations" },
   { key: "referrals", label: "Referrals", icon: <Gift />, group: "Operations" },
   { key: "support", label: "Support", icon: <LifeBuoy />, group: "Operations" },
-  { key: "dmReviews", label: "DM Reviews", icon: <Lock />, group: "Safety", requiredPermission: "dm_reviews.review" },
+  { key: "dmReviews", label: "DM Reviews", icon: <Lock />, group: "Safety", requiredPermission: VIEW_PERMISSIONS.dmReviews },
   { key: "analytics", label: "Analytics", icon: <BarChart3 />, group: "Intelligence" },
   { key: "fraud", label: "Fraud radar", icon: <Activity />, group: "Intelligence" },
   { key: "config", label: "App config", icon: <SlidersHorizontal />, group: "System" },
@@ -269,7 +239,7 @@ function MiniSignal({ label, value }: { label: string; value: string }) {
 }
 
 function Sidebar({ current, onNavigate, admin, onLogout }: { current: ViewKey; onNavigate: (view: ViewKey) => void; admin: Admin; onLogout: () => void }) {
-  const visibleItems = navItems.filter((item) => !item.requiredPermission || admin.isSuperAdmin || admin.permissions.includes(item.requiredPermission));
+  const visibleItems = navItems.filter((item) => canAccessView(admin, item.key));
   const groups = visibleItems.reduce<Record<string, typeof navItems>>((acc, item) => {
     acc[item.group] = [...(acc[item.group] || []), item];
     return acc;
@@ -327,6 +297,7 @@ function Topbar({ view, admin, notice, onClearNotice }: { view: ViewKey; admin: 
 }
 
 function ViewRenderer({ view, session, setNotice, onLogout }: { view: ViewKey; session: Session; setNotice: (notice: Notice) => void; onLogout: () => void }) {
+  if (!canAccessView(session.admin, view)) return <ErrorState message="You do not have permission to view this page." />;
   if (view === "dashboard") return <Dashboard token={session.accessToken} />;
   if (view === "users") return <UsersPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "reports") return <ReportsPage token={session.accessToken} setNotice={setNotice} />;

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { adminOk, pageParams, paginationMeta } from "../modules/admin/http.js";
-import { requirePermission, type AdminAuthRequest } from "../middleware/adminAuth.js";
+import { requireAdminAuth, requirePermission, type AdminAuthRequest } from "../middleware/adminAuth.js";
 import { validateBody } from "../middleware/validate.js";
 import { asyncHandler, HttpError } from "../utils/http.js";
 import { Cosmetic } from "../models/Cosmetic.js";
@@ -10,6 +10,7 @@ import { syncDefaultCosmetics } from "../services/cosmetics.js";
 import { getAsset } from "../services/assets.js";
 
 const adminCosmeticsRouter = Router();
+adminCosmeticsRouter.use(requireAdminAuth);
 
 const cosmeticTypes = [
   "AVATAR_ASSET", "AVATAR_FRAME", "SPEAKING_WAVE", "PROFILE_THEME",

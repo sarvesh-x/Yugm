@@ -22,10 +22,17 @@ jobs:
           cache-dependency-path: backend-server/package-lock.json
       - name: Credential guard unit tests
         run: npm run test:secrets
-      - name: Report credential-bearing values in tracked configs
-        # Report-only until the owner confirms credential rotation (DCR-1);
-        # switch to `npm run secrets:check:strict` after rotation is verified.
-        run: npm run secrets:check
+      - name: Fail on credential-bearing values in tracked configs
+        # DCR-1: owner confirmed provider rotation/revocation on 2026-11-23;
+        # tracked secret values were removed and strict mode is now blocking.
+        run: npm run secrets:check:strict
+      - name: Report Worker deployment config findings
+        # Report-only; staging/production config hardening is an owner decision.
+        run: npm run worker-config:check
+      - name: OpenAPI guard unit tests
+        run: npm run test:openapi
+      - name: Check OpenAPI structure
+        run: npm run openapi:check
       - run: npm ci
       - run: npm run typecheck
       - name: Run backend unit tests
@@ -39,6 +46,27 @@ jobs:
         run: npm --workspace apps/cloudflare-worker run dry-run:staging
       - name: Exercise Worker room sockets against isolated MongoDB
         run: npm --workspace apps/cloudflare-worker run test:realtime
+
+  admin:
+    name: Admin (typecheck + production build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend-server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend-server/package-lock.json
+      - run: npm ci
+      - name: Typecheck admin
+        run: npm --workspace apps/admin run typecheck
+      - name: Test admin
+        run: npm --workspace apps/admin run test
+      - name: Build admin
+        run: npm --workspace apps/admin run build
 
   android:
     name: Android (lint + unit tests + debug build)

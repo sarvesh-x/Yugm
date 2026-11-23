@@ -264,20 +264,34 @@ test("immersive themes keep color JSON, animation JSON and promoted price", () =
 test("gift collections keep bonus config and gift child rows", () => {
   const { result } = map("gift_collections", {
     _id: A, name: "Romance", description: "For close friends", icon: "heart",
-    bonus: { description: "+10% XP", xpMultiplier: 2, coinMultiplier: 4 },
+    bonus: { description: "+10% XP", xpMultiplier: 1.1, coinMultiplier: 0.5 },
     gifts: [GIFT, "bad-id"], isActive: true, createdAt: "2026-01-02T03:04:05Z"
   });
   const row = table(result, "gift_collections")[0];
   const items = table(result, "gift_collection_items");
   assert.equal(result.rejected, false);
   assert.equal(row.bonus_description, "+10% XP");
-  assert.equal(row.bonus_xp_multiplier, 2);
-  assert.equal(row.bonus_coin_multiplier, 4);
+  assert.equal(row.bonus_xp_multiplier, 1.1);
+  assert.equal(row.bonus_coin_multiplier, 0.5);
   assert.equal(items.length, 1);
   assert.equal(items[0].value, GIFT);
   assert.equal(items[0].gift_collections_id, A);
   assert.equal(items[0].position, 0);
   assertColumns(result);
+});
+
+test("gift collection multipliers reject non-finite and negative values", () => {
+  const { result, context } = map("gift_collections", {
+    _id: A, name: "Invalid", description: "Invalid multipliers", icon: "heart",
+    bonus: { description: "+10% XP", xpMultiplier: Number.NaN, coinMultiplier: -1 },
+    gifts: [], isActive: true
+  });
+
+  assert.equal(result.rejected, true);
+  assert.deepEqual(
+    context.quarantine.map((entry) => `${entry.field}:${entry.reason}`),
+    ["bonus.xpMultiplier:NON_FINITE_NUMBER", "bonus.coinMultiplier:OUT_OF_RANGE"]
+  );
 });
 
 test("gift inventories and wishlist items keep authoritative quantities and refs", () => {

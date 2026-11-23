@@ -1,5 +1,145 @@
 # Development progress
 
+## 2026-11-23 -- DCR-1 local credential cleanup staged
+
+- **Scope:** after owner confirmation that all affected credentials were rotated/revoked and moved to ignored secret stores, staged the local/config/CI portion of DCR-1. No credential value was printed, copied or stored.
+- **Changes:** removed all secret-bearing `vars` from tracked `apps/cloudflare-worker/wrangler.jsonc` (10 secret-named keys, including placeholders); added root ignore rules for `wrangler.local.jsonc` and `wrangler.*.local.jsonc` (`.dev.vars*` was already ignored); switched CI from report-only `secrets:check` to blocking `secrets:check:strict`; updated ADR-0003, the credential finding, DCR-1, baseline report, task and progress docs.
+- **Verification (run):** `wrangler.jsonc` parses as valid JSON; `git check-ignore` verified `.dev.vars.local`, `wrangler.local.jsonc` and `wrangler.*.local.jsonc`; `npm.cmd run test:secrets` 8/8 passed; `npm.cmd run secrets:check:strict` reports zero findings across 30 tracked config files; `git diff --check` clean apart from LF/CRLF notices.
+- **State/remaining:** local changes are uncommitted. Explicit commit/push approval and the first CI run with strict mode active are required. No Git history rewrite was performed.
+
+## 2026-11-23 -- Consolidated local verification pass
+
+- **Scope:** re-ran bounded local verification over all accumulated uncommitted changes. No new behavior or production access.
+- **Results:** root typecheck passed for all workspaces; API 421/421, hardening 34/34, shared 12/12, admin 9/9; credential guard 8/8, OpenAPI guard 6/6, config manifest 3/3, worker-config guard 5/5; `openapi:check` PASS; `worker-config:check` report-only with 6 findings; admin production build passed and tracked `dist/` artifacts were restored; `git diff --check` clean apart from line-ending notices.
+- **Limits:** local evidence only. No database, D1, R2, Cloudflare account, deploy, provision, credential value or production data was touched. No CI run was triggered; the worker-config findings remain owner decisions.
+- **Record:** [final local verification handoff](handoffs/2026-11-23-final-local-verification.md).
+
+## 2026-11-23 -- Delta rate audit added (final delta-sync input)
+
+- **Scope:** added local average-rate evidence for the online-vs-maintenance-window decision without observing peak load or touching any database.
+- **Changes:** `backend-server/apps/api/src/migration/deltaRateAudit.ts`, CLI `src/scripts/delta-rate-audit.ts`, npm script `delta:rates`, and 3 tests. It uses two manifest watermarks and the snapshot diff to report added/removed/changed counts per hour by collection, with review items for peak-vs-average, window choice and financial peak.
+- **Verification (run):** targeted tests 26/26 with adjacent delta suites; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smoke on generated snapshots reported a 2-hour window with 0.5 changes/hour. No production access.
+- **State/remaining:** averages cannot establish peak rate or downtime tolerance. Owner decisions on online/offline replay and the final delta window remain open. Changes are uncommitted.
+
+## 2026-11-23 -- Child-table impact audit added (final delta-sync input)
+
+- **Scope:** added local evidence for the child-row replacement-scope decision. No DDL behavior change, database access or data deletion.
+- **Changes:** moved the schema generator's `CHILD_TABLES` declaration into shared `src/migration/childTables.ts`; added `childTableAudit.ts`, CLI `src/scripts/child-table-audit.ts`, npm script `delta:child-tables`, and 4 tests. The report lists 26 root collections with 49 normalized child tables plus review items for replacement unit, stale rows and idempotent replay.
+- **Verification (run):** targeted tests 23/23 with adjacent delta suites; `npm.cmd run typecheck --workspace @yugm/api` passed; `npm.cmd run schema:d1` regenerated 146 tables with no SQL change beyond the earlier draft refinements; CLI smoke produced the 26/49 report. No production access.
+- **State/remaining:** this is sizing/scope evidence only. Owner decision on per-parent vs per-batch replacement and the remaining delta items remains open. Changes are uncommitted.
+
+## 2026-11-23 -- Financial delta audit added (final delta-sync input)
+
+- **Scope:** added local sizing evidence for the financial-delta maintenance-window decision without reconciling balances or touching any database.
+- **Changes:** `backend-server/apps/api/src/migration/financialDeltaAudit.ts`, CLI `src/scripts/financial-delta-audit.ts`, npm script `delta:finance`, and 3 tests. It filters the snapshot diff to six authoritative money collections and keeps review items for ledger reconciliation, maintenance-window sizing and idempotent replay.
+- **Verification (run):** targeted tests 19/19 with adjacent delta suites; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smoke on generated snapshots reported 1 changed wallet transaction. No values, credentials or production data accessed.
+- **State/remaining:** sizing only; it does not prove reconciliation or choose online vs maintenance-window import. Owner delta decisions and all recovery gates remain open. Changes are uncommitted.
+
+## 2026-11-23 -- Deletion audit added (final delta-sync input)
+
+- **Scope:** added local tooling for the hard-delete representation decision without implementing tombstones, deletion lists or D1 deletes.
+- **Changes:** `backend-server/apps/api/src/migration/deletionAudit.ts`, CLI `src/scripts/deletion-audit.ts`, npm script `delta:deletions`, and 4 tests. It lists source IDs removed between two snapshots, detects soft-delete markers from a configurable field, and emits a stable digest.
+- **Verification (run):** targeted tests 16/16 with adjacent delta suites; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smoke on generated snapshots reported one soft-deleted record. No database, Cloudflare account, credential or production data access.
+- **State/remaining:** sizing evidence only. Owner decision on tombstones vs explicit deletion lists, child-row replacement scope, online/offline import, downtime and financial-delta handling remains open. Changes are uncommitted.
+
+## 2026-11-23 -- Watermark candidate audit added (final delta-sync input)
+
+- **Scope:** added local tooling for the first open final-delta-sync design decision without selecting a watermark or touching MongoDB.
+- **Changes:** `backend-server/apps/api/src/migration/watermarkAudit.ts`, CLI `src/scripts/watermark-audit.ts`, npm script `delta:watermark`, and 7 tests. It reports field coverage, parseability, unique `(value, _id)` composite keys, input ordering and sample gaps from a copied snapshot or JSONL export.
+- **Verification (run):** targeted tests 15/15 with adjacent migration suites; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smoke on a generated JSONL fixture reported `viable: true` and `already sorted: true`. No database, Cloudflare account, credential or production data access.
+- **State/remaining:** viability does not prove MongoDB can export by that cursor. Owner decision on the watermark field/order, hard-delete representation, child-row replacement scope and cutover window remains open. Changes are uncommitted.
+
+## 2026-11-23 -- Report-only Worker config guard added
+
+- **Scope:** added a CI guard for Worker deployment configuration hygiene without changing any config or printing values.
+- **Changes:** `backend-server/scripts/check-worker-config.mjs` parses staging/production Wrangler configs and reports missing observability, missing persisted logs, unredacted query strings and wildcard CORS by finding identifier only. Added `worker-config:check` / `test:worker-config` scripts, 5 tests and a report-only CI step.
+- **Verification (run):** `npm.cmd run test:worker-config` 5/5 passed; `npm.cmd run worker-config:check` reported 6 current findings (1 staging, 5 production). No config value was printed; no deploy, provision, credential or production data access.
+- **State/remaining:** report-only by design. Query-string redaction, production observability and an explicit CORS allowlist are owner decisions before production use. Changes are uncommitted.
+
+## 2026-11-23 -- Value-free config manifest added
+
+- **Scope:** prepared recovery evidence for backup procedure step 5 without printing or copying secret values.
+- **Changes:** exported `trackedConfigFiles()` from the existing credential guard, added `scripts/config-backup-manifest.mjs` with `config:manifest` / `test:config-manifest` scripts and 3 tests. The manifest records each tracked config file's path, byte count and SHA-256 only, plus a top-level digest.
+- **Verification (run):** `npm.cmd run test:config-manifest` 3/3 passed; `npm.cmd run config:manifest` produced a stable 30-file manifest without values. No credential, database, Cloudflare account, deploy or production access.
+- **State/remaining:** this is an inventory aid, not a config backup. Ignored `.env`/`.dev.vars` values, GitHub Actions variables and external provider config remain owner-managed. Changes are uncommitted.
+
+## 2026-11-23 -- Combined backup rehearsal runner added
+
+- **Scope:** chained existing integrity verification and dry-run import tooling into one local command. No database, R2, Cloudflare account, credential or production data access.
+- **Changes:** added `src/migration/backupRehearsal.ts`, CLI `src/scripts/backup-rehearse.ts`, npm script `backup:rehearse`, and 3 tests. The runner verifies a copied snapshot first and skips rehearsal when integrity fails; on success it writes transform/validation/id-map artifacts into one output directory.
+- **Verification (run):** targeted tests 13/13 with rehearsal and backup-verifier suites; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smoke on a generated snapshot printed `PASS` for integrity, dry-run rehearsal and the combined result. No production access.
+- **State/remaining:** PASS means copy integrity plus mapping/validation dry run, not a tested restore. No real backup exists and no restore was rehearsed. Changes are uncommitted.
+
+## 2026-11-23 -- OpenAPI structural guard added to CI
+
+- **Scope:** added a dependency-free guard for the migration-critical OpenAPI surface; no deploy, provision, credential or production access.
+- **Changes:** `backend-server/scripts/check-openapi.mjs` checks OpenAPI 3 version, required auth/media/admin paths, duplicate paths or schemas, local `#/components/...` ref targets and embedded server credentials. Added `openapi:check` and `test:openapi` npm scripts, 6 unit tests, and two CI steps in the backend job. The real `apps/api/openapi.yaml` passes with 90 paths, 16 schemas and 23 local refs.
+- **Verification (run):** `npm.cmd run test:openapi` 6/6 passed; `npm.cmd run openapi:check` printed `PASS`. No YAML parser or network tool was needed; workflow YAML was inspected manually and no CI run was triggered.
+- **State/remaining:** this is a structural guard, not full OpenAPI validation. Full `swagger-cli` validation remains a manual step; adding it to CI needs network dependency handling. Changes are uncommitted.
+
+## 2026-11-23 -- Admin view permission helper extracted and tested
+
+- **Scope:** closed the admin view-level permission test gap with a pure helper and a direct view guard. Server RBAC remains authoritative.
+- **Changes:** added `admin/src/navigationPermissions.ts` with `ViewKey`, `VIEW_PERMISSIONS` and `canAccessView()`. `App.tsx` now derives sidebar visibility from the same map (no required-permission string duplicated there) and blocks unauthorized direct views with `ErrorState`. Added 4 tests for unrestricted, restricted, wrong-permission and super-admin cases.
+- **Verification (run):** admin tests 9/9 passed; `npm.cmd run typecheck --workspace @yugm/admin` passed; `npm.cmd run build --workspace @yugm/admin` passed. Generated `dist/` changes were restored to HEAD. No credential, database, Cloudflare account, deploy or production access.
+- **State/remaining:** this tests the permission decision function and compiles the guard into the renderer; real component rendering and admin UI runtime QA are still pending. Changes are uncommitted.
+
+## 2026-11-23 -- Admin API client tests added to CI gate
+
+- **Scope:** closed the remaining "admin has no test script" finding with focused, database-free tests. No deploy, provision or production access.
+- **Changes:** made `api.ts` read `import.meta.env` with optional chaining so pure helpers run under Node; added `src/api.test.ts` with 5 tests covering `formatDate`/`formatNumber`, `adminApi` success and `ApiError` mapping, `adminApiWithMeta`, and multipart auth headers. Added an admin `test` script and wired it into the `admin` CI job between typecheck and build.
+- **Verification (run):** `npm.cmd run test --workspace @yugm/admin` 5/5 passed; `npm.cmd run typecheck --workspace @yugm/admin` passed; `npm.cmd run build --workspace @yugm/admin` passed. Generated `dist/` changes were restored to HEAD because some dist files are tracked. No YAML parser/actionlint was available and no CI run was triggered.
+- **State/remaining:** four follow-up tests now cover the extracted view-permission helper used by both the sidebar and the direct view guard; runtime component rendering/UI QA is still pending. Strict secret scanning remains blocked on credential rotation. Changes are uncommitted.
+
+## 2026-11-23 -- Explicit admin router auth guards added
+
+- **Scope:** closed the Phase 0 finding that five admin routers depended on `adminRouter`'s late catch-all guard. No permission or route behavior changed; the public `badgeArtRouter` was deliberately left unguarded.
+- **Changes:** added `router.use(requireAdminAuth)` to `adminAssetsRouter`, `adminBadgesRouter`, `adminCosmeticsRouter`, `adminReactionsRouter` and `adminSupportRouter`. Added `routes/adminRouterGuards.test.ts` with 5 tests that mount each router alone and assert 401 without a token.
+- **Verification (run):** targeted guard tests 5/5 passed; full API suite 395/395 passed; hardening suite 34/34 passed; `npm.cmd run typecheck --workspace @yugm/api` passed. No database, credential, Cloudflare account, deploy or production data change.
+- **State/remaining:** two follow-up tests now cover valid-JWT acceptance by `requireAdminAuth` and explicit guard layers on each formerly dependent router (with the public badge-art router unguarded). Real route-handler execution under a valid JWT is still untested, and the admin SPA has no test script. Changes are uncommitted.
+
+## 2026-11-23 -- Admin CI typecheck/build gate added
+
+- **Scope:** closed the Phase 0 finding that PR CI did not build the admin SPA. No deploy or production action; only workflow configuration changed locally.
+- **Change:** `.github/workflows/ci.yml` now has a separate `admin` job that installs workspace dependencies, runs `npm --workspace apps/admin run typecheck` and `npm --workspace apps/admin run build` on push/PR to `master`. It mirrors the build step already used by the manual Pages deploy workflow.
+- **Verification (run locally):** `npm.cmd run typecheck --workspace @yugm/admin` passed; `npm.cmd run build --workspace @yugm/admin` passed (Vite build; generated `dist/` files were restored to HEAD because some are tracked despite the ignore rule). YAML structure inspected manually; no YAML parser or actionlint was available locally, and no CI run was triggered because nothing was pushed.
+- **State/remaining:** this is a build gate, not an admin test gate — the admin app still has no test script. Strict secret scanning remains gated on owner credential rotation. Workflow changes are uncommitted.
+
+## 2026-11-23 -- Snapshot delta diff added (final delta-sync planning aid)
+
+- **Scope:** added local tooling to compare two copied snapshots for the final delta-sync gate. No database, Cloudflare account, credential or production data access; no delta exporter or importer was implemented.
+- **Implementation:** `snapshot.ts` gained `readDeclaredSnapshotRecords()`; `snapshotDiff.ts` reports per-collection added/removed/changed counts, top-level changed field names, duplicate/invalid IDs and watermark ordering, emitting source IDs and content digests only. Added `src/scripts/snapshot-diff.ts` with `snapshot:diff` and 5 unit tests.
+- **Verification (run):** targeted tests passed 16/16 with backup-verifier and legacy-reference suites; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smoke on two generated snapshots reported 1 removed / 1 changed record and no values. No production access.
+- **State/remaining:** this is a planning/verification aid, not final delta sync. Watermark export, tombstone/deletion handling, upsert-by-`source_id`, child-row replacement and delta checkpoints remain open. New changes are uncommitted.
+
+## 2026-11-23 -- D1 draft schema conflicts refined (local code + tests)
+
+- **Scope:** resolved the three concrete DDL draft conflicts recorded in `CURRENT_TASK.md` without approving the schema or touching any database.
+- **Changes:** `generate-d1-schema.ts` now treats Mongoose `default: null` as nullable instead of `NOT NULL` and maps the two non-monetary gift-collection multipliers to `REAL` with a non-negative `CHECK`. `transform.ts` adds `toFiniteNumber()` with a new `NON_FINITE_NUMBER` quarantine reason; `mappings.ts` uses it for `bonus.xpMultiplier`/`coinMultiplier` so fractional ratios are preserved. Regenerated `0001_initial.sql` and manifest: `story_comments.parent_id`, `gifts.expires_at` and `gifts.collection_id` are nullable, and the two multiplier columns are `REAL`.
+- **Verification (run):** full `src/migration/*.test.ts` suite 163/163 passed; `npm.cmd run typecheck --workspace @yugm/api` passed; schema generator reported 146 tables, 0 warnings and 0 import failures. SQL diff contains only the three nullability changes, two `REAL` columns/checks and the manifest generation timestamp.
+- **State/remaining:** this is still a review draft; owner approval, capacity metrics, backup/restore rehearsal and cutover gates are unchanged. New changes are uncommitted.
+
+## 2026-11-23 -- Private-media authorization audit added (DCR-4 input preparation)
+
+- **Scope:** read-only source audit of current private-media authorization; no code, policy, bucket, credential or production data change.
+- **Finding:** `authorizeMediaDownload()` grants non-owner `PRIVATE` access only for `ownerType=MESSAGE` direct-message participants (sender/receiver, hidden/block checks). `ROOM`, `CLAN`, `COSMETIC`, `ACHIEVEMENT`, `EVENT` and `APPLICATION` private media have no participant path and are denied. The gap is latent because managed upload currently accepts only `AVATAR`/`USER`, but it blocks any future private room/clan/chat category cutover.
+- **Deliverable:** `docs/migration/private-media-authorization.md` with the exact decision order, the owner-type matrix, legacy public `/uploads` behavior, admin trust/asset-staging rules and the mount-order dependency; linked from DCR-4 and `INDEX.md`.
+- **Verification (run):** source reads of `services/media.ts`, `routes/media.ts`, `services/storage.ts`, `app.ts`, admin routers and the existing unit tests. No build, test, deploy or production access was needed for this documentation-only slice.
+
+## 2026-11-23 -- Legacy media reference scanner added (DCR-4 input preparation)
+
+- **Scope:** filled the remaining DCR-4 inventory gap identified in the media-inventory handoff: historical `/uploads` and other non-MediaObject URL references. No database, bucket, credential or production data access; still no policy decision.
+- **Implementation:** `backend-server/apps/api/src/migration/legacyMediaReferences.ts` scans exported JSONL records or a copied snapshot directory for legacy public `/uploads`, private trust/staging routes, badge-art routes, inline data URLs, absolute URLs and managed upload endpoints. It emits counts, field paths, extensions, de-queried URL digests and a stable report digest — never raw URLs or customer content — and does not check binary existence. Added `src/scripts/legacy-media-references.ts` with npm script `inventory:legacy-media` and 7 unit tests.
+- **Verification (run):** targeted tests passed 23/23 with the D1 screener, media inventory and backup verifier suites; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smoke on a generated JSONL fixture produced counts and digests without echoing URLs. No production access.
+- **State/remaining:** reference counts are not a binary census and do not solve the unrecoverable-file finding. DCR-4 environment inputs, option selection, export approval, media backup and restore rehearsal remain open. New changes are uncommitted.
+
+## 2026-11-23 -- D1 hard-limit screener added (DCR-2 input preparation)
+
+- **Scope:** added local tooling to prepare DCR-2 capacity inputs without any production access. No metric was collected, no Cloudflare account was queried, and no capacity decision was made.
+- **Implementation:** `backend-server/apps/api/src/migration/d1CapacityGate.ts` validates a flat metrics JSON and screens documented D1 hard limits (10 GB, Workers Paid/500 MB Free, 2 MB row, R2-only binaries, 100 KB statement, 100 parameters, 50 MB result, 30 s p99, 50/1,000 queries per invocation). It returns five always-open review items for comfort, throughput headroom, query shape, growth/retention and recovery/billing. Added `src/scripts/d1-capacity-gate.ts` with npm script `capacity:gate` and 6 unit tests.
+- **Verification (run):** targeted tests passed 16/16 with the media-inventory and backup-verifier suites; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smokes with a valid fixture printed `PASS / REVIEW REQUIRED` and an over-limit fixture exited 1 with all expected hard-limit failures. No database, Cloudflare account, credential or production data access.
+- **State/remaining:** hard-limit screening is not DCR-2 acceptance. Owner must supply real aggregates, Workers Paid confirmation, query/growth/recovery evidence and an approved schema before any D1 production step. New local changes are uncommitted; no commit/push authorization applies to this slice.
+
 ## 2026-11-22 -- Realtime parity matrix added (DCR-3 harness, unwired)
 
 - **Scope:** encoded the accepted DCR-3 consequence that a dual-test matrix is required, without building an adapter or touching any runtime path.

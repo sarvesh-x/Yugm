@@ -11,6 +11,7 @@ import { stableStringify } from "./snapshot.js";
 import {
   toBoolean,
   toEnum,
+  toFiniteNumber,
   toInteger,
   toIntegerMinorUnits,
   toOpaqueId,
@@ -2195,8 +2196,9 @@ function mapGiftCollection(record: SourceRecord, context: TransformContext): Map
   const icon = toRequiredString(record.icon ?? "", f("icon"));
   const bonus = embedded(record.bonus);
   const bonusDescription = toRequiredString(bonus.description ?? "", f("bonus.description"));
-  const bonusXp = toInteger(bonus.xpMultiplier ?? 1, f("bonus.xpMultiplier"), { min: 0 });
-  const bonusCoins = toInteger(bonus.coinMultiplier ?? 1, f("bonus.coinMultiplier"), { min: 0 });
+  // Multipliers are ratios, not money; preserve fractional values in REAL columns.
+  const bonusXp = toFiniteNumber(bonus.xpMultiplier ?? 1, f("bonus.xpMultiplier"), { min: 0 });
+  const bonusCoins = toFiniteNumber(bonus.coinMultiplier ?? 1, f("bonus.coinMultiplier"), { min: 0 });
   const isActive = toBoolean(record.isActive ?? true, f("isActive"));
   const items = childRows({
     collection, table: "gift_collection_items", parentTable: collection, parentId: sourceId,

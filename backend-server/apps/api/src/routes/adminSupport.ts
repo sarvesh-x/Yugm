@@ -1,13 +1,14 @@
 import { Router } from "express";
 import { z } from "zod";
 import { adminOk, pageParams, paginationMeta } from "../modules/admin/http.js";
-import { requirePermission, type AdminAuthRequest } from "../middleware/adminAuth.js";
+import { requireAdminAuth, requirePermission, type AdminAuthRequest } from "../middleware/adminAuth.js";
 import { validateBody } from "../middleware/validate.js";
 import { asyncHandler, HttpError, isValidObjectId, ErrorCode } from "../utils/http.js";
 import { SupportTicket } from "../models/SupportTicket.js";
 import { AdminAuditLog } from "../models/AdminAuditLog.js";
 
 const adminSupportRouter = Router();
+adminSupportRouter.use(requireAdminAuth);
 
 adminSupportRouter.get("/support/tickets", requirePermission("support.read"),
   asyncHandler(async (req: AdminAuthRequest, res) => {

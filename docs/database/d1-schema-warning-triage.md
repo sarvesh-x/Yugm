@@ -73,8 +73,14 @@
 
 ## Additional schema review notes (not manifest warnings)
 
-- **Mongoose `Number` always generates `INTEGER`.** `generate-d1-schema.ts` maps every numeric path to `INTEGER` without emitting a warning. Fields that legitimately hold fractions need an owner decision before schema approval — for example `GiftCollection.bonus.xpMultiplier`/`coinMultiplier` (a multiplier commonly expressed as `1.1`) and any rate/ratio fields. The reviewed `gift_collections` transform currently requires integers to match the draft DDL, so fractional source values would be quarantined; this must be resolved before a real import. This note does not change the 46-warning count.
+- **Mongoose `Number` always generates `INTEGER` (draft refinement applied 2026-11-23).** `generate-d1-schema.ts` now maps the non-monetary `GiftCollection.bonus.xpMultiplier` and `coinMultiplier` paths to `REAL` with a non-negative `CHECK`, and `mappings.ts` uses `toFiniteNumber()` so fractional ratios (for example `1.1`) are preserved instead of quarantined. Money remains `INTEGER` in minor units. This changes no warning count and is not owner approval of the DDL; confirm the multiplier semantics at schema approval. No other numeric path was reclassified, so any other rate/ratio field found later still needs explicit review.
 - `Achievement.imageData` is a `Buffer` with `select: false`. The reviewed transform soft-quarantines any legacy inline bytes and preserves `imageUrl`/`assetRef` provenance; actual blob migration requires a separately approved R2 operation.
+
+## Draft refinement applied 2026-11-23
+
+- `generate-d1-schema.ts` treated Mongoose `default: null` as a non-null default and emitted `NOT NULL`. The generator now distinguishes `undefined` from an explicit `null` default. Regenerating `0001_initial.sql` changed exactly the three flagged columns: `story_comments.parent_id`, `gifts.expires_at` and `gifts.collection_id` are now nullable. The existing transforms already treat those source values as optional and soft-quarantine malformed optional references.
+- The two gift-collection multiplier columns are now `REAL NOT NULL CHECK (>= 0)` and the transform preserves finite fractions. Both changes are reflected in the regenerated SQL and manifest; no model, runtime API or MongoDB document was changed.
+- Verification: full migration test suite 163/163 passed and `npm.cmd run typecheck --workspace @yugm/api` passed after regeneration. Owner approval of the regenerated DDL is still outstanding, as are all capacity, recovery and cutover gates.
 
 ## Relation to other gates
 

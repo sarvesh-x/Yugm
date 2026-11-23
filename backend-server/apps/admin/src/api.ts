@@ -1,4 +1,5 @@
-const API_BASE = (import.meta.env.VITE_ADMIN_API_URL || "/api/admin").replace(/\/$/, "");
+// Optional chaining keeps these pure helpers testable under Node as well as Vite.
+const API_BASE = (import.meta.env?.VITE_ADMIN_API_URL || "/api/admin").replace(/\/$/, "");
 
 export type Admin = {
   id: string;

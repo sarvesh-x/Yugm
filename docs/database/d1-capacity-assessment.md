@@ -53,6 +53,16 @@ Source snapshots are in [Cloudflare platform limits](../infrastructure/cloudflar
 | Time Travel | 7 days Free / 30 days Paid | Not an independent backup. Require export snapshots before destructive migrations and a tested restore procedure. |
 | Import | 5 GB maximum file via `d1 execute` | Use chunked import tooling/checkpoints; do not assume a single dump file will fit. |
 
+## Local hard-limit screening (input preparation, not acceptance)
+
+Added 2026-11-23: `npm run capacity:gate -- --input <metrics.json> [--out <report.json>]` in `apps/api` screens caller-supplied aggregates against the decimal-unit hard limits in this document and [the platform snapshot](../infrastructure/cloudflare-platform-limits.md). It never connects to MongoDB, D1, Cloudflare or any remote service.
+
+The tool checks: 12-month projection at least the current total; 10 GB database ceiling; Workers Paid; 500 MB Free ceiling when Paid is false; 2 MB row; no binary bytes in D1; 100 KB statement; 100 bound parameters; 50 MB result; 30 s p99 statement; and 50/1,000 queries per invocation. Exit 0 means **no hard limit was exceeded**, not that DCR-2 is accepted. Every report also returns five always-open review items: size comfort, write-throughput headroom, indexed query shape, growth/retention evidence, and recovery/billing. Those require owner evidence and judgment.
+
+The input is a flat JSON object with non-empty `snapshotId`, `sourceEnvironment`, `collectedAt` and these non-negative numbers: `relationalBytes`, `indexBytes`, `projected12MonthTotalBytes`, `largestRowBytes`, `binariesInD1Bytes`, `largestStatementBytes`, `maxBoundParameters`, `largestQueryResultBytes`, `p99QueryDurationMs`, `averageWriteDurationMs`, `peakWritesPerSecond`, `peakQueriesPerInvocation`, plus boolean `workersPaid`. `projected12MonthTotalBytes` is the final projected relational+index total, not an increment. Units are decimal bytes/ms. Store sensitive aggregate reports outside public docs; the tool itself writes only what the caller supplies.
+
+This screener does not produce metrics, does not validate a restore, and does not replace any item in the exit-gate list below.
+
 ## Recommendation and decision status
 
 The owner has committed to D1 as the target ([ADR-0001](../decisions/0001-d1-and-r2-target.md)) without the Phase 0 metrics. The following checks were not run and therefore remain **exit gates**, not satisfied conditions. Use D1 for production data only if the completed metrics show that all of the following are true:

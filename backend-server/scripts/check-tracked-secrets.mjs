@@ -129,7 +129,7 @@ export function isCandidate(trackedPath) {
   return /(^|\/)\.env(\..*)?$/i.test(path);
 }
 
-function trackedConfigFiles() {
+export function trackedConfigFiles() {
   const root = execFileSync("git", ["rev-parse", "--show-toplevel"], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],

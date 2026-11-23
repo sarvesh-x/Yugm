@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { advanceCheckpoint, batchId, completeCheckpoint, newCheckpoint, shouldApplyBatch } from "./checkpoint.js";
 import {
   toEnum,
+  toFiniteNumber,
   toIntegerMinorUnits,
   toRequiredString,
   toSourceId,
@@ -51,6 +52,19 @@ test("money conversion rejects fractions, unsafe integers and negatives without 
   assert.deepEqual(
     context.quarantine.map((entry) => entry.reason),
     ["NON_INTEGER_MONEY", "NON_INTEGER_MONEY", "MONEY_OVERFLOW", "NEGATIVE_MONEY"]
+  );
+});
+
+test("finite-number transform preserves fractions and quarantines invalid or out-of-range values", () => {
+  const context = new TransformContext("snap-1");
+  assert.equal(toFiniteNumber(1.1, field(context), { min: 0 }), 1.1);
+  assert.equal(toFiniteNumber(0, field(context), { min: 0 }), 0);
+  assert.equal(toFiniteNumber(-0.5, field(context), { min: 0 }), undefined);
+  assert.equal(toFiniteNumber(Number.NaN, field(context)), undefined);
+  assert.equal(toFiniteNumber("1.1", field(context)), undefined);
+  assert.deepEqual(
+    context.quarantine.map((entry) => entry.reason),
+    ["OUT_OF_RANGE", "NON_FINITE_NUMBER", "NON_FINITE_NUMBER"]
   );
 });
 

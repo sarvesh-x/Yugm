@@ -69,7 +69,7 @@ The ignored `android-client/local.properties` is not part of the recoverable Git
 - Wrangler configs exist for local, staging and production under `backend-server/apps/cloudflare-worker/` (`wrangler.jsonc`, `wrangler.staging.jsonc`, `wrangler.production.jsonc`).
 - Staging and production configs include the `IMAGES` binding added by commit `80d46af`; no paid Cloudflare Images storage was enabled.
 - Tracked Wrangler configs are documented as using `STORAGE_DRIVER=mongodb`; managed R2 media requires `STORAGE_DRIVER=s3` and is configured only in ignored local files. See `docs/features/r2-centralized-media.md`.
-- `docs/infrastructure/tracked-worker-credentials-finding.md` records a critical credential-exposure finding that remains unresolved (DCR-1). No secret value is reproduced in this report.
+- `docs/infrastructure/tracked-worker-credentials-finding.md` records the critical credential-exposure finding. Owner-confirmed rotation and local tracked-source cleanup were staged on 2026-11-23; commit/push and the first strict CI run remain pending (DCR-1). No secret value is reproduced in this report.
 - Detailed binding, secret, CORS and environment rules are in `docs/infrastructure/environments.md`.
 
 ## 5. Contract references
@@ -111,6 +111,8 @@ The directive requires baseline measurements that this phase could not produce w
 - Database size, per-collection document counts, index sizes and growth.
 - R2 storage usage and operation counts.
 - Worker CPU, D1 rows read/written, Durable Object duration and Queue backlog.
+
+A read-only D1 hard-limit screener now exists at `npm run capacity:gate --workspace apps/api -- --input <metrics.json>`. It can screen aggregates once the owner supplies them, but it does not collect metrics or close the DCR-2 gate; see [the capacity assessment](../database/d1-capacity-assessment.md#local-hard-limit-screening-input-preparation-not-acceptance).
 
 Required metrics are enumerated in `docs/cloudflare-migration/decision-request.md` (DCR-2) and `docs/database/d1-capacity-assessment.md`. They remain a gate before production migration or cutover.
 

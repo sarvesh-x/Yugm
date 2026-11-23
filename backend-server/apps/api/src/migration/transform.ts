@@ -174,6 +174,24 @@ export function toInteger(
   return value;
 }
 
+/**
+ * Finite non-integer numeric field (for example a multiplier or ratio).
+ * Values are preserved exactly; no rounding or implicit money conversion.
+ */
+export function toFiniteNumber(
+  value: unknown,
+  field: TransformField,
+  options: { min?: number; max?: number } = {}
+): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return field.context.reject(field, "NON_FINITE_NUMBER", "expected a finite number; fractional values are preserved");
+  }
+  if ((options.min !== undefined && value < options.min) || (options.max !== undefined && value > options.max)) {
+    return field.context.reject(field, "OUT_OF_RANGE", `value must be within [${options.min ?? "-∞"}, ${options.max ?? "∞"}]`);
+  }
+  return value;
+}
+
 /** Booleans become SQLite integers; other values are quarantined rather than coerced. */
 export function toBoolean(value: unknown, field: TransformField): number | undefined {
   if (typeof value === "boolean") return value ? 1 : 0;

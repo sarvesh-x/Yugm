@@ -31,6 +31,9 @@ local.properties
 node_modules
 .wrangler/
 .dev.vars*
+# Local Wrangler secret overlays
+wrangler.local.jsonc
+wrangler.*.local.jsonc
 .env
 dist
 backend-server/apps/api/dist

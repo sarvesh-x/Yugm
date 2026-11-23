@@ -2,7 +2,7 @@ import path from "path";
 import { Router, type NextFunction, type Request, type Response } from "express";
 import multer from "multer";
 import { z } from "zod";
-import { requirePermission, type AdminAuthRequest } from "../middleware/adminAuth.js";
+import { requireAdminAuth, requirePermission, type AdminAuthRequest } from "../middleware/adminAuth.js";
 import { adminOk, pageParams, paginationMeta } from "../modules/admin/http.js";
 import { asyncHandler, HttpError } from "../utils/http.js";
 import { auditLog } from "../services/adminAudit.js";
@@ -11,6 +11,7 @@ import { assetOwners, assetStatuses } from "../models/AssetObject.js";
 import { assertAssetStagingFileName, loadAssetStagingFile } from "../services/storage.js";
 
 export const adminAssetsRouter = Router();
+adminAssetsRouter.use(requireAdminAuth);
 
 const MAX_ASSET_BYTES = 8 * 1024 * 1024;
 const assetUpload = multer({

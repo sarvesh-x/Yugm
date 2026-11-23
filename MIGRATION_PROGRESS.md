@@ -9,7 +9,7 @@ This is the persistent, single-source tracker for the MongoDB/Render to Cloudfla
 | Phase | Phase 0 — audit, architecture decisions and implementation planning |
 | Status | Audit/planning complete; DCR-1/DCR-2/DCR-3 and DCR-5 authorization answered; local code + tests authorized; DCR-4 and detailed inputs still open |
 | Started | 2026-11-22 |
-| Last updated | 2026-11-22 |
+| Last updated | 2026-11-23 |
 | Overall gate | No production data, credentials, DNS, billing, deploy, migration or release has been changed or authorized |
 | Commit/push | Owner authorized commit and push of the current local-only changes on 2026-11-22; deploy, provision, migration and release remain unauthorized |
 
@@ -22,6 +22,227 @@ This is the persistent, single-source tracker for the MongoDB/Render to Cloudfla
 - Stop before destructive production changes, paid provisioning, credential handling or significant unresolved architecture decisions.
 
 ## Work log
+
+### 2026-11-23 — DCR-1 local credential cleanup staged
+
+- **Status:** owner-confirmed rotation; local config/CI cleanup staged and uncommitted. No credential value exposed or stored by the assistant.
+- **Added/updated files:** `backend-server/apps/cloudflare-worker/wrangler.jsonc`, `.gitignore`, `.github/workflows/ci.yml`, `docs/decisions/0003-credential-remediation-approach.md`, `docs/infrastructure/tracked-worker-credentials-finding.md`, `docs/cloudflare-migration/decision-request.md`, `docs/migration/BASELINE_REPORT.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-dcr1-local-cleanup.md`.
+- **Verification performed:** strict secret guard zero findings across 30 tracked config files; credential guard tests 8/8; config parses as JSON; ignore rules verified with `git check-ignore`; `git diff --check` clean apart from line-ending notices.
+- **Issues:** commit/push and first strict CI run still pending; no history rewrite performed.
+- **Decisions:** DCR-1 Option A already accepted; owner confirmed provider rotation on 2026-11-23.
+- **Dependencies:** explicit commit/push approval, then CI observation and secret-store confirmation for staging/production separation.
+- **Risks:** removing tracked values does not by itself invalidate leaked history; owner rotation is the mitigating control and has been confirmed.
+- **Next task:** commit/push after explicit approval, then verify the strict CI gate on the first run.
+
+### 2026-11-23 — Consolidated local verification pass
+
+- **Status:** verification only; no code behavior, deploy, provision or data change. Changes remain uncommitted.
+- **Added/updated files:** `docs/handoffs/2026-11-23-final-local-verification.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`.
+- **Verification performed:** root typecheck passed for all workspaces; API 421/421, hardening 34/34, shared 12/12, admin 9/9; credential guard 8/8, OpenAPI guard 6/6, config manifest 3/3, worker-config guard 5/5; `openapi:check` PASS; admin build passed with tracked `dist/` restored; `git diff --check` clean apart from line-ending notices.
+- **Issues:** worker-config guard remains report-only with 6 owner-decision findings.
+- **Decisions:** none; local evidence only.
+- **Dependencies:** owner decisions and approvals remain unchanged.
+- **Risks:** passing local suites must not be read as production verification or CI success.
+- **Next task:** owner supplies DCR inputs/approvals before any provisioning, deploy, migration or commit/push of these slices.
+
+### 2026-11-23 — Delta rate audit added (final delta-sync input)
+
+- **Status:** local read-only tooling only. No export, import, deploy, provision or data change. New changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/api/src/migration/deltaRateAudit.ts`, `backend-server/apps/api/src/migration/deltaRateAudit.test.ts`, `backend-server/apps/api/src/scripts/delta-rate-audit.ts`, `backend-server/apps/api/package.json`, `docs/migration/final-delta-sync-design.md`, `docs/migration/data-migration-tooling.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-delta-rate-audit.md`.
+- **Verification performed:** targeted tests 26/26 passed; typecheck passed; CLI smoke reported a 2-hour window with 0.5 changes/hour. No production access.
+- **Issues:** averages do not establish peak rate; owner decisions remain open.
+- **Decisions:** none; implements input preparation under DCR-5 authorization.
+- **Dependencies:** owner-approved snapshots with valid watermarks before real use.
+- **Risks:** a two-snapshot average could be mistaken for peak load; docs state the opposite.
+- **Next task:** owner decides online/offline replay and maximum cutover downtime before implementation.
+
+### 2026-11-23 — Child-table impact audit added (final delta-sync input)
+
+- **Status:** local reporting/refactor only. No DDL behavior change, delete, deploy, provision or data change. New changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/api/src/migration/childTables.ts`, `backend-server/apps/api/src/migration/childTableAudit.ts`, `backend-server/apps/api/src/migration/childTableAudit.test.ts`, `backend-server/apps/api/src/scripts/child-table-audit.ts`, `backend-server/apps/api/src/scripts/generate-d1-schema.ts`, `backend-server/apps/api/package.json`, `docs/migration/final-delta-sync-design.md`, `docs/migration/data-migration-tooling.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-child-table-audit.md`.
+- **Verification performed:** targeted tests 23/23 passed; typecheck passed; `schema:d1` regenerated 146 tables with no SQL change; CLI smoke reported 26 root tables and 49 child tables. No production access.
+- **Issues:** replacement-scope decision remains open; report is static sizing evidence.
+- **Decisions:** none; shares one child-table source between generator and audit.
+- **Dependencies:** owner decision on per-parent vs per-batch replacement before delta implementation.
+- **Risks:** a future child table added directly to the generator would bypass the audit; docs note the shared module.
+- **Next task:** owner decides replacement unit before implementing delta child-row handling.
+
+### 2026-11-23 — Financial delta audit added (final delta-sync input)
+
+- **Status:** local read-only sizing tool. No reconciliation, export, import, deploy, provision or data change. New changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/api/src/migration/financialDeltaAudit.ts`, `backend-server/apps/api/src/migration/financialDeltaAudit.test.ts`, `backend-server/apps/api/src/scripts/financial-delta-audit.ts`, `backend-server/apps/api/package.json`, `docs/migration/final-delta-sync-design.md`, `docs/migration/data-migration-tooling.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-financial-delta-audit.md`.
+- **Verification performed:** targeted tests 19/19 passed; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smoke reported 1 changed wallet transaction. No production access.
+- **Issues:** sizing only; no balance reconciliation or maintenance-window decision.
+- **Decisions:** none; implements input preparation under DCR-5 authorization.
+- **Dependencies:** owner-approved snapshots and remaining delta-sync design decisions.
+- **Risks:** collection allowlist could miss a future money collection; docs name the six current authoritative collections.
+- **Next task:** owner decides online vs maintenance-window financial deltas before implementation.
+
+### 2026-11-23 — Deletion audit added (final delta-sync input)
+
+- **Status:** local read-only tooling only. No export, import, delete, deploy, provision or data change. New changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/api/src/migration/deletionAudit.ts`, `backend-server/apps/api/src/migration/deletionAudit.test.ts`, `backend-server/apps/api/src/scripts/deletion-audit.ts`, `backend-server/apps/api/package.json`, `docs/migration/final-delta-sync-design.md`, `docs/migration/data-migration-tooling.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-deletion-audit.md`.
+- **Verification performed:** targeted tests 16/16 passed; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smoke on generated snapshots reported 1 soft-deleted record. No production access.
+- **Issues:** sizing evidence only; no deletion representation decision was made.
+- **Decisions:** none; implements input preparation under DCR-5 authorization.
+- **Dependencies:** owner-approved snapshots and remaining delta-sync design decisions.
+- **Risks:** soft-delete detection is field-configurable and heuristic; hard removals rely on complete source IDs in both snapshots.
+- **Next task:** owner decides tombstone vs explicit deletion list before implementing delta deletion handling.
+
+### 2026-11-23 — Watermark candidate audit added (final delta-sync input)
+
+- **Status:** local read-only tooling only. No export, import, deploy, provision or data change. New changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/api/src/migration/watermarkAudit.ts`, `backend-server/apps/api/src/migration/watermarkAudit.test.ts`, `backend-server/apps/api/src/scripts/watermark-audit.ts`, `backend-server/apps/api/package.json`, `docs/migration/final-delta-sync-design.md`, `docs/migration/data-migration-tooling.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-watermark-audit.md`.
+- **Verification performed:** targeted tests 15/15 passed; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smoke on a generated JSONL fixture reported viable and sorted. No production access.
+- **Issues:** viability does not prove MongoDB export support; owner design decisions remain open.
+- **Decisions:** none; implements input preparation under DCR-5 authorization.
+- **Dependencies:** owner-approved export before real use; open delta-sync decisions.
+- **Risks:** a non-date opaque string is accepted as a logical cursor value; docs state that viability is not a MongoDB export guarantee.
+- **Next task:** owner decides watermark field/order and remaining delta-sync design items before implementation.
+
+### 2026-11-23 — Report-only Worker config guard added
+
+- **Status:** local guard script and report-only CI step. No config, deploy, provision, credential or data change. New changes are uncommitted.
+- **Added/updated files:** `backend-server/scripts/check-worker-config.mjs`, `backend-server/scripts/check-worker-config.test.mjs`, `backend-server/package.json`, `.github/workflows/ci.yml`, `docs/infrastructure/admin-deployment-audit.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-worker-config-guard.md`.
+- **Verification performed:** `test:worker-config` 5/5 passed; `worker-config:check` reported 6 current findings with no values printed. No production access.
+- **Issues:** findings are intentionally not fixed here; production observability and CORS are owner decisions.
+- **Decisions:** none; implements a report-only guard under DCR-5 authorization.
+- **Dependencies:** owner decision and config change before findings can be closed.
+- **Risks:** JSONC parsing is a small local subset; guard is report-only so it cannot block deploys by itself.
+- **Next task:** owner approves staging redaction, production observability and explicit CORS values before production traffic.
+
+### 2026-11-23 — Value-free config manifest added
+
+- **Status:** local inventory tooling only. No credential values read into output, no push, deploy, provision or data change. New changes are uncommitted.
+- **Added/updated files:** `backend-server/scripts/check-tracked-secrets.mjs`, `backend-server/scripts/config-backup-manifest.mjs`, `backend-server/scripts/config-backup-manifest.test.mjs`, `backend-server/package.json`, `docs/migration/BACKUP_AND_RECOVERY.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-config-manifest.md`.
+- **Verification performed:** `test:config-manifest` 3/3 passed; `config:manifest` produced a 30-file tracked-config manifest with hashes only. No production access.
+- **Issues:** not a config backup; ignored secret files and external config remain owner-managed.
+- **Decisions:** none; implements backup procedure step 5 preparation under DCR-5 authorization.
+- **Dependencies:** owner-managed protected store for actual config values before recovery is valid.
+- **Risks:** a hash-only manifest could be mistaken for a backup; documentation states the opposite.
+- **Next task:** owner creates and verifies the actual protected configuration backup before any destructive migration step.
+
+### 2026-11-23 — Combined backup rehearsal runner added
+
+- **Status:** local read-only snapshot input plus local artifact writes only. No export, provision, deploy, migration or data change. New changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/api/src/migration/backupRehearsal.ts`, `backend-server/apps/api/src/migration/backupRehearsal.test.ts`, `backend-server/apps/api/src/scripts/backup-rehearse.ts`, `backend-server/apps/api/package.json`, `docs/migration/BACKUP_AND_RECOVERY.md`, `docs/migration/data-migration-tooling.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-backup-rehearsal-runner.md`.
+- **Verification performed:** targeted tests 13/13 passed; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smoke on a generated snapshot printed PASS for integrity, dry-run rehearsal and combined result. No production access.
+- **Issues:** no real backup or restore; combined PASS is not a restore verification.
+- **Decisions:** none; implements backup step 7 plus dry-run rehearsal under DCR-5 authorization.
+- **Dependencies:** owner-approved snapshot copy before real use; restore rehearsal still requires an isolated target and real data.
+- **Risks:** the combined PASS could be mistaken for a successful restore; wording and docs explicitly deny that.
+- **Next task:** owner approves a real export target, then run verification and rehearsal on that copy before any destructive step.
+
+### 2026-11-23 — OpenAPI structural guard added to CI
+
+- **Status:** local guard script and CI steps only. No push, CI run, deploy, provision or data change. New changes are uncommitted.
+- **Added/updated files:** `backend-server/scripts/check-openapi.mjs`, `backend-server/scripts/check-openapi.test.mjs`, `backend-server/package.json`, `.github/workflows/ci.yml`, `docs/infrastructure/admin-deployment-audit.md`, `docs/migration/implementation-plan.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-openapi-guard.md`.
+- **Verification performed:** `test:openapi` 6/6 passed; `openapi:check` passed against the real spec (90 paths, 16 schemas, 23 local refs). No network or production access.
+- **Issues:** structural guard only; it does not replace full OpenAPI schema validation with `swagger-cli`.
+- **Decisions:** none; closes a Phase 0 CI observation under DCR-5 local-code-and-tests authorization.
+- **Dependencies:** owner approval before commit/push if the CI steps should become active.
+- **Risks:** regex-based YAML inspection can miss exotic syntax; documented as a guard, not a validator. CI YAML was not parser-validated locally.
+- **Next task:** decide whether to add full `swagger-cli` validation to CI with a pinned dependency.
+
+### 2026-11-23 — Admin view permission helper extracted and tested
+
+- **Status:** local admin UI hardening and tests. No push, CI run, deploy, provision or data change. New changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/admin/src/navigationPermissions.ts`, `backend-server/apps/admin/src/navigationPermissions.test.ts`, `backend-server/apps/admin/src/App.tsx`, `docs/infrastructure/admin-deployment-audit.md`, `docs/migration/DEPENDENCY_AUDIT.md`, `docs/migration/feature-matrix.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-admin-ci-gate.md`, `docs/handoffs/2026-11-23-admin-router-auth-guards.md`.
+- **Verification performed:** admin tests 9/9, typecheck and Vite build passed; `dist/` artifacts restored to HEAD. No production access.
+- **Issues:** pure permission decisions are tested; component rendering/runtime UI QA remains pending.
+- **Decisions:** none; preserves server authority and existing permitted views while closing a UI bypass gap.
+- **Dependencies:** owner approval before commit/push if these UI changes should become active.
+- **Risks:** view guard uses the same permission map as sidebar; a missing map entry would leave a view unrestricted rather than deny-by-default. Tests assert the map is non-empty but cannot prove every future view is mapped.
+- **Next task:** runtime admin UI QA across roles before treating view-level permissions as verified.
+
+### 2026-11-23 — Admin API client tests added to CI gate
+
+- **Status:** local admin test scaffolding and CI step only. No push, CI run, deploy, provision or data change. New changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/admin/src/api.ts`, `backend-server/apps/admin/src/api.test.ts`, `backend-server/apps/admin/package.json`, `.github/workflows/ci.yml`, `docs/infrastructure/admin-deployment-audit.md`, `docs/migration/feature-matrix.md`, `docs/migration/DEPENDENCY_AUDIT.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-admin-ci-gate.md`.
+- **Verification performed:** admin tests 5/5, typecheck and Vite production build passed locally; `dist/` artifacts restored to HEAD. No YAML parser/actionlint available and no CI run triggered.
+- **Issues:** tests cover API-client/formatting behavior only; view-level permission rendering remains untested.
+- **Decisions:** none; closes the admin test-script finding under DCR-5 local-code-and-tests authorization.
+- **Dependencies:** owner approval before commit/push if the CI test step should become active.
+- **Risks:** `tsx` resolves from the hoisted workspace root; a fresh install must preserve that resolution. The CI workflow was not parser-validated locally.
+- **Next task:** add admin view-level permission-rendering tests before treating the admin UI as verified.
+
+### 2026-11-23 — Explicit admin router auth guards added
+
+- **Status:** local server-side security hardening. No permission change, deploy, provision or data change. New changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/api/src/routes/adminAssets.ts`, `adminBadges.ts`, `adminCosmetics.ts`, `adminReactions.ts`, `adminSupport.ts`, `backend-server/apps/api/src/routes/adminRouterGuards.test.ts`, `docs/architecture/backend-source-audit.md`, `docs/cloudflare-migration/phase0-report.md`, `docs/infrastructure/admin-deployment-audit.md`, `docs/migration/private-media-authorization.md`, `docs/migration/feature-matrix.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-admin-router-auth-guards.md`.
+- **Verification performed:** guard tests 5/5, full API suite 395/395, hardening suite 34/34, typecheck passed. No production access.
+- **Issues:** unauthenticated 401 tests plus valid-JWT/guard-layer tests were added later in the day; real route-handler execution under a valid JWT remains untested. The public badge-art router remains intentionally public.
+- **Decisions:** none; preserves effective permissions while removing mount-order dependence.
+- **Dependencies:** owner approval before commit/push if these guards should become active.
+- **Risks:** double auth runs for routers mounted after `adminRouter`; correctness preserved, minor extra JWT/DB lookup per request.
+- **Next task:** add route-handler execution tests under a valid admin JWT before treating admin authorization as fully verified.
+
+### 2026-11-23 — Admin CI typecheck/build gate added
+
+- **Status:** local workflow configuration only. No push, CI run, deploy, provision or data change. New changes are uncommitted.
+- **Added/updated files:** `.github/workflows/ci.yml`, `docs/cloudflare-migration/phase0-report.md`, `docs/infrastructure/admin-deployment-audit.md`, `docs/migration/DEPENDENCY_AUDIT.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-admin-ci-gate.md`.
+- **Verification performed:** local admin typecheck and Vite production build passed; workflow structure inspected manually. No YAML parser/actionlint was available locally and no CI run was triggered.
+- **Issues:** admin still has no test script; this is not a test gate. Strict secret scanning remains blocked on credential rotation.
+- **Decisions:** none; closes a Phase 0 CI observation under DCR-5 local-code-and-tests authorization.
+- **Dependencies:** owner approval before commit/push if the workflow change should become active in GitHub Actions.
+- **Risks:** an untested workflow edit could fail remotely; local commands were run with the same workspace scripts and the YAML was manually checked.
+- **Next task:** owner approves commit/push, then observe the first CI run with the new job before treating the gate as active.
+
+### 2026-11-23 — Snapshot delta diff added (final delta-sync planning aid)
+
+- **Status:** local read-only tooling only. No export, import, provision, deploy, migration or data change. New changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/api/src/migration/snapshot.ts`, `backend-server/apps/api/src/migration/snapshotDiff.ts`, `backend-server/apps/api/src/migration/snapshotDiff.test.ts`, `backend-server/apps/api/src/scripts/snapshot-diff.ts`, `backend-server/apps/api/package.json`, `docs/migration/final-delta-sync-design.md`, `docs/migration/data-migration-tooling.md`, `docs/migration/BACKUP_AND_RECOVERY.md`, `docs/INDEX.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-snapshot-delta-diff.md`.
+- **Verification performed:** targeted tests 16/16 passed; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smoke on two generated snapshots printed added/removed/changed counts and field names only. No production access.
+- **Issues:** this is not final delta sync; watermark export, tombstones/deletion lists, upsert-by-source_id, child-row replacement and delta checkpoints remain open.
+- **Decisions:** none; implements a verification aid under DCR-5 local-code-and-tests authorization.
+- **Dependencies:** two owner-approved snapshots before real use; open delta design decisions.
+- **Risks:** a snapshot diff could be mistaken for an authoritative delta export; documented as a planning aid only.
+- **Next task:** owner resolves the final delta-sync design decisions before any delta exporter/upsert implementation.
+
+### 2026-11-23 — D1 draft schema conflicts refined (local code + tests)
+
+- **Status:** local DDL/transform refinement only. No database, export, import, deploy, provision or data change. New changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/api/src/migration/transform.ts`, `backend-server/apps/api/src/migration/types.ts`, `backend-server/apps/api/src/migration/mappings.ts`, `backend-server/apps/api/src/migration/transform.test.ts`, `backend-server/apps/api/src/migration/mappings-progression.test.ts`, `backend-server/apps/api/src/scripts/generate-d1-schema.ts`, `backend-server/apps/api/migrations/d1/0001_initial.sql`, `backend-server/apps/api/migrations/d1/0001_initial.manifest.json`, `docs/database/d1-schema-warning-triage.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-d1-schema-conflict-refinement.md`.
+- **Verification performed:** full migration suite 163/163 passed; `npm.cmd run typecheck --workspace @yugm/api` passed; `schema:d1` regenerated 146 tables with 0 warnings/import failures; SQL diff limited to three nullable columns, two `REAL` columns/checks and the manifest timestamp.
+- **Issues:** none introduced in tests; schema remains a review draft and owner approval is still required.
+- **Decisions:** resolved draft-level nullability and multiplier typing from source evidence; no product decision and no schema approval.
+- **Dependencies:** owner approval of regenerated DDL, DCR-2 metrics/Workers Paid, backup/restore rehearsal and cutover gates.
+- **Risks:** REAL multipliers could be mistaken for money columns; documented that money remains INTEGER minor units and only two named fields use REAL.
+- **Next task:** owner reviews/refines the regenerated DDL, then approves it as the baseline before rehearsal.
+
+### 2026-11-23 — Private-media authorization audit added (DCR-4 input preparation)
+
+- **Status:** documentation-only source audit. No code, policy, bucket, deploy, migration or data change. No new commit/push authorization.
+- **Added/updated files:** `docs/migration/private-media-authorization.md`, `docs/cloudflare-migration/decision-request.md`, `docs/INDEX.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-private-media-authorization-audit.md`.
+- **Finding:** current non-owner `PRIVATE` access is implemented only for `ownerType=MESSAGE` direct-message participants; `ROOM`, `CLAN` and other owner types are denied. Latent today because managed upload only accepts `AVATAR`/`USER`, but blocking for any private room/clan/category cutover.
+- **Verification performed:** source reads and cross-check of the existing `mediaAccessDecision` unit tests; no runtime verification.
+- **Issues:** participant rules are undefined for room/clan/group scenarios; admin asset-staging auth depends on router mount order already flagged in Phase 0.
+- **Decisions:** none; no room/clan policy was recommended or selected.
+- **Dependencies:** owner definitions for room/clan/message participant rules, block/hide semantics and admin overrides before private category cutover.
+- **Risks:** the latent gap could be mistaken for implemented room/clan privacy if only `MediaObject.ownerType` enums are reviewed.
+- **Next task:** owner supplies DCR-4 scope and private-media rules; then design the adapter in a separately authorized slice.
+
+### 2026-11-23 — Legacy media reference scanner added (DCR-4 input preparation)
+
+- **Status:** local read-only tooling only. No export, provision, policy decision, deploy, migration or data change. New changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/api/src/migration/legacyMediaReferences.ts`, `backend-server/apps/api/src/migration/legacyMediaReferences.test.ts`, `backend-server/apps/api/src/scripts/legacy-media-references.ts`, `backend-server/apps/api/package.json`, `docs/cloudflare-migration/decision-request.md`, `docs/migration/BACKUP_AND_RECOVERY.md`, `docs/INDEX.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-legacy-media-reference-scanner.md`.
+- **Verification performed:** targeted tests 23/23 passed; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smoke on a generated JSONL fixture produced counts and URL digests without echoing raw URLs. No production access.
+- **Issues:** this counts references, not existing binaries. The historical unrecoverable-file finding and media backup requirement remain unchanged. No public/private policy is asserted.
+- **Decisions:** none; implements DCR-4 input preparation under DCR-5 local-code-and-tests authorization.
+- **Dependencies:** owner-approved export or snapshot copy, DCR-4 environment inputs and option selection.
+- **Risks:** a reference count could be mistaken for a recoverable binary census; signed/query-bearing URLs are de-queried before hashing and raw values are intentionally not emitted.
+- **Next task:** owner supplies a media export or snapshot copy; run both `inventory:media` and `inventory:legacy-media`, then cross-check against the unresolved `/uploads` recovery gap before any cutover.
+
+### 2026-11-23 — D1 hard-limit screener added (DCR-2 input preparation)
+
+- **Status:** local read-only tooling only. No metrics collected, no Cloudflare account queried, no deploy, provision, migration or data change. New changes are uncommitted; no commit/push authorization applies to this slice.
+- **Added/updated files:** `backend-server/apps/api/src/migration/d1CapacityGate.ts`, `backend-server/apps/api/src/migration/d1CapacityGate.test.ts`, `backend-server/apps/api/src/scripts/d1-capacity-gate.ts`, `backend-server/apps/api/package.json`, `docs/database/d1-capacity-assessment.md`, `docs/cloudflare-migration/decision-request.md`, `docs/migration/BASELINE_REPORT.md`, `docs/INDEX.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-d1-capacity-screener.md`.
+- **Verification performed:** targeted tests 16/16 passed; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smoke printed `PASS / REVIEW REQUIRED` for a valid fixture and exited 1 with all expected hard-limit failures for an over-limit fixture. No production access.
+- **Issues:** no real metrics exist; five review items remain open by design. Hard-limit PASS must not be reported as DCR-2 acceptance.
+- **Decisions:** none; implements input preparation under DCR-5 local-code-and-tests authorization.
+- **Dependencies:** owner-supplied aggregates, Workers Paid confirmation, query/growth/recovery evidence and schema approval.
+- **Risks:** a hard-limit PASS could be mistaken for full capacity approval; the screener relies on decimal byte units and caller-honest aggregates.
+- **Next task:** owner supplies metrics in the documented input shape, then review the five open items and the schema before any D1 rehearsal or cutover.
 
 ### 2026-11-22 — Realtime parity matrix added (DCR-3 harness, unwired)
 

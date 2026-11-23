@@ -1,7 +1,7 @@
 # ADR-0003 — Credential remediation approach for tracked Worker config
 
 **Date:** 2026-11-22
-**Status:** Accepted. Rotation and source removal are **pending owner action**; only preparation has been performed.
+**Status:** Accepted. Owner confirmed provider-side rotation/revocation on 2026-11-23; tracked-source removal and strict CI were staged locally on 2026-11-23 and remain uncommitted. No Git history rewrite was performed.
 **Decision request:** DCR-1 in [decision-request.md](../cloudflare-migration/decision-request.md).
 **Evidence:** [tracked Worker credentials finding](../infrastructure/tracked-worker-credentials-finding.md).
 
@@ -27,12 +27,19 @@ The owner selected "owner rotates, agent prepares": the owner performs provider-
 - Added report-only guard steps to `.github/workflows/ci.yml`. The strict command exists and was verified to exit 1 locally, but CI remains report-only until the owner confirms rotation.
 - Verified locally (8/8 unit tests pass). The report scans 30 tracked config files and reports exactly the 8 known credential-bearing variables in the tracked local Worker config, by name and line only. No value was printed.
 
-## Still required before the gate becomes blocking
+## Local cleanup staged 2026-11-23
 
-- Owner confirmation that every affected provider credential has been rotated/revoked.
-- Removal of the credential-bearing `vars` from tracked `wrangler.jsonc` and confirmation that `.dev.vars*` / Wrangler secrets are configured per environment.
-- `git check-ignore` verification for local secret files.
-- Confirmation that staging and production use different credentials and that the staging DB isolation assertion remains enforced.
-- Switch the CI step from `secrets:check` to `secrets:check:strict`.
+- Owner confirmed that every affected provider credential was rotated/revoked and moved to ignored `.dev.vars*` / Wrangler secrets with separate staging and production values.
+- Removed all secret-bearing `vars` from tracked `wrangler.jsonc` without printing, copying or storing any value. Ten secret-named keys were removed, including placeholder values.
+- Added root ignore rules for `wrangler.local.jsonc` and `wrangler.*.local.jsonc`; `.dev.vars*` was already ignored. `git check-ignore` verified representative local secret-file paths.
+- Switched the CI guard step from report-only `secrets:check` to blocking `secrets:check:strict`.
+- `npm.cmd run secrets:check:strict` reports zero findings across 30 tracked config files.
+
+## Still required
+
+- Commit and push of these local changes after explicit approval.
+- Observe the first CI run with the strict guard active.
+- Confirm in the owner's secret store that staging and production credentials are distinct and the staging DB isolation assertion remains enforced.
+- Optional follow-up: broader entropy-based scanning such as gitleaks; the current guard targets the known key-name regression class only.
 
 Full entropy-based scanning (for example gitleaks) remains a separate follow-up; the guard targets the known key-name regression class only.

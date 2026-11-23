@@ -4,7 +4,7 @@ import path from "path";
 import fs from "fs";
 import { z } from "zod";
 import { adminOk, pageParams, paginationMeta } from "../modules/admin/http.js";
-import { requirePermission, type AdminAuthRequest } from "../middleware/adminAuth.js";
+import { requireAdminAuth, requirePermission, type AdminAuthRequest } from "../middleware/adminAuth.js";
 import { asyncHandler, HttpError, sendOk } from "../utils/http.js";
 import { RoomReaction } from "../models/RoomReaction.js";
 import { auditLog } from "../services/adminAudit.js";
@@ -13,6 +13,7 @@ import { ensureDefaultRoomReactions, normalizeReactionId, toPublicRoomReaction }
 import { env } from "../config/env.js";
 
 export const adminReactionsRouter = Router();
+adminReactionsRouter.use(requireAdminAuth);
 
 const UPLOAD_DIR = env.YUGM_RUNTIME === "cloudflare" ? "/tmp/yugm-uploads" : path.join(process.cwd(), "uploads");
 

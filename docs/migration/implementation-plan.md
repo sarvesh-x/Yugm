@@ -31,7 +31,7 @@
 - Establish contract harnesses around `backend-server/apps/api/openapi.yaml`, shared schemas, Android API clients and admin API calls.
 - Replace post-`listen()` best-effort index/migration/seed steps with explicit readiness gates so a failed startup step blocks traffic.
 - Mount and test the already implemented payment and Google Play webhook handlers with raw-body verification and idempotency; do not rely on client-submitted verification as sole proof.
-- Add CI gates: typecheck, API tests, OpenAPI validation, admin typecheck, secret scanning, Worker dry-run.
+- Add CI gates: typecheck, API tests, OpenAPI structural guard (added 2026-11-23; full `swagger-cli` validation remains manual), admin typecheck/test/build (added 2026-11-23), secret scanning (report-only), Worker dry-run.
 
 **Tests:** Existing typecheck/API/hardening/OpenAPI/admin checks; Worker dry-run with staging config; binding verification; no production writes.
 

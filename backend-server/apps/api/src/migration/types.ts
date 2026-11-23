@@ -72,6 +72,7 @@ export type QuarantineReason =
   | "INVALID_REFERENCE"
   | "MISSING_REQUIRED"
   | "NON_INTEGER"
+  | "NON_FINITE_NUMBER"
   | "OUT_OF_RANGE"
   | "INVALID_BOOLEAN";
 

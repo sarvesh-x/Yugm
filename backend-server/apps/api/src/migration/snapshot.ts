@@ -62,3 +62,35 @@ export class FileSystemSnapshotStore implements SnapshotSink, SnapshotSource {
 export async function readSnapshotManifest(directory: string): Promise<SnapshotManifest> {
   return JSON.parse(await readFile(path.join(directory, "snapshot-manifest.json"), "utf8")) as SnapshotManifest;
 }
+
+export interface LocatedSnapshotRecord {
+  collection: string;
+  record: SourceRecord;
+}
+
+/** Reads only batch files declared by the manifest, retaining their collection name. */
+export async function readDeclaredSnapshotRecords(
+  directory: string
+): Promise<{ manifest: SnapshotManifest; records: LocatedSnapshotRecord[] }> {
+  const manifest = await readSnapshotManifest(directory);
+  const records: LocatedSnapshotRecord[] = [];
+  for (const collection of manifest.collections) {
+    for (const batch of collection.batches) {
+      const file = snapshotBatchFileName(collection.name, batch.index);
+      const content = await readFile(path.join(directory, file), "utf8");
+      const lines = content.split("\n");
+      for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index];
+        if (!line.trim()) continue;
+        let record: SourceRecord;
+        try {
+          record = JSON.parse(line) as SourceRecord;
+        } catch (error) {
+          throw new Error(`${file} line ${index + 1}: ${error instanceof Error ? error.message : "invalid JSON"}`);
+        }
+        records.push({ collection: collection.name, record });
+      }
+    }
+  }
+  return { manifest, records };
+}

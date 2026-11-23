@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Router, type NextFunction, type Request, type Response } from "express";
 import multer from "multer";
 import { z } from "zod";
-import { requirePermission, type AdminAuthRequest } from "../middleware/adminAuth.js";
+import { requireAdminAuth, requirePermission, type AdminAuthRequest } from "../middleware/adminAuth.js";
 import { Achievement, badgeIcons, badgeMetrics, badgeTiers, honorMetrics } from "../models/Achievement.js";
 import { adminOk } from "../modules/admin/http.js";
 import { auditLog } from "../services/adminAudit.js";
@@ -11,6 +11,9 @@ import { asyncHandler, HttpError } from "../utils/http.js";
 
 export const adminBadgesRouter = Router();
 export const badgeArtRouter = Router();
+// Explicit auth keeps these routes safe regardless of Express mount order.
+// badgeArtRouter is intentionally public asset delivery and is not guarded.
+adminBadgesRouter.use(requireAdminAuth);
 adminBadgesRouter.use("/badges", requirePermission("cosmetics.write"));
 
 const badgeId = z.string().trim().regex(/^[a-z0-9_-]{1,64}$/);

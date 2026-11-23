@@ -38,6 +38,10 @@ Historical evidence: `docs/cloudflare-migration/audit.md` records that existing 
 | Rehearsal CLI | `backend-server/apps/api/src/scripts/rehearse-migration.ts`, npm script `migrate:rehearse` | Local fixture-snapshot dry rehearsal with PASS/exit-0 output |
 | Snapshot-copy verifier | `backend-server/apps/api/src/migration/verifyBackup.ts`, CLI `src/scripts/verify-backup.ts`, npm script `backup:verify` | Read-only check that a copied snapshot matches its manifest: batch presence, record counts, byte counts, per-batch checksums, unexpected batch files, and an optional top-level integrity digest (`--expect-digest`) |
 | Media inventory reporter | `backend-server/apps/api/src/migration/mediaInventory.ts`, CLI `src/scripts/media-inventory.ts`, npm script `inventory:media` | Read-only aggregation of exported MediaObject records into counts/bytes by category, bucket, visibility, owner and status, plus duplicate-key and checksum data-quality findings. Does not enumerate legacy `/uploads` files or verify that binaries exist |
+| Legacy media reference scanner | `backend-server/apps/api/src/migration/legacyMediaReferences.ts`, CLI `src/scripts/legacy-media-references.ts`, npm script `inventory:legacy-media` | Read-only scan of exported records or a copied snapshot for legacy public `/uploads`, private trust/staging, badge-art, inline data URLs and managed upload endpoints. Emits counts, field paths, extensions and de-queried URL digests only; never raw URLs, and does not check binary existence |
+| Snapshot delta diff | `backend-server/apps/api/src/migration/snapshotDiff.ts`, CLI `src/scripts/snapshot-diff.ts`, npm script `snapshot:diff` | Read-only comparison of two copied snapshots: added/removed/changed records, changed top-level field names, duplicate/invalid IDs and watermark ordering. Emits source IDs and content digests only; not a backup restore check or a delta-import implementation |
+| Combined backup rehearsal | `backend-server/apps/api/src/migration/backupRehearsal.ts`, CLI `src/scripts/backup-rehearse.ts`, npm script `backup:rehearse` | Chains `backup:verify` with the existing dry-run importer and writes one artifact set. Skips rehearsal when integrity fails; PASS means copy integrity plus mapping/validation dry run, not a tested restore |
+| Config manifest | `backend-server/scripts/config-backup-manifest.mjs`, npm scripts `config:manifest` / `test:config-manifest` | Value-free inventory of tracked config files with path, byte count and SHA-256 only. It does not capture ignored `.env`/`.dev.vars` values or external provider config and is not a config backup |
 | D1 draft schema | `backend-server/apps/api/migrations/d1/0001_initial.sql` | Review draft, not approved |
 
 These tools were exercised only against generated fixtures during earlier work (138 migration tests and local `migrate:rehearse` smokes). They have **not** been run against a production snapshot, D1 instance or R2 bucket.
@@ -62,6 +66,8 @@ Record the printed integrity digest from the source snapshot, then pass it as `-
 8. Restore into an **isolated** environment and run the validation gates: counts, identities, message counts by conversation, relationships, wallet/ledger reconciliation, purchases, gifts, inventory, badges, achievements and media reference resolution.
 9. Record operator, command, environment, approval, checksums and observed RPO/RTO.
 10. Only after a successful restore rehearsal may the backup be treated as a valid recovery mechanism.
+
+For procedure step 5, `npm run config:manifest -- [--out <report.json>]` records paths, byte counts and hashes for tracked config files without printing values. It is an inventory aid only: ignored `.env`/`.dev.vars` values, GitHub Actions variables and external provider configuration must still be captured by the owner in a protected secret store. The current manifest covers 30 tracked config files.
 
 ## 5. Verification status
 

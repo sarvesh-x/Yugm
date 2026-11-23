@@ -45,6 +45,8 @@ Rules:
 - Re-running the same delta with the same watermark must produce the same input set.
 - If a record is updated twice, the later delta supersedes the earlier one.
 
+**Local validation aid (2026-11-23):** `npm run delta:watermark -- --snapshot <dir> --field <name>` (or `--input <records.jsonl>`) audits a caller-supplied snapshot for candidate-watermark coverage, parseability, unique `(value, _id)` composite keys, input ordering and example gaps. It never reads MongoDB and does not select the watermark; it only shows whether a proposed field can form a deterministic composite cursor. The owner decision on the exact MongoDB watermark field and ordering remains open.
+
 ## Export rules
 
 - Export only records changed after the baseline watermark.
@@ -61,6 +63,8 @@ MongoDB documents may be hard-deleted or soft-deleted. The delta design must sup
 - **Hard delete:** include a tombstone or deletion list in the delta snapshot, then delete the corresponding `source_id` and child rows in D1 under a transaction.
 
 Hard deletes must be explicit and logged. Silent omission is forbidden.
+
+**Local validation aid (2026-11-23):** `npm run delta:deletions -- --before <baseline-dir> --after <later-dir> [--soft-field deletedAt] [--out <report.json>]` compares two copied snapshots and lists source IDs removed between them, plus records marked by the chosen soft-delete field (`deletedAt` by default). It never reads MongoDB or implements tombstones/deletion lists. It supplies sizing and shape evidence for decision 2; it does not decide whether hard deletes should be tombstones or an explicit list.
 
 ## Upsert and child-row replacement
 
@@ -102,14 +106,26 @@ Full source/target count equality is not required for a delta.
 - Do not delete or overwrite the baseline snapshot.
 - Production cutover requires an approved final delta and a successful restore rehearsal.
 
+## Local verification aid added 2026-11-23
+
+A read-only [snapshot diff tool](../../backend-server/apps/api/src/migration/snapshotDiff.ts) now exists at `npm run snapshot:diff -- --before <dir> --after <dir> [--max-examples 20] [--out <report.json>]`. It compares two already-copied, manifest-declared snapshots and reports added/removed/changed records per collection, top-level changed field names, duplicate/invalid source IDs and watermark ordering. It emits source IDs and content digests only, never record values, and reads no database or remote service.
+
+This is a **planning and verification aid**, not final delta sync. It does not implement watermark-based delta export, tombstones/deletion lists, upsert-by-`source_id`, child-row replacement or delta checkpoints. Those remain open items below and are required before cutover. A diff between two full snapshots can help size and review a proposed delta window, but it must not be treated as an authoritative delta export.
+
 ## Open decisions
 
 1. The exact MongoDB watermark field and ordering.
 2. Whether hard deletes are represented by tombstones or an explicit deletion list.
 3. Whether child-row replacement is performed per parent or per delta batch.
+
+**Local validation aid (2026-11-23):** `npm run delta:child-tables -- [--manifest <path>] [--out <report.json>]` reads the generated schema manifest and the shared child-table declaration to list the 26 root collections with 49 normalized child tables. It adds review items for replacement unit, stale child rows and idempotent replay. It does not change the DDL or make the replacement-scope decision. The child-table declaration was moved to `backend-server/apps/api/src/migration/childTables.ts` so the generator and this audit share one source; regenerating the schema produced no SQL change.
 4. Whether delta imports run online while MongoDB remains authoritative.
 5. The maximum acceptable cutover downtime and final delta window.
+
+**Local validation aid (2026-11-23):** `npm run delta:rates -- --before <baseline-dir> --after <later-dir> [--out <report.json>]` uses the two manifest watermarks and the snapshot diff to report average added/removed/changed records per hour by collection. It emits review items for average-vs-peak, online-vs-window and financial peak checks. It does not observe peak load, read MongoDB/D1 or make the downtime decision.
 6. Whether financial deltas require a maintenance window or can run under normal load.
+
+**Local validation aid (2026-11-23):** `npm run delta:finance -- --before <baseline-dir> --after <later-dir> [--out <report.json>]` filters the snapshot diff to the six authoritative money collections (`wallet_transactions`, `diamond_transactions`, `purchases`, `gift_transactions`, `withdrawal_requests`, `subscriptions`) and reports added/removed/changed counts with review items for ledger reconciliation, maintenance-window sizing and idempotent replay. It emits no balances or customer content, reads no database, and does not make the maintenance-window decision.
 
 ## Relation to other gates
 

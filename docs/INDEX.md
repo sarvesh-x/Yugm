@@ -75,6 +75,9 @@ The production audit documents explain their baselines and verification limits. 
 - [Admin, infrastructure and CI/CD audit](infrastructure/admin-deployment-audit.md)
 - [Environments and operations plan](infrastructure/environments.md)
 - [D1 capacity and suitability assessment](database/d1-capacity-assessment.md)
+- [D1 hard-limit screener (local, read-only)](../backend-server/apps/api/src/migration/d1CapacityGate.ts)
+- [Legacy media reference scanner (local, read-only)](../backend-server/apps/api/src/migration/legacyMediaReferences.ts)
+- [Snapshot delta diff (local, read-only)](../backend-server/apps/api/src/migration/snapshotDiff.ts)
 - [MongoDB to relational mapping](database/mongo-to-relational-mapping.md)
 - [D1 schema warning triage (proposal)](database/d1-schema-warning-triage.md)
 - [Per-feature migration matrix](migration/feature-matrix.md)
@@ -90,10 +93,11 @@ The production audit documents explain their baselines and verification limits. 
 - [Dependency audit and migration matrix](migration/DEPENDENCY_AUDIT.md)
 - [Baseline report](migration/BASELINE_REPORT.md)
 - [Backup and recovery inventory](migration/BACKUP_AND_RECOVERY.md)
+- [Private-media authorization audit](migration/private-media-authorization.md)
 - [Rollback plan](migration/ROLLBACK_PLAN.md)
 - [Tracked Worker credentials finding](infrastructure/tracked-worker-credentials-finding.md)
 
-Phase 0 audit and planning are documented. DCR-1, DCR-2, DCR-3 and the DCR-5 authorization boundary were answered on 2026-11-22 ([ADR-0001](decisions/0001-d1-and-r2-target.md), [ADR-0002](decisions/0002-staged-hybrid-realtime-protocol.md), [ADR-0003](decisions/0003-credential-remediation-approach.md), [ADR-0004](decisions/0004-local-code-and-tests-authorization.md)); DCR-4 and the detailed inputs remain open. Local code and tests are authorized; commit, push, provision, deploy, credential rotation and data operations are not.
+Phase 0 audit and planning are documented. DCR-1, DCR-2, DCR-3 and the DCR-5 authorization boundary were answered on 2026-11-22 ([ADR-0001](decisions/0001-d1-and-r2-target.md), [ADR-0002](decisions/0002-staged-hybrid-realtime-protocol.md), [ADR-0003](decisions/0003-credential-remediation-approach.md), [ADR-0004](decisions/0004-local-code-and-tests-authorization.md)); DCR-4 and the detailed inputs remain open. Local code and tests are authorized; the 2026-11-22 local-only slices were committed and pushed under separate explicit authorization. Provision, deploy, credential rotation and data operations remain unauthorized without new explicit approval.
 
 ## Progress and follow up
 

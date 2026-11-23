@@ -78,7 +78,7 @@ A functional issue was observed: `GET /api/admin/progression/health` is register
 
 The Worker uses one SQLite-backed Durable Object (`API_SERVICE` / `YugmApi`) with a global ID. It has no D1, R2, queue, KV or Cron binding. Maintenance and PK deadlines run through Durable Object alarms rather than a `scheduled()` handler. See [the Worker prototype audit](worker-prototype-audit.md).
 
-Observability is enabled for staging logs/issues, with traces disabled and query-string redaction disabled. Review query strings for PII before carrying this configuration into production. The production wildcard CORS value must be replaced by an explicit allowlist.
+Observability is enabled for staging logs/issues, with traces disabled and query-string redaction disabled. The production config has no observability block and still uses wildcard CORS. A report-only `npm run worker-config:check` guard added 2026-11-23 prints these finding identifiers only — never config values — and runs in CI without changing deployment config. Query-string redaction and explicit production CORS remain owner decisions.
 
 ## 5. Render and container deployment
 
@@ -103,12 +103,12 @@ Render does not declare `CORS_ORIGIN`/`ADMIN_PANEL_ORIGIN`, `REDIS_URL`, R2 vari
 
 | Workflow | Trigger and behavior |
 |---|---|
-| `.github/workflows/ci.yml` | Push/PR to `master`. Runs backend `npm ci`, typecheck, unit tests with dummy `MONGODB_URI`, hardening, Worker staging dry-run, Worker realtime test against isolated MongoDB, and Android lint/unit tests/assemble. Admin is typechecked via workspace `typecheck` but not built or tested in PR CI. |
+| `.github/workflows/ci.yml` | Push/PR to `master`. Runs backend `npm ci`, typecheck, unit tests with dummy `MONGODB_URI`, hardening, Worker staging dry-run, Worker realtime test against isolated MongoDB, and Android lint/unit tests/assemble. A value-free credential guard reports tracked credential-bearing config values. As of 2026-11-23 the admin app is also explicitly typechecked, tested (9 tests: API client, formatting and view-permission helpers) and built in PR CI; runtime component rendering QA remains pending. |
 | `.github/workflows/cloudflare-staging.yml` | Push to `master` in the `cloudflare-staging` environment. Runs typecheck/unit/hardening/realtime, builds admin with staging API URL and root base path, deploys the Worker, then gates on `/ready` asserting `ok`, DB readiness, `YugmStaging` name, storage readiness and image processor configuration before deploying Pages admin and checking it. |
 | `.github/workflows/cloudflare-pages.yml` | Manual `workflow_dispatch` with staging/production target and explicit production validation checkbox. Gates on `CLOUDFLARE_PAGES_READY`, all Cloudflare vars, HTTPS admin API URL ending `/api/admin`, rejection of `.onrender.com` and rejection of embedded credentials. Deploys only the Pages admin. |
 | `.github/workflows/android-release.yml` | Tag-triggered signed APK using keystore secrets. Builds against staging Worker URLs. Release lint is disabled in Gradle. |
 
-The staging deploy gate is useful evidence but is not a full migration acceptance gate. Add secret scanning, admin build/tests, OpenAPI validation and migration-specific checks before production work.
+The staging deploy gate is useful evidence but is not a full migration acceptance gate. An admin typecheck/build CI gate and a report-only credential guard were added on 2026-11-23. A dependency-free OpenAPI structural guard (required paths, local refs, duplicate keys, embedded credentials) was added to CI on 2026-11-23. Strict secret scanning (after credential rotation), runtime admin UI permission QA, full `swagger-cli` validation in CI and migration-specific checks remain open before production work.
 
 ## 7. Deployed versus source-only state
 
@@ -124,10 +124,10 @@ Per source configuration and dated docs:
 ## 8. Migration implications
 
 1. Remove and rotate the tracked credentials before any further Cloudflare work.
-2. Make admin auth order-independent by applying explicit guards to each admin router.
+2. Admin auth explicit guards were added to `adminAssets`, `adminBadges`, `adminCosmetics`, `adminReactions` and `adminSupport` on 2026-11-23, with 5 unauthenticated regression tests plus 2 valid-JWT/guard-layer tests. Real route-handler execution under a valid JWT remains untested.
 3. Fix or remove the dead `progression/health` route.
-4. Add admin build/test and secret-scanning CI gates.
+4. Admin typecheck/test/build CI gate added 2026-11-23; runtime UI permission QA and strict secret-scanning gating remain to be added after credential rotation.
 5. Preserve the existing admin component patterns when adding asset/media tooling.
-6. Use explicit per-environment CORS allowlists and redact query strings in production observability.
+6. Use explicit per-environment CORS allowlists and redact query strings in production observability; the new report-only guard tracks these findings until the owner changes config.
 7. Reconcile the Google Play package-name difference before entitlement cutover.
 8. Keep the production Worker guard until migration acceptance checks actually pass.
