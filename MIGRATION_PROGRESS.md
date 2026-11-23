@@ -23,6 +23,17 @@ This is the persistent, single-source tracker for the MongoDB/Render to Cloudfla
 
 ## Work log
 
+### 2026-11-23 — Legacy compatibility adapter added
+
+- **Status:** local pure harness only. No binding, deploy, runtime wiring or data change. Changes are uncommitted; commit/push needs new explicit authorization.
+- **Added/updated files:** `backend-server/packages/shared/src/legacyRealtimeAdapter.ts`, `backend-server/packages/shared/src/legacyRealtimeAdapter.test.ts`, `backend-server/packages/shared/src/index.ts`, `docs/decisions/0002-staged-hybrid-realtime-protocol.md`, `docs/migration/realtime-plan.md`, `docs/INDEX.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-legacy-compatibility-adapter.md`.
+- **Verification performed:** shared tests 25/25; shared and Worker typechecks. No production access.
+- **Issues:** no authoritative publish path or GA date yet; classification defaults to `unknown` for unclassified events.
+- **Decisions:** none; implements DCR-3 Option C dual-path support locally.
+- **Dependencies:** owner-supplied native GA date and explicit authorization before wiring or committing.
+- **Risks:** a legacy socket ack is never proof of commit; the adapter enforces this, but a wired implementation must supply the authoritative eventId.
+- **Next task:** record the GA date, then wire authoritative publication and run the parity matrix against both real paths.
+
 ### 2026-11-23 — Native command/ack flow added
 
 - **Status:** local harness and typechecked skeleton only. No binding, deploy, runtime wiring or data change. Changes are uncommitted.

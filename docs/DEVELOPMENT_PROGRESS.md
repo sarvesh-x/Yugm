@@ -1,5 +1,12 @@
 # Development progress
 
+## 2026-11-23 -- Legacy compatibility adapter added
+
+- **Scope:** added the remaining ungated DCR-3 local slice — a pure legacy Socket.IO compatibility translation surface for the 90-day dual-path window. No runtime wiring, commit or production access.
+- **Changes:** `backend-server/packages/shared/src/legacyRealtimeAdapter.ts` maps validated legacy routing to native scopes, converts envelopes to legacy emit frames with protocol internals stripped, converts legacy socket acks to native acks that require an authoritative eventId before claiming commit, derives the 90-day cutoff from an owner-supplied GA date, and reports inventory coverage. Event classification is conservative (`unknown` by default). Exported from `@yugm/shared` with 6 tests.
+- **Verification (run):** shared tests 25/25 passed; shared and Worker typechecks passed. No binding, deploy, credential or production data access.
+- **State/remaining:** still a harness. The GA date, authoritative event publication, real dual-path parity run and client migration remain separate gated work. Changes are uncommitted; commit/push requires new explicit authorization.
+
 ## 2026-11-23 -- Native command/ack flow added
 
 - **Scope:** added command-frame parsing and authoritative ack validation to DCR-3 local harnesses; no runtime wiring or claimed commit.

@@ -90,6 +90,7 @@ The production audit documents explain their baselines and verification limits. 
 - [Realtime parity matrix (local, unwired)](../backend-server/packages/shared/src/realtimeParity.ts)
 - [Native server transport (local, unwired)](../backend-server/packages/shared/src/nativeRealtimeServer.ts)
 - [Native Durable Object skeleton (local, unwired)](../backend-server/apps/cloudflare-worker/src/nativeRealtimeDo.ts)
+- [Legacy Socket.IO compatibility adapter (local, unwired)](../backend-server/packages/shared/src/legacyRealtimeAdapter.ts)
 - [Repository-specific implementation plan](migration/implementation-plan.md)
 - [Migration test plan](testing/migration-test-plan.md)
 - [Directive-to-plan reconciliation](migration/DIRECTIVE_RECONCILIATION.md)
