@@ -23,6 +23,17 @@ This is the persistent, single-source tracker for the MongoDB/Render to Cloudfla
 
 ## Work log
 
+### 2026-11-23 — Snapshot metrics derivation helper added
+
+- **Status:** local read-only input-preparation helper. No database/network access, no fabricated values, no deploy or data change. Changes are uncommitted; commit/push needs new explicit authorization.
+- **Added/updated files:** `backend-server/apps/api/src/migration/metricsFromSnapshot.ts`, `backend-server/apps/api/src/migration/metricsFromSnapshot.test.ts`, `backend-server/apps/api/src/scripts/metrics-from-snapshot.ts`, `backend-server/apps/api/package.json`, `docs/migration/DCR2_READINESS_RUNBOOK.md`, `docs/database/d1-capacity-assessment.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-snapshot-metrics-helper.md`.
+- **Verification performed:** new tests 5/5; full API suite 459/459; API typecheck; strict credential guard zero findings; CLI smoke on synthetic snapshot. No production access.
+- **Issues:** derives 5 of 16 fields; index bytes, growth, plan and monitoring values still require owner sources. Binary stripping is opt-in to avoid misclassifying legitimate text.
+- **Decisions:** none; DCR-2 evidence preparation only.
+- **Dependencies:** owner supplies a real snapshot export and installs the CLI output as the partial metrics file before filling the remaining fields.
+- **Risks:** derived bytes include export newline separators (reconciled with the manifest); estimates must never be presented as measured monitoring values.
+- **Next task:** owner runs `metrics:from-snapshot` on a real snapshot, fills the 11 remaining fields, then runs runbook steps 3-10.
+
 ### 2026-11-23 — Legacy compatibility adapter added
 
 - **Status:** local pure harness only. No binding, deploy, runtime wiring or data change. Changes are uncommitted; commit/push needs new explicit authorization.

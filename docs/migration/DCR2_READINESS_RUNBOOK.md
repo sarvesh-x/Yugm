@@ -36,6 +36,8 @@ All commands run from `backend-server/apps/api` unless noted.
 
 Detailed input shapes and limits are in [the D1 capacity assessment](../database/d1-capacity-assessment.md).
 
+A read-only helper can fill the fields an exported snapshot can honestly provide: `npm run metrics:from-snapshot -- --snapshot <dir> [--strip "<collection>.<field>" ...] [--detect-binary-like] [--metrics-out <metrics.json>]`. It connects to nothing, derives `snapshotId`/`sourceEnvironment`/`collectedAt`/`relationalBytes`/`largestRowBytes`, reports binary-looking fields for review (stripping only explicit globs or an opt-in detector), and leaves the other 11 fields null with a provenance reason. It is input preparation, not evidence: the owner still supplies Workers Paid, index bytes, growth, query and monitoring values.
+
 ## 3. Owner-supplied inputs
 
 ### Metrics file

@@ -1,5 +1,12 @@
 # Development progress
 
+## 2026-11-23 -- Snapshot metrics derivation helper added
+
+- **Scope:** added a read-only helper to fill only the DCR-2 metric fields an exported snapshot can honestly provide. No invented monitoring/plan values, no database or network access.
+- **Changes:** `backend-server/apps/api/src/migration/metricsFromSnapshot.ts` derives `snapshotId`, `sourceEnvironment`, `collectedAt`, `relationalBytes` and `largestRowBytes`, reconciles recomputed bytes against the manifest, reports base64/byte-array candidates, and strips them only on an explicit glob or opt-in detector. Added a `metrics:from-snapshot` CLI (`--snapshot`, `--strip`, `--detect-binary-like`, `--metrics-out`, `--out`) and 5 tests. All 11 other fields remain null with a provenance reason.
+- **Verification (run):** new tests 5/5; full API suite 459/459; API typecheck passed; strict credential guard zero findings; CLI smoke on a synthetic snapshot derived 5 fields and left 11 null.
+- **State/remaining:** input preparation only, not evidence or acceptance. Owner still supplies Workers Paid, index bytes, growth projection, query observations and monitoring values. Changes are uncommitted; commit/push needs new explicit authorization.
+
 ## 2026-11-23 -- Legacy compatibility adapter added
 
 - **Scope:** added the remaining ungated DCR-3 local slice — a pure legacy Socket.IO compatibility translation surface for the 90-day dual-path window. No runtime wiring, commit or production access.
