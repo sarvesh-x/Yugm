@@ -23,6 +23,17 @@ This is the persistent, single-source tracker for the MongoDB/Render to Cloudfla
 
 ## Work log
 
+### 2026-11-23 — Read-only snapshot export CLI added
+
+- **Status:** local read-only export tooling. No MongoDB connection, export, deploy or data change made by the assistant. Changes are uncommitted; commit/push needs new explicit authorization.
+- **Added/updated files:** `backend-server/apps/api/src/migration/nativeCollectionReader.ts`, `backend-server/apps/api/src/migration/nativeCollectionReader.test.ts`, `backend-server/apps/api/src/scripts/export-snapshot.ts`, `backend-server/apps/api/package.json`, `docs/migration/DCR2_READINESS_RUNBOOK.md`, `docs/migration/data-migration-tooling.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-snapshot-export-cli.md`.
+- **Verification performed:** new tests 3/3; full API suite 462/462; API typecheck; strict credential guard zero findings; CLI guard paths reject before connecting. No database access.
+- **Issues:** CLI has not been executed against a real MongoDB source; string-ID collections are defaulted from schema inspection and remain overridable.
+- **Decisions:** none; owner authorized building the CLI only, not running it against production.
+- **Dependencies:** owner-provided env URI to an isolated/staging database; explicit approval before any production read.
+- **Risks:** a full export can be large; `--collections` allows a bounded subset. Credentials remain in env and are never printed or stored by the tool.
+- **Next task:** owner runs `snapshot:export` on isolated staging, then `metrics:from-snapshot` on the result and completes the 11 remaining metric fields.
+
 ### 2026-11-23 — Snapshot metrics derivation helper added
 
 - **Status:** local read-only input-preparation helper. No database/network access, no fabricated values, no deploy or data change. Changes are uncommitted; commit/push needs new explicit authorization.

@@ -29,6 +29,7 @@
     "capacity:recovery": "tsx src/scripts/dcr2-recovery-evidence.ts",
     "capacity:status": "tsx src/scripts/dcr2-readiness.ts",
     "metrics:from-snapshot": "tsx src/scripts/metrics-from-snapshot.ts",
+    "snapshot:export": "tsx src/scripts/export-snapshot.ts",
     "inventory:legacy-media": "tsx src/scripts/legacy-media-references.ts",
     "snapshot:diff": "tsx src/scripts/snapshot-diff.ts",
     "delta:watermark": "tsx src/scripts/watermark-audit.ts",

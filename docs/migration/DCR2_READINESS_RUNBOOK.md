@@ -38,6 +38,8 @@ Detailed input shapes and limits are in [the D1 capacity assessment](../database
 
 A read-only helper can fill the fields an exported snapshot can honestly provide: `npm run metrics:from-snapshot -- --snapshot <dir> [--strip "<collection>.<field>" ...] [--detect-binary-like] [--metrics-out <metrics.json>]`. It connects to nothing, derives `snapshotId`/`sourceEnvironment`/`collectedAt`/`relationalBytes`/`largestRowBytes`, reports binary-looking fields for review (stripping only explicit globs or an opt-in detector), and leaves the other 11 fields null with a provenance reason. It is input preparation, not evidence: the owner still supplies Workers Paid, index bytes, growth, query and monitoring values.
 
+If no snapshot exists, create one first from an isolated/staging MongoDB source: `npm run snapshot:export -- --out <dir> --confirm-isolated-export <label> --collections <c1,c2,...>` (or `--all-reviewed`). The export CLI is read-only, requires the confirmation label, refuses unreviewed collections and existing manifests, never prints the MongoDB URI, and emits only aggregate counts/bytes. Do not run it against production without separate approval.
+
 ## 3. Owner-supplied inputs
 
 ### Metrics file

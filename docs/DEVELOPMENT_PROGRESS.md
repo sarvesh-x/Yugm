@@ -1,5 +1,12 @@
 # Development progress
 
+## 2026-11-23 -- Read-only snapshot export CLI added
+
+- **Scope:** added a read-only export CLI so a snapshot can be produced from an isolated MongoDB source when none exists. No connection was made or data read by the assistant.
+- **Changes:** `backend-server/apps/api/src/migration/nativeCollectionReader.ts` implements keyset-paginated reads over an injected native collection (ObjectId and string `_id` support). `backend-server/apps/api/src/scripts/export-snapshot.ts` wires `connectDatabase()` to `exportCollection`/`writeSnapshotManifest`, requires `--confirm-isolated-export`, restricts collections to reviewed `MAPPINGS` keys, refuses an existing manifest, and prints only aggregate counts/bytes with no URI. Added the `snapshot:export` npm script and 3 reader tests.
+- **Verification (run):** new tests 3/3; full API suite 462/462; API typecheck passed; strict credential guard zero findings; CLI guard paths verified to reject before connecting (missing args, missing collections, unreviewed collection).
+- **State/remaining:** the CLI has not been run against any database. Owner must run it against isolated staging or a restored backup (production needs separate approval), then feed the resulting snapshot to `metrics:from-snapshot`. Changes are uncommitted; commit/push needs new explicit authorization.
+
 ## 2026-11-23 -- Snapshot metrics derivation helper added
 
 - **Scope:** added a read-only helper to fill only the DCR-2 metric fields an exported snapshot can honestly provide. No invented monitoring/plan values, no database or network access.
