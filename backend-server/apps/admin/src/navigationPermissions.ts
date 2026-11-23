@@ -16,6 +16,7 @@ export type ViewKey =
   | "gifts"
   | "cosmetics"
   | "assets"
+  | "media"
   | "badges"
   | "reactions"
   | "notifications"
@@ -37,6 +38,7 @@ export const VIEW_PERMISSIONS: Partial<Record<ViewKey, string>> = {
   creatorKyc: "creator_kyc.read",
   payoutReviews: "payout_review.read",
   assets: "cosmetics.write",
+  media: "cosmetics.read",
   badges: "cosmetics.write",
   reactions: "cosmetics.write",
   campaigns: "notifications.send",

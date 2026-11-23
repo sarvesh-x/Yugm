@@ -88,6 +88,8 @@ The production audit documents explain their baselines and verification limits. 
 - [Realtime event inventory](migration/realtime-event-inventory.md)
 - [Native realtime protocol contract (local, unwired)](../backend-server/packages/shared/src/realtimeProtocol.ts)
 - [Realtime parity matrix (local, unwired)](../backend-server/packages/shared/src/realtimeParity.ts)
+- [Native server transport (local, unwired)](../backend-server/packages/shared/src/nativeRealtimeServer.ts)
+- [Native Durable Object skeleton (local, unwired)](../backend-server/apps/cloudflare-worker/src/nativeRealtimeDo.ts)
 - [Repository-specific implementation plan](migration/implementation-plan.md)
 - [Migration test plan](testing/migration-test-plan.md)
 - [Directive-to-plan reconciliation](migration/DIRECTIVE_RECONCILIATION.md)

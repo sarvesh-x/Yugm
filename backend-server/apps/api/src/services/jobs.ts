@@ -19,6 +19,7 @@ import { ChatMessage } from "../models/ChatMessage.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
 import { RoomInvite } from "../models/RoomInvite.js";
 import { endRoom } from "./roomLifecycle.js";
+import { sweepExpiredUploadSessions } from "./media.js";
 
 type PushPayload = {
   userId: string;
@@ -156,6 +157,15 @@ export async function runMaintenanceTasks() {
     if (expiredStories.modifiedCount > 0) results.push(`Expired ${expiredStories.modifiedCount} stories`);
   } catch (error) {
     results.push(`Story expiry failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  try {
+    const swept = await sweepExpiredUploadSessions();
+    if (swept.swept > 0) {
+      results.push(`Swept ${swept.swept} expired upload sessions and released ${swept.releasedBytes} reserved bytes`);
+    }
+  } catch (error) {
+    results.push(`Upload session sweep failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   try {

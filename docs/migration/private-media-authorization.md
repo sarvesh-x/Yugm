@@ -1,7 +1,7 @@
 # Private-media authorization audit
 
 **Date:** 2026-11-23
-**Status:** Source-backed audit plus owner-decided target policy. The runtime behavior described below is current code; the target policy was recorded 2026-11-23 in [ADR-0005](../decisions/0005-r2-media-cutover.md) and encoded in an unwired local harness. No runtime authorization, credential or production data was changed.
+**Status:** Source-backed audit plus implemented target policy. Sections 1–4 describe the original behavior; section 5 records the owner decision and the runtime implementation completed 2026-11-23 in [ADR-0005](../decisions/0005-r2-media-cutover.md). No credential or production data was changed.
 
 ## 1. Managed media registry (`MediaObject`)
 
@@ -66,4 +66,4 @@ The asset-staging route historically relied on mount order, but `adminAssetsRout
 4. Buckets keep the five existing names; domains/CORS use explicit per-environment allowlists, with the production origin still to be supplied.
 5. The agent stages local admin tooling and value-free config guards; provider credentials remain owner-controlled.
 
-The target policy is encoded in `backend-server/apps/api/src/migration/mediaAccessPolicy.ts` as an unwired harness with 6 tests. It is not imported by `services/media.ts`; runtime implementation is a separate Phase 4 slice. Legacy `/uploads` mapping and an owner-approved media export remain open.
+The pure policy lives in `backend-server/apps/api/src/services/mediaAccessPolicy.ts` and is re-exported from the migration path. `services/media.ts` resolves room host/admin lists, active `RoomParticipant` records, clan owner/roles/members and message sender/receiver state, then applies the policy before issuing a short-lived signed URL. Block/hide checks override grants. Integration tests cover message hidden/block cases plus room and clan owner, admin, accepted-participant and outsider access. Legacy `/uploads` mapping and an owner-approved media export remain open.

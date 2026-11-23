@@ -1,5 +1,61 @@
 # Development progress
 
+## 2026-11-23 -- Native command/ack flow added
+
+- **Scope:** added command-frame parsing and authoritative ack validation to DCR-3 local harnesses; no runtime wiring or claimed commit.
+- **Changes:** `nativeCommandSchema` added to the shared protocol; `NativeRealtimeRoom.handleFrame()` is now async, routes commands through an optional handler and validates the returned `NativeCommandAck`. The unwired DO skeleton parses commands and exposes a default-rejecting `authorizeCommand()` override point.
+- **Verification (run):** shared tests 19/19 passed; shared and Worker typechecks passed. No binding, deploy, credential or production data access.
+- **State/remaining:** a configured handler must still perform the authoritative write before returning `committed: true`. Compatibility adapter, client migration and dual-path parity remain separate. Changes are uncommitted.
+
+## 2026-11-23 -- Native Durable Object skeleton added
+
+- **Scope:** added a hibernation-compatible native DO skeleton for DCR-3 without binding or runtime wiring. No production traffic can reach it.
+- **Changes:** `backend-server/apps/cloudflare-worker/src/nativeRealtimeDo.ts` stores connection identity/scope in WebSocket attachments and keeps cursors, seen IDs, sequences and bounded history in Durable Object storage. It handles WebSocket upgrade, matching-scope resume frames and typed envelopes. Added to Worker typecheck include only; not exported from `index.ts` or Wrangler configs.
+- **Verification (run):** `npm.cmd run typecheck --workspace @yugm/cloudflare-worker` passed. No DO binding, Wrangler deploy, live WebSocket, credential or production data access.
+- **State/remaining:** typechecked skeleton only; authentication, authoritative publish, compatibility adapter, client migration and dual-path parity remain separate gated work. Changes are uncommitted.
+
+## 2026-11-23 -- Native realtime server transport foundation added
+
+- **Scope:** added a pure, host-neutral native protocol transport for DCR-3 without wiring a Durable Object, Android client or production path.
+- **Changes:** `backend-server/packages/shared/src/nativeRealtimeServer.ts` provides per-scope sequence assignment, connection scope isolation, receiver dedupe, bounded history and resume replay using the v1 schemas; exported from `@yugm/shared` with 5 tests.
+- **Verification (run):** shared tests 17/17 passed; shared typecheck passed. No worker runtime, binding, credential, deploy or production data access.
+- **State/remaining:** still a harness. A Durable Object adapter, authentication, authoritative event publication, client migration and dual-path parity run remain separate gated work. Changes are uncommitted.
+
+## 2026-11-23 -- Read-only media quota reconciliation added
+
+- **Scope:** extended staged admin media tooling with a read-only report comparing quota counters against live staging reservations. No quota was mutated.
+- **Changes:** added `buildQuotaReconciliation()` and `reconcileMediaQuotas()` in `services/adminMedia.ts`, a `GET /api/admin/media/quota-reconciliation` endpoint, a Media registry UI section, and deterministic tests for OK/over/under/missing-counter drift.
+- **Verification (run):** targeted API tests 11/11 passed; root typecheck passed; admin tests 9/9, typecheck and production build passed; tracked `dist/` restored. No database outside tests, provider, credential or production data access.
+- **State/remaining:** report-only. Stale sessions are counted, not swept by this endpoint; the maintenance sweeper remains the local remediation path. Changes are uncommitted.
+
+## 2026-11-23 -- Android profile upload progress/cancel wired
+
+- **Scope:** closed the DCR-4 client gap where `ProfileDetailScreen` ignored managed upload progress and could not cancel. Only the upload-related section was changed; unrelated working-tree edits in profile screens were preserved.
+- **Changes:** `ProfileViewModel.cancelOwnAvatarUpload()` now sets the cancel flag and cancels the job even before a session ID exists, and `EditProfilePage` receives ViewModel-owned progress/busy state plus a Cancel upload action with a progress indicator and percentage.
+- **Verification (run):** Android Studio JBR `:feature:profile:compileDebugKotlin` → BUILD SUCCESSFUL (only pre-existing deprecation warnings). No Gradle full build, device QA, client release, provider config or production data access.
+- **State/remaining:** compile-verified only; device/emulator QA, live two-client media validation and R2 provisioning remain gated. Changes are uncommitted.
+
+## 2026-11-23 -- Private-media policy applied at runtime boundary
+
+- **Scope:** implemented the DCR-4 accepted private-media rules in the existing download authorization path without provider, deploy or production data changes.
+- **Changes:** moved the pure policy to `services/mediaAccessPolicy.ts` and re-exported it from the migration path; `services/media.ts` now resolves room host/admin/active participant, clan owner/roles/member and message sender/receiver facts, then applies `decideMediaAccess()` before signing a URL. Block/hide checks override grants. Added integration coverage for room and clan owner, admin, accepted participant and outsider cases.
+- **Verification (run):** targeted media, policy and integration tests 21/21 passed; API typecheck passed. No R2 provider, credential, Cloudflare account or production data access.
+- **State/remaining:** short-lived signed URLs still require authoritative resource state at read time; no R2 provisioning, media category cutover or Android client change was made. Changes are uncommitted.
+
+## 2026-11-23 -- Expired upload-session quota sweeper added
+
+- **Scope:** closed the DCR-4 failed-upload quota leak locally without provider, deploy or production data access.
+- **Changes:** added bounded `sweepExpiredUploadSessions()` in `services/media.ts`; it atomically claims expired PENDING/PROCESSING sessions, releases held quota once and best-effort removes staging objects. `services/jobs.ts` invokes it from local maintenance. Added an integration test proving single release plus no-op replay.
+- **Verification (run):** targeted media integration/unit tests 14/14 passed; API typecheck passed. No database outside the in-memory test server, R2 provider, credential or production data access.
+- **State/remaining:** local maintenance only; no Cloudflare Cron provisioning or production job deployment. Android progress/cancel wiring and runtime private-media policy remain separate slices. Changes are uncommitted.
+
+## 2026-11-23 -- Read-only admin media tooling staged
+
+- **Scope:** staged DCR-4 admin registry/quota visibility without media mutation, provider config or production data.
+- **Changes:** added `routes/adminMedia.ts` with authenticated permission-gated lists for media objects, upload sessions and quota reservations; added pure query/DTO helpers in `services/adminMedia.ts` with 4 tests; added `apps/admin/src/MediaPage.tsx` and wired `media` into admin navigation with `cosmetics.read`; extended admin router guard tests.
+- **Verification (run):** targeted API tests 16/16 passed; API typecheck passed; admin tests 9/9, admin typecheck and production build passed; tracked `dist/` artifacts restored. No database, bucket, credential or production data access.
+- **State/remaining:** read-only tooling only. Provider provisioning, exact production CORS/domain, admin mutation tooling, Android wiring fixes and category cutover remain separately gated. Changes are uncommitted.
+
 ## 2026-11-23 -- DCR-5 plan accepted and commit authorized
 
 - **Scope:** recorded owner acceptance of the implementation plan and a one-time commit/push authorization for the current local slices. No provision, deploy, credential or data operation authorized.

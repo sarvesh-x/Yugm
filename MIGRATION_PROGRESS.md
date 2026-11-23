@@ -23,6 +23,94 @@ This is the persistent, single-source tracker for the MongoDB/Render to Cloudfla
 
 ## Work log
 
+### 2026-11-23 — Native command/ack flow added
+
+- **Status:** local harness and typechecked skeleton only. No binding, deploy, runtime wiring or data change. Changes are uncommitted.
+- **Added/updated files:** `backend-server/packages/shared/src/realtimeProtocol.ts`, `backend-server/packages/shared/src/nativeRealtimeServer.ts`, `backend-server/packages/shared/src/nativeRealtimeServer.test.ts`, `backend-server/apps/cloudflare-worker/src/nativeRealtimeDo.ts`, `docs/decisions/0002-staged-hybrid-realtime-protocol.md`, `docs/migration/realtime-plan.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-native-command-ack.md`.
+- **Verification performed:** shared tests 19/19; shared and Worker typechecks. No production access.
+- **Issues:** no configured authoritative command handler exists; default rejects commands.
+- **Decisions:** none; implements DCR-3 ack semantics locally.
+- **Dependencies:** a real command handler must commit to authoritative state before returning success.
+- **Risks:** an invalid handler ack could claim commit; schema validation rejects malformed acks but cannot verify the write.
+- **Next task:** wire room:join and other commands through authoritative services, then run dual-path parity.
+
+### 2026-11-23 — Native Durable Object skeleton added
+
+- **Status:** local typechecked skeleton only. No binding, deploy, live WebSocket, credential or data change. Changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/cloudflare-worker/src/nativeRealtimeDo.ts`, `backend-server/apps/cloudflare-worker/tsconfig.json`, `docs/decisions/0002-staged-hybrid-realtime-protocol.md`, `docs/migration/realtime-plan.md`, `docs/INDEX.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-native-do-skeleton.md`.
+- **Verification performed:** Worker typecheck passed. No runtime or production access.
+- **Issues:** not wired; no authentication or authoritative event publication yet.
+- **Decisions:** none; implements hibernation requirement from closed DCR-3 inputs.
+- **Dependencies:** explicit approval before binding, auth wiring and staging validation.
+- **Risks:** typechecked skeleton could be mistaken for a running adapter; docs state it is unwired.
+- **Next task:** add authenticated upgrade, authoritative publish and dual-path parity tests before any realtime cutover.
+
+### 2026-11-23 — Native realtime server transport foundation added
+
+- **Status:** local pure transport harness only. No DO binding, runtime wiring, client change, deploy or data change. Changes are uncommitted.
+- **Added/updated files:** `backend-server/packages/shared/src/nativeRealtimeServer.ts`, `backend-server/packages/shared/src/nativeRealtimeServer.test.ts`, `backend-server/packages/shared/src/index.ts`, `docs/decisions/0002-staged-hybrid-realtime-protocol.md`, `docs/migration/realtime-plan.md`, `docs/INDEX.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-native-server-transport.md`.
+- **Verification performed:** shared tests 17/17 passed; shared typecheck passed. No production access.
+- **Issues:** unwired; no authentication, persistence or authoritative publish path.
+- **Decisions:** none; implements DCR-3 Option C harness work.
+- **Dependencies:** owner DCR-3 runtime implementation approval and a DO adapter before staging validation.
+- **Risks:** harness success could be mistaken for protocol interoperability; docs state it is unwired.
+- **Next task:** build the hibernation-compatible DO adapter using this transport and run the parity matrix against both real paths.
+
+### 2026-11-23 — Read-only media quota reconciliation added
+
+- **Status:** local read-only admin tooling. No quota mutation, provider config, deploy or data change. Changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/api/src/services/adminMedia.ts`, `backend-server/apps/api/src/services/adminMedia.test.ts`, `backend-server/apps/api/src/routes/adminMedia.ts`, `backend-server/apps/admin/src/MediaPage.tsx`, `docs/decisions/0005-r2-media-cutover.md`, `docs/cloudflare-migration/decision-request.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-media-quota-reconciliation.md`.
+- **Verification performed:** targeted API tests 11/11, root typecheck, admin tests 9/9, admin typecheck/build; `dist/` restored. No production access.
+- **Issues:** report-only; stale sessions are not swept from this endpoint.
+- **Decisions:** none; extends staged DCR-4 admin tooling.
+- **Dependencies:** same provisioning and approval gates as the media registry slice.
+- **Risks:** drift report compares counters to active sessions only; committed media bytes are a separate quota component already handled by reservation checks.
+- **Next task:** owner approves provisioning and any future mutation tooling before category cutover.
+
+### 2026-11-23 — Android profile upload progress/cancel wired
+
+- **Status:** local UI/ViewModel change, compile-verified only. No client release, provider config, deploy or data change. Changes are uncommitted.
+- **Added/updated files:** `android-client/feature/profile/src/main/java/com/yugm/app/feature/profile/screens/ProfileDetailScreen.kt`, `android-client/feature/profile/src/main/java/com/yugm/app/feature/profile/viewmodel/ProfileViewModel.kt`, `docs/decisions/0005-r2-media-cutover.md`, `docs/cloudflare-migration/decision-request.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-android-upload-progress-cancel.md`.
+- **Verification performed:** `:feature:profile:compileDebugKotlin` BUILD SUCCESSFUL; only pre-existing deprecation warnings. No runtime/media/production verification.
+- **Issues:** device/emulator visual and live upload QA remain open.
+- **Decisions:** none; implements DCR-4 client wiring locally.
+- **Dependencies:** release build config, exact API/socket hosts and R2 provisioning approvals remain owner-owned.
+- **Risks:** cancellation before session ID cannot call the server cancel endpoint; the local job and cancel flag stop the upload, and the sweeper releases any late reservation.
+- **Next task:** owner approves device QA and staging two-client media validation before category cutover.
+
+### 2026-11-23 — Private-media policy applied at runtime boundary
+
+- **Status:** local server authorization change with tests; no provider, deploy, credential or production data change. Changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/api/src/services/mediaAccessPolicy.ts`, `backend-server/apps/api/src/migration/mediaAccessPolicy.ts`, `backend-server/apps/api/src/services/media.ts`, `backend-server/apps/api/src/services/media.integration.test.ts`, `docs/decisions/0005-r2-media-cutover.md`, `docs/migration/private-media-authorization.md`, `docs/cloudflare-migration/decision-request.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-private-media-runtime-policy.md`.
+- **Verification performed:** targeted tests 21/21 passed; typecheck passed. No production access.
+- **Issues:** room admins include moderator/admin/co-host arrays and active RoomParticipant rows; clan admins include LEADER/CO_LEADER/OFFICER roles. Platform-admin override remains excluded per owner decision.
+- **Decisions:** implements ADR-0005 policy; no new decision.
+- **Dependencies:** category cutover still needs R2 provisioning, exact production CORS/domain and per-category approval.
+- **Risks:** broader access than the previous message-only rule; block/hide overrides and authoritative read-time checks mitigate it.
+- **Next task:** owner approval for per-category cutover, then verify two-client media access on staging.
+
+### 2026-11-23 — Expired upload-session quota sweeper added
+
+- **Status:** local code and tests only. No provider config, deploy, cron provisioning or production data change. Changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/api/src/services/media.ts`, `backend-server/apps/api/src/services/jobs.ts`, `backend-server/apps/api/src/services/media.integration.test.ts`, `docs/decisions/0005-r2-media-cutover.md`, `docs/cloudflare-migration/decision-request.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-upload-quota-sweeper.md`.
+- **Verification performed:** targeted media integration/unit tests 14/14 passed; typecheck passed. No production access.
+- **Issues:** sweep is local-maintenance only; Cloudflare Cron and production job deployment remain gated.
+- **Decisions:** none; implements the DCR-4 quota-leak fix locally.
+- **Dependencies:** explicit approval before provisioning/deploying scheduled maintenance.
+- **Risks:** staging object deletion is best-effort by design; quota release is committed even if object deletion fails.
+- **Next task:** owner approves cron/provisioning and separately authorizes Android progress/cancel wiring.
+
+### 2026-11-23 — Read-only admin media tooling staged
+
+- **Status:** local admin tooling only. No media mutation, provider config, deploy or data change. Changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/api/src/routes/adminMedia.ts`, `backend-server/apps/api/src/services/adminMedia.ts`, `backend-server/apps/api/src/services/adminMedia.test.ts`, `backend-server/apps/api/src/routes/adminRouterGuards.test.ts`, `backend-server/apps/api/src/app.ts`, `backend-server/apps/admin/src/MediaPage.tsx`, `backend-server/apps/admin/src/App.tsx`, `backend-server/apps/admin/src/navigationPermissions.ts`, `docs/decisions/0005-r2-media-cutover.md`, `docs/cloudflare-migration/decision-request.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-admin-media-tooling.md`.
+- **Verification performed:** targeted API tests 16/16, API typecheck, admin tests 9/9, admin typecheck/build; `dist/` restored. No production access.
+- **Issues:** read-only lists only; no quota release sweep or media mutation is implemented.
+- **Decisions:** none; implements the DCR-4 decision that agent stages local admin tooling.
+- **Dependencies:** exact production origin/CORS, provisioning and separate approval for runtime wiring.
+- **Risks:** storage keys are visible to authorized admins; signed URLs and mutation controls are not emitted.
+- **Next task:** owner approves provisioning and separately authorizes mutation/sweeper tooling before category cutover.
+
 ### 2026-11-23 — DCR-5 plan accepted and commit authorized
 
 - **Status:** decision/authorization record; no provision, deploy, credential or data change. Commit/push of current local slices is authorized once by the owner.

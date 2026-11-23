@@ -43,6 +43,9 @@ let mediaModels: {
   User: typeof import("../models/User.js").User;
   DirectMessage: typeof import("../models/DirectMessage.js").DirectMessage;
   Block: typeof import("../models/Block.js").Block;
+  Room: typeof import("../models/Room.js").Room;
+  RoomParticipant: typeof import("../models/RoomParticipant.js").RoomParticipant;
+  Clan: typeof import("../models/Clan.js").Clan;
 };
 let getManagedS3Client: typeof import("./storage.js").getManagedS3Client;
 let png: Buffer;
@@ -60,7 +63,10 @@ before(async () => {
     MediaUploadSession: (await import("../models/MediaUploadSession.js")).MediaUploadSession,
     User: (await import("../models/User.js")).User,
     DirectMessage: (await import("../models/DirectMessage.js")).DirectMessage,
-    Block: (await import("../models/Block.js")).Block
+    Block: (await import("../models/Block.js")).Block,
+    Room: (await import("../models/Room.js")).Room,
+    RoomParticipant: (await import("../models/RoomParticipant.js")).RoomParticipant,
+    Clan: (await import("../models/Clan.js")).Clan
   };
   ({ getManagedS3Client } = await import("./storage.js"));
 
@@ -203,6 +209,31 @@ test("expired sessions are marked EXPIRED and cancelled sessions remove only the
     () => media.completeUploadSession(cancelledSessionId, userId),
     /no longer pending/
   );
+});
+
+test("sweeper releases expired staging sessions exactly once", async () => {
+  const sessionId = await stageAvatar();
+  await mediaModels.MediaUploadSession.updateOne(
+    { _id: sessionId },
+    { $set: { expiresAt: new Date(Date.now() - 1000) } }
+  );
+  const staged = await mediaModels.MediaUploadSession.findById(sessionId).lean();
+  assert.ok(staged);
+  assert.ok(objects.has(objectId("yugm-staging", staged.stagingKey)));
+  assert.equal(await reservedBytes(userId), png.length);
+
+  const first = await media.sweepExpiredUploadSessions(new Date());
+  assert.equal(first.swept, 1);
+  assert.equal(first.releasedBytes, png.length);
+  assert.equal(first.deletedObjects, 1);
+  const swept = await mediaModels.MediaUploadSession.findById(sessionId).lean();
+  assert.equal(swept?.status, "EXPIRED");
+  assert.equal(swept?.quotaReserved, false);
+  assert.equal(await reservedBytes(userId), 0);
+  assert.ok(!objects.has(objectId("yugm-staging", staged.stagingKey)));
+
+  const second = await media.sweepExpiredUploadSessions(new Date());
+  assert.deepEqual(second, { swept: 0, releasedBytes: 0, deletedObjects: 0 });
 });
 
 test("quota checks count committed media before issuing a new staging grant", async () => {
@@ -398,4 +429,92 @@ test("message media access checks participation, hidden state and blocks", async
   );
   await mediaModels.Block.deleteOne({ blockerId: receiver._id, blockedUserId: sender._id });
   assert.match((await media.authorizeMediaDownload(mediaId, String(receiver._id))).downloadUrl!, /X-Amz-Signature=/);
+});
+
+test("room and clan private media allows resource owners, admins and accepted participants", async () => {
+  const stamp = randomUUID().slice(0, 8);
+  const [host, moderator, participant, outsider] = await mediaModels.User.create([
+    { name: "Host", username: `host_${stamp}` },
+    { name: "Moderator", username: `moderator_${stamp}` },
+    { name: "Participant", username: `participant_${stamp}` },
+    { name: "Outsider", username: `outsider_${stamp}` }
+  ]);
+  const room = await mediaModels.Room.create({
+    title: "Private media room",
+    type: "VOICE",
+    hostId: host._id,
+    category: "Private",
+    language: "English",
+    visibility: "PRIVATE",
+    livekitRoomName: `private-media-${stamp}`
+  });
+  await mediaModels.Room.updateOne({ _id: room._id }, { $set: { moderatorIds: [moderator._id] } });
+  await mediaModels.RoomParticipant.create({ roomId: room._id, userId: participant._id, role: "AUDIENCE" });
+  const roomMedia = await mediaModels.MediaObject.create({
+    _id: randomUUID(),
+    ownerType: "ROOM",
+    ownerId: String(room._id),
+    mediaType: "IMAGE",
+    category: "CHAT_IMAGE",
+    bucket: "private-media",
+    storageKey: `rooms/${String(room._id)}/chat-images/v1/original.png`,
+    contentType: "image/png",
+    fileSize: png.length,
+    checksum: "c".repeat(64),
+    visibility: "PRIVATE",
+    processingStatus: "READY",
+    moderationStatus: "APPROVED",
+    version: 1,
+    variants: [],
+    createdBy: String(host._id)
+  });
+
+  for (const actor of [host, moderator, participant]) {
+    assert.match(
+      (await media.authorizeMediaDownload(String(roomMedia._id), String(actor._id))).downloadUrl!,
+      /X-Amz-Signature=/
+    );
+  }
+  await assert.rejects(
+    () => media.authorizeMediaDownload(String(roomMedia._id), String(outsider._id)),
+    /Media access denied/
+  );
+  await mediaModels.Block.create({ blockerId: host._id, blockedUserId: participant._id });
+  await assert.rejects(
+    () => media.authorizeMediaDownload(String(roomMedia._id), String(participant._id)),
+    /Media access denied/
+  );
+  await mediaModels.Block.deleteOne({ blockerId: host._id, blockedUserId: participant._id });
+
+  const clan = await mediaModels.Clan.create({
+    ownerId: host._id,
+    name: `Private Media ${stamp}`,
+    slug: `private-media-${stamp}`,
+    memberIds: [participant._id],
+    memberRoles: [{ userId: participant._id, role: "OFFICER" }]
+  });
+  const clanMedia = await mediaModels.MediaObject.create({
+    _id: randomUUID(),
+    ownerType: "CLAN",
+    ownerId: String(clan._id),
+    mediaType: "IMAGE",
+    category: "GALLERY",
+    bucket: "private-media",
+    storageKey: `clans/${String(clan._id)}/gallery/v1/original.png`,
+    contentType: "image/png",
+    fileSize: png.length,
+    checksum: "d".repeat(64),
+    visibility: "PRIVATE",
+    processingStatus: "READY",
+    moderationStatus: "APPROVED",
+    version: 1,
+    variants: [],
+    createdBy: String(host._id)
+  });
+  assert.match((await media.authorizeMediaDownload(String(clanMedia._id), String(host._id))).downloadUrl!, /X-Amz-Signature=/);
+  assert.match((await media.authorizeMediaDownload(String(clanMedia._id), String(participant._id))).downloadUrl!, /X-Amz-Signature=/);
+  await assert.rejects(
+    () => media.authorizeMediaDownload(String(clanMedia._id), String(outsider._id)),
+    /Media access denied/
+  );
 });

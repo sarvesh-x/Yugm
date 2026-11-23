@@ -3,6 +3,7 @@ import { z } from "zod";
 // DCR-3 native realtime contract and parity matrix. Harnesses only; no runtime path is wired.
 export * from "./realtimeProtocol.js";
 export * from "./realtimeParity.js";
+export * from "./nativeRealtimeServer.js";
 
 export const appName = "Yugm";
 export const tagline = "Match the vibe.";

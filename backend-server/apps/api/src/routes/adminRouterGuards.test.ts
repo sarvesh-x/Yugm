@@ -9,6 +9,7 @@ import { adminBadgesRouter } from "./adminBadges.js";
 import { adminCosmeticsRouter } from "./adminCosmetics.js";
 import { adminReactionsRouter } from "./adminReactions.js";
 import { adminSupportRouter } from "./adminSupport.js";
+import { adminMediaRouter } from "./adminMedia.js";
 import { HttpError } from "../utils/http.js";
 
 function errorHandler(error: unknown, _req: Request, res: Response, _next: NextFunction) {
@@ -39,6 +40,7 @@ const guardedRouters = [
   { name: "adminCosmeticsRouter", router: adminCosmeticsRouter, path: "/cosmetics" },
   { name: "adminReactionsRouter", router: adminReactionsRouter, path: "/reactions" },
   { name: "adminSupportRouter", router: adminSupportRouter, path: "/support/tickets" },
+  { name: "adminMediaRouter", router: adminMediaRouter, path: "/media" },
 ] as const;
 
 for (const { name, router, path } of guardedRouters) {

@@ -14,6 +14,7 @@ import { adminSupportRouter } from "./routes/adminSupport.js";
 import { adminCosmeticsRouter } from "./routes/adminCosmetics.js";
 import { adminAssetsRouter } from "./routes/adminAssets.js";
 import { adminDmReviewsRouter } from "./routes/adminDmReviews.js";
+import { adminMediaRouter } from "./routes/adminMedia.js";
 import { adminReactionsRouter } from "./routes/adminReactions.js";
 import { adminBadgesRouter, badgeArtRouter } from "./routes/adminBadges.js";
 import { adminVerificationRouter } from "./routes/adminVerification.js";
@@ -287,6 +288,7 @@ export function createApp() {
   app.use("/api", syncInvalidation);
   app.use("/api/admin", adminVerificationRouter);
   app.use("/api/admin", adminDmReviewsRouter);
+  app.use("/api/admin", adminMediaRouter);
   app.use("/api/admin", adminRouter);
   app.use("/api/admin", adminSupportRouter);
   app.use("/api/admin", adminCosmeticsRouter);

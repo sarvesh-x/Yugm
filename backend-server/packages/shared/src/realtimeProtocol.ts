@@ -48,6 +48,17 @@ export const nativeResumeSchema = z.object({
 }).strict();
 export type NativeResume = z.infer<typeof nativeResumeSchema>;
 
+/** Client command whose result must be an authoritative ack, not a socket echo. */
+export const nativeCommandSchema = z.object({
+  v: z.literal(NATIVE_PROTOCOL_VERSION),
+  type: z.literal("command"),
+  commandId: z.string().min(1),
+  event: z.string().min(1),
+  scope: z.string().min(1),
+  data: z.unknown().optional(),
+}).strict();
+export type NativeCommandFrame = z.infer<typeof nativeCommandSchema>;
+
 /** Result of an authoritative command, distinct from socket delivery success. */
 export const nativeCommandAckSchema = z.object({
   v: z.literal(NATIVE_PROTOCOL_VERSION),

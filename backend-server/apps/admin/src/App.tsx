@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { Admin, adminApi, adminApiMultipart, adminApiWithMeta, formatDate, formatNumber, login, refreshAdminSession, Session } from "./api";
 import { AssetsPage } from "./AssetsPage";
+import { MediaPage } from "./MediaPage";
 import { BadgesPage } from "./BadgesPage";
 import { canAccessView, VIEW_PERMISSIONS, type ViewKey } from "./navigationPermissions";
 
@@ -48,6 +49,7 @@ const navItems: Array<{ key: ViewKey; label: string; icon: ReactNode; group: str
   { key: "gifts", label: "Gifts", icon: <Gift />, group: "Money" },
   { key: "cosmetics", label: "Cosmetics", icon: <Palette />, group: "Money" },
   { key: "assets", label: "Managed Assets", icon: <Palette />, group: "Operations", requiredPermission: VIEW_PERMISSIONS.assets },
+  { key: "media", label: "Media registry", icon: <Palette />, group: "Operations", requiredPermission: VIEW_PERMISSIONS.media },
   { key: "badges", label: "Badges", icon: <Crown />, group: "Operations", requiredPermission: VIEW_PERMISSIONS.assets },
   { key: "reactions", label: "Live Reactions", icon: <Sparkles />, group: "Money", requiredPermission: VIEW_PERMISSIONS.assets },
   { key: "notifications", label: "Notifications", icon: <Bell />, group: "Operations" },
@@ -313,6 +315,7 @@ function ViewRenderer({ view, session, setNotice, onLogout }: { view: ViewKey; s
   if (view === "gifts") return <GiftsPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "cosmetics") return <CosmeticsPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "assets") return <AssetsPage token={session.accessToken} setNotice={setNotice} />;
+  if (view === "media") return <MediaPage token={session.accessToken} setNotice={setNotice} />;
   if (view === "badges") return <BadgesPage token={session.accessToken} />;
   if (view === "reactions") return <LiveReactionsPage token={session.accessToken} admin={session.admin} setNotice={setNotice} />;
   if (view === "notifications") return <NotificationsPage token={session.accessToken} setNotice={setNotice} />;

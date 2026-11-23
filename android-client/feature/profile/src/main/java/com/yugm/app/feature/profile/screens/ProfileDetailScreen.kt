@@ -672,6 +672,9 @@ fun ProfileDetailScreen(
             customInterest = customInterestInput, onCustomInterestChange = { customInterestInput = it.take(24) },
             customHobby = customHobbyInput, onCustomHobbyChange = { customHobbyInput = it.take(24) },
             error = accountError, isBusy = accountBusy,
+            isUploadingPhoto = viewModel.avatarUploadBusy,
+            uploadProgress = viewModel.avatarUploadProgress,
+            onCancelPhotoUpload = { viewModel.cancelOwnAvatarUpload() },
             generatedAvatar = generatedAvatarDraft,
             onGeneratedAvatarChange = { generatedAvatarDraft = it },
             onClose = { if (!accountBusy) { showEditProfileScreen = false; accountError = null } },
@@ -925,6 +928,9 @@ private fun EditProfilePage(
     customInterest: String, onCustomInterestChange: (String) -> Unit,
     customHobby: String, onCustomHobbyChange: (String) -> Unit,
     error: String?, isBusy: Boolean,
+    isUploadingPhoto: Boolean,
+    uploadProgress: Float,
+    onCancelPhotoUpload: () -> Unit,
     generatedAvatar: AvatarDescriptor?,
     onGeneratedAvatarChange: (AvatarDescriptor) -> Unit,
     onClose: () -> Unit, onChangePhoto: () -> Unit,
@@ -994,6 +1000,24 @@ private fun EditProfilePage(
                         enabled = !isBusy,
                         modifier = Modifier.size(34.dp).clip(CircleShape).background(colors.primary).border(2.dp, colors.background, CircleShape)
                     ) { Icon(Icons.Filled.CameraAlt, contentDescription = "Change photo", tint = Color.White, modifier = Modifier.size(17.dp)) }
+                }
+                if (isUploadingPhoto) {
+                    Column(
+                        Modifier.fillMaxWidth().padding(top = 10.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        LinearProgressIndicator(
+                            progress = { uploadProgress.coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text(
+                            "Uploading photo ${(uploadProgress.coerceIn(0f, 1f) * 100).toInt()}%",
+                            color = colors.textSecondary,
+                            fontSize = 12.sp,
+                        )
+                        TextButton(onClick = onCancelPhotoUpload) { Text("Cancel upload", color = colors.primary) }
+                    }
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 14.dp),

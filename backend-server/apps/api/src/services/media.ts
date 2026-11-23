@@ -1,13 +1,17 @@
 import { randomUUID } from "node:crypto";
 import mongoose from "mongoose";
 import { Block } from "../models/Block.js";
+import { Clan } from "../models/Clan.js";
 import { DirectMessage } from "../models/DirectMessage.js";
 import { MediaObject, type MediaDocument } from "../models/MediaObject.js";
 import { MediaQuotaReservation } from "../models/MediaQuotaReservation.js";
 import { MediaUploadSession } from "../models/MediaUploadSession.js";
+import { Room } from "../models/Room.js";
+import { RoomParticipant } from "../models/RoomParticipant.js";
 import { User } from "../models/User.js";
 import { HttpError } from "../utils/http.js";
 import { getImageProcessor, hasImageProcessor } from "./imageProcessor.js";
+import { decideMediaAccess, type MediaAccessActor, type MediaAccessSubject } from "./mediaAccessPolicy.js";
 import {
   buildMediaKey,
   buildStagingKey,
@@ -201,6 +205,51 @@ export async function createUploadSession(input: UploadSessionInput) {
     maxBytes: categoryLimits[category].bytes,
     category
   };
+}
+
+/**
+ * Sweeps expired staging sessions and releases their held quota exactly once.
+ * The atomic claim prevents a concurrent completion/cancel from double-releasing.
+ */
+export async function sweepExpiredUploadSessions(now = new Date(), limit = 100) {
+  const boundedLimit = Math.max(1, Math.min(500, Math.floor(limit)));
+  const due = await MediaUploadSession.find({
+    status: { $in: ["PENDING", "PROCESSING"] },
+    quotaReserved: true,
+    expiresAt: { $lte: now }
+  })
+    .select("_id userId expectedBytes stagingKey")
+    .sort({ expiresAt: 1 })
+    .limit(boundedLimit)
+    .lean();
+
+  let swept = 0;
+  let releasedBytes = 0;
+  let deletedObjects = 0;
+  for (const session of due) {
+    const claimed = await MediaUploadSession.findOneAndUpdate(
+      {
+        _id: session._id,
+        status: { $in: ["PENDING", "PROCESSING"] },
+        quotaReserved: true,
+        expiresAt: { $lte: now }
+      },
+      { $set: { status: "EXPIRED", quotaReserved: false } },
+      { returnDocument: "after" }
+    ).lean();
+    if (!claimed) continue;
+
+    swept += 1;
+    releasedBytes += claimed.expectedBytes;
+    await releaseReservation(claimed.userId, claimed.expectedBytes);
+    try {
+      await deleteObject("staging", claimed.stagingKey);
+      deletedObjects += 1;
+    } catch {
+      // Staging deletion is best-effort; the quota release is already committed.
+    }
+  }
+  return { swept, releasedBytes, deletedObjects };
 }
 
 /** Cancellation is idempotent and removes only the owned staging object. */
@@ -505,46 +554,103 @@ export function toPublicMedia(media: MediaDocument) {
   };
 }
 
-async function isMessageParticipant(media: MediaDocument, userId: string): Promise<boolean> {
-  if (media.ownerType !== "MESSAGE" || !mongoose.isValidObjectId(media.ownerId)) return false;
-  const message = await DirectMessage.findOne({
-    _id: media.ownerId,
-    $or: [{ senderId: userId }, { receiverId: userId }],
-    hiddenFor: { $ne: userId }
-  }).lean();
-  if (!message) return false;
-  const blocked = await Block.exists({
+export type { MediaAccessSubject } from "./mediaAccessPolicy.js";
+
+function includesId(ids: readonly unknown[] | undefined, userId: string): boolean {
+  return Array.isArray(ids) && ids.some((id) => String(id) === userId);
+}
+
+async function isBlockedBetween(userId: string, otherUserId: string): Promise<boolean> {
+  if (!mongoose.isValidObjectId(otherUserId)) return false;
+  return Boolean(await Block.exists({
     $or: [
-      { blockerId: message.senderId, blockedUserId: userId },
-      { blockerId: userId, blockedUserId: message.senderId }
+      { blockerId: userId, blockedUserId: otherUserId },
+      { blockerId: otherUserId, blockedUserId: userId }
     ]
-  });
-  return !blocked;
+  }));
 }
 
-export interface MediaAccessSubject {
-  ownerType: string;
-  ownerId: string;
-  visibility: string;
-  deletedAt?: unknown;
-  processingStatus: string;
-  moderationStatus: string;
+/** Resolves authoritative resource facts for the pure media access policy. */
+export async function resolveMediaActor(media: MediaDocument, userId: string): Promise<MediaAccessActor> {
+  const actor: MediaAccessActor = {
+    userId,
+    isMediaOwner: false,
+    isResourceOwner: false,
+    isResourceAdmin: false,
+    isAcceptedParticipant: false,
+    isBlocked: false,
+    isHiddenForActor: false,
+  };
+
+  if (media.ownerType === "USER") {
+    actor.isMediaOwner = media.ownerId === userId;
+    return actor;
+  }
+  if (!mongoose.isValidObjectId(media.ownerId)) return actor;
+
+  if (media.ownerType === "MESSAGE") {
+    const message = await DirectMessage.findOne({
+      _id: media.ownerId,
+      $or: [{ senderId: userId }, { receiverId: userId }]
+    }).lean();
+    if (!message) return actor;
+    actor.isAcceptedParticipant = true;
+    actor.isHiddenForActor = includesId(message.hiddenFor as unknown[] | undefined, userId);
+    const senderId = String(message.senderId);
+    const otherParty = senderId === userId ? String(message.receiverId) : senderId;
+    actor.isBlocked = await isBlockedBetween(userId, otherParty);
+    return actor;
+  }
+
+  if (media.ownerType === "ROOM") {
+    const room = await Room.findOne({ _id: media.ownerId })
+      .select("hostId speakerIds moderatorIds roomAdminIds coHostIds")
+      .lean();
+    if (!room) return actor;
+    actor.isResourceOwner = String(room.hostId) === userId;
+    actor.isResourceAdmin = includesId(room.moderatorIds, userId) ||
+      includesId(room.roomAdminIds, userId) ||
+      includesId(room.coHostIds, userId);
+    actor.isAcceptedParticipant = includesId(room.speakerIds, userId) || Boolean(
+      await RoomParticipant.exists({ roomId: media.ownerId, userId, leftAt: null })
+    );
+    actor.isBlocked = await isBlockedBetween(userId, String(room.hostId));
+    return actor;
+  }
+
+  if (media.ownerType === "CLAN") {
+    const clan = await Clan.findOne({ _id: media.ownerId })
+      .select("ownerId memberIds memberRoles")
+      .lean();
+    if (!clan) return actor;
+    actor.isResourceOwner = String(clan.ownerId) === userId;
+    actor.isResourceAdmin = (clan.memberRoles ?? []).some((role) =>
+      String(role.userId) === userId && ["LEADER", "CO_LEADER", "OFFICER"].includes(role.role)
+    );
+    actor.isAcceptedParticipant = includesId(clan.memberIds, userId);
+    actor.isBlocked = await isBlockedBetween(userId, String(clan.ownerId));
+  }
+
+  return actor;
 }
 
+/** Legacy pure decision helper retained for existing unit tests. */
 export type MediaAccessDecision = "public" | "owner" | "participant" | "deny";
 
-/** Pure resource-level decision; callers still perform the authoritative state check. */
 export function mediaAccessDecision(
   media: MediaAccessSubject,
   userId: string,
   isParticipant: boolean
 ): MediaAccessDecision {
-  if (media.deletedAt || media.processingStatus !== "READY" || media.moderationStatus === "REJECTED") {
-    return "deny";
-  }
-  if (media.ownerType === "USER" && media.ownerId === userId) return "owner";
-  if (media.visibility !== "PRIVATE") return "public";
-  return isParticipant ? "participant" : "deny";
+  const result = decideMediaAccess(media, {
+    userId,
+    isMediaOwner: media.ownerType === "USER" && media.ownerId === userId,
+    isResourceOwner: false,
+    isResourceAdmin: false,
+    isAcceptedParticipant: isParticipant,
+  });
+  if (!result.allowed) return "deny";
+  return result.decision === "resource-admin" ? "participant" : result.decision;
 }
 
 /** Private media access requires identity, resource, deletion and moderation checks. */
@@ -555,13 +661,10 @@ export async function authorizeMediaDownload(mediaId: string, userId: string) {
     throw new HttpError(404, "Media not found");
   }
   const typed = media as unknown as MediaDocument;
-  const ownerMatch = media.ownerType === "USER" && media.ownerId === userId;
-  const participant = !ownerMatch && media.visibility === "PRIVATE"
-    ? await isMessageParticipant(typed, userId)
-    : false;
-  const decision = mediaAccessDecision(media as MediaAccessSubject, userId, participant);
-  if (decision === "deny") throw new HttpError(403, "Media access denied");
-  if (decision === "public") return { media: toPublicMedia(typed) };
+  const actor = await resolveMediaActor(typed, userId);
+  const decision = decideMediaAccess(typed, actor);
+  if (!decision.allowed) throw new HttpError(403, "Media access denied");
+  if (decision.decision === "public") return { media: toPublicMedia(typed) };
   const grant = await generateDownloadUrl({ bucket: media.bucket, key: media.storageKey });
   // The short-lived URL is returned in this response only; it is never stored
   // in the registry or written to logs.

@@ -152,13 +152,16 @@ class ProfileViewModel @Inject constructor(
     }
 
     fun cancelOwnAvatarUpload() {
-        val sessionId = activeAvatarUploadSessionId ?: return
+        val sessionId = activeAvatarUploadSessionId
         cancelAvatarUploadRequested = true
-        viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { yugmApi.cancelMediaUpload(avatarUploadToken, sessionId) } }
-            avatarUploadJob?.cancel()
-            avatarUploadBusy = false
+        if (sessionId != null) {
+            viewModelScope.launch {
+                runCatching { withContext(Dispatchers.IO) { yugmApi.cancelMediaUpload(avatarUploadToken, sessionId) } }
+            }
         }
+        avatarUploadJob?.cancel()
+        avatarUploadBusy = false
+        avatarUploadProgress = 0f
     }
 
     private fun readImage(context: Context, uri: Uri): Pair<String, ByteArray> {
