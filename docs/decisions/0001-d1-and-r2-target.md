@@ -1,7 +1,7 @@
 # ADR-0001 — D1 and R2 as the authoritative Cloudflare target
 
 **Date:** 2026-11-22  
-**Status:** Accepted by owner. Effective for planning and local tooling; production data movement and cutover remain gated (see Residual gates).  
+**Status:** Superseded for production use by [ADR-0007](0007-dcr2-capacity-gate-not-approved.md): D1 is **not approved for production data** because capacity metrics are unavailable and Workers Paid is not enabled. Retained as a record of the directional selection and for local tooling only.
 **Supersedes:** DCR-2 in [the Phase 0 decision request](../cloudflare-migration/decision-request.md).
 
 ## Context
@@ -26,6 +26,8 @@ The owner selected D1 without supplying the production metrics requested in DCR-
 - No row exceeds the 2 MB limit after binaries move to R2; 12-month projection fits comfortably under 10 GB; peak writes and query latency have headroom.
 - Full backup plus a rehearsed restore into isolated staging; Time Travel is not an independent backup.
 - If any gate fails, this ADR must be revisited and the Hyperdrive fallback re-evaluated before schema approval. Financial state must stay atomic in a single database in either case.
+
+**2026-11-23 update:** the residual gates above could not be satisfied. The owner confirmed Workers Paid is not enabled and production metrics are unavailable; a supplied metrics file was `NOT READY` with 11 missing fields. [ADR-0007](0007-dcr2-capacity-gate-not-approved.md) therefore parks D1 production use, keeps MongoDB authoritative and reopens the Hyperdrive fallback. Nothing in this ADR authorizes production migration or MongoDB removal.
 
 This ADR does not resolve DCR-1 (tracked Worker credentials), DCR-3 (realtime protocol), DCR-4 (R2 media cutover scope/environment) or DCR-5 (plan acceptance and authorization boundaries).
 

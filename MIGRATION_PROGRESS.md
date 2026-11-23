@@ -23,6 +23,17 @@ This is the persistent, single-source tracker for the MongoDB/Render to Cloudfla
 
 ## Work log
 
+### 2026-11-23 — DCR-2 parked and not approved
+
+- **Status:** documentation-only decision record. No production data, provisioning, deploy or code change. Changes are uncommitted pending authorization.
+- **Added/updated files:** `docs/decisions/0007-dcr2-capacity-gate-not-approved.md`, `docs/decisions/0001-d1-and-r2-target.md`, `docs/cloudflare-migration/decision-request.md`, `docs/database/d1-capacity-assessment.md`, `docs/migration/DCR2_READINESS_RUNBOOK.md`, `docs/migration/data-migration-tooling.md`, `docs/INDEX.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-dcr2-parked.md`.
+- **Verification performed:** `capacity:intake` on the supplied two-record snapshot metrics → NOT READY, 11 missing fields. Owner confirmed Workers Paid = no and metrics unavailable. No fabricated values.
+- **Issues:** DCR-2 cannot be evaluated; D1 is not approved and MongoDB remains authoritative.
+- **Decisions:** DCR-2 production path parked; Hyperdrive fallback reopened; no cutover or MongoDB removal authorized.
+- **Dependencies:** to reopen — Workers Paid approval, real production aggregates, production-shaped snapshot, then the readiness runbook.
+- **Risks:** treating D1 design tooling as production-ready; the docs now state explicitly that it is not.
+- **Next task:** owner chooses to reopen DCR-2 with paid plan + metrics, advance DCR-3 with the GA date, or advance DCR-4 with origin/CORS and provisioning approvals.
+
 ### 2026-11-23 — Durable Object publish race fixed
 
 - **Status:** local correctness fix in an unwired harness. No binding, deploy, runtime wiring or data change. Changes are uncommitted.

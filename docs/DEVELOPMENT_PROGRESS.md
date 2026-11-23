@@ -1,5 +1,13 @@
 # Development progress
 
+## 2026-11-23 -- DCR-2 parked; documentation updated
+
+- **Scope:** recorded that D1 is not approved for production. No code change; documentation only.
+- **Trigger:** owner supplied a snapshot metrics file derived from a two-record test export. `capacity:intake` reported NOT READY with 11 missing fields, and the owner confirmed Workers Paid is not enabled and production metrics are unavailable.
+- **Changes:** new [ADR-0007](decisions/0007-dcr2-capacity-gate-not-approved.md) records DCR-2 as parked/not approved, MongoDB as authoritative, and the Hyperdrive fallback as reopened. Updated ADR-0001, DCR decision request, D1 capacity assessment, DCR-2 runbook, data-migration-tooling, `INDEX.md`, `CURRENT_TASK.md` and both progress trackers.
+- **Verification (run):** `capacity:intake` on the supplied file → NOT READY with 11 missing fields. No gate was claimed passed; no values were fabricated; no database, deploy or production data access.
+- **State/remaining:** DCR-2 cannot be closed until Workers Paid is enabled and real metrics plus a production-shaped snapshot exist. DCR-3 needs the GA date; DCR-4 needs origin/CORS and provisioning approvals.
+
 ## 2026-11-23 -- Durable Object publish race fixed
 
 - **Scope:** fixed a concurrency gap in the unwired DO skeleton: two concurrent `publish()` calls could allocate the same per-scope sequence and overwrite each other's bounded history, and a `resume` could race a publish on connection cursors.

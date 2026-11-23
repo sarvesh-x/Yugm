@@ -1,7 +1,7 @@
 # DCR-2 readiness runbook
 
 **Date:** 2026-11-23
-**Status:** Local preparation complete. The DCR-2 gate is still open because real metrics, Workers Paid confirmation, recovery evidence and schema approval are owner-owned.
+**Status:** Local preparation complete, but the DCR-2 gate is **parked and not approved** as of 2026-11-23 ([ADR-0007](../decisions/0007-dcr2-capacity-gate-not-approved.md)). Real metrics are unavailable and the owner confirmed Workers Paid is not enabled, so this runbook cannot be completed. MongoDB remains authoritative; no step below authorizes production export, import or cutover.
 **Decision:** D1 is selected under [ADR-0001](../decisions/0001-d1-and-r2-target.md). This runbook is the evidence sequence for that decision; it is not an acceptance certificate.
 
 ## 1. What must be proven

@@ -1,7 +1,7 @@
 # Data migration tooling requirements
 
 **Date:** 2026-11-22  
-**Status:** Phase 0 design requirements. No export, import, migration or rollback was run.
+**Status:** Phase 0 design requirements. No export, import, migration or rollback was run. As of 2026-11-23 D1 production use is parked and not approved ([ADR-0007](../decisions/0007-dcr2-capacity-gate-not-approved.md)); all tooling here remains unapproved design/preparation, and MongoDB remains authoritative.
 
 ## Principles
 
