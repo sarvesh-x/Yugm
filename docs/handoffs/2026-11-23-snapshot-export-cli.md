@@ -18,7 +18,8 @@
 - API typecheck — passed.
 - Strict credential guard — zero findings across 30 tracked config files.
 - CLI guard paths verified to reject before any connection: missing args, missing collections, unreviewed collection.
-- No MongoDB connection was made, and no snapshot was exported by the assistant. These changes are uncommitted.
+- Opt-in `npm run test:export --workspace @yugm/api` passed against a disposable loopback MongoDB: 3 `users` (ObjectId) and 2 `media_objects` (string `_id`) exported, manifest and batch files verified.
+- No real MongoDB connection was made, and no snapshot was exported by the assistant. These changes are uncommitted.
 
 ## Important limitation
 
