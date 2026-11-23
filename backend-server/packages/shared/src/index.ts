@@ -5,6 +5,7 @@ export * from "./realtimeProtocol.js";
 export * from "./realtimeParity.js";
 export * from "./nativeRealtimeServer.js";
 export * from "./legacyRealtimeAdapter.js";
+export * from "./serializedOperations.js";
 
 export const appName = "Yugm";
 export const tagline = "Match the vibe.";

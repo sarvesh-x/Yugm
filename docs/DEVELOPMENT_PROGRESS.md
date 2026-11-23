@@ -1,5 +1,12 @@
 # Development progress
 
+## 2026-11-23 -- Durable Object publish race fixed
+
+- **Scope:** fixed a concurrency gap in the unwired DO skeleton: two concurrent `publish()` calls could allocate the same per-scope sequence and overwrite each other's bounded history, and a `resume` could race a publish on connection cursors.
+- **Changes:** added a pure `SerializedOperations` primitive in `@yugm/shared` with 2 tests; the DO skeleton now routes `publish` and `resume` through it. The lock is in-flight only and needs no persistence because DO hibernation occurs when idle.
+- **Verification (run):** shared tests 27/27; shared and Worker typechecks passed; full API suite 462/462; strict credential guard zero findings. No binding, deploy, credential or production data access.
+- **State/remaining:** still an unwired harness. This fixes internal harness correctness, not interoperability or authoritative publication. Changes are uncommitted.
+
 ## 2026-11-23 -- Read-only snapshot export CLI added
 
 - **Scope:** added a read-only export CLI so a snapshot can be produced from an isolated MongoDB source when none exists. No connection was made or data read by the assistant.

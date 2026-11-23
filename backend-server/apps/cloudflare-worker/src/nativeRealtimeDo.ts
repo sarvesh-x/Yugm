@@ -17,7 +17,9 @@ import {
   type NativeCommandAck,
   type NativeCommandFrame,
   type NativeEnvelope,
+  type NativePublishInput,
   type NativeResume,
+  SerializedOperations,
 } from "@yugm/shared";
 
 const MAX_HISTORY = 200;
@@ -73,6 +75,13 @@ function rememberSeenIds(seen: string[], ids: readonly string[]): string[] {
 }
 
 export class NativeRealtimeDurableObject extends DurableObject<NativeRealtimeDoEnv> {
+  /**
+   * Sequence allocation, bounded history and connection cursors are all
+   * read-modify-write operations. Serialising them prevents concurrent
+   * publishers from allocating the same sequence or losing a cursor write.
+   */
+  private readonly operations = new SerializedOperations();
+
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (request.method !== "GET" || request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
@@ -138,7 +147,7 @@ export class NativeRealtimeDurableObject extends DurableObject<NativeRealtimeDoE
       return;
     }
 
-    await this.resume(ws, attachment, resume.data);
+    await this.operations.run(() => this.resumeOnce(ws, attachment, resume.data));
   }
 
   async webSocketClose(ws: WebSocket): Promise<void> {
@@ -151,12 +160,11 @@ export class NativeRealtimeDurableObject extends DurableObject<NativeRealtimeDoE
   }
 
   /** Future authoritative publishers call this after the source write commits. */
-  async publish(input: {
-    event: string;
-    scope: string;
-    data: unknown;
-    delivery: NativeEnvelope["delivery"];
-  }): Promise<NativeEnvelope> {
+  async publish(input: NativePublishInput): Promise<NativeEnvelope> {
+    return this.operations.run(() => this.publishOnce(input));
+  }
+
+  private async publishOnce(input: NativePublishInput): Promise<NativeEnvelope> {
     const seqKey = this.sequenceKey(input.scope);
     const seq = (await this.ctx.storage.get<number>(seqKey)) ?? 0;
     const nextSeq = seq + 1;
@@ -208,7 +216,7 @@ export class NativeRealtimeDurableObject extends DurableObject<NativeRealtimeDoE
     };
   }
 
-  private async resume(ws: WebSocket, attachment: NativeAttachment, frame: NativeResume): Promise<void> {
+  private async resumeOnce(ws: WebSocket, attachment: NativeAttachment, frame: NativeResume): Promise<void> {
     const state = await this.connectionState(attachment.connectionId, attachment.scope);
     state.lastSeq = frame.afterSeq;
     state.seenIds = rememberSeenIds([], frame.seenIds);

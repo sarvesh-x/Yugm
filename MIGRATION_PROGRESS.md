@@ -23,6 +23,17 @@ This is the persistent, single-source tracker for the MongoDB/Render to Cloudfla
 
 ## Work log
 
+### 2026-11-23 — Durable Object publish race fixed
+
+- **Status:** local correctness fix in an unwired harness. No binding, deploy, runtime wiring or data change. Changes are uncommitted.
+- **Added/updated files:** `backend-server/packages/shared/src/serializedOperations.ts`, `backend-server/packages/shared/src/serializedOperations.test.ts`, `backend-server/packages/shared/src/index.ts`, `backend-server/apps/cloudflare-worker/src/nativeRealtimeDo.ts`, `docs/decisions/0002-staged-hybrid-realtime-protocol.md`, `docs/migration/realtime-plan.md`, `docs/INDEX.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-do-publish-race-fix.md`.
+- **Verification performed:** shared tests 27/27; shared and Worker typechecks; full API suite 462/462; strict credential guard zero findings. No production access.
+- **Issues:** the lock is not a substitute for storage-level transactions if a wired design allows other writers; no interoperability proof.
+- **Decisions:** none; internal DCR-3 harness correctness.
+- **Dependencies:** none for this slice; runtime wiring still needs owner authorization and the GA date.
+- **Risks:** an in-flight lock cannot protect against writes from another DO instance; the current design is a single-object harness.
+- **Next task:** owner supplies the GA date and authorizes authoritative wiring before any real-path parity run.
+
 ### 2026-11-23 — Read-only snapshot export CLI added
 
 - **Status:** local read-only export tooling. No MongoDB connection, export, deploy or data change made by the assistant. Changes are uncommitted; commit/push needs new explicit authorization.
