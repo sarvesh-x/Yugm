@@ -6,9 +6,9 @@
  * the source snapshot so a copied or restored directory can be compared against it.
  *
  * Usage:
- *   npm run backup:verify -- --snapshot <snapshot-directory> [--expect-digest <sha256>]
+ *   npm run backup:verify -- --snapshot <snapshot-directory> [--expect-digest <sha256>] [--out <report.json>]
  */
-import { stat } from "node:fs/promises";
+import { stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { verifyBackup } from "../migration/verifyBackup.js";
 
@@ -35,6 +35,12 @@ async function main() {
   }
 
   const result = await verifyBackup(resolved, argument("expect-digest"));
+  const output = argument("out");
+  if (output) {
+    const target = path.resolve(output);
+    await writeFile(target, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+    console.log(`Wrote backup verification report to ${target}`);
+  }
 
   console.log(`Snapshot: ${result.snapshotId}`);
   console.log(`Source database: ${result.sourceDatabase}`);

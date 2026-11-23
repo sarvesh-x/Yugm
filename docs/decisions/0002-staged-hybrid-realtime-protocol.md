@@ -1,7 +1,7 @@
 # ADR-0002 — Staged hybrid realtime protocol
 
 **Date:** 2026-11-22
-**Status:** Accepted in principle. Inputs still required: old-client support window, hibernation/cost requirement, event-inventory sign-off and the Android `BONDS` topic decision.
+**Status:** Accepted; decision gate complete. Owner inputs recorded 2026-11-23: 90-day legacy support window, hibernation as a hard requirement, acceptance of the 83-name event inventory, and a server BONDS invalidation emitter. Runtime implementation and cutover remain separately gated.
 **Decision request:** DCR-3 in [decision-request.md](../cloudflare-migration/decision-request.md).
 
 ## Decision
@@ -27,6 +27,15 @@ The owner selected the hybrid path on 2026-11-22. It preserves continuity for ex
 - The Android `BONDS` sync topic mismatch and hardcoded catalog/reaction fallbacks must be resolved as part of the client migration slice.
 - The old-client support window and cutoff date must be recorded here before any adapter removal.
 
+## Owner inputs recorded 2026-11-23
+
+1. **Legacy support window:** installed Android clients using Socket.IO/Engine.IO remain supported for **90 days after native protocol GA**. The cutoff date must be written into this ADR when native GA is set; the compatibility adapter is not removed before that date.
+2. **Hibernation/cost:** hibernation compatibility is a **hard requirement** for the native Durable Object path, with cost measured before cutover. A non-hibernating implementation is not acceptable for the native target.
+3. **Event inventory:** the owner accepts the source-verified **83-name baseline** (47 shared, 16 PK, 17 off-catalog literals and 3 Android-only listeners) as the DCR-3 classification input. Newly discovered events must be added deliberately.
+4. **BONDS topic:** the server emits `BONDS` in `sync:invalidate` for `/api/bonds/*` mutations so existing Android BONDS listeners receive authoritative invalidation. The first local slice maps all `/bonds` mutations to `["BONDS", "PROFILE", "TASKS"]` with no payload data; it is an invalidation, not proof of commit.
+
+These inputs close the DCR-3 decision gate. They do not implement the compatibility adapter, native Durable Object protocol, Android migration or two-path cutover.
+
 ## Local contract foundation (2026-11-22)
 
 A local, unwired first slice was added under the DCR-5 authorization:
@@ -39,7 +48,7 @@ A local, unwired first slice was added under the DCR-5 authorization:
 
 An executable parity matrix was added alongside it in `backend-server/packages/shared/src/realtimeParity.ts`: a transport-agnostic `ParityTransport` interface, 6 scenarios (reconnect/resume, duplicate ID, stale sequence, scope isolation, room-join ack and a `BONDS` invalidation case marked sign-off-required) and 10 documented requirements from the inventory (commit-before-ack, wallet-debit-before-emit, PK ordering/idempotency, fan-out, typing/force authorization, dead listeners and the support-window cutoff). `runParityMatrix` skips sign-off scenarios unless `includeSignOff` is set. A conforming in-memory test double passes 12/12 shared tests, and a deliberately broken double is detected. No real adapter exists yet.
 
-This foundation does not resolve the open support-window, hibernation, event-classification or `BONDS` decisions, and it is not evidence that the two protocols are interoperable.
+The DCR-3 decisions are now recorded above. The contract and parity matrix are still harnesses, not evidence that the two protocols are interoperable or that any runtime migration has occurred.
 
 ## Non-goals
 

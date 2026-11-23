@@ -41,6 +41,7 @@ Historical evidence: `docs/cloudflare-migration/audit.md` records that existing 
 | Legacy media reference scanner | `backend-server/apps/api/src/migration/legacyMediaReferences.ts`, CLI `src/scripts/legacy-media-references.ts`, npm script `inventory:legacy-media` | Read-only scan of exported records or a copied snapshot for legacy public `/uploads`, private trust/staging, badge-art, inline data URLs and managed upload endpoints. Emits counts, field paths, extensions and de-queried URL digests only; never raw URLs, and does not check binary existence |
 | Snapshot delta diff | `backend-server/apps/api/src/migration/snapshotDiff.ts`, CLI `src/scripts/snapshot-diff.ts`, npm script `snapshot:diff` | Read-only comparison of two copied snapshots: added/removed/changed records, changed top-level field names, duplicate/invalid IDs and watermark ordering. Emits source IDs and content digests only; not a backup restore check or a delta-import implementation |
 | Combined backup rehearsal | `backend-server/apps/api/src/migration/backupRehearsal.ts`, CLI `src/scripts/backup-rehearse.ts`, npm script `backup:rehearse` | Chains `backup:verify` with the existing dry-run importer and writes one artifact set. Skips rehearsal when integrity fails; PASS means copy integrity plus mapping/validation dry run, not a tested restore |
+| Recovery evidence checker | `backend-server/apps/api/src/migration/dcr2RecoveryEvidence.ts`, CLI `src/scripts/dcr2-recovery-evidence.ts`, npm script `capacity:recovery` | Checks backup verification output, rehearsal artifacts and owner attestation for internal completeness. It does not perform a restore and does not treat attestation booleans as tool-verified proof |
 | Config manifest | `backend-server/scripts/config-backup-manifest.mjs`, npm scripts `config:manifest` / `test:config-manifest` | Value-free inventory of tracked config files with path, byte count and SHA-256 only. It does not capture ignored `.env`/`.dev.vars` values or external provider config and is not a config backup |
 | D1 draft schema | `backend-server/apps/api/migrations/d1/0001_initial.sql` | Review draft, not approved |
 
@@ -49,7 +50,7 @@ These tools were exercised only against generated fixtures during earlier work (
 The snapshot-copy verifier was added on 2026-11-22 to cover procedure step 7 (top-level checksum verification after copy). It reads only a local directory: it never connects to MongoDB, D1, R2 or any remote service and never modifies the snapshot. `verifyBackup` detects missing or unreadable batch files, record/byte count drift, changed batch content, unexpected batch files and a digest mismatch when the source digest is supplied. Its 4 unit tests and a CLI smoke against a generated fixture passed, but this is **fixture-only evidence**. It does not create a backup, prove a restore, or change any item in section 5. Usage:
 
 ```
-npm run backup:verify -- --snapshot <snapshot-directory> [--expect-digest <sha256>]
+npm run backup:verify -- --snapshot <snapshot-directory> [--expect-digest <sha256>] [--out <report.json>]
 ```
 
 Record the printed integrity digest from the source snapshot, then pass it as `--expect-digest` when verifying a copy. The digest covers declared batch checksums in manifest order; a matching digest is evidence of an intact copy, not of a successful restore.

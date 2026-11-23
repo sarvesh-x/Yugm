@@ -1,7 +1,7 @@
 # ADR-0003 — Credential remediation approach for tracked Worker config
 
 **Date:** 2026-11-22
-**Status:** Accepted. Owner confirmed provider-side rotation/revocation on 2026-11-23; tracked-source removal and strict CI were staged locally on 2026-11-23 and remain uncommitted. No Git history rewrite was performed.
+**Status:** Complete under Option A. Owner confirmed provider-side rotation/revocation on 2026-11-23; tracked-source removal and strict CI were committed in `d4b0510` and pushed. Owner confirmed the deployment succeeded with strict CI active. No Git history rewrite was performed.
 **Decision request:** DCR-1 in [decision-request.md](../cloudflare-migration/decision-request.md).
 **Evidence:** [tracked Worker credentials finding](../infrastructure/tracked-worker-credentials-finding.md).
 
@@ -35,11 +35,16 @@ The owner selected "owner rotates, agent prepares": the owner performs provider-
 - Switched the CI guard step from report-only `secrets:check` to blocking `secrets:check:strict`.
 - `npm.cmd run secrets:check:strict` reports zero findings across 30 tracked config files.
 
-## Still required
+## Completion verification
 
-- Commit and push of these local changes after explicit approval.
-- Observe the first CI run with the strict guard active.
-- Confirm in the owner's secret store that staging and production credentials are distinct and the staging DB isolation assertion remains enforced.
-- Optional follow-up: broader entropy-based scanning such as gitleaks; the current guard targets the known key-name regression class only.
+- Commit `d4b0510` containing the cleanup and strict CI guard was pushed to `origin/master`.
+- Owner confirmed on 2026-11-23 that the deployment succeeded with the strict credential guard active.
+- Local strict guard reported zero findings across 30 tracked config files before commit.
+- No Git history rewrite was performed.
+
+## Optional follow-up
+
+- Broader entropy-based scanning such as gitleaks; the current guard targets the known key-name regression class only.
+- Periodic owner review that staging and production credentials remain distinct and that the staging DB isolation assertion stays enforced.
 
 Full entropy-based scanning (for example gitleaks) remains a separate follow-up; the guard targets the known key-name regression class only.

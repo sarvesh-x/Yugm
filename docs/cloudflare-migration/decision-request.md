@@ -1,7 +1,7 @@
 # Cloudflare migration Phase 0 decision request
 
 **Date:** 2026-11-22  
-**Status:** DCR-1, DCR-2, DCR-3 and the authorization portion of DCR-5 were answered by the owner on 2026-11-22: DCR-2 = D1 ([ADR-0001](../decisions/0001-d1-and-r2-target.md)), DCR-1 = Option A ([ADR-0003](../decisions/0003-credential-remediation-approach.md)), DCR-3 = Option C staged hybrid ([ADR-0002](../decisions/0002-staged-hybrid-realtime-protocol.md)), DCR-5 authorization = local code and tests only ([ADR-0004](../decisions/0004-local-code-and-tests-authorization.md)). DCR-4 and the detailed inputs in sections 3–5 remain open. Capacity metrics, Workers Paid, backup/restore and cutover remain mandatory gates. Rotation, source removal, provisioning, deploy and data migration are not authorized.
+**Status:** DCR-1 is complete (Option A; owner-confirmed rotation, tracked cleanup pushed in `d4b0510`, deployment succeeded with strict CI active). DCR-2 was answered by the owner on 2026-11-22 ([ADR-0001](../decisions/0001-d1-and-r2-target.md)). DCR-3 decision gate completed 2026-11-23 ([ADR-0002](../decisions/0002-staged-hybrid-realtime-protocol.md)), DCR-4 decision gate completed 2026-11-23 ([ADR-0005](../decisions/0005-r2-media-cutover.md)), and DCR-5 plan acceptance plus one-time commit/push authorization completed 2026-11-23 ([ADR-0006](../decisions/0006-implementation-plan-acceptance.md)). DCR-2 detailed inputs and runtime implementation gates remain open. Capacity metrics, Workers Paid, backup/restore and cutover remain mandatory gates. Provisioning and data migration are not authorized.
 
 ## Purpose
 
@@ -11,15 +11,15 @@ Phase 0 audits and planning are complete ([report](phase0-report.md)). Five gate
 
 | ID | Decision | Why it is blocked | Blocks |
 |---|---|---|---|
-| DCR-1 | Remediate tracked plaintext Worker credentials | **Option A selected** ([ADR-0003](../decisions/0003-credential-remediation-approach.md)); owner rotation confirmed 2026-11-23; tracked values removed and strict CI staged locally, uncommitted | Commit/push, first strict CI run, and all other Cloudflare work |
+| DCR-1 | Remediate tracked plaintext Worker credentials | **Complete** ([ADR-0003](../decisions/0003-credential-remediation-approach.md)): owner rotation confirmed, cleanup pushed in `d4b0510`, deployment succeeded with strict CI active | DCR-2/DCR-3/DCR-4 inputs, recovery gates, and cutover approvals |
 | DCR-2 | Choose authoritative database: D1 vs PostgreSQL/Hyperdrive | **Resolved:** owner selected D1 ([ADR-0001](../decisions/0001-d1-and-r2-target.md)); capacity metrics and Workers Paid still gate rehearsal/cutover | Schema generation unblocked as a draft; production migration still gated |
-| DCR-3 | Choose realtime protocol path | **Option C (staged hybrid) selected** ([ADR-0002](../decisions/0002-staged-hybrid-realtime-protocol.md)); support window and event-inventory sign-off still needed | Phase 5 until inputs supplied |
-| DCR-4 | Fix and scope R2 media cutover | Buckets/domains/CORS/policies and private-media semantics are unconfirmed; Android wiring gap exists | Phase 4 |
-| DCR-5 | Accept the phased implementation plan and authorization boundaries | **Authorization = local code + tests** ([ADR-0004](../decisions/0004-local-code-and-tests-authorization.md)); full plan acceptance not separately recorded | Commit, push, deploy, provisioning, data work |
+| DCR-3 | Choose realtime protocol path | **Decision gate complete** ([ADR-0002](../decisions/0002-staged-hybrid-realtime-protocol.md)): Option C, 90-day support window, hibernation required, 83-name inventory accepted, BONDS emitter chosen | Runtime adapter/native DO implementation and two-path cutover approvals |
+| DCR-4 | Fix and scope R2 media cutover | **Decision gate complete** ([ADR-0005](../decisions/0005-r2-media-cutover.md)): Option B, five existing buckets, public variants/private originals, owner/resource-admin/accepted-participant access, explicit per-env CORS | R2 provisioning, exact production origin, wiring fixes, admin tooling and phased category cutover approvals |
+| DCR-5 | Accept the phased implementation plan and authorization boundaries | **Accepted** ([ADR-0006](../decisions/0006-implementation-plan-acceptance.md)) with one-time commit/push authorization for current local slices | Future commit/push, deploy, provisioning, data work |
 
 ## 2. DCR-1 — Tracked Worker credentials
 
-**Finding (local remediation staged):** `backend-server/apps/cloudflare-worker/wrangler.jsonc` previously contained plaintext credential-bearing `vars` (database, cache, JWT/admin, LiveKit, payments and related secrets). After owner-confirmed rotation on 2026-11-23 those keys were removed from the tracked file without exposing values; strict CI is staged locally and awaiting commit/push. Full evidence: [tracked Worker credentials finding](../infrastructure/tracked-worker-credentials-finding.md).
+**Finding (remediated):** `backend-server/apps/cloudflare-worker/wrangler.jsonc` previously contained plaintext credential-bearing `vars` (database, cache, JWT/admin, LiveKit, payments and related secrets). After owner-confirmed rotation on 2026-11-23 those keys were removed without exposing values; strict CI was committed in `d4b0510`, pushed and confirmed passing on deployment. Full evidence: [tracked Worker credentials finding](../infrastructure/tracked-worker-credentials-finding.md).
 
 **Risk:** Anyone with repository or history read access may have usable credentials. Test labels are not evidence that values are harmless.
 
@@ -33,7 +33,7 @@ Phase 0 audits and planning are complete ([report](phase0-report.md)). Five gate
 
 **Approval recorded:** Option A, owner-confirmed rotation/revocation on 2026-11-23, and local instruction to remove tracked values and add ignore rules. No history rewrite was selected.
 
-**Completed locally:** values removed without reproducing them, ignore rules verified/added, finding and ADR updated, CI switched to `secrets:check:strict`, and strict guard reports zero findings. Still pending: explicit commit/push approval and observing the first strict CI run. No history was rewritten.
+**Completed:** values removed without reproducing them, ignore rules verified/added, finding and ADR updated, CI switched to `secrets:check:strict`, cleanup committed/pushed in `d4b0510`, and owner confirmed deployment succeeded with strict CI active. No history was rewritten.
 
 ## 3. DCR-2 — Authoritative database decision (resolved: D1)
 
@@ -69,7 +69,7 @@ Phase 0 audits and planning are complete ([report](phase0-report.md)). Five gate
 
 **Owner selection:** A (D1), recorded in [ADR-0001](../decisions/0001-d1-and-r2-target.md). **Still required before production use:** the metrics above, Workers Paid confirmation, a reviewed schema, backup/restore rehearsal and destructive-operation approval. If any D1 capacity check fails, the ADR must be revisited and Option B re-evaluated.
 
-**Local input preparation (2026-11-23):** `npm run capacity:gate -- --input <metrics.json>` in `apps/api` screens supplied aggregates against documented D1 hard limits and reports five review items that stay open for owner judgment. It does not collect metrics or access any production system; see [the capacity assessment](../database/d1-capacity-assessment.md#local-hard-limit-screening-input-preparation-not-acceptance) for the input shape and interpretation.
+**Local input preparation (2026-11-23):** `npm run capacity:intake -- --template` generates the blank metrics file; `npm run capacity:intake -- --input <metrics.json>` checks completeness and then screens supplied aggregates against documented D1 hard limits. It reports five review items that stay open for owner judgment. Neither command collects metrics or accesses a production system. `npm run capacity:projection -- --before <dir> --after <dir> --metrics <metrics.json>` cross-checks the declared 12-month projection against observed snapshot byte growth, `npm run capacity:queries -- --input <observations.jsonl>` screens captured query shapes against D1 limits, `npm run capacity:billing -- --queries <observations.jsonl> --metrics <metrics.json>` estimates rows read/written and storage against Paid inclusions, `npm run capacity:recovery -- --verification <report.json> --rehearsal <dir> --attestation <attestation.json>` checks recovery evidence completeness without performing a restore, and `npm run capacity:status -- ...` aggregates all local reports plus owner attestations into one readiness checklist. See [the capacity assessment](../database/d1-capacity-assessment.md#local-hard-limit-screening-input-preparation-not-acceptance) for the input shape and interpretation.
 
 ## 4. DCR-3 — Realtime protocol path
 
@@ -83,15 +83,17 @@ Phase 0 audits and planning are complete ([report](phase0-report.md)). Five gate
 | B | Versioned native DO WebSocket protocol with dual publish during a client migration window | Enables hibernation, explicit event IDs/dedupe and recovery cursors; requires Android/admin changes and a support window |
 | C | Staged hybrid: compatibility adapter for legacy clients, native protocol for new clients | Highest short-term complexity; requires a clear cutoff date and dual-test matrix |
 
-**Inputs needed:** old-client support window (which installed Android versions must keep working), whether hibernation/cost reduction is a hard requirement, owner sign-off on the source-verified [event inventory](../migration/realtime-event-inventory.md) (47 shared events + 16 PK events plus literal events absent from the catalog), and the Android `BONDS` topic mismatch decision.
+**Owner inputs recorded 2026-11-23:** 90-day legacy support window after native GA; hibernation/cost reduction is a hard requirement; source-verified [event inventory](../migration/realtime-event-inventory.md) accepted as the 83-name baseline; server emits `BONDS` in `sync:invalidate` for `/api/bonds/*` mutations. The first BONDS emitter slice is local and uncommitted.
 
-**Approval required:** selection of A/B/C, the client support window, and acceptance of the corresponding DO cost model. No protocol is treated as interchangeable without a compatibility suite.
+**Implementation still required:** compatibility adapter, native hibernating DO protocol, Android/admin client migration, cutoff-date record, and dual-path compatibility suite. No protocol is treated as interchangeable without that suite.
 
 ## 5. DCR-4 — Media cutover scope and R2 environment
 
-**Current state:** the uncommitted R2 foundation covers avatar only; it is not provisioned or deployed. `ProfileDetailScreen` does not consume progress or cancel, and failed uploads leave quota reservations until TTL with no sweeper. Full context: [Phase 0 report](phase0-report.md) and [Android audit](../architecture/android-source-audit.md).
+**Current state:** decision gate complete under [ADR-0005](../decisions/0005-r2-media-cutover.md). The R2 foundation still covers avatar only; it is not provisioned or deployed. `ProfileDetailScreen` does not consume progress or cancel, and failed uploads leave quota reservations until TTL with no sweeper. Full context: [Phase 0 report](phase0-report.md) and [Android audit](../architecture/android-source-audit.md).
 
-**Environment inputs needed:** bucket names and account, custom domains and CDN policy, CORS origin allowlist, public/private visibility policy, credential owner and secret store, media inventory (categories, counts, bytes, legacy URLs), room/clan private-media participant rules, and who owns the missing admin media/registry/quota tooling.
+**Owner decisions recorded 2026-11-23:** Option B phased cutover; five existing bucket names and server-derived keys; public variants with private originals/staging; private access for media/resource owner, resource admins and accepted participants only; explicit per-environment domains/CORS with no wildcard production origin; agent stages local admin tooling and value-free config guards while provider credentials remain owner-controlled.
+
+**Still required for provisioning:** exact production origin/CORS values, R2 account/bucket provisioning, secret-store setup, owner-approved media inventory export, and authorization for each category cutover.
 
 **Local tooling added 2026-11-22 (input preparation, not a decision):** `npm run inventory:media -- --input <records.jsonl>` in `apps/api` builds a read-only inventory from an exported MediaObject-shaped JSONL file. It reports counts and bytes by category, bucket, visibility, owner type, media type, bucket×visibility, processing/moderation status, variant storage, duplicate storage keys and a stable digest. It never reads MongoDB or R2 and deliberately does not assert a public/private bucket policy, since that policy is still an owner decision. The MediaObject inventory itself does **not** supply legacy `/uploads` URL coverage, because those files are not fully represented in MediaObject. A companion read-only scanner added 2026-11-23, `npm run inventory:legacy-media -- --input <records.jsonl>` or `--snapshot <directory>`, counts source-verified legacy public/private URL forms, inline data URLs, badge-art routes and managed upload endpoints from exported records or a copied snapshot; it emits URL digests and field paths only, never raw URLs. It does not verify that binaries still exist. Neither tool fulfills the media backup requirement in [BACKUP_AND_RECOVERY.md](../migration/BACKUP_AND_RECOVERY.md); that remains open. An owner-approved export is still required before real numbers can be produced.
 
@@ -102,14 +104,14 @@ Phase 0 audits and planning are complete ([report](phase0-report.md)). Five gate
 | Option | Meaning | Consequence |
 |---|---|---|
 | A | Extend avatar-only slice; fix wiring and add the sweeper before any new category | Smallest change; other categories stay on legacy paths |
-| B (recommended) | Phased category cutover after provisioning and fixes | Each category gets its own validation and rollback gate; follows [implementation plan Phase 4](../migration/implementation-plan.md) |
+| B (selected) | Phased category cutover after provisioning and fixes | Each category gets its own validation and rollback gate; follows [implementation plan Phase 4](../migration/implementation-plan.md) |
 | C | Full cutover in one phase | Highest risk: private-media semantics and admin tooling are not yet defined |
 
-**Approval required:** environment inputs above, selection of A/B/C, R2 provisioning and bucket policies, custom domain/CORS approval, media deletion/archive policy, and authorization for any production media change. No credentials or domains are created here.
+**Decision recorded:** A/B/C selection, bucket naming, visibility policy, private-access policy and tooling ownership are recorded in ADR-0005. **Still requiring approval:** R2 provisioning, exact production domain/CORS values, media deletion/archive policy, and each production media-category cutover. No credentials or domains are created by the decision.
 
 ## 6. DCR-5 — Plan acceptance and authorization boundaries
 
-**Request:** accept the repository-specific [implementation plan](../migration/implementation-plan.md) as the execution sequence, with the dependency chain and per-phase exit gates unchanged, and confirm the authorization boundaries below.
+**Response recorded 2026-11-23:** the owner accepted the repository-specific [implementation plan](../migration/implementation-plan.md) as the execution sequence, with the dependency chain and per-phase exit gates unchanged, and authorized one commit/push of the current local slices. See [ADR-0006](../decisions/0006-implementation-plan-acceptance.md).
 
 | Action | Authorization standing |
 |---|---|
@@ -119,7 +121,7 @@ Phase 0 audits and planning are complete ([report](phase0-report.md)). Five gate
 | Credential rotation, secret-store change, history rewrite | DCR-1 selection and provider access |
 | Production snapshot export, transform, import, migration | Separate explicit approval after backup/restore rehearsal |
 | Deploy, DNS cutover, release, destructive production change | Separate explicit approval each time |
-| Commit / push | The 2026-11-22 local-only slices were committed and pushed under one-time explicit authorization (`4af0b0d`). Later local slices remain uncommitted and require new explicit approval |
+| Commit / push | DCR-5 grants one-time explicit authorization for the current local slices only. Previously authorized commits: `4af0b0d`, `d4b0510`. Future commits require new approval |
 
 ## 7. Owner response template
 
@@ -129,8 +131,8 @@ Copy this block and fill it in. Each answer becomes an ADR; nothing is inferred 
 DCR-1 credential remediation: A / B / C ; secret-store owner: ____ ; history decision: ____
 DCR-2 database: D1 (selected 2026-11-22, ADR-0001) ; metrics attached: yes/no ; Workers Paid: yes/no ; capacity gates passed: yes/no
 DCR-3 realtime: A / B / C ; old-client support window: ____ ; hibernation required: yes/no ; event inventory accepted: yes/no
-DCR-4 media scope: A / B / C ; buckets/domains/CORS: ____ ; private-media rule: ____ ; admin tooling owner: ____
-DCR-5 plan acceptance: accept / changes requested (list) ; commit authorization: yes/no
+DCR-4 media scope: B (recorded 2026-11-23) ; buckets: five existing names ; domains/CORS: explicit per-env, production origin pending ; private-media rule: owner/resource-admin/accepted-participant ; admin tooling owner: agent stages locally
+DCR-5 plan acceptance: accepted 2026-11-23 ; commit authorization: one-time for current local slices (ADR-0006)
 ```
 
 ## 8. Next action after responses
@@ -146,8 +148,8 @@ DCR-5 plan acceptance: accept / changes requested (list) ; commit authorization:
 |---|---|---|---|
 | DCR-1 | "Owner rotates, I prepare" — Option A, no history rewrite | [ADR-0003](../decisions/0003-credential-remediation-approach.md) | Provider rotation, removal from tracked config, strict CI gate |
 | DCR-2 | D1 (earlier response) | [ADR-0001](../decisions/0001-d1-and-r2-target.md) | Capacity metrics, Workers Paid, restore rehearsal |
-| DCR-3 | "Hybrid bridge + native DO" — Option C | [ADR-0002](../decisions/0002-staged-hybrid-realtime-protocol.md) | Support window, hibernation requirement, event inventory sign-off, `BONDS` decision |
-| DCR-5 | "Local code + tests" — no commit, push, provision, deploy or data change | [ADR-0004](../decisions/0004-local-code-and-tests-authorization.md) | Full plan acceptance; separate approvals per action |
-| DCR-4 | No response yet | — | R2 scope and environment inputs (section 5) |
+| DCR-3 | "Hybrid bridge + native DO" — Option C; inputs closed 2026-11-23 | [ADR-0002](../decisions/0002-staged-hybrid-realtime-protocol.md) | Runtime adapter/native DO implementation, hibernation proof, dual-path suite, cutoff date |
+| DCR-5 | "Local code + tests"; plan accepted 2026-11-23; one-time commit/push of current local slices | [ADR-0004](../decisions/0004-local-code-and-tests-authorization.md), [ADR-0006](../decisions/0006-implementation-plan-acceptance.md) | Future commit/push, deploy, provisioning and data work |
+| DCR-4 | Option B and policy recorded 2026-11-23 | [ADR-0005](../decisions/0005-r2-media-cutover.md) | R2 provisioning, production origin/CORS, wiring fixes, admin tooling and category cutover approvals |
 
-Nothing is inferred from silence. DCR-4 and the remaining inputs above are still required before the corresponding phases can start.
+Nothing is inferred from silence. DCR-4 is recorded in ADR-0005 and DCR-5 in ADR-0006. Provisioning values, runtime implementation and all production actions remain gated before later phases can start.

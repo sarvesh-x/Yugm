@@ -1,5 +1,90 @@
 # Development progress
 
+## 2026-11-23 -- DCR-5 plan accepted and commit authorized
+
+- **Scope:** recorded owner acceptance of the implementation plan and a one-time commit/push authorization for the current local slices. No provision, deploy, credential or data operation authorized.
+- **Changes:** added ADR-0006; updated ADR-0004, DCR-5 decision request, implementation plan, `CURRENT_TASK.md`, `INDEX.md`, and progress docs. A handoff records the one-time authorization limit.
+- **State:** DCR-1, DCR-3, DCR-4 and DCR-5 decision gates are closed. DCR-2 evidence, recovery rehearsal, runtime implementation and all production approvals remain open.
+- **Next:** verify and publish the current local slices under the one-time authorization, then stop pending new approvals.
+
+## 2026-11-23 -- DCR-4 decision gate completed
+
+- **Scope:** recorded all DCR-4 owner decisions and staged an unwired private-media policy harness. No runtime authorization, provision, credential or production data change.
+- **Decisions recorded:** Option B phased cutover; five existing R2 bucket names; public variants with private originals/staging; private access for media/resource owner, resource admins and accepted participants only; explicit per-env domains/CORS with production origin pending; agent stages local admin tooling/guards while owner controls provider credentials.
+- **Changes:** added ADR-0005, updated DCR-4 decision request, private-media authorization audit, `REALTIME_EVENTS.md` was not touched, `CURRENT_TASK.md`, `INDEX.md`, progress docs. Added `src/migration/mediaAccessPolicy.ts` with 6 tests.
+- **Verification (run):** policy tests 6/6 passed; `npm.cmd run typecheck --workspace @yugm/api` passed. No production access.
+- **State/remaining:** decision gate closed; runtime authorization, admin tooling, wiring fixes, exact production CORS/domain values, provisioning and phased category cutover remain separate work. Changes are uncommitted.
+
+## 2026-11-23 -- DCR-3 decision gate completed
+
+- **Scope:** recorded all owner inputs closing DCR-3 and implemented the accepted BONDS invalidation emitter locally.
+- **Decisions recorded:** 90-day legacy Socket.IO support window after native GA; hibernation is a hard requirement; 83-name event inventory accepted; server emits `BONDS` for `/api/bonds/*` mutations.
+- **Changes:** updated ADR-0002, DCR-3 decision request, realtime plan and `REALTIME_EVENTS.md`; added `BONDS` topic mapping in `syncInvalidation.ts` with a new test. `mutationTopics("POST", "/api/bonds/invitations")` now returns `["BONDS", "PROFILE", "TASKS"]`.
+- **Verification (run):** sync invalidation tests 6/6 passed; `npm.cmd run typecheck --workspace @yugm/api` passed. No database, Cloudflare account, credential or production data access.
+- **State/remaining:** decision gate closed; runtime compatibility adapter, native hibernating DO protocol, Android migration, cutoff-date record and dual-path parity suite remain separate implementation work. Changes are uncommitted.
+
+## 2026-11-23 -- Re-verified all local changes after DCR-2 tooling
+
+- **Scope:** re-ran bounded local verification across all accumulated changes; no behavior change and no production access.
+- **Results:** root typecheck passed; API 439/439, hardening 34/34, shared 12/12, admin 9/9; credential guard 8/8, OpenAPI guard 6/6, config manifest 3/3, worker-config guard 5/5; strict credential guard zero findings; `openapi:check` PASS; admin build passed with tracked `dist/` restored; `git diff --check` clean apart from line-ending notices.
+- **Record:** [final local verification handoff](handoffs/2026-11-23-final-local-verification.md) updated with the new counts.
+- **State:** DCR-1 is closed and pushed in `d4b0510`; later DCR-1 closure docs and DCR-2 tooling remain uncommitted. DCR-2 still needs owner inputs.
+
+## 2026-11-23 -- DCR-2 readiness runbook added
+
+- **Scope:** documentation-only consolidation of the DCR-2 command sequence, owner inputs and interpretation limits. No code or data change.
+- **Changes:** added `docs/migration/DCR2_READINESS_RUNBOOK.md`, linked it from `docs/INDEX.md` and `CURRENT_TASK.md`. The runbook covers metrics template, hard-limit gate, projection, query, billing, recovery-evidence and readiness commands, plus the exact owner attestations required.
+- **State:** DCR-2 local tooling is complete; the gate remains open pending real metrics, Workers Paid, recovery evidence and schema approval. No tests were needed for this documentation-only change.
+
+## 2026-11-23 -- DCR-2 readiness summary added
+
+- **Scope:** aggregated the existing local DCR-2 reports into a single readiness checklist without adding new verification claims.
+- **Changes:** `backend-server/apps/api/src/migration/dcr2Readiness.ts`, CLI `src/scripts/dcr2-readiness.ts`, npm script `capacity:status`, and 2 tests. It checks capacity, Workers Paid, projection, query, billing, recovery evidence and owner attestations for schema approval/Workers Paid.
+- **Verification (run):** targeted tests 24/24 with DCR-2 suites; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smoke on generated reports reported READY 8/8 with 4 review items and an explicit “not production acceptance” warning. No production access.
+- **State/remaining:** the summary is only as good as the supplied reports/attestations. Real metrics, restore rehearsal, Workers Paid confirmation and schema approval remain owner responsibilities. Changes are uncommitted.
+
+## 2026-11-23 -- DCR-2 recovery evidence checker added
+
+- **Scope:** added local validation of recovery evidence artifacts without performing a restore or touching any production system.
+- **Changes:** `verify-backup` now supports `--out`; added `src/migration/dcr2RecoveryEvidence.ts`, CLI `src/scripts/dcr2-recovery-evidence.ts`, npm script `capacity:recovery`, and 3 tests. It checks verification output, rehearsal validation/transform/id-map artifacts and an owner attestation, reporting snapshot mismatches and missing attestation fields.
+- **Verification (run):** targeted tests 22/22 with DCR-2 suites; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smoke on generated fixtures reported evidence COMPLETE with three open review items. No database, Cloudflare account or production data access.
+- **State/remaining:** evidence completeness is not a restore test; attestation booleans are owner claims. DCR-2 still needs real backups, an isolated restore rehearsal, Workers Paid and schema approval. Changes are uncommitted.
+
+## 2026-11-23 -- DCR-2 billing estimate added
+
+- **Scope:** added local billing evidence for DCR-2 without billing API, database or Cloudflare access.
+- **Changes:** `backend-server/apps/api/src/migration/d1BillingEstimate.ts`, CLI `src/scripts/d1-billing-estimate.ts`, npm script `capacity:billing`, and 3 tests. It estimates monthly rows read from query observations, rows written from peak write rate as an upper bound, and storage from capacity metrics, comparing each to Workers Paid inclusions with three review items.
+- **Verification (run):** targeted tests 19/19 with DCR-2 suites; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smoke on generated inputs reported all three inclusions within limits and three open review items. No production access.
+- **State/remaining:** estimates are not invoices and do not cover recovery evidence. Workers Paid, restore rehearsal and schema approval remain open. Changes are uncommitted.
+
+## 2026-11-23 -- DCR-2 query-profile audit added
+
+- **Scope:** added local tooling for the query-shape review item without collecting query data or touching any database.
+- **Changes:** `backend-server/apps/api/src/migration/queryProfileAudit.ts`, CLI `src/scripts/query-profile-audit.ts`, npm script `capacity:queries`, and 4 tests. It validates JSONL query observations, screens statement/parameter/result/duration hard limits, and reports p50/p95/p99, full scans, unindexed observations, rows scanned and coarse headroom evidence.
+- **Verification (run):** targeted tests 16/16 with the DCR-2 suites; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smoke on generated observations reported hard-gate PASS with 4 review items. No production access.
+- **State/remaining:** hard-limit PASS is not query acceptance. DCR-2 still needs real query evidence, Workers Paid, recovery evidence and schema approval. Changes are uncommitted.
+
+## 2026-11-23 -- DCR-2 projection cross-check added
+
+- **Scope:** added local evidence for the 12-month D1 projection gate without collecting metrics or touching any database.
+- **Changes:** `backend-server/apps/api/src/migration/projectionAudit.ts`, CLI `src/scripts/projection-audit.ts`, npm script `capacity:projection`, and 3 tests. It compares declared projection with byte growth between two snapshot manifests, reports baseline alignment and adds four review items (retention, seasonality, index growth, baseline alignment).
+- **Verification (run):** targeted tests 12/12 with the DCR-2 intake/capacity suites; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smoke on generated snapshots reported a 1-hour window, observed growth and four review items. No production access.
+- **State/remaining:** projection evidence only; DCR-2 still needs real metrics, Workers Paid, query/growth/recovery evidence and schema approval. Changes are uncommitted.
+
+## 2026-11-23 -- DCR-2 metrics intake helper added
+
+- **Scope:** prepared a concrete owner-facing metrics intake for DCR-2 without collecting metrics or touching MongoDB/D1/Cloudflare.
+- **Changes:** added `src/migration/dcr2MetricsIntake.ts`, CLI `src/scripts/dcr2-metrics-intake.ts`, npm script `capacity:intake`, and 3 tests. `--template` emits a blank 16-field JSON file; `--input` reports missing/invalid fields with guidance, then screens ready metrics through the hard-limit gate.
+- **Verification (run):** targeted tests 9/9 with the capacity-gate suite; `npm.cmd run typecheck --workspace @yugm/api` passed; CLI smoke showed the blank template as NOT READY and a completed fixture as READY/PASS with 5 review items. No production access.
+- **State/remaining:** DCR-2 still requires real aggregates, Workers Paid, query/growth/recovery evidence and schema approval. Changes are uncommitted.
+
+## 2026-11-23 -- DCR-1 closed after successful deployment
+
+- **Scope:** recorded owner confirmation that the DCR-1 cleanup commit `d4b0510` deployed successfully with strict credential CI active. No code/config/credential change in this documentation update.
+- **Updated:** ADR-0003, DCR-1 decision request, tracked-credentials finding, baseline report, `CURRENT_TASK.md`, the DCR-1 handoff and `MIGRATION_PROGRESS.md`.
+- **State:** DCR-1 Option A is complete: provider rotation confirmed, tracked values removed, ignore rules added, strict CI pushed and verified on deployment. No Git history rewrite was performed.
+- **Remaining at that point:** DCR-2/DCR-3/DCR-4 inputs, verified backups/restore rehearsal, schema approval and cutover approvals. DCR-3 inputs were closed later the same day; runtime implementation remains.
+
 ## 2026-11-23 -- DCR-1 local credential cleanup staged
 
 - **Scope:** after owner confirmation that all affected credentials were rotated/revoked and moved to ignored secret stores, staged the local/config/CI portion of DCR-1. No credential value was printed, copied or stored.

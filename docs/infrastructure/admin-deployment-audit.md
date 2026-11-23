@@ -108,7 +108,7 @@ Render does not declare `CORS_ORIGIN`/`ADMIN_PANEL_ORIGIN`, `REDIS_URL`, R2 vari
 | `.github/workflows/cloudflare-pages.yml` | Manual `workflow_dispatch` with staging/production target and explicit production validation checkbox. Gates on `CLOUDFLARE_PAGES_READY`, all Cloudflare vars, HTTPS admin API URL ending `/api/admin`, rejection of `.onrender.com` and rejection of embedded credentials. Deploys only the Pages admin. |
 | `.github/workflows/android-release.yml` | Tag-triggered signed APK using keystore secrets. Builds against staging Worker URLs. Release lint is disabled in Gradle. |
 
-The staging deploy gate is useful evidence but is not a full migration acceptance gate. An admin typecheck/build CI gate and a report-only credential guard were added on 2026-11-23. A dependency-free OpenAPI structural guard (required paths, local refs, duplicate keys, embedded credentials) was added to CI on 2026-11-23. Strict secret scanning (after credential rotation), runtime admin UI permission QA, full `swagger-cli` validation in CI and migration-specific checks remain open before production work.
+The staging deploy gate is useful evidence but is not a full migration acceptance gate. An admin typecheck/test/build CI gate, a strict credential guard verified on deployment, and a dependency-free OpenAPI structural guard were added on 2026-11-23. Runtime admin UI permission QA, full `swagger-cli` validation in CI and migration-specific checks remain open before production work.
 
 ## 7. Deployed versus source-only state
 

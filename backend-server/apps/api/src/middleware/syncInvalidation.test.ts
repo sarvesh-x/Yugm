@@ -64,3 +64,19 @@ test("wallet and clan updates stay scoped to the authenticated actor", () => {
   assert.deepEqual(recipients, ["actor", "actor"]);
   assert.deepEqual(broadcasts, []);
 });
+
+test("bonds mutations invalidate the BONDS topic with profile and task readers", () => {
+  assert.deepEqual(mutationTopics("POST", "/api/bonds/invitations"), ["BONDS", "PROFILE", "TASKS"]);
+  assert.deepEqual(mutationTopics("PATCH", "/api/bonds/bond-1/preferences"), ["BONDS", "PROFILE", "TASKS"]);
+
+  const emitted: Array<{ userId: string; topics: string[] }> = [];
+  const middleware = createSyncInvalidation((userId, _event, payload: unknown) => {
+    emitted.push({ userId, topics: (payload as { topics: string[] }).topics });
+  });
+  const response = Object.assign(new EventEmitter(), { statusCode: 200 });
+  middleware({ method: "POST", originalUrl: "/api/bonds/invitations", user: { id: "actor" }, body: { secret: "not broadcast" } } as any, response as any, () => {});
+  response.emit("finish");
+
+  assert.deepEqual(emitted, [{ userId: "actor", topics: ["BONDS", "PROFILE", "TASKS"] }]);
+  assert.equal(JSON.stringify(emitted).includes("secret"), false);
+});

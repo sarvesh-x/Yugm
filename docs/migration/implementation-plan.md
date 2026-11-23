@@ -1,7 +1,7 @@
 # Repository-specific migration implementation plan
 
 **Date:** 2026-11-22  
-**Status:** Phase 0 proposal. Phases are sequential; later phases must not start before earlier exit gates pass. The database target is now D1 ([ADR-0001](../decisions/0001-d1-and-r2-target.md)), but capacity metrics, credential remediation and plan acceptance still gate Phase 1 onward. No deployment or data approval is implied.
+**Status:** Accepted as the migration execution sequence on 2026-11-23 ([ADR-0006](../decisions/0006-implementation-plan-acceptance.md)). Phases remain sequential; later phases must not start before earlier exit gates pass. The database target is D1 ([ADR-0001](../decisions/0001-d1-and-r2-target.md)), but capacity metrics, recovery rehearsal and provisioning approvals still gate later phases. No deployment or data approval is implied.
 
 ## Phase 0 — audit, decisions and plan
 

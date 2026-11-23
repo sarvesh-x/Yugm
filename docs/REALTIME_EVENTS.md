@@ -21,3 +21,7 @@ A successful authenticated `PUT /api/experience/badges/showcase` emits `sync:inv
 ## Managed R2 media invalidation
 
 A successful `POST /api/media/uploads/{sessionId}/complete` emits the same actor-scoped `sync:invalidate` topics as legacy `/api/upload/avatar`: `PROFILE` and `TASKS`. Session creation, cancellation and download are silent. The invalidation contains no media IDs, keys, signed URLs or user data; clients re-read the authoritative profile. The HTTP completion response remains the proof of commit.
+
+## Bonds invalidation
+
+A successful authenticated mutation under `/api/bonds/*` emits actor-scoped `sync:invalidate` with `{ topics: ["BONDS", "PROFILE", "TASKS"] }`. The payload contains no bond IDs, user IDs or other user data; Android `AppSync` treats `BONDS` like `GIFTS` and also invalidates `WALLET`, then screens re-read authorized endpoints. This is an ephemeral invalidation, not proof of commit. It closes the DCR-3 decision that existing Android BONDS listeners need a server emitter.

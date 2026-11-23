@@ -69,7 +69,7 @@ The ignored `android-client/local.properties` is not part of the recoverable Git
 - Wrangler configs exist for local, staging and production under `backend-server/apps/cloudflare-worker/` (`wrangler.jsonc`, `wrangler.staging.jsonc`, `wrangler.production.jsonc`).
 - Staging and production configs include the `IMAGES` binding added by commit `80d46af`; no paid Cloudflare Images storage was enabled.
 - Tracked Wrangler configs are documented as using `STORAGE_DRIVER=mongodb`; managed R2 media requires `STORAGE_DRIVER=s3` and is configured only in ignored local files. See `docs/features/r2-centralized-media.md`.
-- `docs/infrastructure/tracked-worker-credentials-finding.md` records the critical credential-exposure finding. Owner-confirmed rotation and local tracked-source cleanup were staged on 2026-11-23; commit/push and the first strict CI run remain pending (DCR-1). No secret value is reproduced in this report.
+- `docs/infrastructure/tracked-worker-credentials-finding.md` records the critical credential-exposure finding. DCR-1 was completed on 2026-11-23: owner-confirmed rotation, tracked cleanup and strict CI were committed in `d4b0510`, pushed, and deployment succeeded. No secret value is reproduced in this report.
 - Detailed binding, secret, CORS and environment rules are in `docs/infrastructure/environments.md`.
 
 ## 5. Contract references

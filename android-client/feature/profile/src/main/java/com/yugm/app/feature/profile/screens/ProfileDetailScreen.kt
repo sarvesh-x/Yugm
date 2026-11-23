@@ -392,6 +392,39 @@ fun ProfileDetailScreen(
 
                 if (isOwnProfile) {
                     item {
+                        val colors = LocalYugmColors.current
+                        val clan = viewModel.ownClan
+                        if (clan == null) {
+                            ClanEmptyCard(onExplore = onOpenClanList)
+                        } else {
+                            GlassCard(Modifier.fillMaxWidth()) {
+                                Text("Clan details", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                                Spacer(Modifier.height(10.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Avatar(clan.name.take(1).uppercase(), 58, clan.avatar, avatarType = clan.avatarType, avatarParts = clan.avatarParts)
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Text(clan.name, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text("${clan.familyLabel.ifBlank { "Clan" }} • ${clan.memberCount} members", color = TextMuted, fontSize = 12.sp)
+                                    }
+                                }
+                                Spacer(Modifier.height(10.dp))
+                                Button(
+                                    onClick = { onOpenClan(clan.id) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = colors.primary,
+                                        contentColor = colors.primaryOn
+                                    )
+                                ) {
+                                    Text("See clan details")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (isOwnProfile) {
+                    item {
                         ProfileCompletionCard(
                             profile = profile,
                             onCompleteClick = openProfileEditor,
@@ -431,31 +464,6 @@ fun ProfileDetailScreen(
                             StatCard("Streak", "${pkStats.bestStreak}", Modifier.weight(1f))
                         }
                         Text("${pkStats.played} played / best battle ${pkStats.bestBattle} / total score ${pkStats.totalScore}", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
-                    }
-                }
-
-                if (isOwnProfile) {
-                    item {
-                        val clan = viewModel.ownClan
-                        if (clan == null) {
-                            ClanEmptyCard(onExplore = onOpenClanList)
-                        } else {
-                            GlassCard(Modifier.fillMaxWidth()) {
-                                Text("Clan details", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp)
-                                Spacer(Modifier.height(10.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Avatar(clan.name.take(1).uppercase(), 58, clan.avatar, avatarType = clan.avatarType, avatarParts = clan.avatarParts)
-                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                        Text(clan.name, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text("${clan.familyLabel.ifBlank { "Clan" }} • ${clan.memberCount} members", color = TextMuted, fontSize = 12.sp)
-                                    }
-                                }
-                                Spacer(Modifier.height(10.dp))
-                                Button(onClick = { onOpenClan(clan.id) }, modifier = Modifier.fillMaxWidth()) {
-                                    Text("See clan details")
-                                }
-                            }
-                        }
                     }
                 }
 
@@ -884,8 +892,15 @@ private fun ClanEmptyCard(onExplore: () -> Unit) {
                     fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.width(12.dp))
-            Button(onClick = onExplore, shape = RoundedCornerShape(12.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp)) {
+            Button(
+                onClick = onExplore,
+                shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colors.primary,
+                    contentColor = colors.primaryOn
+                )
+            ) {
                 Icon(Icons.Default.Explore, null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("Explore clans", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)

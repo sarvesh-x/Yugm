@@ -1,7 +1,7 @@
 # Private-media authorization audit
 
 **Date:** 2026-11-23
-**Status:** Source-backed input for DCR-4. This is a factual audit of current behavior; it does not set bucket policy, room/clan rules or cutover scope. No code, credential or production data was changed.
+**Status:** Source-backed audit plus owner-decided target policy. The runtime behavior described below is current code; the target policy was recorded 2026-11-23 in [ADR-0005](../decisions/0005-r2-media-cutover.md) and encoded in an unwired local harness. No runtime authorization, credential or production data was changed.
 
 ## 1. Managed media registry (`MediaObject`)
 
@@ -58,12 +58,12 @@ These are not `MediaObject` downloads; they are separate server-mediated routes:
 
 The asset-staging route historically relied on mount order, but `adminAssetsRouter` now applies its own `requireAdminAuth` guard (added 2026-11-23); the permission check and `private, no-store` headers still apply. Do not remove that guard during R2 cutover.
 
-## 5. What remains for the owner
+## 5. Owner decisions recorded 2026-11-23
 
-1. Define room participant and clan member rules for private media, including host/mod/admin overrides, block/hide semantics and private rooms.
-2. Decide whether `MESSAGE` private media should extend beyond direct messages to room, clan or group messages.
-3. Decide whether `USER`-owned private media stays owner-only or gains delegated access.
-4. Decide the R2 bucket/domain/CORS/public-private policy and how legacy public `/uploads` references are mapped.
-5. Approve an export and run `inventory:media` plus `inventory:legacy-media` to size the affected sets before any cutover.
+1. Private media is available to the media/resource owner, resource admins (room host/mod/admin, clan admin or conversation admin), and accepted participants only.
+2. Pending invites, platform-admin-only actors and block/hide-denied users are not granted access by this policy.
+3. Published variants are public; staging objects and originals are private and delivered through short-lived signed grants.
+4. Buckets keep the five existing names; domains/CORS use explicit per-environment allowlists, with the production origin still to be supplied.
+5. The agent stages local admin tooling and value-free config guards; provider credentials remain owner-controlled.
 
-These decisions are prerequisites for DCR-4 option B/C category cutover; none has been made here.
+The target policy is encoded in `backend-server/apps/api/src/migration/mediaAccessPolicy.ts` as an unwired harness with 6 tests. It is not imported by `services/media.ts`; runtime implementation is a separate Phase 4 slice. Legacy `/uploads` mapping and an owner-approved media export remain open.

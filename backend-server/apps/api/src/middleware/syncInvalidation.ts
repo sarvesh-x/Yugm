@@ -16,6 +16,7 @@ export function mutationTopics(method: string, originalPath: string): string[] {
   else if (/^\/(rooms|pk|watch-party)\b/.test(path)) topic = "ROOMS";
   else if (/^\/(users|profile|cosmetics|highlights|vibe)\b/.test(path)) topic = "PROFILE";
   else if (/^\/(clans|groups)\b/.test(path)) topic = "CLANS";
+  else if (/^\/bonds\b/.test(path)) topic = "BONDS";
   else if (/^\/(wallet|diamonds|subscriptions|creator|withdrawals|payouts)\b/.test(path)) topic = "WALLET";
   else if (/^\/(gifts|inventory|mystery-box)\b/.test(path)) topic = "GIFTS";
   else if (/^\/(missions|battle-pass|achievements|experience|referrals)\b/.test(path)) topic = "TASKS";

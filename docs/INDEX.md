@@ -75,6 +75,7 @@ The production audit documents explain their baselines and verification limits. 
 - [Admin, infrastructure and CI/CD audit](infrastructure/admin-deployment-audit.md)
 - [Environments and operations plan](infrastructure/environments.md)
 - [D1 capacity and suitability assessment](database/d1-capacity-assessment.md)
+- [DCR-2 readiness runbook](migration/DCR2_READINESS_RUNBOOK.md)
 - [D1 hard-limit screener (local, read-only)](../backend-server/apps/api/src/migration/d1CapacityGate.ts)
 - [Legacy media reference scanner (local, read-only)](../backend-server/apps/api/src/migration/legacyMediaReferences.ts)
 - [Snapshot delta diff (local, read-only)](../backend-server/apps/api/src/migration/snapshotDiff.ts)
@@ -97,7 +98,7 @@ The production audit documents explain their baselines and verification limits. 
 - [Rollback plan](migration/ROLLBACK_PLAN.md)
 - [Tracked Worker credentials finding](infrastructure/tracked-worker-credentials-finding.md)
 
-Phase 0 audit and planning are documented. DCR-1, DCR-2, DCR-3 and the DCR-5 authorization boundary were answered on 2026-11-22 ([ADR-0001](decisions/0001-d1-and-r2-target.md), [ADR-0002](decisions/0002-staged-hybrid-realtime-protocol.md), [ADR-0003](decisions/0003-credential-remediation-approach.md), [ADR-0004](decisions/0004-local-code-and-tests-authorization.md)); DCR-4 and the detailed inputs remain open. Local code and tests are authorized; the 2026-11-22 local-only slices were committed and pushed under separate explicit authorization. Provision, deploy, credential rotation and data operations remain unauthorized without new explicit approval.
+Phase 0 audit and planning are documented. DCR-2 and the DCR-5 authorization boundary were answered on 2026-11-22 ([ADR-0001](decisions/0001-d1-and-r2-target.md), [ADR-0004](decisions/0004-local-code-and-tests-authorization.md)); DCR-1 was completed on 2026-11-23 ([ADR-0003](decisions/0003-credential-remediation-approach.md)); DCR-3 decision gate completed 2026-11-23 ([ADR-0002](decisions/0002-staged-hybrid-realtime-protocol.md)). DCR-4 decision gate completed 2026-11-23 ([ADR-0005](decisions/0005-r2-media-cutover.md)); DCR-5 plan accepted with one-time commit/push authorization 2026-11-23 ([ADR-0006](decisions/0006-implementation-plan-acceptance.md)). DCR-2 evidence inputs and DCR-4 provisioning values remain open. Provision, deploy, credential rotation and data operations remain unauthorized without new explicit approval.
 
 ## Progress and follow up
 
@@ -105,6 +106,6 @@ Phase 0 audit and planning are documented. DCR-1, DCR-2, DCR-3 and the DCR-5 aut
 - [Known issues](KNOWN_ISSUES.md)
 - [Technical debt and roadmap](TECHNICAL_DEBT.md)
 - [Current task](CURRENT_TASK.md)
-- [Architecture decision records](decisions/README.md) · [ADR-0001: D1 and R2 target](decisions/0001-d1-and-r2-target.md) · [ADR-0002: staged hybrid realtime](decisions/0002-staged-hybrid-realtime-protocol.md) · [ADR-0003: credential remediation](decisions/0003-credential-remediation-approach.md) · [ADR-0004: local code and tests authorization](decisions/0004-local-code-and-tests-authorization.md)
+- [Architecture decision records](decisions/README.md) · [ADR-0001: D1 and R2 target](decisions/0001-d1-and-r2-target.md) · [ADR-0002: staged hybrid realtime](decisions/0002-staged-hybrid-realtime-protocol.md) · [ADR-0003: credential remediation](decisions/0003-credential-remediation-approach.md) · [ADR-0004: local code and tests authorization](decisions/0004-local-code-and-tests-authorization.md) · [ADR-0005: R2 media cutover](decisions/0005-r2-media-cutover.md) · [ADR-0006: plan acceptance](decisions/0006-implementation-plan-acceptance.md)
 
 Create a handoff in `docs/handoffs/` only when work remains for another session. Record significant lasting architectural choices in `docs/decisions/` after they are evidenced or confirmed; do not invent product decisions.

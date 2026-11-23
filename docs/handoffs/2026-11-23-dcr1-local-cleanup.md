@@ -20,14 +20,13 @@
 - `git diff --check` — clean apart from LF/CRLF notices.
 - No credential value was printed, copied, modified by the assistant, or written to docs/chat. No Git history was rewritten.
 
-## Important limitation
+## Completion
 
-These are local, uncommitted changes. Removing tracked values does not by itself invalidate values that may exist in Git history; the owner-confirmed provider rotation/revocation is the mitigating control. The strict CI gate has not yet run in GitHub Actions.
+These changes were committed as `d4b0510` and pushed to `origin/master`. The owner confirmed deployment succeeded with the strict `secrets:check:strict` gate active, closing DCR-1.
 
-## Remaining / next
+Removing tracked values does not by itself invalidate values that may exist in Git history; the owner-confirmed provider rotation/revocation is the mitigating control. No history rewrite was selected under Option A.
 
-1. Explicit approval to commit and push these DCR-1 changes.
-2. Observe the first CI run with `secrets:check:strict` active.
-3. Owner confirms in the secret store that staging and production credentials are distinct and the staging DB isolation assertion remains enforced.
-4. Optional follow-up: broader entropy-based scanning such as gitleaks.
-5. No history rewrite was selected under Option A.
+## Optional follow-up
+
+1. Periodic owner confirmation that staging and production credentials remain distinct and the staging DB isolation assertion remains enforced.
+2. Broader entropy-based scanning such as gitleaks.

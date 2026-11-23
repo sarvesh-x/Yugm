@@ -23,6 +23,138 @@ This is the persistent, single-source tracker for the MongoDB/Render to Cloudfla
 
 ## Work log
 
+### 2026-11-23 — DCR-5 plan accepted and commit authorized
+
+- **Status:** decision/authorization record; no provision, deploy, credential or data change. Commit/push of current local slices is authorized once by the owner.
+- **Added/updated files:** `docs/decisions/0006-implementation-plan-acceptance.md`, `docs/decisions/0004-local-code-and-tests-authorization.md`, `docs/cloudflare-migration/decision-request.md`, `docs/migration/implementation-plan.md`, `docs/CURRENT_TASK.md`, `docs/INDEX.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-dcr5-plan-acceptance.md`.
+- **Verification performed:** documentation-only; links checked by inspection. Commit verification and push result are recorded separately in the handoff once complete.
+- **Issues:** DCR-2 capacity/recovery gates and runtime implementation gates remain open.
+- **Decisions:** DCR-5 plan accepted; one-time commit/push authorization for current local slices only.
+- **Dependencies:** new explicit approval for future commit/push, deploy, provisioning and data work.
+- **Risks:** one-time authorization could be mistaken for standing authority; ADR-0006 states the limit.
+- **Next task:** verify and publish current local slices, then pause pending new approvals.
+
+### 2026-11-23 — DCR-4 decision gate completed
+
+- **Status:** decision recorded plus unwired policy harness; uncommitted. No runtime authorization, provision or data change.
+- **Added/updated files:** `docs/decisions/0005-r2-media-cutover.md`, `docs/cloudflare-migration/decision-request.md`, `docs/migration/private-media-authorization.md`, `docs/INDEX.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `backend-server/apps/api/src/migration/mediaAccessPolicy.ts`, `backend-server/apps/api/src/migration/mediaAccessPolicy.test.ts`, `docs/handoffs/2026-11-23-dcr4-decision-complete.md`.
+- **Verification performed:** policy tests 6/6 passed; typecheck passed. No production access.
+- **Issues:** runtime authorization still only covers direct-message participants; production CORS/domain values and provisioning remain open.
+- **Decisions:** DCR-4 Option B; five existing buckets; public variants/private originals; owner/resource-admin/accepted-participant private access; explicit per-env CORS; agent stages local tooling.
+- **Dependencies:** exact production origin/CORS, R2 provisioning, owner-approved export, wiring fixes and category cutover approvals.
+- **Risks:** unwired harness could be mistaken for runtime behavior; docs state it is a design contract only.
+- **Next task:** implement the accepted policy behind resource-boundary checks and stage admin media/quota tooling before any category cutover.
+
+### 2026-11-23 — DCR-3 decision gate completed
+
+- **Status:** decision recorded plus local invalidation emitter; uncommitted. No runtime adapter, deploy, provision or data change.
+- **Added/updated files:** `backend-server/apps/api/src/middleware/syncInvalidation.ts`, `backend-server/apps/api/src/middleware/syncInvalidation.test.ts`, `docs/decisions/0002-staged-hybrid-realtime-protocol.md`, `docs/cloudflare-migration/decision-request.md`, `docs/migration/realtime-plan.md`, `docs/REALTIME_EVENTS.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-dcr3-decision-complete.md`.
+- **Verification performed:** sync invalidation tests 6/6 passed; typecheck passed. No production access.
+- **Issues:** runtime adapter/native DO implementation remains; BONDS emitter is an invalidation, not proof of commit.
+- **Decisions:** DCR-3 inputs closed: 90-day support window, hibernation hard requirement, 83-name inventory accepted, BONDS server emitter chosen.
+- **Dependencies:** native GA date must be recorded to set the 90-day cutoff; runtime implementation needs separate authorization.
+- **Risks:** BONDS invalidations activate existing Android listeners; they carry no payload data and screens re-read authoritative APIs.
+- **Next task:** implement/verify the compatibility adapter and hibernating native DO protocol with the dual-path parity suite before any realtime cutover.
+
+### 2026-11-23 — Re-verified all local changes after DCR-2 tooling
+
+- **Status:** verification only; no code behavior, deploy, provision or data change.
+- **Added/updated files:** `docs/handoffs/2026-11-23-final-local-verification.md`, `docs/DEVELOPMENT_PROGRESS.md`.
+- **Verification performed:** root typecheck passed; API 439/439, hardening 34/34, shared 12/12, admin 9/9; guard suites and strict secret check passed; admin build passed with tracked `dist/` restored; `git diff --check` clean apart from line-ending notices.
+- **Issues:** none found in local checks; DCR-2 owner inputs still open.
+- **Decisions:** none.
+- **Dependencies:** owner evidence for DCR-2 and explicit approval for further commit/push.
+- **Risks:** local test success must not be read as production verification.
+- **Next task:** owner follows the DCR-2 readiness runbook and supplies real evidence.
+
+### 2026-11-23 — DCR-2 readiness runbook added
+
+- **Status:** documentation-only consolidation. No code, deploy, provision or data change. Changes are uncommitted.
+- **Added/updated files:** `docs/migration/DCR2_READINESS_RUNBOOK.md`, `docs/INDEX.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-dcr2-runbook.md`.
+- **Verification performed:** none required for documentation-only change; links checked by inspection.
+- **Issues:** DCR-2 gate still open on owner-owned metrics, Workers Paid, recovery evidence and schema approval.
+- **Decisions:** none; documents the existing D1 decision and evidence sequence.
+- **Dependencies:** owner-supplied metrics, attestations and approved snapshots.
+- **Risks:** runbook must not be read as acceptance; it states that explicitly.
+- **Next task:** owner follows the runbook and supplies the real evidence before any D1 production step.
+
+### 2026-11-23 — DCR-2 readiness summary added
+
+- **Status:** local aggregation only. No verification claims, deploy, provision or data change. New changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/api/src/migration/dcr2Readiness.ts`, `backend-server/apps/api/src/migration/dcr2Readiness.test.ts`, `backend-server/apps/api/src/scripts/dcr2-readiness.ts`, `backend-server/apps/api/package.json`, `docs/database/d1-capacity-assessment.md`, `docs/cloudflare-migration/decision-request.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-dcr2-readiness-summary.md`.
+- **Verification performed:** targeted tests 24/24 passed; typecheck passed; CLI smoke on generated reports reported READY 8/8 with 4 review items and an explicit non-acceptance warning. No production access.
+- **Issues:** summary readiness depends entirely on supplied reports and attestations.
+- **Decisions:** none; implements input aggregation under DCR-5 authorization.
+- **Dependencies:** all DCR-2 local reports plus owner attestations.
+- **Risks:** a READY summary could be mistaken for cutover approval; CLI and docs state otherwise.
+- **Next task:** owner supplies real reports/attestations and reviews open items before any production decision.
+
+### 2026-11-23 — DCR-2 recovery evidence checker added
+
+- **Status:** local evidence validation only. No restore, deploy, provision or data change. New changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/api/src/scripts/verify-backup.ts`, `backend-server/apps/api/src/migration/dcr2RecoveryEvidence.ts`, `backend-server/apps/api/src/migration/dcr2RecoveryEvidence.test.ts`, `backend-server/apps/api/src/scripts/dcr2-recovery-evidence.ts`, `backend-server/apps/api/package.json`, `docs/database/d1-capacity-assessment.md`, `docs/cloudflare-migration/decision-request.md`, `docs/migration/BACKUP_AND_RECOVERY.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-dcr2-recovery-evidence.md`.
+- **Verification performed:** targeted tests 22/22 passed; typecheck passed; CLI smoke on generated fixtures reported evidence COMPLETE and 3 review items. No production access.
+- **Issues:** evidence completeness is not a restore test; attestations are owner claims.
+- **Decisions:** none; implements input preparation under DCR-5 authorization.
+- **Dependencies:** real backup verification, rehearsal artifacts and owner attestation.
+- **Risks:** a complete evidence bundle could be mistaken for a verified restore; docs and CLI state otherwise.
+- **Next task:** owner creates real backups, performs an isolated restore rehearsal and supplies attestations before DCR-2 recovery gate can close.
+
+### 2026-11-23 — DCR-2 billing estimate added
+
+- **Status:** local read-only tooling only. No billing API, database, deploy, provision or data change. New changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/api/src/migration/d1BillingEstimate.ts`, `backend-server/apps/api/src/migration/d1BillingEstimate.test.ts`, `backend-server/apps/api/src/scripts/d1-billing-estimate.ts`, `backend-server/apps/api/package.json`, `docs/database/d1-capacity-assessment.md`, `docs/cloudflare-migration/decision-request.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-dcr2-billing-estimate.md`.
+- **Verification performed:** targeted tests 19/19 passed; typecheck passed; CLI smoke reported reads/writes/storage within Paid inclusions and three review items. No production access.
+- **Issues:** estimates are not invoices; recovery evidence still open.
+- **Decisions:** none; implements input preparation under DCR-5 authorization.
+- **Dependencies:** query observations and completed capacity metrics.
+- **Risks:** peak write rate overstates average writes; docs label it as an upper bound.
+- **Next task:** owner supplies real observations/metrics and reviews billing/recovery evidence before schema approval.
+
+### 2026-11-23 — DCR-2 query-profile audit added
+
+- **Status:** local read-only tooling only. No query collection, deploy, provision or data change. New changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/api/src/migration/queryProfileAudit.ts`, `backend-server/apps/api/src/migration/queryProfileAudit.test.ts`, `backend-server/apps/api/src/scripts/query-profile-audit.ts`, `backend-server/apps/api/package.json`, `docs/database/d1-capacity-assessment.md`, `docs/cloudflare-migration/decision-request.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-dcr2-query-profile-audit.md`.
+- **Verification performed:** targeted tests 16/16 passed; typecheck passed; CLI smoke on generated observations reported hard-gate PASS and 4 review items. No production access.
+- **Issues:** query evidence is owner-supplied; hard-limit PASS is not query acceptance.
+- **Decisions:** none; implements input preparation under DCR-5 authorization.
+- **Dependencies:** approved query observations and owner review of full scans/headroom.
+- **Risks:** weighted-average throughput estimate is coarse and cannot replace peak measurement.
+- **Next task:** owner supplies real query observations, then review index/full-scan and billing evidence.
+
+### 2026-11-23 — DCR-2 projection cross-check added
+
+- **Status:** local read-only tooling only. No metrics collected, no deploy, provision or data change. New changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/api/src/migration/projectionAudit.ts`, `backend-server/apps/api/src/migration/projectionAudit.test.ts`, `backend-server/apps/api/src/scripts/projection-audit.ts`, `backend-server/apps/api/package.json`, `docs/database/d1-capacity-assessment.md`, `docs/cloudflare-migration/decision-request.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-dcr2-projection-audit.md`.
+- **Verification performed:** targeted tests 12/12 passed; typecheck passed; CLI smoke on generated snapshots reported a 1-hour window and four review items. No production access.
+- **Issues:** a short snapshot window cannot prove seasonality; index bytes and retention remain owner evidence.
+- **Decisions:** none; implements input preparation under DCR-5 authorization.
+- **Dependencies:** two owner-approved snapshots and a completed metrics file.
+- **Risks:** byte growth from snapshots may not reflect retained/indexed totals; docs state this.
+- **Next task:** owner supplies real snapshots and metrics, then reviews the four projection items.
+
+### 2026-11-23 — DCR-2 metrics intake helper added
+
+- **Status:** local input-preparation tool only. No metrics collected, no deploy, provision or data change. New changes are uncommitted.
+- **Added/updated files:** `backend-server/apps/api/src/migration/dcr2MetricsIntake.ts`, `backend-server/apps/api/src/migration/dcr2MetricsIntake.test.ts`, `backend-server/apps/api/src/scripts/dcr2-metrics-intake.ts`, `backend-server/apps/api/package.json`, `docs/database/d1-capacity-assessment.md`, `docs/cloudflare-migration/decision-request.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-dcr2-metrics-intake.md`.
+- **Verification performed:** targeted tests 9/9 passed; typecheck passed; CLI smoke showed incomplete template NOT READY and completed fixture READY/PASS. No production access.
+- **Issues:** real DCR-2 metrics remain owner-supplied; hard-limit PASS is not acceptance.
+- **Decisions:** none; implements input preparation under DCR-5 authorization.
+- **Dependencies:** owner-supplied aggregates, Workers Paid, query/growth/recovery evidence.
+- **Risks:** a completed template could be treated as verified capacity; docs and CLI label it as screening only.
+- **Next task:** owner fills the template from approved monitoring/export aggregates, then review the five open items.
+
+### 2026-11-23 — DCR-1 closed after successful deployment
+
+- **Status:** documentation-only closure record. No code, credential, deploy or data change in this entry.
+- **Added/updated files:** `docs/decisions/0003-credential-remediation-approach.md`, `docs/cloudflare-migration/decision-request.md`, `docs/infrastructure/tracked-worker-credentials-finding.md`, `docs/migration/BASELINE_REPORT.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPMENT_PROGRESS.md`, `docs/handoffs/2026-11-23-dcr1-local-cleanup.md`.
+- **Verification:** owner confirmed deployment of commit `d4b0510` succeeded with strict `secrets:check:strict` CI active. No values were printed or copied.
+- **Issues:** none for DCR-1; history rewrite was not selected.
+- **Decisions:** DCR-1 Option A closure recorded.
+- **Dependencies:** DCR-2/DCR-3/DCR-4 inputs, recovery gates and cutover approvals remain open.
+- **Risks:** optional gitleaks and periodic secret-store review remain follow-ups, not DCR-1 blockers.
+- **Next task:** owner supplies the remaining DCR inputs and approves a verified backup/restore rehearsal.
+
 ### 2026-11-23 — DCR-1 local credential cleanup staged
 
 - **Status:** owner-confirmed rotation; local config/CI cleanup staged and uncommitted. No credential value exposed or stored by the assistant.

@@ -402,7 +402,14 @@ internal fun ProfileBondsSection(
                         trailingContent = if (bond.showBadge) {{ Icon(Icons.Default.FavoriteBorder, "${bond.kind} badge", tint = MaterialTheme.colorScheme.primary) }} else null,
                         modifier = Modifier.clickable { onProfile(bond.partner.id) })
                 }
-                if (data.canInvite) TextButton(onClick = { onManage(userId) }) { Text("Invite to Bonds") }
+                if (data.canInvite) {
+                    TextButton(
+                        onClick = { onManage(userId) },
+                        colors = ButtonDefaults.textButtonColors(contentColor = LocalYugmColors.current.primary)
+                    ) {
+                        Text("Invite to Bonds")
+                    }
+                }
             }
         }
     }
@@ -562,8 +569,15 @@ private fun BondsEmptyCard(count: Int, capacity: Int, onAdd: () -> Unit) {
                     fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.width(12.dp))
-            Button(onClick = onAdd, shape = RoundedCornerShape(12.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp)) {
+            Button(
+                onClick = onAdd,
+                shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colors.primary,
+                    contentColor = colors.primaryOn
+                )
+            ) {
                 Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
                 Text(stringResource(R.string.bonds_add), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)

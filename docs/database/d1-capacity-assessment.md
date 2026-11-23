@@ -59,9 +59,21 @@ Added 2026-11-23: `npm run capacity:gate -- --input <metrics.json> [--out <repor
 
 The tool checks: 12-month projection at least the current total; 10 GB database ceiling; Workers Paid; 500 MB Free ceiling when Paid is false; 2 MB row; no binary bytes in D1; 100 KB statement; 100 bound parameters; 50 MB result; 30 s p99 statement; and 50/1,000 queries per invocation. Exit 0 means **no hard limit was exceeded**, not that DCR-2 is accepted. Every report also returns five always-open review items: size comfort, write-throughput headroom, indexed query shape, growth/retention evidence, and recovery/billing. Those require owner evidence and judgment.
 
+Use `npm run capacity:intake -- --template [--out <metrics.json>]` to generate a blank metrics file, then `npm run capacity:intake -- --input <metrics.json>` to check completeness before screening. The intake report names each missing or invalid field and its meaning; it exits non-zero until all fields are supplied. It does not fill values or read a database.
+
 The input is a flat JSON object with non-empty `snapshotId`, `sourceEnvironment`, `collectedAt` and these non-negative numbers: `relationalBytes`, `indexBytes`, `projected12MonthTotalBytes`, `largestRowBytes`, `binariesInD1Bytes`, `largestStatementBytes`, `maxBoundParameters`, `largestQueryResultBytes`, `p99QueryDurationMs`, `averageWriteDurationMs`, `peakWritesPerSecond`, `peakQueriesPerInvocation`, plus boolean `workersPaid`. `projected12MonthTotalBytes` is the final projected relational+index total, not an increment. Units are decimal bytes/ms. Store sensitive aggregate reports outside public docs; the tool itself writes only what the caller supplies.
 
-This screener does not produce metrics, does not validate a restore, and does not replace any item in the exit-gate list below.
+Use `npm run capacity:projection -- --before <baseline-dir> --after <later-dir> --metrics <metrics.json>` to cross-check the declared 12-month projection against byte growth observed between two snapshot manifests. It reports the observed growth rate, a growth-based projection, baseline alignment and four review items (retention, seasonality, index growth and snapshot/metrics alignment). It never fills values or declares capacity accepted.
+
+Use `npm run capacity:queries -- --input <observations.jsonl>` to screen captured query observations against the 100 KB statement, 100-parameter, 50 MB result and 30 s duration limits. It also reports p50/p95/p99 durations, full scans, unindexed observations, rows scanned and a coarse throughput-headroom estimate with four review items. It does not collect query data or accept the schema.
+
+Use `npm run capacity:billing -- --queries <observations.jsonl> --metrics <metrics.json>` to estimate monthly rows read (query frequency × rows scanned), rows written (peak write rate as an upper bound) and storage against Workers Paid inclusions (25B reads, 50M writes, 5 GB storage). It reports overages and three review items; it is not an invoice and does not replace billing or recovery evidence.
+
+Use `npm run backup:verify -- --snapshot <dir> --out <verification.json>` to record a copy check, and `npm run capacity:recovery -- --verification <verification.json> --rehearsal <out-dir> --attestation <attestation.json>` to check that verification, dry-run rehearsal artifacts and owner recovery attestations are internally complete. The checker does not run a restore and does not treat attestation booleans as tool-verified proof.
+
+Use `npm run capacity:status -- --capacity <report.json> --projection <report.json> --queries <report.json> --billing <report.json> --recovery <report.json> --attestation <attestation.json>` to aggregate the local reports and owner attestations into one 8-check readiness summary. `READY` means the supplied evidence is internally consistent; it explicitly does not mean production acceptance.
+
+This screener, projection cross-check and query-profile audit do not produce metrics, do not validate a restore, and do not replace any item in the exit-gate list below.
 
 ## Recommendation and decision status
 
