@@ -13,6 +13,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
+import com.yugm.app.core.ui.theme.BrandGradients
+import com.yugm.app.core.ui.theme.LocalYugmColors
+import com.yugm.app.core.ui.theme.OnBrand
 import org.json.JSONObject
 import java.util.UUID
 
@@ -70,14 +77,19 @@ internal fun BondInviteSheet(home: BondsHome, state: BondsUiState, slot: Int, ta
                     Text(selectedGift?.let { "${it.name} · ${it.price} coins" } ?: "Free invitation")
                     Text("Balance ${home.balance} coins")
                     Text("Expires in ${home.hours} hours. Held coins are returned if the request isn’t accepted.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        color = LocalYugmColors.current.textSecondary)
                     OutlinedTextField(message, { message = it.take(160) }, label = { Text("Personal message (optional)") },
                         modifier = Modifier.fillMaxWidth(), maxLines = 3)
                     Button(onClick = {
                         onSend(JSONObject().put("recipient", friendId).put("kind", kindId).put("slot", slot).put("key", intentKey)
                             .put("message", message.trim()).apply { if (!giftId.isNullOrBlank()) put("giftId", giftId) })
                     }, enabled = !state.busy && selectedFriend != null && selectedKind != null && home.balance >= (selectedGift?.price ?: 0),
-                        modifier = Modifier.fillMaxWidth()) { Text(if (state.busy) "Sending…" else "Send invitation") }
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(BrandGradients.horizontal),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, disabledContainerColor = Color.Transparent)
+                    ) { Text(if (state.busy) "Sending…" else "Send invitation", color = OnBrand, fontWeight = FontWeight.Bold) }
                     if (home.balance < (selectedGift?.price ?: 0)) Text("You don’t have enough coins for this gift.")
                 }
             }
@@ -115,10 +127,15 @@ internal fun BondCenter(home: BondsHome, busy: Boolean, open: (BondCard) -> Unit
                             }
                             if (request.gift.isNotBlank()) Text("${request.giftIcon} ${request.gift} · ${request.price} coins")
                             if (request.message.isNotBlank()) Text(request.message)
-                            Text(bondExpiry(request.expiresAt), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(bondExpiry(request.expiresAt), color = LocalYugmColors.current.textSecondary)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 if (request.incoming) {
-                                    Button(onClick = { action(request, "accept") }, enabled = !busy) { Text("Accept") }
+                                    Button(onClick = { action(request, "accept") }, enabled = !busy,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(BrandGradients.horizontal),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, disabledContainerColor = Color.Transparent)
+                                    ) { Text("Accept", color = OnBrand, fontWeight = FontWeight.Bold) }
                                     OutlinedButton(onClick = { action(request, "decline") }, enabled = !busy) { Text("Decline") }
                                 } else OutlinedButton(onClick = { action(request, "cancel") }, enabled = !busy) { Text("Cancel request") }
                             }
@@ -195,10 +212,18 @@ internal fun BondDetailsScreen(detail: BondDetail, home: BondsHome, state: Bonds
                     TextButton(onClick = { call(card.partner.id, false) }) { Text("Voice") }
                     TextButton(onClick = { call(card.partner.id, true) }) { Text("Video") }
                 }
-                Button(onClick = { mutate("check-in", JSONObject(), "POST") }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
-                    Text("Check in together")
+                Button(
+                    onClick = { mutate("check-in", JSONObject(), "POST") },
+                    enabled = !state.busy,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(BrandGradients.horizontal),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, disabledContainerColor = Color.Transparent)
+                ) {
+                    Text("Check in together", color = OnBrand, fontWeight = FontWeight.Bold)
                 }
-                Text("Earn shared points once you both check in today.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Earn shared points once you both check in today.", color = LocalYugmColors.current.textSecondary)
                 OutlinedButton(onClick = { showGifts = true; model.loadCatalog(token, includeFriends = false) }, enabled = !state.busy) { Text("Send a bond gift") }
                 TextButton(onClick = { profile(card.partner.id) }, enabled = card.partner.id.isNotBlank()) { Text("View profile & safety options") }
             }

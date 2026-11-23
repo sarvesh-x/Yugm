@@ -410,13 +410,14 @@ fun ProfileDetailScreen(
                                 Spacer(Modifier.height(10.dp))
                                 Button(
                                     onClick = { onOpenClan(clan.id) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = colors.primary,
-                                        contentColor = colors.primaryOn
-                                    )
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(BrandGradients.horizontal),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, disabledContainerColor = Color.Transparent),
+                                    contentPadding = PaddingValues(vertical = 12.dp)
                                 ) {
-                                    Text("See clan details")
+                                    Text("See clan details", color = OnBrand, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -899,14 +900,14 @@ private fun ClanEmptyCard(onExplore: () -> Unit) {
                 onClick = onExplore,
                 shape = RoundedCornerShape(12.dp),
                 contentPadding = PaddingValues(horizontal = 12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = colors.primary,
-                    contentColor = colors.primaryOn
-                )
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, disabledContainerColor = Color.Transparent),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(BrandGradients.horizontal)
             ) {
-                Icon(Icons.Default.Explore, null, modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Explore, null, tint = OnBrand, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("Explore clans", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text("Explore clans", color = OnBrand, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
             }
         }
     }
@@ -1800,11 +1801,15 @@ private fun ProfileCompletionCard(
 
             Button(
                 onClick = onCompleteClick,
-                colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, disabledContainerColor = Color.Transparent),
                 shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 46.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(BrandGradients.horizontal)
             ) {
-                Text(if (isComplete) "Edit profile details" else "Complete profile details", color = colors.primaryOn, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text(if (isComplete) "Edit profile details" else "Complete profile details", color = OnBrand, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
