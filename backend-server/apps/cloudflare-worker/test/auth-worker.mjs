@@ -33,12 +33,15 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
       cwd: pathFromHere("../"), env: { ...process.env, WRANGLER_SEND_METRICS: "false" }, windowsHide: true
     });
     const bundle = JSON.parse(await readFile(join(directory, "bundle-meta.json"), "utf8"));
-    assert.deepEqual(Object.keys(bundle.inputs).filter(path => /(?:^|[/\\])(?:sharp[/\\]|imageProcessor\.node\.ts$)/.test(path)), []);
+    assert.deepEqual(Object.keys(bundle.inputs).filter(path =>
+      /(?:^|[/\\])(?:sharp[/\\]|imageProcessor\.node\.ts$|ioredis[/\\]|bullmq[/\\]|redis-adapter[/\\]|redis\.ts$)/.test(path)), []);
     const config = JSON.parse(await readFile(configPath, "utf8"));
     assert.equal(config.workers_dev, false);
     assert.equal(config.preview_urls, false);
     const [binding] = config.d1_databases;
     assert.equal(config.d1_databases.length, 1);
+    assert.equal(binding.database_name, "yugm");
+    assert.equal(binding.database_id, "00000000-0000-4000-8000-000000000004");
     assert.equal(binding.remote, false);
     assert.equal(config.r2_buckets.length, 5);
     assert.deepEqual(config.r2_buckets.map(({ bucket_name: name }) => name),
@@ -55,6 +58,7 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
       compatibilityFlags: config.compatibility_flags,
       bindings: { ...config.vars, FCM_PROJECT_ID: project, JWT_SECRET: randomBytes(32).toString("hex") },
       d1Databases: { [binding.binding]: binding.database_id },
+      ratelimits: Object.fromEntries(config.ratelimits.map(({ name, ...settings }) => [name, settings])),
       r2Buckets: Object.fromEntries(config.r2_buckets.map(({ binding: name, bucket_name: bucket }) => [name, bucket])),
       images: { binding: config.images.binding },
       cf: false,
@@ -612,6 +616,45 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     assert.equal((await action(200, visitor, "leave")).data.clan, null);
     assert.equal(await db.prepare("SELECT 1 FROM clans WHERE source_id = ?").bind(clan.id).first(), null);
     await verifyD1AppEndpoints(db, request, returning, visitor);
+
+    // Invalid bodies exercise the rate limits without reaching Firebase or changing sessions.
+    async function rateLimitedRequest(path, body, forwardedIp) {
+      return worker.dispatchFetch("http://127.0.0.1/api/auth/" + path, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "CF-Connecting-IP": forwardedIp,
+          "X-Forwarded-For": forwardedIp,
+          "X-Yugm-Client-IP": forwardedIp
+        },
+        body: JSON.stringify(body)
+      });
+    }
+    for (let i = 0; i < 10; i++) {
+      const email = i % 2 ? " Limit@example.test " : "limit@example.test";
+      assert.equal((await rateLimitedRequest("google", { email }, "192.0.2." + (i + 1))).status, 422);
+    }
+    const identifierLimited = await rateLimitedRequest("phone", { email: "LIMIT@example.test" }, "192.0.2.50");
+    assert.equal(identifierLimited.status, 429);
+    assert.equal(identifierLimited.headers.get("Retry-After"), "60");
+    assert.equal((await identifierLimited.json()).error.code, "RATE_LIMITED");
+
+    let clientLimitReached = false;
+    for (let i = 1; i <= 21; i++) {
+      const result = await rateLimitedRequest("google", { email: `other${i}@example.test` }, "192.0.2." + (50 + i));
+      if (result.status === 429) {
+        clientLimitReached = true;
+        break;
+      }
+      assert.equal(result.status, 422);
+    }
+    assert.equal(clientLimitReached, true);
+
+    for (let i = 1; i <= 30; i++) {
+      assert.equal((await rateLimitedRequest("refresh", {}, "192.0.2." + i)).status, 422);
+    }
+    assert.equal((await rateLimitedRequest("refresh", {}, "192.0.2.31")).status, 429);
+    assert.equal((await rateLimitedRequest("refresh", { refreshToken: "different" }, "192.0.2.31")).status, 422);
   } finally {
     await worker?.dispose();
     await legacyWorker?.dispose();

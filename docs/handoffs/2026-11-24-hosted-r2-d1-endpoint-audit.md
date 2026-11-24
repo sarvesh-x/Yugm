@@ -14,7 +14,7 @@ The owner approved the existing hosted R2 buckets for pre-release use. Android d
 
 Wrangler confirmed Standard as the default storage class for each bucket. A remote smoke test wrote one temporary marker per bucket, read back identical bytes and deleted every marker. The managed-media flag is enabled in `wrangler.production.jsonc`. Set `YUGM_R2_ENABLED=false` to pause managed media. R2 Standard usage above the monthly included allowances is metered. [Cloudflare R2 pricing](https://developers.cloudflare.com/r2/pricing/)
 
-The production origin and D1 identifier still use placeholders. Firebase credentials, JWT signing and the media grant secret are setup inputs. The production Worker was bundled and exercised with simulated bindings. Hosted R2 object operations were verified directly. Verification of the deployed Worker against hosted D1 and R2 remains open.
+The production origin, Firebase credentials, JWT signing and media grant secret remain setup inputs. The production Worker was bundled and exercised with simulated bindings. Hosted R2 object operations were verified directly. The later D1 slice set the hosted database identifier. Verification of the deployed Worker against hosted D1 and R2 remains open. [D1 binding and readiness](2026-11-24-d1-database-and-redis-boundary.md)
 
 ## Endpoint coverage
 

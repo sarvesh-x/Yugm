@@ -26,6 +26,16 @@ test("the production entrypoint uses D1 and configures hosted R2 with a media pa
   assert.equal(config.durable_objects, undefined);
   assert.ok(!("MONGODB_DB_NAME" in config.vars));
   assert.equal(config.d1_databases.length, 1);
+  const [binding] = config.d1_databases;
+  assert.equal(binding.database_name, "yugm");
+  assert.equal(binding.database_id, "07d88439-c0ca-4e13-bfc9-b08d7bcdb371");
+  const localConfig = JSON.parse(await readFile(pathFromHere("../auth-local/wrangler.jsonc"), "utf8"));
+  assert.equal(localConfig.d1_databases[0].database_name, binding.database_name);
+  assert.notEqual(localConfig.d1_databases[0].database_id, binding.database_id);
+  assert.deepEqual(config.ratelimits.map(({ name, simple }) => [name, simple.limit, simple.period]), [
+    ["AUTH_REQUESTS", 20, 60], ["AUTH_IDENTIFIER", 10, 60], ["AUTH_REFRESH", 30, 60]
+  ]);
+  assert.equal(new Set([...config.ratelimits, ...localConfig.ratelimits].map(({ namespace_id }) => namespace_id)).size, 6);
   assert.deepEqual(Object.fromEntries(config.r2_buckets.map(({ binding, bucket_name }) => [binding, bucket_name])), {
     ASSETS: "yugm-assets", PUBLIC_MEDIA: "yugm-public-media", PRIVATE_MEDIA: "yugm-private-media",
     ORIGINALS: "yugm-originals", STAGING: "yugm-staging"
@@ -39,9 +49,8 @@ test("the production entrypoint uses D1 and configures hosted R2 with a media pa
     });
     const bundle = JSON.parse(await readFile(join(directory, "bundle-meta.json"), "utf8"));
     assert.deepEqual(Object.keys(bundle.inputs).filter(path =>
-      /(?:^|[/\\])(?:sharp[/\\]|imageProcessor\.node\.ts$|runtime\.ts$|livekit-server-sdk[/\\])/.test(path)), []);
+      /(?:^|[/\\])(?:sharp[/\\]|imageProcessor\.node\.ts$|runtime\.ts$|livekit-server-sdk[/\\]|ioredis[/\\]|bullmq[/\\]|redis-adapter[/\\]|redis\.ts$)/.test(path)), []);
 
-    const [binding] = config.d1_databases;
     function makeWorker(bindings) {
       const worker = new Miniflare(convertV4MiniflareOptions({
         modulesRoot: directory,
@@ -50,6 +59,7 @@ test("the production entrypoint uses D1 and configures hosted R2 with a media pa
         compatibilityFlags: config.compatibility_flags,
         bindings: { ...config.vars, ...bindings },
         d1Databases: { [binding.binding]: binding.database_id },
+        ratelimits: Object.fromEntries(config.ratelimits.map(({ name, ...settings }) => [name, settings])),
         r2Buckets: Object.fromEntries(config.r2_buckets.map(({ binding, bucket_name }) => [binding, bucket_name])),
         images: { binding: "IMAGES" },
         cf: false,

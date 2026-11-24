@@ -4,7 +4,7 @@ The [root tracker](../../MIGRATION_PROGRESS.md) remains the work log. The [activ
 
 **Active local scope.** The owner expanded the loopback Worker to cover whole-app debug. D1 covers Auth, Profile, R2 avatars, player cosmetics, core clans, the inbox and push-device registration, room discovery and history, select wallet paths and the game catalog. The mount audit found 573 legacy-only method/path patterns, including room lifecycle, Bonds, direct chat, the rest of clan management and admin. [Coverage and evidence](../handoffs/2026-11-24-hosted-r2-d1-endpoint-audit.md) · [Journey sequence](implementation-plan.md#journey-order)
 
-**Production checkpoint.** Release builds use the configured production HTTPS origin. The production Worker targets the same D1 routes and enables the five verified hosted R2 bindings. RealtimeKit server calls passed with mocked responses. Android RTC, production data transfer and the remaining journeys are open. [Production configuration](../handoffs/2026-11-24-production-cloudflare-builds.md) · [Hosted R2 verification](../handoffs/2026-11-24-hosted-r2-d1-endpoint-audit.md)
+**Production checkpoint.** Release builds use the configured production HTTPS origin. The D1 Worker binds the hosted `yugm` database and the five verified hosted R2 buckets. Its auth protection uses Cloudflare Rate Limiting. Hosted D1 has zero tables and the seed remains conditional on production API and schema acceptance. Android RTC, production data transfer and the remaining journeys are open. [D1 and Redis status](../handoffs/2026-11-24-d1-database-and-redis-boundary.md) · [Hosted R2 verification](../handoffs/2026-11-24-hosted-r2-d1-endpoint-audit.md)
 
 | Gate range | Evidence and status |
 | --- | --- |

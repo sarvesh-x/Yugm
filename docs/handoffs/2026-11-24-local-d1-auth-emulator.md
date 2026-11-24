@@ -33,7 +33,7 @@ From `backend-server`:
    npm.cmd run test:auth-worker --workspace @yugm/cloudflare-worker
    ```
 
-4. Apply the draft schema to the dedicated local D1 database:
+4. Apply the draft schema to the local `yugm` D1 database. Debug uses its original local storage ID and `remote: false`. [Database identity and checks](2026-11-24-d1-database-and-redis-boundary.md)
 
    ```powershell
    npm.cmd exec --workspace @yugm/cloudflare-worker -- wrangler d1 execute AUTH_DB --config auth-local/wrangler.jsonc --local --file ../api/migrations/d1/0001_initial.sql

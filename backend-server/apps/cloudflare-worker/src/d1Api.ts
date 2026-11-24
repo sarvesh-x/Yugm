@@ -2,10 +2,12 @@ import { handleAsNodeRequest } from "cloudflare:node";
 import type { D1Database, ExecutionContext, R2Bucket } from "@cloudflare/workers-types";
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
+import { isIP } from "node:net";
 import process from "node:process";
+import { authClientIpHeader, createWorkerAuthRateLimiters, type AuthRateLimitBindings } from "./authRateLimit.js";
 import { installCloudflareImageProcessor } from "./imageProcessor.js";
 
-interface D1ApiEnv {
+interface D1ApiEnv extends AuthRateLimitBindings {
   AUTH_DB: D1Database;
   ASSETS: R2Bucket;
   PUBLIC_MEDIA: R2Bucket;
@@ -50,6 +52,7 @@ function mediaEnabled(env: D1ApiEnv, stage: ApiStage) {
 }
 
 async function startD1Runtime(env: D1ApiEnv, stage: ApiStage) {
+  const rateLimiters = createWorkerAuthRateLimiters(env);
   if (!env.FCM_PROJECT_ID?.trim()) throw new Error("Set the Firebase project ID");
   const enforceAppCheck = env.APP_CHECK_ENFORCE === "true" || env.APP_CHECK_ENFORCE === "1";
   if (stage === "production" && !enforceAppCheck) throw new Error("Production requires Firebase App Check");
@@ -74,7 +77,7 @@ async function startD1Runtime(env: D1ApiEnv, stage: ApiStage) {
   ]);
   installCloudflareImageProcessor(env.IMAGES);
   if (enforceAppCheck) await initFirebase();
-  const app = createD1App(env.AUTH_DB, mediaEnabled(env, stage) && mediaGrantSecret ? {
+  const app = createD1App(env.AUTH_DB, rateLimiters, mediaEnabled(env, stage) && mediaGrantSecret ? {
     buckets: {
       assets: env.ASSETS,
       "public-media": env.PUBLIC_MEDIA,
@@ -153,6 +156,8 @@ export function createD1ApiWorker(stage: ApiStage) {
         // The Worker knows the real caller host; Express must not derive it from a
         // client-supplied header when constructing managed upload URLs.
         forwarded.headers.set("x-yugm-request-origin", url.origin);
+        const connectingIp = request.headers.get("CF-Connecting-IP") ?? "";
+        forwarded.headers.set(authClientIpHeader, stage === "local" ? "loopback" : isIP(connectingIp) ? connectingIp : "unknown");
         return await handleAsNodeRequest(D1_API_PORT, forwarded);
       } catch (error) {
         console.error("D1 API Worker unavailable", error instanceof Error ? error.name : "Error");

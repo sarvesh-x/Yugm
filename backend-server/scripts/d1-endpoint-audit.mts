@@ -57,13 +57,16 @@ const workerRoutes = [
 ];
 
 const noIo = new Proxy({}, { get() { throw new Error("Endpoint audit attempted binding I/O"); } });
+const noRequest = () => { throw new Error("Endpoint audit attempted request handling"); };
 const legacy = new Map(appRoutes(createApp()).map(endpoint => [canonical(endpoint), endpoint]));
 const worker = new Map([
   ...appRoutes(createD1App(noIo as D1Database, {
+    authLimiter: noRequest, authIdentifierLimiter: noRequest, refreshLimiter: noRequest
+  }, {
     grantSecret: "fixture-only",
     buckets: {
       assets: noIo, "public-media": noIo, "private-media": noIo, originals: noIo, staging: noIo
-    } as NonNullable<Parameters<typeof createD1App>[1]>["buckets"]
+    } as NonNullable<Parameters<typeof createD1App>[2]>["buckets"]
   })),
   ...workerRoutes
 ].map(endpoint => [canonical(endpoint), endpoint]));

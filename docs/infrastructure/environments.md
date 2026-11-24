@@ -6,9 +6,9 @@
 
 | Environment | Worker config | Observed status |
 |---|---|---|
-| Local Android debug | `backend-server/apps/cloudflare-worker/auth-local/wrangler.jsonc` | Loopback Worker with simulated D1, R2 and Images. The Android emulator uses port 4000. [Startup and local bindings](../handoffs/2026-11-24-local-d1-auth-emulator.md) |
+| Local Android debug | `backend-server/apps/cloudflare-worker/auth-local/wrangler.jsonc` | Loopback Worker with simulated `yugm` D1, R2, Images and Cloudflare auth rate limits. The Android emulator uses port 4000. [Startup and local bindings](../handoffs/2026-11-24-local-d1-auth-emulator.md) |
 | Staging | `backend-server/apps/cloudflare-worker/wrangler.staging.jsonc` | Deployed prototype at `https://yugm-api-staging.sarveshkumar10101.workers.dev`. Admin at `https://yugm-admin-staging.pages.dev`. Uses isolated `YugmStaging` MongoDB name, staging LiveKit project, `STAGING_DB_ISOLATED=true`, and restricted admin-origin CORS. |
-| Production target | `backend-server/apps/cloudflare-worker/wrangler.production.jsonc` | Shared D1 Worker with five enabled hosted R2 bindings, Firebase App Check, and a placeholder HTTPS origin. Full route coverage, provider parity and live cutover are open. [Hosted R2 and endpoint audit](../handoffs/2026-11-24-hosted-r2-d1-endpoint-audit.md) |
+| Production target | `backend-server/apps/cloudflare-worker/wrangler.production.jsonc` | Hosted `yugm` D1 and five hosted R2 bindings, Cloudflare auth rate limits, Firebase App Check and a placeholder HTTPS origin. Schema and API acceptance remain open. [D1 and Redis migration status](../handoffs/2026-11-24-d1-database-and-redis-boundary.md) |
 
 Pushes to `master` trigger the staging API and admin deployment workflow. Use a feature branch for checkpoints that should leave staging alone. Version tags trigger the Android release workflow. [Workflow source](../../.github/workflows/cloudflare-staging.yml) · [Android release workflow](../../.github/workflows/android-release.yml)
 
@@ -29,6 +29,7 @@ Wrangler config is the source of truth for non-secret bindings and environment s
 |---|---|---|
 | D1 database | Authoritative relational state | D1 Free is the selected target. Capacity, data import and recovery still require verification for the live rollout. Use the database name where supported in migration commands. [Capacity assessment](../database/d1-capacity-assessment.md) |
 | R2 buckets | Assets, public media, private media, originals, staging | Do not omit IDs in config; Wrangler can auto-provision. Verify target bucket before any write/delete. |
+| Rate Limiting | Sign-in and refresh limits for the D1 Workers | Debug and production use separate namespace IDs. Counters are approximate and location-scoped. [Binding behavior](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/) |
 | Durable Object namespaces | Realtime/stateful coordination | SQLite-backed classes; use Wrangler migrations; scope IDs by conversation/room/user as designed. |
 | Queues | Async producers/consumers | Separate producer and consumer bindings; configure DLQ, retries and batching deliberately. |
 | KV namespaces | Non-critical cache/config only | Never for financial or ownership state. |
@@ -56,6 +57,7 @@ Environment inheritance must be checked explicitly. Some Wrangler fields do not 
 
 - Run project-local Wrangler through existing npm scripts so the pinned version is used.
 - Use local D1/R2/KV/DO simulation for normal development; mark explicitly when a command targets remote resources.
+- Select the debug config and `--local` for schema commands against `yugm`. The shared display name leaves the database IDs and persistence separate.
 - Use disposable MongoDB or test databases for compatibility harnesses. The existing realtime test creates a loopback-only in-memory replica set and must never be pointed at user data.
 - Generate Worker types with the project's `wrangler types` command after config/binding changes; do not hand-edit generated declarations.
 

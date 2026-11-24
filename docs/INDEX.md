@@ -68,6 +68,7 @@ The production audit documents explain their baselines and verification limits. 
 - [Whole-app local D1 and R2 scope, cosmetics and clan implementation](handoffs/2026-11-24-local-d1-r2-app-expansion.md)
 - [Production Cloudflare target and Android build routing](handoffs/2026-11-24-production-cloudflare-builds.md)
 - [Hosted R2 verification and D1 endpoint audit](handoffs/2026-11-24-hosted-r2-d1-endpoint-audit.md)
+- [D1 database identity and Redis migration boundary](handoffs/2026-11-24-d1-database-and-redis-boundary.md)
 - [Migration progress tracker](../MIGRATION_PROGRESS.md)
 - [Phase 0 report](cloudflare-migration/phase0-report.md)
 - [Phase 0 decision request](cloudflare-migration/decision-request.md)

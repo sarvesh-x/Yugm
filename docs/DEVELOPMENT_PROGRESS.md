@@ -1,5 +1,11 @@
 # Development progress
 
+## 2026-11-24 — D1 database identity and Redis-free D1 Workers
+
+- Matched the production `AUTH_DB` binding to the existing hosted `yugm` database. Debug uses the same name with its original local ID and `remote: false`. It retains its existing persistence directory.
+- Moved both D1 Workers to Cloudflare Rate Limiting bindings for sign-in and refresh. Bundle tests confirm Redis and BullMQ are absent. Legacy staging and Node still own the Redis-backed compatibility paths.
+- Wrangler reported zero tables for hosted D1. The route audit still shows 573 legacy-only patterns, so production seed generation remains pending. [Scope and verification](handoffs/2026-11-24-d1-database-and-redis-boundary.md)
+
 ## 2026-11-24 — Hosted R2 verification and D1 endpoint audit
 
 - Verified all five hosted Standard R2 buckets with a disposable write, byte-for-byte read-back and deletion in each. Enabled their native bindings in the production target and retained the media pause switch.

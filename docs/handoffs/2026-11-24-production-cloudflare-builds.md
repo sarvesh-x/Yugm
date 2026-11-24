@@ -16,7 +16,7 @@ The later hosted R2 slice enables the five existing Standard buckets and extends
 | Input | Placeholder or destination |
 | --- | --- |
 | Production origin | Replace `https://api.yugm.invalid` in the production Worker vars. Set the same origin in Android Gradle or CI, and attach the actual production host to this Worker when it is ready. |
-| D1 | Replace the placeholder UUID with the approved production database ID. Use the tracked schema and an isolated import/restore rehearsal to validate production-shaped data before switching traffic. |
+| D1 | The tracked config binds the hosted `yugm` database. Schema and production-shaped recovery rehearsal remain pending for rollout. [Database verification and seed status](2026-11-24-d1-database-and-redis-boundary.md) |
 | R2 | The five production bindings point at the verified hosted Standard buckets. `YUGM_R2_ENABLED=false` pauses managed media. |
 | Firebase | Set `FCM_PROJECT_ID` for the production Firebase project. Store `FCM_CLIENT_EMAIL` and `FCM_PRIVATE_KEY` in the Worker secret store. Register the Android signing certificate with Firebase App Check. |
 | API and media signing | Supply a persistent Worker `JWT_SECRET` and a separate `MEDIA_GRANT_SECRET` of at least 32 characters before enabling managed media. |

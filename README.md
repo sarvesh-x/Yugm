@@ -50,7 +50,7 @@ LIVEKIT_API_SECRET=
 LIVEKIT_URL=ws://localhost:7880
 ```
 
-Redis is optional for the MVP; the API uses in-memory presence if `REDIS_URL` is empty.
+The legacy Node API uses in-memory presence when `REDIS_URL` is empty. The Android debug and production D1 Workers use Cloudflare Rate Limiting bindings and require no Redis connection. [Redis migration status](docs/handoffs/2026-11-24-d1-database-and-redis-boundary.md)
 
 ### Admin And Moderation Backend
 
@@ -118,7 +118,7 @@ For Firebase Auth and FCM, download `google-services.json` from Firebase Console
 android-client/app/google-services.json
 ```
 
-Debug builds use emulator loopback at `http://10.0.2.2:4000/api` with local D1 and R2. Release builds derive the API and socket addresses from one HTTPS origin, `YUGM_PRODUCTION_ORIGIN`. The production Worker configuration targets D1 and enables the five hosted R2 bindings for pre-release use. Full API parity and production rollout are pending. [Production configuration](docs/handoffs/2026-11-24-production-cloudflare-builds.md) · [Hosted R2 and endpoint coverage](docs/handoffs/2026-11-24-hosted-r2-d1-endpoint-audit.md)
+Debug builds use emulator loopback at `http://10.0.2.2:4000/api` with a local D1 database named `yugm` and simulated R2. Release builds use `YUGM_PRODUCTION_ORIGIN` for API and socket addresses. The production Worker config binds the hosted D1 database `yugm` and five hosted R2 buckets. Full API parity and production rollout are pending. [D1 and Redis migration status](docs/handoffs/2026-11-24-d1-database-and-redis-boundary.md) · [Hosted R2 and endpoint coverage](docs/handoffs/2026-11-24-hosted-r2-d1-endpoint-audit.md)
 
 ```bash
 ./gradlew :app:assembleDebug --max-workers=2

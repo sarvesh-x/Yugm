@@ -16,7 +16,7 @@
   "d1_databases": [
     {
       "binding": "AUTH_DB",
-      "database_name": "yugm-auth-local",
+      "database_name": "yugm",
       "database_id": "00000000-0000-4000-8000-000000000004",
       "remote": false
     }
@@ -27,6 +27,11 @@
     { "binding": "PRIVATE_MEDIA", "bucket_name": "private-media", "remote": false },
     { "binding": "ORIGINALS", "bucket_name": "originals", "remote": false },
     { "binding": "STAGING", "bucket_name": "staging", "remote": false }
+  ],
+  "ratelimits": [
+    { "name": "AUTH_REQUESTS", "namespace_id": "17024001", "simple": { "limit": 20, "period": 60 } },
+    { "name": "AUTH_IDENTIFIER", "namespace_id": "17024002", "simple": { "limit": 10, "period": 60 } },
+    { "name": "AUTH_REFRESH", "namespace_id": "17024003", "simple": { "limit": 30, "period": 60 } }
   ],
   "images": { "binding": "IMAGES" }
 }

@@ -1,8 +1,8 @@
-import crypto from "node:crypto";
 import rateLimit from "express-rate-limit";
 import type { Request } from "express";
 import type { AuthRequest } from "./auth.js";
 import { ResilientRedisRateLimitStore } from "../services/rateLimitStore.js";
+import { authIdentifierKey, refreshKey } from "./authRateLimitKeys.js";
 
 function clientIp(req: Request): string {
   const cfIp = req.headers["cf-connecting-ip"];
@@ -31,12 +31,7 @@ export const authLimiter = rateLimit({
 export const authIdentifierLimiter = rateLimit({
   windowMs: 60_000,
   max: 10,
-  keyGenerator: (req) => {
-    const value = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase()
-      : typeof req.body?.phone === "string" ? req.body.phone.replace(/[\s()-]/g, "")
-        : "";
-    return value ? `identifier:${crypto.createHash("sha256").update(value).digest("hex")}` : `ip:${clientIp(req)}`;
-  },
+  keyGenerator: req => authIdentifierKey(req.body, clientIp(req)),
   store: new ResilientRedisRateLimitStore("auth-identifier"),
   standardHeaders: true,
   legacyHeaders: false
@@ -45,12 +40,7 @@ export const authIdentifierLimiter = rateLimit({
 export const refreshLimiter = rateLimit({
   windowMs: 60_000,
   max: 30,
-  keyGenerator: (req) => {
-    const token = typeof req.body?.refreshToken === "string" ? req.body.refreshToken : "";
-    const ip = clientIp(req);
-    const identity = token ? crypto.createHash("sha256").update(token).digest("hex").slice(0, 20) : ip;
-    return `refresh:${ip}:${identity}`;
-  },
+  keyGenerator: req => refreshKey(req.body, clientIp(req)),
   store: new ResilientRedisRateLimitStore("auth-refresh"),
   standardHeaders: true,
   legacyHeaders: false

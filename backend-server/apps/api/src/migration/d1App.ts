@@ -2,6 +2,7 @@ import type { D1Database } from "@cloudflare/workers-types";
 import express, { type ErrorRequestHandler, type Request as ExpressRequest } from "express";
 import { requireAppCheck } from "../middleware/appCheck.js";
 import { requireHttpSession } from "../middleware/httpAccessSession.js";
+import type { AuthRateLimiters } from "../routes/authSession.js";
 import { presentGameCatalog } from "../services/gameCatalog.js";
 import { asyncHandler, HttpError, sendOk } from "../utils/http.js";
 import { responseError } from "../utils/responseError.js";
@@ -15,7 +16,11 @@ import { createD1NotificationRouter } from "./d1Notifications.js";
 import { createD1ProfileEditRouter } from "./d1ProfileEdits.js";
 import { createD1RoomsRouter } from "./d1Rooms.js";
 
-export function createD1App(db: D1Database, media?: Pick<D1MediaRouterOptions, "buckets" | "grantSecret">) {
+export function createD1App(
+  db: D1Database,
+  rateLimiters: AuthRateLimiters,
+  media?: Pick<D1MediaRouterOptions, "buckets" | "grantSecret">
+) {
   const resolvePublicOrigin = (request: ExpressRequest) => {
     // The fetch handler validates the origin and discards any incoming value.
     const value = request.header("x-yugm-request-origin");
@@ -27,7 +32,7 @@ export function createD1App(db: D1Database, media?: Pick<D1MediaRouterOptions, "
   // The managed upload PUT carries raw image bytes, not JSON.
   app.use("/api/media/uploads/:sessionId/bytes", express.raw({ type: () => true, limit: "6mb" }));
   app.use(express.json({ limit: "1mb" }));
-  app.use("/api/auth", requireAppCheck, createD1AuthRouter(db));
+  app.use("/api/auth", requireAppCheck, createD1AuthRouter(db, rateLimiters));
   app.use("/api/users", createD1ProfileEditRouter(db));
   app.use("/api", createD1CosmeticsRouter(db, resolvePublicOrigin));
   app.use("/api/clans", createD1ClansRouter(db));

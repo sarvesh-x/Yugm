@@ -1,5 +1,6 @@
 import { profileSchema } from "@yugm/shared";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
+import { authIdentifierLimiter, authLimiter, refreshLimiter } from "../middleware/rateLimit.js";
 import { validateBody } from "../middleware/validate.js";
 import { asAuthUser } from "../services/authAccounts.js";
 import { mongoAuthAccountStore } from "../services/mongoAuthAccounts.js";
@@ -13,6 +14,7 @@ export const authRouter = createAuthSessionRouter({
   accounts: mongoAuthAccountStore,
   sessions: mongoAuthSessionStore,
   enforceSession: requireAuth,
+  rateLimiters: { authIdentifierLimiter, authLimiter, refreshLimiter },
   onSessionIssued: disconnectOtherUserSockets,
   onLogout: disconnectUserSockets
 });

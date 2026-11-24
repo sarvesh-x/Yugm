@@ -289,8 +289,8 @@ test("auth journey preserves Firebase identity linking and the existing session 
       });
 
       await t.test("the candidate D1 Auth journey preserves the full Mongo HTTP contract", async (parity) => {
-        const [{ createD1AuthRouter }, { requireAppCheck }] = await Promise.all([
-          import("../migration/d1AuthRouter.js"), import("../middleware/appCheck.js")
+        const [{ createD1AuthRouter }, { requireAppCheck }, rateLimiters] = await Promise.all([
+          import("../migration/d1AuthRouter.js"), import("../middleware/appCheck.js"), import("../middleware/rateLimit.js")
         ]);
         const directory = await mkdtemp(join(tmpdir(), "yugm-auth-journey-d1-"));
         const configPath = join(directory, "wrangler.jsonc");
@@ -346,7 +346,7 @@ test("auth journey preserves Firebase identity linking and the existing session 
 
         const candidate = express();
         candidate.use(express.json());
-        candidate.use("/api/auth", requireAppCheck, createD1AuthRouter(db));
+        candidate.use("/api/auth", requireAppCheck, createD1AuthRouter(db, rateLimiters));
         const handleError: ErrorRequestHandler = (error, _req, res, _next) => {
           res.status(error.status ?? 500).json({ ok: false, error: { code: error.code, message: error.message } });
         };

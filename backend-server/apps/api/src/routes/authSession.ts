@@ -1,6 +1,5 @@
 import { Router, type RequestHandler, type Response } from "express";
 import type { AuthRequest } from "../middleware/auth.js";
-import { authIdentifierLimiter, authLimiter, refreshLimiter } from "../middleware/rateLimit.js";
 import { validateBody } from "../middleware/validate.js";
 import { verifyIdToken } from "../services/firebase.js";
 import { getVipStatus } from "../services/vip.js";
@@ -67,15 +66,23 @@ const facebookAuthSchema = z.object({
 });
 const phoneAuthSchema = z.object({ idToken: z.string().min(20), acceptTerms: z.literal(true) });
 
+export type AuthRateLimiters = {
+  authLimiter: RequestHandler;
+  authIdentifierLimiter: RequestHandler;
+  refreshLimiter: RequestHandler;
+};
+
 export function createAuthSessionRouter(dependencies: {
   accounts: AuthAccountStore;
   sessions: AuthSessionStore;
   enforceSession: RequestHandler;
+  rateLimiters: AuthRateLimiters;
   onSessionIssued?: (userId: string, sessionId: string) => Promise<void>;
   onLogout?: (userId: string) => Promise<void>;
 }) {
   const authRouter = Router();
-  const { accounts, sessions, enforceSession, onSessionIssued, onLogout } = dependencies;
+  const { accounts, sessions, enforceSession, rateLimiters, onSessionIssued, onLogout } = dependencies;
+  const { authLimiter, authIdentifierLimiter, refreshLimiter } = rateLimiters;
 
   function authenticatedUserId(req: AuthRequest, res: Response) {
     const id: unknown = req.user?.id ?? res.locals.authUserId;
