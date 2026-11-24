@@ -34,7 +34,7 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     });
     const bundle = JSON.parse(await readFile(join(directory, "bundle-meta.json"), "utf8"));
     assert.deepEqual(Object.keys(bundle.inputs).filter(path =>
-      /(?:^|[/\\])(?:sharp[/\\]|imageProcessor\.node\.ts$|ioredis[/\\]|bullmq[/\\]|redis-adapter[/\\]|redis\.ts$)/.test(path)), []);
+      /(?:^|[/\\])(?:sharp[/\\]|imageProcessor\.node\.ts$|mongoose[/\\]|mongodb[/\\]|bson[/\\]|ioredis[/\\]|bullmq[/\\]|redis-adapter[/\\]|redis\.ts$)/.test(path)), []);
     const config = JSON.parse(await readFile(configPath, "utf8"));
     assert.equal(config.workers_dev, false);
     assert.equal(config.preview_urls, false);
@@ -96,6 +96,11 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     await db.batch(unstable_splitSqlQuery(olderSchema).map(sql => db.prepare(sql)));
     assert.equal((await request("/api/auth/google", 503, { body: {} })).error.code, "D1_SCHEMA_UNAVAILABLE");
     await db.prepare("ALTER TABLE user_auth_profile ADD COLUMN edit_token TEXT").run();
+    const messagingMigrations = ["0003_direct_message_indexes", "0004_direct_message_writes", "0005_clan_chat_indexes"];
+    for (const file of messagingMigrations) {
+      const migration = await readFile(pathFromHere(`../../api/migrations/d1/${file}.sql`), "utf8");
+      await db.batch(unstable_splitSqlQuery(migration).map(sql => db.prepare(sql)));
+    }
     assert.equal((await request("/ready", 200)).storage, "d1");
     assert.equal((await worker.dispatchFetch("http://yugm.example/health")).status, 404);
     await request("/api/users", 404);
@@ -240,6 +245,12 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     assert.equal(legacyEdit.user.bio, "A profile");
     assert.equal(legacyEdit.user.avatarParts, null);
     const afterEdits = (await request("/api/users/me", 200, returning)).data.user;
+    const aliasEdit = (await request("/api/auth/profile", 200, {
+      accessToken: returning.accessToken, method: "PATCH", body: { bio: afterEdits.bio ?? "" }
+    })).data;
+    assert.equal(aliasEdit.user.id, returning.user.id);
+    assert.equal(aliasEdit.user.email, returning.user.email);
+    assert.equal(aliasEdit.xpGrant, undefined);
     assert.deepEqual(afterEdits.hobbies, ["Music"]);
     assert.equal(afterEdits.vibeLine, "Independent change");
     assert.equal((await request("/api/auth/me", 200, returning)).data.user.profileCompleted, true);
@@ -576,6 +587,19 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     assert.equal(joined.memberCount, 2);
     assert.equal(joined.myRole, "MEMBER");
     assert.equal((await request("/api/users/me", 200, visitor)).data.user.clanId, clan.id);
+    const memberAction = (status, account, memberId, role) => request(
+      `${clanRoot}/${clan.id}/members/${memberId}${role ? "/role" : ""}`, status, {
+        accessToken: account.accessToken, method: role ? "PATCH" : "DELETE", ...(role && { body: { role } })
+      }
+    );
+    const deleteClan = (status, account, id = clan.id) => request(`${clanRoot}/${id}`, status,
+      { accessToken: account.accessToken, method: "DELETE" });
+    await memberAction(400, returning, userId, "OFFICER");
+    await memberAction(403, visitor, visitor.user.id, "OFFICER");
+    const promoted = (await memberAction(200, returning, visitor.user.id, "OFFICER")).data.clan;
+    assert.equal(promoted.memberRoles.find(item => item.userId === visitor.user.id).role, "OFFICER");
+    await memberAction(400, visitor, userId);
+    await deleteClan(403, visitor);
     assert.equal((await action(400, returning, "leave")).error.message, "Transfer ownership before leaving this clan");
     await action(403, visitor, "transfer-ownership", { userId });
     await request(`${clanRoot}/${clan.id}`, 403, { accessToken: visitor.accessToken, method: "PATCH", body: { name: "Forbidden edit" } });
@@ -622,9 +646,60 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     assert.equal(accepted.clan.memberCount, 2);
     assert.equal((await request("/api/users/me", 200, returning)).data.user.clanId, clan.id);
     await respondToInvite(404, returning, acceptedInvite, "accept");
-    await action(200, returning, "leave");
-    assert.equal((await action(200, visitor, "leave")).data.clan, null);
+    const pendingInvite = randomBytes(12).toString("hex");
+    const future = new Date(Date.now() + 60000).toISOString();
+    await db.prepare(`INSERT INTO clan_invites (source_id, clan_id, inviter_id, invitee_id, status, expires_at)
+      VALUES (?, ?, ?, ?, 'PENDING', ?)`).bind(pendingInvite, clan.id, visitor.user.id, userId, future).run();
+    const removed = (await memberAction(200, visitor, userId)).data.clan;
+    assert.equal(removed.memberCount, 1);
+    assert.ok(!removed.memberRoles.some(item => item.userId === userId));
+    assert.equal((await request("/api/users/me", 200, returning)).data.user.clanId, undefined);
+    assert.equal(await db.prepare("SELECT status FROM clan_invites WHERE source_id = ?").bind(pendingInvite).first("status"), "CANCELLED");
+    const chat = `${clanRoot}/${clan.id}/messages`;
+    await request(chat, 403, returning);
+    const reinvited = (await sendInvite())._id;
+    await respondToInvite(200, returning, reinvited, "accept");
+    const clanMessage = randomBytes(12).toString("hex");
+    await db.prepare(`INSERT INTO clan_messages (source_id, clan_id, sender_id, message, created_at)
+      VALUES (?, ?, ?, 'clan fixture', '2025-01-01T00:00:00.000Z')`).bind(clanMessage, clan.id, userId).run();
+    const sentMessage = (await request(chat, 201, { accessToken: visitor.accessToken, body: { message: "Hello family" } })).data.message;
+    assert.equal(sentMessage.senderId._id, visitor.user.id);
+    assert.deepEqual((await request(`${chat}?limit=1`, 200, returning)).data.messages.map(item => item._id), [sentMessage._id]);
+    assert.deepEqual((await request(`${chat}?before=${encodeURIComponent(sentMessage.createdAt)}`, 200, returning)).data.messages.map(item => item._id), [clanMessage]);
+    assert.equal(await db.prepare(`SELECT user_id FROM notifications WHERE title = 'New family message' AND json_extract(data, '$.messageId') = ?`)
+      .bind(sentMessage._id).first("user_id"), userId);
+    const react = () => request(`${chat}/${clanMessage}/reactions`, 200, { accessToken: visitor.accessToken, body: { type: "heart" } });
+    assert.equal((await react()).data.message.reactions[0].userId, visitor.user.id);
+    assert.deepEqual((await react()).data.message.reactions, []);
+    assert.equal((await react()).data.message.reactions.length, 1);
+    const report = (await request(`${chat}/${clanMessage}/report`, 201,
+      { accessToken: visitor.accessToken, body: { reason: "Fixture report" } })).data.report;
+    assert.equal(report.targetUserId, userId);
+    assert.equal(report.evidence.clanMessageId, clanMessage);
+    await request(`${chat}/${sentMessage._id}`, 403, { accessToken: returning.accessToken, method: "DELETE" });
+    await request(`${chat}/${sentMessage._id}`, 200, { accessToken: visitor.accessToken, method: "DELETE" });
+    await request(`${chat}/clean`, 403, { accessToken: returning.accessToken, body: {} });
+    await db.prepare("CREATE TRIGGER fixture_reject_clan_delete BEFORE DELETE ON clans BEGIN SELECT RAISE(ABORT, 'fixture clan rollback'); END").run();
+    try {
+      await deleteClan(500, visitor);
+      assert.equal((await request(`${clanRoot}/me`, 200, returning)).data.clan.memberCount, 2);
+      assert.ok(await db.prepare("SELECT 1 FROM clan_message_reactions WHERE clan_messages_id = ?").bind(clanMessage).first());
+    } finally {
+      await db.prepare("DROP TRIGGER fixture_reject_clan_delete").run();
+    }
+    assert.equal((await deleteClan(200, visitor)).data.clan, null);
     assert.equal(await db.prepare("SELECT 1 FROM clans WHERE source_id = ?").bind(clan.id).first(), null);
+    assert.equal(await db.prepare("SELECT 1 FROM clan_messages WHERE source_id = ?").bind(clanMessage).first(), null);
+    assert.equal(await db.prepare("SELECT 1 FROM clan_message_reactions WHERE clan_messages_id = ?").bind(clanMessage).first(), null);
+    assert.equal((await request(`${clanRoot}/me`, 200, returning)).data.clan, null);
+    assert.equal((await request("/api/users/me", 200, visitor)).data.user.clanId, undefined);
+    const leaveClan = (await createClan(201, visitor, "Yugm Leave Fixture", "PUBLIC")).data.clan;
+    const otherChat = `${clanRoot}/${leaveClan.id}/messages`;
+    await request(otherChat, 201, { accessToken: visitor.accessToken, body: { message: "Temporary clan message" } });
+    assert.equal((await request(`${otherChat}/clean`, 200, { accessToken: visitor.accessToken, body: {} })).data.deletedCount, 1);
+    const left = await request(`${clanRoot}/${leaveClan.id}/leave`, 200, { accessToken: visitor.accessToken, body: {} });
+    assert.equal(left.data.clan, null);
+    assert.equal(await db.prepare("SELECT 1 FROM clans WHERE source_id = ?").bind(leaveClan.id).first(), null);
     await verifyD1AppEndpoints(db, request, returning, visitor);
 
     // Invalid bodies exercise the rate limits without reaching Firebase or changing sessions.

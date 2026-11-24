@@ -1,5 +1,5 @@
 import { handleAsNodeRequest } from "cloudflare:node";
-import type { D1Database, ExecutionContext, R2Bucket } from "@cloudflare/workers-types";
+import type { D1Database, ExecutionContext, R2Bucket, RateLimit } from "@cloudflare/workers-types";
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import { isIP } from "node:net";
@@ -8,6 +8,8 @@ import { authClientIpHeader, createWorkerAuthRateLimiters, type AuthRateLimitBin
 import { installCloudflareImageProcessor } from "./imageProcessor.js";
 
 interface D1ApiEnv extends AuthRateLimitBindings {
+  CHAT_SEND?: RateLimit;
+  REPORT_REQUESTS?: RateLimit;
   AUTH_DB: D1Database;
   ASSETS: R2Bucket;
   PUBLIC_MEDIA: R2Bucket;
@@ -66,6 +68,7 @@ async function checkD1Schema(db: D1Database) {
       db.prepare("SELECT source_id, null_fields, missing_fields, edit_token FROM user_auth_profile LIMIT 0"),
       db.prepare("SELECT source_id, upload_token_hash FROM media_upload_sessions LIMIT 0"),
       db.prepare("SELECT source_id, seq FROM media_counters LIMIT 0"),
+      db.prepare("SELECT pair_key, day, amount FROM relationship_message_xp_daily LIMIT 0"),
       db.prepare("SELECT " + ["device_tokens", "user_owned_cosmetics", "user_interests", "user_languages", "user_hobbies",
         "user_profile_media", "user_showcased_badges", "follows", "friendships", "bonds", "bond_users",
         "blocks", "trust_verifications", "profile_visits", "xp_grants", "seasons", "season_rewards", "battle_passes",
@@ -73,10 +76,11 @@ async function checkD1Schema(db: D1Database) {
         "media_objects", "media_variants", "media_quota_reservations", "cosmetics", "assets", "asset_variants",
         "gift_inventories", "gifts", "achievements", "user_claimed_achievement_tiers", "user_safety_statuses",
         "xp_daily_caps", "clans", "clan_members", "clan_member_roles", "clan_invites", "clan_messages",
-        "clan_message_reactions", "mini_game_challenges", "mini_game_scores", "rooms", "room_follows", "room_invites",
+        "clan_message_reactions", "reports", "mini_game_challenges", "mini_game_scores", "rooms", "room_follows", "room_invites",
         "room_speakers", "room_moderators", "room_admins", "room_cohosts", "room_locked_seats", "room_participants",
         "speaker_requests", "chat_messages", "room_activities", "direct_messages", "direct_message_reactions",
-        "message_hidden_for", "conversation_mutes", "pk_battles"]
+        "message_hidden_for", "conversation_mutes", "pk_battles", "matches", "match_users",
+        "relationships", "relationship_users"]
         .map(table => `(SELECT source_id FROM ${table} LIMIT 0) AS ${table}`).join(", "))
     ]);
   } catch {
@@ -116,6 +120,7 @@ async function startD1Runtime(env: D1ApiEnv, stage: ApiStage) {
   ]);
   installCloudflareImageProcessor(env.IMAGES);
   if (enforceAppCheck) await initFirebase();
+  const limitByUser = (binding?: RateLimit) => binding && (async (userId: string) => (await binding.limit({ key: userId })).success);
   const app = createD1App(env.AUTH_DB, rateLimiters, mediaEnabled(env, stage) && mediaGrantSecret ? {
     buckets: {
       assets: env.ASSETS,
@@ -125,7 +130,7 @@ async function startD1Runtime(env: D1ApiEnv, stage: ApiStage) {
       staging: env.STAGING
     },
     grantSecret: mediaGrantSecret
-  } : undefined);
+  } : undefined, { chat: limitByUser(env.CHAT_SEND), report: limitByUser(env.REPORT_REQUESTS) });
   const server = createServer(app);
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);

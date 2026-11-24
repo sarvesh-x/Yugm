@@ -67,7 +67,7 @@ import { getRedisHealth } from "./services/redis.js";
 import { getPublicMongoMedia, getStorageHealth } from "./services/storage.js";
 import { asyncHandler, ErrorCode, HttpError } from "./utils/http.js";
 import { requireAppCheck } from "./middleware/appCheck.js";
-import { responseError } from "./utils/responseError.js";
+import { mongoResponseError } from "./utils/mongoResponseError.js";
 
 export function createApp(options: { readGameCatalogScores?: ReadGameCatalogScores } = {}) {
   const app = express();
@@ -292,7 +292,7 @@ export function createApp(options: { readGameCatalogScores?: ReadGameCatalogScor
 
   app.use((_req, res) => res.status(404).json({ ok: false, error: { message: "Route not found" } }));
   app.use((error: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    const { status, message, code } = responseError(error);
+    const { status, message, code } = mongoResponseError(error);
     console.error(JSON.stringify({
       level: "error",
       event: "request_error",

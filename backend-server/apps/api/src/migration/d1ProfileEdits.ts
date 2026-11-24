@@ -1,30 +1,44 @@
 import { randomBytes } from "node:crypto";
 import type { D1Database } from "@cloudflare/workers-types";
 import { profileSchema } from "@yugm/shared";
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { requireHttpSession } from "../middleware/httpAccessSession.js";
 import { validateBody } from "../middleware/validate.js";
-import { User } from "../models/User.js";
 import { isProfileCompleted } from "../services/profileCompletion.js";
 import { profilePatch } from "../services/profilePatch.js";
 import { serializePublicProfile } from "../services/profilePresentation.js";
+import { getVipStatus, vipPrivacySchema } from "../services/vip.js";
 import { asyncHandler, ErrorCode, HttpError, sendOk } from "../utils/http.js";
 import { AUTH_PROFILE_ARRAYS, AVATAR_PART_KEYS } from "./authProfileFields.js";
-import { createD1AccessSessionReader } from "./d1AccessSession.js";
+import { bindD1LiveUser, createD1AccessSessionReader, d1LiveUserFilter } from "./d1AccessSession.js";
 import { prepareD1ProfileCompletion, profileEditClaim, type ProfileStatement } from "./d1ProfileCompletion.js";
 import { prepareD1Profile, restoreD1Profile, type ProfileRow } from "./d1ProfileReads.js";
 
 type SqlValue = string | number | null;
 const editableLists = ["interests", "hobbies", "languages"] as const;
+type VipPrivacy = { mysterious_visitors: number; vip_chat_privacy: "EVERYONE" | "FOLLOWERS" };
+type VipPrivacyAccount = VipPrivacy & { vip_tier: string | null; vip_level: number; vip_expires_at: string | null; vip_frozen: number };
+
+function presentVipPrivacy(row: VipPrivacy) {
+  return { mysteriousVisitors: Boolean(row.mysterious_visitors), chatPrivacy: row.vip_chat_privacy ?? "EVERYONE" };
+}
 
 function serializeEditedProfile(row: ProfileRow) {
   const nulls: string[] = JSON.parse(String(row.null_fields ?? "[]"));
   const restored = restoreD1Profile(row, true);
-  const user = User.hydrate({
-    ...restored,
+  const user = {
+    ...restored, id: row.source_id,
+    role: restored.role === undefined ? "USER" : restored.role,
+    walletBalance: restored.walletBalance === undefined ? 0 : restored.walletBalance,
+    interests: restored.interests === undefined ? [] : restored.interests,
+    hobbies: restored.hobbies === undefined ? [] : restored.hobbies,
+    languages: restored.languages === undefined ? [] : restored.languages,
+    ownedCosmeticIds: restored.ownedCosmeticIds === undefined ? [] : restored.ownedCosmeticIds,
+    profileMedia: restored.profileMedia === undefined ? [] : restored.profileMedia,
+    friendsCount: undefined, verificationLevel: undefined, isFollowing: undefined, isBonded: undefined,
     followersCount: row.stored_followers_count, followingCount: row.stored_following_count,
     email: nulls.includes("email") ? null : row.email ?? undefined, emailVerified: Boolean(row.email_verified)
-  });
+  };
   const profile = serializePublicProfile(user, false);
   return {
     ...profile,
@@ -130,11 +144,39 @@ export async function updateD1Profile(db: D1Database, header: string | undefined
 export function createD1ProfileEditRouter(db: D1Database) {
   const router = Router();
   const access = createD1AccessSessionReader(db, "http");
-  router.patch("/me", asyncHandler(async (req, _res, next) => {
+  const authenticate = asyncHandler(async (req, _res, next) => {
     await requireHttpSession(req.headers.authorization, access);
     next();
-  }), validateBody(profileSchema.partial()), asyncHandler(async (req, res) => {
+  });
+  const loadVipPrivacy = async (req: Request) => {
+    const { claims } = await requireHttpSession(req.headers.authorization, access);
+    const now = new Date();
+    const time = now.toISOString();
+    const session = bindD1LiveUser(claims, time);
+    const row = await db.prepare(`SELECT vip_tier, vip_level, vip_expires_at, vip_frozen, mysterious_visitors, vip_chat_privacy
+      FROM users AS u WHERE ${d1LiveUserFilter} AND u.deletion_requested_at IS NULL`).bind(...session).first<VipPrivacyAccount>();
+    if (!row) throw new HttpError(401, "Session revoked", ErrorCode.UNAUTHORIZED);
+    if (!getVipStatus({ vipTier: row.vip_tier, vipLevel: row.vip_level, vipExpiresAt: row.vip_expires_at, vipFrozen: row.vip_frozen }, now).isVip) {
+      throw new HttpError(403, "VIP membership required", ErrorCode.FORBIDDEN);
+    }
+    return { row, session, time };
+  };
+  router.patch("/me", authenticate, validateBody(profileSchema.partial()), asyncHandler(async (req, res) => {
     sendOk(res, await updateD1Profile(db, req.headers.authorization, req.body));
+  }));
+  router.get("/me/vip-privacy", asyncHandler(async (req, res) => {
+    sendOk(res, presentVipPrivacy((await loadVipPrivacy(req)).row));
+  }));
+  router.patch("/me/vip-privacy", authenticate, validateBody(vipPrivacySchema), asyncHandler(async (req, res) => {
+    const { row, session, time } = await loadVipPrivacy(req);
+    const { mysteriousVisitors, chatPrivacy } = req.body;
+    const updated = await db.prepare(`UPDATE users AS u SET mysterious_visitors = COALESCE(?, mysterious_visitors),
+      vip_chat_privacy = COALESCE(?, vip_chat_privacy), updated_at = ? WHERE ${d1LiveUserFilter} AND u.deletion_requested_at IS NULL
+      AND vip_tier IS ? AND vip_level IS ? AND vip_expires_at IS ? AND vip_frozen IS ?
+      RETURNING mysterious_visitors, vip_chat_privacy`).bind(mysteriousVisitors === undefined ? null : Number(mysteriousVisitors),
+      chatPrivacy ?? null, time, ...session, row.vip_tier, row.vip_level, row.vip_expires_at, row.vip_frozen).first<VipPrivacy>();
+    if (!updated) throw new HttpError(409, "VIP membership changed. Please try again.", ErrorCode.CONFLICT);
+    sendOk(res, presentVipPrivacy(updated));
   }));
   return router;
 }

@@ -7,8 +7,7 @@
   "workers_dev": false,
   "preview_urls": false,
   "alias": {
-    "iconv-lite": "iconv-lite-worker",
-    "mongoose": "mongoose/index.js"
+    "iconv-lite": "iconv-lite-worker"
   },
   "vars": {
     "YUGM_STAGE": "local"
@@ -18,6 +17,7 @@
       "binding": "AUTH_DB",
       "database_name": "yugm",
       "database_id": "00000000-0000-4000-8000-000000000004",
+      "migrations_dir": "../../api/migrations/d1",
       "remote": false
     }
   ],
@@ -31,7 +31,9 @@
   "ratelimits": [
     { "name": "AUTH_REQUESTS", "namespace_id": "17024001", "simple": { "limit": 20, "period": 60 } },
     { "name": "AUTH_IDENTIFIER", "namespace_id": "17024002", "simple": { "limit": 10, "period": 60 } },
-    { "name": "AUTH_REFRESH", "namespace_id": "17024003", "simple": { "limit": 30, "period": 60 } }
+    { "name": "AUTH_REFRESH", "namespace_id": "17024003", "simple": { "limit": 30, "period": 60 } },
+    { "name": "CHAT_SEND", "namespace_id": "17024004", "simple": { "limit": 12, "period": 10 } },
+    { "name": "REPORT_REQUESTS", "namespace_id": "17024005", "simple": { "limit": 5, "period": 60 } }
   ],
   "images": { "binding": "IMAGES" }
 }

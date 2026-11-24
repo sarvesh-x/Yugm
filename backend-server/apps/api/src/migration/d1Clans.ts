@@ -1,16 +1,19 @@
 import { randomBytes } from "node:crypto";
 import type { D1Database } from "@cloudflare/workers-types";
+import { reactionSchema } from "@yugm/shared";
 import { Router } from "express";
 import { requireHttpSession } from "../middleware/httpAccessSession.js";
 import { validateBody } from "../middleware/validate.js";
 import type { AccessClaims } from "../services/accessSession.js";
 import {
-  canInviteMembers, canManageClan, canModerateChat, CLAN_INVITE_LIFETIME_MS,
-  clanMemberIdSchema, clanSchema, clanUpdateSchema, slugifyClan
+  canAssignRole, canInviteMembers, canManageClan, canModerateChat, canRemoveMember, CLAN_INVITE_LIFETIME_MS,
+  clanMemberIdSchema, clanMemberRoleSchema, clanMessageReportSchema, clanMessageSchema, clanSchema, clanUpdateSchema, slugifyClan
 } from "../services/clanPolicy.js";
 import { asyncHandler, ErrorCode, HttpError, isValidObjectId, sanitizeText, sendOk } from "../utils/http.js";
 import { ACTIVE_COSMETIC_KEYS, AVATAR_PART_KEYS } from "./authProfileFields.js";
 import { bindD1LiveUser, createD1AccessSessionReader, d1LiveUserFilter } from "./d1AccessSession.js";
+import { person, personJson } from "./d1People.js";
+import { enforceD1UserRateLimit, type D1UserRateLimit } from "./d1UserRateLimit.js";
 
 interface ClanRow {
   source_id: string;
@@ -35,6 +38,16 @@ const readClan = `SELECT c.*, EXISTS (SELECT 1 FROM clan_members WHERE value = ?
 const avatarFields = AVATAR_PART_KEYS.map(key => [key, `avatar_parts_${key}`] as const);
 const cosmeticFields = ACTIVE_COSMETIC_KEYS.map(key => [key, `active_cosmetics_${key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)}`] as const);
 const clanClaims = "EXISTS (SELECT 1 FROM user_auth_profile WHERE source_id = ? AND edit_token = ?)";
+
+function clanRole(member: string) {
+  return `CASE WHEN c.owner_id = ${member} THEN 'LEADER' ELSE COALESCE((
+    SELECT CASE WHEN role IN ('CO_LEADER', 'OFFICER') THEN role ELSE 'MEMBER' END
+    FROM clan_member_roles WHERE clans_id = c.source_id AND user_id = ${member} ORDER BY position, source_id LIMIT 1
+  ), 'MEMBER') END`;
+}
+
+const unchangedMemberRoles = `${clanRole("u.source_id")} = ? AND EXISTS (
+  SELECT 1 FROM clan_members AS m WHERE m.clans_id = c.source_id AND m.value = ? AND ${clanRole("m.value")} = ?)`;
 
 function identifier(id: string, entity = "clan") {
   if (!isValidObjectId(id)) throw new HttpError(400, `Invalid ${entity} ID`, ErrorCode.VALIDATION);
@@ -69,9 +82,7 @@ async function readClanDetails(db: D1Database, clanId: string | null, viewer: st
     db.prepare(`${readClan} WHERE c.source_id = ${selectedClan}`).bind(viewer, clanId),
     db.prepare(`SELECT u.source_id, u.name, u.username, u.avatar, u.avatar_type, u.city, u.xp, u.level, u.level_title,
       u.vip_tier, u.vip_expires_at, ${[...avatarFields, ...cosmeticFields].map(([, col]) => `u.${col}`).join(", ")},
-      CASE WHEN c.owner_id = u.source_id THEN 'LEADER' ELSE COALESCE((
-        SELECT role FROM clan_member_roles WHERE clans_id = c.source_id AND user_id = u.source_id ORDER BY position LIMIT 1
-      ), 'MEMBER') END AS role
+      ${clanRole("u.source_id")} AS role
       FROM clan_members AS m JOIN clans AS c ON c.source_id = m.clans_id JOIN users AS u ON u.source_id = m.value
       WHERE c.source_id = ${selectedClan} ORDER BY m.position`).bind(viewer, clanId)
   ]);
@@ -110,6 +121,202 @@ function claimMembershipMutation(db: D1Database, claims: AccessClaims, time: str
     .bind(token, clanId, ...bindD1LiveUser(claims, time), ...values);
 }
 
+function deleteClanRecords(db: D1Database, clanId: string, actorId: string, token: string, onlyEmpty = false) {
+  const guard = onlyEmpty ? `${clanClaims} AND NOT EXISTS (SELECT 1 FROM clan_members WHERE clans_id = ?)` : clanClaims;
+  const args = onlyEmpty ? [actorId, token, clanId] : [actorId, token];
+  return [
+    db.prepare(`DELETE FROM clan_message_reactions WHERE clan_messages_id IN (SELECT source_id FROM clan_messages WHERE clan_id = ?)
+      AND ${guard}`).bind(clanId, ...args),
+    db.prepare(`DELETE FROM clan_invites WHERE clan_id = ? AND ${guard}`).bind(clanId, ...args),
+    db.prepare(`DELETE FROM clan_messages WHERE clan_id = ? AND ${guard}`).bind(clanId, ...args),
+    db.prepare(`DELETE FROM clan_member_roles WHERE clans_id = ? AND ${guard}`).bind(clanId, ...args),
+    db.prepare(`DELETE FROM clan_members WHERE clans_id = ? AND ${guard}`).bind(clanId, ...args),
+    db.prepare(`UPDATE users SET clan_id = NULL WHERE clan_id = ? AND ${guard}`).bind(clanId, ...args),
+    db.prepare(`UPDATE mini_game_challenges SET clan_id = NULL WHERE clan_id = ? AND ${guard}`).bind(clanId, ...args),
+    db.prepare(`DELETE FROM clans WHERE source_id = ? AND ${guard}`).bind(clanId, ...args)
+  ];
+}
+
+function getMemberRoles(clan: Awaited<ReturnType<typeof clanDetails>>, target: string) {
+  if (!clan.myRole) throw new HttpError(403, "Join this clan to continue", ErrorCode.FORBIDDEN);
+  const targetRole = clan.memberRoles.find(member => member.userId === target)?.role;
+  if (!targetRole) throw new HttpError(404, "This user is not a clan member", ErrorCode.NOT_FOUND);
+  return { actorRole: clan.myRole, targetRole };
+}
+
+interface ClanMessageRow {
+  source_id: string; clan_id: string; sender_id: string; sender_json: string; message: string;
+  created_at: string | null; updated_at: string | null; reactions_json: string;
+}
+
+const readClanMessage = `SELECT m.*, ${personJson("sender")} AS sender_json,
+  (SELECT json_group_array(json_object('userId', user_id, 'type', type, 'createdAt', created_at))
+    FROM (SELECT user_id, type, created_at FROM clan_message_reactions WHERE clan_messages_id = m.source_id ORDER BY position, source_id)
+  ) AS reactions_json FROM clan_messages AS m JOIN users AS sender ON sender.source_id = m.sender_id`;
+const messageInClan = "EXISTS (SELECT 1 FROM clan_messages WHERE clan_id = c.source_id AND source_id = ?)";
+const chatModerators = `${clanRole("u.source_id")} IN ('LEADER', 'CO_LEADER', 'OFFICER')`;
+
+function presentClanMessage(row: ClanMessageRow) {
+  return {
+    _id: row.source_id, clanId: row.clan_id, senderId: person(row.sender_json), message: row.message,
+    createdAt: row.created_at ?? undefined, updatedAt: row.updated_at ?? undefined, reactions: JSON.parse(row.reactions_json)
+  };
+}
+
+async function requireClanChatMember(db: D1Database, clanId: string, actor: string) {
+  const membership = await db.prepare(`SELECT u.muted_until, ${memberInClan} AS member, ${clanRole("u.source_id")} AS role
+    FROM clans AS c JOIN users AS u ON u.source_id = ? WHERE c.source_id = ?`).bind(actor, clanId)
+    .first<{ muted_until: string | null; member: number; role: string }>();
+  if (!membership) throw new HttpError(404, "Clan not found", ErrorCode.NOT_FOUND);
+  if (!membership.member) throw new HttpError(403, "Join this clan to chat", ErrorCode.FORBIDDEN);
+  return membership;
+}
+
+async function requireClanMessage(db: D1Database, clanId: string, messageId: string) {
+  const message = await db.prepare("SELECT sender_id FROM clan_messages WHERE clan_id = ? AND source_id = ?")
+    .bind(clanId, messageId).first<{ sender_id: string }>();
+  if (!message) throw new HttpError(404, "Message not found", ErrorCode.NOT_FOUND);
+  return message;
+}
+
+function mountClanChat(router: ReturnType<typeof Router>, db: D1Database, limits: { chat?: D1UserRateLimit; report?: D1UserRateLimit }) {
+  router.get("/:id/messages", asyncHandler(async (req, res) => {
+    const clanId = identifier(req.params.id);
+    const claims: AccessClaims = res.locals.claims;
+    await requireClanChatMember(db, clanId, claims.sub);
+    const limit = Math.trunc(Math.min(Math.max(Number(req.query.limit) || 80, 1), 120));
+    const cursor = Date.parse(String(req.query.before ?? ""));
+    const before = Number.isNaN(cursor) ? null : new Date(cursor).toISOString();
+    const { results } = await db.prepare(`${readClanMessage} WHERE m.clan_id = ? AND (? IS NULL OR m.created_at < ?)
+      AND EXISTS (SELECT 1 FROM users AS u WHERE ${d1LiveUserFilter}
+        AND EXISTS (SELECT 1 FROM clan_members WHERE clans_id = m.clan_id AND value = u.source_id))
+      ORDER BY m.created_at DESC, m.source_id DESC LIMIT ?`)
+      .bind(clanId, before, before, ...bindD1LiveUser(claims, new Date().toISOString()), limit).all<ClanMessageRow>();
+    sendOk(res, { messages: results.reverse().map(presentClanMessage), hasMore: results.length === limit });
+  }));
+
+  router.post("/:id/messages", validateBody(clanMessageSchema), asyncHandler(async (req, res) => {
+    const clanId = identifier(req.params.id);
+    const claims: AccessClaims = res.locals.claims;
+    await enforceD1UserRateLimit(limits.chat, claims.sub, res, 10);
+    const time = new Date().toISOString();
+    const member = await requireClanChatMember(db, clanId, claims.sub);
+    if (member.muted_until && member.muted_until > time) throw new HttpError(403, `Account muted until ${member.muted_until}`, ErrorCode.FORBIDDEN);
+    const message = sanitizeText(req.body.message).trim();
+    if (!message) throw new HttpError(400, "Message cannot be empty", ErrorCode.VALIDATION);
+    const id = randomBytes(12).toString("hex");
+    const [sent, , committed] = await db.batch<ClanMessageRow>([
+      db.prepare(`INSERT INTO clan_messages (source_id, clan_id, sender_id, message, created_at, updated_at)
+        SELECT ?, c.source_id, u.source_id, ?, ?, ? FROM users AS u JOIN clans AS c ON c.source_id = ?
+        WHERE ${d1LiveUserFilter} AND ${memberInClan} AND (u.muted_until IS NULL OR u.muted_until <= ?)`)
+        .bind(id, message, time, time, clanId, ...bindD1LiveUser(claims, time), time),
+      db.prepare(`INSERT INTO notifications (source_id, user_id, type, title, body, data, read, created_at, updated_at)
+        SELECT lower(hex(randomblob(12))), member.value, 'MESSAGE', 'New family message', sender.name || ': ' || m.message,
+          json_object('clanId', m.clan_id, 'messageId', m.source_id), 0, ?, ?
+        FROM clan_messages AS m JOIN users AS sender ON sender.source_id = m.sender_id
+        JOIN clan_members AS member ON member.clans_id = m.clan_id
+        WHERE m.source_id = ? AND member.value <> m.sender_id ORDER BY member.position LIMIT 50`).bind(time, time, id),
+      db.prepare(`${readClanMessage} WHERE m.source_id = ?`).bind(id)
+    ]);
+    if (!sent.meta.changes || !committed.results[0]) throw new HttpError(409, "Clan membership changed. Please try again.", ErrorCode.CONFLICT);
+    sendOk(res, { message: presentClanMessage(committed.results[0]) }, 201);
+  }));
+
+  router.post("/:id/messages/:messageId/reactions", validateBody(reactionSchema), asyncHandler(async (req, res) => {
+    const clanId = identifier(req.params.id);
+    const messageId = identifier(req.params.messageId, "message");
+    const claims: AccessClaims = res.locals.claims;
+    const type: string = req.body.type;
+    await enforceD1UserRateLimit(limits.chat, claims.sub, res, 10);
+    await requireClanChatMember(db, clanId, claims.sub);
+    await requireClanMessage(db, clanId, messageId);
+    const time = new Date().toISOString();
+    const reactionId = randomBytes(12).toString("hex");
+    const args = [claims.sub, reactionId];
+    const [changed, , , , committed] = await db.batch<ClanMessageRow>([
+      claimMembershipMutation(db, claims, time, reactionId, clanId, messageInClan, messageId),
+      db.prepare(`INSERT INTO clan_message_reactions (source_id, user_id, type, created_at, clan_messages_id, position)
+        SELECT ?, ?, ?, ?, ?, COALESCE((SELECT MAX(position) + 1 FROM clan_message_reactions WHERE clan_messages_id = ?), 0)
+        WHERE ${clanClaims} AND NOT EXISTS (SELECT 1 FROM clan_message_reactions WHERE clan_messages_id = ? AND user_id = ? AND type = ?)
+        `).bind(reactionId, claims.sub, type, time, messageId, messageId, ...args, messageId, claims.sub, type),
+      db.prepare(`DELETE FROM clan_message_reactions WHERE clan_messages_id = ? AND user_id = ? AND source_id <> ? AND ${clanClaims}`)
+        .bind(messageId, claims.sub, reactionId, ...args),
+      db.prepare(`INSERT INTO notifications (source_id, user_id, type, title, body, data, read, created_at, updated_at)
+        SELECT ?, m.sender_id, 'MESSAGE', 'New family reaction', u.name || ' reacted to your family message',
+          json_object('clanId', m.clan_id, 'messageId', m.source_id), 0, ?, ?
+        FROM clan_message_reactions AS r JOIN clan_messages AS m ON m.source_id = r.clan_messages_id
+        JOIN users AS u ON u.source_id = r.user_id WHERE r.source_id = ? AND r.user_id <> m.sender_id`)
+        .bind(randomBytes(12).toString("hex"), time, time, reactionId),
+      db.prepare(`${readClanMessage} WHERE m.source_id = ? AND ${clanClaims}`).bind(messageId, ...args)
+    ]);
+    if (!changed.meta.changes || !committed.results[0]) throw new HttpError(409, "Clan message changed. Please try again.", ErrorCode.CONFLICT);
+    sendOk(res, { message: presentClanMessage(committed.results[0]) });
+  }));
+
+  router.delete("/:id/messages/:messageId", asyncHandler(async (req, res) => {
+    const clanId = identifier(req.params.id);
+    const messageId = identifier(req.params.messageId, "message");
+    const claims: AccessClaims = res.locals.claims;
+    const member = await requireClanChatMember(db, clanId, claims.sub);
+    const message = await requireClanMessage(db, clanId, messageId);
+    if (message.sender_id !== claims.sub && !canModerateChat(member.role)) {
+      throw new HttpError(403, "You don't have permission to delete this message", ErrorCode.FORBIDDEN);
+    }
+    const time = new Date().toISOString();
+    const token = randomBytes(16).toString("hex");
+    const args = [claims.sub, token];
+    const [claimed] = await db.batch([
+      claimMembershipMutation(db, claims, time, token, clanId, `EXISTS (SELECT 1 FROM clan_messages
+        WHERE clan_id = c.source_id AND source_id = ? AND (sender_id = u.source_id OR ${chatModerators}))`, messageId),
+      db.prepare(`DELETE FROM clan_message_reactions WHERE clan_messages_id = ? AND ${clanClaims}`).bind(messageId, ...args),
+      db.prepare(`DELETE FROM clan_messages WHERE source_id = ? AND clan_id = ? AND ${clanClaims}`).bind(messageId, clanId, ...args)
+    ]);
+    if (!claimed.meta.changes) throw new HttpError(409, "Clan message changed. Please try again.", ErrorCode.CONFLICT);
+    sendOk(res, { deleted: true });
+  }));
+
+  router.post("/:id/messages/clean", asyncHandler(async (req, res) => {
+    const clanId = identifier(req.params.id);
+    const claims: AccessClaims = res.locals.claims;
+    const member = await requireClanChatMember(db, clanId, claims.sub);
+    if (!canModerateChat(member.role)) throw new HttpError(403, "You don't have permission to clean the chat", ErrorCode.FORBIDDEN);
+    const time = new Date().toISOString();
+    const token = randomBytes(16).toString("hex");
+    const args = [claims.sub, token];
+    const [claimed, , deleted] = await db.batch([
+      claimMembershipMutation(db, claims, time, token, clanId, chatModerators),
+      db.prepare(`DELETE FROM clan_message_reactions WHERE clan_messages_id IN (SELECT source_id FROM clan_messages WHERE clan_id = ?)
+        AND ${clanClaims}`).bind(clanId, ...args),
+      db.prepare(`DELETE FROM clan_messages WHERE clan_id = ? AND ${clanClaims}`).bind(clanId, ...args)
+    ]);
+    if (!claimed.meta.changes) throw new HttpError(409, "Clan membership changed. Please try again.", ErrorCode.CONFLICT);
+    sendOk(res, { deletedCount: deleted.meta.changes });
+  }));
+
+  router.post("/:id/messages/:messageId/report", validateBody(clanMessageReportSchema), asyncHandler(async (req, res) => {
+    const clanId = identifier(req.params.id);
+    const messageId = identifier(req.params.messageId, "message");
+    const claims: AccessClaims = res.locals.claims;
+    await enforceD1UserRateLimit(limits.report, claims.sub, res, 60);
+    await requireClanChatMember(db, clanId, claims.sub);
+    await requireClanMessage(db, clanId, messageId);
+    const time = new Date().toISOString();
+    const id = randomBytes(12).toString("hex");
+    const { reason, description } = req.body;
+    const report = await db.prepare(`INSERT INTO reports (source_id, reporter_id, target_user_id, reason, description, evidence,
+      risk_score, auto_flagged, status, created_at, updated_at)
+      SELECT ?, u.source_id, m.sender_id, ?, ?, json_object('clanId', c.source_id, 'clanMessageId', m.source_id,
+        'message', m.message, 'createdAt', m.created_at), 10, 0, 'PENDING', ?, ?
+      FROM clans AS c JOIN clan_messages AS m ON m.clan_id = c.source_id JOIN users AS u ON u.source_id = ?
+      WHERE c.source_id = ? AND m.source_id = ? AND ${d1LiveUserFilter} AND ${memberInClan}
+      RETURNING target_user_id, evidence`).bind(id, reason, description ?? null, time, time, claims.sub, clanId, messageId,
+      ...bindD1LiveUser(claims, time)).first<{ target_user_id: string; evidence: string }>();
+    if (!report) throw new HttpError(409, "Clan message changed. Please try again.", ErrorCode.CONFLICT);
+    sendOk(res, { report: { _id: id, reporterId: claims.sub, targetUserId: report.target_user_id, reason, description,
+      evidence: JSON.parse(report.evidence), riskScore: 10, autoFlagged: false, status: "PENDING", createdAt: time, updatedAt: time } }, 201);
+  }));
+}
+
 interface InviteRow {
   source_id: string;
   clan_id: string;
@@ -140,13 +347,14 @@ function inviteUser(alias: "sender" | "recipient") {
     json_object(${avatarFields.map(([key, column]) => `'${key}', ${field(column)}`).join(", ")}))`;
 }
 
-export function createD1ClansRouter(db: D1Database) {
+export function createD1ClansRouter(db: D1Database, limits: { chat?: D1UserRateLimit; report?: D1UserRateLimit } = {}) {
   const router = Router();
   const readAccess = createD1AccessSessionReader(db, "http");
   router.use(asyncHandler(async (req, res, next) => {
     res.locals.claims = (await requireHttpSession(req.headers.authorization, readAccess)).claims;
     next();
   }));
+  mountClanChat(router, db, limits);
 
   router.get("/", asyncHandler(async (req, res) => {
     const { sub } = res.locals.claims as AccessClaims;
@@ -417,13 +625,80 @@ export function createD1ClansRouter(db: D1Database) {
     sendOk(res, { clan: await clanDetails(db, clanId, claims.sub) });
   }));
 
+  router.patch("/:id/members/:userId/role", validateBody(clanMemberRoleSchema), asyncHandler(async (req, res) => {
+    const clanId = identifier(req.params.id);
+    const target = identifier(req.params.userId, "member");
+    const claims: AccessClaims = res.locals.claims;
+    const clan = await clanDetails(db, clanId, claims.sub);
+    const { actorRole, targetRole } = getMemberRoles(clan, target);
+    if (targetRole === "LEADER") throw new HttpError(400, "Transfer ownership to change the leader role", ErrorCode.VALIDATION);
+    if (!canAssignRole(actorRole, targetRole, req.body.role)) throw new HttpError(403, "You don't have permission to assign this role", ErrorCode.FORBIDDEN);
+
+    const time = new Date().toISOString();
+    const token = randomBytes(16).toString("hex");
+    const args = [claims.sub, token];
+    const [changed] = await db.batch([
+      claimMembershipMutation(db, claims, time, token, clanId, unchangedMemberRoles, actorRole, target, targetRole),
+      db.prepare(`DELETE FROM clan_member_roles WHERE clans_id = ? AND user_id = ? AND ${clanClaims}`).bind(clanId, target, ...args),
+      db.prepare(`INSERT INTO clan_member_roles (source_id, user_id, role, clans_id, position)
+        SELECT ?, value, ?, clans_id, position FROM clan_members WHERE clans_id = ? AND value = ? AND ${clanClaims}`)
+        .bind(`${token}:role`, req.body.role, clanId, target, ...args),
+      db.prepare(`UPDATE clans SET updated_at = ? WHERE source_id = ? AND ${clanClaims}`).bind(time, clanId, ...args)
+    ]);
+    if (!changed.meta.changes) throw new HttpError(409, "Clan membership changed. Please try again.", ErrorCode.CONFLICT);
+    sendOk(res, { clan: await clanDetails(db, clanId, claims.sub) });
+  }));
+
+  router.delete("/:id/members/:userId", asyncHandler(async (req, res) => {
+    const clanId = identifier(req.params.id);
+    const target = identifier(req.params.userId, "member");
+    const claims: AccessClaims = res.locals.claims;
+    const clan = await clanDetails(db, clanId, claims.sub);
+    const { actorRole, targetRole } = getMemberRoles(clan, target);
+    if (target === claims.sub) throw new HttpError(400, "Use leave to exit your clan", ErrorCode.VALIDATION);
+    if (targetRole === "LEADER") throw new HttpError(400, "The clan leader cannot be removed", ErrorCode.VALIDATION);
+    if (!canRemoveMember(actorRole, targetRole)) throw new HttpError(403, "You don't have permission to remove this member", ErrorCode.FORBIDDEN);
+
+    const time = new Date().toISOString();
+    const token = randomBytes(16).toString("hex");
+    const args = [claims.sub, token];
+    const [changed] = await db.batch([
+      claimMembershipMutation(db, claims, time, token, clanId, unchangedMemberRoles, actorRole, target, targetRole),
+      db.prepare(`UPDATE users SET clan_id = NULL, updated_at = ? WHERE source_id = ? AND clan_id = ? AND ${clanClaims}`)
+        .bind(time, target, clanId, ...args),
+      db.prepare(`DELETE FROM clan_member_roles WHERE clans_id = ? AND user_id = ? AND ${clanClaims}`).bind(clanId, target, ...args),
+      db.prepare(`DELETE FROM clan_members WHERE clans_id = ? AND value = ? AND ${clanClaims}`).bind(clanId, target, ...args),
+      db.prepare(`UPDATE clan_invites SET status = 'CANCELLED', updated_at = ?
+        WHERE clan_id = ? AND invitee_id = ? AND status = 'PENDING' AND ${clanClaims}`).bind(time, clanId, target, ...args),
+      db.prepare(`UPDATE clans SET member_count = (SELECT COUNT(*) FROM clan_members WHERE clans_id = ?), updated_at = ?
+        WHERE source_id = ? AND ${clanClaims}`).bind(clanId, time, clanId, ...args)
+    ]);
+    if (!changed.meta.changes) throw new HttpError(409, "Clan membership changed. Please try again.", ErrorCode.CONFLICT);
+    sendOk(res, { clan: await clanDetails(db, clanId, claims.sub) });
+  }));
+
+  router.delete("/:id", asyncHandler(async (req, res) => {
+    const clanId = identifier(req.params.id);
+    const claims: AccessClaims = res.locals.claims;
+    const clan = await clanDetails(db, clanId, claims.sub);
+    if (clan.myRole !== "LEADER") throw new HttpError(403, "Only the clan leader can perform this action", ErrorCode.FORBIDDEN);
+
+    const time = new Date().toISOString();
+    const token = randomBytes(16).toString("hex");
+    const [changed] = await db.batch([
+      claimMembershipMutation(db, claims, time, token, clanId, "c.owner_id = u.source_id"),
+      ...deleteClanRecords(db, clanId, claims.sub, token)
+    ]);
+    if (!changed.meta.changes) throw new HttpError(409, "Clan membership changed. Please try again.", ErrorCode.CONFLICT);
+    sendOk(res, { clan: null });
+  }));
+
   router.post("/:id/leave", asyncHandler(async (req, res) => {
     const clanId = identifier(req.params.id);
     const claims: AccessClaims = res.locals.claims;
     const time = new Date().toISOString();
     const token = randomBytes(16).toString("hex");
     const args = [claims.sub, token];
-    const empty = "NOT EXISTS (SELECT 1 FROM clan_members WHERE clans_id = ?)";
     const [left] = await db.batch([
       claimMembershipMutation(db, claims, time, token, clanId, `c.owner_id <> u.source_id OR NOT EXISTS (
         SELECT 1 FROM clan_members WHERE clans_id = c.source_id AND value <> u.source_id)`),
@@ -432,14 +707,7 @@ export function createD1ClansRouter(db: D1Database) {
       db.prepare(`DELETE FROM clan_members WHERE clans_id = ? AND value = ? AND ${clanClaims}`).bind(clanId, claims.sub, ...args),
       db.prepare(`UPDATE clans SET member_count = (SELECT COUNT(*) FROM clan_members WHERE clans_id = ?), updated_at = ?
         WHERE source_id = ? AND ${clanClaims}`).bind(clanId, time, clanId, ...args),
-      db.prepare(`DELETE FROM clan_message_reactions WHERE clan_messages_id IN (SELECT source_id FROM clan_messages WHERE clan_id = ?)
-        AND ${empty} AND ${clanClaims}`).bind(clanId, clanId, ...args),
-      ...["clan_invites", "clan_messages", "clan_member_roles"].map(table =>
-        db.prepare(`DELETE FROM ${table} WHERE ${table === "clan_member_roles" ? "clans_id" : "clan_id"} = ? AND ${empty} AND ${clanClaims}`)
-          .bind(clanId, clanId, ...args)),
-      ...["users", "mini_game_challenges"].map(table =>
-        db.prepare(`UPDATE ${table} SET clan_id = NULL WHERE clan_id = ? AND ${empty} AND ${clanClaims}`).bind(clanId, clanId, ...args)),
-      db.prepare(`DELETE FROM clans WHERE source_id = ? AND ${empty} AND ${clanClaims}`).bind(clanId, clanId, ...args)
+      ...deleteClanRecords(db, clanId, claims.sub, token, true)
     ]);
     if (!left.meta.changes) {
       await requireHttpSession(req.headers.authorization, readAccess);

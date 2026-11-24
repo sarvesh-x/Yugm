@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { z } from "zod";
 import { reactionSchema, socketEvents } from "@yugm/shared";
 import { requireAuth, requireNotMuted, type AuthRequest } from "../middleware/auth.js";
 import { chatLimiter, reportLimiter } from "../middleware/rateLimit.js";
@@ -9,7 +8,8 @@ import { ClanInvite } from "../models/ClanInvite.js";
 import { ClanMessage } from "../models/ClanMessage.js";
 import { Report } from "../models/Report.js";
 import { User } from "../models/User.js";
-import { canInviteMembers, canManageClan, canModerateChat, CLAN_INVITE_LIFETIME_MS, clanMemberIdSchema, clanSchema, clanUpdateSchema, slugifyClan } from "../services/clanPolicy.js";
+import { canAssignRole, canInviteMembers, canManageClan, canModerateChat, canRemoveMember, CLAN_INVITE_LIFETIME_MS,
+  clanMemberIdSchema, clanMemberRoleSchema, clanMessageReportSchema, clanMessageSchema, clanSchema, clanUpdateSchema, slugifyClan } from "../services/clanPolicy.js";
 import { createNotification } from "../services/notifications.js";
 import { emitClanMembers, emitUser, isUserOnline } from "../services/socket.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId, sanitizeText } from "../utils/http.js";
@@ -17,28 +17,10 @@ import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId, sanitizeTe
 export const clansRouter = Router();
 clansRouter.use(requireAuth);
 
-const clanMessageSchema = z.object({ message: z.string().min(1).max(600) });
-const clanMemberRoleSchema = z.object({ role: z.enum(["CO_LEADER", "OFFICER", "MEMBER"]) });
-const clanMessageReportSchema = z.object({
-  reason: z.string().min(2).max(80),
-  description: z.string().max(500).optional()
-});
-
 const CLAN_MEMBER_FIELDS = "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle";
-
-const ROLE_RANK: Record<string, number> = {
-  MEMBER: 1,
-  OFFICER: 2,
-  CO_LEADER: 3,
-  LEADER: 4
-};
 
 function idOf(value: any): string {
   return value?._id?.toString?.() ?? value?.toString?.() ?? "";
-}
-
-function roleRank(role: string | null | undefined) {
-  return ROLE_RANK[role || "MEMBER"] ?? 0;
 }
 
 function clanRoleFor(clan: any, userId: string): "LEADER" | "CO_LEADER" | "OFFICER" | "MEMBER" | null {
@@ -49,22 +31,6 @@ function clanRoleFor(clan: any, userId: string): "LEADER" | "CO_LEADER" | "OFFIC
   const role = entry?.role as string | undefined;
   if (role === "CO_LEADER" || role === "OFFICER" || role === "MEMBER") return role;
   return "MEMBER";
-}
-
-function canAssignRole(actorRole: string | null, targetRole: string | null, nextRole: string) {
-  if (actorRole === "LEADER") return nextRole === "CO_LEADER" || nextRole === "OFFICER" || nextRole === "MEMBER";
-  if (actorRole === "CO_LEADER") {
-    if (nextRole === "CO_LEADER") return false;
-    if (roleRank(targetRole) >= roleRank("CO_LEADER")) return false;
-    return nextRole === "OFFICER" || nextRole === "MEMBER";
-  }
-  return false;
-}
-
-function canRemoveMember(actorRole: string | null, targetRole: string | null) {
-  if (actorRole === "LEADER") return targetRole !== "LEADER";
-  if (actorRole === "CO_LEADER") return targetRole === "MEMBER" || targetRole === "OFFICER";
-  return false;
 }
 
 async function populateClanMembers(clan: any) {

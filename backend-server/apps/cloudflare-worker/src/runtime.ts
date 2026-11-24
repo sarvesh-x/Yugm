@@ -70,7 +70,7 @@ export async function startApiRuntime(
 }
 
 export async function sendQueuedPush(data: PushJobData): Promise<PushDeliveryResult> {
-  const { notifyUser } = await import("../../api/src/services/firebase.js");
+  const { notifyUser } = await import("../../api/src/services/mongoPushDelivery.js");
   const { retryDeviceIds, permanentFailures } = await notifyUser(data);
   return { retryDeviceIds, permanentFailures };
 }

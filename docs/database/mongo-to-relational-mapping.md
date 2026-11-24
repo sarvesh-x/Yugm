@@ -1,7 +1,7 @@
 # MongoDB to authoritative relational mapping
 
 **Date:** 2026-11-22  
-**Status:** Phase 0 mapping specification. The target is D1 per [ADR-0001](../decisions/0001-d1-and-r2-target.md), but the [capacity assessment](d1-capacity-assessment.md) gates remain open. A first-cut generated draft exists at `backend-server/apps/api/migrations/d1/0001_initial.sql`; this document remains the authority for reviewing and refining it.
+**Status:** Mapping specification for the MongoDB data transfer. The tracked baseline at `backend-server/apps/api/migrations/d1/0001_initial.sql` has been applied to local and hosted D1. The capacity assessment and validation for existing MongoDB records remain open. [D1 schema setup](../handoffs/2026-11-24-d1-schema-and-reference-seed.md) · [Capacity assessment](d1-capacity-assessment.md)
 
 ## 1. Purpose
 

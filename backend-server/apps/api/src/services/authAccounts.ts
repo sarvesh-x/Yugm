@@ -3,13 +3,13 @@ import { ErrorCode, HttpError } from "../utils/http.js";
 import { hasFirebaseIdentityConflict } from "./authSessionRules.js";
 
 export type AuthUser = Pick<IUser,
-  "name" | "username" | "email" | "phone" | "firebaseUid" | "avatar" | "avatarType" | "avatarParts" |
+  "name" | "username" | "email" | "phone" | "firebaseUid" | "avatar" | "avatarType" |
   "isVerified" | "emailVerified" | "role" | "tokenVersion" | "walletBalance" | "xp" | "lastDailyCheckInAt" |
   "activeCosmetics" | "ownedCosmeticIds" | "vipTier" | "vipLevel" | "vipExp" | "vipStartedAt" | "vipExpiresAt" |
   "vipFrozen" | "vipFreezeStartedAt" | "interests" | "languages" | "city" | "state" | "bio" | "vibeLine" |
   "gender" | "age" | "hobbies" | "interestedIn" | "lookingFor" | "datingAgeMin" | "datingAgeMax" |
   "profileCompletedAt" | "termsAcceptedAt" | "deletionRequestedAt" | "followersCount" | "followingCount"
-> & { id: string };
+> & { id: string; avatarParts?: Partial<NonNullable<IUser["avatarParts"]>> | null };
 
 export type IdentityPatch = Partial<Pick<AuthUser,
   "name" | "username" | "email" | "phone" | "firebaseUid" | "avatar" | "isVerified" |

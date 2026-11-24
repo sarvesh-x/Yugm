@@ -7,8 +7,7 @@
   "workers_dev": false,
   "preview_urls": false,
   "alias": {
-    "iconv-lite": "iconv-lite-worker",
-    "mongoose": "mongoose/index.js"
+    "iconv-lite": "iconv-lite-worker"
   },
   "vars": {
     "YUGM_STAGE": "production",
@@ -34,7 +33,9 @@
   "ratelimits": [
     { "name": "AUTH_REQUESTS", "namespace_id": "17024101", "simple": { "limit": 20, "period": 60 } },
     { "name": "AUTH_IDENTIFIER", "namespace_id": "17024102", "simple": { "limit": 10, "period": 60 } },
-    { "name": "AUTH_REFRESH", "namespace_id": "17024103", "simple": { "limit": 30, "period": 60 } }
+    { "name": "AUTH_REFRESH", "namespace_id": "17024103", "simple": { "limit": 30, "period": 60 } },
+    { "name": "CHAT_SEND", "namespace_id": "17024104", "simple": { "limit": 12, "period": 10 } },
+    { "name": "REPORT_REQUESTS", "namespace_id": "17024105", "simple": { "limit": 5, "period": 60 } }
   ],
   "images": { "binding": "IMAGES" },
   "observability": {

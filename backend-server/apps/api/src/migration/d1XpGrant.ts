@@ -1,8 +1,8 @@
 import { randomBytes } from "node:crypto";
 import type { D1PreparedStatement } from "@cloudflare/workers-types";
 import type { XpEvent } from "@yugm/shared";
-import { defaultSeason, monthlySeasonWindow } from "../models/Season.js";
 import { getLevelPromotion, getLevelStatus } from "../services/levelPresentation.js";
+import { defaultSeason, monthlySeasonWindow } from "../services/seasonDefaults.js";
 import { ErrorCode, HttpError } from "../utils/http.js";
 
 export type D1GuardedStatement = (sql: string, ...values: Array<string | number | null>) => D1PreparedStatement;

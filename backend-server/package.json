@@ -11,7 +11,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "node scripts/run-dev-or-start.cjs",
+    "dev": "npm --workspace @yugm/cloudflare-worker run dev:auth -- --port 4000",
     "dev:api": "npm --workspace apps/api run dev",
     "dev:admin": "npm --workspace apps/admin run dev",
     "start": "npm run start:api",
@@ -30,6 +30,10 @@
     "test:secrets": "node --test scripts/check-tracked-secrets.test.mjs",
     "openapi:check": "node scripts/check-openapi.mjs",
     "audit:d1-endpoints": "tsx scripts/d1-endpoint-audit.mts",
+    "d1:setup:local": "wrangler d1 migrations apply yugm --config apps/cloudflare-worker/auth-local/wrangler.jsonc --local",
+    "d1:setup:production": "wrangler d1 migrations apply yugm --config apps/cloudflare-worker/wrangler.production.jsonc --remote",
+    "d1:seed:sql": "tsx scripts/d1-reference-seed.mts",
+    "test:d1-setup": "node --test scripts/d1-reference-seed.test.mjs",
     "test:openapi": "node --test scripts/check-openapi.test.mjs",
     "config:manifest": "node scripts/config-backup-manifest.mjs",
     "test:config-manifest": "node --test scripts/config-backup-manifest.test.mjs",

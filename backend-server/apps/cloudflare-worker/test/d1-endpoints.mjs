@@ -227,15 +227,92 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor) {
   assert.deepEqual((await requestAs(visitor, path + "/unread-counts", 200)).data, { unreadCounts: { [ownerId]: 1 }, total: 1 });
   assert.deepEqual((await requestAs(owner, path + "/mutes", 200)).data.partnerIds, [visitorId]);
   assert.deepEqual((await requestAs(visitor, path + "/mutes", 200)).data.partnerIds, []);
+  const matchesPath = "/api/dating/matches";
+  await request(matchesPath, 401);
+  assert.deepEqual((await requestAs(owner, matchesPath, 200)).data.matches, []);
+  const preferencesPath = "/api/dating/preferences";
+  const defaultPreferences = {
+    interestedIn: "Everyone", lookingFor: "Friendship", datingAgeMin: 18, datingAgeMax: 35, verifiedOnly: false
+  };
+  assert.deepEqual((await requestAs(owner, preferencesPath, 200)).data.preferences, defaultPreferences);
+  const preferences = { interestedIn: "Women", lookingFor: "Dating", datingAgeMin: 23, datingAgeMax: 42, verifiedOnly: true };
+  await requestAs(owner, preferencesPath, 422, { method: "PUT", body: { ...preferences, datingAgeMax: 18 } });
+  assert.deepEqual((await requestAs(owner, preferencesPath, 200, { method: "PUT", body: preferences })).data.preferences, preferences);
+  assert.deepEqual((await requestAs(owner, preferencesPath, 200)).data.preferences, preferences);
+  assert.deepEqual((await requestAs(visitor, preferencesPath, 200)).data.preferences, defaultPreferences);
+  const matchId = newId();
+  await db.batch([
+    db.prepare("INSERT INTO matches (source_id, created_at, updated_at) VALUES (?, ?, ?)").bind(matchId, time, time),
+    db.prepare("INSERT INTO match_users (source_id, value, matches_id, position) VALUES (?, ?, ?, 0), (?, ?, ?, 1)")
+      .bind(newId(), ownerId, matchId, newId(), visitorId, matchId)
+  ]);
+  const matchResults = await Promise.all([requestAs(owner, matchesPath, 200), requestAs(visitor, matchesPath, 200)]);
+  assert.equal(matchResults[0].data.matches[0].partner._id, visitorId);
+  assert.equal(matchResults[1].data.matches[0].partner._id, ownerId);
+  assert.equal(matchResults[0].data.matches[0].matchDate, time);
+  assert.equal(matchResults[0].data.matches[0].relationship.xp, 50);
+  assert.equal(await db.prepare("SELECT COUNT(*) AS total FROM relationships").first("total"), 1);
+  assert.equal(await db.prepare("SELECT COUNT(*) AS total FROM relationship_users").first("total"), 2);
+  const conversation = path + "/" + visitorId;
+  const visitorConversation = path + "/" + ownerId;
+  const history = (await requestAs(owner, conversation + "?markRead=false", 200)).data;
+  assert.deepEqual(history.messages.map(message => message._id), [older, visible]);
+  assert.equal(history.relationship.xp, 50);
+  assert.equal(history.muted, true);
+  assert.equal((await requestAs(visitor, visitorConversation + "?markRead=false", 200)).data.muted, false);
+  const olderPage = (await requestAs(owner, conversation + "?before=" + visible, 200)).data;
+  assert.deepEqual(olderPage.messages.map(message => message._id), [older]);
+  assert.equal((await requestAs(owner, path + "/unread-counts", 200)).data.total, 1);
+  const search = (await requestAs(owner, conversation + "/search?q=FIXTURE&limit=1", 200)).data;
+  assert.deepEqual(search.messages.map(message => message._id), [visible]);
+  assert.equal(search.hasMore, true);
+  assert.equal(search.nextBefore, time);
+  assert.deepEqual((await requestAs(owner, conversation + "/search?q=%25_", 200)).data.messages, []);
+  await requestAs(owner, conversation + "/search?q=f", 400);
+  await request(conversation, 401);
+  await requestAs(owner, path + "/" + newId(), 404);
+  assert.equal((await requestAs(owner, conversation, 200)).data.messages.find(message => message._id === visible).read, false);
+  assert.equal((await requestAs(owner, path + "/unread-counts", 200)).data.total, 0);
+  assert.equal(await db.prepare("SELECT read FROM direct_messages WHERE source_id = ?").bind(hidden).first("read"), 0);
+
+  await db.prepare("UPDATE direct_messages SET read = 0 WHERE source_id = ?").bind(visible).run();
+  const read = () => requestAs(owner, conversation + "/read", 200, { body: {} });
+  const receipts = await Promise.all([read(), read()]);
+  assert.deepEqual(receipts.map(receipt => receipt.data.updated).sort(), [0, 1]);
+  assert.ok(receipts.every(receipt => !Number.isNaN(Date.parse(receipt.data.readThrough))));
+  assert.equal((await requestAs(visitor, path + "/read-all", 200, { body: {} })).data.updated, 1);
+  assert.equal((await requestAs(visitor, path + "/read-all", 200, { body: {} })).data.updated, 0);
+  await requestAs(owner, conversation + "/mute", 400, { method: "PUT", body: { muted: "true" } });
+  await requestAs(owner, conversation + "/mute", 200, { method: "PUT", body: { muted: false } });
+  const muteVisitor = () => requestAs(visitor, visitorConversation + "/mute", 200, { method: "PUT", body: { muted: true } });
+  const repeatedMutes = await Promise.all([muteVisitor(), muteVisitor()]);
+  assert.ok(repeatedMutes.every(result => result.data.muted));
+  assert.deepEqual((await requestAs(owner, path + "/mutes", 200)).data.partnerIds, []);
+  assert.deepEqual((await requestAs(visitor, path + "/mutes", 200)).data.partnerIds, [ownerId]);
+  assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM conversation_mutes WHERE owner_id = ? AND partner_id = ?")
+    .bind(visitorId, ownerId).first("count"), 1);
+
+  const queryPlan = (await db.prepare(`EXPLAIN QUERY PLAN SELECT source_id FROM direct_messages
+    WHERE receiver_id = ? AND read = 0 AND sender_id = ?`).bind(ownerId, visitorId).all()).results;
+  assert.ok(queryPlan.some(row => row.detail.includes("idx_direct_messages_unread")));
   await db.prepare("INSERT INTO blocks (source_id, blocker_id, blocked_user_id, created_at) VALUES (?, ?, ?, ?)")
     .bind(newId(), ownerId, visitorId, time).run();
+  assert.deepEqual((await requestAs(owner, matchesPath, 200)).data.matches, []);
   assert.deepEqual((await requestAs(owner, path, 200)).data.messages, []);
   assert.equal((await requestAs(owner, path + "/unread-counts", 200)).data.total, 0);
+  await requestAs(owner, conversation, 403);
+  await requestAs(owner, conversation + "/search?q=fixture", 403);
+  await requestAs(owner, conversation + "/read", 403, { body: {} });
+  await requestAs(owner, conversation + "/mute", 403, { method: "PUT", body: { muted: true } });
   assert.deepEqual((await requestAs(owner, "/api/friends", 200)).data.friends, []);
   assert.deepEqual((await requestAs(visitor, "/api/users/" + ownerId + "/rooms", 200)).data.rooms, []);
   assert.equal((await requestAs(owner, "/api/friends/unfriend/" + visitorId, 200, { body: {} })).data.unfriended, true);
   await requestAs(visitor, "/api/friends/request/" + ownerId, 403, { body: {} });
   await db.prepare("DELETE FROM blocks WHERE blocker_id = ? AND blocked_user_id = ?").bind(ownerId, visitorId).run();
+  assert.equal((await requestAs(owner, conversation, 200, { method: "DELETE" })).data.deletedCount, 2);
+  assert.equal((await requestAs(owner, conversation, 200, { method: "DELETE" })).data.deletedCount, 0);
+  assert.deepEqual((await requestAs(owner, conversation, 200)).data.messages, []);
+  assert.equal((await requestAs(visitor, visitorConversation + "?markRead=false", 200)).data.messages.length, 3);
   await requestAs(owner, "/api/friends/request/" + visitorId, 201, { body: {} });
   assert.equal((await requestAs(visitor, "/api/friends/decline/" + ownerId, 200, { body: {} })).data.declined, true);
   assert.equal((await requestAs(owner, "/api/friends/status/" + visitorId, 200)).data.status, "NONE");
@@ -298,4 +375,106 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor) {
   assert.equal((await requestAs(owner, blockPath, 200, { body: {} })).data.blocked, true);
   assert.equal((await requestAs(owner, blockPath, 200, { method: "DELETE" })).data.blocked, false);
   assert.deepEqual((await requestAs(owner, "/api/users/me/blocked", 200)).data.users, []);
+
+  const send = (account, target, status, body) => requestAs(account, path + "/" + target, status, { body });
+  const countSent = () => db.prepare("SELECT COUNT(*) AS count FROM direct_messages WHERE sender_id = ? AND receiver_id = ?")
+    .bind(ownerId, visitorId).first("count");
+  const beforeSends = await countSent();
+  const beforeXp = await db.prepare("SELECT xp FROM users WHERE source_id = ?").bind(ownerId).first("xp");
+  await request(path + "/" + visitorId, 401, { body: { message: "hello" } });
+  await send(owner, visitorId, 400, { message: "   " });
+  await send(owner, ownerId, 400, { message: "hello" });
+  const muteUntil = new Date(Date.now() + 60_000).toISOString();
+  await db.prepare("UPDATE users SET muted_until = ? WHERE source_id = ?").bind(muteUntil, ownerId).run();
+  await send(owner, visitorId, 403, { message: "hello" });
+  await db.prepare("UPDATE users SET muted_until = NULL WHERE source_id = ?").bind(ownerId).run();
+  const savedVip = await db.prepare("SELECT vip_tier, vip_level, vip_expires_at FROM users WHERE source_id = ?").bind(ownerId).first();
+  await db.prepare("UPDATE users SET vip_tier = NULL, vip_level = 0, vip_expires_at = NULL WHERE source_id = ?").bind(ownerId).run();
+  await requestAs(owner, followPath, 200, { method: "DELETE" });
+  await db.prepare("UPDATE users SET vip_chat_privacy = 'FOLLOWERS' WHERE source_id = ?").bind(visitorId).run();
+  await send(owner, visitorId, 403, { message: "hello" });
+  assert.equal(await countSent(), beforeSends);
+  assert.equal((await requestAs(owner, followPath, 200, { body: {} })).data.xpGrant.duplicate, true);
+  await requestAs(visitor, visitorConversation + "/mute", 200, { method: "PUT", body: { muted: false } });
+  const sent = await Promise.all([
+    send(owner, visitorId, 201, { message: "same text" }),
+    send(owner, visitorId, 201, { message: "same text" })
+  ]);
+  await db.prepare("UPDATE users SET vip_chat_privacy = 'EVERYONE' WHERE source_id = ?").bind(visitorId).run();
+  const vipPrivacy = "/api/users/me/vip-privacy";
+  await request(vipPrivacy, 401, { method: "PATCH", body: {} });
+  await requestAs(visitor, vipPrivacy, 403);
+  await db.prepare("UPDATE users SET vip_tier = 'VIP1', vip_level = 1, vip_expires_at = ? WHERE source_id = ?").bind(muteUntil, ownerId).run();
+  const beforePrivacy = (await requestAs(owner, vipPrivacy, 200)).data;
+  const settings = { mysteriousVisitors: true, chatPrivacy: "FOLLOWERS" };
+  assert.deepEqual((await requestAs(owner, vipPrivacy, 200, { method: "PATCH", body: settings })).data, settings);
+  assert.deepEqual((await requestAs(owner, vipPrivacy, 200)).data, settings);
+  const updatedPrivacy = { mysteriousVisitors: true, chatPrivacy: beforePrivacy.chatPrivacy };
+  assert.deepEqual((await requestAs(owner, vipPrivacy, 200, { method: "PATCH", body: { chatPrivacy: beforePrivacy.chatPrivacy } })).data, updatedPrivacy);
+  await requestAs(owner, vipPrivacy, 200, { method: "PATCH", body: beforePrivacy });
+  await db.prepare("UPDATE users SET vip_tier = ?, vip_level = ?, vip_expires_at = ? WHERE source_id = ?")
+    .bind(savedVip.vip_tier, savedVip.vip_level, savedVip.vip_expires_at, ownerId).run();
+  assert.notEqual(sent[0].data.message._id, sent[1].data.message._id);
+  assert.equal(sent[0].data.message.receiverId._id, visitorId);
+  assert.equal(sent[0].data.message.read, false);
+  assert.equal(sent[0].data.xpGrant.xpAwarded, 5);
+  assert.equal(await db.prepare("SELECT xp FROM users WHERE source_id = ?").bind(ownerId).first("xp"), beforeXp + 10);
+  assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM battle_pass_xp_grants WHERE user_id = ? AND action_key LIKE 'CHAT_MESSAGE:message:%'")
+    .bind(ownerId).first("count"), 2);
+  const messageNotice = id => db.prepare("SELECT user_id FROM notifications WHERE type = 'MESSAGE' AND json_extract(data, '$.messageId') = ?")
+    .bind(id).first("user_id");
+  assert.equal(await messageNotice(sent[0].data.message._id), visitorId);
+  assert.equal(await messageNotice(sent[1].data.message._id), visitorId);
+  const sendBlock = newId();
+  await db.prepare("INSERT INTO blocks (source_id, blocker_id, blocked_user_id, created_at) VALUES (?, ?, ?, ?)")
+    .bind(sendBlock, ownerId, visitorId, time).run();
+  await send(visitor, ownerId, 403, { message: "blocked reply" });
+  await db.prepare("DELETE FROM blocks WHERE source_id = ?").bind(sendBlock).run();
+  const reply = await send(visitor, ownerId, 201, { message: "reply", replyToId: sent[0].data.message._id });
+  assert.equal(reply.data.message.replyTo.messageId, sent[0].data.message._id);
+  assert.equal(reply.data.message.replyTo.authorId, ownerId);
+  assert.equal(await db.prepare("SELECT read FROM direct_messages WHERE source_id = ?").bind(sent[1].data.message._id).first("read"), 1);
+  await requestAs(visitor, visitorConversation + "/mute", 200, { method: "PUT", body: { muted: true } });
+  const flagged = await send(owner, visitorId, 201, { message: "A warning about spam" });
+  assert.equal(await messageNotice(flagged.data.message._id), null);
+  assert.equal(await db.prepare("SELECT warning_count FROM user_safety_statuses WHERE user_id = ?").bind(ownerId).first("warning_count"), 1);
+  await send(owner, visitorId, 404, { message: "hidden reply", replyToId: hidden });
+  assert.equal(await countSent(), beforeSends + 3);
+
+  await requestAs(visitor, visitorConversation + "/mute", 200, { method: "PUT", body: { muted: false } });
+  await db.prepare(`CREATE TRIGGER fixture_reject_message_notice BEFORE INSERT ON notifications
+    WHEN NEW.type = 'MESSAGE' BEGIN SELECT RAISE(ABORT, 'fixture message rollback'); END`).run();
+  try {
+    await send(owner, visitorId, 500, { message: "rollback test" });
+    assert.equal(await countSent(), beforeSends + 3);
+    assert.equal(await db.prepare("SELECT xp FROM users WHERE source_id = ?").bind(ownerId).first("xp"), beforeXp + 15);
+  } finally {
+    await db.prepare("DROP TRIGGER fixture_reject_message_notice").run();
+  }
+  const pair = [ownerId, visitorId].sort().join(":");
+  await db.prepare("UPDATE relationship_message_xp_daily SET amount = 116 WHERE pair_key = ?").bind(pair).run();
+  await db.prepare("UPDATE xp_daily_caps SET amount = 98 WHERE user_id = ? AND event = 'CHAT_MESSAGE'").bind(ownerId).run();
+  const capped = await send(owner, visitorId, 201, { message: "partial award" });
+  assert.equal(capped.data.xpGrant.xpAwarded, 2);
+  assert.equal(capped.data.xpGrant.earnedToday, 100);
+  const afterCap = await send(owner, visitorId, 201, { message: "cap reached" });
+  assert.equal(afterCap.data.xpGrant.xpAwarded, 0);
+  assert.equal(afterCap.data.relationship.xp, capped.data.relationship.xp);
+  assert.equal(await db.prepare("SELECT amount FROM relationship_message_xp_daily WHERE pair_key = ?").bind(pair).first("amount"), 120);
+  await send(owner, visitorId, 415, { mediaUrl: "https://example.test/attachment.png", mediaType: "IMAGE" });
+  const moderated = await send(visitor, ownerId, 400, { message: "spam scam casino" });
+  assert.equal(moderated.error.code, "CONTENT_BLOCKED");
+  assert.equal(await db.prepare("SELECT is_chat_restricted FROM user_safety_statuses WHERE user_id = ?").bind(visitorId).first("is_chat_restricted"), 1);
+  assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM moderation_actions WHERE target_user_id = ? AND automated = 1")
+    .bind(visitorId).first("count"), 1);
+  await send(visitor, ownerId, 403, { message: "restricted" });
+  let rateLimited = false;
+  for (let attempt = 0; attempt < 13; attempt++) {
+    const result = await send(owner, visitorId, [400, 429], { message: "" });
+    if (result.error.code === "RATE_LIMITED") {
+      rateLimited = true;
+      break;
+    }
+  }
+  assert.equal(rateLimited, true);
 }

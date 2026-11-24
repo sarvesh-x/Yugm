@@ -5,7 +5,7 @@
 | Debug | `http://10.0.2.2:4000/api` for HTTP and `http://10.0.2.2:4000` for app events. Start the [loopback Wrangler Worker](../handoffs/2026-11-24-local-d1-auth-emulator.md) and run the app on the Android emulator. |
 | Release | Set `YUGM_PRODUCTION_ORIGIN` to the HTTPS origin of the production Cloudflare Worker. Gradle adds `/api` for HTTP and uses the same origin for app events. |
 
-Both Workers bind a D1 database named `yugm`. Debug uses the existing emulator-only database ID and simulated bindings. Production targets the hosted database verified through Wrangler. Both D1 Workers use native Cloudflare rate limits for sign-in and session refresh. [D1 identity and readiness](../handoffs/2026-11-24-d1-database-and-redis-boundary.md)
+Both Workers bind a D1 database named `yugm`. Debug uses the existing emulator-only database ID and simulated bindings. Production targets the hosted database. Both have the versioned schema and reference catalogs, and both D1 Workers use native Cloudflare rate limits for sign-in and session refresh. [D1 setup and verification](../handoffs/2026-11-24-d1-schema-and-reference-seed.md)
 
 The build type selects the environment. Gradle reads the production setting from a Gradle property, an environment variable, or ignored `android-client/local.properties`, in that order. Tagged builds read the GitHub repository variable of the same name. Missing settings leave the reserved `https://api.yugm.invalid` placeholder in generated configuration. Release packaging requires a configured production origin and upload signing. The runtime status is recorded in the [production setup handoff](../handoffs/2026-11-24-production-cloudflare-builds.md).
 

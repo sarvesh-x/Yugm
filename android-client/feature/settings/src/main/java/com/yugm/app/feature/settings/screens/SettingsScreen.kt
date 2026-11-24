@@ -195,13 +195,8 @@ fun SettingsScreen(
             },
             containerColor = Color.Transparent
         ) { innerPadding ->
-        if (viewModel.isLoading && pane == SettingsPane.Home) {
-            Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
-                LoadingState("Loading settings...")
-            }
-        } else {
             when (pane) {
-        SettingsPane.Home -> SettingsHome(
+                SettingsPane.Home -> SettingsHome(
                     modifier = Modifier.padding(innerPadding),
                     userName = userName,
                     username = username,
@@ -273,8 +268,6 @@ fun SettingsScreen(
                 SettingsPane.Terms, SettingsPane.Privacy, SettingsPane.Guidelines -> DocumentPane(Modifier.padding(innerPadding), pane)
             }
         }
-    }
-
     }
     if (showLogoutConfirm) {
         ConfirmDialog(

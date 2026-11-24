@@ -9,6 +9,7 @@ export enum ErrorCode {
   INSUFFICIENT_FUNDS = "INSUFFICIENT_FUNDS",
   INTERNAL = "INTERNAL",
   RATE_LIMITED = "RATE_LIMITED",
+  CONTENT_BLOCKED = "CONTENT_BLOCKED",
 }
 
 export class HttpError extends Error {

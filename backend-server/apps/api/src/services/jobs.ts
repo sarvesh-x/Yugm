@@ -1,5 +1,5 @@
 import { Queue, Worker, type Job } from "bullmq";
-import { notifyUser } from "./firebase.js";
+import { notifyUser } from "./mongoPushDelivery.js";
 import { getRedisUrl } from "./redis.js";
 import { ClanMessage } from "../models/ClanMessage.js";
 import { Clan } from "../models/Clan.js";

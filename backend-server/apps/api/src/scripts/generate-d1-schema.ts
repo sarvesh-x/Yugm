@@ -10,7 +10,8 @@
  *
  * Run from apps/api: npm run schema:d1
  */
-import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import mongoose from "mongoose";
@@ -20,9 +21,6 @@ type Warning = { model: string; field: string; reason: string };
 type Table = { model: string; table: string; columns: string[]; indexes: string[]; notes: string[] };
 
 const MODEL_DIR = path.resolve("src/models");
-const OUT_DIR = path.resolve("migrations/d1");
-const SCHEMA_FILE = path.join(OUT_DIR, "0001_initial.sql");
-const MANIFEST_FILE = path.join(OUT_DIR, "0001_initial.manifest.json");
 
 /** Table names fixed by docs/database/mongo-to-relational-mapping.md. */
 const TABLE_OVERRIDES: Record<string, string> = {
@@ -496,10 +494,13 @@ async function main() {
     lines.push("");
   }
 
-  await mkdir(OUT_DIR, { recursive: true });
-  await writeFile(SCHEMA_FILE, lines.join("\n"), "utf8");
+  // The deployed migration history is immutable. Review the generated schema
+  // separately and use a new versioned migration for approved changes.
+  const outputDir = await mkdtemp(path.join(tmpdir(), "yugm-d1-schema-"));
+  const schemaFile = path.join(outputDir, "schema.sql");
+  await writeFile(schemaFile, lines.join("\n"), "utf8");
   await writeFile(
-    MANIFEST_FILE,
+    path.join(outputDir, "manifest.json"),
     `${JSON.stringify({
       generatedAt: new Date().toISOString(),
       source: "Mongoose model introspection (local source only)",
@@ -514,7 +515,7 @@ async function main() {
     "utf8"
   );
 
-  console.log(`Generated ${allTables.length} tables (${modelEntries.length} roots) -> ${path.relative(process.cwd(), SCHEMA_FILE)}`);
+  console.log(`Generated ${allTables.length} tables (${modelEntries.length} roots) -> ${schemaFile}`);
   console.log(`Review warnings: ${warnings.length}; import failures: ${importResult.failed.length}`);
   for (const failure of importResult.failed) console.error(`  import failed: ${failure}`);
 }

@@ -1,11 +1,10 @@
 import type { D1Database } from "@cloudflare/workers-types";
-import { User } from "../models/User.js";
-import { asAuthUser, type AuthAccountStore, type AuthUser, type IdentityPatch } from "../services/authAccounts.js";
+import { randomBytes } from "node:crypto";
+import type { AuthAccountStore, AuthUser, IdentityPatch } from "../services/authAccounts.js";
 import { ErrorCode, HttpError } from "../utils/http.js";
 import { AUTH_PROFILE_ARRAYS, AUTH_PROFILE_FIELDS, PROFILE_NESTED_FIELDS } from "./authProfileFields.js";
 import { D1TargetWriter } from "./d1Target.js";
 import { applyMapping } from "./mappings.js";
-import { stableStringify } from "./snapshot.js";
 import { TransformContext } from "./transform.js";
 
 type UserRow = Record<string, string | number | null>;
@@ -15,6 +14,11 @@ function column(field: string) {
 }
 
 const arrayFields = Object.entries(AUTH_PROFILE_ARRAYS);
+const dateFields = new Set([
+  "termsAcceptedAt", "profileCompletedAt", "deletionRequestedAt", "lastDailyCheckInAt",
+  "vipStartedAt", "vipExpiresAt", "vipFreezeStartedAt"
+]);
+const booleanFields = new Set(["vipFrozen", "emailVerified", "isVerified"]);
 const fields = [
   ...AUTH_PROFILE_FIELDS, "name", "username", "role", "phone", "firebaseUid", "tokenVersion",
   "termsAcceptedAt", "profileCompletedAt", "deletionRequestedAt", "xp", "lastDailyCheckInAt",
@@ -31,9 +35,11 @@ LEFT JOIN user_auth_profile AS p ON p.source_id = u.source_id`;
 
 function restoreAuthUser(row: UserRow): AuthUser {
   const nulls = new Set<string>(JSON.parse(String(row.null_fields ?? "[]")));
-  const document: Record<string, unknown> = { _id: row.source_id };
+  const document = { id: String(row.source_id) } as Record<string, unknown> & { id: string };
   for (const field of fields) {
-    document[field] = nulls.has(field) ? null : row[column(field)] ?? undefined;
+    const value = row[column(field)];
+    document[field] = nulls.has(field) ? null : value == null ? undefined
+      : dateFields.has(field) ? new Date(String(value)) : booleanFields.has(field) ? Boolean(value) : value;
   }
   for (const [field] of arrayFields) {
     document[field] = nulls.has(field) ? null : JSON.parse(String(row[`${column(field)}_json`]));
@@ -51,9 +57,7 @@ function restoreAuthUser(row: UserRow): AuthUser {
     }
     document[field] = values;
   }
-  // Reuse the existing model's casting and defaults for the self-profile
-  // projection. Hydration here is in memory and performs no MongoDB query.
-  return asAuthUser(User.hydrate(document));
+  return document as AuthUser;
 }
 
 function sqlValue(value: string | boolean | Date | undefined, field: keyof IdentityPatch) {
@@ -92,16 +96,23 @@ export function createD1AuthAccountStore(db: D1Database): AuthAccountStore {
     },
     async insert(input) {
       const now = new Date();
-      const document = new User({ ...input, createdAt: now, updatedAt: now });
-      await document.validate();
+      const user: AuthUser = {
+        ...input, id: randomBytes(12).toString("hex"), name: input.name.trim(), username: input.username.trim().toLowerCase(),
+        email: input.email?.trim().toLowerCase(), phone: input.phone?.trim(), role: "USER", tokenVersion: 0,
+        xp: 0, vipLevel: 0, vipExp: 0, vipFrozen: false, followersCount: 0, followingCount: 0,
+        hobbies: [], ownedCosmeticIds: [], avatarParts: {}, activeCosmetics: {}
+      };
+      const { id, avatarParts, activeCosmetics, ...fields } = user;
       const context = new TransformContext("auth-signup");
-      const mapped = applyMapping("users", JSON.parse(stableStringify(document.toObject())), context);
+      const mapped = applyMapping("users", JSON.parse(JSON.stringify({
+        ...fields, _id: id, profileMedia: [], createdAt: now, updatedAt: now
+      })), context);
       context.assertAccountedFor();
       if (mapped.rejected || context.quarantine.length) {
         throw new HttpError(400, "Invalid account fields", ErrorCode.VALIDATION);
       }
       await writer.writeBatch(mapped.writes);
-      return asAuthUser(document);
+      return user;
     },
     async updateIdentity(user, patch) {
       const keys = Object.keys(patch) as (keyof IdentityPatch)[];

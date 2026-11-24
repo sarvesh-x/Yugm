@@ -6,9 +6,9 @@
 
 | Environment | Worker config | Observed status |
 |---|---|---|
-| Local Android debug | `backend-server/apps/cloudflare-worker/auth-local/wrangler.jsonc` | Loopback Worker with simulated `yugm` D1, R2, Images and Cloudflare auth rate limits. The Android emulator uses port 4000. [Startup and local bindings](../handoffs/2026-11-24-local-d1-auth-emulator.md) |
+| Local Android debug | `backend-server/apps/cloudflare-worker/auth-local/wrangler.jsonc` | `npm run dev` starts the loopback Worker on port 4000 with simulated `yugm` D1, R2, Images and Cloudflare rate limits. Its bundle excludes MongoDB. [Startup and local bindings](../handoffs/2026-11-24-local-d1-auth-emulator.md) |
 | Staging | `backend-server/apps/cloudflare-worker/wrangler.staging.jsonc` | Deployed prototype at `https://yugm-api-staging.sarveshkumar10101.workers.dev`. Admin at `https://yugm-admin-staging.pages.dev`. Uses isolated `YugmStaging` MongoDB name, staging LiveKit project, `STAGING_DB_ISOLATED=true`, and restricted admin-origin CORS. |
-| Production target | `backend-server/apps/cloudflare-worker/wrangler.production.jsonc` | Hosted `yugm` D1 and five hosted R2 bindings, Cloudflare auth rate limits, Firebase App Check and a placeholder HTTPS origin. Schema and API acceptance remain open. [D1 and Redis migration status](../handoffs/2026-11-24-d1-database-and-redis-boundary.md) |
+| Production target | `backend-server/apps/cloudflare-worker/wrangler.production.jsonc` | The D1 release bundle excludes MongoDB. Hosted `yugm` has the base schema and reference catalogs. Migrations `0003` through `0005`, the HTTPS origin and live API acceptance remain open. The Worker config binds five hosted R2 buckets and enables Firebase App Check. [Cutover status](../handoffs/2026-11-24-mongodb-runtime-cutover.md) |
 
 Pushes to `master` trigger the staging API and admin deployment workflow. Use a feature branch for checkpoints that should leave staging alone. Version tags trigger the Android release workflow. [Workflow source](../../.github/workflows/cloudflare-staging.yml) · [Android release workflow](../../.github/workflows/android-release.yml)
 
@@ -29,7 +29,7 @@ Wrangler config is the source of truth for non-secret bindings and environment s
 |---|---|---|
 | D1 database | Authoritative relational state | D1 Free is the selected target. Capacity, data import and recovery still require verification for the live rollout. Use the database name where supported in migration commands. [Capacity assessment](../database/d1-capacity-assessment.md) |
 | R2 buckets | Assets, public media, private media, originals, staging | Do not omit IDs in config; Wrangler can auto-provision. Verify target bucket before any write/delete. |
-| Rate Limiting | Sign-in and refresh limits for the D1 Workers | Debug and production use separate namespace IDs. Counters are approximate and location-scoped. [Binding behavior](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/) |
+| Rate Limiting | Sign-in, refresh, chat and report limits for the D1 Workers | Debug and production use separate namespace IDs. `CHAT_SEND` shares 12 attempts per user per 10 seconds across direct sends, clan sends and clan reactions. `REPORT_REQUESTS` limits clan reports to five attempts per user per minute. Counters are approximate and location-scoped. [Binding behavior](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/) |
 | Durable Object namespaces | Realtime/stateful coordination | SQLite-backed classes; use Wrangler migrations; scope IDs by conversation/room/user as designed. |
 | Queues | Async producers/consumers | Separate producer and consumer bindings; configure DLQ, retries and batching deliberately. |
 | KV namespaces | Non-critical cache/config only | Never for financial or ownership state. |

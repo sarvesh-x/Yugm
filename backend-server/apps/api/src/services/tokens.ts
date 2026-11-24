@@ -4,7 +4,6 @@ import { env } from "../config/env.js";
 import { ErrorCode, HttpError } from "../utils/http.js";
 import { isSessionGenerationCurrent } from "./authSessionRules.js";
 import type { AuthSessionAccount, AuthSessionStore } from "./authSessionStore.js";
-import { mongoAuthSessionStore } from "./mongoAuthSessionStore.js";
 
 type SessionRequest = { ip?: string; get(name: "user-agent"): string | undefined };
 
@@ -38,7 +37,7 @@ function requestMetadata(req: SessionRequest) {
   return { ip: req.ip, userAgent: req.get("user-agent")?.slice(0, 500) };
 }
 
-export async function issueSession(user: AuthSessionAccount, req: SessionRequest, store: AuthSessionStore = mongoAuthSessionStore) {
+export async function issueSession(user: AuthSessionAccount, req: SessionRequest, store: AuthSessionStore) {
   const raw = crypto.randomBytes(32).toString("base64url");
   const session = await store.issue(user.id, crypto.randomUUID(), {
     refreshHash: hashRefresh(raw),
@@ -57,7 +56,7 @@ export async function issueSession(user: AuthSessionAccount, req: SessionRequest
   };
 }
 
-export async function rotateRefresh(raw: string, req: SessionRequest, store: AuthSessionStore = mongoAuthSessionStore) {
+export async function rotateRefresh(raw: string, req: SessionRequest, store: AuthSessionStore) {
   const old = await store.findRefreshSession(hashRefresh(raw));
   if (!old) throw new HttpError(401, "Refresh session is invalid", ErrorCode.UNAUTHORIZED);
   const user = await store.findAccount(old.userId);
@@ -102,10 +101,10 @@ export async function rotateRefresh(raw: string, req: SessionRequest, store: Aut
   };
 }
 
-export async function logoutSession(userId: string, raw: string | undefined, store: AuthSessionStore = mongoAuthSessionStore, deviceToken?: string) {
+export async function logoutSession(userId: string, raw: string | undefined, store: AuthSessionStore, deviceToken?: string) {
   await store.logout(userId, raw ? hashRefresh(raw) : undefined, new Date(), deviceToken);
 }
 
-export async function revokeAllForUser(userId: string, store: AuthSessionStore = mongoAuthSessionStore) {
+export async function revokeAllForUser(userId: string, store: AuthSessionStore) {
   await store.revokeAll(userId, new Date());
 }

@@ -1,7 +1,8 @@
 import mongoose from "mongoose";
 import { BattlePass, type IBattlePass } from "../models/BattlePass.js";
 import { BattlePassXpGrant } from "../models/BattlePassXpGrant.js";
-import { Season, defaultSeason, monthlySeasonWindow, type ISeason, type ISeasonReward } from "../models/Season.js";
+import { Season, type ISeason, type ISeasonReward } from "../models/Season.js";
+import { defaultSeason, monthlySeasonWindow } from "./seasonDefaults.js";
 import { Cosmetic } from "../models/Cosmetic.js";
 import { User } from "../models/User.js";
 import { debitWallet, creditWallet } from "./wallet.js";

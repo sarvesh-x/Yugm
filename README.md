@@ -21,7 +21,7 @@ Start with [AGENTS.md](AGENTS.md) and the [documentation index](docs/INDEX.md). 
 
 ### Android emulator with local D1 and R2
 
-Start the loopback Cloudflare Worker on port 4000. It uses Wrangler's local D1 database and R2 buckets. The current Worker covers Auth, Profile, avatars, player cosmetics, the notification inbox and core clan membership. Follow the [local Worker runbook](docs/handoffs/2026-11-24-local-d1-auth-emulator.md) to apply the local schema and configure the Firebase test project. See the [migration handoff](docs/handoffs/2026-11-24-local-d1-r2-app-expansion.md) for remaining journeys.
+From `backend-server`, run `npm install`, `npm run d1:setup:local` and `npm run dev`. The default dev command starts the loopback Cloudflare Worker on port 4000 with local D1 and R2. It needs Firebase test settings and a signing secret in the local Worker vars file. See the runbook for setup and the cutover tracker for current API coverage. [Local Worker runbook](docs/handoffs/2026-11-24-local-d1-auth-emulator.md) · [MongoDB cutover status](docs/handoffs/2026-11-24-mongodb-runtime-cutover.md)
 
 ### Legacy Node API
 
@@ -29,10 +29,12 @@ Start the loopback Cloudflare Worker on port 4000. It uses Wrangler's local D1 d
 cd backend-server
 npm install
 cp apps/api/.env.example apps/api/.env
-npm run dev
+npm run dev:api
 ```
 
-The backend dev command starts the legacy MongoDB-backed API. Use it for the existing admin workflows and compatibility checks. The Node API and loopback Worker normally use the same port, so run the one needed for the current task.
+Use `npm run dev:api` for the legacy MongoDB-backed admin workflows and compatibility checks. The Node API and loopback Worker normally use the same port, so run the one needed for the current task.
+
+For Android debug, run `npm run d1:setup:local` from `backend-server` to apply the versioned schema and reference catalogs to the local `yugm` database. The hosted database uses the same migrations through `npm run d1:setup:production`. [D1 setup and environment isolation](docs/handoffs/2026-11-24-d1-schema-and-reference-seed.md)
 
 Legacy Render deployments build from `backend-server/` with `npm ci --include=dev && npm --workspace apps/api run build`.
 
@@ -105,7 +107,7 @@ The legacy Node API requires MongoDB. Use an isolated Atlas database or run Mong
 cd backend-server
 docker compose up -d mongo redis livekit
 npm run seed
-npm run dev
+npm run dev:api
 ```
 
 ## Android Client Setup

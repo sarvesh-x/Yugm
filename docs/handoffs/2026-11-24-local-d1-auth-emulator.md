@@ -33,18 +33,18 @@ From `backend-server`:
    npm.cmd run test:auth-worker --workspace @yugm/cloudflare-worker
    ```
 
-4. Apply the draft schema to the local `yugm` D1 database. Debug uses its original local storage ID and `remote: false`. [Database identity and checks](2026-11-24-d1-database-and-redis-boundary.md)
+4. Apply the versioned schema and reference catalog migrations to local `yugm`. Debug uses its original local storage ID and `remote: false`. [Database setup and checks](2026-11-24-d1-schema-and-reference-seed.md)
 
    ```powershell
-   npm.cmd exec --workspace @yugm/cloudflare-worker -- wrangler d1 execute AUTH_DB --config auth-local/wrangler.jsonc --local --file ../api/migrations/d1/0001_initial.sql
+   npm.cmd run d1:setup:local
    ```
 
-   Use a fresh Wrangler local persistence directory when the draft schema changes; `CREATE TABLE IF NOT EXISTS` does not add columns to an existing table.
+   If an older pre-migration draft is missing columns, use the recovery steps below to initialize a new persistence directory while preserving the old database.
 
 5. Start the Worker on port `4000`:
 
    ```powershell
-   npm.cmd run dev:auth --workspace @yugm/cloudflare-worker -- --port 4000
+   npm.cmd run dev
    ```
 
 6. Check the endpoints:
@@ -63,7 +63,7 @@ From `backend-server`:
    ```powershell
    $persist = Join-Path $env:TEMP ("yugm-auth-local-" + [guid]::NewGuid().ToString("N"))
 
-   npm.cmd exec --workspace @yugm/cloudflare-worker -- wrangler d1 execute AUTH_DB --config auth-local/wrangler.jsonc --local --file ../api/migrations/d1/0001_initial.sql --persist-to $persist
+   npm.cmd run d1:setup:local -- --persist-to $persist
    npm.cmd run dev:auth --workspace @yugm/cloudflare-worker -- --port 4000 --persist-to $persist
    ```
 

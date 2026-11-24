@@ -1,4 +1,3 @@
-import mongoose from "mongoose";
 import { ErrorCode, HttpError } from "./http.js";
 
 export function responseError(error: unknown) {
@@ -12,21 +11,7 @@ export function responseError(error: unknown) {
       code: error.code ?? ErrorCode.INTERNAL
     };
   }
-  if (error instanceof mongoose.Error.CastError) {
-    return {
-      status: 400,
-      message: "Invalid identifier",
-      code: ErrorCode.VALIDATION
-    };
-  }
-  if (error instanceof mongoose.Error.ValidationError) {
-    return {
-      status: 400,
-      message: error.message,
-      code: ErrorCode.VALIDATION
-    };
-  }
-  const maybeHttp = error as { message?: unknown; status?: unknown; statusCode?: unknown; type?: unknown };
+  const maybeHttp = (error ?? {}) as { status?: unknown; statusCode?: unknown; type?: unknown };
   if (maybeHttp.type === "entity.parse.failed") {
     return {
       status: 400,

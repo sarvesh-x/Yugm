@@ -1,4 +1,9 @@
 import { vipPlans } from "@yugm/shared";
+import { z } from "zod";
+
+export const vipPrivacySchema = z.object({
+  mysteriousVisitors: z.boolean().optional(), chatPrivacy: z.enum(["EVERYONE", "FOLLOWERS"]).optional()
+}).refine((data) => data.mysteriousVisitors !== undefined || data.chatPrivacy !== undefined, "A privacy setting is required");
 
 export const VIP_LEVEL_REQUIREMENTS = [0, 1_000, 1_500, 2_500, 4_000, 6_000, 10_000, 25_000] as const;
 export const VIP_LEVEL_COUNT = VIP_LEVEL_REQUIREMENTS.length - 1;

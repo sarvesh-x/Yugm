@@ -1,8 +1,6 @@
 import type * as adminType from "firebase-admin";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
-import { DeviceToken } from "../models/DeviceToken.js";
-import { classifyPushResponses, type PushJobData } from "./pushDelivery.js";
 
 let admin: typeof adminType | undefined;
 interface VerifiedFirebaseIdToken extends jwt.JwtPayload {
@@ -217,27 +215,6 @@ export async function deleteFirebaseUser(uid: string): Promise<{ deleted: boolea
   }
 }
 
-export async function notifyUser({ userId, title, body, data, retryDeviceIds }: PushJobData) {
-  if (!admin?.apps.length) return { retryDeviceIds: [], permanentFailures: 0 };
-  const firebase = await fb();
-  const tokens = await DeviceToken.find({
-    userId,
-    ...(retryDeviceIds && { _id: { $in: retryDeviceIds } })
-  }).select("token");
-  if (!tokens.length) return { retryDeviceIds: [], permanentFailures: 0 };
-  const response = await firebase.messaging().sendEachForMulticast({
-    tokens: tokens.map((item) => item.token),
-    notification: { title, body },
-    data
-  });
-  const result = classifyPushResponses(tokens.map((item) => item._id.toString()), response.responses);
-  if (result.unregisteredDeviceIds.length) {
-    try {
-      await DeviceToken.deleteMany({ userId, _id: { $in: result.unregisteredDeviceIds } });
-    } catch {
-      // Cleanup failure must not cause a repeat send to successful devices.
-      console.warn("Could not remove unregistered push devices");
-    }
-  }
-  return result;
+export async function getFirebaseMessaging() {
+  return admin?.apps.length ? (await fb()).messaging() : null;
 }

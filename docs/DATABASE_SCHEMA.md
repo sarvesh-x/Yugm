@@ -1,6 +1,8 @@
 # Database schema map
 
-The backend uses MongoDB through Mongoose. Model definitions are in `backend-server/apps/api/src/models/`; startup migration/index logic is in `src/config/migration.ts` and related services. Shared runtime contracts are separate from persisted schema.
+The D1 Workers use the versioned SQL in `backend-server/apps/api/migrations/d1/`. The base schema and reference catalogs are installed in both local and hosted `yugm`. Local `yugm` also has `0003` conversation indexes, `0004` direct-message write support and `0005` clan history and membership indexes. `0004` adds `relationship_message_xp_daily`, keyed by sorted participant pair and UTC day, plus lookup indexes for user XP caps and chat restrictions. Hosted application of `0003` through `0005` remains pending. [D1 setup and verification](handoffs/2026-11-24-d1-schema-and-reference-seed.md) · [MongoDB cutover status](handoffs/2026-11-24-mongodb-runtime-cutover.md)
+
+The legacy backend uses MongoDB through Mongoose. Model definitions are in `backend-server/apps/api/src/models/`. Startup migration and index logic is in `src/config/migration.ts` and related services. Shared runtime contracts are separate from persisted schema.
 
 The [generated schema inventory](production/schema-inventory.csv) records discovered declarations and explicit indexes. It is a static source inventory, not a report of live collections, installed indexes, data quality, or migration safety. The production architecture and finding register document startup index changes, transaction requirements, and unverified deployment state.
 

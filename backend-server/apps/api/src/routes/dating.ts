@@ -14,19 +14,12 @@ import { getVipStatus } from "../services/vip.js";
 import { ensureRelationshipForMatch, grantRelationshipXp } from "../services/relationships.js";
 import { assertUsersCanInteract } from "../services/safety.js";
 import { calculateCompatibility } from "../services/datingCompatibility.js";
+import { datingPreferenceSchema } from "../services/datingPreferences.js";
 import { getOnlineUserIds, isUserOnline } from "../services/socket.js";
 import { validateBody } from "../middleware/validate.js";
 
 export const datingRouter = Router();
 datingRouter.use(requireAuth);
-
-const preferenceSchema = z.object({
-  interestedIn: z.enum(["Everyone", "Women", "Men", "Non-binary"]),
-  lookingFor: z.enum(["Friendship", "Dating", "Relationship", "Networking"]),
-  datingAgeMin: z.number().int().min(18).max(80),
-  datingAgeMax: z.number().int().min(18).max(80),
-  verifiedOnly: z.boolean().optional()
-}).refine((value) => value.datingAgeMin <= value.datingAgeMax, { message: "Minimum age must be below maximum age", path: ["datingAgeMin"] });
 
 datingRouter.get("/preferences", asyncHandler(async (req: AuthRequest, res) => {
   const user = await User.findById(req.user!.id).select("interestedIn lookingFor datingAgeMin datingAgeMax datingVerifiedOnly").lean();
@@ -39,7 +32,7 @@ datingRouter.get("/preferences", asyncHandler(async (req: AuthRequest, res) => {
   } });
 }));
 
-datingRouter.put("/preferences", validateBody(preferenceSchema), asyncHandler(async (req: AuthRequest, res) => {
+datingRouter.put("/preferences", validateBody(datingPreferenceSchema), asyncHandler(async (req: AuthRequest, res) => {
   const update = { ...req.body, datingVerifiedOnly: req.body.verifiedOnly };
   delete update.verifiedOnly;
   await User.findByIdAndUpdate(req.user!.id, { $set: update });

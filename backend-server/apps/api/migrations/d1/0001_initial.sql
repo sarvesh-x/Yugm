@@ -1,7 +1,6 @@
--- First-cut Cloudflare D1 schema generated from Mongoose models.
--- REVIEW REQUIRED: this is a design draft, not an approved migration.
--- Check every table against docs/database/mongo-to-relational-mapping.md.
--- No data has been exported, transformed or imported.
+-- Initial Cloudflare D1 schema for Yugm.
+-- This migration creates empty tables. Existing MongoDB records require a separate import.
+-- See docs/database/mongo-to-relational-mapping.md for the model mapping.
 -- Binary content stays in R2; rows hold bucket/key/checksum references only.
 -- Foreign keys use preserved source_id values; defer FK checks during bulk import.
 

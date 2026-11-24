@@ -9,11 +9,11 @@
 
 Both configurations expose the database through `AUTH_DB`. Debug can target the binding or the `yugm` name when invoking Wrangler with the debug config and `--local`. A disposable local schema load by name executed 227 statements and returned 148 SQLite tables. [Emulator startup](2026-11-24-local-d1-auth-emulator.md) · [D1 local development](https://developers.cloudflare.com/d1/best-practices/local-development/)
 
-## Production seed status
+## Initial production seed status
 
 `wrangler d1 list --json` identified the hosted database and returned `num_tables: 0`. `npm.cmd run audit:d1-endpoints` found 65 shared routes, 573 legacy-only routes and 4 D1-only routes at this checkpoint. The latest Profile/social slice reports 90 shared and 548 legacy-only routes with the same legacy total of 638. These are method/path patterns. The production origin and provider secrets still require configuration, and the schema remains a local draft. The owner conditioned production seed generation on the models and APIs working in production. That condition remains open, so there is no production seed script. Repository seed commands such as `seed` and `seed:admin` target the legacy backend. [Endpoint coverage](2026-11-24-hosted-r2-d1-endpoint-audit.md) · [Production setup](2026-11-24-production-cloudflare-builds.md)
 
-Finish and review the schema and API ports, rehearse schema and data setup in isolated D1, and verify the configured production Worker. Then generate an idempotent seed for required reference data. Production schema and data changes require separate authorization.
+The owner subsequently authorized setup on local and hosted `yugm`. The versioned schema and reference catalogs have been applied and verified. [Current setup and verification](2026-11-24-d1-schema-and-reference-seed.md)
 
 ## Redis replacement
 

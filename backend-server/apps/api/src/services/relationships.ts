@@ -1,22 +1,15 @@
 import type { RelationshipXpEvent } from "@yugm/shared";
-import { relationshipLevelMilestones, relationshipXpEvents } from "@yugm/shared";
+import { relationshipXpEvents } from "@yugm/shared";
 import { Relationship } from "../models/Relationship.js";
 import { createNotification } from "./notifications.js";
 
-type RelationshipLike = {
-  xp?: number;
-  level?: number;
-  levelTitle?: string;
-  streakDays?: number;
-  lastStreakAt?: Date | string | null;
-  lastInteractionAt?: Date | string | null;
-};
+import { calculateRelationshipLevel, dailyRelationshipMessageXpCap, getRelationshipStatus, relationshipPairKey,
+  relationshipStreak } from "./relationshipPresentation.js";
 
-type RelationshipMilestone = (typeof relationshipLevelMilestones)[number];
+export { calculateRelationshipLevel, getRelationshipStatus, relationshipPairKey } from "./relationshipPresentation.js";
 
-const firstMilestone: RelationshipMilestone = relationshipLevelMilestones[0];
 const dailyRelationshipCaps: Partial<Record<RelationshipXpEvent, number>> = {
-  MESSAGE_SENT: 120,
+  MESSAGE_SENT: dailyRelationshipMessageXpCap,
   ROOM_DM_SENT: 80,
   GIFT_SENT: 300
 };
@@ -24,54 +17,6 @@ const relationshipDailyAwards = new Map<string, { amount: number; resetAt: numbe
 
 function startOfUtcDay(date = new Date()) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-}
-
-function streakUpdate(lastStreakAt?: Date | string | null, currentStreak = 0) {
-  const today = startOfUtcDay();
-  if (!lastStreakAt) return { streakDays: 1, lastStreakAt: today };
-  const previous = startOfUtcDay(new Date(lastStreakAt));
-  const diffDays = Math.round((today.getTime() - previous.getTime()) / (24 * 60 * 60 * 1000));
-  if (diffDays === 0) return { streakDays: currentStreak, lastStreakAt };
-  if (diffDays === 1) return { streakDays: currentStreak + 1, lastStreakAt: today };
-  return { streakDays: 1, lastStreakAt: today };
-}
-
-export function relationshipPairKey(userA: string, userB: string) {
-  return [userA, userB].map(String).sort().join(":");
-}
-
-export function calculateRelationshipLevel(xp = 0) {
-  let current: RelationshipMilestone = firstMilestone;
-  for (const milestone of relationshipLevelMilestones) {
-    if (xp >= milestone.requiredXp) current = milestone;
-  }
-  return current;
-}
-
-export function getRelationshipStatus(relationship?: RelationshipLike | null) {
-  const xp = Math.max(0, Number(relationship?.xp ?? 0));
-  const current = calculateRelationshipLevel(xp);
-  const next = relationshipLevelMilestones.find((milestone) => milestone.level > current.level);
-  const currentLevelXp = current.requiredXp;
-  const nextLevelXp = next?.requiredXp ?? current.requiredXp;
-  const requiredXp = Math.max(0, nextLevelXp - currentLevelXp);
-  const progressXp = Math.max(0, xp - currentLevelXp);
-
-  return {
-    xp,
-    level: Math.max(Number(relationship?.level ?? current.level), current.level),
-    title: current.title,
-    currentLevelXp,
-    nextLevel: next?.level,
-    nextLevelXp: next?.requiredXp,
-    progressXp,
-    requiredXp,
-    progress: requiredXp > 0 ? Math.min(1, progressXp / requiredXp) : 1,
-    perks: relationshipLevelMilestones.filter((milestone) => milestone.level <= current.level).map((milestone) => milestone.perk),
-    nextPerk: next?.perk,
-    streakDays: relationship?.streakDays ?? 0,
-    lastInteractionAt: relationship?.lastInteractionAt
-  };
 }
 
 export async function findRelationship(userA: string, userB: string) {
@@ -129,7 +74,7 @@ export async function grantRelationshipXp(userA: string, userB: string, event: R
   }
 
   const existing = await Relationship.findOne({ pairKey }).select("streakDays lastStreakAt").lean();
-  const streak = streakUpdate(existing?.lastStreakAt, existing?.streakDays ?? 0);
+  const streak = relationshipStreak(existing?.lastStreakAt, existing?.streakDays ?? 0);
   const relationship = await Relationship.findOneAndUpdate(
     { pairKey },
     {

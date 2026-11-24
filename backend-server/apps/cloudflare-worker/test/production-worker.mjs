@@ -33,9 +33,10 @@ test("the production entrypoint uses D1 and configures hosted R2 with a media pa
   assert.equal(localConfig.d1_databases[0].database_name, binding.database_name);
   assert.notEqual(localConfig.d1_databases[0].database_id, binding.database_id);
   assert.deepEqual(config.ratelimits.map(({ name, simple }) => [name, simple.limit, simple.period]), [
-    ["AUTH_REQUESTS", 20, 60], ["AUTH_IDENTIFIER", 10, 60], ["AUTH_REFRESH", 30, 60]
+    ["AUTH_REQUESTS", 20, 60], ["AUTH_IDENTIFIER", 10, 60], ["AUTH_REFRESH", 30, 60], ["CHAT_SEND", 12, 10],
+    ["REPORT_REQUESTS", 5, 60]
   ]);
-  assert.equal(new Set([...config.ratelimits, ...localConfig.ratelimits].map(({ namespace_id }) => namespace_id)).size, 6);
+  assert.equal(new Set([...config.ratelimits, ...localConfig.ratelimits].map(({ namespace_id }) => namespace_id)).size, 10);
   assert.deepEqual(Object.fromEntries(config.r2_buckets.map(({ binding, bucket_name }) => [binding, bucket_name])), {
     ASSETS: "yugm-assets", PUBLIC_MEDIA: "yugm-public-media", PRIVATE_MEDIA: "yugm-private-media",
     ORIGINALS: "yugm-originals", STAGING: "yugm-staging"
@@ -49,7 +50,7 @@ test("the production entrypoint uses D1 and configures hosted R2 with a media pa
     });
     const bundle = JSON.parse(await readFile(join(directory, "bundle-meta.json"), "utf8"));
     assert.deepEqual(Object.keys(bundle.inputs).filter(path =>
-      /(?:^|[/\\])(?:sharp[/\\]|imageProcessor\.node\.ts$|runtime\.ts$|livekit-server-sdk[/\\]|ioredis[/\\]|bullmq[/\\]|redis-adapter[/\\]|redis\.ts$)/.test(path)), []);
+      /(?:^|[/\\])(?:sharp[/\\]|imageProcessor\.node\.ts$|runtime\.ts$|livekit-server-sdk[/\\]|mongoose[/\\]|mongodb[/\\]|bson[/\\]|ioredis[/\\]|bullmq[/\\]|redis-adapter[/\\]|redis\.ts$)/.test(path)), []);
 
     function makeWorker(bindings) {
       const worker = new Miniflare(convertV4MiniflareOptions({
@@ -92,7 +93,8 @@ test("the production entrypoint uses D1 and configures hosted R2 with a media pa
     assert.equal((await worker.dispatchFetch(origin + "/ready")).status, 503);
 
     const db = await worker.getD1Database(binding.binding);
-    const schema = await readFile(pathFromHere("../../api/migrations/d1/0001_initial.sql"), "utf8");
+    const migrations = ["0001_initial", "0003_direct_message_indexes", "0004_direct_message_writes", "0005_clan_chat_indexes"];
+    const schema = (await Promise.all(migrations.map(file => readFile(pathFromHere(`../../api/migrations/d1/${file}.sql`), "utf8")))).join("\n");
     await db.batch(unstable_splitSqlQuery(schema).map(sql => db.prepare(sql)));
     const readiness = await worker.dispatchFetch(origin + "/api/ready");
     assert.equal(readiness.status, 200);

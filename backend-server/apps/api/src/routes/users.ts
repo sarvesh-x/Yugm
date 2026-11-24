@@ -30,13 +30,14 @@ import { createNotification } from "../services/notifications.js";
 import { canUseRoomReaction, findActiveRoomReaction, normalizeReactionId } from "../services/reactions.js";
 import { emitUser, getOnlineUserIds, isUserOnline } from "../services/socket.js";
 import { autoModerate } from "../middleware/autoModerate.js";
-import { getVipStatus } from "../services/vip.js";
+import { getVipStatus, vipPrivacySchema } from "../services/vip.js";
 import { dailyCheckInStart, dailyXpCaps, getLevelStatus, grantXp } from "../services/levels.js";
 import { getProgressionTrack } from "../services/progressionTracks.js";
 import { XpDailyCap } from "../models/XpDailyCap.js";
 import { creditWallet } from "../services/wallet.js";
 import { findRelationship, grantRelationshipXp } from "../services/relationships.js";
 import { DeviceToken } from "../models/DeviceToken.js";
+import { mongoAuthSessionStore } from "../services/mongoAuthSessionStore.js";
 import { revokeAllForUser } from "../services/tokens.js";
 import { disconnectUserSockets } from "../services/socket.js";
 import { deleteFirebaseUser } from "../services/firebase.js";
@@ -142,8 +143,6 @@ const feedbackSchema = z.object({
   subject: z.string().min(3).max(120),
   message: z.string().min(5).max(1200)
 });
-const vipPrivacySchema = z.object({ mysteriousVisitors: z.boolean().optional(), chatPrivacy: z.enum(["EVERYONE", "FOLLOWERS"]).optional() })
-  .refine((data) => data.mysteriousVisitors !== undefined || data.chatPrivacy !== undefined, "A privacy setting is required");
 
 usersRouter.get("/me/vip-privacy", asyncHandler(async (req: AuthRequest, res) => {
   if (!getVipStatus(req.user).isVip) throw new HttpError(403, "VIP membership required", ErrorCode.FORBIDDEN);
@@ -375,7 +374,7 @@ usersRouter.delete("/me", asyncHandler(async (req: AuthRequest, res) => {
   );
   await endUnavailableBonds(req.user!.id, "TERMINATED_BY_ACCOUNT_REMOVAL");
   await Promise.all([
-    revokeAllForUser(req.user!.id),
+    revokeAllForUser(req.user!.id, mongoAuthSessionStore),
     DeviceToken.deleteMany({ userId: req.user!._id })
   ]);
   await disconnectUserSockets(req.user!.id);

@@ -1,5 +1,39 @@
 # Development progress
 
+## 2026-11-24 — Local Google sign-in recovery
+
+- Preserved the prior Wrangler state and started the emulator Worker on a separate local `yugm` database after a 409 Firebase identity collision. The original and new profiles remain in separate persistence directories. Google exchange and Firebase device-token registration returned HTTP 200 from the emulator. [Restart command and evidence](handoffs/2026-11-24-local-google-sign-in-conflict.md)
+
+## 2026-11-24 — MongoDB-free D1 Worker bundles and clan HTTP parity
+
+- Removed the MongoDB driver and Mongoose from both D1 builds. Auth session storage is explicit, D1 constructs its Auth and Profile responses directly, and Firebase and season rules can be bundled independently of legacy persistence. CI now verifies the build graph and runs both D1 Worker fixtures.
+- Switched `npm run dev` to the loopback D1/R2 Worker. Ported nine clan paths, the Auth profile compatibility endpoint and both VIP privacy endpoints. The audit counts 23 of 23 clan patterns and 112 of 638 across the legacy API. The Worker fixture verified permission failures, persisted chat and reports, and deletion rollback.
+- Applied `0005` to local `yugm`. The hosted migration list still shows `0003`, `0004` and `0005` pending. Legacy staging, Node, admin and the remaining feature paths still need MongoDB. [Cutover status and verification](handoffs/2026-11-24-mongodb-runtime-cutover.md)
+
+## 2026-11-24 — D1 direct text messages and replies
+
+- Added D1 text sends and replies with verified sender sessions, account restrictions, moderation, block and follower-only privacy checks, and per-user Cloudflare rate limits.
+- D1 commits the message, read state, inbox notices, and eligible account, relationship and Battle Pass XP in one transaction. Both Worker fixtures, both typechecks and seven legacy characterization tests passed. The live local Worker reached readiness after applying `0004` and restarting.
+- The route audit counts 100 shared and 538 legacy-only patterns. Managed attachments, delivery events, FCM and hosted migration application remain open. [Direct message send verification](handoffs/2026-11-24-d1-direct-message-send.md)
+
+## 2026-11-24 — D1 direct conversations
+
+- Ported six HTTP operations for direct conversation history, search, read state, mute changes and hiding a conversation. The same D1 query scopes inbox and conversation results. Hiding a conversation preserves the other participant's history.
+- Added a versioned index migration for message, mute and relationship lookups. Verified the unread query plan, repeated and concurrent requests, and denial after blocking.
+- At this checkpoint the audit counted 99 shared patterns and 539 legacy-only patterns. [Direct messaging verification](handoffs/2026-11-24-d1-direct-conversation.md)
+
+## 2026-11-24 — D1 schema, reference catalogs and dating routes
+
+- Applied the two tracked Wrangler migrations to the local and hosted `yugm` databases. Verified all 148 project tables on hosted D1 and the seeded catalog counts on both targets. The existing local account was preserved.
+- Added D1 dating preference reads and writes and the match list, including transactional creation of missing relationship records.
+- Added explicit local and production D1 setup commands and isolated the schema generator output from applied migrations. [Setup and verification](handoffs/2026-11-24-d1-schema-and-reference-seed.md)
+
+## 2026-11-24 — Release Google sign-in conflict investigation
+
+- Confirmed the local release APK targets the staging Worker (`yugm-api-staging...`) and therefore MongoDB `YugmStaging`, not D1, R2 or a separate production origin.
+- Two read-only Wrangler tails captured a successful logout/google-exchange/device-token cycle with HTTP 200 responses and no exceptions. The original 409 identity conflict did not reproduce; the code path is deterministic for a given token and Mongo state, so the differing token, origin or earlier database state remains unconfirmed.
+- No source, config, database, secret, deploy or commit changes were made for this investigation. Unrelated uncommitted files appeared later and were left untouched. [Investigation](handoffs/2026-11-24-release-google-auth-conflict-investigation.md)
+
 ## 2026-11-24 — Local D1 Profile/social reads and writes
 
 - Added D1 friends and blocked-list reads plus follow, unfollow, remove-follower and block/unblock writes. Follow uses the existing guarded XP grant pattern with one `FOLLOW_USER` reward per actor/target pair, daily capping, counter and notification writes guarded by the exact follow edge, and replay receipts.
@@ -15,7 +49,7 @@
 
 - Matched the production `AUTH_DB` binding to the existing hosted `yugm` database. Debug uses the same name with its original local ID and `remote: false`. It retains its existing persistence directory.
 - Moved both D1 Workers to Cloudflare Rate Limiting bindings for sign-in and refresh. Bundle tests confirm Redis and BullMQ are absent. Legacy staging and Node still own the Redis-backed compatibility paths.
-- Wrangler reported zero tables for hosted D1. The route audit at that checkpoint showed 573 legacy-only patterns, so production seed generation remains pending; the latest audit is recorded in the Profile/social entry above. [Scope and verification](handoffs/2026-11-24-d1-database-and-redis-boundary.md)
+- Wrangler reported zero tables at this checkpoint. A later authorized migration initialized hosted D1. [Initial evidence](handoffs/2026-11-24-d1-database-and-redis-boundary.md) · [Current D1 setup](handoffs/2026-11-24-d1-schema-and-reference-seed.md)
 
 ## 2026-11-24 — Hosted R2 verification and D1 endpoint audit
 
