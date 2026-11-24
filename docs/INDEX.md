@@ -64,7 +64,7 @@ The production audit documents explain their baselines and verification limits. 
 ## Cloudflare migration
 
 - [Active behavior-preserving $0 migration plan](migration/implementation-plan.md) · [Preservation registries and gate tracker](migration/MIGRATION_PROGRESS.md) · [Budget decision](decisions/0008-zero-spend-cloudflare-migration.md)
-- [Resume the migration in the existing working tree](handoffs/2026-11-24-migration-continuation.md)
+- [Resume the migration in the existing working tree](handoffs/2026-11-24-migration-continuation.md) · [Local D1 + R2 managed avatar media slice](handoffs/2026-11-24-local-d1-r2-media.md)
 - [Migration progress tracker](../MIGRATION_PROGRESS.md)
 - [Phase 0 report](cloudflare-migration/phase0-report.md)
 - [Phase 0 decision request](cloudflare-migration/decision-request.md)

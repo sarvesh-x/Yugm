@@ -89,6 +89,22 @@ const warnings: Warning[] = [];
 const allTables: Table[] = [];
 const tableNames = new Map<string, string>();
 
+/** Columns required by runtime repositories but absent from the source Mongoose model. */
+const RUNTIME_COLUMNS: Record<string, string[]> = {
+  media_upload_sessions: ['  "upload_token_hash" TEXT NOT NULL']
+};
+
+/** Runtime objects owned by the media service rather than a Mongoose model. */
+const RUNTIME_DDL = [
+  'CREATE UNIQUE INDEX IF NOT EXISTS "idx_media_objects_owner_version" ON "media_objects" ("owner_type", "owner_id", category, version);',
+  'CREATE INDEX IF NOT EXISTS "idx_media_upload_sessions_user_status" ON "media_upload_sessions" ("user_id", status);',
+  'CREATE INDEX IF NOT EXISTS "idx_media_upload_sessions_expires_at" ON "media_upload_sessions" (expires_at);',
+  "CREATE TABLE IF NOT EXISTS \"media_counters\" (",
+  '  source_id TEXT PRIMARY KEY,',
+  '  seq INTEGER NOT NULL CHECK ("seq" >= 0)',
+  ");"
+];
+
 function warn(model: string, field: string, reason: string) {
   warnings.push({ model, field, reason });
 }
@@ -447,6 +463,7 @@ async function main() {
   for (const [name] of modelEntries) tableNames.set(name, tableNameFor(name));
 
   for (const [name, schema] of modelEntries) allTables.push(...buildTables(name, schema));
+  for (const table of allTables) table.columns.push(...(RUNTIME_COLUMNS[table.table] ?? []));
   allTables.sort((a, b) => a.table.localeCompare(b.table));
 
   const lines: string[] = [];
@@ -468,6 +485,9 @@ async function main() {
     for (const index of table.indexes) lines.push(index);
     lines.push("");
   }
+  lines.push("-- Runtime media objects (not derived from a Mongoose model).");
+  lines.push(...RUNTIME_DDL);
+  lines.push("");
   if (warnings.length) {
     lines.push("-- Review warnings:");
     for (const warning of warnings) {

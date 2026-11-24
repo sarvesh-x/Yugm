@@ -10,28 +10,22 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env } from "../config/env.js";
 import { HttpError } from "../utils/http.js";
 import { buildPublicStorageUrl, getManagedS3Client } from "./storage.js";
+import {
+  assertMediaBucket,
+  buildMediaKey,
+  buildStagingKey,
+  mediaCategories,
+  mediaOwnerTypes,
+  r2Buckets,
+  type MediaCategory as MediaCategoryName,
+  type MediaOwnerType as MediaOwnerTypeName,
+  type R2BucketName
+} from "./mediaKeys.js";
 
-/** The five storage classes mandated for Yugm. Names are resolved only on the server. */
-export const r2Buckets = ["assets", "public-media", "private-media", "originals", "staging"] as const;
-export type R2Bucket = (typeof r2Buckets)[number];
-
-export const mediaOwnerTypes = ["USER", "ROOM", "CLAN", "MESSAGE", "COSMETIC", "ACHIEVEMENT", "EVENT", "APPLICATION"] as const;
-export type MediaOwnerType = (typeof mediaOwnerTypes)[number];
-
-export const mediaCategories = [
-  "AVATAR",
-  "COVER",
-  "GALLERY",
-  "CHAT_IMAGE",
-  "CHAT_VIDEO",
-  "VOICE_MESSAGE",
-  "ATTACHMENT",
-  "BADGE",
-  "COSMETIC",
-  "STICKER",
-  "APPLICATION_ART"
-] as const;
-export type MediaCategory = (typeof mediaCategories)[number];
+export { buildMediaKey, buildStagingKey, mediaCategories, mediaOwnerTypes, r2Buckets };
+export type MediaCategory = MediaCategoryName;
+export type MediaOwnerType = MediaOwnerTypeName;
+export type R2Bucket = R2BucketName;
 
 const bucketEnv: Record<R2Bucket, string | undefined> = {
   assets: env.R2_ASSETS_BUCKET,
@@ -41,34 +35,8 @@ const bucketEnv: Record<R2Bucket, string | undefined> = {
   staging: env.R2_STAGING_BUCKET
 };
 
-const ownerFolders: Record<MediaOwnerType, string> = {
-  USER: "users",
-  ROOM: "rooms",
-  CLAN: "clans",
-  MESSAGE: "messages",
-  COSMETIC: "cosmetics",
-  ACHIEVEMENT: "achievements",
-  EVENT: "events",
-  APPLICATION: "application"
-};
-
-const categoryFolders: Record<MediaCategory, string> = {
-  AVATAR: "avatars",
-  COVER: "covers",
-  GALLERY: "gallery",
-  CHAT_IMAGE: "chat-images",
-  CHAT_VIDEO: "chat-videos",
-  VOICE_MESSAGE: "voice-messages",
-  ATTACHMENT: "attachments",
-  BADGE: "badges",
-  COSMETIC: "cosmetics",
-  STICKER: "stickers",
-  APPLICATION_ART: "art"
-};
-
 function assertBucket(bucket: R2Bucket): R2Bucket {
-  if (!r2Buckets.includes(bucket)) throw new HttpError(400, "Unsupported media bucket");
-  return bucket;
+  return assertMediaBucket(bucket);
 }
 
 /** Explicit bucket name for a storage class. Legacy S3_BUCKET is a fallback only. */
@@ -114,46 +82,6 @@ export function resolvePublicUrl(bucket: R2Bucket, key: string): string {
 
 /** Backward-compatible name used by the asset registry integration. */
 export const resolveR2PublicUrl = resolvePublicUrl;
-
-const safeSegment = (value: string) => {
-  const clean = value.trim().replace(/[^a-zA-Z0-9_-]/g, "_");
-  if (!clean || clean.length > 96) throw new HttpError(400, "Invalid media identifier");
-  return clean;
-};
-
-/**
- * Structured, immutable key. Callers supply only validated enums and opaque
- * identifiers; no client-supplied path is ever used as a storage key.
- */
-export function buildMediaKey(input: {
-  bucket: R2Bucket;
-  ownerType: MediaOwnerType;
-  ownerId: string;
-  category: MediaCategory;
-  versionId: string;
-  variant: string;
-  extension: string;
-}) {
-  assertBucket(input.bucket);
-  if (!mediaOwnerTypes.includes(input.ownerType)) throw new HttpError(400, "Unsupported media owner");
-  if (!mediaCategories.includes(input.category)) throw new HttpError(400, "Unsupported media category");
-  if (!/^[a-z0-9_]+$/.test(input.variant) || input.variant.length > 24) throw new HttpError(400, "Invalid media variant");
-  if (!/^[a-z0-9]{1,8}$/.test(input.extension)) throw new HttpError(400, "Invalid media extension");
-  return [
-    ownerFolders[input.ownerType],
-    safeSegment(input.ownerId),
-    categoryFolders[input.category],
-    safeSegment(input.versionId),
-    `${input.variant}.${input.extension}`
-  ].join("/");
-}
-
-/** Staging keys are unique per upload session and never expose the original path. */
-export function buildStagingKey(sessionId: string, extension: string) {
-  if (!/^[a-z0-9_-]{1,96}$/.test(sessionId)) throw new HttpError(400, "Invalid upload session");
-  if (!/^[a-z0-9]{1,8}$/.test(extension)) throw new HttpError(400, "Invalid media extension");
-  return `staging/${sessionId}/original.${extension}`;
-}
 
 export function calculateChecksum(content: Buffer): string {
   return createHash("sha256").update(content).digest("hex");

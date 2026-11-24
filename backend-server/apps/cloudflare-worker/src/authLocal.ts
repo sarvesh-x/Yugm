@@ -1,11 +1,20 @@
 import { handleAsNodeRequest } from "cloudflare:node";
-import type { D1Database, ExecutionContext } from "@cloudflare/workers-types";
+import type { D1Database, ExecutionContext, R2Bucket } from "@cloudflare/workers-types";
+import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import process from "node:process";
-import express, { type ErrorRequestHandler } from "express";
+import express, { type ErrorRequestHandler, type Request as ExpressRequest } from "express";
+import { HttpError } from "../../api/src/utils/http.js";
+import { installCloudflareImageProcessor } from "./imageProcessor.js";
 
 interface LocalAuthEnv {
   AUTH_DB: D1Database;
+  ASSETS: R2Bucket;
+  PUBLIC_MEDIA: R2Bucket;
+  PRIVATE_MEDIA: R2Bucket;
+  ORIGINALS: R2Bucket;
+  STAGING: R2Bucket;
+  IMAGES: unknown;
   YUGM_STAGE: string;
   JWT_SECRET?: string;
   FCM_PROJECT_ID?: string;
@@ -18,7 +27,8 @@ interface LocalAuthEnv {
 }
 
 const AUTH_PORT = 8789;
-const loopbackHosts = new Set(["127.0.0.1", "localhost", "[::1]"]);
+// Android's emulator aliases the host loopback interface to 10.0.2.2.
+const loopbackHosts = new Set(["127.0.0.1", "localhost", "[::1]", "10.0.2.2"]);
 const forwardedSettings = [
   "JWT_SECRET", "FCM_PROJECT_ID", "GOOGLE_OAUTH_CLIENT_ID", "APP_CHECK_ENFORCE",
   "FCM_CLIENT_EMAIL", "FCM_PRIVATE_KEY"
@@ -39,19 +49,46 @@ async function startAuthRuntime(env: LocalAuthEnv) {
     else process.env[key] = env[key];
   }
 
-  const [{ createD1AuthRouter }, { createD1ProfileEditRouter }, { requireAppCheck }, { initFirebase }, { responseError }] = await Promise.all([
+  const [{ createD1AuthRouter }, { createD1ProfileEditRouter }, { createD1MediaRouter },
+    { requireAppCheck }, { initFirebase }, { responseError }] = await Promise.all([
     import("../../api/src/migration/d1AuthRouter.js"),
     import("../../api/src/migration/d1ProfileEdits.js"),
+    import("../../api/src/migration/d1Media.js"),
     import("../../api/src/middleware/appCheck.js"),
     import("../../api/src/services/firebase.js"),
     import("../../api/src/utils/responseError.js")
   ]);
+  installCloudflareImageProcessor(env.IMAGES);
   if (enforceAppCheck) await initFirebase();
+  const mediaGrantSecret = randomBytes(32).toString("hex");
+  const resolvePublicOrigin = (request: ExpressRequest) => {
+    const value = request.header("x-yugm-local-origin");
+    if (!value) throw new HttpError(400, "Local media origin is unavailable");
+    const url = new URL(value);
+    if (!/^https?:$/.test(url.protocol) || !loopbackHosts.has(url.hostname) || url.username || url.password) {
+      throw new HttpError(400, "Invalid local media origin");
+    }
+    return url.origin;
+  };
   const app = express();
   app.disable("x-powered-by");
+  // The managed upload PUT carries raw image bytes, not JSON.
+  app.use("/api/media/uploads/:sessionId/bytes", express.raw({ type: () => true, limit: "6mb" }));
   app.use(express.json({ limit: "1mb" }));
   app.use("/api/auth", requireAppCheck, createD1AuthRouter(env.AUTH_DB));
   app.use("/api/users", createD1ProfileEditRouter(env.AUTH_DB));
+  app.use("/api/media", createD1MediaRouter({
+    db: env.AUTH_DB,
+    buckets: {
+      assets: env.ASSETS,
+      "public-media": env.PUBLIC_MEDIA,
+      "private-media": env.PRIVATE_MEDIA,
+      originals: env.ORIGINALS,
+      staging: env.STAGING
+    },
+    resolvePublicOrigin,
+    grantSecret: mediaGrantSecret
+  }));
   app.use((_req, res) => res.status(404).json({ ok: false, error: { message: "Route not found" } }));
   const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
     const { status, message, code } = responseError(error);
@@ -91,10 +128,13 @@ export default {
           env.AUTH_DB.prepare("SELECT source_id, firebase_uid, token_version FROM users LIMIT 0"),
           env.AUTH_DB.prepare("SELECT source_id, token_version_present FROM auth_sessions LIMIT 0"),
           env.AUTH_DB.prepare("SELECT source_id, null_fields, missing_fields, edit_token FROM user_auth_profile LIMIT 0"),
+          env.AUTH_DB.prepare("SELECT source_id, upload_token_hash FROM media_upload_sessions LIMIT 0"),
+          env.AUTH_DB.prepare("SELECT source_id, seq FROM media_counters LIMIT 0"),
           ...["device_tokens", "user_owned_cosmetics", "user_interests", "user_languages", "user_hobbies",
             "user_profile_media", "user_showcased_badges", "follows", "friendships", "bonds", "bond_users",
             "blocks", "trust_verifications", "profile_visits", "xp_grants", "seasons", "season_rewards", "battle_passes",
-            "battle_pass_rewards", "battle_pass_xp_grants", "wallet_transactions", "notifications"]
+            "battle_pass_rewards", "battle_pass_xp_grants", "wallet_transactions", "notifications",
+            "media_objects", "media_variants", "media_quota_reservations"]
             .map((table) => env.AUTH_DB.prepare(`SELECT source_id FROM ${table} LIMIT 0`))
         ]);
         return Response.json({ ok: true, service: "yugm-auth-local", storage: "d1" });
@@ -104,7 +144,11 @@ export default {
         const response = await readD1ProfileRequest(env.AUTH_DB, request, promise => ctx.waitUntil(promise));
         if (response) return response;
       }
-      return await handleAsNodeRequest(AUTH_PORT, request);
+      const forwarded = new Request(request, { headers: new Headers(request.headers) });
+      // The Worker knows the real caller host; Express must not derive it from a
+      // client-supplied header when constructing managed upload URLs.
+      forwarded.headers.set("x-yugm-local-origin", url.origin);
+      return await handleAsNodeRequest(AUTH_PORT, forwarded);
     } catch (error) {
       console.error("Local Auth Worker unavailable", error instanceof Error ? error.name : "Error");
       return Response.json({ ok: false, error: { message: "Local D1 Auth is unavailable. Check its configuration and schema." } }, { status: 503 });

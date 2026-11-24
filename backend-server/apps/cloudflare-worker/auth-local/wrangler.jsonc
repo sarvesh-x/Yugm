@@ -20,5 +20,13 @@
       "database_id": "00000000-0000-4000-8000-000000000004",
       "remote": false
     }
-  ]
+  ],
+  "r2_buckets": [
+    { "binding": "ASSETS", "bucket_name": "assets", "remote": false },
+    { "binding": "PUBLIC_MEDIA", "bucket_name": "public-media", "remote": false },
+    { "binding": "PRIVATE_MEDIA", "bucket_name": "private-media", "remote": false },
+    { "binding": "ORIGINALS", "bucket_name": "originals", "remote": false },
+    { "binding": "STAGING", "bucket_name": "staging", "remote": false }
+  ],
+  "images": { "binding": "IMAGES" }
 }

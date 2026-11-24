@@ -938,7 +938,8 @@ CREATE TABLE IF NOT EXISTS "media_upload_sessions" (
   "attempts" INTEGER NOT NULL,
   "quota_reserved" INTEGER NOT NULL,
   "created_at" TEXT,
-  "updated_at" TEXT
+  "updated_at" TEXT,
+  "upload_token_hash" TEXT NOT NULL
 );
 
 -- Model: MediaObject.variants
@@ -2260,3 +2261,12 @@ CREATE TABLE IF NOT EXISTS "xp_grants" (
   "updated_at" TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_xp_grants_action" ON "xp_grants" ("user_id", "event", "action_key");
+
+-- Runtime media objects (not derived from a Mongoose model).
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_media_objects_owner_version" ON "media_objects" ("owner_type", "owner_id", category, version);
+CREATE INDEX IF NOT EXISTS "idx_media_upload_sessions_user_status" ON "media_upload_sessions" ("user_id", status);
+CREATE INDEX IF NOT EXISTS "idx_media_upload_sessions_expires_at" ON "media_upload_sessions" (expires_at);
+CREATE TABLE IF NOT EXISTS "media_counters" (
+  source_id TEXT PRIMARY KEY,
+  seq INTEGER NOT NULL CHECK ("seq" >= 0)
+);
