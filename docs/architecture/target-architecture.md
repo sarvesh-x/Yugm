@@ -1,7 +1,8 @@
 # Target Cloudflare architecture
 
-**Date:** 2026-11-22  
-**Status:** Phase 0 proposal. It is a responsibility map, not an approved production design or a statement of current implementation. Items marked *decision gate* require approval or measurements before implementation.
+**Updated:** 2026-11-23
+
+**Status:** Target responsibilities for the [zero-spend migration](../migration/implementation-plan.md). Production rollout is gated by workload evidence, recovery and approval.
 
 ## Guiding constraints
 
@@ -15,13 +16,14 @@
 
 ```text
 Android app ─┐
-             ├─ HTTPS/WSS ─ Cloudflare edge ─ API Worker ─ typed repositories ─ D1 or PostgreSQL/Hyperdrive
-Admin SPA ───┘                                ├─ R2 service (public assets, private media, originals, staging)
+             ├─ HTTPS/WSS ─ Cloudflare edge ─ API Worker ─ typed repositories ─ D1 Free candidate
+Admin SPA ───┘                                ├─ R2 Standard (conditional on enforceable free usage)
                                               ├─ Durable Objects (realtime/stateful coordination)
                                               ├─ Queues (async work)
                                               ├─ KV (non-critical cache/config)
                                               └─ Cron (bounded maintenance)
-External providers: Firebase Auth/FCM, LiveKit RTC, payments, moderation — preserved behind server adapters
+RTC candidate: Cloudflare Realtime SFU/TURN behind a provider-neutral interface
+External integrations: Firebase Auth/FCM, payments and moderation
 ```
 
 ## Workers
@@ -44,9 +46,9 @@ Workers must not:
 
 ## Authoritative database
 
-**Decision gate:** D1 versus PostgreSQL through Hyperdrive.
+**Decision gate:** A measured D1 Free rollout under the [revised plan](../migration/implementation-plan.md#3-d1-free-evaluation-and-data-migration).
 
-D1 is the default candidate only if the [capacity assessment](../database/d1-capacity-assessment.md) passes. Otherwise use PostgreSQL through Hyperdrive. In either case:
+MongoDB remains authoritative under [ADR-0007](../decisions/0007-dcr2-capacity-gate-not-approved.md). An isolated workload can establish the scope D1 Free can carry. A PostgreSQL/Hyperdrive fallback would need an independently hosted database. For the authoritative store:
 
 - Permanent relational state uses prepared statements, explicit constraints and foreign keys.
 - Money is integer currency units. Balances and ledgers are atomic in the same database.
@@ -56,12 +58,12 @@ D1 is the default candidate only if the [capacity assessment](../database/d1-cap
 
 ## R2 and CDN
 
-Five logical classes remain server-only: `assets`, `public-media`, `private-media`, `originals`, and temporary staging. The existing uncommitted R2 foundation is the baseline.
+Five logical classes are managed server-side: `assets`, `public-media`, `private-media`, `originals`, and temporary staging. The committed avatar/media foundation is the starting point. Each live category requires [a zero-spend admission gate](../migration/implementation-plan.md#4-r2-media-within-the-included-allowance).
 
 - Object keys are immutable, versioned and built by the server from validated metadata and content hashes.
 - Published originals are never overwritten; superseding preserves the prior version for rollback/moderation.
 - A registry stores bucket/key/checksum/ownership/visibility/state, not a public URL or signed URL.
-- Public URLs resolve at read time through a custom domain/CDN; private reads go through authenticated Worker checks and short-lived grants.
+- The quota-controlled Worker serves the budgeted pilot. Public variants may be cached through that route. Private reads require the accepted resource access checks. Direct bucket delivery and presigned operations require budget enforcement before use.
 - One upload pipeline handles auth, permission/category validation, staging grant, size/signature/MIME/content checks, EXIF/SVG safety, processing/variants/moderation, authoritative DB update and cleanup.
 - R2 lifecycle rules apply only to temporary or explicitly retention-managed objects.
 
@@ -97,11 +99,11 @@ Cron triggers bounded maintenance: expired upload-session cleanup, stale reserva
 
 ## KV
 
-KV only for non-critical cache/config with explicit staleness tolerance: feature/config snapshots, public catalog cache, rate-limit counters where approximate semantics are acceptable, and small deployment metadata. Never use KV for balances, ownership, idempotency, memberships, queues or immediate read-after-write state.
+Use KV for non-critical cache and config that tolerate stale reads, such as public catalog cache and feature snapshots. Use Durable Objects for strict rate-limit counters and consistent authoritative storage for sessions and revocation.
 
 ## RTC, Firebase and external providers
 
-- LiveKit remains the RTC media transport; Workers issue scoped tokens and authorize joins. Do not send raw audio/video over ordinary WebSockets.
+- LiveKit currently carries RTC media. The planned SFU/TURN adapter needs equivalent room authorization, track permissions and Android media behavior. Activation depends on real-device parity and bounded combined egress. Application WebSockets carry signaling and app events. WebRTC carries the media.
 - Firebase identifiers and FCM delivery are preserved through server adapters during migration. Firebase Admin/App Check behavior must be validated in Workers.
 - Payment/provider webhooks are authenticated, idempotent and reconcile against authoritative server state.
 
@@ -109,7 +111,7 @@ KV only for non-critical cache/config with explicit staleness tolerance: feature
 
 Admin reuses the existing React app, API contracts and RBAC model where possible. New management screens cover assets, versions, store listings, prices, eligibility, rewards, badges, gifts, media moderation and audit review.
 
-Observability uses correlation IDs, structured events, bounded log volume, redaction, metrics for D1 rows/read/write, R2 operations, DO duration/requests, queue retries/DLQ, KV operations, and cost alerts. Free-tier-aware controls and account spending limits are set before production traffic.
+Observability uses correlation IDs, bounded and redacted logs, usage by provider, and queue age, retries and terminal failures. Admission limits reserve headroom for recovery. Billing alerts support reconciliation while tested application controls pause metered traffic before the free allowance is exhausted.
 
 ## Environments
 

@@ -1,5 +1,7 @@
 # DCR-2 readiness runbook
 
+**Applicability:** This is the parked Paid-tier readiness procedure. For current D1 Free evaluation steps and the separate production gate, see the [active $0 migration plan](implementation-plan.md#3-d1-free-evaluation-and-data-migration).
+
 **Date:** 2026-11-23
 **Status:** Local preparation complete, but the DCR-2 gate is **parked and not approved** as of 2026-11-23 ([ADR-0007](../decisions/0007-dcr2-capacity-gate-not-approved.md)). Real metrics are unavailable and the owner confirmed Workers Paid is not enabled, so this runbook cannot be completed. MongoDB remains authoritative; no step below authorizes production export, import or cutover.
 **Decision:** D1 is selected under [ADR-0001](../decisions/0001-d1-and-r2-target.md). This runbook is the evidence sequence for that decision; it is not an acceptance certificate.

@@ -233,11 +233,29 @@ test("auth sessions preserve refresh-rotation state as canonical IDs and UTC dat
   assert.equal(result.rejected, false);
   assert.equal(row.user_id, OTHER_ID);
   assert.equal(row.token_version, 3);
+  assert.equal(row.token_version_present, 1);
   assert.equal(row.expires_at, "2026-02-01T00:00:00.000Z");
   assert.equal(row.last_used_at, "2026-01-02T03:04:05.000Z");
   assert.equal(row.revoked_at, null);
   assertValidColumns(result);
   assert.deepEqual(context.quarantine, []);
+});
+
+test("auth session mapping keeps an absent generation distinct from null and zero", () => {
+  const base = {
+    _id: USER_ID, userId: OTHER_ID, familyId: "family-1", refreshHash: "hash-1",
+    expiresAt: "2026-02-01T00:00:00Z", lastUsedAt: "2026-01-02T03:04:05Z"
+  };
+  for (const [record, version, present] of [
+    [base, null, 0], [{ ...base, tokenVersion: null }, null, 1], [{ ...base, tokenVersion: 0 }, 0, 1]
+  ] as const) {
+    const { context, result } = map("auth_sessions", record);
+    assert.equal(result.rejected, false);
+    assert.deepEqual(context.quarantine, []);
+    const row = byTable(result).get("auth_sessions")![0];
+    assert.equal(row.token_version, version);
+    assert.equal(row.token_version_present, present);
+  }
 });
 
 test("wallet transactions quarantine invalid money and serialize metadata deterministically", () => {

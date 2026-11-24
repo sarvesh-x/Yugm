@@ -2,6 +2,7 @@ import type * as adminType from "firebase-admin";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import { DeviceToken } from "../models/DeviceToken.js";
+import { classifyPushResponses, type PushJobData } from "./pushDelivery.js";
 
 let admin: typeof adminType | undefined;
 interface VerifiedFirebaseIdToken extends jwt.JwtPayload {
@@ -83,6 +84,8 @@ async function verifyFirebaseIdTokenWithoutServiceAccount(idToken: string): Prom
   const isGoogleIssuer = iss === "accounts.google.com" || iss === "https://accounts.google.com";
 
   if (isGoogleIssuer) {
+    const audience = env.GOOGLE_OAUTH_CLIENT_ID;
+    if (!audience) throw Object.assign(new Error("Direct Google sign-in is not configured"), { status: 401 });
     const certs = await getGoogleSigningCerts();
     const certificate = certs[decoded.header.kid];
     if (!certificate) throw Object.assign(new Error("Google signing key is unknown"), { status: 401 });
@@ -91,6 +94,8 @@ async function verifyFirebaseIdTokenWithoutServiceAccount(idToken: string): Prom
     try {
       payload = jwt.verify(idToken, certificate, {
         algorithms: ["RS256"],
+        audience,
+        issuer: iss,
         clockTolerance: 60
       });
     } catch (err: any) {
@@ -98,7 +103,7 @@ async function verifyFirebaseIdTokenWithoutServiceAccount(idToken: string): Prom
     }
     const now = Math.floor(Date.now() / 1000);
     if (typeof payload === "string" || typeof payload.sub !== "string" || !payload.sub.trim() || payload.sub.length > 128 ||
-        typeof payload.iat !== "number" || payload.iat > (now + 60)) {
+        typeof payload.iat !== "number" || payload.iat > (now + 60) || typeof payload.exp !== "number") {
       throw Object.assign(new Error("Invalid Google ID token claims"), { status: 401 });
     }
     return {
@@ -212,23 +217,27 @@ export async function deleteFirebaseUser(uid: string): Promise<{ deleted: boolea
   }
 }
 
-export async function notifyUser(userId: string, title: string, body: string, data: Record<string, string> = {}) {
-  if (!admin?.apps.length) return;
+export async function notifyUser({ userId, title, body, data, retryDeviceIds }: PushJobData) {
+  if (!admin?.apps.length) return { retryDeviceIds: [], permanentFailures: 0 };
   const firebase = await fb();
-  const tokens = await DeviceToken.find({ userId }).select("token");
-  if (!tokens.length) return;
+  const tokens = await DeviceToken.find({
+    userId,
+    ...(retryDeviceIds && { _id: { $in: retryDeviceIds } })
+  }).select("token");
+  if (!tokens.length) return { retryDeviceIds: [], permanentFailures: 0 };
   const response = await firebase.messaging().sendEachForMulticast({
     tokens: tokens.map((item) => item.token),
     notification: { title, body },
     data
   });
-  const invalidTokens: string[] = [];
-  response.responses.forEach((resp: any, idx: number) => {
-    if (resp.error?.code === "messaging/registration-token-not-registered") {
-      invalidTokens.push(tokens[idx].token);
+  const result = classifyPushResponses(tokens.map((item) => item._id.toString()), response.responses);
+  if (result.unregisteredDeviceIds.length) {
+    try {
+      await DeviceToken.deleteMany({ userId, _id: { $in: result.unregisteredDeviceIds } });
+    } catch {
+      // Cleanup failure must not cause a repeat send to successful devices.
+      console.warn("Could not remove unregistered push devices");
     }
-  });
-  if (invalidTokens.length) {
-    await DeviceToken.deleteMany({ token: { $in: invalidTokens } });
   }
+  return result;
 }

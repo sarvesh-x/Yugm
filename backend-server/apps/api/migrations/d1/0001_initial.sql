@@ -173,13 +173,14 @@ CREATE TABLE IF NOT EXISTS "assets" (
   "updated_at" TEXT
 );
 
+-- AuthSession: token_version_present distinguishes omitted legacy generations from explicit null
 -- Model: AuthSession
 CREATE TABLE IF NOT EXISTS "auth_sessions" (
   source_id TEXT PRIMARY KEY,
   "user_id" TEXT NOT NULL REFERENCES "users"("source_id"),
   "family_id" TEXT NOT NULL,
   "refresh_hash" TEXT NOT NULL,
-  "token_version" INTEGER NOT NULL,
+  "token_version" INTEGER,
   "expires_at" TEXT NOT NULL,
   "revoked_at" TEXT,
   "replaced_by_hash" TEXT,
@@ -187,8 +188,12 @@ CREATE TABLE IF NOT EXISTS "auth_sessions" (
   "user_agent" TEXT,
   "last_used_at" TEXT NOT NULL,
   "created_at" TEXT,
-  "updated_at" TEXT
+  "updated_at" TEXT,
+  "token_version_present" INTEGER NOT NULL CHECK ("token_version_present" IN (0, 1) AND ("token_version_present" = 1 OR "token_version" IS NULL))
 );
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_auth_sessions_refresh_hash" ON "auth_sessions" ("refresh_hash");
+CREATE INDEX IF NOT EXISTS "idx_auth_sessions_user_active" ON "auth_sessions" ("user_id", "revoked_at");
+CREATE INDEX IF NOT EXISTS "idx_auth_sessions_family_active" ON "auth_sessions" ("family_id", "revoked_at");
 
 -- Model: BattlePass.rewards
 CREATE TABLE IF NOT EXISTS "battle_pass_rewards" (
@@ -213,6 +218,7 @@ CREATE TABLE IF NOT EXISTS "battle_pass_xp_grants" (
   "created_at" TEXT,
   "updated_at" TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_battle_pass_xp_grants_action" ON "battle_pass_xp_grants" ("user_id", "season_id", "action_key");
 
 -- BattlePass: rewards normalized into battle_pass_rewards (no JSON column on parent)
 -- Model: BattlePass
@@ -229,6 +235,7 @@ CREATE TABLE IF NOT EXISTS "battle_passes" (
   "created_at" TEXT,
   "updated_at" TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_battle_passes_user_season" ON "battle_passes" ("user_id", "season_id");
 
 -- Model: Block
 CREATE TABLE IF NOT EXISTS "blocks" (
@@ -238,16 +245,18 @@ CREATE TABLE IF NOT EXISTS "blocks" (
   "created_at" TEXT,
   "updated_at" TEXT
 );
+CREATE INDEX IF NOT EXISTS "idx_blocks_pair" ON "blocks" ("blocker_id", "blocked_user_id");
 
--- Bond.milestoneDays: source_id is <parent source_id>:<field>:<position>; primitive element stored in value
+-- Bond.milestoneDays: source_id is <bond source id>:milestoneDays:<position>
 -- Model: Bond.milestoneDays
 CREATE TABLE IF NOT EXISTS "bond_milestones" (
   source_id TEXT PRIMARY KEY,
-  "value" INTEGER,
+  "day" INTEGER NOT NULL,
   "bonds_id" TEXT NOT NULL REFERENCES "bonds"("source_id"),
   position INTEGER NOT NULL CHECK (position >= 0)
 );
 CREATE INDEX IF NOT EXISTS "idx_bond_milestones_parent" ON "bond_milestones" ("bonds_id", position);
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_bond_milestones_day" ON "bond_milestones" ("bonds_id", "day");
 
 -- Model: BondPoint
 CREATE TABLE IF NOT EXISTS "bond_points" (
@@ -262,15 +271,17 @@ CREATE TABLE IF NOT EXISTS "bond_points" (
   "updated_at" TEXT
 );
 
--- Bond.preferences: source_id is <parent source_id>:<field>:<position>; primitive element stored in value
+-- Bond.preferences: source_id is <bond source id>:preferences:<actor key>
 -- Model: Bond.preferences
 CREATE TABLE IF NOT EXISTS "bond_preferences" (
   source_id TEXT PRIMARY KEY,
-  "value" TEXT NOT NULL,
+  "key" TEXT NOT NULL,
+  "value_json" TEXT NOT NULL CHECK (json_valid("value_json")),
   "bonds_id" TEXT NOT NULL REFERENCES "bonds"("source_id"),
   position INTEGER NOT NULL CHECK (position >= 0)
 );
 CREATE INDEX IF NOT EXISTS "idx_bond_preferences_parent" ON "bond_preferences" ("bonds_id", position);
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_bond_preferences_actor" ON "bond_preferences" ("bonds_id", "key");
 
 -- Model: BondRankingSnapshot.entries
 CREATE TABLE IF NOT EXISTS "bond_ranking_entries" (
@@ -347,6 +358,7 @@ CREATE TABLE IF NOT EXISTS "bond_users" (
   position INTEGER NOT NULL CHECK (position >= 0)
 );
 CREATE INDEX IF NOT EXISTS "idx_bond_users_parent" ON "bond_users" ("bonds_id", position);
+CREATE INDEX IF NOT EXISTS "idx_bond_users_member" ON "bond_users" ("value", "bonds_id");
 
 -- Bond: preferences.$* collapsed onto existing column preferences; Map wildcard path suppressed
 -- Bond: users normalized into bond_users (no JSON column on parent)
@@ -554,6 +566,7 @@ CREATE TABLE IF NOT EXISTS "device_tokens" (
   "created_at" TEXT,
   "updated_at" TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_device_tokens_token" ON "device_tokens" ("token");
 
 -- Model: DiamondTransaction
 CREATE TABLE IF NOT EXISTS "diamond_transactions" (
@@ -671,6 +684,8 @@ CREATE TABLE IF NOT EXISTS "follows" (
   "created_at" TEXT,
   "updated_at" TEXT
 );
+CREATE INDEX IF NOT EXISTS "idx_follows_follower" ON "follows" ("follower_id", "following_id");
+CREATE INDEX IF NOT EXISTS "idx_follows_following" ON "follows" ("following_id");
 
 -- Model: FriendMatchRequest
 CREATE TABLE IF NOT EXISTS "friend_match_requests" (
@@ -693,6 +708,8 @@ CREATE TABLE IF NOT EXISTS "friendships" (
   "created_at" TEXT,
   "updated_at" TEXT
 );
+CREATE INDEX IF NOT EXISTS "idx_friendships_user_status" ON "friendships" ("user_id", "status");
+CREATE INDEX IF NOT EXISTS "idx_friendships_friend_status" ON "friendships" ("friend_id", "status");
 
 -- GiftCollection.gifts: source_id is <parent source_id>:<field>:<position>; primitive element stored in value
 -- Model: GiftCollection.gifts
@@ -975,8 +992,11 @@ CREATE TABLE IF NOT EXISTS "mini_game_scores" (
   "rounds" INTEGER CHECK ("rounds" >= 0),
   "metadata" TEXT NOT NULL,
   "created_at" TEXT,
-  "updated_at" TEXT
+  "updated_at" TEXT,
+  "catalog_fields" TEXT NOT NULL DEFAULT '{}'
 );
+CREATE INDEX IF NOT EXISTS "idx_mini_game_scores_catalog_best" ON "mini_game_scores" ("user_id", "game_id", "score" DESC, "created_at" ASC);
+CREATE INDEX IF NOT EXISTS "idx_mini_game_scores_catalog_recent" ON "mini_game_scores" ("user_id", "created_at" DESC);
 
 -- Model: Mission
 CREATE TABLE IF NOT EXISTS "missions" (
@@ -1247,6 +1267,7 @@ CREATE TABLE IF NOT EXISTS "profile_visits" (
   "created_at" TEXT,
   "updated_at" TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_profile_visits_pair" ON "profile_visits" ("profile_id", "visitor_id");
 
 -- Model: Purchase
 CREATE TABLE IF NOT EXISTS "purchases" (
@@ -1569,6 +1590,8 @@ CREATE TABLE IF NOT EXISTS "seasons" (
   "created_at" TEXT,
   "updated_at" TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_seasons_key" ON "seasons" ("key");
+CREATE INDEX IF NOT EXISTS "idx_seasons_active_start" ON "seasons" ("active", "start_date" DESC);
 
 -- Model: SpeakerRequest
 CREATE TABLE IF NOT EXISTS "speaker_requests" (
@@ -1737,6 +1760,16 @@ CREATE TABLE IF NOT EXISTS "trust_verifications" (
   "consent_accepted_at" TEXT,
   "created_at" TEXT,
   "updated_at" TEXT
+);
+CREATE INDEX IF NOT EXISTS "idx_trust_verifications_user" ON "trust_verifications" ("user_id");
+
+-- User.authProfileNulls: Preserves explicit nulls and omissions outside the 100-column users table
+-- Model: User.authProfileNulls
+CREATE TABLE IF NOT EXISTS "user_auth_profile" (
+  "source_id" TEXT PRIMARY KEY REFERENCES "users"("source_id") ON DELETE CASCADE,
+  "null_fields" TEXT NOT NULL,
+  "missing_fields" TEXT NOT NULL DEFAULT '[]',
+  "edit_token" TEXT
 );
 
 -- Model: User.badgeGrants
@@ -2017,6 +2050,10 @@ CREATE TABLE IF NOT EXISTS "users" (
   "created_at" TEXT,
   "updated_at" TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_users_auth_username" ON "users" ("username");
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_users_auth_email" ON "users" ("email") WHERE "email" IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_users_auth_phone" ON "users" ("phone") WHERE "phone" IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_users_auth_firebase_uid" ON "users" ("firebase_uid") WHERE "firebase_uid" IS NOT NULL;
 
 -- VibeGraph.interests: source_id is <parent source_id>:<field>:<position>; primitive element stored in value
 -- Model: VibeGraph.interests
@@ -2141,6 +2178,7 @@ CREATE TABLE IF NOT EXISTS "wallet_transactions" (
   "created_at" TEXT,
   "updated_at" TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_wallet_transactions_idempotency" ON "wallet_transactions" ("user_id", json_extract("metadata", '$.idempotencyKey')) WHERE json_type("metadata", '$.idempotencyKey') = 'text';
 
 -- Model: WatchParty
 CREATE TABLE IF NOT EXISTS "watch_parties" (
@@ -2221,3 +2259,4 @@ CREATE TABLE IF NOT EXISTS "xp_grants" (
   "created_at" TEXT,
   "updated_at" TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_xp_grants_action" ON "xp_grants" ("user_id", "event", "action_key");

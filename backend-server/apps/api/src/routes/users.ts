@@ -22,7 +22,7 @@ import { Room } from "../models/Room.js";
 import { RoomParticipant } from "../models/RoomParticipant.js";
 import { SupportTicket } from "../models/SupportTicket.js";
 import { User, type IUser } from "../models/User.js";
-import { isProfileCompleted } from "../services/profileCompletion.js";
+import { serializePublicProfile } from "../services/profilePresentation.js";
 import { updateProfileForUser } from "../services/profileUpdate.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId, sanitizeText } from "../utils/http.js";
 import { TrustVerification } from "../models/TrustVerification.js";
@@ -318,49 +318,7 @@ usersRouter.post("/friend-match/cancel", chatLimiter, asyncHandler(async (req: A
 }));
 
 function publicUser(user: any) {
-  const levelStatus = getLevelStatus(user);
-  return {
-    id: user.id,
-    _id: user._id?.toString?.() ?? user.id,
-    name: user.name,
-    username: user.username,
-    avatar: user.avatar,
-    avatarType: user.avatarType,
-    avatarParts: user.avatarParts,
-    role: user.role,
-    walletBalance: user.walletBalance,
-    xp: levelStatus.xp,
-    level: levelStatus.level,
-    levelTitle: levelStatus.title,
-    levelStatus,
-    activeCosmetics: user.activeCosmetics,
-    ownedCosmeticIds: user.ownedCosmeticIds,
-    ...getVipStatus(user),
-    interests: user.interests,
-    hobbies: user.hobbies,
-    languages: user.languages,
-    profileMedia: user.profileMedia,
-    bondsCount: user.bondsCount ?? 0,
-    clanId: user.clanId?.toString?.() ?? user.clanId,
-    isOnline: user.isOnline ?? isUserOnline(user._id?.toString?.() ?? user.id),
-    city: user.city,
-    state: user.state,
-    bio: user.bio,
-    profileCompleted: isProfileCompleted(user),
-    streakCount: user.streakCount ?? 0,
-    vibeLine: user.vibeLine,
-    gender: user.gender,
-    age: user.age,
-    followersCount: user.followersCount,
-    followingCount: user.followingCount,
-    friendsCount: user.friendsCount ?? 0,
-    interestedIn: user.interestedIn,
-    lookingFor: user.lookingFor,
-    datingAgeMin: user.datingAgeMin,
-    datingAgeMax: user.datingAgeMax,
-    isFollowing: user.isFollowing,
-    isBonded: user.isBonded, isVerified: Boolean(user.isVerified), verificationLevel: user.verificationLevel ?? (user.isVerified ? "BASIC" : "NONE"), showcasedBadgeIds: user.showcasedBadgeIds ?? []
-  };
+  return serializePublicProfile(user, user.isOnline ?? isUserOnline(user._id?.toString?.() ?? user.id));
 }
 
 let unavailableUsersCache: { ids: any[]; expiresAt: number } = { ids: [], expiresAt: 0 };
@@ -437,12 +395,13 @@ usersRouter.delete("/me", asyncHandler(async (req: AuthRequest, res) => {
 
 usersRouter.patch("/me", validateBody(profileSchema.partial()), asyncHandler(async (req: AuthRequest, res) => {
   const { user, xpGrant } = await updateProfileForUser(req.user!.id, req.body);
+  if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
   const bondsCount = await Bond.countDocuments({ users: req.user!._id, status: "ACTIVE" });
   // This response is self-only, so include the email and verification state
   // that `publicUser` deliberately omits for other users' profiles. The Android
   // client keeps the cached signed-in identity from this payload.
   sendOk(res, {
-    user: { ...publicUser({ ...user, bondsCount }), email: user?.email, emailVerified: Boolean(user?.emailVerified) },
+    user: { ...publicUser(user), bondsCount, email: user.email, emailVerified: Boolean(user.emailVerified) },
     xpGrant
   });
 }));

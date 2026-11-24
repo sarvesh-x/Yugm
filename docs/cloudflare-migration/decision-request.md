@@ -1,5 +1,7 @@
 # Cloudflare migration Phase 0 decision request
 
+**Current execution plan:** [ADR-0008](../decisions/0008-zero-spend-cloudflare-migration.md) records the later $0 direction and conditional R2 scope. The [implementation plan](../migration/implementation-plan.md) now permits isolated Free-tier evaluation without owner-supplied production metrics. This decision request preserves the Phase 0 approvals and records.
+
 **Date:** 2026-11-22  
 **Status:** DCR-1 is complete (Option A; owner-confirmed rotation, tracked cleanup pushed in `d4b0510`, deployment succeeded with strict CI active). DCR-2 directional selection was recorded 2026-11-22 ([ADR-0001](../decisions/0001-d1-and-r2-target.md)) but its production gate is **parked/not approved** as of 2026-11-23: metrics are unavailable and Workers Paid is not enabled ([ADR-0007](../decisions/0007-dcr2-capacity-gate-not-approved.md)). DCR-3 decision gate completed 2026-11-23 ([ADR-0002](../decisions/0002-staged-hybrid-realtime-protocol.md)), DCR-4 decision gate completed 2026-11-23 ([ADR-0005](../decisions/0005-r2-media-cutover.md)), and DCR-5 plan acceptance plus one-time commit/push authorization completed 2026-11-23 ([ADR-0006](../decisions/0006-implementation-plan-acceptance.md)). MongoDB remains authoritative; provisioning, data migration, deploy and cutover are not authorized.
 

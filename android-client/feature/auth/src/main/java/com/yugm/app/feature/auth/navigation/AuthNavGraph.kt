@@ -33,7 +33,7 @@ fun NavGraphBuilder.authNavGraph(
     profileName: String,
     profileUsername: String,
     googleWebClientId: String,
-    validateStartupSession: suspend () -> Unit,
+    awaitStartupSessionCheck: suspend () -> Unit,
     currentStartupDestination: () -> String,
     navigateAfterLogin: (Session) -> Unit,
     onProfileComplete: (Session) -> Unit,
@@ -42,7 +42,7 @@ fun NavGraphBuilder.authNavGraph(
 ) {
     composable(Screen.Splash.route) {
         SplashScreen {
-            validateStartupSession()
+            awaitStartupSessionCheck()
             val start = currentStartupDestination()
             navController.navigate(start) {
                 popUpTo(Screen.Splash.route) { inclusive = true }

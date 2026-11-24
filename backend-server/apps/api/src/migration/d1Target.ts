@@ -39,7 +39,7 @@ function normalizeValue(value: string | number | null | undefined): string | num
 export class D1TargetWriter implements TargetWriter {
   constructor(private readonly db: D1Like) {}
 
-  async write(table: string, rows: readonly TargetRow[]): Promise<void> {
+  private *prepareUpserts(table: string, rows: readonly TargetRow[]): Iterable<D1BoundStatement> {
     if (!rows.length) return;
     const tableSql = quoteIdentifier(table);
     const columns = Object.keys(rows[0]).sort();
@@ -51,6 +51,12 @@ export class D1TargetWriter implements TargetWriter {
       }
     }
     const columnSql = columns.map(quoteIdentifier).join(", ");
+    const updates = columns.filter((column) => column !== "source_id").map((column) => {
+      const quoted = quoteIdentifier(column);
+      return `${quoted} = excluded.${quoted}`;
+    });
+    // Only an existing row with the same source identity is eligible for replacement.
+    const onConflict = updates.length ? `DO UPDATE SET ${updates.join(", ")}` : "DO NOTHING";
     const rowsPerStatement = Math.max(1, Math.floor(D1_MAX_BOUND_PARAMETERS / columns.length));
 
     for (let offset = 0; offset < rows.length; offset += rowsPerStatement) {
@@ -60,30 +66,18 @@ export class D1TargetWriter implements TargetWriter {
       for (const row of chunk) {
         for (const column of columns) values.push(normalizeValue(row[column]));
       }
-      const sql = `INSERT OR REPLACE INTO ${tableSql} (${columnSql}) VALUES ${placeholders}`;
-      await this.db.prepare(sql).bind(...values).run();
+      const sql = `INSERT INTO ${tableSql} (${columnSql}) VALUES ${placeholders} ON CONFLICT ("source_id") ${onConflict}`;
+      yield this.db.prepare(sql).bind(...values);
     }
+  }
+
+  async write(table: string, rows: readonly TargetRow[]): Promise<void> {
+    for (const statement of this.prepareUpserts(table, rows)) await statement.run();
   }
 
   /** Applies statements atomically when the binding supports batch(). */
   async writeBatch(writes: ReadonlyArray<{ table: string; rows: readonly TargetRow[] }>): Promise<void> {
-    const statements: D1BoundStatement[] = [];
-    for (const write of writes) {
-      if (!write.rows.length) continue;
-      const tableSql = quoteIdentifier(write.table);
-      const columns = Object.keys(write.rows[0]).sort();
-      const columnSql = columns.map(quoteIdentifier).join(", ");
-      const rowsPerStatement = Math.max(1, Math.floor(D1_MAX_BOUND_PARAMETERS / columns.length));
-      for (let offset = 0; offset < write.rows.length; offset += rowsPerStatement) {
-        const chunk = write.rows.slice(offset, offset + rowsPerStatement);
-        const placeholders = chunk.map(() => `(${columns.map(() => "?").join(", ")})`).join(", ");
-        const values: unknown[] = [];
-        for (const row of chunk) for (const column of columns) values.push(normalizeValue(row[column]));
-        statements.push(this.db.prepare(
-          `INSERT OR REPLACE INTO ${tableSql} (${columnSql}) VALUES ${placeholders}`
-        ).bind(...values));
-      }
-    }
+    const statements = writes.flatMap(({ table, rows }) => [...this.prepareUpserts(table, rows)]);
     if (statements.length) await this.db.batch(statements);
   }
 }

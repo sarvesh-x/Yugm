@@ -15,6 +15,10 @@
       {
         "name": "API_SERVICE",
         "class_name": "YugmApi"
+      },
+      {
+        "name": "PUSH_OUTBOX",
+        "class_name": "PushDispatch"
       }
     ]
   },
@@ -24,8 +28,16 @@
       "new_sqlite_classes": [
         "YugmApi"
       ]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["PushDispatch"]
     }
   ],
+  "queues": {
+    "producers": [{ "binding": "PUSH_QUEUE", "queue": "yugm-local-push" }],
+    "consumers": [{ "queue": "yugm-local-push", "max_batch_timeout": 1 }]
+  },
   "images": {
     "binding": "IMAGES"
   },
@@ -50,6 +62,7 @@
   },
   "vars": {
     "YUGM_STAGE": "local",
+    "YUGM_LOCAL_PUSH_QUEUE": "false",
     "NODE_ENV": "production",
     "YUGM_RUNTIME": "cloudflare",
     "PORT": "4000",

@@ -1,5 +1,4 @@
 import type { Server as HttpServer } from "http";
-import jwt from "jsonwebtoken";
 import { Server } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
 import { socketEvents } from "@yugm/shared";
@@ -12,6 +11,7 @@ import { AuthSession } from "../models/AuthSession.js";
 import { User } from "../models/User.js";
 import { endRoom, recordRoomParticipantExit } from "./roomLifecycle.js";
 import { isAlwaysOnOfficialVoiceRoom } from "./officialRooms.js";
+import { createSocketSessionAuth } from "./socketAccessSession.js";
 import {
   clearRoomSocketDisconnect,
   consumeRedisRateLimit,
@@ -217,35 +217,15 @@ export async function initSocket(server: HttpServer, options: { transports?: Arr
     inactiveRoomTimer.unref?.();
   }
 
-  io.use(async (socket, next) => {
-    const token = socket.handshake.auth?.token as string | undefined;
-    if (!token) return next(new Error("Authentication required"));
-    try {
-      const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] }) as {
-        sub: string; sid?: string; typ?: string; tokenVersion?: number;
-      };
-      if (decoded.typ !== "access" || !decoded.sid || !decoded.sub) return next(new Error("Invalid token"));
-      const [user, session] = await Promise.all([
-        User.findById(decoded.sub).select("tokenVersion isBlocked").lean(),
-        AuthSession.findOne({
-          _id: decoded.sid,
-          userId: decoded.sub,
-          revokedAt: null,
-          expiresAt: { $gt: new Date() }
-        }).lean()
-      ]);
-      if (!user || user.isBlocked || !session ||
-          (decoded.tokenVersion !== undefined && user.tokenVersion !== decoded.tokenVersion) ||
-          (session.tokenVersion ?? decoded.tokenVersion) !== decoded.tokenVersion) {
-        return next(new Error("This account was signed in on another device"));
-      }
-      socket.data.userId = decoded.sub;
-      socket.data.sessionId = decoded.sid;
-      next();
-    } catch {
-      next(new Error("Invalid token"));
-    }
-  });
+  io.use(createSocketSessionAuth(async (claims) => {
+    const [user, session] = await Promise.all([
+      User.findById(claims.sub).select("tokenVersion isBlocked").lean(),
+      AuthSession.findOne({
+        _id: claims.sid, userId: claims.sub, revokedAt: null, expiresAt: { $gt: new Date() }
+      }).select("tokenVersion").lean()
+    ]);
+    return { user, session };
+  }));
 
   io.on("connection", (socket) => {
     const userId = socket.data.userId as string | undefined;

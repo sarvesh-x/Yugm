@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { installCloudflareImageProcessor } from "./imageProcessor.js";
+import type { PushDeliveryResult, PushJobData, PushPayload } from "../../api/src/services/pushDelivery.js";
 
 let initialized = false;
 
@@ -7,7 +8,11 @@ let initialized = false;
 // through WebSocketPair instead; socketBridge hands the transport to Engine.IO.
 class WorkerUpgradeServer { close() {} }
 
-export async function startApiRuntime(bindings: Record<string, unknown>, trackBackground: (work: Promise<unknown>) => void): Promise<void> {
+export async function startApiRuntime(
+  bindings: Record<string, unknown>,
+  trackBackground: (work: Promise<unknown>) => void,
+  pushDispatcher?: (payload: PushPayload) => Promise<void>
+): Promise<void> {
   if (initialized) return;
 
   // Install media processing before API modules load. When the Images binding
@@ -53,7 +58,7 @@ export async function startApiRuntime(bindings: Record<string, unknown>, trackBa
   await redis.connectRedis();
   await officialRooms.ensureOfficialRooms();
   await firebase.initFirebase();
-  await jobs.startJobWorkers({ startLocalCron: false });
+  await jobs.startJobWorkers({ startLocalCron: false, pushDispatcher });
 
   const server = createServer(appModule.createApp());
   await socket.initSocket(server, { transports: ["websocket", "polling"], wsEngine: WorkerUpgradeServer });
@@ -62,6 +67,12 @@ export async function startApiRuntime(bindings: Record<string, unknown>, trackBa
     server.listen(8787, resolve);
   });
   initialized = true;
+}
+
+export async function sendQueuedPush(data: PushJobData): Promise<PushDeliveryResult> {
+  const { notifyUser } = await import("../../api/src/services/firebase.js");
+  const { retryDeviceIds, permanentFailures } = await notifyUser(data);
+  return { retryDeviceIds, permanentFailures };
 }
 
 export async function getSocketEngine() {

@@ -1,164 +1,125 @@
-# Repository-specific migration implementation plan
+# Yugm behavior-preserving Cloudflare migration on a $0 budget
 
-**Date:** 2026-11-22  
-**Status:** Accepted as the migration execution sequence on 2026-11-23 ([ADR-0006](../decisions/0006-implementation-plan-acceptance.md)). Phases remain sequential; later phases must not start before earlier exit gates pass. The database target is D1 ([ADR-0001](../decisions/0001-d1-and-r2-target.md)), but capacity metrics, recovery rehearsal and provisioning approvals still gate later phases. No deployment or data approval is implied.
+**Updated:** 2026-11-24
 
-## Phase 0 — audit, decisions and plan
+**Status:** Active 18-phase plan for local work and isolated validation under the owner's behavior-preservation directive. The [$0 budget decision](../decisions/0008-zero-spend-cloudflare-migration.md) still governs activation. Provider activation, production data access, cutover and removal have separate approvals.
 
-**Goal:** Establish evidence and stop conditions before code/data changes.
+## Target and starting point
 
-**Work:**
+Move MongoDB to D1 if the intended workload fits Workers Free, Redis to purpose-specific Cloudflare bindings, BullMQ to Queues and Cron, and LiveKit to Cloudflare Realtime SFU/TURN if zero-spend operation can be demonstrated. Use R2 Standard for media within its included allowance. The staging Worker currently wraps the Express/Mongoose app in a singleton Durable Object with an Images binding. D1 tooling, native WebSocket harnesses and R2 media code are starting points for integration. Retain Firebase Auth, App Check, FCM and existing payment behavior.
 
-- Audit backend, Android, admin, Worker prototype, schemas, APIs, realtime, media, jobs, infrastructure, tests and docs.
-- Preserve the uncommitted R2/media foundation as the baseline.
-- Produce [the Phase 0 report](../cloudflare-migration/phase0-report.md), [target architecture](../architecture/target-architecture.md), [data tooling requirements](data-migration-tooling.md), [realtime plan](realtime-plan.md), [test plan](../testing/migration-test-plan.md) and [progress tracker](../../MIGRATION_PROGRESS.md).
-- Record the [credential exposure](../infrastructure/tracked-worker-credentials-finding.md) and block further Cloudflare work until remediation is approved.
-- Collect production metrics; the D1-versus-PostgreSQL/Hyperdrive decision is recorded as [ADR-0001](../decisions/0001-d1-and-r2-target.md) (D1 selected by owner).
+Preserve logical fields, IDs, defaults, validation, relationships, API and event contracts, business effects and the existing Android/admin journeys. Use repository and infrastructure adapters around existing rules. Record storage-level differences and suspected bugs explicitly. A quota conflict blocks the affected production switch and leaves the existing behavior on its current path. Disabling features or substituting a reduced launch is a separate product decision.
 
-**Exit gate:** Owner has acknowledged credential remediation; production metrics are recorded and the D1 capacity gates checked; this plan is accepted. The ADR exists, but documentation-only completion is not enough.
+## Journey order
 
-**Approvals:** Credential rotation/removal, D1/Hyperdrive decision, plan acceptance.
+The owner set the execution order below. Complete the local contract work for the active journey before starting the next. Apply the relevant technical gates within each journey. Record production-only blockers separately so local verification never implies rollout approval. Earlier Arcade, push and direct-message work remains evidence to reuse when its journey is reached.
 
-## Phase 1 — foundations and isolated environments
+| Order | Journey | Preservation checks |
+| --- | --- | --- |
+| 1 | **Authentication** | Firebase sign-in and account linking, email verification, App Check, access and refresh sessions, sign-out and device revocation. Preserve the authenticated account ID and the profile-completion signal. |
+| 2 | **Navigation** | Signed-out and signed-in startup, incomplete-profile routing, all five roots and bottom-dock visibility, deep links, back stack and session restoration. [Navigation architecture](../NAVIGATION_ARCHITECTURE.md) |
+| 3 | **Profile** | Profile setup and editing, validation, server-confirmed completion, avatar progress/cancel, public/private fields and profile invalidation. |
+| 4 | **Settings** | Preference and privacy persistence, notification settings, account verification and scoped security/account actions. |
+| 5 | **Chat** | Conversation visibility, send/history/read, mute/block, attachments and delivery through the supported legacy and native transports. Reuse the existing direct-message and push fixtures. |
+| 6 | **Rooms** | Discovery-to-join, permissions, seats, presence, voice/video, moderation, reconnect and PK lifecycle. |
+| Later | **Remaining journeys** | Order the remaining social, media, progression, commerce and admin journeys by their dependencies after the six above. Arcade score writes remain deferred at the owner's request. |
 
-**Goal:** Create the deployable skeleton without moving authoritative data.
+## Phase gates
 
-**Work areas:**
+Apply the phases in order to each affected slice, following the journey sequence above. A local slice can progress while an unrelated production gate is open. Record fixture, command, observed result and evidence before closing any gate. The [gate tracker](MIGRATION_PROGRESS.md) links the source-backed baseline and current evidence.
 
-- Split the experimental Worker prototype in `backend-server/apps/cloudflare-worker` into thin Workers/handlers with typed repository and provider boundaries; do not keep the singleton `YugmApi` Durable Object as production architecture.
-- Define runtime env schema for D1/Hyperdrive, R2, DO, queues, KV and Cron in `backend-server/apps/api/src/config/env.ts` and Worker bindings under `wrangler*.jsonc`.
-- Add dev/staging/prod Wrangler configs with separate bindings, explicit CORS allowlists, observability and redaction. Remove tracked secrets; use Worker secrets/secret manager and ignored `.dev.vars*`.
-- Establish contract harnesses around `backend-server/apps/api/openapi.yaml`, shared schemas, Android API clients and admin API calls.
-- Replace post-`listen()` best-effort index/migration/seed steps with explicit readiness gates so a failed startup step blocks traffic.
-- Mount and test the already implemented payment and Google Play webhook handlers with raw-body verification and idempotency; do not rely on client-submitted verification as sole proof.
-- Add CI gates: typecheck, API tests, OpenAPI structural guard (added 2026-11-23; full `swagger-cli` validation remains manual), admin typecheck/test/build (added 2026-11-23), secret scanning (report-only), Worker dry-run.
+| Phase | Deliverable | Evidence required to advance |
+| --- | --- | --- |
+| 0. Repository baseline | Model, rule, user-flow, API, event and dependency registries. | Source references and an affected-slice baseline. Unknown or divergent behavior recorded for resolution. |
+| 1. Characterization | Repeatable legacy fixtures for exposed behavior, errors, persisted effects, events and ordering. | Actual legacy path exercises the contract before its provider changes. |
+| 2. Adapter boundary | Minimal repository or transport seam reusing existing domain services. | Same contract suite can exercise the old and new implementation. |
+| 3. D1 mapping | Field-by-field source to SQLite mapping, including relationships and reversible physical translations. | No unexplained changes to IDs, fields, validation, default/null behavior, serialization or relationships. |
+| 4. D1 data | Deterministic export, transform, resumable import, reconciliation and final sync. | Counts, critical relationship and financial records, rejects and final deltas reconcile with a verified restore. |
+| 5. Worker backend | Existing API contracts behind Worker-compatible infrastructure. | Same fixture produces equivalent HTTP, data, events and notification outcomes. Worker bundle and startup checks pass. |
+| 6. Firebase | Original identity project, token verification, App Check, sessions and FCM. | Supported provider and recovery journeys work on Workers and Android. Existing users and IDs persist across repeated sign-in. |
+| 7. R2 media | Category-specific compatible media resolver and upload/publication paths. | Existing media display, privacy and current upload flow pass end to end within a tested $0 envelope. |
+| 8. Redis and sessions | Semantic replacements for cache, limits, presence, state and coordination. | Existing expiration, visibility, atomicity, rate limit and failure behavior verified. |
+| 9. App realtime | Hibernating scoped DO WebSockets with staged legacy compatibility. | Both actual transports pass event and message parity, authorization, replay and dedupe under DCR-3. |
+| 10. Voice and video | Provider-neutral RTC and Cloudflare Realtime SFU/TURN candidate. | Release-device room, media, reconnect and moderation parity under a tested $0 envelope. |
+| 11. Background jobs | Queues/Cron or alarms, durable dispatch status, retries and recovery. | Local and isolated staging tests cover duplicates, enqueue failure, partial FCM results, expiry, replay and terminal failures. |
+| 12. Financial and inventory | Existing wallet, purchase, gift, reward and ownership rules using atomic persistence. | Idempotency, parallel writes, refunds, insufficient balance and inventory equivalence hold with one authoritative writer. |
+| 13. Admin and assets | Admin and asset infrastructure adapters. | Same authorized actions and resulting publication, prices, version/ownership and rendering effects. |
+| 14. User-flow regression | Run all [required journeys](USER_FLOW_REGISTRY.md) on the existing and migrated systems. | Critical Android and admin journeys pass with supported devices, network failure and restart behavior. |
+| 15. Staging and cutover | Isolated migration rehearsal, final-sync and rollback plan. | Quota/load, verified backups and restore, old/new behavior, data reconciliation and explicit cutover authorization. |
+| 16. Legacy cleanup | Retire approved dependencies only after their last supported consumer is gone. | Check app/Worker bundles and deployments, installed-client window, rollback retention and explicit removal approval. |
+| 17. Final acceptance | Publish model, business, UI, API, data, infrastructure, security and removal evidence plus deployment, rollback and limitations docs. | Review evidence and remaining blockers. No unexplained losses or behavior changes, and the activated services run within the approved $0 envelope. |
 
-**Tests:** Existing typecheck/API/hardening/OpenAPI/admin checks; Worker dry-run with staging config; binding verification; no production writes.
+## Free limits and application behavior
 
-**Exit gate:** All environments start with isolated bindings; no tracked secrets; contract harness passes; dry run succeeds; owner approves provisioning.
+These are provider ceilings checked on 2026-11-23. Size each pilot against **remaining account capacity**, including other environments. Use conservative pilot limits below the provider ceilings and revise them only after measuring actual use. Reset counters on the provider's quota windows, including midnight UTC for daily quotas.
 
-**Approvals:** Paid resources, plan upgrade, domains/DNS, secret-store strategy.
+| Service | Published allowance or cost | Behavior to verify |
+| --- | --- | --- |
+| Workers Free | 100,000 requests/day and 10 ms CPU per HTTP request. | Bound request work and pagination. Test cold starts, actual CPU and quota errors. Stop raising rollout traffic when headroom disappears. [Limits](https://developers.cloudflare.com/workers/platform/limits/) |
+| D1 Free | 500 MB per database, 5 GB across the account, 5 million rows read/day, 100,000 rows written/day and 50 D1 queries per Worker invocation. | Reserve capacity for essential writes. Pause discretionary jobs and admissions early. At exhaustion, surface a retryable failure and avoid claiming a commit. [Limits](https://developers.cloudflare.com/d1/platform/limits/) · [Pricing and enforcement](https://developers.cloudflare.com/d1/platform/pricing/) |
+| SQLite Durable Objects | 100,000 requests/day, 13,000 GB-s/day, plus storage and row-operation limits. | Hibernate idle sockets, bound replay history and shed ephemeral presence/typing before durable work. Test reconnects and failure during quota exhaustion. [Pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/) |
+| KV Free | 100,000 key reads/day and 1,000 writes/day. | Cache public or staleness-tolerant data. Bound cache fills and origin fallback. Keep revocation, permissions, strict counters and idempotency in consistent storage. [Pricing](https://developers.cloudflare.com/kv/platform/pricing/) · [Consistency](https://developers.cloudflare.com/kv/concepts/how-kv-works/) |
+| Queues Free | 10,000 operations/day and 24-hour retention. Delivery of a small message usually consumes three operations before retries. | Measure job volume, track backlog age, make consumption retry-safe and recover unfinished jobs before or after queue retention expires. [Pricing](https://developers.cloudflare.com/queues/platform/pricing/) |
+| R2 Standard | 10 GB-month, 1 million Class A operations and 10 million Class B operations/month included. Overage is billable. | Start with bounded avatar usage. Count storage and all origin operations before admitting traffic. See the [R2 admission gate](#4-r2-media-within-the-included-allowance). [Pricing](https://developers.cloudflare.com/r2/pricing/) |
+| Images Free | 5,000 unique transformations/month. | Verify the account's Images plan and binding behavior. Bound generated variants and test upload recovery at the transformation ceiling. [Pricing](https://developers.cloudflare.com/images/pricing/) |
+| Realtime SFU/TURN | 1,000 GB/month included across both, then $0.05/GB egress. | Keep remote SFU/TURN disabled while egress exposure is unbounded. Test call limits and stop behavior before any live pilot. [Pricing](https://developers.cloudflare.com/realtime/sfu/platform/pricing/) |
 
-## Phase 2 — data migration tooling and rehearsal
+Cloudflare budget alerts are delayed notifications. Documented Workers and Durable Objects spending limits cover specific products and charges, and can overshoot. Treat billing dashboards as reconciliation rather than request admission controls. [Cloudflare spending controls](https://developers.cloudflare.com/billing/manage/spend-management/) · [Budget alerts](https://developers.cloudflare.com/billing/manage/budget-alerts/)
 
-**Goal:** Prove data can be exported, transformed, imported, validated and restored.
+## Workstream details
 
-**Work areas:**
+Use these implementation details when the active journey reaches each dependency. The migration tracker identifies the current journey and its evidence. DCR-2 and live rollout approvals remain separate. [Current journey](MIGRATION_PROGRESS.md)
 
-- Full MongoDB backup and restore into isolated staging.
-- Export/transform tooling with stable ObjectId/UID/Firebase maps, UTC timestamps, integer money and explicit quarantine reports.
-- Review and refine the first-cut D1 schema generated from [ADR-0001](../decisions/0001-d1-and-r2-target.md) by `npm run schema:d1 --workspace apps/api` (`backend-server/apps/api/migrations/d1/0001_initial.sql`), adding FK/unique/non-negative constraints and child tables where the [mapping spec](../database/mongo-to-relational-mapping.md) requires them.
-- Batch importer with snapshots, checkpoint/resume, dry-run, idempotency, final delta sync and rollback runbook.
-- Validation reports for counts, checksums, referential integrity, wallet/ledger reconciliation, ownership, badges, gifts, achievements and media references.
+### 1. BullMQ push notifications and scheduled maintenance
 
-**Tests:** Transform unit/golden tests, idempotent re-run, checkpoint interruption, injected mismatch/negative/orphan cases, restore rehearsal, production-shaped data volume checks.
+- Trace persisted notifications through `services/notifications.ts`, `enqueuePushNotification()` in `services/jobs.ts`, FCM and job readiness. The first [push retry slice](../handoffs/2026-11-23-push-delivery-retries.md) splits queue processing from the inline fallback, persists retry targets after a partial send, and uses three total attempts with a 60-second exponential backoff base on BullMQ.
+- The [local Queues slice](../handoffs/2026-11-23-local-push-queues.md) records the existing persistence, preference and fan-out contract and wires an opt-in Worker producer and consumer. It keeps the BullMQ/inline default and reuses the FCM sender.
+- Persist dispatch state in a SQLite Durable Object keyed by the committed notification ID, with its intended recipient in the stored job. Use bounded retry and recovery alarms and record terminal failures for replay. Local tests cover duplicate consumption, failed enqueue, partial devices and expiry via simulated elapsed time. An external send followed by a failed checkpoint can still duplicate a device push. Measure usage and validate interruption and provider behavior before staging activation.
+- Move scheduled jobs individually from the existing Worker/Node scheduling paths. Preserve PK deadlines and overlap safety. A single maintenance owner runs each task during rollout to avoid duplicate state changes.
 
-**Exit gate:** Zero unaccounted records; finances reconcile; restore rehearsal passes; no destructive production step taken.
+**Exit evidence.** The real producer and consumer paths preserve preferences, retry and recovery behavior. A bounded day of modeled jobs fits the operation budget with retry headroom. The production switch has separate approval and a drain/checkpoint procedure for legacy jobs.
 
-**Approvals:** Production snapshot access, schema approval, destructive-operation approval.
+### 2. Redis and application realtime
 
-## Phase 3 — Workers API and domain cutovers
+- Inventory each current Redis caller. Move caches to KV or Workers Cache according to staleness needs. Use SQLite Durable Objects for globally consistent limiter state where required. Treat Workers Rate Limiting as approximate per location. Keep revocation and authorization-sensitive session state in the current authoritative database until its D1 slice is validated. [Workers Rate Limiting](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
+- Reuse the native protocol, SQLite Durable Object skeleton, compatibility adapter and parity harness under [DCR-3](realtime-plan.md). Start with an authorized, low-risk topic such as BONDS invalidation. Wire authenticated upgrades and scopes, authoritative commit before publish and ack, event IDs, bounded replay and hibernation. Route installed-client Socket.IO and native events from the same authoritative commit.
+- Run parity across both real paths and two clients. Include denial/revocation, reconnect/restart, duplicates, ordering, replay and load. Record native GA when separately approved and start the existing 90-day legacy window then. Retire the Redis socket adapter only after its callers have migrated or the approved compatibility path runs independently of Redis.
 
-**Goal:** Move authoritative reads/writes behind Workers repositories one domain at a time.
+**Exit evidence.** Every Redis use has tested replacement behavior and rollback, queues are drained, and inspection and staging verification show no remaining required Redis connection before removal.
 
-**Suggested order:**
+### 3. D1 Free evaluation and data migration
 
-1. Identity/auth/profile and admin auth.
-2. Catalog/cosmetics/assets metadata and permissions.
-3. Social graph, conversations and room metadata.
-4. Wallet/ledger, purchases, gifts, rewards and payouts.
-5. Achievements/badges and progression state.
-6. Remaining read-heavy APIs.
+**Existing local read evidence.** The normal `GET /api/games/catalog` route passed the [shared HTTP fixture](../../backend-server/apps/api/src/routes/gamesCatalog.characterization.test.ts) with MongoDB and Wrangler's local D1 binding. The [Arcade handoff](../handoffs/2026-11-23-arcade-catalog-d1-parity.md) records scope and usage. Apply D1 evaluation to the active journey. Run an isolated remote pilot only after its approval, using generated data or an approved restored copy.
 
-**Work areas:** `backend-server/apps/api/src/routes/*`, `services/*`, `models/*`, `app.ts`, shared schemas, OpenAPI, Android `core/api` clients, admin data hooks.
+- Derive capacity evidence from the target implementation. Measure loaded database and index footprint, indexed query plans, actual D1 row reads/writes per workflow, largest relational rows, peak throughput, latency and Worker CPU. Include indexes, retries, maintenance and reconnect traffic. Record the fixture, scenario, admitted workload, date and provenance for every value. Pilot measurements bound the tested cohort. Production size, growth and traffic remain unknown until observed.
+- Use the [export CLI and local validation tooling](data-migration-tooling.md) with a disposable MongoDB or a separately approved restored copy. Existing Paid-oriented capacity tools remain useful for mapping and reconciliation, but their original readiness result cannot decide a Free launch.
+- Migrate related domains behind repository boundaries in dependency order. Preserve IDs, auth checks, pagination, admin and Android contracts. Keep balances, purchases, ledger and dependent financial writes in one database transaction with database-enforced constraints and idempotency. Exercise parallel requests, replay, injected failures, refunds and verified webhook retries before proposing money traffic.
+- For any existing-data switch, obtain approved representative source evidence, reconcile counts, identity, media references and financial totals, report all rejects, and rehearse backup/restore and final delta handling including deletes. Preserve a single writer during the cutover. A rollback after D1 writes requires validated reconciliation back to the prior writer, or a write freeze until state is reconciled.
 
-**Rules:** One authoritative writer per domain; feature flags/adapters; no success before authoritative commit; preserve existing error codes/pagination; keep financial operations atomic in one database.
+**Exit evidence.** A proposed rollout has measured headroom, explicit admission limits and tested load shedding. If source evidence remains unavailable or measured usage cannot fit Free, keep existing accounts on MongoDB and record the production blocker. Use generated or separately approved restored data for isolated parity. Production D1 requires an explicit decision that revises the existing Paid-only gate and separately approves the rollout. Hyperdrive requires a separate PostgreSQL origin and stays outside the Cloudflare-native database path.
 
-**Tests:** Old/new contract comparison, RBAC/resource authz, transaction/idempotency/replay, failure injection, Android/admin integration smoke.
+### 4. R2 media within the included allowance
 
-**Exit gate:** Domain passes contract and data validation under staging load; rollback path demonstrated.
+Use R2 Standard conditionally, starting with an isolated avatar pilot and following [the phased media policy](../decisions/0005-r2-media-cutover.md). R2 requires checkout and can bill for excess usage. Review the actual subscription terms and account-wide usage before activation. Obtain separate provisioning approval for any billable subscription or resource. [R2 setup](https://developers.cloudflare.com/r2/get-started/) · [R2 pricing](https://developers.cloudflare.com/r2/pricing/)
 
-## Phase 4 — R2 media and centralized asset platform
+1. Establish a conservative budget for bytes stored throughout the month and Class A/B operations across the account. Include originals, variants, replaced objects, staging and incomplete multipart uploads, migration backfill, list/head calls, retries, cache misses and cleanup. Reserve capacity for recovery operations and usage-data lag. Unknown or unreconciled usage keeps the R2 pilot disabled.
+2. For the strict budget pilot, keep buckets private and route operations through one authenticated, quota-controlled Worker. Reserve capacity atomically before each origin operation and stop new reservations when the safe allowance is exhausted or usage accounting is unavailable. Account for all other credentials, direct links, presigned requests and background access before treating the budget as enforceable. Keep direct public R2 access and presigned uploads disabled during the pilot. Public variants can still be served through a controlled cached route. Follow the accepted access policy for originals and private media.
+3. Test budget races, retry accounting, quota reset, storage already present at rollover and fail-closed behavior. Rehearse stopping both new uploads and uncached reads before the provider thresholds. Keep previously committed media references intact. Use an approved existing delivery path where available or return a controlled unavailable state. Preserve a recoverable inventory before any object move or expiry-policy change.
+4. Expand one category at a time after its approved inventory, exact production CORS/origin, private-access tests, client checks, operation counts, and rollback rehearsal. If the account cannot bound billable exposure, keep that category off R2. A $0 invoice so far is insufficient evidence for unlimited operation.
 
-**Goal:** Complete the storage and asset cutover on top of the preserved R2 foundation.
+**Exit evidence.** Approved account conditions, measured and reconciled use, a verified pause path, private media authorized end to end, and an approved rollback for the category.
 
-**Work areas:**
+### 5. LiveKit and RTC
 
-- Existing `services/r2.ts`, `services/media.ts`, `routes/media.ts`, `MediaObject`, `MediaUploadSession`, `MediaQuotaReservation`, Android `MediaUploadApi`, OpenAPI and feature docs.
-- One upload pipeline for all media categories: staged presigned upload, size/signature/MIME/content validation, EXIF/SVG safety, processing/variants/moderation, authoritative DB update, cleanup, progress/retry/expiry/rate limits.
-- Immutable versioned keys, checksums, metadata, ownership, visibility, reference tracking and no published-object overwrite.
-- Private media delivery through authenticated Worker checks and short-lived grants; no public cache; no persisted signed URLs.
-- Asset system separation: identity/artwork/version/store listing/price/availability/ownership/equipped/reward conditions/rendering config; DRAFT→PUBLISHED→ARCHIVED, rollback and reference protection.
-- Admin media/asset tooling and reconciliation of legacy files/URLs.
+- First extract provider-neutral room/token and Android media interfaces while preserving the LiveKit path. Use fakes locally to test authorization, publish/subscribe permissions, mute, reconnect and lifecycle. Keep application chat WebSocket and media transport separate.
+- Use Cloudflare Realtime SFU/TURN as the candidate. On real devices, prove audio/video, disconnect/ICE recovery, roles, mute enforcement, group fan-out and recording requirements. Preserve LiveKit where a capability has no proven replacement. RealtimeKit and any participant-minute service require separate approval.
+- Before a live SFU/TURN pilot, verify that the account can bound combined egress, including concurrent streams, relay, active sessions after admission closes, recording and usage-reporting lag. Set conservative server-side admission, track/bitrate and lifetime controls and demonstrate hard shutdown. If a $0 ceiling cannot be established, keep SFU/TURN off and preserve existing RTC behavior on LiveKit. [Realtime architecture](https://developers.cloudflare.com/realtime/sfu/concepts/architecture/) · [TURN FAQ](https://developers.cloudflare.com/realtime/turn/faq/)
 
-**Tests:** Live isolated R2 upload→publish→read→archive/rollback; quota concurrency; private download authz; CDN/CORS/public policy; asset admin flows; Android device/visual QA; old URL mapping.
+**Exit evidence.** Device parity and operational recovery pass, the owner separately approves provider activation and traffic, and LiveKit drains before retirement.
 
-**Exit gate:** R2 resources configured with approved credentials/domains; all media categories cut over or explicitly deferred; registry reconciled with R2; Android/admin validated.
+## Production acceptance and rollback
 
-**Approvals:** R2 provisioning, bucket policies, custom domains/CORS, media deletion/archive policy.
-
-## Phase 5 — realtime and stateful coordination
-
-**Goal:** Replace or harden the Engine.IO bridge according to [the realtime plan](realtime-plan.md).
-
-**Work areas:** Durable Object classes/bindings/migrations in Worker config; API socket handlers; Android socket client; admin realtime consumers; sync invalidation service; conversation/room/PKD state.
-
-**Rules:** Preserve protocol or version it explicitly; authenticate connects/subscriptions/events; durable writes before ack; event IDs/dedupe; reconnect recovery; hibernation where possible; scoping by conversation/room/user/PKD.
-
-**Tests:** Two-client Android/admin validation, event inventory parity, duplicate/out-of-order/revocation/restart tests, load and DO cost measurement.
-
-**Exit gate:** No unresolved protocol incompatibility; recovery and load tests pass; cost model accepted.
-
-## Phase 6 — Queues, Cron, observability and hardening
-
-**Goal:** Make async work and maintenance safe and observable.
-
-**Work areas:** Queue producers/consumers for media processing, notifications/moderation/reconciliation/webhooks; Cron scheduled handler; KV cache/config; structured logs/correlation IDs; metrics/alerts/spending limits; rate limits and RBAC audit.
-
-**Rules:** Small idempotent messages, DLQ/retry handling, bounded checkpointed cron, overlap prevention, R2 lifecycle only for temporary/retention-managed objects, no sensitive logging.
-
-**Tests:** Duplicate delivery, retry/DLQ, cron idempotency/overlap, log redaction, cost dashboard verification.
-
-**Exit gate:** Operational dashboards, alerts and runbooks pass staging review.
-
-## Phase 7 — Android/admin integration and staged rollout
-
-**Goal:** Complete clients and roll out behind flags.
-
-**Work areas:** Android modules (`core/api`, `core/data`, `core/ui`, `feature/*`, `app`), design-system reuse, navigation/dock whitelist, admin React app and deployment config. Specific debt from the [Android source audit](../architecture/android-source-audit.md):
-  - Fix `ProfileDetailScreen` progress/cancel wiring and the pre-sessionId cancellation window; call server-side cancel on failed uploads so quota reservations are released (pair with the Phase 6 sweeper).
-  - Move hardcoded catalogs, prices and eligibility (VIP thresholds, gift box prices, cosmetic names, `coinToInrRate` fallback) behind server-administered config; keep client keyword filtering advisory.
-  - Replace direct composable→API singleton calls with repository/state-holder boundaries for domains being cut over.
-  - Reconcile the Android `BONDS` sync topic with server invalidation mapping.
-  - Consolidate duplicate `GlassCard`, `LiveBadge` and text-field primitives; keep the single `:core:ui` theme and bottom-dock navigation.
-
-**Tests:** Gradle unit tests, affected compiles, full lint/assemble where appropriate, device/emulator QA, TalkBack/font-scale/narrow-width checks, admin UI QA, old-client compatibility window.
-
-**Exit gate:** Client tests pass; no new competing theme/navigation; rollout plan and rollback accepted.
-
-## Phase 8 — production cutover
-
-**Goal:** Switch traffic only after full validation.
-
-**Work:** Final delta sync; production backup; approval confirmation; DNS/route change; staged traffic; monitoring; rollback readiness.
-
-**Tests:** Final validation suite, financial/media/realtime reconciliation, live smoke, rollback rehearsal.
-
-**Exit gate:** Owner-approved cutover and post-cutover acceptance. No phase is considered complete from source presence or dry run alone.
-
-## Dependency chain
-
-```text
-Credential remediation + production metrics
-  → D1/Hyperdrive ADR (D1 selected; capacity gates still open)
-    → Phase 1 environments/contracts
-      → Phase 2 data rehearsal
-        → Phase 3 API domains
-          → Phase 4 media/assets
-          → Phase 5 realtime
-            → Phase 6 ops
-              → Phase 7 clients
-                → Phase 8 cutover
-```
-
-Phase 4 media work already has an uncommitted foundation, but provisioning and cutover remain gated by the earlier decisions.
+- For each release slice, record the workload bound, provider usage evidence, authorizations, flag defaults, rollback owner and cutover/rollback triggers. Verify secrets and explicit per-environment origins through existing deployment safeguards. Keep admin and Android interfaces stable and verify old-client behavior.
+- Use the existing OpenAPI, authorization, Worker bundle and credential checks. Keep Android verification bounded to affected modules, reuse the existing UI and navigation standards, and exercise app behavior on supported clients for slices that change their behavior.
+- Rehearse MongoDB, media and configuration recovery in isolated environments before data cutover. A checksum or importer dry run alone does not establish recoverability. Use the [backup inventory](BACKUP_AND_RECOVERY.md), [rollback plan](ROLLBACK_PLAN.md) and [migration test plan](../testing/migration-test-plan.md).
+- Test with two clients, inject quota and provider failures, and verify recovery and financial reconciliation before raising traffic. Require specific owner approval for backup/restore work with live data, production import, traffic switch and legacy removal. The $0 plan authorizes no spend.

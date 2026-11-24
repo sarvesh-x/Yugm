@@ -170,7 +170,7 @@ fun NavGraph(
             profileName = mainViewModel.userName,
             profileUsername = mainViewModel.username,
             googleWebClientId = resources.getString(com.yugm.app.R.string.default_web_client_id),
-            validateStartupSession = mainViewModel::validateStartupSession,
+            awaitStartupSessionCheck = mainViewModel::awaitStartupSessionCheck,
             currentStartupDestination = {
                 startupDestination(
                     isLoggedIn = mainViewModel.authToken.isNotBlank(),
@@ -206,15 +206,16 @@ fun NavGraph(
         ) { backStackEntry ->
             val tab = backStackEntry.arguments?.getString("tab") ?: "discover"
             val requestedTab by backStackEntry.savedStateHandle
-                .getStateFlow<String?>("tab_request", null)
+                .getStateFlow<String?>(MainTabsRoutes.TAB_REQUEST_KEY, null)
                 .collectAsState()
             MainTabsScreen(
                 navController = navController,
+                mainTabsState = backStackEntry.savedStateHandle,
                 token = mainViewModel.authToken,
                 currentUserId = mainViewModel.currentUserId,
                 initialTab = tab,
                 requestedTab = requestedTab,
-                onRequestedTabConsumed = { backStackEntry.savedStateHandle["tab_request"] = null },
+                onRequestedTabConsumed = { backStackEntry.savedStateHandle[MainTabsRoutes.TAB_REQUEST_KEY] = null },
                 onProfileUpdated = mainViewModel::validateAndUpdate,
                 userAvatar = mainViewModel.userAvatar,
                 userAvatarType = mainViewModel.userAvatarType,

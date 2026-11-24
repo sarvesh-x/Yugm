@@ -5,8 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --config wrangler.jsonc",
+    "dev:auth": "wrangler dev --config auth-local/wrangler.jsonc --local --ip 127.0.0.1",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.runtime.json",
+    "test:auth-worker": "node --test test/auth-worker.mjs",
     "test:realtime": "node test/realtime.mjs",
+    "test:push-queue": "node --test test/push-queue.mjs",
     "test:staging": "node test/staging-smoke.mjs --confirm-isolated-staging",
     "test:staging-admin": "node test/staging-admin.mjs --confirm-isolated-staging",
     "deploy:staging": "wrangler deploy --config wrangler.staging.jsonc",
@@ -18,6 +21,7 @@
     "mongoose": "^8.24.1"
   },
   "devDependencies": {
+    "miniflare": "5.20261117.0-beta",
     "socket.io-client": "^4.8.1"
   }
 }

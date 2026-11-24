@@ -12,6 +12,7 @@ import { unstable_dev } from "wrangler";
 // reads the application's .env file or connects to a user-provided URI.
 const workerDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const secret = `local-worker-test-${randomUUID()}`;
+const pushQueueEnabled = process.argv.includes("--push-queue");
 const sockets = [];
 let replica;
 let worker;
@@ -33,10 +34,20 @@ try {
   await db.collection("roomparticipants").insertMany(users.slice(0, 2).map((userId, i) => ({ roomId, userId, leftAt: null, role: i ? "SPEAKER" : "HOST", seatIndex: i, micEnabled: true, moderatorMuted: false })));
 
   await db.collection("friendships").insertOne({ userId: users[0], friendId: users[1], status: "ACCEPTED" });
+  if (pushQueueEnabled) {
+    await db.collection("devicetokens").insertOne({
+      userId: users[1], token: "local-worker-push-fixture", platform: "android"
+    });
+  }
 
   const startWorker = (port) => unstable_dev(path.join(workerDir, "src/index.ts"), {
-    config: path.join(workerDir, "wrangler.jsonc"), local: true, port,
-    vars: { MONGODB_URI: uri, JWT_SECRET: secret, REDIS_URL: "", YUGM_BONDS_ENABLED: "true", LIVEKIT_URL: "ws://127.0.0.1:1", MONGODB_MEDIA_MAX_BYTES: "300" },
+    config: path.join(workerDir, "wrangler.jsonc"), local: true, persist: false, port,
+    vars: {
+      MONGODB_URI: uri, JWT_SECRET: secret, REDIS_URL: "", YUGM_BONDS_ENABLED: "true",
+      LIVEKIT_URL: "ws://127.0.0.1:1", MONGODB_MEDIA_MAX_BYTES: "300",
+      FCM_PROJECT_ID: "", FCM_CLIENT_EMAIL: "", FCM_PRIVATE_KEY: "",
+      YUGM_LOCAL_PUSH_QUEUE: pushQueueEnabled ? "true" : "false"
+    },
     logLevel: "error", experimental: { disableExperimentalWarning: true, disableDevRegistry: true }
   });
   worker = await startWorker(0);
@@ -44,6 +55,7 @@ try {
   // /health is liveness only; /ready proves the Node runtime and dependencies started.
   const ready = await fetch(`${address}/ready`);
   assert.equal(ready.status, 200, "Worker must start with isolated MongoDB");
+  assert.equal((await ready.json()).jobs.mode, pushQueueEnabled ? "cloudflare-queues" : "inline");
 
   function token(i) {
     return jwt.sign({ sub: users[i].toString(), sid: sessions[i].toString(), typ: "access", tokenVersion: 1 }, secret, { algorithm: "HS256", expiresIn: "1h" });
@@ -121,6 +133,10 @@ try {
   const request = await bondApi("/invitations", 0, {
     recipient: String(users[1]), slot: 1, kind: "BESTIE", giftId: gift.id, key: randomUUID()
   }, 201);
+  if (pushQueueEnabled) {
+    const inbox = await db.collection("notifications").findOne({ userId: users[1], "data.type": "BONDS" });
+    assert.ok(inbox, "the Bond notification is persisted while Cloudflare Queues handles push");
+  }
   let timeout;
   try {
     const event = await Promise.race([updated, new Promise((_, reject) => {

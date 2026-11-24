@@ -1,5 +1,95 @@
 # Development progress
 
+## 2026-11-24 — Local D1 Profile edits
+
+- Wired `PATCH /api/users/me` to local D1 with a single batch for the Profile save, first-completion XP, Battle Pass progress and any earned level-up coins and inbox entry. The fixture matched the mounted MongoDB response and verified rollback on ledger failure. The bundled Worker processed concurrent setup requests with one completion grant.
+- All 67 focused API checks, both typechecks, the Worker smoke test and the strict credential scan passed. Android setup and Edit Profile, live invalidation and managed-avatar behavior remain open. [Profile edit evidence](handoffs/2026-11-24-d1-profile-edits.md)
+
+## 2026-11-24 — Local D1 Profile reads
+
+- Wired authenticated Profile reads into the loopback Worker. Compared the D1 reader with mounted MongoDB for viewer and self visibility, relationship counts, null and omitted fields, profile media, denial and visit behavior. The bundled Worker also checked session revocation and persisted a visit to local D1.
+- The 52 focused API checks, both typechecks, Worker smoke test and credential check passed. Local D1 edits were completed in the follow-up above. Live presence remains open. [Profile read evidence](handoffs/2026-11-24-d1-profile-reads.md)
+
+## 2026-11-24 — Profile contract and local D1 import
+
+- Fixed `PATCH /api/users/me` to return the committed user, including completion and self-only email. Verified authorization, read visibility, normalization, repeat saves, one-time XP and actor-scoped invalidation against a disposable MongoDB replica set.
+- Matched Bond milestone and preference rows to the draft D1 child tables. The Profile import fixture passed with its relationship counts and completion grants intact. [Profile verification](handoffs/2026-11-24-profile-contract-baseline.md)
+
+## 2026-11-24 — Migration continuation handoff
+
+- Recorded the current working-tree checkpoint, the verification process for each journey and the first Profile acceptance checks. Linked the Auth and Navigation evidence and the remaining production gates. [Migration handoff](handoffs/2026-11-24-migration-continuation.md)
+
+## 2026-11-24 — Full-app Navigation after process death
+
+- Moved the startup session check out of Splash so restored screens wait for server validation. The Android emulator exercised a notification shade tap, authenticated conversation restoration, the selected Profile dock after Back and a revoked session returning to Sign in from Settings.
+- Both debug APKs built and the reports show 26 Auth and Navigation JVM checks. Live FCM remains open. [Emulator evidence](handoffs/2026-11-24-navigation-process-restart.md)
+
+## 2026-11-24 — Local D1 Auth Worker
+
+- Wired the existing Auth HTTP routes to an isolated loopback Worker with local D1. The built Worker passed readiness, verified email sign-in, `/auth/me`, refresh rotation, immediate revocation, logout and return sign-in with generated Firebase keys and no MongoDB or Redis connection.
+- The Worker typecheck and 22 focused API checks passed. Live Firebase, App Check on Workers and full Android checks remain open. [Commands and evidence](handoffs/2026-11-24-local-d1-auth-worker.md)
+
+## 2026-11-24 — Android navigation back stack and push recreation
+
+- Reproduced a dropped Chat request from Settings on the emulator and repaired root tab switches. The pager now writes to the MainTabs destination's saved state. Push routes wait for the app to leave Auth and preserve pending or consumed state on activity recreation.
+- Four connected Android tests, 12 core navigation JVM tests and the app Kotlin compile passed. The fixture uses Android's real NavController in an isolated test activity. [Scope and commands](handoffs/2026-11-24-navigation-recreation.md)
+
+## 2026-11-24 — Local Auth journey parity and Navigation baseline
+
+- Ran the same Auth routes against disposable MongoDB and local D1. Linked accounts retained their IDs and wallet balances. The restored self-profile matched with its explicit nulls, nested fields and ordered arrays. The fixture exercised sign-in, refresh, scoped logout and overlapping identity claims. All 505 API tests and both API and Worker typechecks passed. [Auth evidence](handoffs/2026-11-24-auth-journey-parity.md)
+- Started Navigation with 12 core route and dock tests and four Auth startup destination tests. The next evidence is actual back-stack, restored tab and notification targeting behavior. [Navigation baseline](handoffs/2026-11-24-navigation-baseline.md)
+
+## 2026-11-24 — Auth access and revocation across local servers
+
+- Shared the HTTP and Socket.IO access-token checks with a D1 authorization reader. The fixture verified required and optional HTTP access, account ownership, suspension, block and expiry, and rejection after logout on a separate local server.
+- The D1 socket fixture rejected reconnect and disconnected an open client before handling its next packet. The existing MongoDB `/auth/me` and Socket.IO handshake passed. All 33 focused tests and API and Worker typechecks passed. [Access verification](handoffs/2026-11-24-auth-access-revocation.md)
+
+## 2026-11-24 — Local Auth session adapters
+
+- Moved session issuance, rotation and logout persistence behind the shared Auth token service. Verified MongoDB and local D1 for ordinary and legacy session generations. Isolated D1 tests covered concurrent sign-ins, replay, rollback and import retry. [Session adapter evidence](handoffs/2026-11-24-auth-session-store.md)
+- D1 imports now update by source ID and surface secondary uniqueness conflicts. The 48 focused tests and API and Worker typechecks passed. Protected access and sockets still use MongoDB and need their own D1 parity checks. [Remaining Auth work](handoffs/2026-11-24-auth-session-store.md)
+
+## 2026-11-23 — Auth providers, App Check and legacy session mapping
+
+- Exercised Firebase Google, Facebook and phone exchanges, the mounted App Check gate and the existing warm-cache behavior after logout. The legacy direct Google verifier now requires the configured client audience and expiration. Android continues to exchange Firebase ID tokens. [Auth verification](handoffs/2026-11-23-auth-providers-and-session-mapping.md)
+- Preserved the distinction between a missing session generation, explicit null and zero in the draft D1 mapping. Verified all three representations through the importer on a local D1 binding. The 27 focused API and mapping tests, API and Worker typechecks, and six Android JVM tests passed. [Mapping and rollout boundaries](handoffs/2026-11-23-auth-providers-and-session-mapping.md)
+
+## 2026-11-23 — Ordered journey migration and Auth baseline
+
+- Set the execution order to Authentication, Navigation, Profile, Settings, Chat and Rooms. Record outstanding production gates for each journey and run its local checks in that sequence. Arcade work stays deferred. [Journey order](migration/implementation-plan.md#journey-order)
+- Exercised the existing Firebase email exchange and session lifecycle through the HTTP API against disposable MongoDB. All 10 focused tests and the API typecheck passed. Provider-specific flows, App Check and client parity are still open. [Auth evidence](handoffs/2026-11-23-auth-journey-baseline.md)
+
+## 2026-11-23 — Direct-message characterization
+
+- Deferred Arcade score writes at the owner's request and characterized the existing DM send, history and read paths. Captured persisted messages, XP effects, addressed socket events, mute and block behavior and repeat requests.
+- Repeating the legacy send creates another message, inbox notification and XP grant. A repeat read echoes only to the reader's sessions. [Evidence and next boundary](handoffs/2026-11-23-direct-message-baseline.md)
+
+## 2026-11-23 — Local notification and push Queues slice
+
+- Characterized notification creation, persisted inbox state, socket and FCM payloads, opt-outs, and failure behavior with disposable MongoDB and a stubbed sender.
+- Added the opt-in local Cloudflare Queue and SQLite Durable Object outbox. Local queue tests exercise duplicate delivery, transient retry targets, permanent failures, broker failure, expiry and manual replay. [Evidence and remaining gates](handoffs/2026-11-23-local-push-queues.md)
+
+## 2026-11-23 — Arcade catalog parity on local D1
+
+- Added a D1 adapter behind the existing catalog HTTP route and indexed its best-score and recent-score reads. The draft mapper now preserves legacy field presence separately from indexed columns.
+- The shared fixture passed with disposable MongoDB and a Wrangler local D1 binding. Across 267 scores, D1 reported 20 rows read, zero rows written and 1,601,536 bytes for the complete draft schema and fixture. [Verification and limits](handoffs/2026-11-23-arcade-catalog-d1-parity.md)
+
+## 2026-11-23 — Behavior-preservation baseline and Arcade fixture
+
+- Added source-backed [registries and phase tracking](migration/MIGRATION_PROGRESS.md) and refreshed the static route, socket and schema indexes. All 97 extracted Mongoose registrations have a draft D1 mapping. Field equivalence and production capacity are open.
+- Added a legacy characterization for the Arcade catalog release contract, including auth denial, per-user scope, best-score tie-breaking, latest ten, optional metadata and unchanged score records. The [handoff](handoffs/2026-11-23-behavior-preservation-baseline.md) records the commands and remaining evidence.
+
+## 2026-11-23 — Push delivery errors reach the retry handler
+
+- The BullMQ push path now fails attempts when delivery fails. For a partial Firebase response it saves only retryable device IDs, then resolves current registrations for that same user on retry.
+- API suite passed 467/467, including five focused tests. Worker entry and runtime typechecks passed. Queues binding and end-to-end delivery remain open. See the [handoff](handoffs/2026-11-23-push-delivery-retries.md).
+
+## 2026-11-23 — Cloudflare migration replanned for $0
+
+- Recorded the owner's zero-spend constraint and conditional R2 direction in [ADR-0008](decisions/0008-zero-spend-cloudflare-migration.md).
+- Reordered the [implementation plan](migration/implementation-plan.md) to start with the BullMQ push-notification slice and independently test Redis, D1 Free, R2 and RTC replacements. D1 evaluation starts with a bounded fixture and measurements from the target store. Production D1 and recovery remain open.
+- Checked Cloudflare's published free quotas and billing controls and traced the current push and Worker paths. This pass changed documentation only. No runtime, deployment, account or data checks were run. Evidence and next steps are in the [handoff](handoffs/2026-11-23-zero-spend-cloudflare-migration.md).
+
 ## 2026-11-23 -- DCR-2 parked; documentation updated
 
 - **Scope:** recorded that D1 is not approved for production. No code change; documentation only.

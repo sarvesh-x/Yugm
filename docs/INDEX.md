@@ -61,8 +61,10 @@ The production audit documents explain their baselines and verification limits. 
 - [Cloudflare migration audit](cloudflare-migration/audit.md)
 - [Production blueprint and audit](production/README.md)
 
-## Cloudflare migration (Phase 0)
+## Cloudflare migration
 
+- [Active behavior-preserving $0 migration plan](migration/implementation-plan.md) · [Preservation registries and gate tracker](migration/MIGRATION_PROGRESS.md) · [Budget decision](decisions/0008-zero-spend-cloudflare-migration.md)
+- [Resume the migration in the existing working tree](handoffs/2026-11-24-migration-continuation.md)
 - [Migration progress tracker](../MIGRATION_PROGRESS.md)
 - [Phase 0 report](cloudflare-migration/phase0-report.md)
 - [Phase 0 decision request](cloudflare-migration/decision-request.md)
@@ -92,7 +94,6 @@ The production audit documents explain their baselines and verification limits. 
 - [Native Durable Object skeleton (local, unwired)](../backend-server/apps/cloudflare-worker/src/nativeRealtimeDo.ts)
 - [Legacy Socket.IO compatibility adapter (local, unwired)](../backend-server/packages/shared/src/legacyRealtimeAdapter.ts)
 - [Serialized operations primitive (local, unwired)](../backend-server/packages/shared/src/serializedOperations.ts)
-- [Repository-specific implementation plan](migration/implementation-plan.md)
 - [Migration test plan](testing/migration-test-plan.md)
 - [Directive-to-plan reconciliation](migration/DIRECTIVE_RECONCILIATION.md)
 - [Dependency audit and migration matrix](migration/DEPENDENCY_AUDIT.md)
@@ -103,6 +104,8 @@ The production audit documents explain their baselines and verification limits. 
 - [Tracked Worker credentials finding](infrastructure/tracked-worker-credentials-finding.md)
 
 Phase 0 audit and planning are documented. DCR-2 and the DCR-5 authorization boundary were answered on 2026-11-22 ([ADR-0001](decisions/0001-d1-and-r2-target.md), [ADR-0004](decisions/0004-local-code-and-tests-authorization.md)); DCR-1 was completed on 2026-11-23 ([ADR-0003](decisions/0003-credential-remediation-approach.md)); DCR-3 decision gate completed 2026-11-23 ([ADR-0002](decisions/0002-staged-hybrid-realtime-protocol.md)). DCR-4 decision gate completed 2026-11-23 ([ADR-0005](decisions/0005-r2-media-cutover.md)); DCR-5 plan accepted with one-time commit/push authorization 2026-11-23 ([ADR-0006](decisions/0006-implementation-plan-acceptance.md)). DCR-2 production use is parked and not approved ([ADR-0007](decisions/0007-dcr2-capacity-gate-not-approved.md)); MongoDB remains authoritative and the Hyperdrive fallback is reopened. DCR-4 provisioning values remain open. Provision, deploy, credential rotation and data operations remain unauthorized without new explicit approval.
+
+The execution sequence now starts with independently testable provider replacements on Workers Free. Production D1 remains parked while the plan evaluates a bounded Free-tier rollout. R2 remains conditional on enforcing the included allowance before live use. See [ADR-0008](decisions/0008-zero-spend-cloudflare-migration.md).
 
 ## Progress and follow up
 

@@ -1,5 +1,7 @@
 # Reconciliation: full Cloudflare migration directive vs. existing plan
 
+**Current execution order:** See the [zero-spend migration plan](implementation-plan.md) and [ADR-0008](../decisions/0008-zero-spend-cloudflare-migration.md). The phase mapping below records the earlier plan.
+
 **Date:** 2026-11-22
 **Status:** Phase 0 reconciliation artifact. It maps the owner's 26-phase directive onto the repository's existing Phase 0–8 plan, records where the two agree, and names the unresolved gates. It does not authorize provisioning, credential changes, deployment, data migration or removal.
 

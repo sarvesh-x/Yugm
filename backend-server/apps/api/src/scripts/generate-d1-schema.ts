@@ -55,7 +55,6 @@ const VALIDATED_JSON_FIELDS = new Set<string>([
   "ImmersiveTheme.colors",
   "ImmersiveTheme.animation",
   "MiniGameScore.metadata",
-  "Bond.preferences",
   "Notification.data",
   "NotificationCampaign.filters",
   "PkEvent.metadata",
@@ -190,6 +189,8 @@ async function importModels() {
 
 function columnDefinition(model: string, field: string, schemaType: any, col: string): string {
   const type = sqlType(schemaType, model, field);
+  // Old sessions predate the generation field. Keep those rows distinct from version zero.
+  if (model === "AuthSession" && field === "tokenVersion") return `  ${quote(col)} ${type}`;
   const required = Boolean(schemaType?.isRequired);
   // `default: null` means the source document may legitimately store null.
   // Treating it as a non-null default created invalid NOT NULL columns such as
@@ -239,7 +240,13 @@ function buildChildTable(model: string, field: string, childTable: string, schem
   const notes: string[] = [];
   const childSchema = schemaType?.schema as mongoose.Schema | undefined;
 
-  if (childSchema) {
+  if (childTable === "bond_preferences") {
+    columns.push('  "key" TEXT NOT NULL', '  "value_json" TEXT NOT NULL CHECK (json_valid("value_json"))');
+    notes.push("source_id is <bond source id>:preferences:<actor key>");
+  } else if (childTable === "bond_milestones") {
+    columns.push('  "day" INTEGER NOT NULL');
+    notes.push("source_id is <bond source id>:milestoneDays:<position>");
+  } else if (childSchema) {
     for (const [name, subType] of Object.entries(childSchema.paths)) {
       if (name === "__v") continue;
       const col = name === "_id" ? "element_id" : columnName(name);
@@ -259,6 +266,15 @@ function buildChildTable(model: string, field: string, childTable: string, schem
   columns.push("  position INTEGER NOT NULL CHECK (position >= 0)");
   const indexName = `idx_${childTable}_parent`;
   const indexes = [`CREATE INDEX IF NOT EXISTS ${quote(indexName)} ON ${quote(childTable)} (${quote(`${columnName(parentTable)}_id`)}, position);`];
+  if (childTable === "bond_preferences") {
+    indexes.push('CREATE UNIQUE INDEX IF NOT EXISTS "idx_bond_preferences_actor" ON "bond_preferences" ("bonds_id", "key");');
+  }
+  if (childTable === "bond_milestones") {
+    indexes.push('CREATE UNIQUE INDEX IF NOT EXISTS "idx_bond_milestones_day" ON "bond_milestones" ("bonds_id", "day");');
+  }
+  if (childTable === "bond_users") {
+    indexes.push('CREATE INDEX IF NOT EXISTS "idx_bond_users_member" ON "bond_users" ("value", "bonds_id");');
+  }
   return { model: `${model}.${field}`, table: childTable, columns, indexes, notes };
 }
 
@@ -341,7 +357,86 @@ function buildTables(modelName: string, schema: mongoose.Schema): Table[] {
     allTables.push(buildChildTable(modelName, field, childTable, schemaType, table));
   }
 
-  return [{ model: modelName, table, columns, indexes: createIndexes(table, schema), notes }];
+  const indexes = createIndexes(table, schema);
+  if (modelName === "User") {
+    allTables.push({
+      model: "User.authProfileNulls",
+      table: "user_auth_profile",
+      columns: [
+        '  "source_id" TEXT PRIMARY KEY REFERENCES "users"("source_id") ON DELETE CASCADE',
+        '  "null_fields" TEXT NOT NULL',
+        '  "missing_fields" TEXT NOT NULL DEFAULT \'[]\'',
+        '  "edit_token" TEXT'
+      ],
+      indexes: [],
+      notes: ["Preserves explicit nulls and omissions outside the 100-column users table"]
+    });
+    indexes.push(
+      'CREATE UNIQUE INDEX IF NOT EXISTS "idx_users_auth_username" ON "users" ("username");',
+      'CREATE UNIQUE INDEX IF NOT EXISTS "idx_users_auth_email" ON "users" ("email") WHERE "email" IS NOT NULL;',
+      'CREATE UNIQUE INDEX IF NOT EXISTS "idx_users_auth_phone" ON "users" ("phone") WHERE "phone" IS NOT NULL;',
+      'CREATE UNIQUE INDEX IF NOT EXISTS "idx_users_auth_firebase_uid" ON "users" ("firebase_uid") WHERE "firebase_uid" IS NOT NULL;'
+    );
+  }
+  if (modelName === "DeviceToken") {
+    indexes.push('CREATE UNIQUE INDEX IF NOT EXISTS "idx_device_tokens_token" ON "device_tokens" ("token");');
+  }
+  if (modelName === "Follow") {
+    indexes.push(
+      'CREATE INDEX IF NOT EXISTS "idx_follows_follower" ON "follows" ("follower_id", "following_id");',
+      'CREATE INDEX IF NOT EXISTS "idx_follows_following" ON "follows" ("following_id");'
+    );
+  }
+  if (modelName === "Friendship") {
+    indexes.push(
+      'CREATE INDEX IF NOT EXISTS "idx_friendships_user_status" ON "friendships" ("user_id", "status");',
+      'CREATE INDEX IF NOT EXISTS "idx_friendships_friend_status" ON "friendships" ("friend_id", "status");'
+    );
+  }
+  if (modelName === "Block") {
+    indexes.push('CREATE INDEX IF NOT EXISTS "idx_blocks_pair" ON "blocks" ("blocker_id", "blocked_user_id");');
+  }
+  if (modelName === "TrustVerification") {
+    indexes.push('CREATE INDEX IF NOT EXISTS "idx_trust_verifications_user" ON "trust_verifications" ("user_id");');
+  }
+  if (modelName === "ProfileVisit") {
+    indexes.push('CREATE UNIQUE INDEX IF NOT EXISTS "idx_profile_visits_pair" ON "profile_visits" ("profile_id", "visitor_id");');
+  }
+  if (modelName === "XpGrant") {
+    indexes.push('CREATE UNIQUE INDEX IF NOT EXISTS "idx_xp_grants_action" ON "xp_grants" ("user_id", "event", "action_key");');
+  }
+  if (modelName === "Season") {
+    indexes.push(
+      'CREATE UNIQUE INDEX IF NOT EXISTS "idx_seasons_key" ON "seasons" ("key");',
+      'CREATE INDEX IF NOT EXISTS "idx_seasons_active_start" ON "seasons" ("active", "start_date" DESC);'
+    );
+  }
+  if (modelName === "BattlePass") {
+    indexes.push('CREATE UNIQUE INDEX IF NOT EXISTS "idx_battle_passes_user_season" ON "battle_passes" ("user_id", "season_id");');
+  }
+  if (modelName === "BattlePassXpGrant") {
+    indexes.push('CREATE UNIQUE INDEX IF NOT EXISTS "idx_battle_pass_xp_grants_action" ON "battle_pass_xp_grants" ("user_id", "season_id", "action_key");');
+  }
+  if (modelName === "WalletTransaction") {
+    indexes.push(`CREATE UNIQUE INDEX IF NOT EXISTS "idx_wallet_transactions_idempotency" ON "wallet_transactions" ("user_id", json_extract("metadata", '$.idempotencyKey')) WHERE json_type("metadata", '$.idempotencyKey') = 'text';`);
+  }
+  if (modelName === "AuthSession") {
+    notes.push("token_version_present distinguishes omitted legacy generations from explicit null");
+    columns.push('  "token_version_present" INTEGER NOT NULL CHECK ("token_version_present" IN (0, 1) AND ("token_version_present" = 1 OR "token_version" IS NULL))');
+    indexes.push(
+      'CREATE UNIQUE INDEX IF NOT EXISTS "idx_auth_sessions_refresh_hash" ON "auth_sessions" ("refresh_hash");',
+      'CREATE INDEX IF NOT EXISTS "idx_auth_sessions_user_active" ON "auth_sessions" ("user_id", "revoked_at");',
+      'CREATE INDEX IF NOT EXISTS "idx_auth_sessions_family_active" ON "auth_sessions" ("family_id", "revoked_at");'
+    );
+  }
+  if (modelName === "MiniGameScore") {
+    columns.push('  "catalog_fields" TEXT NOT NULL DEFAULT \'{}\'');
+    indexes.push(
+      'CREATE INDEX IF NOT EXISTS "idx_mini_game_scores_catalog_best" ON "mini_game_scores" ("user_id", "game_id", "score" DESC, "created_at" ASC);',
+      'CREATE INDEX IF NOT EXISTS "idx_mini_game_scores_catalog_recent" ON "mini_game_scores" ("user_id", "created_at" DESC);'
+    );
+  }
+  return [{ model: modelName, table, columns, indexes, notes }];
 }
 
 async function main() {

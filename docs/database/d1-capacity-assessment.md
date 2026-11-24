@@ -1,5 +1,7 @@
 # D1 capacity and suitability assessment
 
+**Applicability:** This Phase 0 assessment records the original Paid-tier criteria. See the [active $0 migration plan](../migration/implementation-plan.md#3-d1-free-evaluation-and-data-migration) for the bounded D1 Free evaluation.
+
 **Date:** 2026-11-22  
 **Status:** Database target was decided as D1 by the owner on 2026-11-22 ([ADR-0001](../decisions/0001-d1-and-r2-target.md)), but **D1 is not approved for production** as of 2026-11-23 ([ADR-0007](../decisions/0007-dcr2-capacity-gate-not-approved.md)): production metrics are unavailable and Workers Paid is not enabled. The capacity assessment is incomplete and parked; no D1 production database has been provisioned. MongoDB remains authoritative, and the Hyperdrive fallback is reopened. All tooling below is local preparation only, not evidence or acceptance.
 

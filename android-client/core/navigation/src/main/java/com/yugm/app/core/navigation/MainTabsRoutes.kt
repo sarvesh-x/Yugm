@@ -1,5 +1,7 @@
 package com.yugm.app.core.navigation
 
+import androidx.lifecycle.SavedStateHandle
+
 /** The five main application tabs, in stable tab order, as tab identifiers. */
 enum class MainTabDestination { GAME_ZONE, PARTY, DISCOVER, CHAT, PROFILE }
 
@@ -17,9 +19,14 @@ object MainTabsRoutes {
     const val DISCOVER = "discover"
     const val CHAT = "chat"
     const val PROFILE = "profile"
+    const val TAB_REQUEST_KEY = "tab_request"
+    const val SAVED_PAGE_KEY = "main_tab_page"
 
     /** The five main root destinations: Arcade (GAME_ZONE), Party, Discover, Chat, Profile. */
     val ALL: Set<String> = setOf(GAME_ZONE, PARTY, DISCOVER, CHAT, PROFILE)
+
+    fun restoredPage(state: SavedStateHandle): Int? =
+        state.get<Int>(SAVED_PAGE_KEY)?.takeIf { it in 0 until ALL.size }
 
     /** True when the back stack entry is the main tabs host itself (the whitelist destination). */
     fun isMainTabs(route: String?): Boolean = route == Screen.MainTabs.route

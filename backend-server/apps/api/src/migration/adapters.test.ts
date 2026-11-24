@@ -37,7 +37,10 @@ test("D1 writer quotes identifiers, chunks to the 100-parameter limit and binds 
   await new D1TargetWriter(db).write("users", rows);
 
   assert.equal(db.runs.length, 3);
-  assert.ok(db.runs.every((statement) => statement.sql.startsWith('INSERT OR REPLACE INTO "users" ("coins", "name", "source_id")')));
+  assert.ok(db.runs.every((statement) => statement.sql.startsWith('INSERT INTO "users" ("coins", "name", "source_id")')));
+  assert.ok(db.runs.every((statement) => statement.sql.endsWith(
+    'ON CONFLICT ("source_id") DO UPDATE SET "coins" = excluded."coins", "name" = excluded."name"'
+  )));
   assert.deepEqual(db.runs.map((statement) => statement.values.length / 3), [33, 33, 4]);
   assert.equal(db.runs[0].values.length, 99);
 });
@@ -62,8 +65,8 @@ test("D1 writeBatch submits all chunks in one atomic batch", async () => {
   ]);
   assert.equal(db.batches.length, 1);
   assert.equal(db.batches[0].length, 2);
-  assert.match(db.batches[0][0].sql, /INSERT OR REPLACE INTO "users"/);
-  assert.match(db.batches[0][1].sql, /INSERT OR REPLACE INTO "wallet_transactions"/);
+  assert.match(db.batches[0][0].sql, /INSERT INTO "users"/);
+  assert.match(db.batches[0][1].sql, /INSERT INTO "wallet_transactions"/);
   await new D1TargetWriter(db).write("users", []);
   assert.equal(db.runs.length, 0);
 });

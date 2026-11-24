@@ -59,7 +59,6 @@ test("bonds normalize reference/primitive children and canonicalize per-user pre
   assert.equal(row.activated_at, "2026-01-02T03:04:05.000Z");
   assert.equal(row.points, 120);
   assert.equal(row.version, 3);
-  assert.equal(row.milestone_days, "[1,7]");
   assert.equal(row.next_milestone_at, "2026-01-08T00:00:00.000Z");
   assert.deepEqual(table(result, "bond_users"), [
     { source_id: `${BOND}:users:0`, value: A, bonds_id: BOND, position: 0 },
@@ -69,7 +68,15 @@ test("bonds normalize reference/primitive children and canonicalize per-user pre
     { source_id: `${BOND}:slots:0`, value: 0, bonds_id: BOND, position: 0 },
     { source_id: `${BOND}:slots:1`, value: 2, bonds_id: BOND, position: 1 }
   ]);
-  const preferences = JSON.parse(String(row.preferences));
+  assert.deepEqual(table(result, "bond_milestones"), [
+    { source_id: `${BOND}:milestoneDays:0`, day: 1, bonds_id: BOND, position: 0 },
+    { source_id: `${BOND}:milestoneDays:1`, day: 7, bonds_id: BOND, position: 1 }
+  ]);
+  const preferenceRows = table(result, "bond_preferences");
+  assert.deepEqual(preferenceRows.map(({ source_id, key, bonds_id, position }) => [source_id, key, bonds_id, position]), [
+    [`${BOND}:preferences:${A}`, A, BOND, 0], [`${BOND}:preferences:${B}`, B, BOND, 1]
+  ]);
+  const preferences = Object.fromEntries(preferenceRows.map(row => [row.key, JSON.parse(String(row.value_json))]));
   assert.equal(preferences[A].visibility, "FRIENDS");
   assert.equal(preferences[A].showDuration, 0);
   assert.equal(preferences[A].reminders, 0);
@@ -78,6 +85,17 @@ test("bonds normalize reference/primitive children and canonicalize per-user pre
   assert.equal(preferences[B].leaderboard, 1);
   assert.equal(preferences[B].announcements, 1);
   assertColumns(result);
+});
+
+test("duplicate bond milestones surface a rejected row", () => {
+  const { result, context } = map("bonds", {
+    _id: BOND, pairKey: `${A}:${B}`, users: [A, B], slots: [0, 1], kind: "BESTIE",
+    activatedAt: "2026-01-02T03:04:05Z", milestoneDays: [1, 1]
+  });
+  assert.equal(result.rejected, true);
+  assert.deepEqual(result.writes, []);
+  assert.equal(context.quarantine[0]?.field, "milestoneDays");
+  assert.equal(context.quarantine[0]?.detail, "duplicate milestone day");
 });
 
 test("bonds reject an invalid status and missing required arrays", () => {
@@ -315,8 +333,7 @@ test("bond preferences accept Mongoose Map values and soft-quarantine invalid ne
     activatedAt: "2026-01-02T03:04:05Z",
     preferences
   });
-  const row = table(result, "bonds")[0];
-  const parsed = JSON.parse(String(row.preferences));
+  const parsed = Object.fromEntries(table(result, "bond_preferences").map(row => [row.key, JSON.parse(String(row.value_json))]));
   assert.equal(result.rejected, false);
   assert.equal(parsed[A].visibility, "FRIENDS");
   assert.equal(parsed[A].showBadge, 0);

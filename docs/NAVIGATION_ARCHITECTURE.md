@@ -59,8 +59,7 @@ Dead routes (no composable/callers as audited): `Screen.OtpVerify`, `Screen.User
 
 - Main-tabs host: `main_tabs?tab={id}` via `Screen.MainTabs.createRoute(tab)`.
 - Canonical tab ids (stable): `game_zone`, `party`, `discover`, `chat`, `profile`.
-- Legacy compatibility aliases normalized by `MainTabsRoutes.normalizeTab(...)`: `live`/`voice`
-  → `party`, `arcade`/`yugm_arcade` → `game_zone`, `messages` → `chat`, `account`/`me` → `profile`.
+- The current `MainTabsRoutes.normalizeTab(...)` accepts `live`, `voice_rooms` and `voicerooms` for Party, `game`, `games` and `gamezone` for the games root, `chats`, `chat_list` and `chatlist` for Chat, and `mine` for Profile. Canonical IDs also work.
 - Unknown/blank tab input normalizes to `discover` (a whitelisted root) and never to an off-root
   destination.
 - Legacy top-level stub routes (`discover`, `chat_list`, `voice_rooms`, `games`) redirect to the
@@ -75,10 +74,10 @@ Dead routes (no composable/callers as audited): `Screen.OtpVerify`, `Screen.User
 - **Idempotency:** repeated selection of the active tab is a no-op for navigation/scrolling
   (`tabScrollTarget`); `navigateTopLevel` does not stack duplicate `main_tabs` entries and does
   not re-navigate to an already-current secondary destination.
-- **Top-level switching:** when already on `MainTabs`, a root request sets `tab_request` on the
-  existing entry. When `MainTabs` exists elsewhere in the stack, it is revealed with
-  `popBackStack(MainTabs, inclusive = false)` rather than duplicated. Secondary destinations are
-  revealed via `popBackStack(route, false)` when present, otherwise navigated with `launchSingleTop`.
+- **Top-level switching:** a root request sets `tab_request` on the current `MainTabs` entry or
+  reveals the existing entry and then sends the request to it. Normal Back to `MainTabs` restores
+  the originating tab. Secondary destinations use `popBackStack(route, false)` when present and
+  `launchSingleTop` when opened.
 - **Reselection:** selecting the active tab is handled by the host (e.g. scroll-to-top/reselect
   signals for Discover/Party and per-tab reselect signals) without recreating destinations or
   reloading data unnecessarily.
@@ -88,12 +87,16 @@ Dead routes (no composable/callers as audited): `Screen.OtpVerify`, `Screen.User
 - **Deep links:** not currently registered (see audit F6). When added, register them against the
   canonical routes and ensure they resolve to `main_tabs?tab=…` for root targets and to the
   exact secondary route otherwise, with `launchSingleTop`/`popUpTo` matching this contract.
-- **Push/notification intents:** `MainActivity.routeFromPushIntent(...)` targets secondary routes
-  directly (dock hidden). `NotificationTarget.kt` exists but is not yet the unified runtime
-  mapper; unification/`launchSingleTop` parity is a documented follow-up.
+- **Push intents:** `PushNavigation` resolves the existing notification extras to secondary routes
+  and opens them with `launchSingleTop` after startup, sign-in and profile completion. The activity
+  saves whether the route is pending or consumed across recreation. The in-app banner still
+  resolves its destinations in `MainActivity`. [Emulator checks](handoffs/2026-11-24-navigation-recreation.md)
 - **Configuration/process recreation:** the settled pager page is persisted as `main_tab_page` on
-  the `MainTabs` back-stack entry's `SavedStateHandle` and restored as the pager's initial page,
-  so the selected tab and dock visibility survive recreation.
+  the `MainTabs` destination's own `SavedStateHandle` and restored as the pager's initial page.
+  On process restart, `MainActivity` starts session validation before attaching the restored graph.
+  A saved authenticated task requires the same eligible account. Transient startup failures use
+  the bounded cached-session policy.
+  Dock eligibility continues to follow the current destination as the stack changes. [Process restart checks](handoffs/2026-11-24-navigation-process-restart.md)
 
 ## State and system-inset ownership
 

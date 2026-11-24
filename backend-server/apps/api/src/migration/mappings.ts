@@ -8,6 +8,7 @@
  * be reviewed against docs/database/mongo-to-relational-mapping.md before use.
  */
 import { stableStringify } from "./snapshot.js";
+import { ACTIVE_COSMETIC_KEYS, AVATAR_PART_KEYS, authProfileNullFields, missingProfileFields } from "./authProfileFields.js";
 import {
   toBoolean,
   toEnum,
@@ -98,13 +99,6 @@ const PK_INVITE_STATUSES = ["PENDING", "ACCEPTED", "REJECTED", "EXPIRED", "CANCE
 const PK_PARTICIPANT_ROLES = ["HOST", "SPEAKER", "AUDIENCE", "MODERATOR"] as const;
 const PK_TEAM_NAMES = ["A", "B"] as const;
 
-const ACTIVE_COSMETIC_KEYS = [
-  "avatarAsset", "avatarFrame", "speakingWave", "profileTheme", "entranceEffect",
-  "profileBadge", "nameStyle", "roomEntry", "moodStatus", "profileMusic",
-  "voiceBadge", "roomTheme", "avatarDecoration", "reactionPack", "profileLayout",
-  "profileBanner", "introCard", "collectibleTitle", "giftShelf", "chatBubble",
-  "seasonalEvent", "videoCallOverlay", "roomBadge", "roomAmbience"
-] as const;
 const NOTIFICATION_KEYS = [
   "roomInvites", "messages", "gifts", "follows", "hostGoingLive", "wallet", "safety", "marketing"
 ] as const;
@@ -272,7 +266,7 @@ function mapUser(record: SourceRecord, context: TransformContext): MappedRecord 
   };
 
   const avatarParts = (record.avatarParts ?? {}) as Record<string, unknown>;
-  for (const key of ["background", "clothes", "head", "mouth", "eyes", "top"] as const) {
+  for (const key of AVATAR_PART_KEYS) {
     row[`avatar_parts_${key}`] = optInteger(avatarParts[key], f(`avatarParts.${key}`), { min: 0, max: 47 });
   }
 
@@ -293,7 +287,7 @@ function mapUser(record: SourceRecord, context: TransformContext): MappedRecord 
   row.streak_count = toInteger(record.streakCount ?? 0, f("streakCount"), { min: 0 }) ?? 0;
   row.badge_revision = optInteger(record.badgeRevision, f("badgeRevision"));
   row.vip_level = toInteger(record.vipLevel ?? 0, f("vipLevel"), { min: 0, max: 7 }) ?? 0;
-  row.vip_exp = toInteger(record.vipExp ?? 0, f("vipExp"), { min: 0 }) ?? 0;
+  row.vip_exp = toInteger(record.vipExp ?? 0, f("vipExp")) ?? 0;
   row.vip_frozen = toBoolean(record.vipFrozen ?? false, f("vipFrozen")) ?? 0;
   row.mysterious_visitors = toBoolean(record.mysteriousVisitors ?? false, f("mysteriousVisitors")) ?? 0;
   row.moderation_strikes = toInteger(record.moderationStrikes ?? 0, f("moderationStrikes"), { min: 0 }) ?? 0;
@@ -317,6 +311,10 @@ function mapUser(record: SourceRecord, context: TransformContext): MappedRecord 
     primitiveChildren(collection, table, "users", sourceId, name, values, context);
   const writes: TargetWrite[] = [
     { table: "users", rows: [row] },
+    { table: "user_auth_profile", rows: [{
+      source_id: sourceId ?? null, null_fields: JSON.stringify(authProfileNullFields(record)),
+      missing_fields: JSON.stringify(missingProfileFields(record))
+    }] },
     primitive("interests", "user_interests", record.interests),
     primitive("hobbies", "user_hobbies", record.hobbies),
     primitive("languages", "user_languages", record.languages),
@@ -382,7 +380,7 @@ function mapAuthSession(record: SourceRecord, context: TransformContext): Mapped
   const familyId = toRequiredString(record.familyId, f("familyId"));
   const refreshHash = toRequiredString(record.refreshHash, f("refreshHash"));
   const expiresAt = toUtcIso(record.expiresAt, f("expiresAt"));
-  const tokenVersion = toInteger(record.tokenVersion ?? 0, f("tokenVersion"), { min: 0 });
+  const tokenVersion = record.tokenVersion == null ? null : toInteger(record.tokenVersion, f("tokenVersion"), { min: 0 });
   const lastUsedAt = toUtcIso(record.lastUsedAt, f("lastUsedAt"));
   if (rejected([sourceId, userId, familyId, refreshHash, expiresAt, tokenVersion, lastUsedAt])) {
     return { writes: [], rejected: true };
@@ -393,6 +391,7 @@ function mapAuthSession(record: SourceRecord, context: TransformContext): Mapped
     family_id: familyId,
     refresh_hash: refreshHash,
     token_version: tokenVersion,
+    token_version_present: Object.hasOwn(record, "tokenVersion") && record.tokenVersion !== undefined ? 1 : 0,
     expires_at: expiresAt,
     last_used_at: lastUsedAt,
     revoked_at: optDate(record.revokedAt, f("revokedAt")),
@@ -2096,6 +2095,10 @@ function mapMiniGameChallenge(record: SourceRecord, context: TransformContext): 
   return { writes: [{ table: collection, rows: [row] }], rejected: false };
 }
 
+const miniGameScoreColumns = new Set([
+  "_id", "userId", "gameId", "score", "durationMs", "rounds", "metadata", "createdAt", "updatedAt"
+]);
+
 function mapMiniGameScore(record: SourceRecord, context: TransformContext): MappedRecord {
   const collection = "mini_game_scores";
   const f = (name: string) => field(collection, name, String(record._id ?? "<unknown>"), context);
@@ -2105,6 +2108,13 @@ function mapMiniGameScore(record: SourceRecord, context: TransformContext): Mapp
   const score = toInteger(record.score, f("score"), { min: 0, max: 999999 });
   const metadata = jsonMetadata(record.metadata, f("metadata"));
   if (rejected([sourceId, userId, gameId, score, metadata])) return { writes: [], rejected: true };
+  // Catalog returns raw lean documents. Keep legacy fields such as __v, and
+  // distinguish explicit null or empty metadata from omitted fields.
+  const catalogFields = Object.fromEntries(Object.entries(record).filter(([key, value]) =>
+    value !== undefined && (
+      !miniGameScoreColumns.has(key) || value === null || (key === "metadata" && metadata === "{}")
+    )
+  ));
   const row: TargetRow = {
     source_id: sourceId ?? null,
     user_id: userId ?? null,
@@ -2113,6 +2123,7 @@ function mapMiniGameScore(record: SourceRecord, context: TransformContext): Mapp
     duration_ms: optInteger(record.durationMs, f("durationMs"), { min: 0, max: 300000 }),
     rounds: optInteger(record.rounds, f("rounds"), { min: 0, max: 1000 }),
     metadata,
+    catalog_fields: stableStringify(catalogFields),
     created_at: optDate(record.createdAt, f("createdAt")),
     updated_at: optDate(record.updatedAt, f("updatedAt"))
   };
@@ -2982,7 +2993,7 @@ function mapRelationship(record: SourceRecord, context: TransformContext): Mappe
   return { writes: [{ table: collection, rows: [row] }, users], rejected: false };
 }
 
-/** Bond.preferences is a Map keyed by actor ID; emit canonical JSON with Mongoose defaults. */
+/** Bond.preferences is a Map keyed by actor ID. Preserve defaults in each actor's value. */
 const BOND_PREFERENCE_DEFAULTS = {
   visibility: "PRIVATE",
   showDuration: true,
@@ -2994,7 +3005,7 @@ const BOND_PREFERENCE_DEFAULTS = {
   announcements: false
 } as const;
 
-function canonicalBondPreferences(value: unknown, collection: string, rowId: string | undefined, context: TransformContext): string {
+function bondPreferenceRows(value: unknown, collection: string, rowId: string | undefined, context: TransformContext): TargetWrite {
   const entries: Array<[unknown, unknown]> = [];
   if (value instanceof Map) {
     entries.push(...value.entries());
@@ -3004,13 +3015,17 @@ function canonicalBondPreferences(value: unknown, collection: string, rowId: str
     context.reject(softField(collection, "preferences", rowId, context), "INVALID_REFERENCE", "expected a Map or object");
   }
 
-  const preferences: Record<string, Record<string, unknown>> = {};
+  const preferences = new Map<string, Record<string, unknown>>();
   for (const [rawKey, rawValue] of entries) {
     const key = toRequiredString(
       typeof rawKey === "string" || typeof rawKey === "number" ? String(rawKey) : "",
       softField(collection, "preferences.<key>", rowId, context)
     );
     if (!key) continue;
+    if (preferences.has(key)) {
+      context.reject(softField(collection, `preferences.${key}`, rowId, context), "INVALID_REFERENCE", "duplicate normalized preference key");
+      continue;
+    }
 
     let source: Record<string, unknown> | undefined;
     if (rawValue instanceof Map) {
@@ -3023,7 +3038,7 @@ function canonicalBondPreferences(value: unknown, collection: string, rowId: str
     source ??= {};
 
     const prefField = (name: string) => softField(collection, `preferences.${key}.${name}`, rowId, context);
-    preferences[key] = {
+    preferences.set(key, {
       visibility: toEnum(source.visibility ?? BOND_PREFERENCE_DEFAULTS.visibility, BOND_PREFERENCE_VISIBILITIES, prefField("visibility"))
         ?? BOND_PREFERENCE_DEFAULTS.visibility,
       showDuration: toBoolean(source.showDuration ?? BOND_PREFERENCE_DEFAULTS.showDuration, prefField("showDuration"))
@@ -3040,9 +3055,13 @@ function canonicalBondPreferences(value: unknown, collection: string, rowId: str
         ?? (BOND_PREFERENCE_DEFAULTS.reminders ? 1 : 0),
       announcements: toBoolean(source.announcements ?? BOND_PREFERENCE_DEFAULTS.announcements, prefField("announcements"))
         ?? (BOND_PREFERENCE_DEFAULTS.announcements ? 1 : 0)
-    };
+    });
   }
-  return stableStringify(preferences);
+  const rows = [...preferences.keys()].sort().map((key, position) => ({
+    source_id: `${rowId}:preferences:${key}`, bonds_id: rowId ?? "", key, position,
+    value_json: stableStringify(preferences.get(key))
+  }));
+  return { table: "bond_preferences", rows };
 }
 
 function canonicalBondEntries(value: unknown, collection: string, rowId: string | undefined, context: TransformContext): string | undefined {
@@ -3080,8 +3099,23 @@ function mapBond(record: SourceRecord, context: TransformContext): MappedRecord 
   const activatedAt = toUtcIso(record.activatedAt, f("activatedAt"));
   const points = toInteger(record.points ?? 0, f("points"));
   const version = toInteger(record.version ?? 1, f("version"));
-  const milestoneDays = canonicalIntegerList(record.milestoneDays ?? [], collection, "milestoneDays", sourceId, context);
-  const preferences = canonicalBondPreferences(record.preferences, collection, sourceId, context);
+  if (record.milestoneDays != null && !Array.isArray(record.milestoneDays)) {
+    context.reject(softField(collection, "milestoneDays", sourceId, context), "INVALID_REFERENCE", "expected an array");
+  }
+  const milestones = childRows({
+    collection, table: "bond_milestones", parentTable: collection, parentId: sourceId,
+    fieldName: "milestoneDays", elements: record.milestoneDays, context,
+    build: (raw, entry) => {
+      const day = toInteger(raw.value, entry);
+      return day === undefined ? undefined : { day };
+    }
+  });
+  const days = milestones.rows.map(row => row.day);
+  if (new Set(days).size !== days.length) {
+    context.reject(f("milestoneDays"), "INVALID_REFERENCE", "duplicate milestone day");
+    return { writes: [], rejected: true };
+  }
+  const preferences = bondPreferenceRows(record.preferences, collection, sourceId, context);
   const usersValid = Array.isArray(record.users);
   const slotsValid = Array.isArray(record.slots);
   if (!usersValid) context.reject(f("users"), "MISSING_REQUIRED", "Bond.users is required");
@@ -3089,7 +3123,7 @@ function mapBond(record: SourceRecord, context: TransformContext): MappedRecord 
   const users = referenceChildren(collection, "bond_users", collection, sourceId, "users", record.users, context);
   const slots = integerChildren(collection, "bond_slots", collection, sourceId, "slots", record.slots, context);
   if (rejected([
-    sourceId, pairKey, kind, status, activatedAt, points, version, milestoneDays, preferences,
+    sourceId, pairKey, kind, status, activatedAt, points, version,
     usersValid ? true : undefined, slotsValid ? true : undefined
   ])) {
     return { writes: [], rejected: true };
@@ -3104,15 +3138,13 @@ function mapBond(record: SourceRecord, context: TransformContext): MappedRecord 
     ended_by: optReference(record.endedBy, f("endedBy")),
     points: points ?? null,
     version: version ?? null,
-    milestone_days: milestoneDays,
     next_milestone_at: optDate(record.nextMilestoneAt, f("nextMilestoneAt")),
     anniversary_reminder_at: optDate(record.anniversaryReminderAt, f("anniversaryReminderAt")),
-    preferences,
     created_at: optDate(record.createdAt, f("createdAt")),
     updated_at: optDate(record.updatedAt, f("updatedAt"))
   };
   context.keep(collection);
-  return { writes: [{ table: collection, rows: [row] }, users, slots], rejected: false };
+  return { writes: [{ table: collection, rows: [row] }, users, slots, milestones, preferences], rejected: false };
 }
 
 function mapBondPoint(record: SourceRecord, context: TransformContext): MappedRecord {

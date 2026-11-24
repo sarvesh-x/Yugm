@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.lifecycle.SavedStateHandle
 import com.yugm.app.core.model.Room
 import com.yugm.app.core.model.RoomType
 import com.yugm.app.core.navigation.MainTabDestination
@@ -48,7 +49,6 @@ internal const val TAB_DISCOVER = 2
 internal const val TAB_CHAT = 3
 internal const val TAB_PROFILE = 4
 internal const val TAB_PAGE_COUNT = 5
-internal const val MAIN_TAB_PAGE_KEY = "main_tab_page"
 
 internal fun normalizeMainTab(tab: String): Int = when (MainTabsRoutes.normalizeTab(tab)) {
     MainTabDestination.GAME_ZONE -> TAB_GAME_ZONE
@@ -82,6 +82,7 @@ internal fun tabScrollTarget(currentPage: Int, requestedPage: Int): Int? =
 @Composable
 fun MainTabsScreen(
     navController: NavHostController,
+    mainTabsState: SavedStateHandle,
     token: String,
     currentUserId: String,
     initialTab: String = "discover",
@@ -96,18 +97,15 @@ fun MainTabsScreen(
     val backStackEntry by navController.currentBackStackEntryAsState()
     // Process-death/configuration restoration: the last selected page is persisted on the
     // main-tabs back stack entry so the pager resumes on the tab the user was on.
-    val restoredTabPage = remember(backStackEntry) {
-        val saved = backStackEntry?.savedStateHandle?.get<Int>(MAIN_TAB_PAGE_KEY)
-        if (saved != null && saved in 0 until TAB_PAGE_COUNT) saved else -1
-    }
+    val restoredTabPage = remember(mainTabsState) { MainTabsRoutes.restoredPage(mainTabsState) }
     var appliedInitialTab by rememberSaveable { mutableStateOf<String?>(null) }
     val pagerState = rememberPagerState(
-        initialPage = if (restoredTabPage >= 0) restoredTabPage else requestedPage,
+        initialPage = restoredTabPage ?: requestedPage,
         pageCount = { TAB_PAGE_COUNT }
     )
     val scope = rememberCoroutineScope()
-    LaunchedEffect(pagerState.settledPage) {
-        backStackEntry?.savedStateHandle?.set(MAIN_TAB_PAGE_KEY, pagerState.settledPage)
+    LaunchedEffect(mainTabsState, pagerState.settledPage) {
+        mainTabsState[MainTabsRoutes.SAVED_PAGE_KEY] = pagerState.settledPage
     }
     val chatListViewModel: ChatListViewModel = hiltViewModel()
     val chatUnreadBadge = remember(chatListViewModel.unreadCounts, chatListViewModel.mutedPartnerIds) {
@@ -128,7 +126,7 @@ fun MainTabsScreen(
         // restored saved page is already the pager's initial page, so do not scroll away from it.
         if (appliedInitialTab == initialTab) return@LaunchedEffect
         val target = normalizeMainTab(initialTab)
-        if (restoredTabPage >= 0) {
+        if (restoredTabPage != null) {
             appliedInitialTab = initialTab
             return@LaunchedEffect
         }

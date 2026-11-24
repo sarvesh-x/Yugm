@@ -3,6 +3,7 @@ package com.yugm.app.ui.viewmodel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yugm.app.core.data.SessionManager
@@ -20,6 +21,7 @@ import java.util.concurrent.TimeUnit
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -92,15 +94,23 @@ class MainViewModel @Inject constructor(
         inAppNotification = null
     }
 
-    /** Validate restored auth/profile data before the splash chooses an authenticated route. */
-    suspend fun validateStartupSession() {
+    fun startStartupSessionCheck() {
+        if (startupSessionCheckStarted || startupSessionCheckComplete) return
+        startupSessionCheckStarted = true
+        viewModelScope.launch { validateStartupSession() }
+    }
+
+    suspend fun awaitStartupSessionCheck() {
+        snapshotFlow { startupSessionCheckComplete }.first { it }
+    }
+
+    /** Validate restored auth/profile data whether navigation starts at Splash or restores its stack. */
+    private suspend fun validateStartupSession() {
         val token = sessionManager.authToken
-        if (token.isBlank() || startupSessionCheckComplete) {
+        if (token.isBlank()) {
             startupSessionCheckComplete = true
             return
         }
-        if (startupSessionCheckStarted) return
-        startupSessionCheckStarted = true
         try {
             withTimeout(10_000L) {
                 val user = withContext(Dispatchers.IO) { yugmApi.authMe(token) }

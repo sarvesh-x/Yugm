@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-11-23T04:36:33.718Z",
+  "generatedAt": "2026-11-24T04:41:56.158Z",
   "source": "Mongoose model introspection (local source only)",
   "modelsImported": 91,
   "importFailures": [],
   "rootTableCount": 97,
-  "totalTableCount": 146,
+  "totalTableCount": 147,
   "childTables": [
     "achievement_tiers",
     "admin_role_permissions",
@@ -40,6 +40,7 @@
     "story_highlight_stories",
     "story_views",
     "support_ticket_messages",
+    "user_auth_profile",
     "user_badge_grants",
     "user_claimed_achievement_tiers",
     "user_claimed_achievements",

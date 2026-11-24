@@ -85,6 +85,17 @@ export function getLevelStatus(user?: LevelUser | null) {
   };
 }
 
+export function getLevelPromotion(previousLevel: number, nextLevel: number) {
+  const rewards = Array.from(
+    { length: Math.max(0, nextLevel - previousLevel) },
+    (_, index) => getLevelMilestone(previousLevel + index + 1)
+  );
+  return {
+    levelUpReward: rewards.reduce((sum, milestone) => sum + milestone.coinReward, 0),
+    levelsGained: rewards.map(milestone => milestone.level)
+  };
+}
+
 export async function grantXp(userId: string, event: XpEvent, metadata: Record<string, unknown> = {}, amountOverride?: number) {
   const startedAt = Date.now();
   let xpAwarded: number = Math.max(0, Math.floor(amountOverride ?? xpEvents[event]));
@@ -214,12 +225,7 @@ export async function grantXp(userId: string, event: XpEvent, metadata: Record<s
   let levelsGained: number[] = [];
   if (promoted) {
     const previousLevel = Number(promoted.level ?? 1);
-    const rewards = Array.from(
-      { length: Math.max(0, status.level - previousLevel) },
-      (_, index) => getLevelMilestone(previousLevel + index + 1)
-    );
-    levelUpReward = rewards.reduce((sum, milestone) => sum + milestone.coinReward, 0);
-    levelsGained = rewards.map((milestone) => milestone.level);
+    ({ levelUpReward, levelsGained } = getLevelPromotion(previousLevel, status.level));
     if (levelUpReward > 0) {
       await creditWallet(userId, levelUpReward, "LEVEL_REWARD", { event, levels: levelsGained, ...metadata });
     }

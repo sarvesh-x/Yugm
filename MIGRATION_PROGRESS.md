@@ -2,26 +2,99 @@
 
 This is the persistent, single-source tracker for the MongoDB/Render to Cloudflare migration. Update it after every phase. It records work actually performed and verified; it does not imply that a planned phase is complete.
 
-## Current phase
+## Current work
 
-| Field | Value |
-|---|---|
-| Phase | Phase 0 — audit, architecture decisions and implementation planning |
-| Status | Audit/planning complete; DCR-1/DCR-2/DCR-3 and DCR-5 authorization answered; local code + tests authorized; DCR-4 and detailed inputs still open |
-| Started | 2026-11-22 |
-| Last updated | 2026-11-23 |
-| Overall gate | No production data, credentials, DNS, billing, deploy, migration or release has been changed or authorized |
-| Commit/push | Owner authorized commit and push of the current local-only changes on 2026-11-22; deploy, provision, migration and release remain unauthorized |
+The [active 18-phase plan](docs/migration/implementation-plan.md) governs behavior preservation and zero-spend activation. The [preservation registries and gate tracker](docs/migration/MIGRATION_PROGRESS.md) record baseline evidence. [ADR-0008](docs/decisions/0008-zero-spend-cloudflare-migration.md) records the budget and conditional R2 direction. No production metrics are available. D1 Free can be evaluated against isolated workloads while MongoDB remains authoritative.
 
-## Scope for Phase 0
+Profile is the active journey after local Auth and Navigation checks. Settings, chat and rooms follow in the owner's order. [Journey order](docs/migration/implementation-plan.md#journey-order) · [Migration handoff](docs/handoffs/2026-11-24-migration-continuation.md)
 
-- Audit the actual backend, Android, admin, Worker prototype, schemas, APIs, realtime, media, jobs, infrastructure, tests and documentation without assuming docs are current.
-- Preserve the uncommitted R2 media/avatar foundation as the baseline; do not overwrite it.
-- Document the current system, target responsibilities, per-feature migration impact, database mapping, API compatibility, infrastructure environments, security/observability/cost controls and test plan.
-- Decide D1 versus PostgreSQL/Hyperdrive only after production capacity metrics are available.
-- Stop before destructive production changes, paid provisioning, credential handling or significant unresolved architecture decisions.
+| Workstream | Status | Next evidence |
+| --- | --- | --- |
+| Authentication | MongoDB and local D1 Auth journey fixtures passed. The isolated Worker passed the Auth lifecycle with D1 as its only service binding. | Verify live Firebase and App Check on Workers and the full Android Auth journey before rollout. [Local Worker evidence](docs/handoffs/2026-11-24-local-d1-auth-worker.md) |
+| Navigation | Full-app Android 17 checks passed for a notification tap, validated conversation restore, Profile tab and dock on Back, and revoked-session routing. | Live FCM and device parity remain open. [Emulator evidence](docs/handoffs/2026-11-24-navigation-process-restart.md) |
+| Profile | The local Worker serves reads and edits from D1. The mounted MongoDB fixture matched the committed Profile response and first-completion rewards. Concurrent setup and rollback passed. | Verify Android setup and Edit Profile. Live presence, invalidation and managed-avatar parity remain open. [Profile read evidence](docs/handoffs/2026-11-24-d1-profile-reads.md) · [Profile edit evidence](docs/handoffs/2026-11-24-d1-profile-edits.md) |
+| BullMQ and jobs | Notification contract characterized. Opt-in local Queues producer, consumer and SQLite outbox tested with controlled delivery. | Approved staging FCM/device parity, recovery timing under realistic usage, quota fit and legacy job drain. |
+| Redis and application realtime | Local native protocol, adapter and DO harnesses exist. The legacy DM persistence, retry, history and read-receipt fixture passed. | Use the DM fixture at the local repository and transport boundary, then run staged hybrid parity. |
+| D1 Free | Arcade catalog read passed the same HTTP fixture with MongoDB and local D1. Production DCR-2 is parked. | Arcade score writes are deferred at the owner's request. Evaluate other local slices independently. |
+| R2 and Images | Local avatar foundation and admin tools exist. Conditional scope on R2 Standard. | Demonstrate budget admission, pause behavior, category access and recovery before approving live use. |
+| RTC | LiveKit active. | Extract the provider boundary and validate SFU/TURN parity with enforceable egress limits before any live pilot. |
+| Recovery | Verified backup and restore evidence is missing. | Rehearse data, media and configuration recovery on approved isolated targets before production cutover. |
+
+The current work is local documentation, tests and compatibility preparation. Provisioning, billing changes, deployments, production data operations and commit/push require separate authorization. The work log below preserves prior evidence and checkpoints.
 
 ## Work log
+
+### 2026-11-24 — Local D1 Profile edits
+
+- Compared the D1 setup and edit responses and completion rewards with mounted MongoDB. The local Worker passed concurrent setup and different concurrent edits. The ledger failure fixture proved the Profile and reward writes roll back together. [Verification](docs/handoffs/2026-11-24-d1-profile-edits.md)
+
+### 2026-11-24 — Local D1 Profile reads
+
+- Compared the authenticated D1 reader with mounted MongoDB and exercised Profile reads and visit persistence in the bundled Worker. [Verification](docs/handoffs/2026-11-24-d1-profile-reads.md)
+
+### 2026-11-24 — Profile HTTP baseline and local D1 import
+
+- Verified Profile reads, edit validation, one-time completion XP and actor invalidation. Repaired the save response and the Bond milestone/preference import mismatch. The isolated D1 import retained the fixture's account state, relationship counts and completion receipts. [Verification](docs/handoffs/2026-11-24-profile-contract-baseline.md)
+
+### 2026-11-24 — Full-app Navigation after process death
+
+- Fixed a startup check skipped by restored screens and verified the request order and rendered dock on Android 17. A revoked session discarded the restored Settings stack and returned to Sign in. [Verification](docs/handoffs/2026-11-24-navigation-process-restart.md)
+
+### 2026-11-24 — Local D1 Auth Worker
+
+- Ran the existing Auth routes on a loopback Worker with local D1. The fixture verified sign-in, `/auth/me`, refresh rotation and logout without connecting to MongoDB or Redis. [Verification](docs/handoffs/2026-11-24-local-d1-auth-worker.md)
+
+### 2026-11-24 — Navigation recreation on the emulator
+
+- Fixed explicit tab requests after revealing an existing MainTabs entry. Verified back-stack and queued notification behavior across recreation on Android 17. [Verification](docs/handoffs/2026-11-24-navigation-recreation.md)
+
+### 2026-11-24 — Local Auth parity and Navigation baseline
+
+- Matched the local D1 candidate's Auth outcomes with MongoDB using the same route handlers. Started the Navigation baseline with the core route, dock and startup destination tests. [Auth evidence](docs/handoffs/2026-11-24-auth-journey-parity.md) · [Navigation evidence](docs/handoffs/2026-11-24-navigation-baseline.md)
+
+### 2026-11-24 — Auth access and revocation
+
+- Exercised the shared HTTP and Socket.IO guards on the MongoDB entry points and isolated D1 servers. Logout denied the next HTTP request and reconnect and blocked the open socket's next inbound packet. [Verification and scope](docs/handoffs/2026-11-24-auth-access-revocation.md)
+
+### 2026-11-24 — Auth session persistence adapters
+
+- Verified the shared token service on MongoDB and local D1. The D1 fixture exercised replay after concurrent refresh, account generation after concurrent login, batch rollback and explicit handling of import collisions. [Verification](docs/handoffs/2026-11-24-auth-session-store.md)
+
+### 2026-11-23 — Auth providers and local D1 session mapping
+
+- Added local provider, App Check and warm-session fixtures. Scoped the direct Google verifier to the configured client audience. Preserved legacy generation presence in the D1 mapper and verified it through a local binding. [Verification](docs/handoffs/2026-11-23-auth-providers-and-session-mapping.md)
+
+### 2026-11-23 — Authentication first
+
+- Recorded the owner's journey sequence and passed the first Auth characterization against the current HTTP routes with disposable MongoDB and fixture Firebase keys. Ten focused tests and API typecheck passed. [Auth handoff](docs/handoffs/2026-11-23-auth-journey-baseline.md)
+
+### 2026-11-23 — Legacy direct-message characterization
+
+- Deferred the Arcade write slice at the owner's request. Exercised the existing direct-message endpoints against disposable MongoDB and captured Socket.IO fan-out at the adapter boundary. The test records the distinct-message behavior of repeat sends, XP keys, history paging, read receipts, and privacy behavior. [Evidence](docs/handoffs/2026-11-23-direct-message-baseline.md)
+
+### 2026-11-23 — Local notification and push Queues slice
+
+- Characterized the inbox, socket, preferences and FCM payload behavior. Added an opt-in local Worker queue with durable retry, duplicate suppression, recovery and replay. The default dispatcher and deployed configurations keep the existing provider.
+- The focused route/service and local queue tests passed. The [handoff](docs/handoffs/2026-11-23-local-push-queues.md) records verification and the remaining cutover gates.
+
+### 2026-11-23 — Arcade catalog local D1 parity
+
+- The normal catalog route matched JSON and auth errors across MongoDB and local D1. Local usage was 20 rows read, zero written, and 1,601,536 bytes for the full draft schema and fixture. Production configuration still uses the MongoDB path. [Arcade D1 handoff](docs/handoffs/2026-11-23-arcade-catalog-d1-parity.md)
+
+### 2026-11-23 — Behavior-preservation baseline
+
+- Recorded the owner's 18-phase behavior-preservation directive and retained Firebase Auth/FCM and existing journeys. Refreshed the static source indexes and added registries for models, rules, journeys, HTTP, events and dependencies.
+- Ran the Arcade catalog against the Express app and disposable MongoDB to establish the first golden comparison. The new fixture checks the serialized response and persisted score state. See the [baseline handoff](docs/handoffs/2026-11-23-behavior-preservation-baseline.md).
+
+### 2026-11-23 — Push delivery retry contract
+
+- Reused the existing notification job and Firebase sender. Queue attempts now report delivery errors and persist transient device targets before retrying partial results.
+- API tests passed 467/467 and Worker typecheck passed. Cloudflare Queues wiring and provider integration are still pending. See the [handoff](docs/handoffs/2026-11-23-push-delivery-retries.md).
+
+### 2026-11-23 — Cloudflare migration replanned for $0
+
+- Recorded the budget decision, current provider sequence and R2 activation conditions. The plan uses measured isolated workloads to advance D1 Free evaluation without assuming production capacity.
+- Reviewed current Cloudflare quotas and billing semantics, repository status, Worker bindings and the existing notification delivery path. No runtime or account verification was performed. See the [handoff](docs/handoffs/2026-11-23-zero-spend-cloudflare-migration.md).
 
 ### 2026-11-23 — DCR-2 parked and not approved
 
@@ -703,19 +776,9 @@ This is the persistent, single-source tracker for the MongoDB/Render to Cloudfla
 - **Risks:** false confidence from documentation-only work; credential exposure; protocol and media-scope divergence; no recovery mechanism proven.
 - **Next task:** resolve DCR-1/DCR-3/DCR-4/DCR-5 and capacity inputs; then create and verify backups and rehearse a restore. Do not remove legacy infrastructure before validated replacement and explicit approval.
 
-## Phase status table
+## Release readiness
 
-| Phase | Description | Status | Approval needed |
-|---|---|---|---|
-| 0 | Audit, architecture, capacity inputs and implementation plan | Audit/planning complete and reconciled to the 26-phase directive; decision gates open | Credential remediation; realtime protocol; R2/media scope; plan acceptance; D1 capacity metrics |
-| 1 | Foundations, isolated environments, contracts and compatibility harnesses | Documentation prepared; recovery gate not satisfied; no implementation started | Provisioning plan, secrets owner, verified backup and restore rehearsal |
-| 2 | Authoritative data migration tooling and rehearsal | Local tooling exists; rehearsal only against generated fixtures | Production snapshot access and destructive-operation approval |
-| 3 | Workers API/repository cutovers by domain | Not started | Phase 2 validation |
-| 4 | Media/R2 and centralized asset platform cutovers | Not started | R2 provisioning and media inventory |
-| 5 | Realtime/Durable Objects protocol migration | Not started | Protocol decision and load test approval |
-| 6 | Queues/Cron/admin/observability hardening | Not started | Cost and alerting approval |
-| 7 | Android/admin integration and staged rollout | Not started | Release approval |
-| 8 | Production cutover, validation and rollback rehearsal | Not started | Explicit production cutover approval |
+Each workstream uses the exit evidence in the [active implementation plan](docs/migration/implementation-plan.md). Production access, recovery, rollout and legacy removal are independently authorized. Local development can proceed without the production data gate.
 
 ## Verification rule
 

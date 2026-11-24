@@ -1,7 +1,5 @@
-import { Router } from "express";
+import { Router, type RequestHandler, type Response } from "express";
 import { profileSchema } from "@yugm/shared";
-import { User } from "../models/User.js";
-import { DeviceToken } from "../models/DeviceToken.js";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { authIdentifierLimiter, authLimiter, refreshLimiter } from "../middleware/rateLimit.js";
 import { validateBody } from "../middleware/validate.js";
@@ -9,162 +7,21 @@ import { verifyIdToken } from "../services/firebase.js";
 import { getVipStatus } from "../services/vip.js";
 import { getLevelStatus } from "../services/levels.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode } from "../utils/http.js";
-import { issueSession, revokeAllForUser, revokeSession, rotateRefresh } from "../services/tokens.js";
+import { issueSession, logoutSession, rotateRefresh } from "../services/tokens.js";
 import { z } from "zod";
 import { disconnectOtherUserSockets, disconnectUserSockets } from "../services/socket.js";
 import { isProfileCompleted } from "../services/profileCompletion.js";
-import { hasFirebaseIdentityConflict } from "../services/authSessionRules.js";
+import { asAuthUser, findOrCreateFirebaseUser, type AuthAccountStore, type AuthUser } from "../services/authAccounts.js";
+import type { AuthSessionStore } from "../services/authSessionStore.js";
+import { mongoAuthAccountStore } from "../services/mongoAuthAccounts.js";
+import { mongoAuthSessionStore } from "../services/mongoAuthSessionStore.js";
 import { updateProfileForUser } from "../services/profileUpdate.js";
 
-export const authRouter = Router();
-
-async function generateUniqueUsername(): Promise<string> {
-  for (let i = 0; i < 5; i++) {
-    const suffix = Math.random().toString(36).slice(2, 7);
-    const username = `vibe_${suffix}`;
-    const exists = await User.findOne({ username }).lean();
-    if (!exists) return username;
-  }
-  return `vibe_${Date.now()}`;
-}
-
-function normalizePhoneNumber(value?: string): string | undefined {
-  if (!value) return undefined;
-  const digits = value.replace(/[^\d]/g, "");
-  return digits ? `+${digits}` : undefined;
-}
-
-function phoneLookupValues(value?: string): string[] {
-  const normalized = normalizePhoneNumber(value);
-  if (!normalized) return [];
-  const digits = normalized.slice(1);
-  return Array.from(new Set([normalized, digits, `+${digits}`]));
-}
-
-async function findOrCreateFirebaseUser(input: {
-  firebaseUid: string;
-  name?: string;
-  email?: string;
-  phone?: string;
-  avatar?: string;
-  acceptTerms: boolean;
-  emailVerified?: boolean;
-}): Promise<{ user: any; isNewUser: boolean }> {
-  const normalizedEmail = input.email?.trim().toLowerCase();
-  const normalizedPhone = normalizePhoneNumber(input.phone);
-
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const byUid = await User.findOne({ firebaseUid: input.firebaseUid }).select("+email +phone -__v");
-    if (byUid) {
-      let changed = false;
-      if (input.acceptTerms && !byUid.termsAcceptedAt) { byUid.termsAcceptedAt = new Date(); changed = true; }
-      if (input.emailVerified && !byUid.emailVerified) { byUid.emailVerified = true; changed = true; }
-      if (byUid.deletionRequestedAt) { byUid.deletionRequestedAt = undefined; changed = true; }
-      if (!byUid.email && normalizedEmail) { byUid.email = normalizedEmail; changed = true; }
-      if (!byUid.phone && normalizedPhone) { byUid.phone = normalizedPhone; changed = true; }
-      if ((!byUid.name || byUid.name === "Yugm User") && input.name) { byUid.name = input.name; changed = true; }
-      if (!byUid.avatar && input.avatar) { byUid.avatar = input.avatar; changed = true; }
-      if (changed) await byUid.save();
-      return { user: byUid, isNewUser: false };
-    }
-
-    // Older accounts may have been created through the OTP flow before Firebase
-    // became the identity provider. Attach the authenticated Firebase identity to
-    // that existing record instead of violating the unique email index.
-    const byEmail = normalizedEmail
-      ? await User.findOne({ email: normalizedEmail }).select("+email -__v")
-      : null;
-    // Firebase phone credentials represent a verified phone number. Link that
-    // identity to legacy phone accounts instead of trying to create a duplicate
-    // record and failing against the unique phone index.
-    const byPhone = !byEmail && normalizedPhone
-      ? await User.findOne({ phone: { $in: phoneLookupValues(input.phone) } }).select("+phone +email -__v")
-      : null;
-    const existingIdentity = byEmail ?? byPhone;
-    if (existingIdentity) {
-      if (existingIdentity.deletionRequestedAt) {
-        // Accounts pending deletion must not block new registrations. Release any
-        // identifiers still present (e.g. deleted before Firebase/Auth cleanup)
-        // so a fresh account can be created with the same email/phone.
-        const unset: Record<string, string> = {};
-        if (existingIdentity.email) unset.email = "";
-        if (existingIdentity.phone) unset.phone = "";
-        if (existingIdentity.firebaseUid) unset.firebaseUid = "";
-        const tombstoneUsername = String(existingIdentity.username || "").startsWith("deleted_")
-          ? existingIdentity.username
-          : `deleted_${existingIdentity._id.toString()}`;
-        await User.updateOne(
-          { _id: existingIdentity._id, deletionRequestedAt: { $type: "date" } },
-          {
-            $set: { name: "Deleted User", username: tombstoneUsername, emailVerified: false, isVerified: false },
-            ...(Object.keys(unset).length ? { $unset: unset } : {})
-          }
-        );
-        continue;
-      }
-
-      if (byEmail && !input.emailVerified) {
-        throw new HttpError(409, "Verify this email address before linking it to an existing account.", ErrorCode.CONFLICT);
-      }
-      if (hasFirebaseIdentityConflict(existingIdentity.firebaseUid, input.firebaseUid)) {
-        throw new HttpError(409, "This account is already linked to another sign-in method. Contact support to recover the account.", ErrorCode.CONFLICT);
-      }
-      if (input.acceptTerms && !existingIdentity.termsAcceptedAt) existingIdentity.termsAcceptedAt = new Date();
-      if (input.emailVerified) existingIdentity.emailVerified = true;
-      existingIdentity.firebaseUid = input.firebaseUid;
-      if (!existingIdentity.email && normalizedEmail) existingIdentity.email = normalizedEmail;
-      if (!existingIdentity.phone && normalizedPhone) existingIdentity.phone = normalizedPhone;
-      if (!existingIdentity.name && input.name) existingIdentity.name = input.name;
-      if (!existingIdentity.avatar && input.avatar) existingIdentity.avatar = input.avatar;
-      try {
-        return { user: await existingIdentity.save(), isNewUser: false };
-      } catch (error: any) {
-        // Concurrent sign-in may have linked the same Firebase user already.
-        if (error?.code === 11000) continue;
-        throw error;
-      }
-    }
-
-    try {
-      const user = await User.create({
-        name: input.name || "Yugm User",
-        username: await generateUniqueUsername(),
-        email: normalizedEmail || undefined,
-        phone: normalizedPhone || undefined,
-        firebaseUid: input.firebaseUid,
-        avatar: input.avatar || undefined,
-        interests: ["Music", "Chill"],
-        languages: ["Hindi", "English"],
-        walletBalance: 250,
-        isVerified: false,
-        termsAcceptedAt: input.acceptTerms ? new Date() : undefined,
-        emailVerified: Boolean(input.emailVerified)
-      });
-      return { user, isNewUser: true };
-    } catch (error: any) {
-      // The client retries auth after transient timeouts. If the original
-      // request completed concurrently, return its user instead of a 500.
-      if (error?.code === 11000) continue;
-      throw error;
-    }
-  }
-
-  const existing = await User.findOne({ firebaseUid: input.firebaseUid }).select("-__v +email");
-  if (existing) return { user: existing, isNewUser: false };
-  throw new HttpError(409, "Could not finish creating your account. Please retry.", ErrorCode.CONFLICT);
-}
-
-async function issueSingleDeviceSession(user: any, req: AuthRequest) {
-  const tokens = await issueSession(user, req);
-  await disconnectOtherUserSockets(user.id, tokens.sessionId);
-  return tokens;
-}
-
-function publicUser(user: any) {
+function publicUser(user: AuthUser) {
   const levelStatus = getLevelStatus(user);
   return {
     id: user.id,
-    _id: user._id?.toString?.() ?? user.id,
+    _id: user.id,
     name: user.name,
     username: user.username,
     email: user.email,
@@ -215,97 +72,127 @@ const facebookAuthSchema = z.object({
 });
 const phoneAuthSchema = z.object({ idToken: z.string().min(20), acceptTerms: z.literal(true) });
 
-authRouter.post("/google", authLimiter, authIdentifierLimiter, validateBody(authSchema), asyncHandler(async (req, res) => {
-  const { idToken, acceptTerms, name: bodyName, mode } = req.body;
-  if (!idToken) throw new HttpError(400, "idToken is required", ErrorCode.VALIDATION);
+export function createAuthRouter(candidate?: {
+  accounts: AuthAccountStore;
+  sessions: AuthSessionStore;
+  enforceSession: RequestHandler;
+}) {
+  const authRouter = Router();
+  const accounts = candidate?.accounts ?? mongoAuthAccountStore;
+  const sessions = candidate?.sessions ?? mongoAuthSessionStore;
+  const enforceSession = candidate?.enforceSession ?? requireAuth;
 
-  const payload = await verifyIdToken(idToken);
-  const { sub: firebaseUid, name: tokenName, email, picture, email_verified } = payload;
-  if (!firebaseUid) throw new HttpError(401, "Invalid Firebase identity token", ErrorCode.UNAUTHORIZED);
-
-  // Email/password accounts must be verified before they can create or use a
-  // Yugm account. This prevents abuse with unverified email addresses.
-  if (payload.firebase?.sign_in_provider === "password" && !payload.email_verified) {
-    throw new HttpError(403, "Verify your email address to continue. Check your inbox for the verification link.", ErrorCode.FORBIDDEN);
+  function authenticatedUserId(req: AuthRequest, res: Response) {
+    const id: unknown = req.user?.id ?? res.locals.authUserId;
+    if (typeof id !== "string" || !id) throw new HttpError(401, "Invalid user", ErrorCode.UNAUTHORIZED);
+    return id;
   }
 
-  const resolvedName = tokenName || bodyName;
-  const { user, isNewUser } = await findOrCreateFirebaseUser({ firebaseUid, name: resolvedName, email, avatar: picture, acceptTerms, emailVerified: email_verified });
-  const tokens = await issueSingleDeviceSession(user, req);
-  sendOk(res, { ...tokens, user: publicUser(user), isNewUser: isNewUser || !isProfileCompleted(user) });
-}));
-
-authRouter.post("/facebook", authLimiter, authIdentifierLimiter, validateBody(facebookAuthSchema), asyncHandler(async (req, res) => {
-  const { idToken, acceptTerms, name: bodyName } = req.body;
-  if (!idToken) throw new HttpError(400, "idToken is required", ErrorCode.VALIDATION);
-
-  const payload = await verifyIdToken(idToken);
-  const { sub: firebaseUid, name: tokenName, email, picture, email_verified } = payload;
-  if (!firebaseUid) throw new HttpError(401, "Invalid Firebase identity token", ErrorCode.UNAUTHORIZED);
-  const signInProvider = payload.firebase?.sign_in_provider;
-  if (signInProvider && signInProvider !== "facebook.com") {
-    throw new HttpError(401, "This token was not issued for Facebook sign-in", ErrorCode.UNAUTHORIZED);
-  }
-  const resolvedName = tokenName || bodyName;
-  const { user, isNewUser } = await findOrCreateFirebaseUser({ firebaseUid, name: resolvedName, email, avatar: picture, acceptTerms, emailVerified: email_verified });
-  const tokens = await issueSingleDeviceSession(user, req);
-  sendOk(res, { ...tokens, user: publicUser(user), isNewUser: isNewUser || !isProfileCompleted(user) });
-}));
-
-authRouter.post("/phone", authLimiter, authIdentifierLimiter, validateBody(phoneAuthSchema), asyncHandler(async (req, res) => {
-  const { idToken, acceptTerms } = req.body;
-  if (!idToken) throw new HttpError(400, "idToken is required", ErrorCode.VALIDATION);
-
-  const payload = await verifyIdToken(idToken);
-  const { sub: firebaseUid, phone_number } = payload;
-  if (!firebaseUid) throw new HttpError(401, "Invalid Firebase identity token", ErrorCode.UNAUTHORIZED);
-  if (!phone_number) throw new HttpError(401, "Phone sign-in token is missing a phone number", ErrorCode.UNAUTHORIZED);
-  const signInProvider = payload.firebase?.sign_in_provider;
-  if (signInProvider && signInProvider !== "phone") {
-    throw new HttpError(401, "This token was not issued for phone sign-in", ErrorCode.UNAUTHORIZED);
-  }
-  const { user, isNewUser } = await findOrCreateFirebaseUser({ firebaseUid, phone: phone_number, acceptTerms });
-  const tokens = await issueSingleDeviceSession(user, req);
-  sendOk(res, { ...tokens, user: publicUser(user), isNewUser: isNewUser || !isProfileCompleted(user) });
-}));
-
-authRouter.post("/refresh", refreshLimiter, validateBody(z.object({ refreshToken: z.string().min(30) })), asyncHandler(async (req, res) => {
-  sendOk(res, await rotateRefresh(req.body.refreshToken, req));
-}));
-
-authRouter.post("/logout", requireAuth, validateBody(z.object({ refreshToken: z.string().optional(), deviceToken: z.string().min(20).optional() })), asyncHandler(async (req: AuthRequest, res) => {
-  if (req.body.deviceToken) {
-    await DeviceToken.deleteOne({ userId: req.user!._id, token: req.body.deviceToken });
-  }
-  if (req.body.refreshToken) await revokeSession(req.body.refreshToken, req.user!.id);
-  await User.updateOne({ _id: req.user!._id }, { $inc: { tokenVersion: 1 } });
-  await revokeAllForUser(req.user!.id);
-  await disconnectUserSockets(req.user!.id);
-  sendOk(res, { loggedOut: true });
-}));
-
-authRouter.get("/me", requireAuth, (req: AuthRequest, res) => sendOk(res, { user: publicUser(req.user) }));
-
-authRouter.post("/verify-email", requireAuth, validateBody(z.object({ idToken: z.string().min(20).optional() }).optional()), asyncHandler(async (req: AuthRequest, res) => {
-  if (req.user!.emailVerified) {
-    return sendOk(res, { emailVerified: true, user: publicUser(req.user) });
+  async function currentUser(req: AuthRequest, res: Response) {
+    if (req.user) return asAuthUser(req.user);
+    const user = await accounts.findById(authenticatedUserId(req, res));
+    if (!user) throw new HttpError(401, "Invalid user", ErrorCode.UNAUTHORIZED);
+    return user;
   }
 
-  const { idToken } = req.body ?? {};
-  if (idToken) {
+  async function issueSingleDeviceSession(user: AuthUser, req: AuthRequest) {
+    const tokens = await issueSession(user, req, sessions);
+    if (!candidate) await disconnectOtherUserSockets(user.id, tokens.sessionId);
+    return tokens;
+  }
+
+  authRouter.post("/google", authLimiter, authIdentifierLimiter, validateBody(authSchema), asyncHandler(async (req, res) => {
+    const { idToken, acceptTerms, name: bodyName, mode } = req.body;
+    if (!idToken) throw new HttpError(400, "idToken is required", ErrorCode.VALIDATION);
+
     const payload = await verifyIdToken(idToken);
-    const isMatchingUser = payload.sub === req.user!.firebaseUid || (payload.email && payload.email.toLowerCase() === req.user!.email?.toLowerCase());
-    if (isMatchingUser && payload.email_verified) {
-      await User.updateOne({ _id: req.user!._id }, { $set: { emailVerified: true } });
-      req.user!.emailVerified = true;
-      return sendOk(res, { emailVerified: true, user: publicUser(req.user) });
+    const { sub: firebaseUid, name: tokenName, email, picture, email_verified } = payload;
+    if (!firebaseUid) throw new HttpError(401, "Invalid Firebase identity token", ErrorCode.UNAUTHORIZED);
+
+    // Email/password accounts must be verified before they can create or use a
+    // Yugm account. This prevents abuse with unverified email addresses.
+    if (payload.firebase?.sign_in_provider === "password" && !payload.email_verified) {
+      throw new HttpError(403, "Verify your email address to continue. Check your inbox for the verification link.", ErrorCode.FORBIDDEN);
     }
+
+    const resolvedName = tokenName || bodyName;
+    const { user, isNewUser } = await findOrCreateFirebaseUser(accounts, { firebaseUid, name: resolvedName, email, avatar: picture, acceptTerms, emailVerified: email_verified });
+    const tokens = await issueSingleDeviceSession(user, req);
+    sendOk(res, { ...tokens, user: publicUser(user), isNewUser: isNewUser || !isProfileCompleted(user) });
+  }));
+
+  authRouter.post("/facebook", authLimiter, authIdentifierLimiter, validateBody(facebookAuthSchema), asyncHandler(async (req, res) => {
+    const { idToken, acceptTerms, name: bodyName } = req.body;
+    if (!idToken) throw new HttpError(400, "idToken is required", ErrorCode.VALIDATION);
+
+    const payload = await verifyIdToken(idToken);
+    const { sub: firebaseUid, name: tokenName, email, picture, email_verified } = payload;
+    if (!firebaseUid) throw new HttpError(401, "Invalid Firebase identity token", ErrorCode.UNAUTHORIZED);
+    const signInProvider = payload.firebase?.sign_in_provider;
+    if (signInProvider && signInProvider !== "facebook.com") {
+      throw new HttpError(401, "This token was not issued for Facebook sign-in", ErrorCode.UNAUTHORIZED);
+    }
+    const resolvedName = tokenName || bodyName;
+    const { user, isNewUser } = await findOrCreateFirebaseUser(accounts, { firebaseUid, name: resolvedName, email, avatar: picture, acceptTerms, emailVerified: email_verified });
+    const tokens = await issueSingleDeviceSession(user, req);
+    sendOk(res, { ...tokens, user: publicUser(user), isNewUser: isNewUser || !isProfileCompleted(user) });
+  }));
+
+  authRouter.post("/phone", authLimiter, authIdentifierLimiter, validateBody(phoneAuthSchema), asyncHandler(async (req, res) => {
+    const { idToken, acceptTerms } = req.body;
+    if (!idToken) throw new HttpError(400, "idToken is required", ErrorCode.VALIDATION);
+
+    const payload = await verifyIdToken(idToken);
+    const { sub: firebaseUid, phone_number } = payload;
+    if (!firebaseUid) throw new HttpError(401, "Invalid Firebase identity token", ErrorCode.UNAUTHORIZED);
+    if (!phone_number) throw new HttpError(401, "Phone sign-in token is missing a phone number", ErrorCode.UNAUTHORIZED);
+    const signInProvider = payload.firebase?.sign_in_provider;
+    if (signInProvider && signInProvider !== "phone") {
+      throw new HttpError(401, "This token was not issued for phone sign-in", ErrorCode.UNAUTHORIZED);
+    }
+    const { user, isNewUser } = await findOrCreateFirebaseUser(accounts, { firebaseUid, phone: phone_number, acceptTerms });
+    const tokens = await issueSingleDeviceSession(user, req);
+    sendOk(res, { ...tokens, user: publicUser(user), isNewUser: isNewUser || !isProfileCompleted(user) });
+  }));
+
+  authRouter.post("/refresh", refreshLimiter, validateBody(z.object({ refreshToken: z.string().min(30) })), asyncHandler(async (req, res) => {
+    sendOk(res, await rotateRefresh(req.body.refreshToken, req, sessions));
+  }));
+
+  authRouter.post("/logout", enforceSession, validateBody(z.object({ refreshToken: z.string().optional(), deviceToken: z.string().min(20).optional() })), asyncHandler(async (req: AuthRequest, res) => {
+    const userId = authenticatedUserId(req, res);
+    await logoutSession(userId, req.body.refreshToken, sessions, req.body.deviceToken);
+    if (!candidate) await disconnectUserSockets(userId);
+    sendOk(res, { loggedOut: true });
+  }));
+
+  authRouter.get("/me", enforceSession, asyncHandler(async (req: AuthRequest, res) => {
+    sendOk(res, { user: publicUser(await currentUser(req, res)) });
+  }));
+
+  authRouter.post("/verify-email", enforceSession, validateBody(z.object({ idToken: z.string().min(20).optional() }).optional()), asyncHandler(async (req: AuthRequest, res) => {
+    let user = await currentUser(req, res);
+    const { idToken } = req.body ?? {};
+    if (!user.emailVerified && idToken) {
+      const payload = await verifyIdToken(idToken);
+      const isMatchingUser = payload.sub === user.firebaseUid || (payload.email && payload.email.toLowerCase() === user.email?.toLowerCase());
+      if (isMatchingUser && payload.email_verified) {
+        const updated = await accounts.updateIdentity(user, { emailVerified: true }) ?? await accounts.findById(user.id);
+        if (!updated?.emailVerified) throw new HttpError(409, "Account changed. Please try again.", ErrorCode.CONFLICT);
+        user = updated;
+      }
+    }
+    sendOk(res, { emailVerified: Boolean(user.emailVerified), user: publicUser(user) });
+  }));
+
+  if (!candidate) {
+    authRouter.patch("/profile", requireAuth, validateBody(profileSchema.partial()), asyncHandler(async (req: AuthRequest, res) => {
+      const { user, xpGrant } = await updateProfileForUser(req.user!.id, req.body);
+      if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+      sendOk(res, { user: publicUser(asAuthUser(user)), xpGrant });
+    }));
   }
+  return authRouter;
+}
 
-  sendOk(res, { emailVerified: Boolean(req.user!.emailVerified), user: publicUser(req.user) });
-}));
-
-authRouter.patch("/profile", requireAuth, validateBody(profileSchema.partial()), asyncHandler(async (req: AuthRequest, res) => {
-  const { user, xpGrant } = await updateProfileForUser(req.user!.id, req.body);
-  sendOk(res, { user: publicUser(user), xpGrant });
-}));
+export const authRouter = createAuthRouter();

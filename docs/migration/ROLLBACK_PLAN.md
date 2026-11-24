@@ -74,7 +74,7 @@ Stop immediately and escalate if any of the following occurs:
 - Any credential exposure or environment mismatch.
 - Any production Error 1101, Worker initialization failure or essential scheduled-job failure.
 
-The Phase 3 gate explicitly forbids production cutover while Worker initialization or essential scheduled jobs are failing.
+Production cutover stops while Worker initialization or essential scheduled jobs are failing. See the [current release gates](implementation-plan.md#production-acceptance-and-rollback).
 
 ## 6. Financial invariants during rollback
 

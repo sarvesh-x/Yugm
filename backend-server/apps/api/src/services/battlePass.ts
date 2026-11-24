@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { BattlePass, type IBattlePass } from "../models/BattlePass.js";
 import { BattlePassXpGrant } from "../models/BattlePassXpGrant.js";
-import { Season, defaultSeason, type ISeason, type ISeasonReward } from "../models/Season.js";
+import { Season, defaultSeason, monthlySeasonWindow, type ISeason, type ISeasonReward } from "../models/Season.js";
 import { Cosmetic } from "../models/Cosmetic.js";
 import { User } from "../models/User.js";
 import { debitWallet, creditWallet } from "./wallet.js";
@@ -19,17 +19,12 @@ export async function getActiveSeason() {
   if (active) return active;
 
   await Season.updateMany({ active: true }, { $set: { active: false } });
-  const year = now.getUTCFullYear();
-  const month = now.getUTCMonth();
-  const key = `season_${year}_${String(month + 1).padStart(2, "0")}`;
-  const startDate = new Date(Date.UTC(year, month, 1));
-  const endDate = new Date(Date.UTC(year, month + 3, 1));
-  const monthLabel = startDate.toLocaleString("en", { month: "long", timeZone: "UTC" });
+  const { key, name, startDate, endDate } = monthlySeasonWindow(now);
   try {
     return await Season.findOneAndUpdate(
       { key },
       {
-        $set: { active: true, startDate, endDate, name: `Voyage · ${monthLabel} ${year}` },
+        $set: { active: true, startDate, endDate, name },
         $setOnInsert: {
           description: defaultSeason.description,
           maxLevel: defaultSeason.maxLevel,

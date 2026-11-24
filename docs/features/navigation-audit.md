@@ -8,6 +8,8 @@ definitions, navigation actions, deep links, push-intent routes, notification ro
 dock render sites, and lifecycle-owned navigation state. Source is authoritative for behavior;
 runtime claims (below) are marked unverified.
 
+The November 24 follow-up reproduced a dropped explicit tab request and verified the repair, back-stack recreation and pending push behavior on an emulator. The entries below retain the dated audit. [Follow-up](../handoffs/2026-11-24-navigation-recreation.md)
+
 ## 1. Route inventory (complete)
 
 Exactly one `NavHost` exists: the root graph in `app/navigation/NavGraph.kt` (the only

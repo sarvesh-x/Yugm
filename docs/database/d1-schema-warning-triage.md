@@ -6,6 +6,8 @@
 
 **Generator defect found and fixed (2026-11-22):** Mongoose Map fields expose both `field` and `field.$*` paths, and both sanitized to the same SQL column, producing invalid duplicate columns `bonds.preferences` and `room_mode_states.scores`. `generate-d1-schema.ts` now suppresses the duplicate wildcard column and records a note in the generated SQL. This purely mechanical fix removed one now-obsolete warning (`Bond.preferences.$*`) from the manifest; no field was dropped and no schema policy changed. This document was updated from 47 to 46 warnings to match.
 
+**Bond child-table follow-up (2026-11-24).** The local Profile import fixture verified ordered milestone rows keyed by bond and day and preference rows keyed by bond and actor. The draft generator and mapping now agree on the child-table columns. [Local rehearsal](../handoffs/2026-11-24-profile-contract-baseline.md)
+
 ## Disposition vocabulary
 
 | Disposition | Meaning |

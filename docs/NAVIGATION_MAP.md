@@ -15,14 +15,14 @@ Durable contract and rules: [NAVIGATION_ARCHITECTURE.md](NAVIGATION_ARCHITECTURE
 
 - One `NavHost` (root `NavGraph`); no nested `navigation<>` graphs; every screen is a flat composable.
 - `MainTabsRoutes` (`core/navigation`) — the **explicit destination whitelist**: `ALL` = {`game_zone`, `party`, `discover`, `chat`, `profile`}, plus `isMainTabs(route)` and `normalizeTab()`. The dock visibility rule is derived from the actual current destination: `MainTabsScreen.showDock = MainTabsRoutes.isMainTabs(currentBackStackEntry?.destination?.route) && !(currentPage == CHAT && isClanChatActive)`.
-- `MainTabsScreen` — the **single dock owner**. Tab switching uses `navigateTopLevel` (idempotent: `alreadySelected` early-return, `launchSingleTop` on navigates). Selected tab = pager (`pageToDockTab(pagerState.currentPage)`); pager page is persisted to the MainTabs entry (`main_tab_page`) for process-death restoration.
+- `MainTabsScreen` owns the dock and the live pager selection. It persists the settled page to its own MainTabs entry as `main_tab_page`. External tab requests reach the same entry through `navigateTopLevel`.
 - Legacy top-level stub routes `discover`/`chat_list`/`voice_rooms`/`games` remain for compatibility and redirect to `main_tabs?tab=…` with `popUpTo`+`launchSingleTop`.
 - Screens never decide global dock visibility: standalone screens default `showBottomDock = false` (`ProfileDetailScreen`, `DatingDiscoveryScreen`), `MatchesScreen`'s dock is removed (dead route).
 
 ## Main tabs (current implementation)
 
 - **Destinations:** Arcade (`game_zone`), Party (`party`), Discover (`discover`), Chat (`chat`), Profile (`profile`) hosted in `MainTabsScreen` via `HorizontalPager`.
-- **Route/selection:** `Screen.MainTabs.createRoute(tab)` carries the initial tab arg; `TopLevelNavigation.navigateTopLevel` maps legacy top-level routes to `MainTabs` tab routes and uses `savedStateHandle["tab_request"]` to switch tabs when `MainTabs` is already on the back stack (explicit destination check: already MainTabs → set request; else pop to MainTabs entry if present; else `navigate(launchSingleTop)`).
+- **Route and selection.** `Screen.MainTabs.createRoute(tab)` carries the initial tab argument. `navigateTopLevel` sends `tab_request` to the current or revealed MainTabs entry. When no entry exists, it navigates to the requested tab's root route.
 - **Visibility:** dock visible on the five main roots only; hidden on chat clan subtab (`isClanChatActive`), and structurally so on every secondary/detail/immersive/auth route.
 - **Unread badge:** chat tab badge sourced in `MainTabsScreen` from `ChatListViewModel` unread counts excluding muted partners, surfaced via dock semantics.
 - **Bonds:** `Screen.Bonds` (`bonds?partner={partner}&center={center}`) is a secondary Profile destination in `profileNavGraph`; it hides the dock and back returns to the main-tabs Profile page. `partner` opens an existing bond or pending request (or the existing invite flow for an explicit invite target), and `center=true` opens Relationship Center (notification taps). Opening Bonds from the profile — including Add bond/empty slots — lands on Bonds home; no invite sheet is opened automatically. The former `Screen.CloseFriends` / `close_friends` route was removed.
@@ -39,6 +39,6 @@ Summary: bottom bar visible = five main roots (Arcade, Party, Discover, Chat, My
 - State restoration: selected tab persists to the MainTabs back-stack entry (`main_tab_page`) and is restored on recreation; tab content lists preserve their `LazyListState` via `rememberLazyListState()`.
 - Back: secondary screens pop to MainTabs; return restores the originating tab (pager) and the dock.
 - **Inset ownership (elevated-bar fix):** while `MainTabs` is current, `NavGraph` applies only top/horizontal safe-drawing insets so the dock can paint its surface to the physical bottom edge (including the system navigation inset) and pad interactive content above it. All other destinations keep full `safeDrawing` insets. When the main host hides the dock (Chat clan subtab), the pager applies `navigationBarsPadding()`.
-- Push intents (`MainActivity.routeFromPushIntent`): direct secondary routes only (no `main_tabs`); dedup caveat documented in the audit (§3, F9).
+- Push intents use `PushNavigation` to open secondary routes after Auth startup and profile completion. A handled intent stays consumed on activity recreation. [Verification](handoffs/2026-11-24-navigation-recreation.md)
 
 This is a source map. When changing navigation, trace route definitions, graph registration, callers, deep links/push intents, auth/profile gates, back behavior, dock visibility, and lifecycle-owned subscriptions. Runtime/device verification is required for behavior claims. Regression tests: `core:navigation` (`MainTabsRoutesTest`, `TopLevelNavigationTargetsTest`), `core:ui` (`BottomDockGeometryTest`), and `app` (`MainTabsNavigationTest`).

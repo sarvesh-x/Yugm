@@ -43,6 +43,19 @@ const seasonSchema = new Schema<ISeason>(
 
 export const Season = mongoose.model<ISeason>("Season", seasonSchema);
 
+export function monthlySeasonWindow(now: Date) {
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth();
+  const startDate = new Date(Date.UTC(year, month, 1));
+  const monthLabel = startDate.toLocaleString("en", { month: "long", timeZone: "UTC" });
+  return {
+    key: `season_${year}_${String(month + 1).padStart(2, "0")}`,
+    name: `Voyage · ${monthLabel} ${year}`,
+    startDate,
+    endDate: new Date(Date.UTC(year, month + 3, 1))
+  };
+}
+
 export const defaultSeason = {
   key: "season_1",
   name: "Voyage V1",

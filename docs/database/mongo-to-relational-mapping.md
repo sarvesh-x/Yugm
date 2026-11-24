@@ -30,8 +30,8 @@ Source of truth for current fields is `backend-server/apps/api/src/models/`. The
 
 | Source models | Candidate tables | Notes |
 |---|---|---|
-| `User` | `users`, `user_interests`, `user_roles`/flags as appropriate | Preserve Firebase UID, username uniqueness, profile completion fields, avatar legacy value, managed avatar reference and integer balances. Embedded arrays become child tables or validated JSON. |
-| `AuthSession`, `DeviceToken` | `auth_sessions`, `device_tokens` | Preserve session generation, refresh rotation state, revocation, expiry and FCM tokens. These are authoritative; never cache in KV. |
+| `User` | `users`, `user_auth_profile`, ordered profile array tables | Preserve Firebase UID, username uniqueness, profile completion fields, avatar references and integer balances. The one-to-one metadata table distinguishes explicit null from omitted fields without adding columns to the 100-column `users` table. [Local Auth journey](../handoffs/2026-11-24-auth-journey-parity.md) · [Profile read parity](../handoffs/2026-11-24-d1-profile-reads.md) |
+| `AuthSession`, `DeviceToken` | `auth_sessions`, `device_tokens` | Preserve session generation, refresh rotation state, revocation, expiry and FCM tokens. Keep these authoritative in the database. The draft distinguishes legacy omission from explicit null and generation zero. The unique refresh hash index protects session identity and the importer only updates matching source IDs. [Local Auth evidence](../handoffs/2026-11-24-auth-session-store.md) |
 | `AdminUser`, `AdminSession` | `admin_users`, `admin_sessions`, `admin_role_permissions` | Preserve roles, permissions, status, 2FA state, session revocation and last-login data. |
 | `AdminAuditLog`, `AdminModerationAction` | `admin_audit_logs`, `admin_moderation_actions` | Append-only. Preserve string/UUID entity IDs as text, metadata JSON, IP/UA and UTC timestamps. |
 

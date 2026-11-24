@@ -20,6 +20,12 @@ import { socketEvents } from "@yugm/shared";
 export const gamesRouter = Router();
 gamesRouter.use(requireAuth);
 
+export type GameCatalogScores = {
+  best: Record<string, { score: number; createdAt: Date | string | null }>;
+  recent: readonly object[];
+};
+export type ReadGameCatalogScores = (userId: string) => Promise<GameCatalogScores>;
+
 const scoreSchema = z.object({
   gameId: z.enum(miniGameIds),
   score: z.number().int().min(0).max(999999),
@@ -52,6 +58,12 @@ async function bestScoresForUser(userId: string) {
     { $group: { _id: "$gameId", score: { $first: "$score" }, createdAt: { $first: "$createdAt" } } }
   ]);
   return Object.fromEntries(rows.map((row) => [row._id, { score: row.score, createdAt: row.createdAt }]));
+}
+
+async function readMongoGameCatalogScores(userId: string): Promise<GameCatalogScores> {
+  const best = await bestScoresForUser(userId);
+  const recent = await MiniGameScore.find({ userId }).sort({ createdAt: -1 }).limit(10).lean();
+  return { best, recent };
 }
 
 function startOfUtcDay(date = new Date()) {
@@ -91,13 +103,10 @@ function challengePayload(challenge: any) {
 }
 
 gamesRouter.get("/catalog", asyncHandler(async (req: AuthRequest, res) => {
-  const bestScores = await bestScoresForUser(req.user!.id);
-  const recent = await MiniGameScore.find({ userId: req.user!.id })
-    .sort({ createdAt: -1 })
-    .limit(10)
-    .lean();
+  const { readGameCatalogScores }: { readGameCatalogScores?: ReadGameCatalogScores } = req.app.locals;
+  const { best, recent } = await (readGameCatalogScores ?? readMongoGameCatalogScores)(req.user!.id);
   sendOk(res, {
-    games: miniGames.map((game) => ({ ...game, best: bestScores[game.id] ?? null })),
+    games: miniGames.map((game) => ({ ...game, best: best[game.id] ?? null })),
     recent
   });
 }));

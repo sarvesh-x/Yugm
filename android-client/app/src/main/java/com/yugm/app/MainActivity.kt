@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.compose.currentBackStackEntryAsState
 import com.yugm.app.core.api.YugmApi
 import com.yugm.app.core.api.YugmMediaRoom
 import com.yugm.app.core.api.ApiHttpException
@@ -45,7 +46,9 @@ import com.yugm.app.core.model.CoinPack
 import com.yugm.app.core.model.RazorpayCheckoutData
 import com.yugm.app.core.api.YugmHttpClient
 import com.yugm.app.navigation.NavGraph
+import com.yugm.app.core.navigation.PushNavigation
 import com.yugm.app.core.navigation.Screen
+import com.yugm.app.feature.auth.screens.SplashScreen
 import com.yugm.app.core.ui.theme.Background
 import com.yugm.app.core.ui.theme.YugmTheme
 import com.yugm.app.core.ui.theme.LocalYugmColors
@@ -67,6 +70,7 @@ import timber.log.Timber
 import javax.inject.Inject
 
 private const val TAG = "MainActivity"
+private const val NAVIGATION_ACCOUNT_ID = "yugm.navigation_account_id"
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
@@ -84,7 +88,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        pendingPushRoute.value = routeFromPushIntent(intent)
+        pendingPushRoute.value = PushNavigation.restorePendingRoute(savedInstanceState, intent)
         FirebaseApp.initializeApp(this)
         YugmHttpClient.authTokenProvider = { sessionManager.authToken }
         enableEdgeToEdge(
@@ -144,9 +148,17 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                 }
 
                 val pushRoute = pendingPushRoute.value
-                LaunchedEffect(pushRoute, mainViewModel.authToken, mainViewModel.profileCompleted, mainViewModel.startupSessionCheckComplete) {
-                    if (!pushRoute.isNullOrBlank() && mainViewModel.authToken.isNotBlank() && mainViewModel.startupSessionCheckComplete && mainViewModel.profileCompleted) {
-                        navController.navigate(pushRoute) { launchSingleTop = true }
+                val pushBackStackEntry by navController.currentBackStackEntryAsState()
+                val pushDestination = pushBackStackEntry?.destination?.route
+                LaunchedEffect(pushRoute, pushDestination, mainViewModel.authToken, mainViewModel.profileCompleted, mainViewModel.startupSessionCheckComplete) {
+                    if (PushNavigation.openWhenReady(
+                            navController,
+                            pushRoute,
+                            signedIn = mainViewModel.authToken.isNotBlank(),
+                            startupChecked = mainViewModel.startupSessionCheckComplete,
+                            profileCompleted = mainViewModel.profileCompleted,
+                        )
+                    ) {
                         pendingPushRoute.value = null
                     }
                 }
@@ -183,7 +195,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                         }
                         val sessionAlreadyCleared = sessionManager.authToken.isBlank() && mainViewModel.authToken.isBlank()
                         val route = navController.currentDestination?.route
-                        if ((rejectedCurrentSession || sessionAlreadyCleared) && route != Screen.Login.route && route != Screen.Splash.route) {
+                        if ((rejectedCurrentSession || sessionAlreadyCleared) && route != null && route != Screen.Login.route && route != Screen.Splash.route) {
                                 val message = if (reason.contains("another device", ignoreCase = true)) {
                                     "This account was signed in on another device. Sign in again to continue."
                                 } else {
@@ -196,6 +208,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                                 }
                         }
                     }
+                    mainViewModel.startStartupSessionCheck()
                 }
 
                 // Initialize Google Play Billing
@@ -241,6 +254,17 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                 }
 
                 Box(Modifier.fillMaxSize().background(Background)) {
+                    if (savedInstanceState != null && !mainViewModel.startupSessionCheckComplete) {
+                        SplashScreen { }
+                        return@Box
+                    }
+                    remember(navController) {
+                        // Clear pending restore state before the NavHost attaches its graph.
+                        if (savedInstanceState != null && (!savedInstanceState.containsKey(NAVIGATION_ACCOUNT_ID) ||
+                                savedInstanceState.getString(NAVIGATION_ACCOUNT_ID) != navigationAccountId())) {
+                            navController.restoreState(Bundle())
+                        }
+                    }
                     NavGraph(
                         navController = navController,
                         mainViewModel = mainViewModel,
@@ -316,7 +340,17 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        pendingPushRoute.value = routeFromPushIntent(intent)
+        PushNavigation.routeFromIntent(intent)?.let { pendingPushRoute.value = it }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        PushNavigation.savePendingRoute(outState, pendingPushRoute.value)
+        outState.putString(NAVIGATION_ACCOUNT_ID, navigationAccountId())
+    }
+
+    private fun navigationAccountId(): String? = sessionManager.userId.takeIf {
+        sessionManager.authToken.isNotBlank() && sessionManager.profileCompleted
     }
 
     override fun onPaymentSuccess(razorpayPaymentId: String?, paymentData: PaymentData?) {
@@ -347,22 +381,4 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
         Toast.makeText(this, response ?: "Payment cancelled", Toast.LENGTH_LONG).show()
     }
 
-    private fun routeFromPushIntent(intent: Intent?): String? {
-        if (intent?.getStringExtra("type") == "BONDS") return Screen.Bonds.createRoute(center = true)
-        val roomId = intent?.getStringExtra("roomId")
-        val callType = intent?.getStringExtra("callType").orEmpty()
-        val clanId = intent?.getStringExtra("clanId")
-        // The API sends partnerId in direct-message notification data. Accept the
-        // older chatPartnerId key too so notifications from either client version work.
-        val chatPartnerId = intent?.getStringExtra("chatPartnerId")
-            ?: intent?.getStringExtra("partnerId")
-        return when {
-            !roomId.isNullOrBlank() && callType.equals("VIDEO", true) -> Screen.VideoRoom.createRoute(roomId)
-            !roomId.isNullOrBlank() && callType.equals("VOICE", true) -> Screen.VoiceRoom.createRoute(roomId)
-            !roomId.isNullOrBlank() -> Screen.RoomLobby.createRoute(roomId)
-            !clanId.isNullOrBlank() -> Screen.ClanDetail.createRoute(clanId)
-            !chatPartnerId.isNullOrBlank() -> Screen.Chat.createRoute(chatPartnerId)
-            else -> null
-        }
-    }
 }

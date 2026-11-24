@@ -30,7 +30,8 @@ const envSchema = z.object({
   NODE_ENV: z.string().default("development"),
   YUGM_RUNTIME: z.enum(["node", "cloudflare"]).default("node"),
   PORT: z.coerce.number().default(4000),
-  MONGODB_URI: z.string().min(1, "MONGODB_URI is required"),
+  MONGODB_URI: z.string().min(1, "MONGODB_URI is required").optional(),
+  YUGM_LOCAL_AUTH_ONLY: z.literal("true").optional(),
   MONGODB_DB_NAME: z.string().min(1).default("Yugm"),
   REDIS_URL: z.string().optional(),
   JWT_SECRET: z.preprocess(
@@ -48,6 +49,7 @@ const envSchema = z.object({
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(60),
   TRUST_PROXY: z.string().optional(),
   APP_CHECK_ENFORCE: z.preprocess((v) => v === true || v === "true" || v === "1", z.boolean()).default(false),
+  GOOGLE_OAUTH_CLIENT_ID: optionalSetting,
   LIVEKIT_API_KEY: z.string().optional(),
   LIVEKIT_API_SECRET: z.string().optional(),
   LIVEKIT_URL: z.string().default("ws://localhost:7880"),
@@ -98,6 +100,10 @@ const envSchema = z.object({
     (value) => (typeof value === "string" && !value.trim() ? undefined : value),
     z.coerce.number().int().min(60).max(3600).default(900)
   )
+}).superRefine((config, ctx) => {
+  if (!config.MONGODB_URI && !(config.YUGM_RUNTIME === "cloudflare" && config.YUGM_LOCAL_AUTH_ONLY === "true")) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["MONGODB_URI"], message: "MONGODB_URI is required" });
+  }
 });
 
 const parsed = envSchema.parse(process.env);

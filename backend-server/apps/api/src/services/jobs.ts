@@ -20,13 +20,7 @@ import { RoomParticipant } from "../models/RoomParticipant.js";
 import { RoomInvite } from "../models/RoomInvite.js";
 import { endRoom } from "./roomLifecycle.js";
 import { sweepExpiredUploadSessions } from "./media.js";
-
-type PushPayload = {
-  userId: string;
-  title: string;
-  body: string;
-  data: Record<string, string>;
-};
+import { deliverPushJob, type PushJobData, type PushPayload } from "./pushDelivery.js";
 
 const redisUrl = getRedisUrl();
 let pushQueue: Queue | undefined;
@@ -34,7 +28,8 @@ let pushWorker: Worker | undefined;
 let cronWorker: Worker | undefined;
 let cronInterval: ReturnType<typeof setInterval> | undefined;
 const workerStartupTimeoutMs = 3000;
-let jobsMode: "redis" | "inline" = "inline";
+let jobsMode: "redis" | "inline" | "cloudflare-queues" = "inline";
+let pushDispatcher: ((payload: PushPayload) => Promise<void>) | undefined;
 let lastJobError: string | undefined;
 let lastCronRun: string | undefined;
 
@@ -54,9 +49,15 @@ function bullConnectionOptions() {
 
 async function runInlinePush(payload: PushPayload) {
   try {
-    await notifyUser(payload.userId, payload.title, payload.body, payload.data);
-  } catch (error) {
-    console.warn("Inline push notification failed (non-fatal):", error instanceof Error ? error.message : String(error));
+    const result = await notifyUser(payload);
+    if (result.retryDeviceIds.length || result.permanentFailures) {
+      console.warn("Inline push had device delivery failures", {
+        retryable: result.retryDeviceIds.length,
+        permanent: result.permanentFailures
+      });
+    }
+  } catch {
+    console.warn("Inline push notification failed (non-fatal)");
   }
 }
 
@@ -226,7 +227,17 @@ async function startCronWorker() {
   console.log("Cron maintenance worker started (15-minute interval)");
 }
 
-export async function startJobWorkers(options: { startLocalCron?: boolean } = {}) {
+export async function startJobWorkers(options: {
+  startLocalCron?: boolean;
+  pushDispatcher?: (payload: PushPayload) => Promise<void>;
+} = {}) {
+  pushDispatcher = options.pushDispatcher;
+  if (pushDispatcher) {
+    jobsMode = "cloudflare-queues";
+    lastJobError = undefined;
+    if (options.startLocalCron !== false) await startCronWorker();
+    return;
+  }
   const connection = bullConnectionOptions();
   if (!connection) {
     jobsMode = "inline";
@@ -239,14 +250,14 @@ export async function startJobWorkers(options: { startLocalCron?: boolean } = {}
       connection,
       defaultJobOptions: {
         attempts: 3,
-        backoff: { type: "exponential", delay: 5000 },
+        backoff: { type: "exponential", delay: 60_000 },
         removeOnComplete: { age: 3600, count: 1000 },
         removeOnFail: { age: 86_400, count: 5000 }
       }
     });
     pushWorker = new Worker(
       "push-notifications",
-      async (job: Job<PushPayload>) => runInlinePush(job.data),
+      async (job: Job<PushJobData>) => deliverPushJob(job, notifyUser),
       { connection }
     );
     await withTimeout(
@@ -274,6 +285,10 @@ export async function startJobWorkers(options: { startLocalCron?: boolean } = {}
 }
 
 export async function enqueuePushNotification(payload: PushPayload) {
+  if (pushDispatcher) {
+    await pushDispatcher(payload);
+    return;
+  }
   if (!pushQueue) {
     await runInlinePush(payload);
     return;
@@ -289,6 +304,7 @@ export async function closeJobWorkers() {
   await cronWorker?.close();
   pushWorker = undefined;
   pushQueue = undefined;
+  pushDispatcher = undefined;
   cronWorker = undefined;
   jobsMode = "inline";
 }
@@ -296,7 +312,7 @@ export async function closeJobWorkers() {
 export function getJobHealth() {
   return {
     mode: jobsMode,
-    queueReady: Boolean(pushQueue),
+    queueReady: Boolean(pushQueue || pushDispatcher),
     workerReady: Boolean(pushWorker),
     lastError: lastJobError,
     lastCronRun

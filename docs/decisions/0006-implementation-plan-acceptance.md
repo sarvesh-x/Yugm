@@ -1,7 +1,7 @@
 # ADR-0006 — Implementation plan acceptance and commit authorization
 
 **Date:** 2026-11-23
-**Status:** Accepted.
+**Status:** Accepted as the original sequence. [ADR-0008](0008-zero-spend-cloudflare-migration.md) supersedes the execution order. The one-time commit authorization recorded below was consumed.
 **Decision request:** DCR-5 in [decision-request.md](../cloudflare-migration/decision-request.md).
 
 ## Decision
