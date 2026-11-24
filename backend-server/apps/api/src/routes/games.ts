@@ -15,16 +15,13 @@ import { createNotification } from "../services/notifications.js";
 import { emitUser } from "../services/socket.js";
 import { asyncHandler, ErrorCode, HttpError, isValidObjectId, sanitizeText, sendOk } from "../utils/http.js";
 import { grantXp } from "../services/levels.js";
+import { presentGameCatalog, type GameCatalogScores, type ReadGameCatalogScores } from "../services/gameCatalog.js";
 import { socketEvents } from "@yugm/shared";
 
 export const gamesRouter = Router();
 gamesRouter.use(requireAuth);
 
-export type GameCatalogScores = {
-  best: Record<string, { score: number; createdAt: Date | string | null }>;
-  recent: readonly object[];
-};
-export type ReadGameCatalogScores = (userId: string) => Promise<GameCatalogScores>;
+export type { GameCatalogScores, ReadGameCatalogScores } from "../services/gameCatalog.js";
 
 const scoreSchema = z.object({
   gameId: z.enum(miniGameIds),
@@ -104,11 +101,7 @@ function challengePayload(challenge: any) {
 
 gamesRouter.get("/catalog", asyncHandler(async (req: AuthRequest, res) => {
   const { readGameCatalogScores }: { readGameCatalogScores?: ReadGameCatalogScores } = req.app.locals;
-  const { best, recent } = await (readGameCatalogScores ?? readMongoGameCatalogScores)(req.user!.id);
-  sendOk(res, {
-    games: miniGames.map((game) => ({ ...game, best: best[game.id] ?? null })),
-    recent
-  });
+  sendOk(res, presentGameCatalog(await (readGameCatalogScores ?? readMongoGameCatalogScores)(req.user!.id)));
 }));
 
 gamesRouter.get("/missions", asyncHandler(async (req: AuthRequest, res) => {

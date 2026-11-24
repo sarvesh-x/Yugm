@@ -1,18 +1,13 @@
 import { Router } from "express";
-import { z } from "zod";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { requireAppCheck } from "../middleware/appCheck.js";
 import { validateBody } from "../middleware/validate.js";
 import { Notification } from "../models/Notification.js";
 import { DeviceToken } from "../models/DeviceToken.js";
+import { deviceTokenSchema, removeDeviceTokenSchema } from "../services/deviceTokenContract.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId } from "../utils/http.js";
 
 export const notificationsRouter = Router();
-
-const deviceTokenSchema = z.object({
-  token: z.string().min(20),
-  platform: z.enum(["android", "ios", "web"])
-});
 
 notificationsRouter.post("/device-token", requireAppCheck, requireAuth, validateBody(deviceTokenSchema), asyncHandler(async (req: AuthRequest, res) => {
   const existing = await DeviceToken.findOne({ token: req.body.token }).lean();
@@ -36,7 +31,7 @@ notificationsRouter.post("/device-token", requireAppCheck, requireAuth, validate
   sendOk(res, { token });
 }));
 
-notificationsRouter.post("/device-token/remove", requireAppCheck, requireAuth, validateBody(z.object({ token: z.string().min(20) })), asyncHandler(async (req: AuthRequest, res) => {
+notificationsRouter.post("/device-token/remove", requireAppCheck, requireAuth, validateBody(removeDeviceTokenSchema), asyncHandler(async (req: AuthRequest, res) => {
   await DeviceToken.deleteOne({ userId: req.user!._id, token: req.body.token });
   sendOk(res, { removed: true });
 }));

@@ -12,6 +12,7 @@ import jwt from "jsonwebtoken";
 import { convertV4MiniflareOptions, Miniflare, Response } from "miniflare";
 import sharp from "sharp";
 import { unstable_splitSqlQuery } from "wrangler";
+import { verifyD1AppEndpoints } from "./d1-endpoints.mjs";
 
 const run = promisify(execFile);
 const pathFromHere = (relative) => fileURLToPath(new URL(relative, import.meta.url));
@@ -610,6 +611,7 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     await action(200, returning, "leave");
     assert.equal((await action(200, visitor, "leave")).data.clan, null);
     assert.equal(await db.prepare("SELECT 1 FROM clans WHERE source_id = ?").bind(clan.id).first(), null);
+    await verifyD1AppEndpoints(db, request, returning, visitor);
   } finally {
     await worker?.dispose();
     await legacyWorker?.dispose();

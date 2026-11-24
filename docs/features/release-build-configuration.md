@@ -38,6 +38,6 @@ The release output is under `app/build/outputs/bundle/release` or `app/build/out
 
 ## Managed media on the release API
 
-The production Worker selects D1 and has native R2 bindings. Hosted media is disabled in the checked-in configuration while the usage limit and full-app rollout remain open. R2 credentials and media signing secrets belong on the server. The app requests an upload session, sends the bytes to its short-lived URL, then completes the session and loads the committed variant from the production Worker.
+The production Worker selects D1 and enables native R2 bindings for the five existing hosted buckets. Set `YUGM_R2_ENABLED=false` to pause managed media. Store `MEDIA_GRANT_SECRET` as a Worker secret. The app requests an upload session, sends the bytes to its short-lived URL, then completes the session and loads the committed variant from the production Worker. [Hosted bucket verification](../handoffs/2026-11-24-hosted-r2-d1-endpoint-audit.md)
 
 Before releasing, verify the production hostname, Firebase sign-in and App Check on a signed device, API readiness, and the relevant Android journeys against the live deployment. When hosted media is active, exercise upload, completion, image rendering and cancellation.

@@ -2,6 +2,8 @@
 
 The owner selected D1 and R2 for production storage, Firebase for identity and push, and RealtimeKit for the RTC migration on a $0 budget. The Android build type selects the environment. Existing Compose screens, navigation and gameplay rules remain the reference for parity.
 
+The later hosted R2 slice enables the five existing Standard buckets and extends the D1 routes. [Current configuration and verification](2026-11-24-hosted-r2-d1-endpoint-audit.md)
+
 ## Implemented
 
 - **Debug.** The Android API and event origins are fixed at emulator loopback on port 4000. The existing local Wrangler profile uses simulated D1, R2 and Images bindings. [Local debug commands](2026-11-24-local-d1-auth-emulator.md)
@@ -15,7 +17,7 @@ The owner selected D1 and R2 for production storage, Firebase for identity and p
 | --- | --- |
 | Production origin | Replace `https://api.yugm.invalid` in the production Worker vars. Set the same origin in Android Gradle or CI, and attach the actual production host to this Worker when it is ready. |
 | D1 | Replace the placeholder UUID with the approved production database ID. Use the tracked schema and an isolated import/restore rehearsal to validate production-shaped data before switching traffic. |
-| R2 | Point the five production bindings at the intended Standard buckets. Keep `YUGM_R2_ENABLED=false` while usage bounds are unverified. |
+| R2 | The five production bindings point at the verified hosted Standard buckets. `YUGM_R2_ENABLED=false` pauses managed media. |
 | Firebase | Set `FCM_PROJECT_ID` for the production Firebase project. Store `FCM_CLIENT_EMAIL` and `FCM_PRIVATE_KEY` in the Worker secret store. Register the Android signing certificate with Firebase App Check. |
 | API and media signing | Supply a persistent Worker `JWT_SECRET` and a separate `MEDIA_GRANT_SECRET` of at least 32 characters before enabling managed media. |
 | RealtimeKit | The app ID, account ID, API token and voice/video publisher/listener presets are later inputs. Keep the account API token on the server. |
@@ -25,7 +27,7 @@ The production configuration has no public route attached, and disables `workers
 ## $0 production envelope
 
 - D1 Free has a 500 MB maximum per database, 5 million rows read and 100,000 rows written per day across the account. Queries fail after the daily free limits. Workers Free has its own invocation and CPU limits, so the local fixture is insufficient to establish production headroom. [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/) · [D1 limits](https://developers.cloudflare.com/d1/platform/limits/) · [Workers limits](https://developers.cloudflare.com/workers/platform/limits/)
-- R2 Standard includes 10 GB-month of storage, 1 million Class A operations and 10 million Class B operations per month. R2 can incur charges above those allowances. Images Free has its own transformation cap. Hosted media stays disabled by default while enforceable usage limits remain open. [R2 pricing](https://developers.cloudflare.com/r2/pricing/) · [Images pricing](https://developers.cloudflare.com/images/pricing/)
+- R2 Standard includes 10 GB-month of storage, 1 million Class A operations and 10 million Class B operations per month. R2 can incur charges above those allowances. Images Free has its own transformation cap. The owner approved hosted R2 for pre-release use. [R2 pricing](https://developers.cloudflare.com/r2/pricing/) · [Images pricing](https://developers.cloudflare.com/images/pricing/)
 - Cloudflare lists 10,000 included participant-minutes per month for each of RealtimeKit audio-only and audio/video. Usage beyond those amounts is billed. An expired participant token blocks new joins and reconnects. Existing participants remain connected until they leave or the provider removes them. A production $0 implementation needs admission accounting and a reliable stop for active participants before the included allocation runs out. [RealtimeKit pricing](https://developers.cloudflare.com/realtime/realtimekit/platform/pricing/) · [RealtimeKit token behavior](https://developers.cloudflare.com/realtime/realtimekit/faq/)
 
 ## Verification

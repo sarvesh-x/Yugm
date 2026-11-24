@@ -118,7 +118,7 @@ For Firebase Auth and FCM, download `google-services.json` from Firebase Console
 android-client/app/google-services.json
 ```
 
-Debug builds use emulator loopback at `http://10.0.2.2:4000/api`. Release builds derive the API and socket addresses from one HTTPS origin, `YUGM_PRODUCTION_ORIGIN`. The production Worker configuration targets D1 and R2, with hosted R2 disabled by default while the $0 usage limits and live cutover remain open. [Production configuration and rollout status](docs/handoffs/2026-11-24-production-cloudflare-builds.md)
+Debug builds use emulator loopback at `http://10.0.2.2:4000/api` with local D1 and R2. Release builds derive the API and socket addresses from one HTTPS origin, `YUGM_PRODUCTION_ORIGIN`. The production Worker configuration targets D1 and enables the five hosted R2 bindings for pre-release use. Full API parity and production rollout are pending. [Production configuration](docs/handoffs/2026-11-24-production-cloudflare-builds.md) · [Hosted R2 and endpoint coverage](docs/handoffs/2026-11-24-hosted-r2-d1-endpoint-audit.md)
 
 ```bash
 ./gradlew :app:assembleDebug --max-workers=2

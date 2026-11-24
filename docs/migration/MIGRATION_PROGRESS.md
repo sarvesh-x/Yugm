@@ -2,9 +2,9 @@
 
 The [root tracker](../../MIGRATION_PROGRESS.md) remains the work log. The [active 18-phase plan](implementation-plan.md#phase-gates) defines each gate. This index records the current acceptance boundary.
 
-**Active local scope.** The owner expanded the loopback Worker to cover whole-app debug. The current D1 routes and fixtures cover Auth, Profile, managed R2 avatars, player cosmetics, the notification inbox and core clans. Bonds, Rooms, the rest of clan management and chat, and admin work remain open. [Local scope and evidence](../handoffs/2026-11-24-local-d1-r2-app-expansion.md) · [Journey sequence](implementation-plan.md#journey-order)
+**Active local scope.** The owner expanded the loopback Worker to cover whole-app debug. D1 covers Auth, Profile, R2 avatars, player cosmetics, core clans, the inbox and push-device registration, room discovery and history, select wallet paths and the game catalog. The mount audit found 573 legacy-only method/path patterns, including room lifecycle, Bonds, direct chat, the rest of clan management and admin. [Coverage and evidence](../handoffs/2026-11-24-hosted-r2-d1-endpoint-audit.md) · [Journey sequence](implementation-plan.md#journey-order)
 
-**Production checkpoint.** Release builds use the configured production HTTPS origin. The production Worker uses the same migrated D1 routes and has R2 bindings. Hosted R2 is disabled by default. RealtimeKit server calls passed with mocked responses. Android RTC, production data transfer and the remaining journeys are open. [Production configuration and verification](../handoffs/2026-11-24-production-cloudflare-builds.md)
+**Production checkpoint.** Release builds use the configured production HTTPS origin. The production Worker targets the same D1 routes and enables the five verified hosted R2 bindings. RealtimeKit server calls passed with mocked responses. Android RTC, production data transfer and the remaining journeys are open. [Production configuration](../handoffs/2026-11-24-production-cloudflare-builds.md) · [Hosted R2 verification](../handoffs/2026-11-24-hosted-r2-d1-endpoint-audit.md)
 
 | Gate range | Evidence and status |
 | --- | --- |

@@ -1,7 +1,7 @@
 # Centralized Cloudflare R2 media and asset storage
 
 **Date:** 2026-11-22
-**Status:** Foundation + avatar slice implemented in the working tree; not committed, provisioned, migrated or deployed.
+**Status:** Managed avatars run in the local D1 Worker. The production target enables the five existing hosted Standard buckets. [Hosted R2 verification](../handoffs/2026-11-24-hosted-r2-d1-endpoint-audit.md)
 
 ## Purpose
 
@@ -23,19 +23,19 @@ Five logical storage classes are resolved only on the server:
 
 Managed uploads require `STORAGE_DRIVER=s3`; otherwise session creation fails with `503` and the Android avatar flow falls back to the legacy multipart endpoint. Never put R2 credentials, bucket names, keys or signed URLs in Android/admin/API responses, logs, build config or analytics.
 
-### Configuration procedure
+### Legacy S3 API configuration procedure
 
 Values are supplied by the owner and written locally; they must not be pasted into chat, source files, tracked Wrangler config, CI logs or analytics. The preflight prints only key names and set/blank status, never values.
 
 1. **Local Node API:** fill the existing ignored `backend-server/apps/api/.env` with `STORAGE_DRIVER=s3`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, the five `R2_*_BUCKET` names, `R2_ASSETS_PUBLIC_URL` and `R2_MEDIA_PUBLIC_URL`. Then run `cd backend-server && npm run env:check`. `env:check` fails with the exact missing key names when `s3` is selected without endpoint, credentials, buckets or a public URL.
 2. **Local Worker:** create ignored `backend-server/apps/cloudflare-worker/.dev.vars` with the same keys. `apps/cloudflare-worker/src/index.ts:86–88` copies string bindings into `process.env`, so no `r2_buckets` binding is required for this S3-API path. Run `npm run dev --workspace apps/cloudflare-worker`.
-3. **Deployed staging/production:** bucket names and `STORAGE_DRIVER` are non-secret per-environment configuration; the API token ID/secret and any provider secrets belong in Wrangler secrets or the deployment secret store, not in tracked `vars`. Set them interactively, for example `npx wrangler secret put R2_ACCESS_KEY_ID --config apps/cloudflare-worker/wrangler.staging.jsonc` (repeat for `R2_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ID` and any other secret). The current Wrangler configs still set `STORAGE_DRIVER=mongodb`; switching an environment to `s3` is a deploy-affecting change that requires separate approval and must not be done before the corresponding secrets and buckets exist.
+3. **Legacy staging:** bucket names and `STORAGE_DRIVER` are non-secret per-environment configuration. Store S3 credentials in the deployment secret store. Staging currently uses `STORAGE_DRIVER=mongodb`. Its eventual cutover requires its own buckets, credentials and deployment approval.
 4. **Cloudflare-side prerequisites (owner action):** create one bucket per logical class per environment, set the staging bucket to expire incomplete objects, allow the app origin for presigned PUT on the staging bucket, and bind custom domains/CDN for the two public buckets. No bucket, credential, domain or CORS change is made by this repository.
 5. **Verification after values are in place:** `npm run env:check`, `npm run test --workspace apps/api`, `npm run typecheck --workspace apps/api`, then a live create→PUT→complete→download→cancel cycle against the intended environment with the signed URL kept out of logs. A green preflight is not proof that buckets, CORS or credentials are valid at runtime.
 
 ### Release clients
 
-Release builds derive the HTTPS API and socket URLs from `YUGM_PRODUCTION_ORIGIN`. The production Worker uses native R2 bindings, with hosted media disabled in the checked-in configuration pending budget and live verification. The client receives short-lived upload grants and committed media URLs at runtime. See [release build configuration](release-build-configuration.md).
+Release builds derive the HTTPS API and socket URLs from `YUGM_PRODUCTION_ORIGIN`. The D1 production Worker enables the five hosted R2 buckets through native bindings. The Worker serves managed uploads and variants using those bindings and a server-side `MEDIA_GRANT_SECRET`. The debug target uses simulated bindings. The client receives short-lived upload grants and committed media URLs at runtime. [Release build configuration](release-build-configuration.md)
 
 ## Storage service
 

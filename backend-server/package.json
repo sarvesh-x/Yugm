@@ -29,6 +29,7 @@
     "secrets:check:strict": "node scripts/check-tracked-secrets.mjs --strict",
     "test:secrets": "node --test scripts/check-tracked-secrets.test.mjs",
     "openapi:check": "node scripts/check-openapi.mjs",
+    "audit:d1-endpoints": "tsx scripts/d1-endpoint-audit.mts",
     "test:openapi": "node --test scripts/check-openapi.test.mjs",
     "config:manifest": "node scripts/config-backup-manifest.mjs",
     "test:config-manifest": "node --test scripts/config-backup-manifest.test.mjs",

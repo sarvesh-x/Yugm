@@ -1,6 +1,6 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import { miniGameIds } from "@yugm/shared";
-import type { GameCatalogScores } from "../routes/games.js";
+import type { GameCatalogScores } from "../services/gameCatalog.js";
 
 type BestScoreRow = {
   game_id: string;

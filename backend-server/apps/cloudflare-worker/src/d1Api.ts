@@ -3,8 +3,6 @@ import type { D1Database, ExecutionContext, R2Bucket } from "@cloudflare/workers
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import process from "node:process";
-import express, { type ErrorRequestHandler, type Request as ExpressRequest } from "express";
-import { HttpError } from "../../api/src/utils/http.js";
 import { installCloudflareImageProcessor } from "./imageProcessor.js";
 
 interface D1ApiEnv {
@@ -70,38 +68,13 @@ async function startD1Runtime(env: D1ApiEnv, stage: ApiStage) {
     else process.env[key] = env[key];
   }
 
-  const [{ createD1AuthRouter }, { createD1ProfileEditRouter }, { createD1MediaRouter }, { createD1CosmeticsRouter },
-    { createD1ClansRouter }, { createD1NotificationRouter }, { requireAppCheck }, { initFirebase }, { responseError }] = await Promise.all([
-    import("../../api/src/migration/d1AuthRouter.js"),
-    import("../../api/src/migration/d1ProfileEdits.js"),
-    import("../../api/src/migration/d1Media.js"),
-    import("../../api/src/migration/d1Cosmetics.js"),
-    import("../../api/src/migration/d1Clans.js"),
-    import("../../api/src/migration/d1Notifications.js"),
-    import("../../api/src/middleware/appCheck.js"),
-    import("../../api/src/services/firebase.js"),
-    import("../../api/src/utils/responseError.js")
+  const [{ createD1App }, { initFirebase }] = await Promise.all([
+    import("../../api/src/migration/d1App.js"),
+    import("../../api/src/services/firebase.js")
   ]);
   installCloudflareImageProcessor(env.IMAGES);
   if (enforceAppCheck) await initFirebase();
-  const resolvePublicOrigin = (request: ExpressRequest) => {
-    // The fetch handler validates the origin and discards any incoming value.
-    const value = request.header("x-yugm-request-origin");
-    if (!value) throw new HttpError(400, "Media origin is unavailable");
-    return value;
-  };
-  const app = express();
-  app.disable("x-powered-by");
-  // The managed upload PUT carries raw image bytes, not JSON.
-  app.use("/api/media/uploads/:sessionId/bytes", express.raw({ type: () => true, limit: "6mb" }));
-  app.use(express.json({ limit: "1mb" }));
-  app.use("/api/auth", requireAppCheck, createD1AuthRouter(env.AUTH_DB));
-  app.use("/api/users", createD1ProfileEditRouter(env.AUTH_DB));
-  app.use("/api", createD1CosmeticsRouter(env.AUTH_DB, resolvePublicOrigin));
-  app.use("/api/clans", createD1ClansRouter(env.AUTH_DB));
-  app.use("/api/notifications", createD1NotificationRouter(env.AUTH_DB));
-  if (mediaEnabled(env, stage) && mediaGrantSecret) app.use("/api/media", createD1MediaRouter({
-    db: env.AUTH_DB,
+  const app = createD1App(env.AUTH_DB, mediaEnabled(env, stage) && mediaGrantSecret ? {
     buckets: {
       assets: env.ASSETS,
       "public-media": env.PUBLIC_MEDIA,
@@ -109,17 +82,8 @@ async function startD1Runtime(env: D1ApiEnv, stage: ApiStage) {
       originals: env.ORIGINALS,
       staging: env.STAGING
     },
-    resolvePublicOrigin,
     grantSecret: mediaGrantSecret
-  }));
-  app.use((_req, res) => res.status(404).json({ ok: false, error: { message: "Route not found" } }));
-  const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
-    const { status, message, code } = responseError(error);
-    const requestId = crypto.randomUUID();
-    if (status >= 500) console.error("D1 API request failed", requestId, status);
-    res.status(status).json({ ok: false, error: { message: status >= 500 ? "Unexpected server error" : message, code, requestId } });
-  };
-  app.use(errorHandler);
+  } : undefined);
   const server = createServer(app);
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
@@ -156,15 +120,17 @@ export function createD1ApiWorker(stage: ApiStage) {
             env.AUTH_DB.prepare("SELECT source_id, null_fields, missing_fields, edit_token FROM user_auth_profile LIMIT 0"),
             env.AUTH_DB.prepare("SELECT source_id, upload_token_hash FROM media_upload_sessions LIMIT 0"),
             env.AUTH_DB.prepare("SELECT source_id, seq FROM media_counters LIMIT 0"),
-            ...["device_tokens", "user_owned_cosmetics", "user_interests", "user_languages", "user_hobbies",
+            env.AUTH_DB.prepare("SELECT " + ["device_tokens", "user_owned_cosmetics", "user_interests", "user_languages", "user_hobbies",
               "user_profile_media", "user_showcased_badges", "follows", "friendships", "bonds", "bond_users",
               "blocks", "trust_verifications", "profile_visits", "xp_grants", "seasons", "season_rewards", "battle_passes",
               "battle_pass_rewards", "battle_pass_xp_grants", "wallet_transactions", "notifications",
               "media_objects", "media_variants", "media_quota_reservations", "cosmetics", "assets", "asset_variants",
               "gift_inventories", "gifts", "achievements", "user_claimed_achievement_tiers", "user_safety_statuses",
               "xp_daily_caps", "clans", "clan_members", "clan_member_roles", "clan_invites", "clan_messages",
-              "clan_message_reactions", "mini_game_challenges"]
-              .map((table) => env.AUTH_DB.prepare(`SELECT source_id FROM ${table} LIMIT 0`))
+              "clan_message_reactions", "mini_game_challenges", "mini_game_scores", "rooms", "room_follows", "room_invites",
+              "room_speakers", "room_moderators", "room_admins", "room_cohosts", "room_locked_seats", "room_participants",
+              "speaker_requests", "chat_messages", "room_activities"]
+              .map(table => `(SELECT source_id FROM ${table} LIMIT 0) AS ${table}`).join(", "))
           ]);
           return Response.json({ ok: true, service, storage: "d1", managedMedia: mediaEnabled(env, stage) });
         }

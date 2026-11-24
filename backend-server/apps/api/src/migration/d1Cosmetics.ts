@@ -1,7 +1,7 @@
 import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
 import { randomBytes } from "node:crypto";
-import { cosmeticBundles, equipProfileCosmeticSchema, profileCosmetics, purchaseCosmeticBundleSchema,
-  purchaseProfileCosmeticSchema, transferCosmeticSchema, xpDailyCaps, xpEvents } from "@yugm/shared";
+import { coinPacks, cosmeticBundles, equipProfileCosmeticSchema, profileCosmetics, purchaseCosmeticBundleSchema,
+  purchaseProfileCosmeticSchema, transferCosmeticSchema, vipPlans, walletSourceLabels, xpDailyCaps, xpEvents } from "@yugm/shared";
 import { Router, type Request as ExpressRequest } from "express";
 import { requireHttpSession } from "../middleware/httpAccessSession.js";
 import { validateBody } from "../middleware/validate.js";
@@ -9,7 +9,7 @@ import { activeCosmeticKey, toPublicCosmetic } from "../services/cosmeticPresent
 import type { AccessClaims } from "../services/accessSession.js";
 import { DAILY_REWARD_COINS, DAILY_REWARD_SOURCE, nextUtcDay, startOfUtcDay } from "../services/dailyWalletReward.js";
 import { getLevelStatus } from "../services/levelPresentation.js";
-import { getVipStatus } from "../services/vip.js";
+import { getVipStatus, VIP_CYCLE_DAYS, VIP_LEVEL_REQUIREMENTS } from "../services/vip.js";
 import { asyncHandler, ErrorCode, HttpError, sendOk } from "../utils/http.js";
 import { ACTIVE_COSMETIC_KEYS } from "./authProfileFields.js";
 import { bindD1LiveUser, createD1AccessSessionReader, d1LiveUserFilter } from "./d1AccessSession.js";
@@ -80,6 +80,17 @@ function wardrobe(row: WardrobeRow) {
     }
   }
   return { ownedCosmeticIds: JSON.parse(row.owned_ids_json) as string[], activeCosmetics };
+}
+
+function walletVip(row: WardrobeRow, now = new Date()) {
+  return getVipStatus({
+    vipTier: row.vip_tier, vipLevel: row.vip_level, vipExp: row.vip_exp, vipStartedAt: row.vip_started_at ?? undefined,
+    vipExpiresAt: row.vip_expires_at, vipFrozen: row.vip_frozen, vipFreezeStartedAt: row.vip_freeze_started_at
+  }, now);
+}
+
+function walletLevel(row: WardrobeRow) {
+  return getLevelStatus({ xp: row.xp, lastDailyCheckInAt: row.last_daily_check_in_at ?? undefined });
 }
 
 async function seedDefaultCosmetics(db: D1Database) {
@@ -399,17 +410,82 @@ export function createD1CosmeticsRouter(db: D1Database, publicOrigin: (req: Expr
     sendOk(res, {
       balance: row.balance,
       diamondBalance: row.diamond_balance,
-      vip: getVipStatus({
-        vipTier: row.vip_tier, vipLevel: row.vip_level, vipExp: row.vip_exp, vipStartedAt: row.vip_started_at ?? undefined,
-        vipExpiresAt: row.vip_expires_at, vipFrozen: row.vip_frozen, vipFreezeStartedAt: row.vip_freeze_started_at
-      }, now),
-      level: getLevelStatus({ xp: row.xp, lastDailyCheckInAt: row.last_daily_check_in_at ?? undefined }),
+      vip: walletVip(row, now),
+      level: walletLevel(row),
       cosmetics: wardrobe(row),
       dailyReward: {
         canClaim: !claimedToday, coinReward: DAILY_REWARD_COINS, xpReward: 0,
         nextClaimAt: claimedToday ? nextUtcDay(now).toISOString() : null
       }
     });
+  }));
+
+  router.get("/wallet/packs", authenticate, (_req, res) => sendOk(res, { packs: coinPacks }));
+
+  router.get("/wallet/vip/plans", authenticate, asyncHandler(async (_req, res) => {
+    const row = walletRow(await db.prepare(readWardrobe).bind(res.locals.userId).first());
+    sendOk(res, {
+      plans: vipPlans,
+      levels: VIP_LEVEL_REQUIREMENTS.slice(1).map((requiredExp, index) => ({ level: index + 1, requiredExp })),
+      cycleDays: VIP_CYCLE_DAYS, vip: walletVip(row), balance: row.balance
+    });
+  }));
+
+  router.get("/wallet/transactions", authenticate, asyncHandler(async (req, res) => {
+    const limit = Math.trunc(Math.min(Math.max(Number(req.query.limit) || 100, 1), 200));
+    const { results } = await db.prepare(`SELECT source_id AS _id, user_id AS userId, type, source, amount,
+      balance_before AS balanceBefore, balance_after AS balanceAfter, metadata, purchase_token AS purchaseToken,
+      product_id AS productId, platform, verification_status AS verificationStatus, credited_at AS creditedAt,
+      created_at AS createdAt, updated_at AS updatedAt FROM wallet_transactions
+      WHERE user_id = ? ORDER BY created_at DESC, source_id DESC LIMIT ?`).bind(res.locals.userId, limit)
+      .all<Record<string, unknown> & { source: keyof typeof walletSourceLabels; metadata: string }>();
+    sendOk(res, {
+      transactions: results.map(({ metadata, ...transaction }) => ({
+        ...Object.fromEntries(Object.entries(transaction).filter(([, value]) => value != null)),
+        metadata: JSON.parse(metadata), label: walletSourceLabels[transaction.source] ?? transaction.source
+      }))
+    });
+  }));
+
+  router.post("/wallet/rewards/daily", authenticate, asyncHandler(async (req, res) => {
+    const claims: AccessClaims = res.locals.claims;
+    const now = new Date();
+    const time = now.toISOString();
+    const dayStart = startOfUtcDay(now).toISOString();
+    const dayKey = dayStart.slice(0, 10);
+    const operationId = newId();
+    const claim = "EXISTS (SELECT 1 FROM wallet_transactions WHERE source_id = ?)";
+    const today = `EXISTS (SELECT 1 FROM wallet_transactions WHERE user_id = ? AND source = ?
+      AND (created_at >= ? OR json_extract(metadata, '$.day') = ?))`;
+    const todayArgs = [claims.sub, DAILY_REWARD_SOURCE, dayStart, dayKey];
+    const [credit, , , account, eligibility] = await db.batch([
+      db.prepare(`INSERT INTO wallet_transactions (source_id, user_id, type, source, amount, balance_before, balance_after,
+        metadata, credited_at, created_at, updated_at)
+        SELECT ?, u.source_id, 'CREDIT', ?, ?, u.wallet_balance, u.wallet_balance + ?, ?, ?, ?, ? FROM users AS u
+        WHERE ${d1LiveUserFilter} AND NOT ${walletFrozen} AND u.wallet_balance <= ? AND NOT ${today}`)
+        .bind(operationId, DAILY_REWARD_SOURCE, DAILY_REWARD_COINS, DAILY_REWARD_COINS,
+          JSON.stringify({ day: dayKey, reason: "daily_reward" }), time, time, time,
+          ...bindD1LiveUser(claims, time), Number.MAX_SAFE_INTEGER - DAILY_REWARD_COINS, ...todayArgs),
+      db.prepare(`UPDATE users SET wallet_balance = wallet_balance + ?, updated_at = ? WHERE source_id = ? AND ${claim}`)
+        .bind(DAILY_REWARD_COINS, time, claims.sub, operationId),
+      clearProfileMarkers(db, claims.sub, ["walletBalance"], claim, operationId),
+      db.prepare(readWardrobe).bind(claims.sub),
+      db.prepare(`SELECT ${walletFrozen} AS frozen, ${today} AS claimed FROM users AS u WHERE source_id = ?`)
+        .bind(...todayArgs, claims.sub)
+    ]);
+    const row = walletRow(account.results[0]);
+    const claimed = credit.meta.changes > 0;
+    const state = eligibility.results[0] as { frozen: number; claimed: number };
+    if (!claimed) {
+      await requireHttpSession(req.headers.authorization, readAccess);
+      if (state.frozen) throw new HttpError(403, "Wallet is frozen", ErrorCode.FORBIDDEN);
+      if (!state.claimed) throw new HttpError(409, "Coin balance limit reached", ErrorCode.CONFLICT);
+    }
+    sendOk(res, {
+      claimed, alreadyClaimed: !claimed, rewardCoins: DAILY_REWARD_COINS, rewardXp: 0,
+      balance: row.balance, level: walletLevel(row),
+      dailyReward: { canClaim: false, coinReward: DAILY_REWARD_COINS, xpReward: 0, nextClaimAt: nextUtcDay(now).toISOString() }
+    }, claimed ? 201 : 200);
   }));
 
   router.get("/wallet/cosmetics", authenticate, asyncHandler(async (req, res) => {

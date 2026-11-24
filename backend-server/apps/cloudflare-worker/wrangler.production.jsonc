@@ -13,7 +13,7 @@
   "vars": {
     "YUGM_STAGE": "production",
     "YUGM_PRODUCTION_ORIGIN": "https://api.yugm.invalid",
-    "YUGM_R2_ENABLED": "false",
+    "YUGM_R2_ENABLED": "true",
     "APP_CHECK_ENFORCE": "true"
   },
   "d1_databases": [
@@ -25,11 +25,11 @@
     }
   ],
   "r2_buckets": [
-    { "binding": "ASSETS", "bucket_name": "yugm-production-assets" },
-    { "binding": "PUBLIC_MEDIA", "bucket_name": "yugm-production-public-media" },
-    { "binding": "PRIVATE_MEDIA", "bucket_name": "yugm-production-private-media" },
-    { "binding": "ORIGINALS", "bucket_name": "yugm-production-originals" },
-    { "binding": "STAGING", "bucket_name": "yugm-production-staging" }
+    { "binding": "ASSETS", "bucket_name": "yugm-assets" },
+    { "binding": "PUBLIC_MEDIA", "bucket_name": "yugm-public-media" },
+    { "binding": "PRIVATE_MEDIA", "bucket_name": "yugm-private-media" },
+    { "binding": "ORIGINALS", "bucket_name": "yugm-originals" },
+    { "binding": "STAGING", "bucket_name": "yugm-staging" }
   ],
   "images": { "binding": "IMAGES" },
   "observability": {

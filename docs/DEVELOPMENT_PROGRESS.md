@@ -1,5 +1,11 @@
 # Development progress
 
+## 2026-11-24 — Hosted R2 verification and D1 endpoint audit
+
+- Verified all five hosted Standard R2 buckets with a disposable write, byte-for-byte read-back and deletion in each. Enabled their native bindings in the production target and retained the media pause switch.
+- Added 20 legacy API operations to the shared D1 Worker. The slice covers room discovery, follows and history, push-device registration and removal, wallet and daily-claim operations, and the game catalog. The mount audit identifies 65 shared patterns and 573 legacy-only patterns.
+- The dated handoff records test results, the remaining route families and the production inputs. [Hosted R2 and endpoint audit](handoffs/2026-11-24-hosted-r2-d1-endpoint-audit.md)
+
 ## 2026-11-24 — Cloudflare migration checkpoint
 
 - Updated the README, build guide, environment matrix and migration handoffs to reflect the emulator and production build split, the current D1 route coverage, the hosted R2 default and the remaining RealtimeKit work.

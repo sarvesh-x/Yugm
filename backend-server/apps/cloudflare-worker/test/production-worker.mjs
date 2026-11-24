@@ -13,7 +13,7 @@ import { unstable_splitSqlQuery } from "wrangler";
 const run = promisify(execFile);
 const pathFromHere = relative => fileURLToPath(new URL(relative, import.meta.url));
 
-test("the production entrypoint uses D1 and keeps hosted media disabled by default", async () => {
+test("the production entrypoint uses D1 and configures hosted R2 with a media pause switch", async () => {
   const temporaryRoot = await realpath(tmpdir());
   const directory = await mkdtemp(join(temporaryRoot, "yugm-production-worker-"));
   const configPath = pathFromHere("../wrangler.production.jsonc");
@@ -21,12 +21,15 @@ test("the production entrypoint uses D1 and keeps hosted media disabled by defau
   assert.equal(config.main, "src/production.ts");
   assert.equal(config.workers_dev, false);
   assert.equal(config.preview_urls, false);
-  assert.equal(config.vars.YUGM_R2_ENABLED, "false");
+  assert.equal(config.vars.YUGM_R2_ENABLED, "true");
   assert.equal(config.vars.APP_CHECK_ENFORCE, "true");
   assert.equal(config.durable_objects, undefined);
   assert.ok(!("MONGODB_DB_NAME" in config.vars));
   assert.equal(config.d1_databases.length, 1);
-  assert.equal(config.r2_buckets.length, 5);
+  assert.deepEqual(Object.fromEntries(config.r2_buckets.map(({ binding, bucket_name }) => [binding, bucket_name])), {
+    ASSETS: "yugm-assets", PUBLIC_MEDIA: "yugm-public-media", PRIVATE_MEDIA: "yugm-private-media",
+    ORIGINALS: "yugm-originals", STAGING: "yugm-staging"
+  });
 
   const workers = [];
   try {
@@ -73,7 +76,7 @@ test("the production entrypoint uses D1 and keeps hosted media disabled by defau
       FCM_CLIENT_EMAIL: "firebase-fixture@yugm-production-fixture.iam.gserviceaccount.com",
       FCM_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" })
     };
-    const worker = makeWorker(firebaseFixture);
+    const worker = makeWorker({ ...firebaseFixture, YUGM_R2_ENABLED: "false" });
     assert.equal((await worker.dispatchFetch("http://127.0.0.1/health")).status, 404);
     assert.equal((await worker.dispatchFetch("https://unrelated.test/health")).status, 404);
     assert.equal((await worker.dispatchFetch(origin + "/ready")).status, 503);
@@ -89,12 +92,17 @@ test("the production entrypoint uses D1 and keeps hosted media disabled by defau
     });
     assert.equal(missingAppCheck.status, 401);
     assert.match(await missingAppCheck.text(), /App verification token is required/i);
+    const missingDeviceAppCheck = await worker.dispatchFetch(origin + "/api/notifications/device-token", {
+      method: "POST", headers: { "content-type": "application/json" }, body: "{}"
+    });
+    assert.equal(missingDeviceAppCheck.status, 401);
+    assert.match(await missingDeviceAppCheck.text(), /App verification token is required/i);
     assert.equal((await worker.dispatchFetch(origin + "/api/media/uploads", { method: "POST" })).status, 503);
     assert.equal((await worker.dispatchFetch(origin + "/api/assets/published/none/full")).status, 503);
 
-    const missingMediaSecret = makeWorker({ ...firebaseFixture, YUGM_R2_ENABLED: "true" });
+    const missingMediaSecret = makeWorker(firebaseFixture);
     assert.equal((await missingMediaSecret.dispatchFetch(origin + "/ready")).status, 503);
-    const withMedia = makeWorker({ ...firebaseFixture, YUGM_R2_ENABLED: "true", MEDIA_GRANT_SECRET: randomBytes(32).toString("hex") });
+    const withMedia = makeWorker({ ...firebaseFixture, MEDIA_GRANT_SECRET: randomBytes(32).toString("hex") });
     const mediaDb = await withMedia.getD1Database(binding.binding);
     await mediaDb.batch(unstable_splitSqlQuery(schema).map(sql => mediaDb.prepare(sql)));
     const assetId = randomBytes(12).toString("hex");

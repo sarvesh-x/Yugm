@@ -8,7 +8,7 @@
 |---|---|---|
 | Local Android debug | `backend-server/apps/cloudflare-worker/auth-local/wrangler.jsonc` | Loopback Worker with simulated D1, R2 and Images. The Android emulator uses port 4000. [Startup and local bindings](../handoffs/2026-11-24-local-d1-auth-emulator.md) |
 | Staging | `backend-server/apps/cloudflare-worker/wrangler.staging.jsonc` | Deployed prototype at `https://yugm-api-staging.sarveshkumar10101.workers.dev`. Admin at `https://yugm-admin-staging.pages.dev`. Uses isolated `YugmStaging` MongoDB name, staging LiveKit project, `STAGING_DB_ISOLATED=true`, and restricted admin-origin CORS. |
-| Production target | `backend-server/apps/cloudflare-worker/wrangler.production.jsonc` | Shared D1 Worker with native R2 bindings, Firebase App Check, and a placeholder HTTPS origin. Hosted R2 starts disabled. Full route coverage, provider parity and live cutover are open. |
+| Production target | `backend-server/apps/cloudflare-worker/wrangler.production.jsonc` | Shared D1 Worker with five enabled hosted R2 bindings, Firebase App Check, and a placeholder HTTPS origin. Full route coverage, provider parity and live cutover are open. [Hosted R2 and endpoint audit](../handoffs/2026-11-24-hosted-r2-d1-endpoint-audit.md) |
 
 Pushes to `master` trigger the staging API and admin deployment workflow. Use a feature branch for checkpoints that should leave staging alone. Version tags trigger the Android release workflow. [Workflow source](../../.github/workflows/cloudflare-staging.yml) · [Android release workflow](../../.github/workflows/android-release.yml)
 
@@ -64,7 +64,7 @@ Environment inheritance must be checked explicitly. Some Wrangler fields do not 
 - Enable structured logs and issues in staging and production. Keep redaction on for query strings and sensitive headers.
 - Add correlation IDs from API requests through queues, DO events and admin audit logs.
 - Monitor Workers CPU/memory/subrequests, D1 rows read/written and storage, DO requests/duration/hibernation, R2 class A/B operations and storage, queue retries/DLQ/backlog, KV operations, and provider quotas.
-- Verify service-specific free allowances and enforceable stops before activating hosted R2 and RealtimeKit. Treat billing alerts as monitoring. [Current budget assumptions](../handoffs/2026-11-24-production-cloudflare-builds.md#0-production-envelope)
+- Hosted R2 is approved for pre-release use. Review actual R2 and Images usage before public rollout. Verify free allowances and enforceable limits before activating RealtimeKit. [Current budget assumptions](../handoffs/2026-11-24-production-cloudflare-builds.md#0-production-envelope)
 - Use `wrangler deploy --dry-run` with the intended config as a packaging check. A dry run does not prove remote bindings or runtime behavior.
 
 ## Approval gates

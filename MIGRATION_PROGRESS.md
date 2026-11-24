@@ -8,7 +8,7 @@ The [active 18-phase plan](docs/migration/implementation-plan.md) governs behavi
 
 The owner expanded the debug target to the whole app on local D1 and R2. The loopback Worker has verified Auth, Profile, managed avatars, player cosmetics, notification inbox routes and core clan membership in workerd. Live Android and provider checks, the other app journeys and MongoDB package removal are open. [Local coverage and next work](docs/handoffs/2026-11-24-local-d1-r2-app-expansion.md)
 
-Android now selects emulator loopback for debug and the production HTTPS origin for release. The production configuration targets the shared D1 API with native R2 bindings. RealtimeKit is the selected RTC candidate and has an offline-tested server client. Full production coverage, live data cutover, hosted media activation and Android RTC are open. [Production configuration and verification](docs/handoffs/2026-11-24-production-cloudflare-builds.md)
+Android selects emulator loopback for debug and the production HTTPS origin for release. The production configuration targets the shared D1 API and enables the five hosted R2 buckets verified for pre-release use. RealtimeKit has an offline-tested server client. Full API parity, live data cutover and Android RTC are open. [Production configuration](docs/handoffs/2026-11-24-production-cloudflare-builds.md) · [Hosted R2 and endpoint audit](docs/handoffs/2026-11-24-hosted-r2-d1-endpoint-audit.md)
 
 | Workstream | Status | Next evidence |
 | --- | --- | --- |
