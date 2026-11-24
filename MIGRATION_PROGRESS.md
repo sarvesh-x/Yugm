@@ -22,7 +22,16 @@ Profile is the active journey after local Auth and Navigation checks. Settings, 
 
 The current work is local documentation, tests and compatibility preparation. Provisioning, billing changes, deployments, production data operations and commit/push require separate authorization. The work log below preserves prior evidence and checkpoints.
 
+**Commit-state note (2026-11-24):** "Uncommitted" in the dated entries below describes the working-tree state when each entry was written. The local migration slices were subsequently captured in commit `b04f77d` (`feat(migration): checkpoint local Cloudflare migration`) on `codex/cloudflare-migration-checkpoint`, branched from `master@5a519fe`. Current Git state is authoritative; those historical phrases are not claims about the present working tree.
+
 ## Work log
+
+### 2026-11-24 — Commit-state wording clarified
+
+- **Status:** documentation-only; no code, data, credential, provisioning or deploy change.
+- **Changes:** added a commit-state note to this tracker, `docs/DEVELOPMENT_PROGRESS.md`, `docs/CURRENT_TASK.md` and the migration continuation handoff. Historical "uncommitted" wording is retained as evidence and qualified by checkpoint `b04f77d`.
+- **Verification:** `git status` checked before editing; `git diff --check` clean. No tests re-run; no production access.
+- **Next task:** continue the Profile slice — Android setup and Edit Profile against the loopback D1 Worker. Commit/push authorization applies only to this documentation commit.
 
 ### 2026-11-24 — Local D1 Profile edits
 

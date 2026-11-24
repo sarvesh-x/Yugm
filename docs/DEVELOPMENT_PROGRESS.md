@@ -1,5 +1,12 @@
 # Development progress
 
+**Commit-state note (2026-11-24):** The "uncommitted" / "changes remain uncommitted" wording in older entries records the working-tree state at the time each entry was written. Those local slices were subsequently captured in commit `b04f77d` on `codex/cloudflare-migration-checkpoint` (branched from `master@5a519fe`). Check Git for current state; the historical wording is retained as evidence and is not a claim about the present working tree.
+
+## 2026-11-24 — Commit-state wording clarified
+
+- Added current commit-state notes to this file, the root migration tracker, `CURRENT_TASK.md` and the migration continuation handoff. Older "uncommitted" statements are retained as historical evidence and qualified by checkpoint `b04f77d`.
+- Documentation only; no code, data, credential or deployment change. `git diff --check` clean. No tests re-run in this slice.
+
 ## 2026-11-24 — Local D1 Profile edits
 
 - Wired `PATCH /api/users/me` to local D1 with a single batch for the Profile save, first-completion XP, Battle Pass progress and any earned level-up coins and inbox entry. The fixture matched the mounted MongoDB response and verified rollback on ledger failure. The bundled Worker processed concurrent setup requests with one completion grant.

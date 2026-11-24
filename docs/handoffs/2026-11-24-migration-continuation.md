@@ -1,6 +1,6 @@
 # Continue the Yugm Cloudflare migration
 
-Start from the `codex/cloudflare-migration-checkpoint` branch or a descendant of that checkpoint. The branch contains the migration work after `5a519fe`. Read `git status`, `AGENTS.md`, the docs index and the first section of `CURRENT_TASK.md` before editing. [Agent guide](../../AGENTS.md) · [Docs index](../INDEX.md) · [Current task](../CURRENT_TASK.md)
+Start from the `codex/cloudflare-migration-checkpoint` branch at `b04f77d` or a descendant of that checkpoint. The commit contains the migration work after `5a519fe`, including the local Auth, Navigation and Profile parity slices. Older records that describe those slices as "uncommitted" predate this checkpoint. Read `git status`, `AGENTS.md`, the docs index and the first section of `CURRENT_TASK.md` before editing. [Agent guide](../../AGENTS.md) · [Docs index](../INDEX.md) · [Current task](../CURRENT_TASK.md)
 
 ## Resume with Profile
 
