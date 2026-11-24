@@ -1,6 +1,6 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import type { UserRole } from "@yugm/shared";
-import type { AccessAccount, ReadAccessContext } from "../services/accessSession.js";
+import type { AccessClaims, AccessAccount, ReadAccessContext } from "../services/accessSession.js";
 
 type D1AccessAccount = AccessAccount & { id: string; role: UserRole };
 
@@ -46,4 +46,17 @@ export function createD1AccessSessionReader(db: D1Database, surface: "http" | "s
       session: row.session_id ? { tokenVersion } : null
     };
   };
+}
+
+// Revalidate the HTTP actor in the same D1 batch as a protected mutation. The users table alias is u.
+export const d1LiveUserFilter = `u.source_id = ? AND u.is_blocked = 0
+  AND (u.suspended_until IS NULL OR u.suspended_until <= ?)
+  AND EXISTS (SELECT 1 FROM auth_sessions AS s WHERE s.source_id = ? AND s.user_id = u.source_id
+    AND s.revoked_at IS NULL AND s.expires_at > ?
+    AND COALESCE(CASE WHEN s.token_version_present = 0 THEN 0 ELSE s.token_version END, ?) IS ?)
+  AND (? IS NULL OR u.token_version = ?)`;
+
+export function bindD1LiveUser(claims: AccessClaims, time: string) {
+  const generation = claims.tokenVersion ?? null;
+  return [claims.sub, time, claims.sid, time, generation, generation, generation, generation];
 }

@@ -2,6 +2,8 @@
 
 **Scope:** Local development only. The owner chose to keep this slice limited to **Auth + Profile**. Firebase remains the identity provider. Staging, production, the normal Node API and all other journeys remain on their current paths.
 
+The startup commands below also run the later local Worker routes. Android debug fixes the API and socket origin at emulator loopback. Current coverage includes cosmetics, the notification inbox and core clan membership. See the [whole-app local expansion handoff](2026-11-24-local-d1-r2-app-expansion.md) for current routes and remaining gaps.
+
 ## What changed
 
 - `backend-server/apps/cloudflare-worker/src/authLocal.ts` now accepts `10.0.2.2` as a loopback host. Android debug builds on the emulator force `http://10.0.2.2:4000/api`, and the Worker previously rejected that Host header with `404`.
@@ -54,11 +56,10 @@ From `backend-server`:
 
    `/ready` should report `storage: "d1"`.
 
-   If it returns the generic `Local D1 Auth is unavailable` message after `.dev.vars` exists, the default local D1 database may be an older draft. Table count alone is not enough: during diagnosis it had 147 tables, but `user_auth_profile` was missing `missing_fields` and `edit_token`, and `bond_milestones` / `bond_preferences` also had stale columns. `CREATE TABLE IF NOT EXISTS` does not repair existing tables. Use a fresh persistence directory; this discards only local D1 data:
+   If it returns `D1 API is unavailable` after `.dev.vars` exists, check whether the local database predates the current schema. Earlier drafts could have the expected table count while missing fields. Apply the schema in a fresh persistence directory to keep the original local data available:
 
    ```powershell
-   $persist = Join-Path $env:TEMP 'yugm-auth-local-clean'
-   Remove-Item -LiteralPath $persist -Recurse -Force -ErrorAction SilentlyContinue
+   $persist = Join-Path $env:TEMP ("yugm-auth-local-" + [guid]::NewGuid().ToString("N"))
 
    npm.cmd exec --workspace @yugm/cloudflare-worker -- wrangler d1 execute AUTH_DB --config auth-local/wrangler.jsonc --local --file ../api/migrations/d1/0001_initial.sql --persist-to $persist
    npm.cmd run dev:auth --workspace @yugm/cloudflare-worker -- --port 4000 --persist-to $persist
@@ -66,7 +67,7 @@ From `backend-server`:
 
    This exact command sequence was verified: `/ready` returned `storage: "d1"`. If you keep the default persistence directory, fully stop and restart Wrangler as well, because `.dev.vars` is read at startup.
 
-7. Run a debug build on an Android emulator. `YugmApplication` already selects `http://10.0.2.2:4000/api` for debug emulator builds, regardless of `YUGM_SERVER_MODE`. `ApiConfig.shouldRequireAppCheck()` already disables App Check for that local HTTP host in debug builds.
+7. Run a debug build on an Android emulator. Gradle sets the API to `http://10.0.2.2:4000/api` and the event origin to `http://10.0.2.2:4000`. Debug App Check is disabled for this local HTTP host. [Build type routing](../features/release-build-configuration.md)
 
 ## Expected journey
 
@@ -110,7 +111,7 @@ Unmounted calls observed on the same journey are expected to return `404` from t
 
 ## Limits
 
-- Only Auth and Profile are mounted. Home tabs such as Chat, Rooms and Wallet will return `404` against this Worker.
+- The Worker covers Auth, Profile, managed avatars, player cosmetics, wallet overview, the inbox and core clan membership. Chat, Rooms and other unported wallet routes are still open. [Local route coverage](2026-11-24-local-d1-r2-app-expansion.md)
 - A D1 token is not accepted by the MongoDB-backed Node API; treat this as a separate local backend.
 - Managed avatar upload is now mounted by the later [local D1 + R2 media slice](2026-11-24-local-d1-r2-media.md). This Auth/Profile runbook's original generated-avatar coverage (`avatarType` / `avatarPartsJson`) remains valid. The isolated config now has five local-only R2 bindings and an Images binding; the normal Node API and its MongoDB-backed legacy upload path are unchanged. Workers still have no writable filesystem, so uploaded bytes are written through R2 bindings. Because the media tables and `upload_token_hash` column were added after the first local database, use a fresh persistence directory when running the full slice.
 - Post-profile push-token sync and optional Profile/Discover sections return `404` by design in this slice. They are non-fatal; see [Android API trace](#android-api-trace).

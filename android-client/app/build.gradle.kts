@@ -1,8 +1,6 @@
 @file:Suppress("DEPRECATION")
 
-import java.net.Inet4Address
-import java.net.NetworkInterface
-import java.util.Collections
+import java.net.URI
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Properties
 
@@ -31,57 +29,23 @@ fun quoted(value: String): String {
     return "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
 }
 
-fun localLanIpv4(): String? {
-    return Collections.list(NetworkInterface.getNetworkInterfaces())
-        .asSequence()
-        .filter { it.isUp && !it.isLoopback }
-        .flatMap { network ->
-            val interfaceName = network.displayName.lowercase()
-            val preference = when {
-                network.isVirtual || listOf("virtual", "vmware", "virtualbox", "hyper-v", "docker", "wsl").any(interfaceName::contains) -> 0
-                listOf("wi-fi", "wifi", "wireless", "wlan").any(interfaceName::contains) -> 3
-                else -> 1
-            }
-            Collections.list(network.inetAddresses)
-                .filterIsInstance<Inet4Address>()
-                .mapNotNull { address ->
-                    val value = address.hostAddress
-                    val isPrivate = value.startsWith("192.168.") || value.startsWith("10.") || value.startsWith("172.")
-                    if (isPrivate && preference > 0) preference to value else null
-                }
-        }
-        .sortedByDescending { it.first }
-        .map { it.second }
-        .firstOrNull()
-}
+val debugOrigin = "http://10.0.2.2:4000"
+val productionPlaceholder = "https://api.yugm.invalid"
+val productionSetting = configValue("YUGM_PRODUCTION_ORIGIN")?.trim()?.trimEnd('/')
+    ?.takeIf(String::isNotBlank) ?: productionPlaceholder
+val productionUri = runCatching { URI(productionSetting) }.getOrNull()
+val productionHost = productionUri?.host.orEmpty().lowercase()
+val validProductionOrigin = productionUri?.scheme == "https" && productionHost.contains('.') &&
+    !productionHost.all { it.isDigit() || it == '.' } && !productionHost.startsWith("yugm-api-staging.") &&
+    productionUri.rawUserInfo == null && productionUri.rawPath.isNullOrEmpty() &&
+    productionUri.rawQuery == null && productionUri.rawFragment == null
+val productionOrigin = if (validProductionOrigin) productionSetting else productionPlaceholder
 
-val isReleaseTaskRequested = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
-val defaultServerMode = if (isReleaseTaskRequested) "deploy" else "development"
-val yugmServerMode = configValue("YUGM_SERVER_MODE")?.trim()?.lowercase()
-    ?: defaultServerMode
-
-require(yugmServerMode == "development" || yugmServerMode == "deploy") {
-    "YUGM_SERVER_MODE must be either 'development' or 'deploy'"
+val requestsReleaseArtifact = gradle.startParameter.taskNames.any { task ->
+    val name = task.substringAfterLast(':').lowercase()
+    name in setOf("build", "assemble", "bundle", "assemblerelease", "bundlerelease", "packagerelease",
+        "packagereleasebundle", "signreleasebundle", "installrelease") || name.startsWith("publish")
 }
-if (isReleaseTaskRequested) {
-    require(yugmServerMode == "deploy") {
-        "Release builds must use YUGM_SERVER_MODE=deploy"
-    }
-}
-
-val localLanHost = configValue("YUGM_LAN_HOST")?.trim()?.takeIf(String::isNotBlank) ?: localLanIpv4()
-val defaultApiBaseUrl = if (yugmServerMode == "deploy") {
-    "https://yugm-api-staging.sarveshkumar10101.workers.dev/api"
-} else {
-    localLanHost?.let { "http://$it:4000/api" } ?: "http://10.0.2.2:4000/api"
-}
-val defaultSocketBaseUrl = if (yugmServerMode == "deploy") {
-    "https://yugm-api-staging.sarveshkumar10101.workers.dev"
-} else {
-    localLanHost?.let { "http://$it:4000" } ?: "http://10.0.2.2:4000"
-}
-val yugmApiBaseUrl = configValue("YUGM_API_BASE_URL") ?: defaultApiBaseUrl
-val yugmSocketBaseUrl = configValue("YUGM_SOCKET_BASE_URL") ?: defaultSocketBaseUrl
 val yugmVersionCode = configValue("YUGM_VERSION_CODE")?.toIntOrNull() ?: 1
 val yugmVersionName = configValue("YUGM_VERSION_NAME")?.takeIf(String::isNotBlank) ?: "1.0"
 val uploadKeystoreFile = configValue("YUGM_UPLOAD_KEYSTORE_FILE")
@@ -91,18 +55,9 @@ val uploadKeyPassword = configValue("YUGM_UPLOAD_KEY_PASSWORD")
 val hasUploadSigning = listOf(uploadKeystoreFile, uploadKeystorePassword, uploadKeyAlias, uploadKeyPassword)
     .all { !it.isNullOrBlank() }
 
-if (isReleaseTaskRequested) {
-    require(!yugmApiBaseUrl.isNullOrBlank()) {
-        "Set YUGM_API_BASE_URL to your deployed API URL, for example https://your-backend.example.com/api"
-    }
-    require(!yugmSocketBaseUrl.isNullOrBlank()) {
-        "Set YUGM_SOCKET_BASE_URL to your deployed socket URL, for example https://your-backend.example.com"
-    }
-    require(yugmApiBaseUrl.startsWith("https://")) {
-        "YUGM_API_BASE_URL must use HTTPS for release builds"
-    }
-    require(yugmSocketBaseUrl.startsWith("https://")) {
-        "YUGM_SOCKET_BASE_URL must use HTTPS for release builds"
+if (requestsReleaseArtifact) {
+    require(validProductionOrigin && !productionHost.endsWith(".invalid")) {
+        "Set YUGM_PRODUCTION_ORIGIN to the live Yugm HTTPS origin without a path, query, or credentials before packaging a release."
     }
     require(hasUploadSigning) {
         "Release builds require YUGM_UPLOAD_KEYSTORE_FILE, YUGM_UPLOAD_KEYSTORE_PASSWORD, YUGM_UPLOAD_KEY_ALIAS, and YUGM_UPLOAD_KEY_PASSWORD. Keep the upload keystore and passwords outside source control."
@@ -156,11 +111,9 @@ android {
 
     buildTypes {
         debug {
-            buildConfigField("String", "API_BASE_URL", quoted(yugmApiBaseUrl))
-            buildConfigField("String", "SOCKET_BASE_URL", quoted(yugmSocketBaseUrl))
-            buildConfigField("String", "LAN_API_BASE_URL", quoted(localLanHost?.let { "http://$it:4000/api" }.orEmpty()))
-            buildConfigField("String", "FPNV_TEST_TOKEN", "\"$fpnvTestToken\"")
-            buildConfigField("String", "LAN_SOCKET_BASE_URL", quoted(localLanHost?.let { "http://$it:4000" }.orEmpty()))
+            buildConfigField("String", "API_BASE_URL", quoted("$debugOrigin/api"))
+            buildConfigField("String", "SOCKET_BASE_URL", quoted(debugOrigin))
+            buildConfigField("String", "FPNV_TEST_TOKEN", quoted(fpnvTestToken))
 
             // Debug packaging only. The LiveKit/WebRTC dependency ships ~44 MB of
             // native libraries across four ABIs; a phone plus a desktop emulator
@@ -188,10 +141,8 @@ android {
             // public artifact; CI release builds have always had it empty.
             buildConfigField("String", "FPNV_TEST_TOKEN", "\"\"")
             isShrinkResources = true
-            buildConfigField("String", "API_BASE_URL", quoted(yugmApiBaseUrl))
-            buildConfigField("String", "SOCKET_BASE_URL", quoted(yugmSocketBaseUrl))
-            buildConfigField("String", "LAN_API_BASE_URL", quoted(""))
-            buildConfigField("String", "LAN_SOCKET_BASE_URL", quoted(""))
+            buildConfigField("String", "API_BASE_URL", quoted("$productionOrigin/api"))
+            buildConfigField("String", "SOCKET_BASE_URL", quoted(productionOrigin))
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

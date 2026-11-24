@@ -9,6 +9,7 @@ import { ClanInvite } from "../models/ClanInvite.js";
 import { ClanMessage } from "../models/ClanMessage.js";
 import { Report } from "../models/Report.js";
 import { User } from "../models/User.js";
+import { canInviteMembers, canManageClan, canModerateChat, CLAN_INVITE_LIFETIME_MS, clanMemberIdSchema, clanSchema, clanUpdateSchema, slugifyClan } from "../services/clanPolicy.js";
 import { createNotification } from "../services/notifications.js";
 import { emitClanMembers, emitUser, isUserOnline } from "../services/socket.js";
 import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId, sanitizeText } from "../utils/http.js";
@@ -16,39 +17,12 @@ import { asyncHandler, sendOk, HttpError, ErrorCode, isValidObjectId, sanitizeTe
 export const clansRouter = Router();
 clansRouter.use(requireAuth);
 
-const avatarSchema = z.string().refine(
-  (v) => /^https?:\/\//i.test(v) || /^data:image\/(png|jpe?g|webp|gif);base64,/i.test(v),
-  "Avatar must be an http(s) URL or a data image URL"
-);
-
-const clanSchema = z.object({
-  name: z.string().min(3).max(48),
-  description: z.string().max(220).optional(),
-  avatar: avatarSchema.optional(),
-  privacy: z.enum(["PUBLIC", "PRIVATE"]).default("PUBLIC"),
-  familyLabel: z.string().min(2).max(32).default("Family")
-});
 const clanMessageSchema = z.object({ message: z.string().min(1).max(600) });
-const clanInviteSchema = z.object({ userId: z.string().regex(/^[0-9a-fA-F]{24}$/) });
-const ownershipSchema = z.object({ userId: z.string().regex(/^[0-9a-fA-F]{24}$/) });
-const clanUpdateSchema = z.object({
-  name: z.string().min(3).max(48).optional(),
-  description: z.string().max(220).nullable().optional(),
-  avatar: avatarSchema.nullable().optional(),
-  privacy: z.enum(["PUBLIC", "PRIVATE"]).optional(),
-  familyLabel: z.string().min(2).max(32).optional()
-}).refine((value) => Object.values(value).some((entry) => entry !== undefined), {
-  message: "Provide at least one clan setting to update"
-});
 const clanMemberRoleSchema = z.object({ role: z.enum(["CO_LEADER", "OFFICER", "MEMBER"]) });
 const clanMessageReportSchema = z.object({
   reason: z.string().min(2).max(80),
   description: z.string().max(500).optional()
 });
-
-function slugify(name: string) {
-  return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 42) || "clan";
-}
 
 const CLAN_MEMBER_FIELDS = "name username avatar city activeCosmetics vipTier vipExpiresAt xp level levelTitle";
 
@@ -75,18 +49,6 @@ function clanRoleFor(clan: any, userId: string): "LEADER" | "CO_LEADER" | "OFFIC
   const role = entry?.role as string | undefined;
   if (role === "CO_LEADER" || role === "OFFICER" || role === "MEMBER") return role;
   return "MEMBER";
-}
-
-function canManageClan(role: string | null) {
-  return role === "LEADER" || role === "CO_LEADER";
-}
-
-function canInviteMembers(role: string | null) {
-  return role === "LEADER" || role === "CO_LEADER" || role === "OFFICER";
-}
-
-function canModerateChat(role: string | null) {
-  return role === "LEADER" || role === "CO_LEADER" || role === "OFFICER";
 }
 
 function canAssignRole(actorRole: string | null, targetRole: string | null, nextRole: string) {
@@ -186,7 +148,7 @@ async function requireClanLeader(clanId: string, userId: string) {
 }
 
 async function uniqueSlug(name: string) {
-  const base = slugify(name);
+  const base = slugifyClan(name);
   let slug = base;
   for (let index = 0; index < 5; index++) {
     const exists = await Clan.exists({ slug });
@@ -269,7 +231,7 @@ clansRouter.get("/:id/invitations", asyncHandler(async (req: AuthRequest, res) =
   sendOk(res, { invitations });
 }));
 
-clansRouter.post("/:id/invitations", validateBody(clanInviteSchema), asyncHandler(async (req: AuthRequest, res) => {
+clansRouter.post("/:id/invitations", validateBody(clanMemberIdSchema), asyncHandler(async (req: AuthRequest, res) => {
   const { clan, role } = await requireClanMemberDoc(req.params.id, req.user!.id);
   if (!canInviteMembers(role)) throw new HttpError(403, "You don't have permission to invite members", ErrorCode.FORBIDDEN);
   if (req.body.userId === req.user!.id) throw new HttpError(400, "You are already in this clan", ErrorCode.VALIDATION);
@@ -282,7 +244,7 @@ clansRouter.post("/:id/invitations", validateBody(clanInviteSchema), asyncHandle
   }
   await ClanInvite.updateMany({ clanId: clan._id, inviteeId: req.body.userId, status: "PENDING", expiresAt: { $lte: new Date() } }, { $set: { status: "EXPIRED" } });
   let invitation = await ClanInvite.findOne({ clanId: clan._id, inviteeId: req.body.userId, status: "PENDING" });
-  if (!invitation) invitation = await ClanInvite.create({ clanId: clan._id, inviterId: req.user!._id, inviteeId: req.body.userId, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
+  if (!invitation) invitation = await ClanInvite.create({ clanId: clan._id, inviterId: req.user!._id, inviteeId: req.body.userId, expiresAt: new Date(Date.now() + CLAN_INVITE_LIFETIME_MS) });
   await createNotification(req.body.userId, "ROOM_INVITE", "Clan invitation", `${req.user!.name} invited you to join ${clan.name}`, { clanId: clan.id, clanInviteId: invitation.id });
   sendOk(res, { invitation }, 201);
 }));
@@ -330,7 +292,7 @@ clansRouter.post("/invitations/:inviteId/:action(accept|decline)", asyncHandler(
   sendOk(res, { invitation: invite, clan: mapped });
 }));
 
-clansRouter.post("/:id/transfer-ownership", validateBody(ownershipSchema), asyncHandler(async (req: AuthRequest, res) => {
+clansRouter.post("/:id/transfer-ownership", validateBody(clanMemberIdSchema), asyncHandler(async (req: AuthRequest, res) => {
   const clan = await requireClanLeader(req.params.id, req.user!.id);
   if (!clan.memberIds.some((memberId) => idOf(memberId) === req.body.userId)) throw new HttpError(400, "Ownership can only be transferred to a clan member", ErrorCode.VALIDATION);
   const previousOwnerId = idOf(clan.ownerId);

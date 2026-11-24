@@ -23,7 +23,8 @@ class NavigationSessionFixture {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         assertEquals("http://10.0.2.2:4000/api", ApiConfig.apiBaseUrl)
-        assertEquals("http://10.0.2.2:4000/api", ApiConfig.lanApiBaseUrl)
+        assertEquals("http://10.0.2.2:4000", ApiConfig.socketBaseUrl)
+        assertEquals("", ApiConfig.lanApiBaseUrl)
         val session = SessionManager(context)
         session.onboardingCompleted = true
         session.saveSession(

@@ -1,6 +1,24 @@
 # Development progress
 
+## 2026-11-24 — Cloudflare migration checkpoint
+
+- Updated the README, build guide, environment matrix and migration handoffs to reflect the emulator and production build split, the current D1 route coverage, the hosted R2 default and the remaining RealtimeKit work.
+- The strict tracked-config credential scan and staged whitespace checks passed. Local secrets and generated build files are ignored.
+- The checkpoint branch is `codex/cloudflare-d1-r2-checkpoint`. The staging workflow runs on pushes to `master`. [Environment and deployment triggers](infrastructure/environments.md)
+
+## 2026-11-24 — Production Cloudflare target and build routing
+
+- Made Android debug use emulator loopback and release use one production HTTPS origin. Removed staging as the release default in Gradle and tagged CI builds.
+- Switched the production Wrangler target to the existing D1 API routes with native R2 bindings and Firebase App Check. Tested the production bundle in isolation. Hosted R2 remains disabled in the tracked config.
+- Added a RealtimeKit server client with mocked meeting creation, token issuance, participant removal and confirmed shutdown. Full app parity, production data cutover, Android RTC and the $0 activation envelope remain open. [Production setup and verification](handoffs/2026-11-24-production-cloudflare-builds.md)
+
 **Commit-state note (2026-11-24):** The "uncommitted" / "changes remain uncommitted" wording in older entries records the working-tree state at the time each entry was written. Those local slices were subsequently captured in commit `b04f77d` on `codex/cloudflare-migration-checkpoint` (branched from `master@5a519fe`). Check Git for current state; the historical wording is retained as evidence and is not a claim about the present working tree.
+
+## 2026-11-24 — Local D1 cosmetics, inbox and clan membership
+
+- Reviewed the isolated Worker at `05617d2`, the standard MongoDB Worker and Android API callers. Recorded the remaining ownership, storage, notifications and realtime boundaries for whole-app local debugging.
+- Mounted player cosmetics and inventory, published cosmetic R2 delivery, wallet reads, the notification inbox and clan membership and invitations in the loopback Worker. Cosmetic debits, XP and ownership commit together. Clan joins and invitations use actor-scoped D1 writes.
+- The workerd integration fixture, 30 focused API checks, both typechecks and `git diff --check` passed. Android, provider and realtime checks are open. [Evidence and remaining work](handoffs/2026-11-24-local-d1-r2-app-expansion.md)
 
 ## 2026-11-24 — Local D1 + R2 managed avatar media slice
 

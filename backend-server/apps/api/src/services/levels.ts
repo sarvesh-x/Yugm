@@ -1,21 +1,16 @@
 import type { XpEvent } from "@yugm/shared";
 import mongoose from "mongoose";
-import { getLevelMilestone, getLevelMilestoneForXp, xpDailyCaps, xpEvents } from "@yugm/shared";
+import { xpDailyCaps, xpEvents } from "@yugm/shared";
 import { User } from "../models/User.js";
 import { createNotification } from "./notifications.js";
 import { creditWallet } from "./wallet.js";
 import { XpDailyCap } from "../models/XpDailyCap.js";
 import { XpGrant } from "../models/XpGrant.js";
 import { addBattlePassXp } from "./battlePass.js";
+import { getLevelPromotion, getLevelStatus } from "./levelPresentation.js";
+import { startOfUtcDay } from "./dailyWalletReward.js";
 
-type LevelUser = {
-  _id?: unknown;
-  id?: string;
-  xp?: number;
-  level?: number;
-  levelTitle?: string;
-  lastDailyCheckInAt?: Date | string;
-};
+export { calculateLevel, getLevelPromotion, getLevelStatus } from "./levelPresentation.js";
 
 export const dailyXpCaps = xpDailyCaps;
 
@@ -45,55 +40,6 @@ async function syncBattlePassXpWithRetry(userId: string, xpAwarded: number, even
       await new Promise((resolve) => setTimeout(resolve, 100 * (2 ** (attempt - 1))));
     }
   }
-}
-
-function startOfUtcDay(date = new Date()) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-}
-
-function isSameUtcDay(a?: Date | string, b = new Date()) {
-  if (!a) return false;
-  const date = new Date(a);
-  return startOfUtcDay(date).getTime() === startOfUtcDay(b).getTime();
-}
-
-export function calculateLevel(xp = 0) {
-  return getLevelMilestoneForXp(xp);
-}
-
-export function getLevelStatus(user?: LevelUser | null) {
-  const xp = Math.max(0, Number(user?.xp ?? 0));
-  const current = calculateLevel(xp);
-  const next = getLevelMilestone(current.level + 1);
-  const currentRequiredXp = current.requiredXp;
-  const nextRequiredXp = next.requiredXp;
-  const requiredXp = Math.max(0, nextRequiredXp - currentRequiredXp);
-  const progressXp = Math.max(0, xp - currentRequiredXp);
-
-  return {
-    xp,
-    level: current.level,
-    title: current.title,
-    currentLevelXp: currentRequiredXp,
-    nextLevel: next.level,
-    nextLevelXp: next.requiredXp,
-    progressXp,
-    requiredXp,
-    progress: requiredXp > 0 ? Math.min(1, progressXp / requiredXp) : 1,
-    canDailyCheckIn: !isSameUtcDay(user?.lastDailyCheckInAt),
-    dailyCheckInXp: xpEvents.DAILY_CHECKIN
-  };
-}
-
-export function getLevelPromotion(previousLevel: number, nextLevel: number) {
-  const rewards = Array.from(
-    { length: Math.max(0, nextLevel - previousLevel) },
-    (_, index) => getLevelMilestone(previousLevel + index + 1)
-  );
-  return {
-    levelUpReward: rewards.reduce((sum, milestone) => sum + milestone.coinReward, 0),
-    levelsGained: rewards.map(milestone => milestone.level)
-  };
 }
 
 export async function grantXp(userId: string, event: XpEvent, metadata: Record<string, unknown> = {}, amountOverride?: number) {

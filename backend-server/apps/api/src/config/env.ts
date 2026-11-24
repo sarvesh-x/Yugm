@@ -31,7 +31,7 @@ const envSchema = z.object({
   YUGM_RUNTIME: z.enum(["node", "cloudflare"]).default("node"),
   PORT: z.coerce.number().default(4000),
   MONGODB_URI: z.string().min(1, "MONGODB_URI is required").optional(),
-  YUGM_LOCAL_AUTH_ONLY: z.literal("true").optional(),
+  YUGM_D1_API: z.literal("true").optional(),
   MONGODB_DB_NAME: z.string().min(1).default("Yugm"),
   REDIS_URL: z.string().optional(),
   JWT_SECRET: z.preprocess(
@@ -101,7 +101,7 @@ const envSchema = z.object({
     z.coerce.number().int().min(60).max(3600).default(900)
   )
 }).superRefine((config, ctx) => {
-  if (!config.MONGODB_URI && !(config.YUGM_RUNTIME === "cloudflare" && config.YUGM_LOCAL_AUTH_ONLY === "true")) {
+  if (!config.MONGODB_URI && !(config.YUGM_RUNTIME === "cloudflare" && config.YUGM_D1_API === "true")) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["MONGODB_URI"], message: "MONGODB_URI is required" });
   }
 });

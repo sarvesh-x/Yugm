@@ -35,7 +35,7 @@ Values are supplied by the owner and written locally; they must not be pasted in
 
 ### Release clients
 
-Release APK/AAB builds contain **no** R2 credentials, bucket names, keys or signed URLs. They only need the HTTPS API and socket URLs plus signing/version/App Check configuration; the API host they point at must have managed storage enabled. See [release APK/AAB configuration](release-build-configuration.md) for the exact Gradle properties, enforced checks, build commands, server-side environment, expected upload sequence and failure map. In particular, the release build has a staging API default; if `YUGM_API_BASE_URL` is omitted, the artifact points at the staging Worker, which still uses `STORAGE_DRIVER=mongodb` and therefore does not publish managed media to R2.
+Release builds derive the HTTPS API and socket URLs from `YUGM_PRODUCTION_ORIGIN`. The production Worker uses native R2 bindings, with hosted media disabled in the checked-in configuration pending budget and live verification. The client receives short-lived upload grants and committed media URLs at runtime. See [release build configuration](release-build-configuration.md).
 
 ## Storage service
 

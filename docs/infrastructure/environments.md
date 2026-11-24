@@ -1,17 +1,16 @@
 # Cloudflare environments and operations plan
 
-**Date:** 2026-11-22  
-**Status:** Phase 0 plan. No resources were provisioned and no secrets were changed.
+**Updated 2026-11-24.** See the [production configuration handoff](../handoffs/2026-11-24-production-cloudflare-builds.md) for implemented routes, verification and rollout status.
 
 ## Current observed state
 
 | Environment | Worker config | Observed status |
 |---|---|---|
-| Local | `backend-server/apps/cloudflare-worker/wrangler.jsonc` | Experimental local development config. Its tracked `vars` block contains plaintext credentials; see [finding](tracked-worker-credentials-finding.md). |
+| Local Android debug | `backend-server/apps/cloudflare-worker/auth-local/wrangler.jsonc` | Loopback Worker with simulated D1, R2 and Images. The Android emulator uses port 4000. [Startup and local bindings](../handoffs/2026-11-24-local-d1-auth-emulator.md) |
 | Staging | `backend-server/apps/cloudflare-worker/wrangler.staging.jsonc` | Deployed prototype at `https://yugm-api-staging.sarveshkumar10101.workers.dev`. Admin at `https://yugm-admin-staging.pages.dev`. Uses isolated `YugmStaging` MongoDB name, staging LiveKit project, `STAGING_DB_ISOLATED=true`, and restricted admin-origin CORS. |
-| Production | `backend-server/apps/cloudflare-worker/wrangler.production.jsonc` | Source config only. Runtime deliberately refuses `YUGM_STAGE=production`. No production cutover has been authorized. |
+| Production target | `backend-server/apps/cloudflare-worker/wrangler.production.jsonc` | Shared D1 Worker with native R2 bindings, Firebase App Check, and a placeholder HTTPS origin. Hosted R2 starts disabled. Full route coverage, provider parity and live cutover are open. |
 
-Pushes to `master` currently deploy only to Cloudflare staging according to the existing [migration audit](../cloudflare-migration/audit.md); the Render blueprint is retained for rollback with automatic deploy disabled.
+Pushes to `master` trigger the staging API and admin deployment workflow. Use a feature branch for checkpoints that should leave staging alone. Version tags trigger the Android release workflow. [Workflow source](../../.github/workflows/cloudflare-staging.yml) · [Android release workflow](../../.github/workflows/android-release.yml)
 
 ## Target environment rules
 
@@ -28,7 +27,7 @@ Wrangler config is the source of truth for non-secret bindings and environment s
 
 | Binding | Use | Notes |
 |---|---|---|
-| D1 database or Hyperdrive config | Authoritative relational state | Choice blocked by [capacity assessment](../database/d1-capacity-assessment.md). Use database name rather than binding name in migration commands where supported to avoid targeting the wrong resource. |
+| D1 database | Authoritative relational state | D1 Free is the selected target. Capacity, data import and recovery still require verification for the live rollout. Use the database name where supported in migration commands. [Capacity assessment](../database/d1-capacity-assessment.md) |
 | R2 buckets | Assets, public media, private media, originals, staging | Do not omit IDs in config; Wrangler can auto-provision. Verify target bucket before any write/delete. |
 | Durable Object namespaces | Realtime/stateful coordination | SQLite-backed classes; use Wrangler migrations; scope IDs by conversation/room/user as designed. |
 | Queues | Async producers/consumers | Separate producer and consumer bindings; configure DLQ, retries and batching deliberately. |
@@ -42,14 +41,13 @@ Environment inheritance must be checked explicitly. Some Wrangler fields do not 
 
 - Use distinct API and admin origins per environment. Record exact domains only after provisioning approval; do not invent IDs or zone records.
 - Enforce HTTPS and HSTS where applicable. Verify certificate issuance before routing traffic.
-- Configure CORS as an explicit allowlist. Current production prototype uses `CORS_ORIGIN=*`; that is not acceptable for admin/private operations in the target design.
+- Configure an explicit CORS allowlist when wiring the browser admin app. The D1 production candidate currently serves the Android routes listed in the production handoff.
 - Cloudflare Access or equivalent protection should be considered for non-public admin tooling and preview URLs.
 - DNS/traffic cutover requires explicit approval; keep the legacy rollback path until validation passes.
 
 ### Secrets
 
-- Treat all current values in the tracked local Worker config as compromised and rotate them at their providers before proceeding.
-- Remove secrets from tracked files. Add and verify ignore rules for `.dev.vars*`, local Wrangler overlays and credential-bearing configs.
+- Keep secrets outside tracked files. Use ignored `.dev.vars*` for local runtime bindings. The prior credential finding and remediation are historical. [Credential finding](tracked-worker-credentials-finding.md)
 - Use interactive/protected-file secret input, not command-line arguments or chat.
 - `wrangler secret put/delete` is a deployment operation; use staged version-secret workflows when a change needs review.
 - Never log tokens, credentials, private content, object keys containing sensitive data, or signed URLs.
@@ -66,7 +64,7 @@ Environment inheritance must be checked explicitly. Some Wrangler fields do not 
 - Enable structured logs and issues in staging and production. Keep redaction on for query strings and sensitive headers.
 - Add correlation IDs from API requests through queues, DO events and admin audit logs.
 - Monitor Workers CPU/memory/subrequests, D1 rows read/written and storage, DO requests/duration/hibernation, R2 class A/B operations and storage, queue retries/DLQ/backlog, KV operations, and provider quotas.
-- Configure account spending limits and billing alerts before production. Free-plan limits are for prototypes only.
+- Verify service-specific free allowances and enforceable stops before activating hosted R2 and RealtimeKit. Treat billing alerts as monitoring. [Current budget assumptions](../handoffs/2026-11-24-production-cloudflare-builds.md#0-production-envelope)
 - Use `wrangler deploy --dry-run` with the intended config as a packaging check. A dry run does not prove remote bindings or runtime behavior.
 
 ## Approval gates

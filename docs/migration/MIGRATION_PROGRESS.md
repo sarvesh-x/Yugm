@@ -2,7 +2,9 @@
 
 The [root tracker](../../MIGRATION_PROGRESS.md) remains the work log. The [active 18-phase plan](implementation-plan.md#phase-gates) defines each gate. This index records the current acceptance boundary.
 
-**Active journey.** Profile. The loopback D1 read and edit routes and the local D1 + R2 managed avatar flow passed their fixtures. Next, verify Android setup, uploaded-avatar selection and Edit Profile against that Worker. Settings, chat and rooms follow in that order. [Profile edit evidence](../handoffs/2026-11-24-d1-profile-edits.md) · [Managed media evidence](../handoffs/2026-11-24-local-d1-r2-media.md) · [Journey sequence](implementation-plan.md#journey-order)
+**Active local scope.** The owner expanded the loopback Worker to cover whole-app debug. The current D1 routes and fixtures cover Auth, Profile, managed R2 avatars, player cosmetics, the notification inbox and core clans. Bonds, Rooms, the rest of clan management and chat, and admin work remain open. [Local scope and evidence](../handoffs/2026-11-24-local-d1-r2-app-expansion.md) · [Journey sequence](implementation-plan.md#journey-order)
+
+**Production checkpoint.** Release builds use the configured production HTTPS origin. The production Worker uses the same migrated D1 routes and has R2 bindings. Hosted R2 is disabled by default. RealtimeKit server calls passed with mocked responses. Android RTC, production data transfer and the remaining journeys are open. [Production configuration and verification](../handoffs/2026-11-24-production-cloudflare-builds.md)
 
 | Gate range | Evidence and status |
 | --- | --- |

@@ -1,5 +1,7 @@
 # ADR-0008 — Cloudflare migration with a $0 budget
 
+**Later direction:** RealtimeKit is now the owner's preferred RTC candidate, and D1 Free is the intended production data store. The no-charge constraint and live parity, recovery and activation checks still apply. [Current production target](../handoffs/2026-11-24-production-cloudflare-builds.md)
+
 **Date:** 2026-11-23
 
 **Status:** Budget and direction confirmed by the owner. The [revised implementation plan](../migration/implementation-plan.md) records the proposed implementation order and release gates.

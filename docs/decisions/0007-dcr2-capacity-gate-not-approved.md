@@ -1,6 +1,6 @@
 # ADR-0007 — D1 not approved for production; DCR-2 capacity gate parked
 
-**Later direction:** [ADR-0008](0008-zero-spend-cloudflare-migration.md) adds a local D1 Free evaluation path. This production decision remains in force.
+**Later direction:** The owner selected D1 on Workers Free for the production target on 2026-11-24. The Paid-only target requirement below is historical. Live data migration and traffic acceptance remain open. [Current production target](../handoffs/2026-11-24-production-cloudflare-builds.md)
 
 **Date:** 2026-11-23
 **Status:** Recorded decision. Closes the local DCR-2 work path; does not approve any production data operation.

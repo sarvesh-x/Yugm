@@ -7,6 +7,7 @@
     "dev": "wrangler dev --config wrangler.jsonc",
     "dev:auth": "wrangler dev --config auth-local/wrangler.jsonc --local --ip 127.0.0.1",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.runtime.json",
+    "test:production-worker": "node --test test/production-worker.mjs",
     "test:auth-worker": "node --test test/auth-worker.mjs",
     "test:realtime": "node test/realtime.mjs",
     "test:push-queue": "node --test test/push-queue.mjs",

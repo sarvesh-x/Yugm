@@ -30,14 +30,13 @@ import { grantRelationshipXp } from "../services/relationships.js";
 import { assertUsersCanInteract } from "../services/safety.js";
 import { creditPurchase } from "../services/purchaseCredit.js";
 import { markPurchasePaid } from "../services/purchaseState.js";
+import { DAILY_REWARD_COINS, DAILY_REWARD_SOURCE, nextUtcDay, startOfUtcDay } from "../services/dailyWalletReward.js";
 import { assertDiamondsEnabled, creditDiamonds, debitDiamonds } from "../services/diamonds.js";
 import { assertRoomGiftReplayMatches, roomGiftLedgerKeys } from "../services/giftReplay.js";
 
 export const walletRouter = Router();
 walletRouter.use(requireAuth);
 
-const DAILY_REWARD_COINS = 25;
-const DAILY_REWARD_SOURCE = "DAILY_REWARD";
 
 const adminWalletAdjustSchema = z.object({
   userId: z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid userId format"),
@@ -50,15 +49,6 @@ function findCoinPack(packId: string) {
   const pack = coinPacks.find((item) => item.id === packId);
   if (!pack) throw new HttpError(400, "Invalid coin pack", ErrorCode.VALIDATION);
   return pack;
-}
-
-function startOfUtcDay(date = new Date()) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-}
-
-function nextUtcDay(date = new Date()) {
-  const start = startOfUtcDay(date);
-  return new Date(start.getTime() + 24 * 60 * 60 * 1000);
 }
 
 async function runWalletSideEffect<T>(label: string, task: () => Promise<T>) {

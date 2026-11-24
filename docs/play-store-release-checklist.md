@@ -9,9 +9,7 @@ Build verification: `:app:assembleDebug`, `testDebugUnitTest`, `:app:lintDebug`,
 Set these in the ignored `android-client/local.properties` (or the CI secret store) before building a release artifact. Do not commit them.
 
 ```properties
-YUGM_SERVER_MODE=deploy
-YUGM_API_BASE_URL=https://<release-api-host>/api
-YUGM_SOCKET_BASE_URL=https://<release-socket-host>
+YUGM_PRODUCTION_ORIGIN=https://api.yugm.invalid
 YUGM_VERSION_CODE=<integer>
 YUGM_VERSION_NAME=<version>
 
@@ -21,8 +19,8 @@ YUGM_UPLOAD_KEY_ALIAS=<alias>
 YUGM_UPLOAD_KEY_PASSWORD=<secret>
 ```
 
-- Release tasks require `YUGM_SERVER_MODE=deploy`, both URLs to start with `https://`, and all four signing values.
-- `YUGM_API_BASE_URL` must be set explicitly; otherwise the build falls back to the staging Worker URL, which does not publish managed media to R2.
+- Release packaging requires a configured production HTTPS origin and all four signing values.
+- Replace `https://api.yugm.invalid` with the verified production Worker origin. Debug builds always use the emulator and local Worker.
 - `YUGM_UPLOAD_KEYSTORE_FILE` is resolved relative to `android-client/app`; use an absolute path and confirm the file exists.
 - R2 credentials belong only on the API host. Never put them in the APK, `BuildConfig`, `local.properties` or logs.
 

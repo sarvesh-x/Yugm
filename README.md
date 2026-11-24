@@ -19,6 +19,12 @@ Start with [AGENTS.md](AGENTS.md) and the [documentation index](docs/INDEX.md). 
 
 ## Backend Setup
 
+### Android emulator with local D1 and R2
+
+Start the loopback Cloudflare Worker on port 4000. It uses Wrangler's local D1 database and R2 buckets. The current Worker covers Auth, Profile, avatars, player cosmetics, the notification inbox and core clan membership. Follow the [local Worker runbook](docs/handoffs/2026-11-24-local-d1-auth-emulator.md) to apply the local schema and configure the Firebase test project. See the [migration handoff](docs/handoffs/2026-11-24-local-d1-r2-app-expansion.md) for remaining journeys.
+
+### Legacy Node API
+
 ```bash
 cd backend-server
 npm install
@@ -26,7 +32,9 @@ cp apps/api/.env.example apps/api/.env
 npm run dev
 ```
 
-The backend dev command starts the API server.
+The backend dev command starts the legacy MongoDB-backed API. Use it for the existing admin workflows and compatibility checks. The Node API and loopback Worker normally use the same port, so run the one needed for the current task.
+
+Legacy Render deployments build from `backend-server/` with `npm ci --include=dev && npm --workspace apps/api run build`.
 
 ### Backend Environment
 
@@ -85,7 +93,7 @@ More details:
 
 ### Database Options
 
-Yugm requires a real MongoDB database. Use Atlas for hosted development/production, or run MongoDB locally with Docker.
+The legacy Node API requires MongoDB. Use an isolated Atlas database or run MongoDB locally with Docker.
 
 **Option A - MongoDB Atlas:**
 1. Create a free M0 cluster at https://cloud.mongodb.com
@@ -110,16 +118,13 @@ For Firebase Auth and FCM, download `google-services.json` from Firebase Console
 android-client/app/google-services.json
 ```
 
-Debug Android builds use the local backend by default; release builds use the live Render server. Override the mode when you need to test a different environment:
+Debug builds use emulator loopback at `http://10.0.2.2:4000/api`. Release builds derive the API and socket addresses from one HTTPS origin, `YUGM_PRODUCTION_ORIGIN`. The production Worker configuration targets D1 and R2, with hosted R2 disabled by default while the $0 usage limits and live cutover remain open. [Production configuration and rollout status](docs/handoffs/2026-11-24-production-cloudflare-builds.md)
 
 ```bash
-./gradlew :app:assembleDebug -PYUGM_SERVER_MODE=development
-./gradlew :app:assembleDebug -PYUGM_SERVER_MODE=deploy
+./gradlew :app:assembleDebug --max-workers=2
 ```
 
-For the Android emulator, the default `development` mode reaches your computer's local API at `http://10.0.2.2:4000/api`. Use `-PYUGM_SERVER_MODE=deploy` to test the live API. Release builds default to `deploy` and reject development mode. Debug builds allow HTTP only in the debug variant so local development works; release builds continue to require HTTPS.
-
-Release builds require the Play upload keystore outside source control. Supply `YUGM_UPLOAD_KEYSTORE_FILE`, `YUGM_UPLOAD_KEYSTORE_PASSWORD`, `YUGM_UPLOAD_KEY_ALIAS`, and `YUGM_UPLOAD_KEY_PASSWORD` as Gradle properties or environment variables. The Android release target is API 36. Before uploading, confirm the permanent package ID and register the Play app-signing and upload certificate fingerprints in Firebase.
+Release packaging requires the production origin and the Play upload keystore outside source control. The Android release target is API 36. See the [build and signing configuration](docs/features/release-build-configuration.md).
 
 ### Publish an APK to GitHub Releases
 
@@ -130,7 +135,7 @@ git tag v1.2.3
 git push origin v1.2.3
 ```
 
-The `Android Release` workflow builds a signed production APK, assigns its app version from the tag, and attaches it to the matching GitHub Release. Add these repository Actions secrets first:
+The `Android Release` workflow builds a signed production APK, assigns its app version from the tag, and attaches it to the matching GitHub Release. Set the repository Actions variable `YUGM_PRODUCTION_ORIGIN` and add these Actions secrets:
 
 | Secret | Value |
 | --- | --- |
@@ -141,21 +146,11 @@ The `Android Release` workflow builds a signed production APK, assigns its app v
 
 Encode the keystore locally with `base64 -w 0 yugm-upload.jks` on Linux/macOS, or `[Convert]::ToBase64String([IO.File]::ReadAllBytes('yugm-upload.jks'))` in PowerShell. Keep the keystore and its passwords private. Tags must follow `vMAJOR.MINOR.PATCH`, with the minor and patch numbers below 1000.
 
-The Render API build command is `npm ci --include=dev && npm --workspace apps/api run build` from `backend-server/`. If an existing Render service has a custom build command, sync the Blueprint or set that exact command in its Settings; running `tsc` without `npm ci` leaves workspace packages and type definitions unavailable.
-
-Firebase ID tokens are verified against Google's public Firebase signing certificates using the project ID in `google-services.json`. When `APP_CHECK_ENFORCE=true`, the backend also needs the Firebase Admin service account in `FCM_CLIENT_EMAIL` and `FCM_PRIVATE_KEY`; grant that service account the Firebase App Check Token Verifier role because auth App Check tokens use replay protection. These credentials also enable push notifications. The current GitHub release APK signing-certificate SHA-256 is `f12c860597aea05a8ffdcce67416b95dc207be707ad821f93c76807679ca426a`; register it in Firebase App Check. Since APKs are distributed outside Google Play, configure Play Integrity to allow off-Play installs (don't require `PLAY_RECOGNIZED` or `LICENSED`, and set the minimum device integrity to `Device integrity`). Link the Play Integrity API to the same Google Cloud project. See [Firebase's Android provider guide](https://firebase.google.com/docs/app-check/android/play-integrity-provider). Google Play service-account credentials are optional at startup and are required only to verify purchases. The Render service still requires its database, persistent JWT secrets, and production LiveKit configuration (`wss://` URL and API credentials) for those features.
+Firebase ID tokens are verified using the Firebase project ID. The production Worker requires Firebase Admin credentials to validate and consume App Check tokens. Grant the Firebase App Check Token Verifier role to the service account and register the release signing certificate. The recorded GitHub release APK certificate SHA-256 is `f12c860597aea05a8ffdcce67416b95dc207be707ad821f93c76807679ca426a`. Confirm it against the APK before publishing. For off-Play APK distribution, use Play Integrity settings that support off-Play installs and link the Play Integrity API to the same Google Cloud project. [Firebase's Android provider guide](https://firebase.google.com/docs/app-check/android/play-integrity-provider)
 
 See [the Play Store release checklist](docs/play-store-release-checklist.md) for the remaining Play Console and account setup steps.
 
 Email sign-in and account creation use Firebase Authentication's Email/Password provider; phone sign-in uses Firebase Phone Auth. Enable both providers in the Yugm Firebase project and configure phone verification for the app. The app exchanges the resulting Firebase ID token with the API, which creates a Yugm profile on first sign-in. Google sign-in also creates a profile automatically. Email OTP is reserved for development because the production API does not send email codes.
-
-For a physical Android device on the same Wi-Fi, point the debug build at your computer's LAN IP:
-
-```bash
-./gradlew :app:assembleDebug -PYUGM_SERVER_MODE=development -PYUGM_API_BASE_URL=http://192.168.1.20:4000/api -PYUGM_SOCKET_BASE_URL=http://192.168.1.20:4000
-```
-
-Replace `192.168.1.20` with your computer's current LAN IP. Keep the backend listening on port `4000` and allow that port through the computer's firewall.
 
 ## Firebase Auth Setup
 
@@ -169,7 +164,7 @@ Google Sign-In and Phone Auth require a Firebase project:
    - Place `google-services.json` in `android-client/app/`
 5. Configure the OAuth client IDs required by the native Android sign-in flow.
 
-## LiveKit Local Development
+## Legacy LiveKit Local Development
 
 ```bash
 cd backend-server
@@ -177,6 +172,8 @@ docker compose up -d livekit
 ```
 
 For LiveKit Cloud, copy the project WebSocket URL, API key, and API secret into `backend-server/apps/api/.env`. Only the API should know the API secret; the clients receive short-lived room tokens from `/api/livekit/token`.
+
+The D1 Worker does not yet serve room media sessions. The RealtimeKit server client is tested with simulated responses, and Android RTC integration is pending. [Production RTC migration](docs/handoffs/2026-11-24-production-cloudflare-builds.md)
 
 ## Useful Scripts
 

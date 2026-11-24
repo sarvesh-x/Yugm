@@ -1,28 +1,40 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "yugm-api",
-  "main": "src/index.ts",
-  "compatibility_date": "2026-08-04",
+  "name": "yugm-api-production",
+  "main": "src/production.ts",
+  "compatibility_date": "2026-11-24",
   "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
   "alias": {
     "iconv-lite": "iconv-lite-worker",
     "mongoose": "mongoose/index.js"
   },
-  "durable_objects": {
-    "bindings": [{ "name": "API_SERVICE", "class_name": "YugmApi" }]
-  },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["YugmApi"] }],
-  "images": { "binding": "IMAGES" },
   "vars": {
     "YUGM_STAGE": "production",
-    "NODE_ENV": "production",
-    "YUGM_RUNTIME": "cloudflare",
-    "PORT": "8787",
-    "MONGODB_DB_NAME": "Yugm",
-    "STORAGE_DRIVER": "mongodb",
-    "GOOGLE_PLAY_PACKAGE_NAME": "com.yugm.app",
-    "GOOGLE_PLAY_SUBS_ENABLED": "false",
-    "MONETIZATION_DIAMONDS_ENABLED": "false",
-    "CORS_ORIGIN": "*"
+    "YUGM_PRODUCTION_ORIGIN": "https://api.yugm.invalid",
+    "YUGM_R2_ENABLED": "false",
+    "APP_CHECK_ENFORCE": "true"
+  },
+  "d1_databases": [
+    {
+      "binding": "AUTH_DB",
+      "database_name": "yugm-production",
+      "database_id": "00000000-0000-4000-8000-000000000000",
+      "migrations_dir": "../api/migrations/d1"
+    }
+  ],
+  "r2_buckets": [
+    { "binding": "ASSETS", "bucket_name": "yugm-production-assets" },
+    { "binding": "PUBLIC_MEDIA", "bucket_name": "yugm-production-public-media" },
+    { "binding": "PRIVATE_MEDIA", "bucket_name": "yugm-production-private-media" },
+    { "binding": "ORIGINALS", "bucket_name": "yugm-production-originals" },
+    { "binding": "STAGING", "bucket_name": "yugm-production-staging" }
+  ],
+  "images": { "binding": "IMAGES" },
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "invocation_logs": false, "persist": true },
+    "traces": { "enabled": false }
   }
 }

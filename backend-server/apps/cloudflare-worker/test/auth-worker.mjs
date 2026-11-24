@@ -20,7 +20,7 @@ const keyId = "fixture-firebase-key";
 const keysUrl = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
 const hash = (token) => createHash("sha256").update(token).digest("hex");
 
-test("isolated Worker serves Auth and Profile with just a local D1 binding", async () => {
+test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership with local D1 and R2", async () => {
   const temporaryRoot = await realpath(tmpdir());
   const directory = await mkdtemp(join(temporaryRoot, "yugm-auth-worker-"));
   const configPath = pathFromHere("../auth-local/wrangler.jsonc");
@@ -74,7 +74,7 @@ test("isolated Worker serves Auth and Profile with just a local D1 binding", asy
         ...(body !== undefined && { body: JSON.stringify(body) })
       });
       const result = await response.text();
-      assert.equal(response.status, status, `${path} returned ${response.status}: ${result}`);
+      assert.ok([status].flat().includes(response.status), `${path} returned ${response.status}: ${result}`);
       return JSON.parse(result);
     }
 
@@ -357,6 +357,259 @@ test("isolated Worker serves Auth and Profile with just a local D1 binding", asy
       .bind(invalidGrant.sessionId).first("status"), "FAILED");
     assert.equal(await db.prepare("SELECT quota_reserved FROM media_upload_sessions WHERE source_id = ?")
       .bind(invalidGrant.sessionId).first("quota_reserved"), 0);
+
+    const catalogPath = "/api/wallet/cosmetics";
+    const inventoryPath = "/api/users/me/inventory";
+    const equipPath = `${catalogPath}/equip`;
+    await request(catalogPath, 401);
+    await request(inventoryPath, 401, rotated);
+    const { data: initialCatalog } = await request(catalogPath, 200, returning);
+    const cosmetic = initialCatalog.cosmetics.find(item => item.type === "AVATAR_FRAME");
+    assert.ok(cosmetic);
+    assert.deepEqual(initialCatalog.ownedCosmeticIds, []);
+    const initialWallet = (await request("/api/wallet", 200, returning)).data;
+    assert.equal(initialWallet.balance, (await request("/api/users/me", 200, returning)).data.user.walletBalance);
+    assert.equal(initialWallet.dailyReward.coinReward, 25);
+    assert.equal(initialWallet.dailyReward.canClaim, true);
+
+    const userId = returning.user.id;
+    const rewardId = "local-bond-reward";
+    const inactiveId = "local-inactive-frame";
+    const assetId = randomBytes(12).toString("hex");
+    const objectKey = "assets/local-cosmetic-full.png";
+    const pendingKey = "assets/local-cosmetic-unpublished.png";
+    const assetBucket = await worker.getR2Bucket("ASSETS");
+    await assetBucket.put(objectKey, new Uint8Array(avatarPng), { httpMetadata: { contentType: "image/png" } });
+    await assetBucket.put(pendingKey, new Uint8Array(avatarPng), { httpMetadata: { contentType: "image/png" } });
+    await db.batch([
+      db.prepare(`INSERT INTO assets
+        (source_id, owner_type, owner_id, kind, status, version, original_name, mime_type, bytes, width, height,
+         sha256, staging_key, staging_url, public_key, public_url, created_by)
+        VALUES (?, 'cosmetic', ?, 'IMAGE', 'published', 1, 'fixture.png', 'image/png', ?, 32, 24, ?, ?, '', ?, ?, 'local-fixture')`)
+        .bind(assetId, cosmetic.id, avatarPng.byteLength, hash(avatarPng), pendingKey, objectKey, "https://legacy.example/art.png"),
+      db.prepare(`INSERT INTO asset_variants
+        (source_id, name, key, url, content_type, bytes, width, height, assets_id, position)
+        VALUES (?, 'full', ?, '', 'image/png', ?, 32, 24, ?, 0), (?, 'unpublished', ?, '', 'image/png', ?, 32, 24, ?, 1)`)
+        .bind(`${assetId}:full`, objectKey, avatarPng.byteLength, assetId, `${assetId}:unpublished`, pendingKey, avatarPng.byteLength, assetId),
+      db.prepare("UPDATE cosmetics SET name = 'Edited locally', asset_ref = ? WHERE source_id = ?").bind(assetId, cosmetic.id),
+      db.prepare(`INSERT INTO cosmetics (source_id, type, name, coin_price, rarity, preview, is_active, reward_only)
+        VALUES (?, 'AVATAR_FRAME', 'Bond reward', 0, 'RARE', '', 1, 1), (?, 'AVATAR_FRAME', 'Retired frame', 100, 'COMMON', '', 0, 0)`)
+        .bind(rewardId, inactiveId),
+      db.prepare(`INSERT INTO user_owned_cosmetics (source_id, value, users_id, position)
+        VALUES (?, ?, ?, 0), (?, ?, ?, 1), (?, ?, ?, 2)`)
+        .bind(`${userId}:owned:0`, cosmetic.id, userId, `${userId}:owned:1`, rewardId, userId, `${userId}:owned:2`, inactiveId, userId),
+      db.prepare(`INSERT INTO user_claimed_achievement_tiers
+        (source_id, achievement_id, tier, claimed_at, users_id, position) VALUES (?, 'test-badge', 'BRONZE', ?, ?, 0)`)
+        .bind(`${userId}:claimed:0`, new Date().toISOString(), userId)
+    ]);
+
+    const { data: ownedCatalog } = await request(catalogPath, 200, returning);
+    assert.deepEqual(ownedCatalog.ownedCosmeticIds, [cosmetic.id, rewardId, inactiveId]);
+    assert.ok(ownedCatalog.cosmetics.some(item => item.id === rewardId));
+    assert.ok(!ownedCatalog.cosmetics.some(item => item.id === inactiveId));
+    const managed = ownedCatalog.cosmetics.find(item => item.id === cosmetic.id);
+    assert.equal(managed.name, "Edited locally");
+    assert.equal(managed.assetId, assetId);
+    assert.equal(managed.assetVersion, 1);
+    assert.equal(managed.assetVariants.length, 1);
+    assert.equal(managed.assetVariants[0].url, managed.assetUrl);
+    assert.equal(managed.assetUrl, `http://127.0.0.1/api/assets/published/${assetId}/full`);
+    const image = await worker.dispatchFetch(managed.assetUrl);
+    assert.equal(image.status, 200);
+    assert.equal(image.headers.get("content-type"), "image/png");
+    assert.deepEqual(Buffer.from(await image.arrayBuffer()), avatarPng);
+    const imageHead = await worker.dispatchFetch(managed.assetUrl, { method: "HEAD" });
+    assert.equal(imageHead.status, 200);
+    assert.equal(imageHead.headers.get("content-length"), String(avatarPng.byteLength));
+    assert.equal((await worker.dispatchFetch(managed.assetUrl.replace(/full$/, "unpublished"))).status, 404);
+    await db.prepare("UPDATE assets SET status = 'archived' WHERE source_id = ?").bind(assetId).run();
+    assert.equal((await worker.dispatchFetch(managed.assetUrl)).status, 404);
+    assert.equal((await request(catalogPath, 200, returning)).data.cosmetics.find(item => item.id === cosmetic.id).assetId, undefined);
+
+    const otherCatalog = (await request(catalogPath, 200, visitor)).data;
+    assert.deepEqual(otherCatalog.ownedCosmeticIds, []);
+    assert.ok(!otherCatalog.cosmetics.some(item => item.id === rewardId));
+    const equip = (status, account, cosmeticId, type = cosmetic.type) =>
+      request(equipPath, status, { accessToken: account.accessToken, body: { cosmeticId, type } });
+    assert.equal((await equip(403, visitor, cosmetic.id)).error.message, "Cosmetic is not owned");
+    assert.equal((await equip(400, returning, cosmetic.id, "PROFILE_THEME")).error.message, "Cosmetic type mismatch");
+    const { data: equipped } = await equip(200, returning, cosmetic.id);
+    assert.equal(equipped.activeCosmetics.avatarFrame, cosmetic.id);
+    assert.equal(equipped.balance, initialWallet.balance);
+    assert.equal((await request("/api/users/me", 200, returning)).data.user.activeCosmetics.avatarFrame, cosmetic.id);
+    assert.equal((await request(`/api/users/${userId}`, 200, visitor)).data.user.activeCosmetics.avatarFrame, cosmetic.id);
+    const inventory = (await request(inventoryPath, 200, returning)).data;
+    assert.equal(inventory.summary.totalCosmetics, 3);
+    assert.equal(inventory.summary.equippedCosmetics, 1);
+    assert.ok(inventory.cosmetics.find(item => item.id === cosmetic.id).isEquipped);
+    assert.ok(inventory.cosmetics.some(item => item.id === inactiveId));
+    assert.equal(inventory.summary.totalBadges, 1);
+    assert.equal(inventory.badges[0].title, "test-badge");
+    assert.deepEqual((await request(inventoryPath, 200, visitor)).data.cosmetics, []);
+
+    await equip(200, returning, "");
+    const cleared = (await request("/api/users/me", 200, returning)).data.user;
+    assert.equal(cleared.activeCosmetics.avatarFrame, undefined);
+    assert.equal(cleared.avatar, completedUpload.avatarUrl);
+
+    const purchaseId = "local-purchase-frame";
+    const costlyId = "local-expensive-frame";
+    const day = new Date();
+    day.setUTCHours(0, 0, 0, 0);
+    await db.batch([
+      db.prepare(`INSERT INTO cosmetics (source_id, type, name, coin_price, rarity, preview, is_active, reward_only)
+        VALUES (?, 'AVATAR_FRAME', 'Local frame', 50, 'COMMON', '', 1, 0),
+               (?, 'AVATAR_FRAME', 'Expensive frame', 100000, 'COMMON', '', 1, 0)`).bind(purchaseId, costlyId),
+      db.prepare("UPDATE users SET wallet_balance = 1000 WHERE source_id = ?").bind(userId),
+      db.prepare(`INSERT INTO xp_daily_caps (source_id, user_id, event, day, amount)
+        VALUES (?, ?, 'COSMETIC_PURCHASE', ?, 246)`).bind(`${userId}:daily-cosmetic-cap`, userId, day.toISOString()),
+      db.prepare(`INSERT INTO user_owned_cosmetics (source_id, value, users_id, position)
+        SELECT ?, 'frame_minimal', ?, 3 WHERE NOT EXISTS (
+          SELECT 1 FROM user_owned_cosmetics WHERE users_id = ? AND value = 'frame_minimal'
+        )`).bind(`${userId}:owned:starter`, userId, userId)
+    ]);
+    const buy = (status, cosmeticId) => request(`${catalogPath}/purchase`, status,
+      { accessToken: returning.accessToken, body: { cosmeticId } });
+    assert.equal((await buy(402, costlyId)).error.code, "INSUFFICIENT_FUNDS");
+    assert.equal((await buy(403, rewardId)).error.code, "FORBIDDEN");
+    const safetyId = randomBytes(12).toString("hex");
+    await db.prepare(`INSERT INTO user_safety_statuses (source_id, user_id, trust_score, risk_level, warning_count,
+      report_count, suspension_count, is_shadow_banned, is_chat_restricted, is_room_restricted, is_wallet_frozen)
+      VALUES (?, ?, 100, 'LOW', 0, 0, 0, 0, 0, 0, 1)`).bind(safetyId, userId).run();
+    assert.equal((await buy(403, purchaseId)).error.message, "Wallet is frozen");
+    await db.prepare("DELETE FROM user_safety_statuses WHERE source_id = ?").bind(safetyId).run();
+
+    await db.prepare(`CREATE TRIGGER fixture_xp_failure BEFORE INSERT ON xp_grants
+      WHEN NEW.event = 'COSMETIC_PURCHASE' BEGIN SELECT RAISE(ABORT, 'fixture XP failure'); END`).run();
+    await buy(500, purchaseId);
+    await db.prepare("DROP TRIGGER fixture_xp_failure").run();
+    assert.equal((await request("/api/wallet", 200, returning)).data.balance, 1000);
+    assert.equal(await db.prepare("SELECT 1 FROM user_owned_cosmetics WHERE users_id = ? AND value = ?")
+      .bind(userId, purchaseId).first(), null);
+
+    const purchases = await Promise.all([buy([200, 201], purchaseId), buy([200, 201], purchaseId)]);
+    const awarded = purchases.find(({ data }) => data.xpGrant).data;
+    assert.equal(purchases.filter(({ data }) => data.xpGrant).length, 1);
+    assert.equal(awarded.xpGrant.xpAwarded, 54);
+    assert.equal(awarded.xpGrant.earnedToday, 300);
+    assert.equal(awarded.xpGrant.capped, true);
+    assert.equal(awarded.activeCosmetics.avatarFrame, purchaseId);
+    assert.equal(awarded.balance, 950 + awarded.xpGrant.levelUpReward);
+    const debit = await db.prepare(`SELECT amount, balance_before, balance_after FROM wallet_transactions
+      WHERE user_id = ? AND source = 'PROFILE_COSMETIC_PURCHASE'`).bind(userId).all();
+    assert.equal(debit.results.length, 1);
+    assert.equal(debit.results[0].amount, 50);
+    assert.equal(debit.results[0].balance_before, 1000);
+    assert.equal(debit.results[0].balance_after, 950);
+
+    const buyBundle = status => request(`${catalogPath}/bundle-purchase`, status,
+      { accessToken: returning.accessToken, body: { bundleId: "bundle_vibe_starter" } });
+    const bundlePurchase = (await buyBundle(200)).data;
+    assert.deepEqual(bundlePurchase.newCosmetics, ["mood_chill", "bubble_rounded"]);
+    assert.equal(bundlePurchase.balance, awarded.balance - 399);
+    assert.equal(bundlePurchase.xpGrant.xpAwarded, 0);
+    assert.equal(bundlePurchase.xpGrant.capped, true);
+    assert.equal(bundlePurchase.activeCosmetics.avatarFrame, purchaseId);
+    await buyBundle(409);
+
+    const transfer = (status, cosmeticId, receiverId) => request(`${catalogPath}/transfer`, status,
+      { accessToken: returning.accessToken, body: { cosmeticId, receiverId } });
+    await transfer(404, purchaseId, randomBytes(12).toString("hex"));
+    await transfer(403, rewardId, visitor.user.id);
+    assert.equal((await request("/api/users/me", 200, returning)).data.user.activeCosmetics.avatarFrame, purchaseId);
+    assert.equal((await transfer(200, purchaseId, visitor.user.id)).data.transferred, true);
+    await transfer(403, purchaseId, visitor.user.id);
+    assert.ok(!(await request(inventoryPath, 200, returning)).data.cosmetics.some(item => item.id === purchaseId));
+    assert.ok((await request(inventoryPath, 200, visitor)).data.cosmetics.some(item => item.id === purchaseId && !item.isEquipped));
+    assert.equal((await request("/api/users/me", 200, returning)).data.user.activeCosmetics.avatarFrame, undefined);
+    const notificationsPath = "/api/notifications";
+    const received = (await request(notificationsPath, 200, visitor)).data;
+    const receivedGift = received.notifications.filter(item => item.type === "GIFT" && item.title === "Cosmetic Gift");
+    assert.equal(receivedGift.length, 1);
+    assert.equal(receivedGift[0].userId, visitor.user.id);
+    assert.equal(receivedGift[0].data.cosmeticId, purchaseId);
+    assert.equal(receivedGift[0].read, false);
+    const readPath = `${notificationsPath}/${receivedGift[0]._id}/read`;
+    await request(readPath, 404, { accessToken: returning.accessToken, method: "PATCH", body: {} });
+    const readGift = (await request(readPath, 200, { accessToken: visitor.accessToken, method: "PATCH", body: {} })).data.notification;
+    assert.equal(readGift.read, true);
+    assert.equal((await request(notificationsPath, 200, visitor)).data.unreadCount, received.unreadCount - 1);
+
+    const clanRoot = "/api/clans";
+    await request(clanRoot, 401, rotated);
+    assert.equal((await request(`${clanRoot}/me`, 200, returning)).data.clan, null);
+    const createClan = (status, account, name, privacy) => request(clanRoot, status, {
+      accessToken: account.accessToken, body: { name, privacy, familyLabel: "Family" }
+    });
+    const clan = (await createClan(201, returning, "Yugm Local Clan", "PUBLIC")).data.clan;
+    assert.equal(clan.myRole, "LEADER");
+    assert.equal(clan.memberCount, 1);
+    assert.equal(clan.members[0]._id, userId);
+    assert.equal((await request("/api/users/me", 200, returning)).data.user.clanId, clan.id);
+    await createClan(400, returning, "Other Local Clan", "PUBLIC");
+    const list = (await request(`${clanRoot}?q=LOCAL%20clan`, 200, visitor)).data.clans;
+    assert.deepEqual(list.map(item => item.id), [clan.id]);
+    assert.deepEqual(list[0].members, []);
+    const ranking = (await request(`${clanRoot}/leaderboard`, 200, visitor)).data.clans;
+    assert.equal(ranking[0].id, clan.id);
+    assert.equal(ranking[0].rank, 1);
+    const action = (status, account, path, body = {}) => request(`${clanRoot}/${clan.id}/${path}`, status,
+      { accessToken: account.accessToken, body });
+    const joins = await Promise.all([action([200, 400], visitor, "join"), action([200, 400], visitor, "join")]);
+    const joined = joins.find(result => result.ok).data.clan;
+    assert.equal(joins.filter(result => result.ok).length, 1);
+    assert.equal(joined.memberCount, 2);
+    assert.equal(joined.myRole, "MEMBER");
+    assert.equal((await request("/api/users/me", 200, visitor)).data.user.clanId, clan.id);
+    assert.equal((await action(400, returning, "leave")).error.message, "Transfer ownership before leaving this clan");
+    await action(403, visitor, "transfer-ownership", { userId });
+    await request(`${clanRoot}/${clan.id}`, 403, { accessToken: visitor.accessToken, method: "PATCH", body: { name: "Forbidden edit" } });
+    const changedClan = (await request(`${clanRoot}/${clan.id}`, 200, {
+      accessToken: returning.accessToken, method: "PATCH", body: { privacy: "PRIVATE" }
+    })).data.clan;
+    assert.equal(changedClan.privacy, "PRIVATE");
+    assert.equal((await action(200, returning, "transfer-ownership", { userId: visitor.user.id })).data.clan.myRole, "CO_LEADER");
+    assert.equal((await action(200, returning, "leave")).data.clan, null);
+    assert.equal((await request("/api/users/me", 200, returning)).data.user.clanId, undefined);
+    assert.deepEqual((await request(clanRoot, 200, returning)).data.clans, []);
+    await request(`${clanRoot}/${clan.id}`, 404, returning);
+    await action(403, returning, "join");
+    assert.equal((await request(`${clanRoot}/me`, 200, visitor)).data.clan.myRole, "LEADER");
+    assert.deepEqual((await request(`${clanRoot}/leaderboard`, 200, visitor)).data.clans, []);
+
+    const sendInvite = async () => (await action(201, visitor, "invitations", { userId })).data.invitation;
+    const invites = await Promise.all([sendInvite(), sendInvite()]);
+    const inviteId = invites[0]._id;
+    assert.equal(invites[1]._id, inviteId);
+    assert.deepEqual((await request(`${clanRoot}/invitations`, 200, visitor)).data.invitations, []);
+    const inbox = (await request(`${clanRoot}/invitations`, 200, returning)).data.invitations;
+    assert.equal(inbox.length, 1);
+    assert.equal(inbox[0].clanId._id, clan.id);
+    assert.equal(inbox[0].inviterId._id, visitor.user.id);
+    const sent = (await request(`${clanRoot}/${clan.id}/invitations`, 200, visitor)).data.invitations;
+    assert.equal(sent[0].inviteeId._id, userId);
+    const clanNotices = (await request(notificationsPath, 200, returning)).data.notifications;
+    assert.equal(clanNotices.filter(item => item.data?.clanInviteId === inviteId).length, 1);
+    await request(`${notificationsPath}/read-all`, 200, { accessToken: returning.accessToken, body: {} });
+    assert.equal((await request(notificationsPath, 200, returning)).data.unreadCount, 0);
+    const respondToInvite = (status, account, id, response) => request(`${clanRoot}/invitations/${id}/${response}`, status,
+      { accessToken: account.accessToken, body: {} });
+    await respondToInvite(404, visitor, inviteId, "accept");
+    assert.equal((await respondToInvite(200, returning, inviteId, "decline")).data.invitation.status, "DECLINED");
+    const cancelledInvite = (await sendInvite())._id;
+    const cancelledClanInvite = (await request(`${clanRoot}/${clan.id}/invitations/${cancelledInvite}`, 200,
+      { accessToken: visitor.accessToken, method: "DELETE" })).data.invitation;
+    assert.equal(cancelledClanInvite.status, "CANCELLED");
+    await respondToInvite(404, returning, cancelledInvite, "accept");
+    const acceptedInvite = (await sendInvite())._id;
+    const accepted = (await respondToInvite(200, returning, acceptedInvite, "accept")).data;
+    assert.equal(accepted.invitation.status, "ACCEPTED");
+    assert.equal(accepted.clan.memberCount, 2);
+    assert.equal((await request("/api/users/me", 200, returning)).data.user.clanId, clan.id);
+    await respondToInvite(404, returning, acceptedInvite, "accept");
+    await action(200, returning, "leave");
+    assert.equal((await action(200, visitor, "leave")).data.clan, null);
+    assert.equal(await db.prepare("SELECT 1 FROM clans WHERE source_id = ?").bind(clan.id).first(), null);
   } finally {
     await worker?.dispose();
     await legacyWorker?.dispose();

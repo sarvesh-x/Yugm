@@ -1,4 +1,4 @@
-import { getLevelStatus } from "./levels.js";
+import { getLevelStatus } from "./levelPresentation.js";
 import { isProfileCompleted } from "./profileCompletion.js";
 import { getVipStatus } from "./vip.js";
 
