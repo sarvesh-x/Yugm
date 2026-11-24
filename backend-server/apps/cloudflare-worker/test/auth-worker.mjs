@@ -12,12 +12,21 @@ import jwt from "jsonwebtoken";
 import { convertV4MiniflareOptions, Miniflare, Response } from "miniflare";
 import sharp from "sharp";
 import { unstable_splitSqlQuery } from "wrangler";
+import { verifyD1Admin } from "./d1-admin.mjs";
+import { verifyD1AdminSupport } from "./d1-admin-support.mjs";
+import { verifyD1Bonds } from "./d1-bonds.mjs";
 import { verifyD1AppEndpoints } from "./d1-endpoints.mjs";
+import { verifyD1Maintenance, verifyD1Progression, verifyD1PushDelivery } from "./d1-maintenance.mjs";
+import { verifyD1Wallet } from "./d1-wallet.mjs";
+import { verifyD1WatchParty } from "./d1-watch-party.mjs";
 
 const run = promisify(execFile);
 const pathFromHere = (relative) => fileURLToPath(new URL(relative, import.meta.url));
 const project = "yugm-auth-workerd-fixture";
 const keyId = "fixture-firebase-key";
+const razorpaySecret = "fixture-razorpay-secret";
+const adminJwtSecret = "fixture-admin-jwt-secret";
+const googlePlayPackage = "com.yugm.fixture";
 const keysUrl = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
 const hash = (token) => createHash("sha256").update(token).digest("hex");
 
@@ -51,18 +60,69 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     const signingCert = publicKey.export({ type: "spki", format: "pem" });
     let certificateRequests = 0;
+    const pushAttempts = new Map();
+    let googleConsumes = 0;
     worker = new Miniflare(convertV4MiniflareOptions({
       modulesRoot: directory,
       modules: [{ type: "ESModule", path: join(directory, "authLocal.js") }],
       compatibilityDate: config.compatibility_date,
       compatibilityFlags: config.compatibility_flags,
-      bindings: { ...config.vars, FCM_PROJECT_ID: project, JWT_SECRET: randomBytes(32).toString("hex") },
+      bindings: {
+        ...config.vars, FCM_PROJECT_ID: project, JWT_SECRET: randomBytes(32).toString("hex"),
+        ADMIN_JWT_SECRET: adminJwtSecret,
+        FCM_CLIENT_EMAIL: `fixture@${project}.iam.gserviceaccount.com`,
+        FCM_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }), YUGM_FCM_PUSH_ENABLED: "true",
+        LIVEKIT_API_KEY: "fixture-livekit-key", LIVEKIT_API_SECRET: "fixture-livekit-secret",
+        LIVEKIT_URL: "wss://livekit.fixture",
+        RAZORPAY_KEY_ID: "rzp_test_fixture", RAZORPAY_KEY_SECRET: razorpaySecret,
+        GOOGLE_PLAY_PACKAGE_NAME: googlePlayPackage, GOOGLE_PLAY_CLIENT_EMAIL: "gplay-fixture@yugm.test",
+        GOOGLE_PLAY_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" })
+      },
       d1Databases: { [binding.binding]: binding.database_id },
       ratelimits: Object.fromEntries(config.ratelimits.map(({ name, ...settings }) => [name, settings])),
       r2Buckets: Object.fromEntries(config.r2_buckets.map(({ binding: name, bucket_name: bucket }) => [name, bucket])),
       images: { binding: config.images.binding },
       cf: false,
-      outboundService(request) {
+      async outboundService(request) {
+        const razorpayAuth = `Basic ${Buffer.from(`rzp_test_fixture:${razorpaySecret}`).toString("base64")}`;
+        if (request.url === "https://api.razorpay.com/v1/orders") {
+          assert.equal(request.headers.get("Authorization"), razorpayAuth);
+          const body = await request.json();
+          assert.equal(body.currency, "INR");
+          assert.equal(body.amount, 2900);
+          return Response.json({ id: "order_fixture", amount: body.amount, currency: "INR", status: "created" });
+        }
+        if (request.url === "https://api.razorpay.com/v1/payments/pay_fixture") {
+          assert.equal(request.headers.get("Authorization"), razorpayAuth);
+          return Response.json({ id: "pay_fixture", order_id: "order_fixture", status: "captured", amount: 2900, currency: "INR" });
+        }
+        const googlePlayBase = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${googlePlayPackage}/purchases/products/`;
+        if (request.url.startsWith(googlePlayBase)) {
+          assert.equal(request.headers.get("Authorization"), "Bearer fixture-fcm-access");
+          if (request.url.endsWith(":consume")) {
+            assert.equal(request.method, "POST");
+            googleConsumes += 1;
+            return Response.json({});
+          }
+          assert.equal(request.method, "GET");
+          return Response.json({ purchaseState: 0, consumptionState: 0, orderId: "GPA.FIXTURE.1" });
+        }
+        if (request.url === "https://oauth2.googleapis.com/token") {
+          return Response.json({ access_token: "fixture-fcm-access", expires_in: 3600, token_type: "Bearer" });
+        }
+        if (request.url === `https://fcm.googleapis.com/v1/projects/${project}/messages:send`) {
+          assert.equal(request.headers.get("Authorization"), "Bearer fixture-fcm-access");
+          const { message } = await request.json();
+          assert.equal(message.data.partnerId, "fixture");
+          assert.ok(message.data.notificationId);
+          const count = (pushAttempts.get(message.token) ?? 0) + 1;
+          pushAttempts.set(message.token, count);
+          if (message.token === "fixture-push-retry" && count === 1) return Response.json({}, { status: 503 });
+          if (message.token === "fixture-push-unregistered") return Response.json({
+            error: { details: [{ errorCode: "UNREGISTERED" }] }
+          }, { status: 404 });
+          return Response.json({ name: "fixture-accepted" });
+        }
         assert.equal(request.url, keysUrl);
         certificateRequests += 1;
         return Response.json({ [keyId]: signingCert }, { headers: { "Cache-Control": "max-age=300" } });
@@ -96,8 +156,9 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     await db.batch(unstable_splitSqlQuery(olderSchema).map(sql => db.prepare(sql)));
     assert.equal((await request("/api/auth/google", 503, { body: {} })).error.code, "D1_SCHEMA_UNAVAILABLE");
     await db.prepare("ALTER TABLE user_auth_profile ADD COLUMN edit_token TEXT").run();
-    const messagingMigrations = ["0003_direct_message_indexes", "0004_direct_message_writes", "0005_clan_chat_indexes"];
-    for (const file of messagingMigrations) {
+    const runtimeMigrations = ["0003_direct_message_indexes", "0004_direct_message_writes", "0005_clan_chat_indexes", "0006_scheduled_maintenance",
+      "0007_notification_push_jobs", "0008_wallet_purchase_indexes", "0009_app_config_key_unique", "0010_support_ticket_sender"];
+    for (const file of runtimeMigrations) {
       const migration = await readFile(pathFromHere(`../../api/migrations/d1/${file}.sql`), "utf8");
       await db.batch(unstable_splitSqlQuery(migration).map(sql => db.prepare(sql)));
     }
@@ -701,6 +762,14 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     assert.equal(left.data.clan, null);
     assert.equal(await db.prepare("SELECT 1 FROM clans WHERE source_id = ?").bind(leaveClan.id).first(), null);
     await verifyD1AppEndpoints(db, request, returning, visitor);
+    await verifyD1Bonds(db, request, returning, visitor);
+    await verifyD1Wallet(db, request, returning, visitor);
+    assert.equal(googleConsumes, 1);
+    await verifyD1WatchParty(db, request, returning, visitor);
+    await verifyD1Admin(db, request, adminJwtSecret, returning.accessToken);
+    await verifyD1AdminSupport(db, request, adminJwtSecret, returning.user.id);
+    await verifyD1Progression(db, request, visitor);
+    await verifyD1Maintenance(worker, db, returning, visitor);
 
     // Invalid bodies exercise the rate limits without reaching Firebase or changing sessions.
     async function rateLimitedRequest(path, body, forwardedIp) {
@@ -740,6 +809,7 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     }
     assert.equal((await rateLimitedRequest("refresh", {}, "192.0.2.31")).status, 429);
     assert.equal((await rateLimitedRequest("refresh", { refreshToken: "different" }, "192.0.2.31")).status, 422);
+    await verifyD1PushDelivery(worker, db, returning, visitor, pushAttempts);
   } finally {
     await worker?.dispose();
     await legacyWorker?.dispose();

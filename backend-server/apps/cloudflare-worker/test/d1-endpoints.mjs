@@ -1,7 +1,18 @@
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 
 const newId = () => randomBytes(12).toString("hex");
+const livekitKey = "fixture-livekit-key";
+const livekitSecret = "fixture-livekit-secret";
+
+function readLiveKitToken(token) {
+  const [header, payload, signature] = token.split(".");
+  assert.equal(createHmac("sha256", livekitSecret).update(`${header}.${payload}`).digest("base64url"), signature);
+  return {
+    header: JSON.parse(Buffer.from(header, "base64url").toString("utf8")),
+    payload: JSON.parse(Buffer.from(payload, "base64url").toString("utf8"))
+  };
+}
 
 export async function verifyD1AppEndpoints(db, request, owner, visitor) {
   const ownerId = owner.user.id;
@@ -137,6 +148,130 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor) {
   assert.equal((await requestAs(visitor, prefix + "/" + privateVideo, 200)).data.room.type, "VIDEO");
   assert.deepEqual((await requestAs(visitor, prefix + "/" + privateVideo + "/messages", 200)).data.messages, []);
   assert.deepEqual((await requestAs(visitor, prefix + "/" + privateVideo + "/activity", 200)).data.activity, []);
+
+  // Room lifecycle: create/join/controls/end are committed through D1 with guarded XP.
+  const roomBody = {
+    type: "VOICE", title: "Lifecycle Voice", description: "Fixture", tags: ["Acoustic"],
+    language: "English", category: "music", maxSpeakers: 3, visibility: "PUBLIC",
+    allowAudienceMicRequests: true, vipOnly: false
+  };
+  await request(prefix, 401, { body: roomBody });
+  await requestAs(owner, prefix, 422, { body: { ...roomBody, title: "" } });
+  const ownerXpBeforeRoom = await db.prepare("SELECT xp FROM users WHERE source_id = ?").bind(ownerId).first("xp");
+  const createdRoom = (await requestAs(owner, prefix, 201, { body: roomBody })).data;
+  const lifecycleId = createdRoom.room._id;
+  assert.equal(createdRoom.xpGrant.event, "ROOM_CREATE");
+  assert.equal(createdRoom.xpGrant.xpAwarded, 40);
+  assert.equal(createdRoom.room.status, "LIVE");
+  assert.equal(createdRoom.room.participantCount, 1);
+  assert.equal(await db.prepare("SELECT xp FROM users WHERE source_id = ?").bind(ownerId).first("xp"), ownerXpBeforeRoom + 40);
+  assert.equal(await db.prepare(`SELECT COUNT(*) AS total FROM xp_grants
+    WHERE user_id = ? AND event = 'ROOM_CREATE' AND action_key = ?`).bind(ownerId, `room-create:${lifecycleId}`).first("total"), 1);
+  const visitorXpBeforeRoom = await db.prepare("SELECT xp FROM users WHERE source_id = ?").bind(visitorId).first("xp");
+  const joins = await Promise.all([
+    requestAs(visitor, prefix + "/" + lifecycleId + "/join", 200, { body: {} }),
+    requestAs(visitor, prefix + "/" + lifecycleId + "/join", 200, { body: {} })
+  ]);
+  assert.ok(joins.every(result => result.data.role === "AUDIENCE"));
+  assert.equal(joins.filter(result => result.data.xpGrant).length, 1);
+  assert.equal(await db.prepare("SELECT participant_count FROM rooms WHERE source_id = ?").bind(lifecycleId).first("participant_count"), 2);
+  assert.equal(await db.prepare("SELECT xp FROM users WHERE source_id = ?").bind(visitorId).first("xp"), visitorXpBeforeRoom + 10);
+  assert.equal((await requestAs(visitor, prefix + "/" + lifecycleId + "/join", 200, { body: {} })).data.xpGrant, undefined);
+
+  const tokenPath = "/api/livekit/token";
+  await request(tokenPath, 401, { body: { roomId: lifecycleId } });
+  await requestAs(owner, tokenPath, 400, { body: { roomId: "bad" } });
+  await requestAs(owner, tokenPath, 404, { body: { roomId: newId() } });
+  await requestAs(owner, tokenPath, 403, { body: { roomId: privateVideo } });
+  const audienceToken = (await requestAs(visitor, tokenPath, 200, { body: { roomId: lifecycleId } })).data;
+  const audienceClaims = readLiveKitToken(audienceToken.token);
+  assert.equal(audienceToken.url, "wss://livekit.fixture");
+  assert.equal(audienceToken.identity, visitorId);
+  assert.equal(audienceToken.roomName, createdRoom.room.livekitRoomName);
+  assert.equal(audienceToken.role, "AUDIENCE");
+  assert.equal(audienceToken.canPublishMicrophone, false);
+  assert.equal(audienceClaims.header.alg, "HS256");
+  assert.equal(audienceClaims.payload.iss, livekitKey);
+  assert.equal(audienceClaims.payload.sub, visitorId);
+  assert.equal(audienceClaims.payload.video.room, audienceToken.roomName);
+  assert.equal(audienceClaims.payload.video.roomJoin, true);
+  assert.equal(audienceClaims.payload.video.canPublish, true);
+  assert.deepEqual(audienceClaims.payload.video.canPublishSources, ["screen_share_audio"]);
+  assert.equal(audienceClaims.payload.video.canSubscribe, true);
+  assert.equal(audienceClaims.payload.exp - audienceClaims.payload.nbf, 7200);
+  const hostToken = (await requestAs(owner, tokenPath, 200, { body: { roomId: lifecycleId } })).data;
+  const hostClaims = readLiveKitToken(hostToken.token);
+  assert.equal(hostToken.role, "HOST");
+  assert.equal(hostToken.canPublishMicrophone, true);
+  assert.deepEqual(hostClaims.payload.video.canPublishSources, ["microphone", "screen_share_audio"]);
+
+  await requestAs(owner, prefix + "/" + lifecycleId + "/request-speaker", 409, { body: {} });
+  const requested = (await requestAs(visitor, prefix + "/" + lifecycleId + "/request-speaker", 201, { body: {} })).data;
+  assert.equal(requested.request.status, "PENDING");
+  await requestAs(visitor, prefix + "/" + lifecycleId + "/request-speaker", 409, { body: {} });
+  await requestAs(visitor, prefix + "/" + lifecycleId + "/approve-speaker", 403, { body: { userId: visitorId } });
+  await requestAs(owner, prefix + "/" + lifecycleId + "/approve-speaker", 200, { body: { userId: visitorId } });
+  assert.equal(await db.prepare(`SELECT role FROM room_participants
+    WHERE room_id = ? AND user_id = ? AND left_at IS NULL`).bind(lifecycleId, visitorId).first("role"), "SPEAKER");
+  const speakerToken = (await requestAs(visitor, tokenPath, 200, { body: { roomId: lifecycleId } })).data;
+  assert.equal(speakerToken.role, "SPEAKER");
+  assert.equal(speakerToken.canPublishMicrophone, true);
+  assert.deepEqual(readLiveKitToken(speakerToken.token).payload.video.canPublishSources, ["microphone", "screen_share_audio"]);
+  await requestAs(owner, prefix + "/" + lifecycleId + "/mute-user", 200, { body: { userId: visitorId } });
+  const mutedToken = (await requestAs(visitor, tokenPath, 200, { body: { roomId: lifecycleId } })).data;
+  assert.equal(mutedToken.canPublishMicrophone, false);
+  assert.deepEqual(readLiveKitToken(mutedToken.token).payload.video.canPublishSources, []);
+  await requestAs(visitor, prefix + "/" + lifecycleId + "/mic-state", 423, { body: { enabled: true } });
+  await requestAs(owner, prefix + "/" + lifecycleId + "/unmute-user", 200, { body: { userId: visitorId } });
+  assert.equal((await requestAs(visitor, prefix + "/" + lifecycleId + "/mic-state", 200, { body: { enabled: true } })).data.micEnabled, true);
+  await requestAs(visitor, prefix + "/" + lifecycleId + "/mic-lock", 403, { body: { locked: true } });
+  await requestAs(owner, prefix + "/" + lifecycleId + "/mic-lock", 200, { body: { locked: true } });
+  assert.equal(await db.prepare("SELECT mic_locked FROM rooms WHERE source_id = ?").bind(lifecycleId).first("mic_locked"), 1);
+  await requestAs(owner, prefix + "/" + lifecycleId + "/seat-lock", 200, { body: { seatIndex: 2, locked: true } });
+  await requestAs(visitor, prefix + "/" + lifecycleId + "/take-seat", 423, { body: { seatIndex: 2 } });
+  await requestAs(owner, prefix + "/" + lifecycleId + "/seat-lock", 200, { body: { seatIndex: 2, locked: false } });
+  assert.equal((await requestAs(visitor, prefix + "/" + lifecycleId + "/take-seat", 200, { body: { seatIndex: 2 } })).data.seatIndex, 2);
+  await requestAs(visitor, prefix + "/" + lifecycleId + "/leave-seat", 200, { body: {} });
+  assert.equal(await db.prepare(`SELECT seat_index FROM room_participants
+    WHERE room_id = ? AND user_id = ? AND left_at IS NULL`).bind(lifecycleId, visitorId).first("seat_index"), null);
+  await requestAs(owner, prefix + "/" + lifecycleId + "/invite-speaker", 200, { body: { userId: visitorId } });
+  assert.equal(await db.prepare(`SELECT role FROM room_participants
+    WHERE room_id = ? AND user_id = ? AND left_at IS NULL`).bind(lifecycleId, visitorId).first("role"), "SPEAKER");
+  await requestAs(owner, prefix + "/" + lifecycleId + "/remove-speaker", 200, { body: { userId: visitorId } });
+  assert.equal(await db.prepare(`SELECT role FROM room_participants
+    WHERE room_id = ? AND user_id = ? AND left_at IS NULL`).bind(lifecycleId, visitorId).first("role"), "AUDIENCE");
+  await requestAs(visitor, prefix + "/" + lifecycleId + "/request-speaker", 201, { body: {} });
+  await requestAs(owner, prefix + "/" + lifecycleId + "/reject-speaker", 200, { body: { userId: visitorId } });
+  assert.equal(await db.prepare("SELECT COUNT(*) AS total FROM speaker_requests WHERE room_id = ? AND status = 'REJECTED'")
+    .bind(lifecycleId).first("total"), 1);
+  await requestAs(visitor, prefix + "/" + lifecycleId + "/admin", 403, { body: { userId: ownerId } });
+  assert.equal((await requestAs(owner, prefix + "/" + lifecycleId + "/admin", 200, { body: { userId: visitorId } })).data.isRoomAdmin, true);
+  await requestAs(owner, prefix + "/" + lifecycleId + "/admin", 200, { body: { userId: visitorId, isAdmin: false } });
+  await requestAs(visitor, prefix + "/" + lifecycleId + "/co-host", 403, { body: { userId: visitorId } });
+  assert.equal((await requestAs(owner, prefix + "/" + lifecycleId + "/co-host", 200, { body: { userId: visitorId } })).data.room.isDuet, true);
+  const coHosts = (await requestAs(visitor, prefix + "/" + lifecycleId + "/co-hosts", 200)).data;
+  assert.equal(coHosts.coHosts[0]._id, visitorId);
+  assert.equal(coHosts.isDuet, true);
+  assert.equal((await requestAs(owner, prefix + "/" + lifecycleId + "/remove-co-host", 200, { body: { userId: visitorId } })).data.room.isDuet, false);
+  await requestAs(visitor, prefix + "/" + lifecycleId, 403, { method: "PATCH", body: { title: "Hacked" } });
+  await requestAs(owner, prefix + "/" + lifecycleId, 200, { method: "PATCH", body: { title: "Renamed lifecycle room" } });
+  assert.equal(await db.prepare("SELECT title FROM rooms WHERE source_id = ?").bind(lifecycleId).first("title"), "Renamed lifecycle room");
+  await db.prepare(`INSERT INTO chat_messages (source_id, room_id, sender_id, message, type, created_at)
+    VALUES (?, ?, ?, 'to clean', 'TEXT', ?)`).bind(newId(), lifecycleId, ownerId, time).run();
+  assert.equal((await requestAs(owner, prefix + "/" + lifecycleId + "/chat/clean", 200, { body: {} })).data.cleared, true);
+  assert.equal(await db.prepare("SELECT COUNT(*) AS total FROM chat_messages WHERE room_id = ?").bind(lifecycleId).first("total"), 0);
+  assert.equal((await requestAs(visitor, prefix + "/" + lifecycleId + "/leave", 200, { body: {} })).data.left, true);
+  assert.equal(await db.prepare("SELECT participant_count FROM rooms WHERE source_id = ?").bind(lifecycleId).first("participant_count"), 1);
+  const rejoined = (await requestAs(visitor, prefix + "/" + lifecycleId + "/join", 200, { body: {} })).data;
+  assert.equal(rejoined.role, "AUDIENCE");
+  assert.equal(rejoined.xpGrant.xpAwarded, 10);
+  await requestAs(visitor, prefix + "/" + lifecycleId + "/end", 403, { body: {} });
+  const endedRoom = (await requestAs(owner, prefix + "/" + lifecycleId + "/end", 200, { body: {} })).data;
+  assert.equal(endedRoom.roomId, lifecycleId);
+  assert.ok(endedRoom.summary.durationMinutes >= 0);
+  assert.equal(await db.prepare("SELECT status FROM rooms WHERE source_id = ?").bind(lifecycleId).first("status"), "ENDED");
+  await requestAs(visitor, prefix + "/" + lifecycleId + "/join", 400, { body: {} });
+  await requestAs(owner, prefix + "/" + lifecycleId + "/end", 409, { body: {} });
 
   const follow = "/" + live + "/follow";
   for (const roomId of [privateVideo, ended]) await requestAs(visitor, prefix + "/" + roomId + "/follow", 404, { body: {} });

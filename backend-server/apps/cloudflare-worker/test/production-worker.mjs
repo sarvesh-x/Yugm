@@ -23,6 +23,7 @@ test("the production entrypoint uses D1 and configures hosted R2 with a media pa
   assert.equal(config.preview_urls, false);
   assert.equal(config.vars.YUGM_R2_ENABLED, "true");
   assert.equal(config.vars.APP_CHECK_ENFORCE, "true");
+  assert.deepEqual(config.triggers.crons, ["*/15 * * * *", "* * * * *"]);
   assert.equal(config.durable_objects, undefined);
   assert.ok(!("MONGODB_DB_NAME" in config.vars));
   assert.equal(config.d1_databases.length, 1);
@@ -93,7 +94,8 @@ test("the production entrypoint uses D1 and configures hosted R2 with a media pa
     assert.equal((await worker.dispatchFetch(origin + "/ready")).status, 503);
 
     const db = await worker.getD1Database(binding.binding);
-    const migrations = ["0001_initial", "0003_direct_message_indexes", "0004_direct_message_writes", "0005_clan_chat_indexes"];
+    const migrations = ["0001_initial", "0003_direct_message_indexes", "0004_direct_message_writes", "0005_clan_chat_indexes",
+      "0006_scheduled_maintenance", "0007_notification_push_jobs", "0008_wallet_purchase_indexes", "0009_app_config_key_unique", "0010_support_ticket_sender"];
     const schema = (await Promise.all(migrations.map(file => readFile(pathFromHere(`../../api/migrations/d1/${file}.sql`), "utf8")))).join("\n");
     await db.batch(unstable_splitSqlQuery(schema).map(sql => db.prepare(sql)));
     const readiness = await worker.dispatchFetch(origin + "/api/ready");

@@ -1,15 +1,70 @@
 import { randomBytes } from "node:crypto";
 import type { D1Database } from "@cloudflare/workers-types";
+import { createRoomSchema, xpDailyCaps, xpEvents } from "@yugm/shared";
 import { Router, type Request } from "express";
+import { z } from "zod";
 import { requireHttpSession } from "../middleware/httpAccessSession.js";
+import { validateBody } from "../middleware/validate.js";
+import { startOfUtcDay } from "../services/dailyWalletReward.js";
 import { asyncHandler, ErrorCode, HttpError, isValidObjectId, sendOk } from "../utils/http.js";
 import { bindD1LiveUser, createD1AccessSessionReader, d1LiveUserFilter } from "./d1AccessSession.js";
-import { person, personJson, visiblePerson } from "./d1People.js";
+import { d1UserId, person, personJson, visiblePerson } from "./d1People.js";
+import { prepareD1XpGrant, type D1GuardedStatement } from "./d1XpGrant.js";
 
 type Row = Record<string, string | number | null>;
+type ActorRow = {
+  xp: number; level: number; wallet_balance: number; last_daily_check_in_at: string | null;
+  name: string; muted_until: string | null; vip_expires_at: string | null; person_json: string;
+  room_restricted: number; shadow_banned: number; chat_restricted: number;
+};
 const privilegedRoles = new Set(["HOST", "SPEAKER", "MODERATOR"]);
 const ordered = "ORDER BY r.participant_count DESC, r.created_at DESC, r.source_id";
 const livePublic = "r.visibility = 'PUBLIC' AND r.status = 'LIVE'";
+const roomCreateEvent = "ROOM_CREATE";
+const roomJoinEvent = "ROOM_JOIN";
+const roomCreateXp = xpEvents[roomCreateEvent];
+const roomCreateCap = xpDailyCaps[roomCreateEvent]!;
+const roomJoinXp = xpEvents[roomJoinEvent];
+const roomJoinCap = xpDailyCaps[roomJoinEvent]!;
+const dailyEventXp = "SELECT COALESCE(SUM(amount), 0) AS amount FROM xp_daily_caps WHERE user_id = ? AND event = ? AND day = ?";
+const restrictedStatus = (column: string) =>
+  `EXISTS (SELECT 1 FROM user_safety_statuses WHERE user_id = u.source_id AND ${column} = 1)`;
+const actorQuery = `SELECT u.xp, u.level, u.wallet_balance, u.last_daily_check_in_at, u.name, u.muted_until,
+  u.vip_expires_at, ${personJson("u")} AS person_json, ${restrictedStatus("is_room_restricted")} AS room_restricted,
+  ${restrictedStatus("is_shadow_banned")} AS shadow_banned,
+  ${restrictedStatus("is_chat_restricted")} AS chat_restricted
+  FROM users AS u WHERE ${d1LiveUserFilter} AND u.deletion_requested_at IS NULL`;
+const patchSchema = z.object({
+  title: z.string().min(1).max(100).optional(),
+  description: z.string().max(500).optional(),
+  tags: z.array(z.string()).optional(),
+  category: z.string().optional(),
+  visibility: z.enum(["PUBLIC", "PRIVATE"]).optional(),
+  maxSpeakers: z.number().int().min(2).max(20).optional(),
+  allowAudienceMicRequests: z.boolean().optional(),
+  micLocked: z.boolean().optional(),
+  coverImage: z.string().optional(),
+  scheduledFor: z.string().datetime().optional(),
+  theme: z.string().optional(),
+  vipOnly: z.boolean().optional(),
+  badge: z.string().optional(),
+  ambience: z.string().optional()
+});
+const roomPatchColumns: Record<string, [string, (value: unknown) => string | number | null]> = {
+  title: ["title", value => String(value)], description: ["description", value => String(value)],
+  tags: ["tags", value => JSON.stringify(value)], category: ["category", value => String(value)],
+  visibility: ["visibility", value => String(value)], maxSpeakers: ["max_speakers", value => Number(value)],
+  allowAudienceMicRequests: ["allow_audience_mic_requests", value => Number(value)],
+  micLocked: ["mic_locked", value => Number(value)], coverImage: ["cover_image", value => String(value)],
+  scheduledFor: ["scheduled_for", value => String(value)], theme: ["theme", value => String(value)],
+  vipOnly: ["vip_only", value => Number(value)], badge: ["badge", value => String(value)],
+  ambience: ["ambience", value => String(value)]
+};
+const adminSchema = z.object({ userId: z.string(), isAdmin: z.boolean().optional() });
+const micLockSchema = z.object({ locked: z.boolean() });
+const seatLockSchema = z.object({ seatIndex: z.number().int().min(0), locked: z.boolean() });
+const micStateSchema = z.object({ enabled: z.boolean() });
+const takeSeatSchema = z.object({ seatIndex: z.number().int().min(0).optional() });
 
 function snake(field: string) {
   return field.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
@@ -27,6 +82,11 @@ const roomAccess = `r.visibility = 'PUBLIC' OR r.host_id = ?2 OR EXISTS (
   SELECT 1 FROM room_invites WHERE room_id = r.source_id AND invitee_id = ?2 AND status IN ('PENDING', 'ACCEPTED')
 ) OR ${[roomArrays.speakerIds, roomArrays.moderatorIds, roomArrays.roomAdminIds, roomArrays.coHostIds].map(table =>
   `EXISTS (SELECT 1 FROM ${table} WHERE rooms_id = r.source_id AND value = ?2)`).join(" OR ")}`;
+const roomByViewer = `SELECT ${roomProjection}, (${roomAccess}) AS can_read,
+  (r.host_id = ?2) AS is_host,
+  EXISTS (SELECT 1 FROM room_admins WHERE rooms_id = r.source_id AND value = ?2) AS is_room_admin,
+  (SELECT role FROM users WHERE source_id = ?2) AS viewer_role
+  ${fromRooms} WHERE r.source_id = ?1`;
 
 function room(row: Row) {
   return {
@@ -57,6 +117,133 @@ function visible(row?: Row | null) {
 
 function pageSize(value: unknown, fallback: number, max: number) {
   return Math.trunc(Math.min(Math.max(Number(value) || fallback, 1), max));
+}
+
+const newId = () => randomBytes(12).toString("hex");
+
+function safety(actor: ActorRow, checks: { muted?: boolean; room?: boolean; shadow?: boolean } = {}) {
+  if (checks.muted && actor.muted_until && Date.parse(actor.muted_until) > Date.now()) {
+    throw new HttpError(403, `Account muted until ${actor.muted_until}`, ErrorCode.FORBIDDEN);
+  }
+  if (checks.room && actor.room_restricted) throw new HttpError(403, "Room access restricted", ErrorCode.FORBIDDEN);
+  if (checks.shadow && actor.shadow_banned) throw new HttpError(403, "Account restricted", ErrorCode.FORBIDDEN);
+}
+
+function actorMetadata(actor: ActorRow) {
+  const profile = person(actor.person_json) as {
+    name?: string; avatar?: string; avatarType?: string; avatarParts?: Record<string, unknown>;
+    activeCosmetics?: Record<string, unknown>;
+  };
+  return {
+    userName: profile.name ?? actor.name, avatar: profile.avatar ?? "",
+    avatarType: profile.avatarType ?? null, avatarParts: profile.avatarParts ?? null,
+    roomEntry: profile.activeCosmetics?.roomEntry ?? "",
+    entranceEffect: profile.activeCosmetics?.entranceEffect ?? ""
+  };
+}
+
+async function readActor(db: D1Database, claims: Parameters<typeof bindD1LiveUser>[0], time: string) {
+  return db.prepare(actorQuery).bind(...bindD1LiveUser(claims, time)).first<ActorRow>();
+}
+
+function control(row: Row, hostOnly = false) {
+  const host = Boolean(row.is_host) || row.viewer_role === "ADMIN";
+  if (hostOnly && !host) throw new HttpError(403, "Host control required", ErrorCode.FORBIDDEN);
+  if (!hostOnly && !host && !row.is_room_admin) {
+    throw new HttpError(403, "Room host or room admin control required", ErrorCode.FORBIDDEN);
+  }
+  return host;
+}
+
+function readRoom(row?: Row | null) {
+  const value = visible(row);
+  return value;
+}
+
+async function loadRoom(db: D1Database, id: string, viewer: string) {
+  return db.prepare(roomByViewer).bind(id, viewer).first<Row>();
+}
+
+function micLimit(row: Row) {
+  return Math.min(20, Math.max(2, Number(row.max_speakers) || 8));
+}
+
+async function occupiedSeats(db: D1Database, id: string, limit: number, excludeUserId?: string) {
+  const { results } = await db.prepare(`SELECT seat_index, joined_at FROM room_participants
+    WHERE room_id = ? AND left_at IS NULL AND role IN ('HOST', 'SPEAKER', 'MODERATOR')
+    ${excludeUserId ? "AND user_id <> ?" : ""} ORDER BY joined_at, source_id`)
+    .bind(...(excludeUserId ? [id, excludeUserId] : [id]))
+    .all<{ seat_index: number | null; joined_at: string }>();
+  const used = new Set<number>();
+  for (const participant of results) {
+    const seat = participant.seat_index;
+    if (Number.isInteger(seat) && seat !== null && seat >= 0 && seat < limit) used.add(seat);
+  }
+  for (const participant of results) {
+    if (Number.isInteger(participant.seat_index)) continue;
+    for (let seat = 0; seat < limit; seat++) {
+      if (!used.has(seat)) { used.add(seat); break; }
+    }
+  }
+  return used;
+}
+
+function openSeat(row: Row, used: Set<number>, requested?: number) {
+  const limit = micLimit(row);
+  const locked = new Set<number>(JSON.parse(String(row.locked_seat_indices_json ?? "[]")) as number[]);
+  if (requested !== undefined) {
+    if (requested < 0 || requested >= limit) throw new HttpError(400, "Invalid mic seat", ErrorCode.VALIDATION);
+    if (locked.has(requested)) throw new HttpError(423, "This mic seat is locked", ErrorCode.FORBIDDEN);
+    if (used.has(requested)) throw new HttpError(409, "This mic seat is already occupied", ErrorCode.CONFLICT);
+    return requested;
+  }
+  for (let seat = 0; seat < limit; seat++) {
+    if (!used.has(seat) && !locked.has(seat)) return seat;
+  }
+  throw new HttpError(409, "No open mic seats are available", ErrorCode.CONFLICT);
+}
+
+function activityStatement(db: D1Database, roomId: string, userId: string | null, type: string,
+  label: string, metadata: Record<string, unknown>, time: string
+) {
+  return db.prepare(`INSERT INTO room_activities (source_id, room_id, user_id, type, label, metadata, created_at, updated_at)
+    SELECT ?, r.source_id, ?, ?, ?, ?, ?, ? FROM rooms AS r WHERE r.source_id = ?`)
+    .bind(newId(), userId, type, label, JSON.stringify(metadata), time, time, roomId);
+}
+
+function capStatements(write: D1GuardedStatement, guard: string, userId: string, event: string,
+  day: string, xpAwarded: number, time: string
+) {
+  return [
+    write(`UPDATE xp_daily_caps SET amount = amount + ?, updated_at = ? WHERE source_id = (
+      SELECT source_id FROM xp_daily_caps WHERE user_id = ? AND event = ? AND day = ? ORDER BY source_id LIMIT 1
+    ) AND ${guard}`, xpAwarded, time, userId, event, day),
+    write(`INSERT INTO xp_daily_caps (source_id, user_id, event, day, amount, created_at, updated_at)
+      SELECT ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (
+        SELECT 1 FROM xp_daily_caps WHERE user_id = ? AND event = ? AND day = ?
+      ) AND ${guard}`, newId(), userId, event, day, xpAwarded, time, time, userId, event, day)
+  ];
+}
+
+export async function endD1Room(db: D1Database, id: string, time: string) {
+  const room = await db.prepare("SELECT status, type, livekit_room_name FROM rooms WHERE source_id = ?").bind(id)
+    .first<{ status: string; type: string; livekit_room_name: string }>();
+  if (!room || room.status !== "LIVE" || (room.type === "VOICE" && room.livekit_room_name === "official-yugm-trending")) {
+    return false;
+  }
+  const [ended] = await db.batch([
+    db.prepare(`UPDATE rooms SET status = 'ENDED', ended_at = ?, participant_count = 0, updated_at = ?
+      WHERE source_id = ? AND status = 'LIVE'`).bind(time, time, id),
+    db.prepare(`DELETE FROM chat_messages WHERE room_id = ? AND EXISTS (
+      SELECT 1 FROM rooms WHERE source_id = ? AND status = 'ENDED' AND ended_at = ?)`).bind(id, id, time),
+    db.prepare(`UPDATE room_participants SET left_at = ?, mic_enabled = 0, camera_enabled = 0, seat_index = NULL
+      WHERE room_id = ? AND left_at IS NULL AND EXISTS (
+        SELECT 1 FROM rooms WHERE source_id = ? AND status = 'ENDED' AND ended_at = ?)`).bind(time, id, id, time),
+    db.prepare(`UPDATE speaker_requests SET status = 'REJECTED', updated_at = ?
+      WHERE room_id = ? AND status = 'PENDING' AND EXISTS (
+        SELECT 1 FROM rooms WHERE source_id = ? AND status = 'ENDED' AND ended_at = ?)`).bind(time, id, id, time)
+  ]);
+  return Boolean(ended.meta.changes);
 }
 
 export async function readD1HostRooms(db: D1Database, hostId: string, viewer: string, limit: unknown) {
@@ -275,6 +462,681 @@ export function createD1RoomsRouter(db: D1Database) {
       type: row.type, label: row.label, metadata: JSON.parse(String(row.metadata)),
       createdAt: row.created_at ?? undefined, updatedAt: row.updated_at ?? undefined
     })) });
+  }));
+
+  const ownedCosmetics = async (userId: string, fields: { theme?: string; badge?: string; ambience?: string }) => {
+    const ids = [fields.theme, fields.badge, fields.ambience].filter(Boolean) as string[];
+    if (!ids.length) return;
+    const { results } = await db.prepare(`SELECT value FROM user_owned_cosmetics
+      WHERE users_id = ? AND value IN (${ids.map(() => "?").join(", ")})`).bind(userId, ...ids).all<{ value: string }>();
+    const owned = new Set(results.map(row => row.value));
+    const missing = ids.filter(value => !owned.has(value));
+    if (missing.length) {
+      throw new HttpError(403, `You don't own these cosmetics: ${missing.join(", ")}`, ErrorCode.FORBIDDEN);
+    }
+  };
+
+  const xpForEvent = async (userId: string, event: string, day: string, award: number, cap: number) => {
+    const row = await db.prepare(dailyEventXp).bind(userId, event, day).first<{ amount: number }>();
+    const earnedToday = row?.amount ?? 0;
+    return { earnedToday, xpAwarded: Math.min(award, Math.max(0, cap - earnedToday)) };
+  };
+
+  const activeParticipant = (id: string, userId: string) => db.prepare(`SELECT source_id, role FROM room_participants
+    WHERE room_id = ? AND user_id = ? AND left_at IS NULL ORDER BY joined_at, source_id LIMIT 1`)
+    .bind(id, userId).first<{ source_id: string; role: string }>();
+
+  const actorStateGuard = `EXISTS (SELECT 1 FROM users AS u WHERE ${d1LiveUserFilter}
+    AND u.deletion_requested_at IS NULL AND u.xp = ? AND u.level = ? AND u.wallet_balance = ? AND u.last_daily_check_in_at IS ?)`;
+
+  router.post("/", validateBody(createRoomSchema), asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const body = req.body as z.infer<typeof createRoomSchema>;
+    const now = new Date();
+    const time = now.toISOString();
+    const day = startOfUtcDay(now).toISOString();
+    const scheduledFor = body.scheduledFor ? new Date(body.scheduledFor) : undefined;
+    const isScheduled = Boolean(scheduledFor && scheduledFor.getTime() > Date.now() + 60_000);
+    let created: { roomId: string; xpGrant: ReturnType<typeof prepareD1XpGrant>["xpGrant"] } | undefined;
+    for (let attempt = 0; attempt < 3 && !created; attempt++) {
+      const actor = await readActor(db, claims, time);
+      if (!actor) throw new HttpError(401, "Session revoked", ErrorCode.UNAUTHORIZED);
+      safety(actor, { muted: true, room: true, shadow: true });
+      await ownedCosmetics(claims.sub, body);
+      const cap = await xpForEvent(claims.sub, roomCreateEvent, day, roomCreateXp, roomCreateCap);
+      const id = newId();
+      const write: D1GuardedStatement = (sql, ...values) => db.prepare(sql).bind(...values, id);
+      const progress = prepareD1XpGrant(write, "EXISTS (SELECT 1 FROM rooms WHERE source_id = ?)", now, {
+        userId: claims.sub, event: roomCreateEvent, actionKey: `room-create:${id}`, requestedXp: roomCreateXp,
+        xpAwarded: cap.xpAwarded, previousXp: actor.xp, previousLevel: actor.level,
+        lastDailyCheckInAt: actor.last_daily_check_in_at ?? undefined, balanceBefore: actor.wallet_balance,
+        cap: {
+          capped: cap.earnedToday + cap.xpAwarded >= roomCreateCap, cap: roomCreateCap,
+          earnedToday: cap.earnedToday + cap.xpAwarded,
+          remainingToday: Math.max(0, roomCreateCap - cap.earnedToday - cap.xpAwarded)
+        }
+      });
+      const statements = [
+        db.prepare(`INSERT INTO rooms (source_id, title, description, type, host_id, cover_image, category, tags, language,
+            status, visibility, max_speakers, participant_count, is_duet, livekit_room_name, allow_audience_mic_requests,
+            mic_locked, theme, vip_only, badge, ambience, scheduled_for, started_at, created_at, updated_at)
+          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?
+          WHERE ${actorStateGuard}`)
+          .bind(id, body.title, body.description ?? null, body.type, claims.sub, body.coverImage ?? null, body.category,
+            JSON.stringify(body.tags), body.language, isScheduled ? "SCHEDULED" : "LIVE", body.visibility, body.maxSpeakers,
+            isScheduled ? 0 : 1, `yugm-${Date.now()}-${randomBytes(3).toString("hex")}`, Number(body.allowAudienceMicRequests),
+            body.theme ?? null, Number(body.vipOnly), body.badge ?? null, body.ambience ?? null,
+            scheduledFor ? scheduledFor.toISOString() : null, isScheduled ? null : time, time, time,
+            ...bindD1LiveUser(claims, time), actor.xp, actor.level, actor.wallet_balance, actor.last_daily_check_in_at),
+        db.prepare(`INSERT INTO room_speakers (source_id, value, rooms_id, position)
+          SELECT ?, ?, ?, 0 WHERE EXISTS (SELECT 1 FROM rooms WHERE source_id = ?)`)
+          .bind(`${id}:speakerIds:0`, claims.sub, id, id),
+        ...(isScheduled ? [] : [
+          db.prepare(`INSERT INTO room_participants (source_id, room_id, user_id, role, mic_enabled, moderator_muted,
+              seat_index, camera_enabled, joined_at)
+            SELECT ?, ?, ?, 'HOST', 1, 0, 0, 1, ? WHERE EXISTS (SELECT 1 FROM rooms WHERE source_id = ?)`)
+            .bind(newId(), id, claims.sub, time, id),
+          activityStatement(db, id, claims.sub, "MISSION", `${actor.name} started the room`, {}, time)
+        ]),
+        ...(body.visibility === "PUBLIC" ? [
+          db.prepare(`INSERT INTO notifications (source_id, user_id, type, title, body, data, read, created_at, updated_at)
+            SELECT lower(hex(randomblob(12))), recipient.source_id, 'ROOM_LIVE', ? || ' ' || ?, ?,
+              json_object('roomId', ?, 'actorId', ?, 'scheduled', json(?)), 0, ?, ?
+            FROM (
+              SELECT follower_id AS source_id FROM follows WHERE following_id = ?
+              UNION SELECT friend_id FROM friendships WHERE status = 'ACCEPTED' AND user_id = ?
+              UNION SELECT user_id FROM friendships WHERE status = 'ACCEPTED' AND friend_id = ?
+            ) AS recipient
+            WHERE recipient.source_id <> ? AND EXISTS (SELECT 1 FROM rooms WHERE source_id = ?)
+              AND NOT EXISTS (SELECT 1 FROM blocks WHERE (blocker_id = recipient.source_id AND blocked_user_id = ?)
+                OR (blocker_id = ? AND blocked_user_id = recipient.source_id))
+            LIMIT 500`)
+            .bind(actor.name, isScheduled ? "scheduled a room" : "started a room", body.title, id, claims.sub,
+              isScheduled ? "true" : "false", time, time, claims.sub, claims.sub, claims.sub, claims.sub, id,
+              claims.sub, claims.sub)
+        ] : [])
+      ];
+      if (cap.xpAwarded > 0) {
+        statements.push(...capStatements(write, "EXISTS (SELECT 1 FROM rooms WHERE source_id = ?)",
+          claims.sub, roomCreateEvent, day, cap.xpAwarded, time));
+      }
+      statements.push(...progress.statements);
+      const userFields = { ...progress.columns, updated_at: time };
+      if (Object.keys(progress.columns).length) {
+        statements.push(write(`UPDATE users SET ${Object.keys(userFields).map(key => `${key} = ?`).join(", ")}
+          WHERE source_id = ? AND EXISTS (SELECT 1 FROM rooms WHERE source_id = ?)`,
+        ...Object.values(userFields), claims.sub));
+      }
+      const [room] = await db.batch(statements);
+      if (room.meta.changes) created = { roomId: id, xpGrant: progress.xpGrant };
+    }
+    if (!created) throw new HttpError(409, "Room creation changed. Please try again.", ErrorCode.CONFLICT);
+    const row = await loadRoom(db, created.roomId, claims.sub);
+    sendOk(res, { room: room(readRoom(row)), xpGrant: created.xpGrant }, 201);
+  }));
+
+  router.post("/:id/join", asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const now = new Date();
+    const time = now.toISOString();
+    const day = startOfUtcDay(now).toISOString();
+    let response: { joined: boolean; role: string; xpGrant?: unknown } | undefined;
+    for (let attempt = 0; attempt < 3 && !response; attempt++) {
+      const actor = await readActor(db, claims, time);
+      if (!actor) throw new HttpError(401, "Session revoked", ErrorCode.UNAUTHORIZED);
+      safety(actor, { room: true, shadow: true });
+      const row = readRoom(await loadRoom(db, id, claims.sub));
+      if (row.status === "SCHEDULED") throw new HttpError(400, "This room is scheduled for later", ErrorCode.VALIDATION);
+      if (row.status !== "LIVE") throw new HttpError(400, "This room has ended", ErrorCode.VALIDATION);
+      const isHost = Boolean(row.is_host);
+      const isVip = Boolean(actor.vip_expires_at && Date.parse(actor.vip_expires_at) > Date.now());
+      if (row.vip_only && !isHost && !isVip) {
+        throw new HttpError(403, "This room is for VIP members only", ErrorCode.FORBIDDEN);
+      }
+      const blocked = await db.prepare("SELECT 1 FROM blocks WHERE blocker_id = ? AND blocked_user_id = ?")
+        .bind(row.host_id, claims.sub).first();
+      if (blocked) throw new HttpError(403, "You cannot join this room", ErrorCode.FORBIDDEN);
+      const speaker = (JSON.parse(String(row.speaker_ids_json)) as string[]).includes(claims.sub);
+      const moderator = (JSON.parse(String(row.moderator_ids_json)) as string[]).includes(claims.sub);
+      const cohost = (JSON.parse(String(row.co_host_ids_json)) as string[]).includes(claims.sub);
+      const role = isHost ? "HOST" : moderator || cohost ? "MODERATOR" : speaker ? "SPEAKER" : "AUDIENCE";
+      const existing = await activeParticipant(id, claims.sub);
+      if (existing) {
+        const updates = [];
+        if (role !== existing.role && role !== "AUDIENCE") {
+          updates.push(db.prepare("UPDATE room_participants SET role = ? WHERE source_id = ? AND left_at IS NULL")
+            .bind(role, existing.source_id));
+        }
+        if (row.visibility === "PRIVATE") {
+          updates.push(db.prepare(`UPDATE room_invites SET status = 'ACCEPTED', updated_at = ?
+            WHERE room_id = ? AND invitee_id = ? AND status = 'PENDING'`).bind(time, id, claims.sub));
+        }
+        if (updates.length) await db.batch(updates);
+        response = { joined: true, role };
+        break;
+      }
+      const cap = await xpForEvent(claims.sub, roomJoinEvent, day, roomJoinXp, roomJoinCap);
+      const participantId = newId();
+      const write: D1GuardedStatement = (sql, ...values) => db.prepare(sql).bind(...values, participantId);
+      const progress = prepareD1XpGrant(write, "EXISTS (SELECT 1 FROM room_participants WHERE source_id = ?)", now, {
+        userId: claims.sub, event: roomJoinEvent, actionKey: `room-join:${participantId}`, requestedXp: roomJoinXp,
+        xpAwarded: cap.xpAwarded, previousXp: actor.xp, previousLevel: actor.level,
+        lastDailyCheckInAt: actor.last_daily_check_in_at ?? undefined, balanceBefore: actor.wallet_balance,
+        cap: {
+          capped: cap.earnedToday + cap.xpAwarded >= roomJoinCap, cap: roomJoinCap,
+          earnedToday: cap.earnedToday + cap.xpAwarded,
+          remainingToday: Math.max(0, roomJoinCap - cap.earnedToday - cap.xpAwarded)
+        }
+      });
+      const metadata = JSON.stringify(actorMetadata(actor));
+      const statements = [
+        db.prepare(`INSERT INTO room_participants (source_id, room_id, user_id, role, mic_enabled, moderator_muted,
+            seat_index, camera_enabled, joined_at)
+          SELECT ?, r.source_id, ?, ?, 1, 0, NULL, 1, ? FROM rooms AS r
+          WHERE r.source_id = ? AND r.status = 'LIVE'
+            AND NOT EXISTS (SELECT 1 FROM room_participants WHERE room_id = r.source_id AND user_id = ? AND left_at IS NULL)
+            AND ${actorStateGuard}`)
+          .bind(participantId, claims.sub, role, time, id, claims.sub,
+            ...bindD1LiveUser(claims, time), actor.xp, actor.level, actor.wallet_balance, actor.last_daily_check_in_at),
+        db.prepare(`UPDATE rooms SET participant_count = participant_count + 1, updated_at = ?
+          WHERE source_id = ? AND EXISTS (SELECT 1 FROM room_participants WHERE source_id = ?)`)
+          .bind(time, id, participantId),
+        db.prepare(`UPDATE room_invites SET status = 'ACCEPTED', updated_at = ?
+          WHERE room_id = ? AND invitee_id = ? AND status = 'PENDING'
+            AND EXISTS (SELECT 1 FROM room_participants WHERE source_id = ?)`)
+          .bind(time, id, claims.sub, participantId),
+        db.prepare(`INSERT INTO room_activities (source_id, room_id, user_id, type, label, metadata, created_at, updated_at)
+          SELECT ?, r.source_id, ?, 'JOIN', ?, ?, ?, ? FROM rooms AS r WHERE r.source_id = ?
+            AND EXISTS (SELECT 1 FROM room_participants WHERE source_id = ?)`)
+          .bind(newId(), claims.sub, `${actor.name} joined`, metadata, time, time, id, participantId)
+      ];
+      if (cap.xpAwarded > 0) {
+        statements.push(...capStatements(write, "EXISTS (SELECT 1 FROM room_participants WHERE source_id = ?)",
+          claims.sub, roomJoinEvent, day, cap.xpAwarded, time));
+      }
+      statements.push(...progress.statements);
+      const userFields = { ...progress.columns, updated_at: time };
+      if (Object.keys(progress.columns).length) {
+        statements.push(write(`UPDATE users SET ${Object.keys(userFields).map(key => `${key} = ?`).join(", ")}
+          WHERE source_id = ? AND EXISTS (SELECT 1 FROM room_participants WHERE source_id = ?)`,
+        ...Object.values(userFields), claims.sub));
+      }
+      const [joined] = await db.batch(statements);
+      if (joined.meta.changes) {
+        response = { joined: true, role, xpGrant: progress.xpGrant };
+      }
+    }
+    if (!response) {
+      const existing = await activeParticipant(id, claims.sub);
+      if (existing) response = { joined: true, role: existing.role };
+    }
+    if (!response) throw new HttpError(409, "Room join changed. Please try again.", ErrorCode.CONFLICT);
+    sendOk(res, response);
+  }));
+
+  router.post("/:id/leave", asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const time = new Date().toISOString();
+    const room = await db.prepare("SELECT host_id, status, type, livekit_room_name FROM rooms WHERE source_id = ?")
+      .bind(id).first<{ host_id: string; status: string; type: string; livekit_room_name: string }>();
+    const alwaysOnHost = Boolean(room && room.type === "VOICE" &&
+      room.livekit_room_name === "official-yugm-trending" && room.host_id === claims.sub);
+    if (room && room.status === "LIVE" && !alwaysOnHost) {
+      const [exited] = await db.batch([
+        db.prepare(`UPDATE room_participants SET left_at = ?, mic_enabled = 0, camera_enabled = 0, seat_index = NULL
+          WHERE room_id = ? AND user_id = ? AND left_at IS NULL`).bind(time, id, claims.sub),
+        db.prepare(`UPDATE speaker_requests SET status = 'REJECTED', updated_at = ?
+          WHERE room_id = ? AND user_id = ? AND status = 'PENDING'
+            AND EXISTS (SELECT 1 FROM room_participants WHERE room_id = ? AND user_id = ? AND left_at = ?)`)
+          .bind(time, id, claims.sub, id, claims.sub, time),
+        db.prepare(`UPDATE rooms SET participant_count = CASE WHEN participant_count > 0 THEN participant_count - 1 ELSE 0 END,
+            updated_at = ? WHERE source_id = ?
+            AND EXISTS (SELECT 1 FROM room_participants WHERE room_id = ? AND user_id = ? AND left_at = ?)`)
+          .bind(time, id, id, claims.sub, time)
+      ]);
+      if (exited.meta.changes) {
+        const remaining = await db.prepare("SELECT 1 FROM room_participants WHERE room_id = ? AND left_at IS NULL LIMIT 1")
+          .bind(id).first();
+        if (room.host_id === claims.sub || !remaining) await endD1Room(db, id, time);
+      }
+    }
+    const actor = await readActor(db, claims, time);
+    if (actor) {
+      await activityStatement(db, id, claims.sub, "LEAVE", `${actor.name} left`, actorMetadata(actor), time)
+        .run().catch(() => undefined);
+    }
+    sendOk(res, { left: true });
+  }));
+
+  router.post("/:id/end", asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const row = readRoom(await loadRoom(db, id, claims.sub));
+    control(row);
+    if (row.status !== "LIVE") throw new HttpError(409, "Room has already ended", ErrorCode.CONFLICT);
+    const startedAt = String(row.started_at ?? row.created_at ?? new Date().toISOString());
+    const [joined, messages, gifts, fans] = await db.batch([
+      db.prepare("SELECT COUNT(*) AS total FROM room_participants WHERE room_id = ? AND joined_at >= ?").bind(id, startedAt),
+      db.prepare("SELECT COUNT(*) AS total FROM chat_messages WHERE room_id = ? AND created_at >= ?").bind(id, startedAt),
+      db.prepare(`SELECT COUNT(*) AS count, COALESCE(SUM(diamond_amount), 0) AS diamonds
+        FROM gift_transactions WHERE room_id = ? AND created_at >= ?`).bind(id, startedAt),
+      db.prepare("SELECT COUNT(*) AS total FROM follows WHERE following_id = ? AND created_at >= ?")
+        .bind(row.host_id, startedAt)
+    ]);
+    const endedAt = new Date();
+    const ended = await endD1Room(db, id, endedAt.toISOString());
+    if (!ended) throw new HttpError(409, "Room has already ended", ErrorCode.CONFLICT);
+    const giftStats = gifts.results[0] as { count: number; diamonds: number };
+    sendOk(res, {
+      roomId: id,
+      summary: {
+        durationMinutes: Math.max(0, Math.floor((endedAt.getTime() - new Date(startedAt).getTime()) / 60_000)),
+        joined: (joined.results[0] as { total: number }).total,
+        messages: (messages.results[0] as { total: number }).total,
+        gifts: giftStats.count,
+        newFans: (fans.results[0] as { total: number }).total,
+        diamondGifts: giftStats.diamonds
+      }
+    });
+  }));
+
+  router.patch("/:id", validateBody(patchSchema), asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const row = readRoom(await loadRoom(db, id, claims.sub));
+    control(row);
+    const patch = req.body as z.infer<typeof patchSchema>;
+    await ownedCosmetics(claims.sub, patch);
+    const entries = Object.entries(patch).filter(([, value]) => value !== undefined) as
+      Array<[keyof typeof roomPatchColumns, unknown]>;
+    if (entries.length) {
+      const fields = entries.map(([key]) => `${roomPatchColumns[key][0]} = ?`);
+      const values = entries.map(([key, value]) => roomPatchColumns[key][1](value));
+      const time = new Date().toISOString();
+      await db.prepare(`UPDATE rooms SET ${fields.join(", ")}, updated_at = ? WHERE source_id = ?`)
+        .bind(...values, time, id).run();
+    }
+    sendOk(res, { room: room(row) });
+  }));
+
+  router.post("/:id/mic-lock", validateBody(micLockSchema), asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const row = readRoom(await loadRoom(db, id, claims.sub));
+    control(row);
+    await db.prepare("UPDATE rooms SET mic_locked = ?, updated_at = ? WHERE source_id = ?")
+      .bind(Number(req.body.locked), new Date().toISOString(), id).run();
+    sendOk(res, { micLocked: req.body.locked });
+  }));
+
+  router.post("/:id/seat-lock", validateBody(seatLockSchema), asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const row = readRoom(await loadRoom(db, id, claims.sub));
+    control(row);
+    const { seatIndex, locked } = req.body;
+    if (seatIndex >= micLimit(row)) throw new HttpError(400, "Invalid mic seat", ErrorCode.VALIDATION);
+    if ((await occupiedSeats(db, id, micLimit(row))).has(seatIndex)) {
+      throw new HttpError(409, "An occupied mic cannot be locked", ErrorCode.CONFLICT);
+    }
+    if (locked) {
+      await db.prepare(`INSERT INTO room_locked_seats (source_id, value, rooms_id, position)
+        SELECT ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM room_locked_seats WHERE rooms_id = ? AND value = ?)`)
+        .bind(`${id}:lockedSeatIndices:${seatIndex}`, seatIndex, id, seatIndex, id, seatIndex).run();
+    } else {
+      await db.prepare("DELETE FROM room_locked_seats WHERE rooms_id = ? AND value = ?").bind(id, seatIndex).run();
+    }
+    sendOk(res, { seatIndex, locked });
+  }));
+
+  router.post("/:id/chat/clean", asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const row = readRoom(await loadRoom(db, id, claims.sub));
+    control(row);
+    await db.batch([
+      db.prepare("DELETE FROM chat_messages WHERE room_id = ?").bind(id),
+      db.prepare("DELETE FROM room_activities WHERE room_id = ?").bind(id)
+    ]);
+    sendOk(res, { cleared: true });
+  }));
+
+  router.post("/:id/request-speaker", asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const time = new Date().toISOString();
+    const actor = await readActor(db, claims, time);
+    if (!actor) throw new HttpError(401, "Session revoked", ErrorCode.UNAUTHORIZED);
+    safety(actor, { muted: true });
+    const row = readRoom(await loadRoom(db, id, claims.sub));
+    if (row.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
+    if (!row.allow_audience_mic_requests) throw new HttpError(400, "Mic requests are closed", ErrorCode.VALIDATION);
+    const participant = await activeParticipant(id, claims.sub);
+    if (!participant) throw new HttpError(403, "You are not a participant in this room", ErrorCode.FORBIDDEN);
+    if (participant.role !== "AUDIENCE") throw new HttpError(409, "Only audience members can request the mic", ErrorCode.CONFLICT);
+    const existing = await db.prepare("SELECT 1 FROM speaker_requests WHERE room_id = ? AND user_id = ? AND status = 'PENDING'")
+      .bind(id, claims.sub).first();
+    if (existing) throw new HttpError(409, "Speaker request already pending", ErrorCode.CONFLICT);
+    const requestId = newId();
+    const [created] = await db.batch([
+      db.prepare(`INSERT INTO speaker_requests (source_id, room_id, user_id, status, created_at, updated_at)
+        SELECT ?, r.source_id, ?, 'PENDING', ?, ? FROM rooms AS r
+        WHERE r.source_id = ? AND r.status = 'LIVE'
+          AND NOT EXISTS (SELECT 1 FROM speaker_requests WHERE room_id = r.source_id AND user_id = ? AND status = 'PENDING')`)
+        .bind(requestId, claims.sub, time, time, id, claims.sub),
+      activityStatement(db, id, claims.sub, "SPEAKER_REQUEST", `${actor.name} requested the mic`, {}, time)
+    ]);
+    if (!created.meta.changes) throw new HttpError(409, "Speaker request already pending", ErrorCode.CONFLICT);
+    sendOk(res, {
+      request: { _id: requestId, roomId: id, userId: claims.sub, status: "PENDING", createdAt: time, updatedAt: time }
+    }, 201);
+  }));
+
+  router.post("/:id/approve-speaker", asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const userId = d1UserId(String(req.body?.userId ?? ""));
+    const time = new Date().toISOString();
+    const row = readRoom(await loadRoom(db, id, claims.sub));
+    control(row);
+    if (row.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
+    if (row.host_id === userId) throw new HttpError(400, "Cannot approve the room host", ErrorCode.VALIDATION);
+    const participant = await activeParticipant(id, userId);
+    if (!participant) throw new HttpError(404, "Active participant not found", ErrorCode.NOT_FOUND);
+    if (participant.role !== "AUDIENCE") throw new HttpError(409, "User is already allowed to speak", ErrorCode.CONFLICT);
+    const seatIndex = openSeat(row, await occupiedSeats(db, id, micLimit(row)));
+    const request = await db.prepare("SELECT source_id FROM speaker_requests WHERE room_id = ? AND user_id = ? AND status = 'PENDING'")
+      .bind(id, userId).first<{ source_id: string }>();
+    if (!request) throw new HttpError(404, "Pending speaker request not found", ErrorCode.NOT_FOUND);
+    const [approved] = await db.batch([
+      db.prepare("UPDATE speaker_requests SET status = 'APPROVED', updated_at = ? WHERE source_id = ? AND status = 'PENDING'")
+        .bind(time, request.source_id),
+      db.prepare(`INSERT INTO room_speakers (source_id, value, rooms_id, position)
+        SELECT ?, ?, ?, COALESCE((SELECT MAX(position) + 1 FROM room_speakers WHERE rooms_id = ?), 0)
+        WHERE EXISTS (SELECT 1 FROM speaker_requests WHERE source_id = ? AND status = 'APPROVED')
+          AND NOT EXISTS (SELECT 1 FROM room_speakers WHERE rooms_id = ? AND value = ?)`)
+        .bind(newId(), userId, id, id, request.source_id, id, userId),
+      db.prepare(`UPDATE room_participants SET role = 'SPEAKER', mic_enabled = 1, camera_enabled = 1,
+          moderator_muted = 0, seat_index = ? WHERE source_id = ? AND left_at IS NULL
+          AND EXISTS (SELECT 1 FROM speaker_requests WHERE source_id = ? AND status = 'APPROVED')`)
+        .bind(seatIndex, participant.source_id, request.source_id)
+    ]);
+    if (!approved.meta.changes) throw new HttpError(404, "Pending speaker request not found", ErrorCode.NOT_FOUND);
+    sendOk(res, { approved: true });
+  }));
+
+  router.post("/:id/take-seat", validateBody(takeSeatSchema), asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const time = new Date().toISOString();
+    const row = readRoom(await loadRoom(db, id, claims.sub));
+    if (row.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
+    const participant = await activeParticipant(id, claims.sub);
+    if (!participant) throw new HttpError(403, "You are not a participant in this room", ErrorCode.FORBIDDEN);
+    if (!["AUDIENCE", "HOST", "SPEAKER", "MODERATOR"].includes(participant.role)) {
+      throw new HttpError(409, "You cannot change seats right now", ErrorCode.CONFLICT);
+    }
+    const wasAudience = participant.role === "AUDIENCE";
+    if (row.type === "VIDEO" && wasAudience) {
+      throw new HttpError(403, "Ask the host to approve your call request", ErrorCode.FORBIDDEN);
+    }
+    const seatIndex = openSeat(row, await occupiedSeats(db, id, micLimit(row), claims.sub), req.body.seatIndex);
+    if (wasAudience) {
+      await db.batch([
+        db.prepare(`INSERT INTO room_speakers (source_id, value, rooms_id, position)
+          SELECT ?, ?, ?, COALESCE((SELECT MAX(position) + 1 FROM room_speakers WHERE rooms_id = ?), 0)
+          WHERE NOT EXISTS (SELECT 1 FROM room_speakers WHERE rooms_id = ? AND value = ?)`)
+          .bind(newId(), claims.sub, id, id, id, claims.sub),
+        db.prepare(`UPDATE room_participants SET role = 'SPEAKER', mic_enabled = 1, camera_enabled = 1,
+            moderator_muted = 0, seat_index = ? WHERE source_id = ? AND left_at IS NULL AND role = 'AUDIENCE'`)
+          .bind(seatIndex, participant.source_id),
+        db.prepare(`UPDATE speaker_requests SET status = 'APPROVED', updated_at = ?
+          WHERE room_id = ? AND user_id = ? AND status = 'PENDING'`).bind(time, id, claims.sub)
+      ]);
+    } else {
+      await db.prepare("UPDATE room_participants SET seat_index = ? WHERE source_id = ? AND left_at IS NULL")
+        .bind(seatIndex, participant.source_id).run();
+    }
+    sendOk(res, { seated: true, seatIndex, moved: !wasAudience });
+  }));
+
+  router.post("/:id/leave-seat", asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const row = readRoom(await loadRoom(db, id, claims.sub));
+    if (row.status !== "LIVE" || row.type !== "VOICE") {
+      throw new HttpError(400, "This room has no live mic seats", ErrorCode.VALIDATION);
+    }
+    const participant = await activeParticipant(id, claims.sub);
+    if (!participant) throw new HttpError(403, "You are not a participant in this room", ErrorCode.FORBIDDEN);
+    const [left] = await db.batch([
+      db.prepare(`UPDATE room_participants SET role = 'AUDIENCE', mic_enabled = 0, moderator_muted = 0, seat_index = NULL
+        WHERE source_id = ? AND left_at IS NULL AND role IN ('HOST', 'SPEAKER', 'MODERATOR')`)
+        .bind(participant.source_id),
+      db.prepare(`DELETE FROM room_speakers WHERE rooms_id = ? AND value = ?
+        AND EXISTS (SELECT 1 FROM room_participants WHERE source_id = ? AND role = 'AUDIENCE')`)
+        .bind(id, claims.sub, participant.source_id)
+    ]);
+    if (!left.meta.changes) throw new HttpError(409, "You are not currently on a mic seat", ErrorCode.CONFLICT);
+    sendOk(res, { leftSeat: true });
+  }));
+
+  router.post("/:id/invite-speaker", asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const userId = d1UserId(String(req.body?.userId ?? ""));
+    const time = new Date().toISOString();
+    const row = readRoom(await loadRoom(db, id, claims.sub));
+    control(row);
+    if (row.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
+    if (row.host_id === userId) throw new HttpError(400, "Cannot invite the room host", ErrorCode.VALIDATION);
+    const participant = await activeParticipant(id, userId);
+    if (!participant) throw new HttpError(404, "Active participant not found", ErrorCode.NOT_FOUND);
+    if (participant.role !== "AUDIENCE") throw new HttpError(409, "User already has a speaker seat", ErrorCode.CONFLICT);
+    const seatIndex = openSeat(row, await occupiedSeats(db, id, micLimit(row)));
+    await db.batch([
+      db.prepare(`INSERT INTO room_speakers (source_id, value, rooms_id, position)
+        SELECT ?, ?, ?, COALESCE((SELECT MAX(position) + 1 FROM room_speakers WHERE rooms_id = ?), 0)
+        WHERE NOT EXISTS (SELECT 1 FROM room_speakers WHERE rooms_id = ? AND value = ?)`)
+        .bind(newId(), userId, id, id, id, userId),
+      db.prepare(`UPDATE room_participants SET role = 'SPEAKER', mic_enabled = 1, camera_enabled = 1,
+          moderator_muted = 0, seat_index = ? WHERE source_id = ? AND left_at IS NULL`)
+        .bind(seatIndex, participant.source_id),
+      db.prepare(`UPDATE speaker_requests SET status = 'APPROVED', updated_at = ?
+        WHERE room_id = ? AND user_id = ? AND status = 'PENDING'`).bind(time, id, userId)
+    ]);
+    sendOk(res, { invited: true });
+  }));
+
+  router.post("/:id/reject-speaker", asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const userId = d1UserId(String(req.body?.userId ?? ""));
+    const row = readRoom(await loadRoom(db, id, claims.sub));
+    control(row);
+    if (row.host_id === userId) throw new HttpError(400, "Cannot reject the room host", ErrorCode.VALIDATION);
+    const result = await db.prepare(`UPDATE speaker_requests SET status = 'REJECTED', updated_at = ?
+      WHERE room_id = ? AND user_id = ? AND status = 'PENDING'`)
+      .bind(new Date().toISOString(), id, userId).run();
+    if (!result.meta.changes) throw new HttpError(404, "Pending speaker request not found", ErrorCode.NOT_FOUND);
+    sendOk(res, { rejected: true });
+  }));
+
+  router.post("/:id/mute-user", asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const userId = d1UserId(String(req.body?.userId ?? ""));
+    const row = readRoom(await loadRoom(db, id, claims.sub));
+    const host = control(row);
+    if (row.host_id === userId) throw new HttpError(400, "Cannot mute the room host", ErrorCode.VALIDATION);
+    if (!host && (JSON.parse(String(row.room_admin_ids_json)) as string[]).includes(userId)) {
+      throw new HttpError(403, "Room admins cannot mute each other", ErrorCode.FORBIDDEN);
+    }
+    const participant = await activeParticipant(id, userId);
+    if (!participant) throw new HttpError(404, "Active participant not found", ErrorCode.NOT_FOUND);
+    await db.prepare("UPDATE room_participants SET mic_enabled = 0, moderator_muted = 1 WHERE source_id = ? AND left_at IS NULL")
+      .bind(participant.source_id).run();
+    sendOk(res, { muted: true });
+  }));
+
+  router.post("/:id/unmute-user", asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const userId = d1UserId(String(req.body?.userId ?? ""));
+    const row = readRoom(await loadRoom(db, id, claims.sub));
+    const host = control(row);
+    if (row.host_id === userId) throw new HttpError(400, "Cannot unmute the room host", ErrorCode.VALIDATION);
+    if (!host && (JSON.parse(String(row.room_admin_ids_json)) as string[]).includes(userId)) {
+      throw new HttpError(403, "Room admins cannot unmute each other", ErrorCode.FORBIDDEN);
+    }
+    const participant = await activeParticipant(id, userId);
+    if (!participant) throw new HttpError(404, "Active participant not found", ErrorCode.NOT_FOUND);
+    await db.prepare("UPDATE room_participants SET mic_enabled = 1, moderator_muted = 0 WHERE source_id = ? AND left_at IS NULL")
+      .bind(participant.source_id).run();
+    sendOk(res, { unmuted: true });
+  }));
+
+  router.post("/:id/mic-state", validateBody(micStateSchema), asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const row = await loadRoom(db, id, claims.sub);
+    if (!row) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
+    const participant = await db.prepare(`SELECT source_id, role, moderator_muted FROM room_participants
+      WHERE room_id = ? AND user_id = ? AND left_at IS NULL`).bind(id, claims.sub)
+      .first<{ source_id: string; role: string; moderator_muted: number }>();
+    if (!participant) throw new HttpError(403, "You are not an active room participant", ErrorCode.FORBIDDEN);
+    if (!privilegedRoles.has(participant.role)) throw new HttpError(403, "You do not have an active mic seat", ErrorCode.FORBIDDEN);
+    if (req.body.enabled && participant.moderator_muted) {
+      throw new HttpError(423, "The host or an admin muted your microphone", ErrorCode.FORBIDDEN);
+    }
+    const enabled = Boolean(req.body.enabled);
+    await db.prepare("UPDATE room_participants SET mic_enabled = ? WHERE source_id = ? AND left_at IS NULL")
+      .bind(Number(enabled), participant.source_id).run();
+    sendOk(res, { micEnabled: enabled, moderatorMuted: Boolean(participant.moderator_muted) });
+  }));
+
+  router.post("/:id/remove-speaker", asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const userId = d1UserId(String(req.body?.userId ?? ""));
+    const row = readRoom(await loadRoom(db, id, claims.sub));
+    const host = control(row);
+    if (row.host_id === userId) throw new HttpError(400, "Cannot remove the room host from the mic", ErrorCode.VALIDATION);
+    if (!host && (JSON.parse(String(row.room_admin_ids_json)) as string[]).includes(userId)) {
+      throw new HttpError(403, "Room admins cannot remove each other from the mic", ErrorCode.FORBIDDEN);
+    }
+    const participant = await db.prepare(`SELECT source_id FROM room_participants
+      WHERE room_id = ? AND user_id = ? AND left_at IS NULL AND role IN ('SPEAKER', 'MODERATOR')`)
+      .bind(id, userId).first<{ source_id: string }>();
+    if (!participant) throw new HttpError(404, "Active speaker not found", ErrorCode.NOT_FOUND);
+    await db.batch([
+      db.prepare(`UPDATE room_participants SET role = 'AUDIENCE', mic_enabled = 0, moderator_muted = 0, seat_index = NULL
+        WHERE source_id = ? AND left_at IS NULL`).bind(participant.source_id),
+      db.prepare("DELETE FROM room_speakers WHERE rooms_id = ? AND value = ?").bind(id, userId),
+      db.prepare("DELETE FROM room_moderators WHERE rooms_id = ? AND value = ?").bind(id, userId)
+    ]);
+    sendOk(res, { removedFromSeat: true });
+  }));
+
+  router.post("/:id/remove-user", asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const userId = d1UserId(String(req.body?.userId ?? ""));
+    const time = new Date().toISOString();
+    const row = readRoom(await loadRoom(db, id, claims.sub));
+    const host = control(row);
+    if (row.host_id === userId) throw new HttpError(400, "Cannot remove the room host", ErrorCode.VALIDATION);
+    if (!host && (JSON.parse(String(row.room_admin_ids_json)) as string[]).includes(userId)) {
+      throw new HttpError(403, "Room admins cannot remove each other", ErrorCode.FORBIDDEN);
+    }
+    const participant = await activeParticipant(id, userId);
+    if (!participant) throw new HttpError(404, "Active participant not found", ErrorCode.NOT_FOUND);
+    await db.batch([
+      db.prepare("UPDATE room_participants SET left_at = ?, mic_enabled = 0, camera_enabled = 0, seat_index = NULL WHERE source_id = ? AND left_at IS NULL")
+        .bind(time, participant.source_id),
+      db.prepare(`UPDATE rooms SET participant_count = CASE WHEN participant_count > 0 THEN participant_count - 1 ELSE 0 END,
+          updated_at = ? WHERE source_id = ?`).bind(time, id),
+      db.prepare("DELETE FROM room_speakers WHERE rooms_id = ? AND value = ?").bind(id, userId),
+      db.prepare("DELETE FROM room_moderators WHERE rooms_id = ? AND value = ?").bind(id, userId),
+      db.prepare("DELETE FROM room_admins WHERE rooms_id = ? AND value = ?").bind(id, userId),
+      db.prepare(`UPDATE speaker_requests SET status = 'REJECTED', updated_at = ?
+        WHERE room_id = ? AND user_id = ? AND status = 'PENDING'`).bind(time, id, userId)
+    ]);
+    sendOk(res, { removed: true });
+  }));
+
+  router.post("/:id/admin", validateBody(adminSchema), asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const userId = d1UserId(String(req.body.userId));
+    const row = readRoom(await loadRoom(db, id, claims.sub));
+    control(row, true);
+    if (row.host_id === userId) throw new HttpError(400, "Cannot promote the room host", ErrorCode.VALIDATION);
+    const participant = await activeParticipant(id, userId);
+    if (!participant) throw new HttpError(404, "Active participant not found", ErrorCode.NOT_FOUND);
+    const isAdmin = req.body.isAdmin !== false;
+    if (isAdmin) {
+      await db.prepare(`INSERT INTO room_admins (source_id, value, rooms_id, position)
+        SELECT ?, ?, ?, COALESCE((SELECT MAX(position) + 1 FROM room_admins WHERE rooms_id = ?), 0)
+        WHERE NOT EXISTS (SELECT 1 FROM room_admins WHERE rooms_id = ? AND value = ?)`)
+        .bind(newId(), userId, id, id, id, userId).run();
+    } else {
+      await db.prepare("DELETE FROM room_admins WHERE rooms_id = ? AND value = ?").bind(id, userId).run();
+    }
+    sendOk(res, { isRoomAdmin: isAdmin });
+  }));
+
+  router.post("/:id/co-host", asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const userId = d1UserId(String(req.body?.userId ?? ""));
+    const row = readRoom(await loadRoom(db, id, claims.sub));
+    if (row.host_id !== claims.sub) throw new HttpError(403, "Only host can add co-hosts", ErrorCode.FORBIDDEN);
+    if (row.host_id === userId) throw new HttpError(400, "Cannot add host as co-host", ErrorCode.VALIDATION);
+    if ((JSON.parse(String(row.co_host_ids_json)) as string[]).includes(userId)) {
+      throw new HttpError(409, "User is already a co-host", ErrorCode.CONFLICT);
+    }
+    await db.batch([
+      db.prepare(`INSERT INTO room_cohosts (source_id, value, rooms_id, position)
+        SELECT ?, ?, ?, COALESCE((SELECT MAX(position) + 1 FROM room_cohosts WHERE rooms_id = ?), 0)
+        WHERE NOT EXISTS (SELECT 1 FROM room_cohosts WHERE rooms_id = ? AND value = ?)`)
+        .bind(newId(), userId, id, id, id, userId),
+      db.prepare("UPDATE rooms SET is_duet = 1, updated_at = ? WHERE source_id = ?")
+        .bind(new Date().toISOString(), id),
+      db.prepare("UPDATE room_participants SET role = 'MODERATOR' WHERE room_id = ? AND user_id = ? AND left_at IS NULL")
+        .bind(id, userId)
+    ]);
+    sendOk(res, { room: room(readRoom(await loadRoom(db, id, claims.sub))) });
+  }));
+
+  router.post("/:id/remove-co-host", asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const userId = d1UserId(String(req.body?.userId ?? ""));
+    const row = readRoom(await loadRoom(db, id, claims.sub));
+    if (row.host_id !== claims.sub) throw new HttpError(403, "Only host can remove co-hosts", ErrorCode.FORBIDDEN);
+    const time = new Date().toISOString();
+    await db.batch([
+      db.prepare("DELETE FROM room_cohosts WHERE rooms_id = ? AND value = ?").bind(id, userId),
+      db.prepare(`UPDATE rooms SET is_duet = CASE WHEN EXISTS (SELECT 1 FROM room_cohosts WHERE rooms_id = ?) THEN 1 ELSE 0 END,
+          updated_at = ? WHERE source_id = ?`).bind(id, time, id),
+      db.prepare("UPDATE room_participants SET role = 'SPEAKER' WHERE room_id = ? AND user_id = ? AND left_at IS NULL")
+        .bind(id, userId)
+    ]);
+    sendOk(res, { room: room(readRoom(await loadRoom(db, id, claims.sub))) });
+  }));
+
+  router.get("/:id/co-hosts", asyncHandler(async (req, res) => {
+    const { claims } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const row = await loadRoom(db, id, claims.sub);
+    if (!row) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
+    const { results } = await db.prepare(`SELECT ${personJson("u")} AS user_json FROM room_cohosts AS c
+      JOIN users AS u ON u.source_id = c.value WHERE c.rooms_id = ? ORDER BY c.position, c.source_id`)
+      .bind(id).all<{ user_json: string }>();
+    sendOk(res, { coHosts: results.map(entry => person(entry.user_json)), isDuet: Boolean(row.is_duet) });
   }));
 
   return router;

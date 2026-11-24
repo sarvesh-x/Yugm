@@ -6,6 +6,7 @@ import { requireHttpSession } from "../middleware/httpAccessSession.js";
 import { startOfUtcDay } from "../services/dailyWalletReward.js";
 import { asyncHandler, ErrorCode, HttpError, sendOk } from "../utils/http.js";
 import { bindD1LiveUser, createD1AccessSessionReader, d1LiveUserFilter } from "./d1AccessSession.js";
+import { terminateD1BondPair } from "./d1Bonds.js";
 import { d1UserId, person, personJson, visiblePerson } from "./d1People.js";
 import { prepareD1XpGrant, type D1GuardedStatement } from "./d1XpGrant.js";
 import { readD1HostRooms } from "./d1Rooms.js";
@@ -415,6 +416,7 @@ export function createD1SocialRouter(db: D1Database) {
       ) AND EXISTS (SELECT 1 FROM users AS u WHERE ${d1LiveUserFilter}) RETURNING source_id`)
       .bind(newId(), user.id, id, time, time, user.id, id, id, ...bindD1LiveUser(claims, time)).all();
     if (!result.results.length) await authenticate(req);
+    else await terminateD1BondPair(db, user.id, id);
     sendOk(res, { blocked: true });
   }));
 

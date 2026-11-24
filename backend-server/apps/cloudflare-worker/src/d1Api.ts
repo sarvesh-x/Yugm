@@ -1,9 +1,11 @@
 import { handleAsNodeRequest } from "cloudflare:node";
-import type { D1Database, ExecutionContext, R2Bucket, RateLimit } from "@cloudflare/workers-types";
+import type { D1Database, ExecutionContext, R2Bucket, RateLimit, ScheduledController } from "@cloudflare/workers-types";
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import { isIP } from "node:net";
 import process from "node:process";
+import { runD1Maintenance } from "../../api/src/migration/d1Maintenance.js";
+import { createFcmSender, deliverD1PushJobs } from "../../api/src/migration/d1NotificationPush.js";
 import { authClientIpHeader, createWorkerAuthRateLimiters, type AuthRateLimitBindings } from "./authRateLimit.js";
 import { installCloudflareImageProcessor } from "./imageProcessor.js";
 
@@ -20,13 +22,25 @@ interface D1ApiEnv extends AuthRateLimitBindings {
   YUGM_STAGE: string;
   YUGM_PRODUCTION_ORIGIN?: string;
   YUGM_R2_ENABLED?: string;
+  YUGM_FCM_PUSH_ENABLED?: string;
+  YUGM_BONDS_ENABLED?: string;
+  YUGM_BOND_SLOTS?: string;
   MEDIA_GRANT_SECRET?: string;
   JWT_SECRET?: string;
+  ADMIN_JWT_SECRET?: string;
   FCM_PROJECT_ID?: string;
   GOOGLE_OAUTH_CLIENT_ID?: string;
   APP_CHECK_ENFORCE?: string;
   FCM_CLIENT_EMAIL?: string;
   FCM_PRIVATE_KEY?: string;
+  LIVEKIT_API_KEY?: string;
+  LIVEKIT_API_SECRET?: string;
+  LIVEKIT_URL?: string;
+  RAZORPAY_KEY_ID?: string;
+  RAZORPAY_KEY_SECRET?: string;
+  GOOGLE_PLAY_PACKAGE_NAME?: string;
+  GOOGLE_PLAY_CLIENT_EMAIL?: string;
+  GOOGLE_PLAY_PRIVATE_KEY?: string;
   MONGODB_URI?: string;
   REDIS_URL?: string;
 }
@@ -36,8 +50,9 @@ type ApiStage = "local" | "production";
 // Android's emulator aliases the host loopback interface to 10.0.2.2.
 const loopbackHosts = new Set(["127.0.0.1", "localhost", "[::1]", "10.0.2.2"]);
 const forwardedSettings = [
-  "JWT_SECRET", "FCM_PROJECT_ID", "GOOGLE_OAUTH_CLIENT_ID", "APP_CHECK_ENFORCE",
-  "FCM_CLIENT_EMAIL", "FCM_PRIVATE_KEY"
+  "JWT_SECRET", "ADMIN_JWT_SECRET", "FCM_PROJECT_ID", "GOOGLE_OAUTH_CLIENT_ID", "APP_CHECK_ENFORCE",
+  "FCM_CLIENT_EMAIL", "FCM_PRIVATE_KEY", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "LIVEKIT_URL",
+  "YUGM_BONDS_ENABLED", "YUGM_BOND_SLOTS"
 ] as const;
 
 class D1SetupError extends Error {
@@ -66,7 +81,7 @@ async function checkD1Schema(db: D1Database) {
       db.prepare("SELECT source_id, firebase_uid, token_version FROM users LIMIT 0"),
       db.prepare("SELECT source_id, token_version_present FROM auth_sessions LIMIT 0"),
       db.prepare("SELECT source_id, null_fields, missing_fields, edit_token FROM user_auth_profile LIMIT 0"),
-      db.prepare("SELECT source_id, upload_token_hash FROM media_upload_sessions LIMIT 0"),
+      db.prepare("SELECT source_id, upload_token_hash, staging_cleaned_at FROM media_upload_sessions LIMIT 0"),
       db.prepare("SELECT source_id, seq FROM media_counters LIMIT 0"),
       db.prepare("SELECT pair_key, day, amount FROM relationship_message_xp_daily LIMIT 0"),
       db.prepare("SELECT " + ["device_tokens", "user_owned_cosmetics", "user_interests", "user_languages", "user_hobbies",
@@ -80,11 +95,22 @@ async function checkD1Schema(db: D1Database) {
         "room_speakers", "room_moderators", "room_admins", "room_cohosts", "room_locked_seats", "room_participants",
         "speaker_requests", "chat_messages", "room_activities", "direct_messages", "direct_message_reactions",
         "message_hidden_for", "conversation_mutes", "pk_battles", "matches", "match_users",
-        "relationships", "relationship_users"]
-        .map(table => `(SELECT source_id FROM ${table} LIMIT 0) AS ${table}`).join(", "))
+        "relationships", "relationship_users", "purchases", "diamond_transactions"]
+        .map(table => `(SELECT source_id FROM ${table} LIMIT 0) AS ${table}`).join(", ")),
+      db.prepare("SELECT notification_id, device_id FROM notification_push_jobs LIMIT 0")
     ]);
   } catch {
     throw new D1SetupError("D1_SCHEMA_UNAVAILABLE", "The local D1 schema is missing or out of date. Check the emulator setup instructions.");
+  }
+}
+
+function configureD1Runtime(env: D1ApiEnv) {
+  process.env.NODE_ENV = "production";
+  process.env.YUGM_RUNTIME = "cloudflare";
+  process.env.YUGM_D1_API = "true";
+  for (const key of forwardedSettings) {
+    if (env[key] === undefined) delete process.env[key];
+    else process.env[key] = env[key];
   }
 }
 
@@ -106,13 +132,7 @@ async function startD1Runtime(env: D1ApiEnv, stage: ApiStage) {
   if (mediaEnabled(env, stage) && (!mediaGrantSecret || mediaGrantSecret.length < 32 || mediaGrantSecret === env.JWT_SECRET)) {
     throw new Error("Managed media requires a separate persistent media grant secret");
   }
-  process.env.NODE_ENV = "production";
-  process.env.YUGM_RUNTIME = "cloudflare";
-  process.env.YUGM_D1_API = "true";
-  for (const key of forwardedSettings) {
-    if (env[key] === undefined) delete process.env[key];
-    else process.env[key] = env[key];
-  }
+  configureD1Runtime(env);
 
   const [{ createD1App }, { initFirebase }] = await Promise.all([
     import("../../api/src/migration/d1App.js"),
@@ -130,7 +150,22 @@ async function startD1Runtime(env: D1ApiEnv, stage: ApiStage) {
       staging: env.STAGING
     },
     grantSecret: mediaGrantSecret
-  } : undefined, { chat: limitByUser(env.CHAT_SEND), report: limitByUser(env.REPORT_REQUESTS) });
+  } : undefined, { chat: limitByUser(env.CHAT_SEND), report: limitByUser(env.REPORT_REQUESTS) }, {
+    apiKey: env.LIVEKIT_API_KEY,
+    apiSecret: env.LIVEKIT_API_SECRET,
+    url: env.LIVEKIT_URL,
+    production: stage === "production"
+  }, {
+    razorpayKeyId: env.RAZORPAY_KEY_ID,
+    razorpayKeySecret: env.RAZORPAY_KEY_SECRET,
+    googlePlayPackageName: env.GOOGLE_PLAY_PACKAGE_NAME,
+    googlePlayClientEmail: env.GOOGLE_PLAY_CLIENT_EMAIL,
+    googlePlayPrivateKey: env.GOOGLE_PLAY_PRIVATE_KEY,
+    production: stage === "production",
+    devRecharge: stage === "local"
+  }, {
+    jwtSecret: env.ADMIN_JWT_SECRET ?? env.JWT_SECRET
+  });
   const server = createServer(app);
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
@@ -142,6 +177,21 @@ export function createD1ApiWorker(stage: ApiStage) {
   let startup: Promise<void> | undefined;
   const service = stage === "local" ? "yugm-auth-local" : "yugm-api";
   return {
+    async scheduled(controller: ScheduledController, env: D1ApiEnv) {
+      if (env.YUGM_STAGE !== stage || env.MONGODB_URI || env.REDIS_URL) return;
+      if (stage === "production" && !configuredProductionOrigin(env.YUGM_PRODUCTION_ORIGIN)) return;
+      const now = new Date(Math.min(controller.scheduledTime, Date.now()));
+      if (controller.cron === "*/15 * * * *") {
+        await runD1Maintenance(env.AUTH_DB, now, mediaEnabled(env, stage) ? env.STAGING : undefined);
+      }
+      if (controller.cron === "* * * * *" && env.YUGM_FCM_PUSH_ENABLED === "true" && env.FCM_PROJECT_ID &&
+        env.FCM_CLIENT_EMAIL && env.FCM_PRIVATE_KEY) {
+        configureD1Runtime(env);
+        const { initFirebase, getFirebaseAccessToken } = await import("../../api/src/services/firebase.js");
+        await initFirebase();
+        await deliverD1PushJobs(env.AUTH_DB, now, createFcmSender(env.FCM_PROJECT_ID, getFirebaseAccessToken));
+      }
+    },
     async fetch(request: Request, env: D1ApiEnv, ctx: ExecutionContext): Promise<Response> {
       const url = new URL(request.url);
       const validOrigin = stage === "local" ? loopbackHosts.has(url.hostname) : url.origin === configuredProductionOrigin(env.YUGM_PRODUCTION_ORIGIN);

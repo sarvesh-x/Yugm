@@ -1,5 +1,48 @@
 # Development progress
 
+## 2026-11-25 — D1 admin support routes
+
+- Added the six `/api/admin/support` patterns: list/detail, reply, status, assignment and stats. The admin guard and audit helper are now shared with the config routes, preserving auth-before-validation order and the legacy admin envelope. `0010_support_ticket_sender.sql` separates user and admin ticket-message senders, and the ticket mapping now emits `sender_admin_id` for legacy admin replies.
+- Added a Worker fixture for auth/permission denial, filters, validation, reply persistence, audits, status/assignment and stats. Typechecks, focused mapping test 12/12, all Worker fixtures, backend tests (admin 9/9, API 515/515, shared 27/27), production dry-run bundle, emitted-bundle import grep and `git diff --check` passed. The audit reports 638 legacy / 182 D1 / 177 matched / 461 missing, with `/api/admin` at 11 mounted / 204 missing. Hosted `0003` through `0010` and live admin acceptance remain open. [Support handoff](handoffs/2026-11-25-d1-admin-support.md)
+
+## 2026-11-25 — D1 admin config and audit-log routes
+
+- Added a host-neutral admin guard using Web Crypto HS256 verification, active-admin/session checks and role-plus-table permissions. Mounted the first five `/api/admin` patterns: config list/read/upsert/delete and paginated audit logs. Admin errors now use the legacy `success: false` envelope, and `0009_app_config_key_unique.sql` restores the source unique-key guarantee.
+- Added a Worker fixture for auth ordering, user/permission denial, D1 config persistence, audit filtering/pagination and expired sessions. Typechecks, all Worker fixtures, backend tests (admin 9/9, API 515/515, shared 27/27), production dry-run bundle, emitted-bundle import grep and `git diff --check` passed. The audit reports 638 legacy / 176 D1 / 171 matched / 467 missing, with `/api/admin` at 5 mounted / 210 missing. Hosted `0003` through `0009` and live admin acceptance remain open. [Admin handoff](handoffs/2026-11-25-d1-admin-config-and-audit.md)
+
+## 2026-11-24 — D1 watch-party routes
+
+- Added the four `/api/rooms/:roomId/watch-party` patterns to the local D1 Worker: host-only start/sync/stop and session read. Starting replaces the single per-room record in one D1 batch, and the response mirrors the legacy `WatchParty` JSON. Validation and status codes follow the existing shared contracts.
+- Added a Worker fixture for auth, host guards, invalid bodies, D1 persistence, replacement and replay. Typechecks, all Worker fixtures, backend tests (admin 9/9, API 515/515, shared 27/27), production dry-run bundle, emitted-bundle import grep and `git diff --check` passed. The audit reports 638 legacy / 171 D1 / 166 matched / 472 missing, with `/api/rooms` at 40 mounted / 19 missing. Realtime watch-party events and the remaining room patterns are still open. [Watch-party handoff](handoffs/2026-11-24-d1-watch-party.md)
+
+## 2026-11-24 — D1 stale-room safety cleanup
+
+- Ported the legacy 48-hour stale-room end job to the `*/15 * * * *` D1 maintenance run. `endD1Room()` is now exported and reused from the room routes, so the room end, chat delete, participant release and pending speaker-request rejection stay in one guarded D1 batch, with the always-on official room exempt. The Worker fixture verifies the stale room ends while recent and official rooms stay live.
+- Typechecks, all Worker fixtures, backend tests (admin 9/9, API 515/515, shared 27/27), production dry-run bundle, emitted-bundle import grep and `git diff --check` passed. The audit is unchanged at 638 legacy / 167 D1 / 162 matched / 476 missing because this job adds no HTTP route. Weekly honors, 30-day account-deletion cleanup and PK deadlines remain on the legacy runtime. [Stale-room handoff](handoffs/2026-11-24-d1-stale-room-cleanup.md)
+
+## 2026-11-24 — D1 wallet routes and payments
+
+- Added the six remaining `/api/wallet` patterns to the local D1 Worker: purchase history, Razorpay order/verify, Google Play verify, VIP activation and dev recharge (local stage only). Balances, purchases, credits, VIP state and XP caps stay authoritative in D1; credits are once-only and provider calls are host-neutral and injected.
+- Added `d1Payments.ts` with Web Crypto HMAC/RSA helpers and `0008_wallet_purchase_indexes.sql`. The auth-worker fixture uses generated local keys and mocked Razorpay/Google/FCM endpoints; no live provider call was made. API/Worker typechecks, all Worker fixtures, backend tests, both D1 dry-run bundles, emitted-bundle import grep and `git diff --check` passed. The audit reports 638 legacy / 167 D1 / 162 matched / 476 missing patterns, with 16/16 wallet mounted. Hosted payment secrets, legacy VIP XP atomicity and realtime emitters remain open. [Wallet handoff](handoffs/2026-11-24-d1-wallet.md)
+
+## 2026-11-24 — D1 Bonds route group
+
+- Added all 16 `/api/bonds` patterns to the local D1 Worker. Invitation holds/releases, paid/free requests, slot capacity, eligibility, privacy preferences, check-ins, gifts, type changes, end/block termination, profile reads and leaderboards now use D1 as authoritative state. Wallet debits/credits, receipt keys, version bumps and guarded notifications share the same transactions.
+- Shared `bondRulesCore.ts` now holds host-neutral rules for both the legacy service and Worker bundles. Cron maintenance finalizes prior ranking periods, persists milestones, grants the day-7 frame to both partners and awards weekly ranking frames. Blocking terminates an active pair through the existing D1 social hook.
+- A new Worker fixture covers validation, opt-in eligibility, replayed paid invitations, cancellation release, reciprocal check-in, gift points/fees, visibility, leaderboard, type change, end and block termination. API/Worker typechecks, all Worker fixtures, backend tests, dry-run bundle checks and `git diff --check` passed. The audit reports 638 legacy / 161 D1 / 156 matched / 482 missing patterns, with 16/16 Bonds mounted. Legacy Bonds rate limiting, D1 realtime emitters, admin/moderation/account-deletion wiring and hosted flag confirmation remain open. [Bonds handoff](handoffs/2026-11-24-d1-bonds.md)
+
+## 2026-11-24 — D1 room lifecycle and LiveKit token admission
+
+- Added 36 mounted `/api/rooms` handlers for create, join, leave, end, room PATCH, mic/seat locks, chat clean, speaker requests and seat/mute/moderation controls. XP, daily caps, receipts and guarded user updates stay in the same D1 transactions. The official always-on voice room remains exempt from automatic end.
+- Added `POST /api/livekit/token` with Web Crypto HS256 tokens, live-room and participant checks, role/media capability derivation and a production `wss://` requirement. No `livekit-server-sdk` import was added to either D1 Worker bundle; LiveKit credentials still need operator-supplied secrets.
+- The audit counts 140 shared and 498 legacy-only patterns, with 23 `/api/rooms` routes still open. Worker fixtures, production/debug dry runs, all workspace typechecks, backend tests and `git diff --check` passed. [Room lifecycle verification and remaining jobs](handoffs/2026-11-24-d1-room-lifecycle-and-livekit.md)
+
+## 2026-11-24 — D1 progression and scheduled jobs
+
+- Added the level, level overview, leaderboard and daily check-in APIs. Concurrent and repeated claims award one day's XP, streak, cosmetic and wallet credits. The Worker fixture verified rollback when the ledger write failed.
+- Added D1 maintenance and Firebase push dispatch through Cloudflare Cron Triggers. Tested expiry, retention, VIP review, quota release, staged R2 cleanup, overlapping push invocation, retry and recipient preferences. Production FCM remains unverified.
+- Applied `0006` and `0007` to both local persistence directories. The route audit counts 116 shared and 522 legacy-only patterns. [Verification and remaining jobs](handoffs/2026-11-24-d1-progression-and-jobs.md)
+
 ## 2026-11-24 — Local Google sign-in recovery
 
 - Preserved the prior Wrangler state and started the emulator Worker on a separate local `yugm` database after a 409 Firebase identity collision. The original and new profiles remain in separate persistence directories. Google exchange and Firebase device-token registration returned HTTP 200 from the emulator. [Restart command and evidence](handoffs/2026-11-24-local-google-sign-in-conflict.md)

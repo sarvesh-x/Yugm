@@ -2,7 +2,7 @@ import { blockBondPair, endUnavailableBonds } from "../services/bonds.js";
 import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
-import { getLevelMilestone, levelMilestones, profileSchema, reactionSchema, socketEvents, streakCoinBonuses, streakCosmeticRewards, xpEventDisplay, xpEvents, type XpEvent } from "@yugm/shared";
+import { profileSchema, reactionSchema, socketEvents, streakCoinBonuses, streakCosmeticRewards } from "@yugm/shared";
 import { optionalAuth, requireAuth, requireNotMuted, type AuthRequest } from "../middleware/auth.js";
 import { activeCosmeticKey, ensureDefaultCosmetics, listCosmeticsByIds } from "../services/cosmetics.js";
 import { chatLimiter } from "../middleware/rateLimit.js";
@@ -31,8 +31,8 @@ import { canUseRoomReaction, findActiveRoomReaction, normalizeReactionId } from 
 import { emitUser, getOnlineUserIds, isUserOnline } from "../services/socket.js";
 import { autoModerate } from "../middleware/autoModerate.js";
 import { getVipStatus, vipPrivacySchema } from "../services/vip.js";
-import { dailyCheckInStart, dailyXpCaps, getLevelStatus, grantXp } from "../services/levels.js";
-import { getProgressionTrack } from "../services/progressionTracks.js";
+import { dailyCheckInStart, getLevelStatus, grantXp } from "../services/levels.js";
+import { nextStreakMilestone, presentLevelOverview } from "../services/levelOverview.js";
 import { XpDailyCap } from "../models/XpDailyCap.js";
 import { creditWallet } from "../services/wallet.js";
 import { findRelationship, grantRelationshipXp } from "../services/relationships.js";
@@ -471,23 +471,8 @@ usersRouter.get("/me/level-overview", asyncHandler(async (req: AuthRequest, res)
   if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
 
   const levelStatus = getLevelStatus(user);
-  const streak = user.streakCount ?? 0;
-  const milestones = Object.keys(streakCoinBonuses).map(Number).sort((a, b) => a - b);
-  const nextMilestone = milestones.find((m) => m > streak) ?? null;
   const today = dailyCheckInStart();
   const capRows = await XpDailyCap.find({ userId: req.user!.id, day: today }).select("event amount").lean();
-  const earnedByEvent = new Map(capRows.map((row) => [row.event, row.amount]));
-  const eventInfo = (key: XpEvent) => ({
-    ...xpEventDisplay[key],
-    xp: xpEvents[key],
-    cap: dailyXpCaps[key] ?? null,
-    earnedToday: earnedByEvent.get(key) ?? 0
-  });
-  const todayXpEarned = capRows.reduce((total, row) => total + row.amount, 0);
-  const todayXpCap = Object.values(dailyXpCaps).reduce((total, cap) => total + (cap ?? 0), 0);
-  const roadmapMilestones = levelStatus.level <= levelMilestones.length
-    ? levelMilestones
-    : Array.from({ length: 31 }, (_, index) => getLevelMilestone(Math.max(1, levelStatus.level - 10) + index));
 
   const [topUsers, usersAhead] = await Promise.all([
     User.find({ isBlocked: { $ne: true } })
@@ -506,42 +491,7 @@ usersRouter.get("/me/level-overview", asyncHandler(async (req: AuthRequest, res)
     })
   ]);
 
-  sendOk(res, {
-    schemaVersion: 1,
-    level: levelStatus,
-    wealthLevel: getProgressionTrack(user.wealthExp),
-    charmLevel: getProgressionTrack(user.charmExp),
-    streak: {
-      count: streak,
-      canCheckIn: levelStatus.canDailyCheckIn,
-      nextMilestone,
-      nextMilestoneReward: nextMilestone ? streakCoinBonuses[nextMilestone] : 0,
-      milestones: milestones.map((streakDays) => ({
-        streakDays,
-        rewardCoins: streakCoinBonuses[streakDays],
-        cosmeticId: streakCosmeticRewards[streakDays] ?? "",
-        reached: streak >= streakDays
-      })),
-      streakBonuses: streakCoinBonuses
-    },
-    leaderboardRank: usersAhead + 1,
-    milestones: roadmapMilestones,
-    xpEvents: {
-      DAILY_CHECKIN: eventInfo("DAILY_CHECKIN"),
-      PROFILE_COMPLETE: eventInfo("PROFILE_COMPLETE"),
-      ROOM_CREATE: eventInfo("ROOM_CREATE"),
-      ROOM_JOIN: eventInfo("ROOM_JOIN"),
-      CHAT_MESSAGE: eventInfo("CHAT_MESSAGE"),
-      GIFT_SENT: eventInfo("GIFT_SENT"),
-      GIFT_RECEIVED: eventInfo("GIFT_RECEIVED"),
-      VIP_PURCHASE: eventInfo("VIP_PURCHASE"),
-      COSMETIC_PURCHASE: eventInfo("COSMETIC_PURCHASE"),
-      FOLLOW_USER: eventInfo("FOLLOW_USER"),
-      MINI_GAME_PLAY: eventInfo("MINI_GAME_PLAY")
-    },
-    todayXpEarned,
-    todayXpCap,
-    leaderboard: topUsers.map((u, i) => ({
+  const leaderboard = topUsers.map((u, i) => ({
       rank: i + 1,
       id: u._id.toString(),
       name: u.name,
@@ -553,8 +503,9 @@ usersRouter.get("/me/level-overview", asyncHandler(async (req: AuthRequest, res)
       levelTitle: getLevelStatus(u).title,
       xp: getLevelStatus(u).xp,
       activeCosmetics: u.activeCosmetics ?? {}
-    }))
-  });
+  }));
+  sendOk(res, presentLevelOverview(levelStatus, user.streakCount ?? 0, user.wealthExp, user.charmExp, capRows,
+    usersAhead + 1, leaderboard));
 }));
 
 usersRouter.get("/me/inventory", asyncHandler(async (req: AuthRequest, res) => {
@@ -669,7 +620,6 @@ usersRouter.post("/me/check-in", asyncHandler(async (req: AuthRequest, res) => {
     });
   }
 
-  const milestones = Object.keys(streakCoinBonuses).map(Number).sort((a, b) => a - b);
   let streakBonus = 0;
   if (streakCoinBonuses[newStreak]) {
     streakBonus = streakCoinBonuses[newStreak];
@@ -680,7 +630,7 @@ usersRouter.post("/me/check-in", asyncHandler(async (req: AuthRequest, res) => {
     });
   }
 
-  const nextMilestone = milestones.find((m) => m > newStreak) ?? null;
+  const nextMilestone = nextStreakMilestone(newStreak);
 
   const xpReward = await grantXp(req.user!.id, "DAILY_CHECKIN", {
     idempotencyKey: `check-in:${req.user!.id}:${todayStart.toISOString()}:xp`

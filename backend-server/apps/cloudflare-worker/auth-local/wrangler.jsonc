@@ -10,7 +10,8 @@
     "iconv-lite": "iconv-lite-worker"
   },
   "vars": {
-    "YUGM_STAGE": "local"
+    "YUGM_STAGE": "local",
+    "YUGM_BONDS_ENABLED": "true"
   },
   "d1_databases": [
     {
@@ -35,5 +36,6 @@
     { "name": "CHAT_SEND", "namespace_id": "17024004", "simple": { "limit": 12, "period": 10 } },
     { "name": "REPORT_REQUESTS", "namespace_id": "17024005", "simple": { "limit": 5, "period": 60 } }
   ],
-  "images": { "binding": "IMAGES" }
+  "images": { "binding": "IMAGES" },
+  "triggers": { "crons": ["*/15 * * * *", "* * * * *"] }
 }

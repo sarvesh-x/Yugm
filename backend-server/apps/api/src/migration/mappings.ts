@@ -2472,7 +2472,14 @@ function mapSupportTicket(record: SourceRecord, context: TransformContext): Mapp
       const text = toRequiredString(element.message, { ...childField, field: "messages.message" });
       const createdAt = toUtcIso(element.createdAt, { ...childField, field: "messages.createdAt" });
       if (!senderId || !senderRole || !text || !createdAt) return undefined;
-      return { sender_id: senderId, sender_role: senderRole, message: text, created_at: createdAt };
+      // Legacy admin replies store an admin ID in senderId despite the User ref.
+      return {
+        sender_id: senderRole === "USER" ? senderId : null,
+        sender_admin_id: senderRole === "ADMIN" ? senderId : null,
+        sender_role: senderRole,
+        message: text,
+        created_at: createdAt
+      };
     }
   });
   if (rejected([sourceId, category, subject, message, status, priority])) return { writes: [], rejected: true };

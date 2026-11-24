@@ -15,7 +15,7 @@ import {
   validateUploadRequest
 } from "../services/mediaUploadPolicy.js";
 import { AVATAR_PART_KEYS } from "./authProfileFields.js";
-import { createD1AccessSessionReader } from "./d1AccessSession.js";
+import { bindD1LiveUser, createD1AccessSessionReader, d1LiveUserFilter } from "./d1AccessSession.js";
 import { asyncHandler, ErrorCode, HttpError, sendOk } from "../utils/http.js";
 
 interface MediaUploadSessionRow {
@@ -62,11 +62,6 @@ interface MediaVariantRow {
   key: string;
   content_type: string;
   bytes: number;
-}
-
-interface ProfileAuditRow {
-  null_fields: string | null;
-  missing_fields: string | null;
 }
 
 export interface D1MediaRouterOptions {
@@ -131,29 +126,11 @@ async function putObject(
   });
 }
 
-async function reserveQuota(db: D1Database, userId: string, bytes: number, now: string) {
-  const committed = Number(await db.prepare(`SELECT COALESCE(SUM(file_size), 0) AS total
-    FROM media_objects WHERE owner_type = 'USER' AND owner_id = ? AND deleted_at IS NULL`).bind(userId).first("total") ?? 0);
-  await db.prepare(`INSERT INTO media_quota_reservations (source_id, bytes, created_at, updated_at)
-    VALUES (?, 0, ?, ?) ON CONFLICT (source_id) DO NOTHING`).bind(userId, now, now).run();
-  const result = await db.prepare(`UPDATE media_quota_reservations SET bytes = bytes + ?, updated_at = ?
-    WHERE source_id = ? AND bytes + ? + ? <= ?`).bind(bytes, now, userId, committed, bytes, USER_MEDIA_QUOTA_BYTES).run();
-  return result.meta.changes === 1;
-}
-
-function releaseQuota(db: D1Database, userId: string, bytes: number, now: string) {
-  return db.prepare("UPDATE media_quota_reservations SET bytes = MAX(0, bytes - ?), updated_at = ? WHERE source_id = ?")
-    .bind(bytes, now, userId);
-}
-
 async function transitionSession(
-  db: D1Database, session: MediaUploadSessionRow, status: MediaUploadSessionRow["status"], now: string
+  db: D1Database, session: MediaUploadSessionRow, status: "EXPIRED" | "FAILED", now: string
 ) {
-  await db.batch([
-    db.prepare(`UPDATE media_upload_sessions SET status = ?, quota_reserved = 0, updated_at = ?
-      WHERE source_id = ? AND status IN ('PENDING', 'PROCESSING')`).bind(status, now, session.source_id),
-    releaseQuota(db, session.user_id, session.expected_bytes, now)
-  ]);
+  await db.prepare(`UPDATE media_upload_sessions SET status = ?, quota_reserved = 0, updated_at = ?
+    WHERE source_id = ? AND status = ?`).bind(status, now, session.source_id, session.status).run();
 }
 
 async function nextMediaVersion(db: D1Database, userId: string) {
@@ -211,19 +188,25 @@ export function createD1MediaRouter(options: D1MediaRouterOptions) {
     const stagingKey = buildStagingKey(sessionId, extension);
     const now = new Date();
     const expiresAt = new Date(now.getTime() + SESSION_TTL_SECONDS * 1000).toISOString();
-    if (!await reserveQuota(db, user.id, Number(body.bytes), now.toISOString())) {
-      throw new HttpError(413, "Your media storage quota has been reached");
-    }
-    try {
-      await db.prepare(`INSERT INTO media_upload_sessions
+    const time = now.toISOString();
+    const bytes = Number(body.bytes);
+    const [, opened] = await db.batch([
+      db.prepare(`INSERT INTO media_quota_reservations (source_id, bytes, created_at, updated_at)
+        VALUES (?, 0, ?, ?) ON CONFLICT (source_id) DO NOTHING`).bind(user.id, time, time),
+      db.prepare(`INSERT INTO media_upload_sessions
         (source_id, user_id, category, expected_content_type, expected_bytes, owner_type, owner_id,
          bucket, staging_key, status, expires_at, attempts, quota_reserved, upload_token_hash, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, 'USER', ?, 'staging', ?, 'PENDING', ?, 0, 1, ?, ?, ?)`)
-        .bind(sessionId, user.id, category, contentType, Number(body.bytes), user.id, stagingKey, expiresAt,
-          hash(grant), now.toISOString(), now.toISOString()).run();
-    } catch (error) {
-      await db.batch([releaseQuota(db, user.id, Number(body.bytes), now.toISOString())]);
-      throw error;
+        SELECT ?, ?, ?, ?, ?, 'USER', ?, 'staging', ?, 'PENDING', ?, 0, 1, ?, ?, ?
+        FROM media_quota_reservations WHERE source_id = ? AND bytes + ? + (
+          SELECT COALESCE(SUM(file_size), 0) FROM media_objects
+          WHERE owner_type = 'USER' AND owner_id = ? AND deleted_at IS NULL
+        ) <= ?`).bind(sessionId, user.id, category, contentType, bytes, user.id, stagingKey, expiresAt,
+          hash(grant), time, time, user.id, bytes, user.id, USER_MEDIA_QUOTA_BYTES),
+      db.prepare(`UPDATE media_quota_reservations SET bytes = bytes + ?, updated_at = ? WHERE source_id = ?
+        AND EXISTS (SELECT 1 FROM media_upload_sessions WHERE source_id = ?)`).bind(bytes, time, user.id, sessionId)
+    ]);
+    if (opened.meta.changes !== 1) {
+      throw new HttpError(413, "Your media storage quota has been reached");
     }
 
     const uploadUrl = `${resolvePublicOrigin(req)}/api/media/uploads/${sessionId}/bytes?grant=${encodeURIComponent(grant)}`;
@@ -264,7 +247,7 @@ export function createD1MediaRouter(options: D1MediaRouterOptions) {
   }));
 
   router.post("/uploads/:sessionId/complete", asyncHandler(async (req, res) => {
-    const { user } = await requireHttpSession(req.headers.authorization, access);
+    const { user, claims } = await requireHttpSession(req.headers.authorization, access);
     let session = await readSession(db, req.params.sessionId);
     if (!session || session.user_id !== user.id) {
       throw new HttpError(404, "Upload session not found", ErrorCode.NOT_FOUND);
@@ -351,69 +334,51 @@ export function createD1MediaRouter(options: D1MediaRouterOptions) {
         }
       }
 
-      const userRow = await db.prepare("SELECT avatar_media_id, updated_at FROM users WHERE source_id = ?")
-        .bind(user.id).first<{ avatar_media_id: string | null; updated_at: string | null }>();
-      if (!userRow) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
-      const audit = await db.prepare("SELECT null_fields, missing_fields FROM user_auth_profile WHERE source_id = ?")
-        .bind(user.id).first<ProfileAuditRow>();
-      const nulls = new Set<string>(JSON.parse(String(audit?.null_fields ?? "[]")));
-      const missing = new Set<string>(JSON.parse(String(audit?.missing_fields ?? "[]")));
-      for (const field of ["avatar", "avatarType", "avatarParts", "activeCosmetics", "activeCosmetics.avatarAsset"]) {
-        nulls.delete(field);
-        missing.delete(field);
-      }
-      for (const key of AVATAR_PART_KEYS) {
-        nulls.delete(`avatarParts.${key}`);
-        missing.delete(`avatarParts.${key}`);
-      }
-      nulls.add("avatarParts");
-
+      const finishedAt = new Date().toISOString();
+      const completed = `EXISTS (SELECT 1 FROM media_upload_sessions WHERE source_id = ? AND status = 'COMPLETED' AND media_id = ?)`;
+      const sessionId = session.source_id;
+      const write = (sql: string, ...args: Array<string | number | null>) => db.prepare(sql).bind(...args, sessionId, mediaId);
+      const changedFields = JSON.stringify(["avatar", "avatarType", "avatarParts", "activeCosmetics", "activeCosmetics.avatarAsset",
+        ...AVATAR_PART_KEYS.map(key => `avatarParts.${key}`)]);
       const statements = [
-        db.prepare(`INSERT INTO media_objects
+        db.prepare(`UPDATE media_upload_sessions SET status = 'COMPLETED', media_id = ?, completed_at = ?, quota_reserved = 0, updated_at = ?
+          WHERE source_id = ? AND user_id = ? AND status = 'PROCESSING' AND EXISTS (
+            SELECT 1 FROM users AS u WHERE ${d1LiveUserFilter} AND u.deletion_requested_at IS NULL
+          )`).bind(mediaId, finishedAt, finishedAt, session.source_id, user.id, ...bindD1LiveUser(claims, finishedAt)),
+        write(`INSERT INTO media_objects
           (source_id, owner_type, owner_id, media_type, category, bucket, storage_key, content_type, file_size,
            width, height, duration, checksum, visibility, processing_status, moderation_status, version,
            created_by, superseded_by_id, deleted_at, created_at, updated_at)
-          VALUES (?, 'USER', ?, 'IMAGE', 'AVATAR', 'public-media', ?, ?, ?, ?, ?, NULL, ?,
-                  'PUBLIC', 'READY', 'APPROVED', ?, ?, NULL, NULL, ?, ?)`)
-          .bind(mediaId, user.id, avatarKey, session.expected_content_type, staged.body.byteLength,
-            metadata.width, metadata.height, hash(staged.body), version,
-            user.id, now.toISOString(), now.toISOString())
+          SELECT ?, 'USER', ?, 'IMAGE', 'AVATAR', 'public-media', ?, ?, ?, ?, ?, NULL, ?,
+            'PUBLIC', 'READY', 'APPROVED', ?, ?, NULL, NULL, ?, ? WHERE ${completed}`,
+        mediaId, user.id, avatarKey, session.expected_content_type, staged.body.byteLength,
+        metadata.width, metadata.height, hash(staged.body), version, user.id, finishedAt, finishedAt)
       ];
       for (const [position, variant] of variants.entries()) {
-        statements.push(db.prepare(`INSERT INTO media_variants
+        statements.push(write(`INSERT INTO media_variants
           (source_id, name, bucket, key, url, content_type, bytes, width, height, media_objects_id, position)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-          .bind(`${mediaId}:${variant.row.name}`, variant.row.name, variant.row.bucket, variant.row.key,
-            variant.row.bucket === "public-media"
-              ? publicMediaUrl(resolvePublicOrigin(req), mediaId, variant.row.name, "webp")
-              : null,
-            variant.row.content_type, variant.row.bytes, variant.width, variant.height, mediaId, position));
+          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${completed}`,
+        `${mediaId}:${variant.row.name}`, variant.row.name, variant.row.bucket, variant.row.key,
+        variant.row.bucket === "public-media" ? publicMediaUrl(resolvePublicOrigin(req), mediaId, variant.row.name, "webp") : null,
+        variant.row.content_type, variant.row.bytes, variant.width, variant.height, mediaId, position));
       }
-      const userIndex = statements.push(db.prepare(`UPDATE users SET avatar = ?, avatar_media_id = ?,
-        avatar_type = 'UPLOADED', active_cosmetics_avatar_asset = '', avatar_parts_background = NULL,
-        avatar_parts_clothes = NULL, avatar_parts_head = NULL, avatar_parts_mouth = NULL, avatar_parts_eyes = NULL,
-        avatar_parts_top = NULL, updated_at = ? WHERE source_id = ? AND updated_at IS ?`)
-        .bind(avatarUrl, mediaId, now.toISOString(), user.id, userRow.updated_at)) - 1;
-      if (audit) {
-        statements.push(db.prepare(`UPDATE user_auth_profile SET null_fields = ?, missing_fields = ?
-          WHERE source_id = ? AND null_fields IS ? AND missing_fields IS ?`)
-          .bind(JSON.stringify([...nulls]), JSON.stringify([...missing]), user.id,
-            audit.null_fields, audit.missing_fields));
-      }
-      if (userRow.avatar_media_id) {
-        statements.push(db.prepare(`UPDATE media_objects SET superseded_by_id = ?, updated_at = ?
-          WHERE source_id = ? AND deleted_at IS NULL`)
-          .bind(mediaId, now.toISOString(), userRow.avatar_media_id));
-      }
-      const sessionIndex = statements.push(db.prepare(`UPDATE media_upload_sessions
-        SET status = 'COMPLETED', media_id = ?, completed_at = ?, quota_reserved = 0, updated_at = ?
-        WHERE source_id = ? AND user_id = ? AND status = 'PROCESSING'`)
-        .bind(mediaId, now.toISOString(), now.toISOString(), session.source_id, user.id)) - 1;
-      statements.push(releaseQuota(db, user.id, session.expected_bytes, now.toISOString()));
+      statements.push(
+        write(`UPDATE media_objects SET superseded_by_id = ?, updated_at = ? WHERE deleted_at IS NULL
+          AND source_id = (SELECT avatar_media_id FROM users WHERE source_id = ?) AND ${completed}`, mediaId, finishedAt, user.id),
+        write(`UPDATE users SET avatar = ?, avatar_media_id = ?, avatar_type = 'UPLOADED', active_cosmetics_avatar_asset = '',
+          avatar_parts_background = NULL, avatar_parts_clothes = NULL, avatar_parts_head = NULL, avatar_parts_mouth = NULL,
+          avatar_parts_eyes = NULL, avatar_parts_top = NULL, updated_at = ? WHERE source_id = ? AND ${completed}`,
+        avatarUrl, mediaId, finishedAt, user.id),
+        write(`UPDATE user_auth_profile SET
+          null_fields = (SELECT json_group_array(value) FROM (SELECT value FROM json_each(null_fields)
+            WHERE value NOT IN (SELECT value FROM json_each(?)) UNION ALL SELECT 'avatarParts')),
+          missing_fields = (SELECT json_group_array(value) FROM json_each(missing_fields) WHERE value NOT IN (SELECT value FROM json_each(?)))
+          WHERE source_id = ? AND ${completed}`, changedFields, changedFields, user.id)
+      );
 
-      const committed = await db.batch(statements);
-      if (committed[userIndex].meta.changes === 0 || committed[sessionIndex].meta.changes === 0) {
-        throw new HttpError(409, "Profile changed. Please try again.", ErrorCode.CONFLICT);
+      const [committed] = await db.batch(statements);
+      if (committed.meta.changes === 0) {
+        throw new HttpError(409, "Upload session is no longer processing", ErrorCode.CONFLICT);
       }
       sendOk(res, { mediaId, avatarUrl, mediaType: "IMAGE", version });
     } catch (error) {
@@ -437,7 +402,6 @@ export function createD1MediaRouter(options: D1MediaRouterOptions) {
       updated_at = ? WHERE source_id = ? AND user_id = ? AND status = 'PENDING' AND quota_reserved = 1`)
       .bind(now, session.source_id, user.id).run();
     if (claim.meta.changes === 1) {
-      await db.batch([releaseQuota(db, user.id, session.expected_bytes, now)]);
       await buckets.staging.delete(session.staging_key).catch(() => {});
     }
     sendOk(res, { sessionId: session.source_id, status: "CANCELLED" });

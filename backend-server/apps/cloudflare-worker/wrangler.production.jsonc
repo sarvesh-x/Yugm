@@ -13,6 +13,7 @@
     "YUGM_STAGE": "production",
     "YUGM_PRODUCTION_ORIGIN": "https://api.yugm.invalid",
     "YUGM_R2_ENABLED": "true",
+    "YUGM_FCM_PUSH_ENABLED": "true",
     "APP_CHECK_ENFORCE": "true"
   },
   "d1_databases": [
@@ -38,6 +39,7 @@
     { "name": "REPORT_REQUESTS", "namespace_id": "17024105", "simple": { "limit": 5, "period": 60 } }
   ],
   "images": { "binding": "IMAGES" },
+  "triggers": { "crons": ["*/15 * * * *", "* * * * *"] },
   "observability": {
     "enabled": true,
     "logs": { "enabled": true, "invocation_logs": false, "persist": true },

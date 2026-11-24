@@ -39,7 +39,7 @@ type AssetVariant = {
   width: number | null;
   height: number | null;
 };
-type WardrobeRow = Record<string, string | number | null> & {
+export type WardrobeRow = Record<string, string | number | null> & {
   balance: number;
   stored_level: number;
   diamond_balance: number;
@@ -56,7 +56,7 @@ function activeColumn(key: CosmeticKey) {
   return `active_cosmetics_${key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)}`;
 }
 
-const readWardrobe = `SELECT u.wallet_balance AS balance, u.diamond_balance, u.xp, u.level AS stored_level, u.last_daily_check_in_at,
+export const readWardrobe = `SELECT u.wallet_balance AS balance, u.diamond_balance, u.xp, u.level AS stored_level, u.last_daily_check_in_at,
   u.vip_tier, u.vip_level, u.vip_exp, u.vip_started_at, u.vip_expires_at, u.vip_frozen, u.vip_freeze_started_at,
   ${ACTIVE_COSMETIC_KEYS.map(key => `u.${activeColumn(key)}`).join(", ")}, p.null_fields,
   (SELECT json_group_array(value) FROM (
@@ -64,7 +64,7 @@ const readWardrobe = `SELECT u.wallet_balance AS balance, u.diamond_balance, u.x
   )) AS owned_ids_json
   FROM users AS u LEFT JOIN user_auth_profile AS p ON p.source_id = u.source_id WHERE u.source_id = ?`;
 
-function walletRow(row: unknown) {
+export function walletRow(row: unknown) {
   if (!row) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
   return row as WardrobeRow;
 }
@@ -82,14 +82,14 @@ function wardrobe(row: WardrobeRow) {
   return { ownedCosmeticIds: JSON.parse(row.owned_ids_json) as string[], activeCosmetics };
 }
 
-function walletVip(row: WardrobeRow, now = new Date()) {
+export function walletVip(row: WardrobeRow, now = new Date()) {
   return getVipStatus({
     vipTier: row.vip_tier, vipLevel: row.vip_level, vipExp: row.vip_exp, vipStartedAt: row.vip_started_at ?? undefined,
     vipExpiresAt: row.vip_expires_at, vipFrozen: row.vip_frozen, vipFreezeStartedAt: row.vip_freeze_started_at
   }, now);
 }
 
-function walletLevel(row: WardrobeRow) {
+export function walletLevel(row: WardrobeRow) {
   return getLevelStatus({ xp: row.xp, lastDailyCheckInAt: row.last_daily_check_in_at ?? undefined });
 }
 
@@ -117,10 +117,10 @@ const readCosmetics = `SELECT c.*, a.source_id AS published_asset_id, a.version 
   FROM cosmetics AS c LEFT JOIN assets AS a ON a.source_id = c.asset_ref AND a.status = 'published'
     AND a.owner_type = 'cosmetic' AND a.owner_id = c.source_id`;
 const sortCosmetics = "ORDER BY c.type, c.coin_price, c.name";
-const walletFrozen = `EXISTS (SELECT 1 FROM user_safety_statuses AS safety
+export const walletFrozen = `EXISTS (SELECT 1 FROM user_safety_statuses AS safety
   WHERE safety.user_id = u.source_id AND safety.is_wallet_frozen = 1)`;
 
-function clearProfileMarkers(db: D1Database, userId: string, fields: string[], guard: string, ...guardValues: unknown[]) {
+export function clearProfileMarkers(db: D1Database, userId: string, fields: string[], guard: string, ...guardValues: unknown[]) {
   const markers = JSON.stringify(fields);
   return db.prepare(`UPDATE user_auth_profile SET
     null_fields = (SELECT json_group_array(value) FROM json_each(null_fields) WHERE value NOT IN (SELECT value FROM json_each(?))),
@@ -210,7 +210,7 @@ const readDailyXp = `SELECT COALESCE(SUM(amount), 0) AS amount FROM xp_daily_cap
   WHERE user_id = ? AND event = ? AND day = ?`;
 const debitClaim = "EXISTS (SELECT 1 FROM wallet_transactions WHERE source_id = ?)";
 
-function newId() {
+export function newId() {
   return randomBytes(12).toString("hex");
 }
 

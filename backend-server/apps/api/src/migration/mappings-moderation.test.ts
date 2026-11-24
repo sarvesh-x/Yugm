@@ -161,6 +161,8 @@ test("support tickets keep defaults and emit deterministic message child rows", 
   assert.equal(messages[0].support_tickets_id, REPORT);
   assert.equal(messages[0].position, 0);
   assert.equal(messages[1].position, 1);
+  assert.equal(messages[1].sender_id, null);
+  assert.equal(messages[1].sender_admin_id, ADMIN);
   assertColumns(result);
 
   const defaults = map("support_tickets", { _id: REPORT, subject: "s", message: "m" });

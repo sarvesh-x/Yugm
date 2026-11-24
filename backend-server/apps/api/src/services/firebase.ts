@@ -160,6 +160,7 @@ export async function initFirebase() {
     return;
   }
   const firebase = await fb();
+  if (firebase.apps.length) return;
   const privateKey = rawKey.includes("-----BEGIN") && rawKey.includes("\n")
     ? rawKey
     : rawKey.replace(/\\n/g, "\n");
@@ -217,4 +218,10 @@ export async function deleteFirebaseUser(uid: string): Promise<{ deleted: boolea
 
 export async function getFirebaseMessaging() {
   return admin?.apps.length ? (await fb()).messaging() : null;
+}
+
+export async function getFirebaseAccessToken() {
+  const credential = admin?.apps[0]?.options.credential;
+  if (!credential) throw new Error("Firebase Admin credentials are unavailable");
+  return (await credential.getAccessToken()).access_token;
 }
