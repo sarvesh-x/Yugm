@@ -87,41 +87,51 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     const emulatorHealth = await worker.dispatchFetch("http://10.0.2.2/health");
     assert.equal(emulatorHealth.status, 200);
     assert.equal((await emulatorHealth.json()).ok, true);
-    assert.equal((await request("/ready", 503)).ok, false);
+    assert.equal((await request("/ready", 503)).error.code, "D1_SCHEMA_UNAVAILABLE");
+    assert.equal((await request("/api/auth/google", 503, { body: {} })).error.code, "D1_SCHEMA_UNAVAILABLE");
     const db = await worker.getD1Database(binding.binding);
     const schema = await readFile(pathFromHere("../../api/migrations/d1/0001_initial.sql"), "utf8");
-    await db.batch(unstable_splitSqlQuery(schema).map((sql) => db.prepare(sql)));
+    const olderSchema = schema.replace(/,\r?\n  "edit_token" TEXT/, "");
+    assert.notEqual(olderSchema, schema);
+    await db.batch(unstable_splitSqlQuery(olderSchema).map(sql => db.prepare(sql)));
+    assert.equal((await request("/api/auth/google", 503, { body: {} })).error.code, "D1_SCHEMA_UNAVAILABLE");
+    await db.prepare("ALTER TABLE user_auth_profile ADD COLUMN edit_token TEXT").run();
     assert.equal((await request("/ready", 200)).storage, "d1");
     assert.equal((await worker.dispatchFetch("http://yugm.example/health")).status, 404);
     await request("/api/users", 404);
 
-    legacyWorker = new Miniflare(convertV4MiniflareOptions({
+    const obsoleteWorkerConfig = {
       modulesRoot: directory,
       modules: [{ type: "ESModule", path: join(directory, "authLocal.js") }],
       compatibilityDate: config.compatibility_date,
       compatibilityFlags: config.compatibility_flags,
-      bindings: {
-        ...config.vars, FCM_PROJECT_ID: project, JWT_SECRET: randomBytes(32).toString("hex"),
-        MONGODB_URI: "mongodb://127.0.0.1:27017"
-      },
+      bindings: { ...config.vars, FCM_PROJECT_ID: project, JWT_SECRET: randomBytes(32).toString("hex") },
       d1Databases: { [binding.binding]: binding.database_id },
       cf: false
+    };
+    legacyWorker = new Miniflare(convertV4MiniflareOptions(obsoleteWorkerConfig));
+    const obsoleteReady = await legacyWorker.dispatchFetch("http://127.0.0.1/ready");
+    assert.equal(obsoleteReady.status, 503);
+    assert.equal((await obsoleteReady.json()).error.code, "D1_CONFIG_REQUIRED");
+    await legacyWorker.setOptions(convertV4MiniflareOptions({
+      ...obsoleteWorkerConfig,
+      bindings: { ...obsoleteWorkerConfig.bindings, MONGODB_URI: "mongodb://127.0.0.1:27017" }
     }));
     const legacyReady = await legacyWorker.dispatchFetch("http://127.0.0.1/ready");
     assert.equal(legacyReady.status, 503);
     assert.match(await legacyReady.text(), /isolated D1 configuration/);
 
-    function signIn(emailVerified, audience = project, status = 200, account = "worker-fixture-uid") {
+    function signIn(emailVerified, audience = project, status = 200, account = "worker-fixture-uid", provider = "email") {
       const idToken = jwt.sign({
         email: `${account}@example.test`,
         email_verified: emailVerified,
         auth_time: Math.floor(Date.now() / 1000),
-        firebase: { sign_in_provider: "password" }
+        firebase: { sign_in_provider: provider === "google" ? "google.com" : "password" }
       }, privateKey, {
         algorithm: "RS256", keyid: keyId, issuer: `https://securetoken.google.com/${project}`,
         audience, subject: account, expiresIn: "5m"
       });
-      return request("/api/auth/google", status, { body: { idToken, acceptTerms: true, provider: "email" } });
+      return request("/api/auth/google", status, { body: { idToken, acceptTerms: true, provider } });
     }
     assert.equal((await signIn(true, "another-fixture-project", 401)).error.code, "VALIDATION");
     assert.equal((await signIn(false, project, 403)).error.code, "FORBIDDEN");
@@ -154,7 +164,7 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     await request("/api/auth/refresh", 401, { body: { refreshToken: rotated.refreshToken } });
     assert.equal(await db.prepare("SELECT COUNT(*) AS total FROM auth_sessions WHERE revoked_at IS NULL").first("total"), 0);
 
-    const { data: returning } = await signIn(true);
+    const { data: returning } = await signIn(true, project, 200, "worker-fixture-uid", "google");
     assert.equal(returning.user.id, first.user.id);
     assert.equal(await db.prepare("SELECT COUNT(*) AS total FROM users").first("total"), 1);
     assert.ok(certificateRequests > 0);

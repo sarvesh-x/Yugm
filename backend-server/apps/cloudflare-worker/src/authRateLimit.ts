@@ -16,7 +16,6 @@ export function createWorkerAuthRateLimiters(env: AuthRateLimitBindings): AuthRa
   const { AUTH_REQUESTS, AUTH_IDENTIFIER, AUTH_REFRESH } = env;
   const clientIp = (req: Request) => req.get(authClientIpHeader) ?? "unknown";
   function forKey(binding: RateLimit, key: (req: Request) => string) {
-    if (typeof binding?.limit !== "function") throw new Error("Missing auth rate limit binding");
     return asyncHandler(async (req, res, next) => {
       const { success } = await binding.limit({ key: key(req) });
       if (!success) {

@@ -94,7 +94,13 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor) {
       VALUES (?, ?, ?, 'JOIN', 'joined', '{"fixture":true}', ?)`).bind(newId(), live, visitorId, time),
     db.prepare(`INSERT INTO follows (source_id, follower_id, following_id, created_at, updated_at)
       SELECT ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM follows WHERE follower_id = ? AND following_id = ?)`)
-      .bind(newId(), visitorId, ownerId, time, time, visitorId, ownerId)
+      .bind(newId(), visitorId, ownerId, time, time, visitorId, ownerId),
+    db.prepare(`UPDATE users SET following_count = following_count + 1 WHERE source_id = ?
+      AND EXISTS (SELECT 1 FROM follows WHERE follower_id = ? AND following_id = ?)`)
+      .bind(visitorId, visitorId, ownerId),
+    db.prepare(`UPDATE users SET followers_count = followers_count + 1 WHERE source_id = ?
+      AND EXISTS (SELECT 1 FROM follows WHERE follower_id = ? AND following_id = ?)`)
+      .bind(ownerId, visitorId, ownerId)
   ]);
 
   const prefix = "/api/rooms";
@@ -140,4 +146,156 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor) {
   assert.deepEqual(followers.map(item => item._id), [visitorId]);
   assert.equal((await requestAs(visitor, prefix + follow, 200, { method: "DELETE" })).data.following, false);
   assert.deepEqual((await requestAs(visitor, prefix + "/followed", 200)).data.rooms, []);
+
+  const hosted = (await requestAs(owner, "/api/users/" + ownerId + "/rooms", 200)).data.rooms;
+  assert.deepEqual(new Set(hosted.map(item => item._id)), new Set([live, privateVideo]));
+  const ownerFollowers = (await requestAs(owner, "/api/users/" + ownerId + "/followers", 200)).data;
+  assert.deepEqual(ownerFollowers.followers, ownerFollowers.users);
+  assert.deepEqual(ownerFollowers.users.map(item => item._id), [visitorId]);
+  const following = (await requestAs(visitor, "/api/users/" + visitorId + "/following", 200)).data.following;
+  assert.deepEqual(following.map(item => item._id), [ownerId]);
+  const statsPath = "/api/users/" + ownerId + "/pk-stats";
+  const pkResults = [
+    ["ENDED", "LEFT", ownerId, 12, 3],
+    ["ENDED", "DRAW", null, 8, 8],
+    ["FORCE_ENDED", "LEFT", ownerId, 9, 5],
+    ["ENDED", "RIGHT", visitorId, 2, 10],
+    ["ACTIVE", null, null, 100, 0]
+  ];
+  await db.batch(pkResults.map(([status, side, winner, score, otherScore], i) => {
+    const id = newId();
+    const endedAt = new Date(now.getTime() - (5 - i) * 1000).toISOString();
+    return db.prepare(`INSERT INTO pk_battles (source_id, battle_code, title, mode, format, scope, team_size, status,
+      battle_type, duration_seconds, in_room_battle, state_version, event_sequence, termination_reason, started_by_user_id,
+      left_room_id, right_room_id, left_host_id, right_host_id, left_score, right_score, winner_side, winner_user_id, ended_at, created_at)
+      VALUES (?, ?, '', 'GIFT', 'ROOM', 'CROSS_ROOM', 1, ?, 'VOICE', 60, 0, 1, 0, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(id, id, status, ownerId, live, privateVideo, ownerId, visitorId, score, otherScore, side, winner, endedAt, endedAt);
+  }));
+  assert.deepEqual((await requestAs(owner, statsPath, 200)).data.stats, {
+    played: 4, wins: 2, losses: 1, draws: 1, totalScore: 31, bestBattle: 12, bestStreak: 2, winRate: 50
+  });
+  await request("/api/friends", 401);
+
+  const sendFriendRequest = () => requestAs(visitor, "/api/friends/request/" + ownerId, [201, 409], { body: {} });
+  await requestAs(owner, "/api/friends/request/" + ownerId, 400, { body: {} });
+  const requests = await Promise.all([sendFriendRequest(), sendFriendRequest()]);
+  assert.equal(requests.filter(result => result.ok).length, 1);
+  const friend = requests.find(result => result.ok).data.friendship._id;
+  assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM notifications WHERE type = 'FRIEND_REQUEST' AND json_extract(data, '$.friendshipId') = ?")
+    .bind(friend).first("count"), 1);
+  assert.equal((await requestAs(owner, "/api/friends/requests", 200)).data.requests[0].userId._id, visitorId);
+  assert.equal((await requestAs(visitor, "/api/friends/sent", 200)).data.sent[0].friendId._id, ownerId);
+  assert.equal((await requestAs(visitor, "/api/friends/status/" + ownerId, 200)).data.status, "SENT");
+  assert.equal((await requestAs(owner, "/api/friends/status/" + visitorId, 200)).data.status, "PENDING");
+  await requestAs(visitor, "/api/friends/accept/" + ownerId, 404, { body: {} });
+  const accept = () => requestAs(owner, "/api/friends/accept/" + visitorId, [200, 404], { body: {} });
+  const accepts = await Promise.all([accept(), accept()]);
+  assert.equal(accepts.filter(result => result.ok).length, 1);
+  assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM notifications WHERE type = 'FRIEND_ACCEPT' AND json_extract(data, '$.friendshipId') = ?")
+    .bind(friend).first("count"), 1);
+  assert.deepEqual((await requestAs(owner, "/api/friends", 200)).data.friends.map(item => item._id), [visitorId]);
+  assert.equal((await requestAs(owner, "/api/friends/count/" + visitorId, 200)).data.count, 1);
+  assert.equal((await requestAs(owner, "/api/friends/mutual/" + visitorId, 200)).data.mutualCount, 0);
+
+  const visible = newId();
+  const hidden = newId();
+  const older = newId();
+  const path = "/api/users/messages";
+  await db.batch([
+    ...[[visible, visitorId, ownerId, time], [hidden, visitorId, ownerId, time], [older, ownerId, visitorId, beforeJoin]]
+      .map(([id, sender, receiver, created]) => db.prepare(`INSERT INTO direct_messages (source_id, sender_id, receiver_id,
+        message, media_url, media_type, duration, forwarded, is_edited, read, created_at, reply_to_message_id,
+        reply_to_author, reply_to_text, reply_to_media_url) VALUES (?, ?, ?, 'Fixture', '', '', 0, 0, 0, 0, ?, '', '', '', '')`)
+        .bind(id, sender, receiver, created)),
+    db.prepare("INSERT INTO message_hidden_for (source_id, value, direct_messages_id, position) VALUES (?, ?, ?, 0)")
+      .bind(newId(), ownerId, hidden),
+    db.prepare(`INSERT INTO direct_message_reactions (source_id, user_id, type, created_at, direct_messages_id, position)
+      VALUES (?, ?, 'heart', ?, ?, 0)`).bind(newId(), ownerId, time, visible),
+    db.prepare("INSERT INTO conversation_mutes (source_id, owner_id, partner_id, muted, updated_at) VALUES (?, ?, ?, 1, ?)")
+      .bind(newId(), ownerId, visitorId, time)
+  ]);
+  await request(path, 401);
+  const page = (await requestAs(owner, path + "?limit=1", 200)).data;
+  assert.equal(page.hasMore, true);
+  assert.equal(page.messages[0]._id, visible);
+  assert.equal(page.messages[0].senderId._id, visitorId);
+  assert.equal(page.messages[0].reactions[0].type, "heart");
+  assert.equal(page.messages[0].read, false);
+  const secondPage = (await requestAs(owner, path + "?before=" + encodeURIComponent(page.nextBefore), 200)).data;
+  assert.deepEqual(secondPage.messages.map(item => item._id), [older]);
+  assert.deepEqual((await requestAs(owner, path + "/unread-counts", 200)).data, { unreadCounts: { [visitorId]: 1 }, total: 1 });
+  assert.deepEqual((await requestAs(visitor, path + "/unread-counts", 200)).data, { unreadCounts: { [ownerId]: 1 }, total: 1 });
+  assert.deepEqual((await requestAs(owner, path + "/mutes", 200)).data.partnerIds, [visitorId]);
+  assert.deepEqual((await requestAs(visitor, path + "/mutes", 200)).data.partnerIds, []);
+  await db.prepare("INSERT INTO blocks (source_id, blocker_id, blocked_user_id, created_at) VALUES (?, ?, ?, ?)")
+    .bind(newId(), ownerId, visitorId, time).run();
+  assert.deepEqual((await requestAs(owner, path, 200)).data.messages, []);
+  assert.equal((await requestAs(owner, path + "/unread-counts", 200)).data.total, 0);
+  assert.deepEqual((await requestAs(owner, "/api/friends", 200)).data.friends, []);
+  assert.deepEqual((await requestAs(visitor, "/api/users/" + ownerId + "/rooms", 200)).data.rooms, []);
+  assert.equal((await requestAs(owner, "/api/friends/unfriend/" + visitorId, 200, { body: {} })).data.unfriended, true);
+  await requestAs(visitor, "/api/friends/request/" + ownerId, 403, { body: {} });
+  await db.prepare("DELETE FROM blocks WHERE blocker_id = ? AND blocked_user_id = ?").bind(ownerId, visitorId).run();
+  await requestAs(owner, "/api/friends/request/" + visitorId, 201, { body: {} });
+  assert.equal((await requestAs(visitor, "/api/friends/decline/" + ownerId, 200, { body: {} })).data.declined, true);
+  assert.equal((await requestAs(owner, "/api/friends/status/" + visitorId, 200)).data.status, "NONE");
+
+  const friendshipId = newId();
+  await db.prepare(`INSERT INTO friendships (source_id, user_id, friend_id, status, created_at, updated_at)
+    VALUES (?, ?, ?, 'ACCEPTED', ?, ?)`).bind(friendshipId, ownerId, visitorId, time, time).run();
+  const ownerFriends = (await requestAs(owner, "/api/users/me/friends", 200)).data.users;
+  assert.deepEqual(ownerFriends.map(item => item._id), [visitorId]);
+  assert.equal(Object.hasOwn(ownerFriends[0], "bio"), false);
+  assert.equal(Object.hasOwn(ownerFriends[0], "isVerified"), false);
+  assert.equal(Object.hasOwn(ownerFriends[0], "avatarParts"), true);
+  assert.deepEqual((await requestAs(owner, "/api/users/" + visitorId + "/friends", 200)).data.users.map(item => item._id), [ownerId]);
+  await request("/api/users/me/friends", 401);
+  await db.prepare("DELETE FROM friendships WHERE source_id = ?").bind(friendshipId).run();
+
+  const followCounts = async () => Object.fromEntries((await db.prepare(`SELECT source_id, following_count, followers_count
+    FROM users WHERE source_id IN (?, ?)`).bind(ownerId, visitorId).all()).results.map(row => [row.source_id, row]));
+  const countsBefore = await followCounts();
+  const followPath = "/api/users/" + visitorId + "/follow";
+  await request(followPath, 401, { body: {} });
+  await requestAs(owner, "/api/users/" + ownerId + "/follow", 400, { body: {} });
+  const followed = await requestAs(owner, followPath, 200, { body: {} });
+  assert.equal(followed.data.following, true);
+  assert.equal(followed.data.xpGrant.event, "FOLLOW_USER");
+  assert.equal(followed.data.xpGrant.xpAwarded, 10);
+  assert.equal(await db.prepare(`SELECT COUNT(*) AS count FROM notifications
+    WHERE type = 'FOLLOW' AND user_id = ? AND json_extract(data, '$.userId') = ?`).bind(visitorId, ownerId).first("count"), 1);
+  assert.equal(await db.prepare(`SELECT COUNT(*) AS count FROM xp_grants
+    WHERE user_id = ? AND event = 'FOLLOW_USER' AND action_key = ?`).bind(ownerId, `follow:${ownerId}:${visitorId}`).first("count"), 1);
+  const countsAfter = await followCounts();
+  assert.equal(countsAfter[ownerId].following_count, countsBefore[ownerId].following_count + 1);
+  assert.equal(countsAfter[visitorId].followers_count, countsBefore[visitorId].followers_count + 1);
+  assert.equal((await requestAs(owner, followPath, 200, { body: {} })).data.following, true);
+  assert.equal((await followCounts())[ownerId].following_count, countsAfter[ownerId].following_count);
+  assert.equal((await requestAs(owner, followPath, 200, { body: {} })).data.xpGrant.duplicate, true);
+  assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM xp_grants WHERE user_id = ? AND event = 'FOLLOW_USER'")
+    .bind(ownerId).first("count"), 1);
+  assert.equal((await requestAs(owner, followPath, 200, { method: "DELETE" })).data.following, false);
+  assert.equal((await followCounts())[ownerId].following_count, countsBefore[ownerId].following_count);
+  assert.equal(await db.prepare(`SELECT COUNT(*) AS count FROM notifications
+    WHERE type = 'FOLLOW' AND user_id = ? AND json_extract(data, '$.action') = 'UNFOLLOW'`).bind(visitorId).first("count"), 1);
+  assert.equal((await requestAs(owner, followPath, 200, { body: {} })).data.xpGrant.duplicate, true);
+  assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM xp_grants WHERE user_id = ? AND event = 'FOLLOW_USER'")
+    .bind(ownerId).first("count"), 1);
+
+  const countsBeforeRemoval = await followCounts();
+  assert.equal((await requestAs(owner, "/api/users/me/followers/" + visitorId, 200, { method: "DELETE" })).data.removed, true);
+  const countsAfterRemoval = await followCounts();
+  assert.equal(countsAfterRemoval[visitorId].following_count, countsBeforeRemoval[visitorId].following_count - 1);
+  assert.equal(countsAfterRemoval[ownerId].followers_count, countsBeforeRemoval[ownerId].followers_count - 1);
+  await requestAs(owner, "/api/users/me/followers/" + ownerId, 400, { method: "DELETE" });
+
+  const blockPath = "/api/users/" + visitorId + "/block";
+  await request(blockPath, 401, { body: {} });
+  await requestAs(owner, "/api/users/" + ownerId + "/block", 400, { body: {} });
+  assert.equal((await requestAs(owner, blockPath, 200, { body: {} })).data.blocked, true);
+  assert.deepEqual((await requestAs(owner, "/api/users/me/blocked", 200)).data.users.map(item => item._id), [visitorId]);
+  assert.deepEqual((await requestAs(visitor, "/api/users/me/blocked", 200)).data.users, []);
+  assert.equal((await requestAs(owner, blockPath, 200, { body: {} })).data.blocked, true);
+  assert.equal((await requestAs(owner, blockPath, 200, { method: "DELETE" })).data.blocked, false);
+  assert.deepEqual((await requestAs(owner, "/api/users/me/blocked", 200)).data.users, []);
 }

@@ -38,6 +38,12 @@ const forwardedSettings = [
   "FCM_CLIENT_EMAIL", "FCM_PRIVATE_KEY"
 ] as const;
 
+class D1SetupError extends Error {
+  constructor(readonly code: "D1_CONFIG_REQUIRED" | "D1_SCHEMA_UNAVAILABLE", message: string) {
+    super(message);
+  }
+}
+
 function configuredProductionOrigin(value?: string) {
   if (!value || !URL.canParse(value)) return null;
   const url = new URL(value);
@@ -51,9 +57,42 @@ function mediaEnabled(env: D1ApiEnv, stage: ApiStage) {
   return stage === "local" || env.YUGM_R2_ENABLED === "true";
 }
 
+async function checkD1Schema(db: D1Database) {
+  try {
+    // Preparing these statements validates the draft tables on an empty database too.
+    await db.batch([
+      db.prepare("SELECT source_id, firebase_uid, token_version FROM users LIMIT 0"),
+      db.prepare("SELECT source_id, token_version_present FROM auth_sessions LIMIT 0"),
+      db.prepare("SELECT source_id, null_fields, missing_fields, edit_token FROM user_auth_profile LIMIT 0"),
+      db.prepare("SELECT source_id, upload_token_hash FROM media_upload_sessions LIMIT 0"),
+      db.prepare("SELECT source_id, seq FROM media_counters LIMIT 0"),
+      db.prepare("SELECT " + ["device_tokens", "user_owned_cosmetics", "user_interests", "user_languages", "user_hobbies",
+        "user_profile_media", "user_showcased_badges", "follows", "friendships", "bonds", "bond_users",
+        "blocks", "trust_verifications", "profile_visits", "xp_grants", "seasons", "season_rewards", "battle_passes",
+        "battle_pass_rewards", "battle_pass_xp_grants", "wallet_transactions", "notifications",
+        "media_objects", "media_variants", "media_quota_reservations", "cosmetics", "assets", "asset_variants",
+        "gift_inventories", "gifts", "achievements", "user_claimed_achievement_tiers", "user_safety_statuses",
+        "xp_daily_caps", "clans", "clan_members", "clan_member_roles", "clan_invites", "clan_messages",
+        "clan_message_reactions", "mini_game_challenges", "mini_game_scores", "rooms", "room_follows", "room_invites",
+        "room_speakers", "room_moderators", "room_admins", "room_cohosts", "room_locked_seats", "room_participants",
+        "speaker_requests", "chat_messages", "room_activities", "direct_messages", "direct_message_reactions",
+        "message_hidden_for", "conversation_mutes", "pk_battles"]
+        .map(table => `(SELECT source_id FROM ${table} LIMIT 0) AS ${table}`).join(", "))
+    ]);
+  } catch {
+    throw new D1SetupError("D1_SCHEMA_UNAVAILABLE", "The local D1 schema is missing or out of date. Check the emulator setup instructions.");
+  }
+}
+
 async function startD1Runtime(env: D1ApiEnv, stage: ApiStage) {
+  if (![env.AUTH_REQUESTS, env.AUTH_IDENTIFIER, env.AUTH_REFRESH].every(binding => typeof binding?.limit === "function")) {
+    throw new D1SetupError("D1_CONFIG_REQUIRED", "Auth rate limit bindings are missing. Restart Wrangler with the current auth-local/wrangler.jsonc.");
+  }
+  if (!env.FCM_PROJECT_ID?.trim() || (env.JWT_SECRET?.trim().length ?? 0) < 16) {
+    throw new D1SetupError("D1_CONFIG_REQUIRED", "Set FCM_PROJECT_ID and a persistent JWT_SECRET in auth-local/.dev.vars, then restart Wrangler.");
+  }
+  if (stage === "local") await checkD1Schema(env.AUTH_DB);
   const rateLimiters = createWorkerAuthRateLimiters(env);
-  if (!env.FCM_PROJECT_ID?.trim()) throw new Error("Set the Firebase project ID");
   const enforceAppCheck = env.APP_CHECK_ENFORCE === "true" || env.APP_CHECK_ENFORCE === "1";
   if (stage === "production" && !enforceAppCheck) throw new Error("Production requires Firebase App Check");
   if (enforceAppCheck && (!env.FCM_CLIENT_EMAIL?.trim() || !env.FCM_PRIVATE_KEY?.trim())) {
@@ -116,25 +155,7 @@ export function createD1ApiWorker(stage: ApiStage) {
         });
         await startup;
         if (request.method === "GET" && (url.pathname === "/ready" || url.pathname === "/api/ready")) {
-          // Preparing these statements validates the draft tables on an empty database too.
-          await env.AUTH_DB.batch([
-            env.AUTH_DB.prepare("SELECT source_id, firebase_uid, token_version FROM users LIMIT 0"),
-            env.AUTH_DB.prepare("SELECT source_id, token_version_present FROM auth_sessions LIMIT 0"),
-            env.AUTH_DB.prepare("SELECT source_id, null_fields, missing_fields, edit_token FROM user_auth_profile LIMIT 0"),
-            env.AUTH_DB.prepare("SELECT source_id, upload_token_hash FROM media_upload_sessions LIMIT 0"),
-            env.AUTH_DB.prepare("SELECT source_id, seq FROM media_counters LIMIT 0"),
-            env.AUTH_DB.prepare("SELECT " + ["device_tokens", "user_owned_cosmetics", "user_interests", "user_languages", "user_hobbies",
-              "user_profile_media", "user_showcased_badges", "follows", "friendships", "bonds", "bond_users",
-              "blocks", "trust_verifications", "profile_visits", "xp_grants", "seasons", "season_rewards", "battle_passes",
-              "battle_pass_rewards", "battle_pass_xp_grants", "wallet_transactions", "notifications",
-              "media_objects", "media_variants", "media_quota_reservations", "cosmetics", "assets", "asset_variants",
-              "gift_inventories", "gifts", "achievements", "user_claimed_achievement_tiers", "user_safety_statuses",
-              "xp_daily_caps", "clans", "clan_members", "clan_member_roles", "clan_invites", "clan_messages",
-              "clan_message_reactions", "mini_game_challenges", "mini_game_scores", "rooms", "room_follows", "room_invites",
-              "room_speakers", "room_moderators", "room_admins", "room_cohosts", "room_locked_seats", "room_participants",
-              "speaker_requests", "chat_messages", "room_activities"]
-              .map(table => `(SELECT source_id FROM ${table} LIMIT 0) AS ${table}`).join(", "))
-          ]);
+          await checkD1Schema(env.AUTH_DB);
           return Response.json({ ok: true, service, storage: "d1", managedMedia: mediaEnabled(env, stage) });
         }
         if (url.pathname.toLowerCase().startsWith("/api/users/")) {
@@ -160,7 +181,11 @@ export function createD1ApiWorker(stage: ApiStage) {
         forwarded.headers.set(authClientIpHeader, stage === "local" ? "loopback" : isIP(connectingIp) ? connectingIp : "unknown");
         return await handleAsNodeRequest(D1_API_PORT, forwarded);
       } catch (error) {
-        console.error("D1 API Worker unavailable", error instanceof Error ? error.name : "Error");
+        const detail = error instanceof D1SetupError ? error.code : error instanceof Error ? error.name : "Error";
+        console.error("D1 API Worker unavailable", detail);
+        if (stage === "local" && error instanceof D1SetupError) {
+          return Response.json({ ok: false, error: { code: error.code, message: error.message } }, { status: 503 });
+        }
         return Response.json({ ok: false, error: { message: "D1 API is unavailable. Check its configuration and schema." } }, { status: 503 });
       }
     }

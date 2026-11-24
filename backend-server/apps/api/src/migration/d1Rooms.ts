@@ -3,8 +3,8 @@ import type { D1Database } from "@cloudflare/workers-types";
 import { Router, type Request } from "express";
 import { requireHttpSession } from "../middleware/httpAccessSession.js";
 import { asyncHandler, ErrorCode, HttpError, isValidObjectId, sendOk } from "../utils/http.js";
-import { ACTIVE_COSMETIC_KEYS, AVATAR_PART_KEYS } from "./authProfileFields.js";
 import { bindD1LiveUser, createD1AccessSessionReader, d1LiveUserFilter } from "./d1AccessSession.js";
+import { person, personJson, visiblePerson } from "./d1People.js";
 
 type Row = Record<string, string | number | null>;
 const privilegedRoles = new Set(["HOST", "SPEAKER", "MODERATOR"]);
@@ -13,26 +13,6 @@ const livePublic = "r.visibility = 'PUBLIC' AND r.status = 'LIVE'";
 
 function snake(field: string) {
   return field.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-}
-
-function personJson(alias: string) {
-  return `json_object('_id', ${alias}.source_id, 'name', ${alias}.name, 'username', ${alias}.username,
-    'avatar', ${alias}.avatar, 'avatarType', ${alias}.avatar_type, 'city', ${alias}.city,
-    'xp', ${alias}.xp, 'level', ${alias}.level, 'levelTitle', ${alias}.level_title,
-    'vipTier', ${alias}.vip_tier, 'vipExpiresAt', ${alias}.vip_expires_at,
-    'avatarParts', json_object(${AVATAR_PART_KEYS.map(key => `'${key}', ${alias}.avatar_parts_${key}`).join(", ")}),
-    'activeCosmetics', json_object(${ACTIVE_COSMETIC_KEYS.map(key => `'${key}', ${alias}.active_cosmetics_${snake(key)}`).join(", ")}))`;
-}
-
-function person(record: string) {
-  const { avatarParts, activeCosmetics, ...fields } = JSON.parse(record) as Record<string, unknown>;
-  const present = (value: Record<string, unknown>) => Object.fromEntries(Object.entries(value).filter(([, item]) => item != null));
-  const parts = present(avatarParts as Record<string, unknown>);
-  return {
-    ...present(fields),
-    avatarParts: Object.keys(parts).length ? parts : undefined,
-    activeCosmetics: present(activeCosmetics as Record<string, unknown>)
-  };
 }
 
 const roomArrays = {
@@ -77,6 +57,14 @@ function visible(row?: Row | null) {
 
 function pageSize(value: unknown, fallback: number, max: number) {
   return Math.trunc(Math.min(Math.max(Number(value) || fallback, 1), max));
+}
+
+export async function readD1HostRooms(db: D1Database, hostId: string, viewer: string, limit: unknown) {
+  const { results } = await db.prepare(`SELECT ${roomProjection} ${fromRooms}
+    WHERE r.host_id = ?1 AND r.status = 'LIVE' AND (${roomAccess}) AND ${visiblePerson("host", "?2")}
+    ORDER BY r.created_at DESC, r.source_id LIMIT ?3`)
+    .bind(hostId, viewer, pageSize(limit, 20, 50)).all<Row>();
+  return results.map(room);
 }
 
 function participants(rows: Row[], maxSpeakers: number) {

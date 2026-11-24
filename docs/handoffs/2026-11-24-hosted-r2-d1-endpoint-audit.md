@@ -24,6 +24,8 @@ From `backend-server`, run `npm.cmd run audit:d1-endpoints` for counts or `npm.c
 | ---: | ---: | ---: | ---: |
 | 638 | 69 | 65 | 573 |
 
+The table records the audit for this 20-route slice. A later 2026-11-24 Profile/social slice re-ran the same audit: legacy **638**, D1 **94**, shared **90**, legacy-only **548** distinct method/path patterns. See [the Profile/social handoff](2026-11-24-d1-profile-social-writes.md).
+
 The shared Worker added 20 legacy API operations in this slice.
 
 - Rooms gained public discovery, scheduled and trending lists, search, recommendations, followed rooms, room and host rankings, detail, follower listing, follow and unfollow, chat history and activity. Private room follower lists require permission to view the room. Public host rankings keep wallet balance as a tie-breaker and omit the value from the response.
@@ -31,7 +33,7 @@ The shared Worker added 20 legacy API operations in this slice.
 - Wallet gained coin pack and VIP plan reads, account-scoped transaction history, and a daily reward claim that commits the ledger and balance atomically. Replays return the same daily-claim outcome without another credit.
 - The Arcade catalog exposes the existing D1 score projection through the normal Worker route and shares its response presenter with the legacy API.
 
-The missing list includes 215 admin, 47 user, 46 room, 16 Bonds and 9 clan patterns. Room lifecycle and realtime delivery, direct and clan messaging, the remaining cosmetics administration and payments are still open. The production RealtimeKit client has mock coverage from the prior slice. Android RTC and live provider verification remain open. [Production setup and RTC work](2026-11-24-production-cloudflare-builds.md)
+The missing list at this checkpoint included 215 admin, 47 user, 46 room, 16 Bonds and 9 clan patterns. The later Profile/social slice reduced the user total to 32. Room lifecycle and realtime delivery, direct and clan messaging, the remaining cosmetics administration and payments are still open. The production RealtimeKit client has mock coverage from the prior slice. Android RTC and live provider verification remain open. [Production setup and RTC work](2026-11-24-production-cloudflare-builds.md)
 
 ## Verification
 

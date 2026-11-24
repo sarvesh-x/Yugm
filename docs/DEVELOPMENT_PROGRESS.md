@@ -1,15 +1,26 @@
 # Development progress
 
+## 2026-11-24 — Local D1 Profile/social reads and writes
+
+- Added D1 friends and blocked-list reads plus follow, unfollow, remove-follower and block/unblock writes. Follow uses the existing guarded XP grant pattern with one `FOLLOW_USER` reward per actor/target pair, daily capping, counter and notification writes guarded by the exact follow edge, and replay receipts.
+- Both Worker suites passed (1/1 each), both API and Worker typechecks passed, and `git diff --check` was clean. The mount audit now reports 638 legacy, 94 D1, 90 shared and 548 legacy-only distinct method/path patterns.
+- D1 block does not terminate Bonds or publish `BONDS` because the Worker has no D1 Bonds router. Chat writes and conversation reads remain open. No commit, push, deploy, provision, migration or production data operation was performed. [Profile/social slice](handoffs/2026-11-24-d1-profile-social-writes.md)
+
+## 2026-11-24 — Emulator Auth startup recovery
+
+- Reproduced the Google backend exchange 503 and identified missing rate-limit bindings in the running Wrangler process and an older local D1 schema. Preserved the old SQLite database, applied the current schema and restarted the Worker on port 4000.
+- Added local setup errors that distinguish configuration from a missing or stale schema. Verified emulator readiness and the exchange route, plus fixture sign-in and both Worker suites. [Recovery and verification](handoffs/2026-11-24-emulator-auth-startup-recovery.md)
+
 ## 2026-11-24 — D1 database identity and Redis-free D1 Workers
 
 - Matched the production `AUTH_DB` binding to the existing hosted `yugm` database. Debug uses the same name with its original local ID and `remote: false`. It retains its existing persistence directory.
 - Moved both D1 Workers to Cloudflare Rate Limiting bindings for sign-in and refresh. Bundle tests confirm Redis and BullMQ are absent. Legacy staging and Node still own the Redis-backed compatibility paths.
-- Wrangler reported zero tables for hosted D1. The route audit still shows 573 legacy-only patterns, so production seed generation remains pending. [Scope and verification](handoffs/2026-11-24-d1-database-and-redis-boundary.md)
+- Wrangler reported zero tables for hosted D1. The route audit at that checkpoint showed 573 legacy-only patterns, so production seed generation remains pending; the latest audit is recorded in the Profile/social entry above. [Scope and verification](handoffs/2026-11-24-d1-database-and-redis-boundary.md)
 
 ## 2026-11-24 — Hosted R2 verification and D1 endpoint audit
 
 - Verified all five hosted Standard R2 buckets with a disposable write, byte-for-byte read-back and deletion in each. Enabled their native bindings in the production target and retained the media pause switch.
-- Added 20 legacy API operations to the shared D1 Worker. The slice covers room discovery, follows and history, push-device registration and removal, wallet and daily-claim operations, and the game catalog. The mount audit identifies 65 shared patterns and 573 legacy-only patterns.
+- Added 20 legacy API operations to the shared D1 Worker. The slice covers room discovery, follows and history, push-device registration and removal, wallet and daily-claim operations, and the game catalog. The mount audit at that checkpoint identified 65 shared patterns and 573 legacy-only patterns; the latest audit is recorded in the Profile/social entry above.
 - The dated handoff records test results, the remaining route families and the production inputs. [Hosted R2 and endpoint audit](handoffs/2026-11-24-hosted-r2-d1-endpoint-audit.md)
 
 ## 2026-11-24 — Cloudflare migration checkpoint

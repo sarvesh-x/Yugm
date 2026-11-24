@@ -11,10 +11,12 @@ import { createD1AuthRouter } from "./d1AuthRouter.js";
 import { createD1ClansRouter } from "./d1Clans.js";
 import { createD1CosmeticsRouter } from "./d1Cosmetics.js";
 import { readD1GameCatalog } from "./d1GameCatalog.js";
+import { createD1InboxRouter } from "./d1Inbox.js";
 import { createD1MediaRouter, type D1MediaRouterOptions } from "./d1Media.js";
 import { createD1NotificationRouter } from "./d1Notifications.js";
 import { createD1ProfileEditRouter } from "./d1ProfileEdits.js";
 import { createD1RoomsRouter } from "./d1Rooms.js";
+import { createD1SocialRouter } from "./d1Social.js";
 
 export function createD1App(
   db: D1Database,
@@ -34,6 +36,8 @@ export function createD1App(
   app.use(express.json({ limit: "1mb" }));
   app.use("/api/auth", requireAppCheck, createD1AuthRouter(db, rateLimiters));
   app.use("/api/users", createD1ProfileEditRouter(db));
+  app.use("/api/users/messages", createD1InboxRouter(db));
+  app.use("/api", createD1SocialRouter(db));
   app.use("/api", createD1CosmeticsRouter(db, resolvePublicOrigin));
   app.use("/api/clans", createD1ClansRouter(db));
   app.use("/api/notifications", createD1NotificationRouter(db));

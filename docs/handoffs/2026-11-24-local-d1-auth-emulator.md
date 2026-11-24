@@ -56,7 +56,9 @@ From `backend-server`:
 
    `/ready` should report `storage: "d1"`.
 
-   If it returns `D1 API is unavailable` after `.dev.vars` exists, check whether the local database predates the current schema. Earlier drafts could have the expected table count while missing fields. Apply the schema in a fresh persistence directory to keep the original local data available:
+   `D1_CONFIG_REQUIRED` means the local Worker needs the settings named in the response. Fully stop and restart Wrangler after pulling binding changes or editing `.dev.vars`.
+
+   `D1_SCHEMA_UNAVAILABLE` means the local database is empty or missing required tables or columns. Earlier drafts could have the expected table count while missing fields. Apply the schema in a fresh persistence directory to keep the original local data available:
 
    ```powershell
    $persist = Join-Path $env:TEMP ("yugm-auth-local-" + [guid]::NewGuid().ToString("N"))
@@ -66,6 +68,8 @@ From `backend-server`:
    ```
 
    This exact command sequence was verified: `/ready` returned `storage: "d1"`. If you keep the default persistence directory, fully stop and restart Wrangler as well, because `.dev.vars` is read at startup.
+
+   A credential-free `POST /api/auth/google` with an empty JSON body returns `422 VALIDATION` when the route is accepting requests. [Emulator 503 recovery](2026-11-24-emulator-auth-startup-recovery.md)
 
 7. Run a debug build on an Android emulator. Gradle sets the API to `http://10.0.2.2:4000/api` and the event origin to `http://10.0.2.2:4000`. Debug App Check is disabled for this local HTTP host. [Build type routing](../features/release-build-configuration.md)
 
