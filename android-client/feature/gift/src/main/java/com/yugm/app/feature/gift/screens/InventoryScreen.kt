@@ -2,6 +2,7 @@ package com.yugm.app.feature.gift.screens
 
 import com.yugm.app.core.api.SyncTopic
 import com.yugm.app.core.ui.components.AutomaticSyncEffect
+import com.yugm.app.core.ui.components.YugmTopBar
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -92,28 +93,9 @@ fun InventoryScreen(
     Scaffold(
         containerColor = colors.background,
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            "Gift inventory",
-                            fontWeight = FontWeight.Black,
-                            fontSize = 22.sp,
-                            color = colors.textPrimary
-                        )
-                        Text(
-                            "Your collection",
-                            color = colors.textSecondary,
-                            fontSize = 13.sp
-                        )
-                    }
-                },
-                navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text("‹", color = colors.textPrimary, fontSize = 28.sp)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.background)
+            YugmTopBar(
+                title = "Gift inventory",
+                onBack = onBack,
             )
         }
     ) { padding ->

@@ -31,6 +31,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+import com.yugm.app.core.ui.components.YugmTopBar
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MatchesScreen(
@@ -59,14 +61,9 @@ fun MatchesScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Your Matches", color = Color.White, fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text("Back", color = Gold, fontWeight = FontWeight.Bold)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
+            YugmTopBar(
+                title = "Your Matches",
+                onBack = onBack
             )
         },
         containerColor = Background

@@ -33,6 +33,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.Scaffold
+import com.yugm.app.core.ui.components.YugmTopBar
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ExperimentalMaterial3Api
+import com.yugm.app.core.ui.components.YugmTopBar
 import androidx.compose.ui.unit.sp
 import com.yugm.app.core.api.SocialApi
 import com.yugm.app.core.ui.components.GlassButton
@@ -84,12 +89,19 @@ fun MoodActivityScreen(
     }
 
     YugmAmbientBackground {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text("Mood & Activity", color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Black)
-            Text("Let others know how you're feeling", color = TextMuted, fontSize = 14.sp)
+        Scaffold(
+            topBar = {
+                YugmTopBar(
+                    title = "Mood & Activity",
+                    onBack = onBack
+                )
+            },
+            containerColor = Color.Transparent
+        ) { padding ->
+            Column(
+                modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
 
             if (currentMood != null || currentActivity != null) {
                 GlassCard {
@@ -188,11 +200,7 @@ fun MoodActivityScreen(
                     }
                 }
             )
-
-            com.yugm.app.core.ui.components.GlassOutlinedButton(
-                text = "Back",
-                onClick = onBack
-            )
         }
     }
+}
 }

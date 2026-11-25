@@ -10,7 +10,7 @@ internal sealed interface ProfileBondSlot {
 private fun ProfileBondSlot.partnerId(): String = when (this) {
     is ProfileBondSlot.Active -> bond.partner.id
     is ProfileBondSlot.Pending -> request.partner.id
-    ProfileBondSlot.Empty -> ""
+    is ProfileBondSlot.Empty -> ""
 }
 
 /**

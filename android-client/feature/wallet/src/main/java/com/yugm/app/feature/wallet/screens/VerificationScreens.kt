@@ -32,10 +32,9 @@ import com.yugm.app.core.ui.components.YugmLoadingSpinner
 private fun VerificationScaffold(title: String, onBack: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(title, color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Bold) },
-                navigationIcon = { TextButton(onClick = onBack) { Text("Back", color = LocalYugmColors.current.secondary) } },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = LocalYugmColors.current.background)
+            com.yugm.app.core.ui.components.YugmTopBar(
+                title = title,
+                onBack = onBack
             )
         },
         containerColor = LocalYugmColors.current.background

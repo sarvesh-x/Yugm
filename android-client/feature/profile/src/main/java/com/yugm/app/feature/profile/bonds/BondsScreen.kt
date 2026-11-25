@@ -1,5 +1,7 @@
 package com.yugm.app.feature.profile.bonds
 
+import com.yugm.app.core.ui.components.YugmTopBar
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -13,7 +15,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.HelpOutline
@@ -119,13 +120,13 @@ internal fun BondsScreen(
     BackHandler(onBack = back)
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(stringResource(when (page) {
+            YugmTopBar(
+                title = stringResource(when (page) {
                     BondsPage.Center -> R.string.bonds_center
                     BondsPage.Rankings -> R.string.bonds_rankings
                     else -> R.string.bonds_title
-                })) },
-                navigationIcon = { IconButton(onClick = back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+                }),
+                onBack = back,
                 actions = {
                     IconButton(onClick = { help = true }) { Icon(Icons.Default.HelpOutline, stringResource(R.string.bonds_help)) }
                     if (page == BondsPage.Home) {
@@ -136,7 +137,7 @@ internal fun BondsScreen(
                             }) { Icon(Icons.Default.Inbox, stringResource(R.string.bonds_center)) }
                         }
                     }
-                }
+                },
             )
         }
     ) { padding ->
@@ -489,7 +490,7 @@ private fun OwnBondsSection(
     }
     val slots = profileBondSlots(home.active, home.requests, home.capacity)
     val count = activeBondCount(slots)
-    val hasAny = slots.any { it != ProfileBondSlot.Empty }
+    val hasAny = slots.any { it !is ProfileBondSlot.Empty }
 
     if (!hasAny && error == null) {
         BondsEmptyCard(count, home.capacity, onAdd = { onManage("") })
@@ -520,10 +521,12 @@ private fun OwnBondsSection(
                         slot = slot,
                         modifier = Modifier.weight(1f),
                         colors = colors,
-                        onClick = when (slot) {
-                            is ProfileBondSlot.Active -> ({ onManage(slot.bond.partner.id) })
-                            is ProfileBondSlot.Pending -> ({ onManage(slot.request.partner.id) })
-                            ProfileBondSlot.Empty -> ({ onManage("") })
+                        onClick = {
+                            when (slot) {
+                                is ProfileBondSlot.Active -> onManage(slot.bond.partner.id)
+                                is ProfileBondSlot.Pending -> onManage(slot.request.partner.id)
+                                is ProfileBondSlot.Empty -> onManage("")
+                            }
                         }
                     )
                 }
@@ -546,7 +549,7 @@ private fun ProfileBondSlotCard(
     val person = when (slot) {
         is ProfileBondSlot.Active -> slot.bond.partner
         is ProfileBondSlot.Pending -> slot.request.partner
-        ProfileBondSlot.Empty -> null
+        is ProfileBondSlot.Empty -> null
     }
     val shape = RoundedCornerShape(15.dp)
     val interactionSource = remember { MutableInteractionSource() }

@@ -1,5 +1,7 @@
 package com.yugm.app.feature.wallet.screens
 
+import com.yugm.app.core.ui.components.YugmTopBar
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -83,14 +85,13 @@ fun VipPlansScreen(token: String, onBack: () -> Unit, onRecharge: () -> Unit = {
     Scaffold(
         containerColor = VipDark,
         topBar = {
-            TopAppBar(
-                title = { Text("VIP Center", color = Color.White, fontWeight = FontWeight.Bold) },
-                navigationIcon = { TextButton(onClick = onBack) { Text("‹", fontSize = 28.sp, color = Color.White) } },
+            YugmTopBar(
+                title = "VIP Center",
+                onBack = onBack,
                 actions = {
                     TextButton(onClick = onPrivacySettings) { Text("Privacy", color = VipGold, fontWeight = FontWeight.SemiBold) }
                     TextButton(onClick = { showRules = true }) { Text("Rules", color = Color.White) }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = VipDark)
             )
         }
     ) { padding ->

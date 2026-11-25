@@ -59,6 +59,8 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
 
+import com.yugm.app.core.ui.components.YugmTopBar
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EventsScreen(
@@ -81,14 +83,9 @@ fun EventsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Events", color = colors.textPrimary, fontWeight = FontWeight.Black) },
-                navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text("Back", color = colors.primary, fontWeight = FontWeight.Bold)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.background)
+            YugmTopBar(
+                title = "Events",
+                onBack = onBack
             )
         },
         containerColor = colors.background

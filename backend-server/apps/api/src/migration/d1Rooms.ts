@@ -297,6 +297,16 @@ export async function readD1HostRooms(db: D1Database, hostId: string, viewer: st
   return results.map(room);
 }
 
+export async function readD1LiveRoomsForHosts(db: D1Database, hostIds: string[], viewer: string, limit = 10) {
+  if (!hostIds.length) return [];
+  const { results } = await db.prepare(`SELECT ${roomProjection} ${fromRooms}
+    WHERE r.host_id IN (SELECT value FROM json_each(?1)) AND r.status = 'LIVE'
+      AND (${roomAccess}) AND ${visiblePerson("host", "?2")}
+    ORDER BY r.participant_count DESC, r.created_at DESC, r.source_id LIMIT ?3`)
+    .bind(JSON.stringify(hostIds), viewer, pageSize(limit, 10, 50)).all<Row>();
+  return results.map(room);
+}
+
 function participants(rows: Row[], maxSpeakers: number) {
   // Legacy active speakers can have a missing saved seat. Preserve the existing roster fallback.
   const assigned = new Set(rows.filter(row => privilegedRoles.has(String(row.role)) && row.seat_index !== null)

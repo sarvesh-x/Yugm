@@ -26,6 +26,7 @@ import com.yugm.app.ui.viewmodel.WingmanAction
 import com.yugm.app.ui.viewmodel.WingmanTab
 import com.yugm.app.ui.viewmodel.WingmanViewModel
 import com.yugm.app.core.ui.components.YugmLoadingSpinner
+import com.yugm.app.core.ui.components.YugmTopBar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,19 +40,9 @@ fun WingmanScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text("AI Wingman", fontWeight = FontWeight.Bold)
-                },
-                navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text("Back", color = TextPrimaryColor)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Background,
-                    titleContentColor = TextPrimaryColor,
-                )
+            YugmTopBar(
+                title = "AI Wingman",
+                onBack = onBack
             )
         },
         containerColor = Background,

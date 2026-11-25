@@ -21,6 +21,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yugm.app.core.model.SupportTicket
+import com.yugm.app.core.ui.components.YugmTopBar
 import com.yugm.app.core.ui.theme.*
 import com.yugm.app.feature.settings.viewmodel.SupportViewModel
 import com.yugm.app.core.util.UiState
@@ -47,14 +48,9 @@ fun SupportScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Support", color = Color.White, fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text("Back", color = Gold, fontWeight = FontWeight.Bold)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
+            YugmTopBar(
+                title = "Support",
+                onBack = onBack
             )
         },
         containerColor = Background

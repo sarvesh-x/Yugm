@@ -28,12 +28,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ExperimentalMaterial3Api
+import com.yugm.app.core.ui.components.YugmTopBar
 import com.yugm.app.core.api.SocialApi
 import com.yugm.app.core.model.VoicePoll
 import com.yugm.app.core.model.VoicePollListResponse
@@ -47,6 +52,7 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VoicePollScreen(
     token: String,
@@ -98,143 +104,145 @@ fun VoicePollScreen(
     AutomaticSyncEffect(token, showMine, topics = setOf(SyncTopic.SOCIAL), enabled = token.isNotBlank(), isBusy = { isLoading }) { load(refresh = true) }
 
     YugmAmbientBackground {
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Voice Polls", color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Black)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    GlassButton(
-                        text = if (showMine) "Active" else "Mine",
-                        height = 40.dp,
-                        gradient = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Panel, Panel)),
-                        onClick = { showMine = !showMine; showCreate = false }
-                    )
-                    GlassButton(
-                        text = if (showCreate) "Cancel" else "Create",
-                        height = 40.dp,
-                        gradient = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Purple, Pink)),
-                        onClick = { showCreate = !showCreate }
-                    )
-                }
-            }
-            Spacer(Modifier.height(16.dp))
-
-            if (showCreate) {
-                CreatePollSection(token, onCreated = { showCreate = false; showMine = false; load() })
-                Spacer(Modifier.height(16.dp))
-            }
-
-            Column(modifier = Modifier.weight(1f)) {
-                when {
-                    isLoading && (polls.isEmpty() && myPolls.isEmpty()) -> com.yugm.app.core.ui.components.LoadingState("Loading polls...")
-                    loadError != null && polls.isEmpty() && myPolls.isEmpty() -> {
-                        GlassCard {
-                            Text("Couldn't load polls", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
-                            Text(loadError ?: "Unknown error", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
-                            Spacer(Modifier.height(12.dp))
-                            GlassButton(text = "Retry", onClick = { load(refresh = true) })
-                        }
+        Scaffold(
+            topBar = {
+                YugmTopBar(
+                    title = "Voice Polls",
+                    onBack = onBack,
+                    actions = {
+                        GlassButton(
+                            text = if (showMine) "Active" else "Mine",
+                            height = 40.dp,
+                            gradient = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Panel, Panel)),
+                            onClick = { showMine = !showMine; showCreate = false }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        GlassButton(
+                            text = if (showCreate) "Cancel" else "Create",
+                            height = 40.dp,
+                            gradient = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Purple, Pink)),
+                            onClick = { showCreate = !showCreate }
+                        )
                     }
-                    else -> {
-                        val displayPolls = if (showMine) myPolls else polls
-                        val canLoadMore = !showMine && polls.isNotEmpty() && polls.size < activeTotal
-                        if (displayPolls.isEmpty()) {
+                )
+            },
+            containerColor = Color.Transparent
+        ) { innerPadding ->
+            Column(modifier = Modifier.fillMaxSize().padding(innerPadding).padding(16.dp)) {
+                if (showCreate) {
+                    CreatePollSection(token, onCreated = { showCreate = false; showMine = false; load() })
+                    Spacer(Modifier.height(16.dp))
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    when {
+                        isLoading && (polls.isEmpty() && myPolls.isEmpty()) -> com.yugm.app.core.ui.components.LoadingState("Loading polls...")
+                        loadError != null && polls.isEmpty() && myPolls.isEmpty() -> {
                             GlassCard {
-                                Text(if (showMine) "No polls yet" else "No active polls", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
-                                Text(
-                                    if (showMine) "Polls you create will appear here" else "Create one to start the conversation",
-                                    color = TextMuted,
-                                    fontSize = 13.sp
-                                )
+                                Text("Couldn't load polls", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                                Text(loadError ?: "Unknown error", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
+                                Spacer(Modifier.height(12.dp))
+                                GlassButton(text = "Retry", onClick = { load(refresh = true) })
                             }
-                        } else {
-                            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
-                                items(displayPolls, key = { it.id }) { poll ->
-                                    val totalVotes = poll.options.sumOf { it.votes }
-                                    val expired = DateUtils.isIsoBeforeNow(poll.expiresAt)
-                                    val selectedIndex = if (userId.isNotBlank()) poll.selectedOptionIndexFor(userId) else null
-                                    val hasVoted = selectedIndex != null || (userId.isNotBlank() && poll.voters.contains(userId))
-                                    val selectedOptionText = selectedIndex?.let { poll.options.getOrNull(it)?.text }?.takeIf { it.isNotBlank() }
-                                    val isOwner = userId.isNotBlank() && poll.userId == userId
-                                    val canClose = isOwner && poll.isActive && !expired
-                                    val status = when {
-                                        !poll.isActive -> "Closed"
-                                        expired -> "Expired"
-                                        hasVoted -> "Voted"
-                                        showMine -> "Active"
-                                        else -> null
-                                    }
-                                    GlassCard(modifier = Modifier.fillMaxWidth()) {
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                            verticalAlignment = Alignment.Top,
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
+                        }
+                        else -> {
+                            val displayPolls = if (showMine) myPolls else polls
+                            val canLoadMore = !showMine && polls.isNotEmpty() && polls.size < activeTotal
+                            if (displayPolls.isEmpty()) {
+                                GlassCard {
+                                    Text(if (showMine) "No polls yet" else "No active polls", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                                    Text(
+                                        if (showMine) "Polls you create will appear here" else "Create one to start the conversation",
+                                        color = TextMuted,
+                                        fontSize = 13.sp
+                                    )
+                                }
+                            } else {
+                                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
+                                    items(displayPolls, key = { it.id }) { poll ->
+                                        val totalVotes = poll.options.sumOf { it.votes }
+                                        val expired = DateUtils.isIsoBeforeNow(poll.expiresAt)
+                                        val selectedIndex = if (userId.isNotBlank()) poll.selectedOptionIndexFor(userId) else null
+                                        val hasVoted = selectedIndex != null || (userId.isNotBlank() && poll.voters.contains(userId))
+                                        val selectedOptionText = selectedIndex?.let { poll.options.getOrNull(it)?.text }?.takeIf { it.isNotBlank() }
+                                        val isOwner = userId.isNotBlank() && poll.userId == userId
+                                        val canClose = isOwner && poll.isActive && !expired
+                                        val status = when {
+                                            !poll.isActive -> "Closed"
+                                            expired -> "Expired"
+                                            hasVoted -> "Voted"
+                                            showMine -> "Active"
+                                            else -> null
+                                        }
+                                        GlassCard(modifier = Modifier.fillMaxWidth()) {
                                             Row(
                                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .clickable { onPollDetail(poll.id) }
+                                                verticalAlignment = Alignment.Top,
+                                                modifier = Modifier.fillMaxWidth()
                                             ) {
-                                                Avatar(poll.userName.firstOrNull()?.toString() ?: "?", 36, imageUrl = poll.userAvatar, avatarType = poll.userAvatarType, avatarParts = poll.userAvatarParts)
-                                                Column(Modifier.weight(1f)) {
-                                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                                        Text(if (poll.userName.isNotBlank()) poll.userName else "Someone", color = TextMuted, fontSize = 12.sp)
-                                                        if (status != null) Text(
-                                                            "• $status",
-                                                            color = when (status) {
-                                                                "Active" -> Cyan
-                                                                "Voted" -> Gold
-                                                                else -> TextMuted
-                                                            },
-                                                            fontSize = 12.sp
-                                                        )
-                                                    }
-                                                    Text(poll.question, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 15.sp)
-                                                    Text("${poll.options.size} options \u00B7 $totalVotes votes", color = TextMuted, fontSize = 12.sp)
-                                                    if (selectedOptionText != null) {
-                                                        Text("Your vote: $selectedOptionText", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                                    } else if (hasVoted) {
-                                                        Text("You voted", color = Gold.copy(alpha = 0.85f), fontSize = 12.sp)
+                                                Row(
+                                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .clickable { onPollDetail(poll.id) }
+                                                ) {
+                                                    Avatar(poll.userName.firstOrNull()?.toString() ?: "?", 36, imageUrl = poll.userAvatar, avatarType = poll.userAvatarType, avatarParts = poll.userAvatarParts)
+                                                    Column(Modifier.weight(1f)) {
+                                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                            Text(if (poll.userName.isNotBlank()) poll.userName else "Someone", color = TextMuted, fontSize = 12.sp)
+                                                            if (status != null) Text(
+                                                                "• $status",
+                                                                color = when (status) {
+                                                                    "Active" -> Cyan
+                                                                    "Voted" -> Gold
+                                                                    else -> TextMuted
+                                                                },
+                                                                fontSize = 12.sp
+                                                            )
+                                                        }
+                                                        Text(poll.question, color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 15.sp)
+                                                        Text("${poll.options.size} options \u00B7 $totalVotes votes", color = TextMuted, fontSize = 12.sp)
+                                                        if (selectedOptionText != null) {
+                                                            Text("Your vote: $selectedOptionText", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                                        } else if (hasVoted) {
+                                                            Text("You voted", color = Gold.copy(alpha = 0.85f), fontSize = 12.sp)
+                                                        }
                                                     }
                                                 }
-                                            }
-                                            if (canClose) {
-                                                Text(
-                                                    "Close",
-                                                    color = Pink,
-                                                    fontSize = 12.sp,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    modifier = Modifier
-                                                        .padding(start = 8.dp, top = 2.dp)
-                                                        .clickable {
-                                                            scope.launch {
-                                                                runCatching { SocialApi.closeVoicePoll(token, poll.id) }
-                                                                    .onSuccess { updated ->
-                                                                        polls = polls.map { if (it.id == updated.id) updated else it }
-                                                                        myPolls = myPolls.map { if (it.id == updated.id) updated else it }
-                                                                        Toast.makeText(context, "Poll closed", Toast.LENGTH_SHORT).show()
-                                                                    }
-                                                                    .onFailure { e ->
-                                                                        Toast.makeText(context, e.message ?: "Failed to close poll", Toast.LENGTH_SHORT).show()
-                                                                    }
+                                                if (canClose) {
+                                                    Text(
+                                                        "Close",
+                                                        color = Pink,
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        modifier = Modifier
+                                                            .padding(start = 8.dp, top = 2.dp)
+                                                            .clickable {
+                                                                scope.launch {
+                                                                    runCatching { SocialApi.closeVoicePoll(token, poll.id) }
+                                                                        .onSuccess { updated ->
+                                                                            polls = polls.map { if (it.id == updated.id) updated else it }
+                                                                            myPolls = myPolls.map { if (it.id == updated.id) updated else it }
+                                                                            Toast.makeText(context, "Poll closed", Toast.LENGTH_SHORT).show()
+                                                                        }
+                                                                        .onFailure { e ->
+                                                                            Toast.makeText(context, e.message ?: "Failed to close poll", Toast.LENGTH_SHORT).show()
+                                                                        }
+                                                                }
                                                             }
-                                                        }
-                                                )
+                                                    )
+                                                }
                                             }
                                         }
                                     }
-                                }
-                                if (canLoadMore) {
-                                    item("load-more") {
-                                        GlassButton(
-                                            text = if (isLoadingMore) "Loading..." else "Load more",
-                                            enabled = !isLoadingMore,
-                                            onClick = { load(refresh = false) }
-                                        )
+                                    if (canLoadMore) {
+                                        item("load-more") {
+                                            GlassButton(
+                                                text = if (isLoadingMore) "Loading..." else "Load more",
+                                                enabled = !isLoadingMore,
+                                                onClick = { load(refresh = false) }
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -242,9 +250,6 @@ fun VoicePollScreen(
                     }
                 }
             }
-
-            Spacer(Modifier.height(12.dp))
-            GlassButton(text = "Back", gradient = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Purple, Pink)), onClick = onBack)
         }
     }
 }

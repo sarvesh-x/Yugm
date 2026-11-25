@@ -93,7 +93,7 @@ export function walletLevel(row: WardrobeRow) {
   return getLevelStatus({ xp: row.xp, lastDailyCheckInAt: row.last_daily_check_in_at ?? undefined });
 }
 
-async function seedDefaultCosmetics(db: D1Database) {
+export async function seedDefaultCosmetics(db: D1Database) {
   const now = new Date().toISOString();
   await db.prepare(`INSERT INTO cosmetics
     (source_id, type, name, coin_price, rarity, preview, is_active, reward_only, asset_kind, asset_url, created_at, updated_at)

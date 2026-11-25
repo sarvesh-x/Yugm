@@ -56,6 +56,8 @@ import java.util.Locale
 import java.util.TimeZone
 import kotlinx.coroutines.delay
 
+import com.yugm.app.core.ui.components.YugmTopBar
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EventDetailScreen(
@@ -72,14 +74,9 @@ fun EventDetailScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(event.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text("Back", color = TextPrimary)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
+            YugmTopBar(
+                title = event.title,
+                onBack = onBack
             )
         },
         containerColor = Background

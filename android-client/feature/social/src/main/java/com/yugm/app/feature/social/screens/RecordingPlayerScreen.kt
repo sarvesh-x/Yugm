@@ -42,6 +42,8 @@ import com.yugm.app.core.ui.theme.TextMuted
 import com.yugm.app.core.ui.theme.TextPrimary
 import androidx.compose.material3.TextButton
 
+import com.yugm.app.core.ui.components.YugmTopBar
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecordingPlayerScreen(
@@ -52,14 +54,9 @@ fun RecordingPlayerScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(recording.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text("Back", color = TextPrimary)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
+            YugmTopBar(
+                title = recording.title,
+                onBack = onBack
             )
         },
         containerColor = Background

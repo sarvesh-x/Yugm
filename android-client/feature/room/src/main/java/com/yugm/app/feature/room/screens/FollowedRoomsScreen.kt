@@ -2,6 +2,7 @@ package com.yugm.app.feature.room.screens
 
 import com.yugm.app.core.api.SyncTopic
 import com.yugm.app.core.ui.components.AutomaticSyncEffect
+import com.yugm.app.core.ui.components.YugmTopBar
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -108,19 +109,9 @@ fun FollowedRoomsScreen(
         containerColor = colors.background,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Followed rooms", color = colors.textPrimary, fontWeight = FontWeight.Bold)
-                        Text("${rooms.size} ${if (rooms.size == 1) "room" else "rooms"} in your list", color = colors.textSecondary, fontSize = 11.sp)
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = colors.textPrimary)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.background)
+            YugmTopBar(
+                title = "Followed rooms",
+                onBack = onBack,
             )
         }
     ) { padding ->

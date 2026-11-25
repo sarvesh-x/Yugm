@@ -6,7 +6,7 @@ This is the persistent, single-source tracker for the MongoDB/Render to Cloudfla
 
 The [active 18-phase plan](docs/migration/implementation-plan.md) governs behavior preservation and zero-spend activation. The [preservation registries and gate tracker](docs/migration/MIGRATION_PROGRESS.md) record baseline evidence. [ADR-0008](docs/decisions/0008-zero-spend-cloudflare-migration.md) records the budget and conditional R2 direction. No production metrics are available. D1 Free can be evaluated against isolated workloads while MongoDB remains authoritative.
 
-The owner expanded debug to the whole app on local D1 and R2. The shared D1 Worker mounts 222 of 638 legacy HTTP patterns, including all 59 room patterns and 15 admin patterns. Both D1 bundles exclude MongoDB, Mongoose, Redis and BullMQ. The remaining 416 patterns, existing-data import and live acceptance still gate retirement of the legacy runtime. [Current coverage and audit](docs/handoffs/2026-11-25-d1-route-coverage-checkpoint.md)
+The owner expanded debug to the whole app on local D1 and R2. The shared D1 Worker mounts 254 of 638 legacy HTTP patterns, including all 59 room patterns, all six highlights patterns, all five wishlist and subscription patterns, all four missions and referral patterns, all three battle-pass patterns, `POST /api/direct-send-gift` and 15 admin patterns. Both D1 bundles exclude MongoDB, Mongoose, Redis and BullMQ. The remaining 384 patterns, existing-data import and live acceptance still gate retirement of the legacy runtime. [Direct gift](docs/handoffs/2026-11-25-d1-direct-send-gift.md) · [Current coverage and audit](docs/handoffs/2026-11-25-d1-route-coverage-checkpoint.md) · [Referrals](docs/handoffs/2026-11-25-d1-referrals.md) · [Subscriptions](docs/handoffs/2026-11-25-d1-subscriptions.md) · [Battle pass](docs/handoffs/2026-11-25-d1-battle-pass.md) · [Missions](docs/handoffs/2026-11-25-d1-missions.md) · [Feed, highlights and wishlist](docs/handoffs/2026-11-25-d1-feed-highlights-wishlist.md)
 
 Android selects emulator loopback for debug and the configured production HTTPS origin for release. The recovered local `yugm` database is at `0019`. The last recorded hosted schema and reference seed are at `0002`. The D1 Workers use native Cloudflare rate limits, and production config binds five verified hosted R2 buckets. RealtimeKit has an offline-tested server client. [Database setup](docs/handoffs/2026-11-24-d1-schema-and-reference-seed.md) · [Hosted R2 verification](docs/handoffs/2026-11-24-hosted-r2-d1-endpoint-audit.md)
 
@@ -30,6 +30,30 @@ The current work is local documentation, tests and compatibility preparation. Pr
 **Commit-state note (2026-11-24):** "Uncommitted" in the dated entries below describes the working-tree state when each entry was written. The local migration slices were subsequently captured in commit `b04f77d` (`feat(migration): checkpoint local Cloudflare migration`) on `codex/cloudflare-migration-checkpoint`, branched from `master@5a519fe`. Current Git state is authoritative; those historical phrases are not claims about the present working tree.
 
 ## Work log
+
+### 2026-11-25 — D1 direct-send-gift route
+
+- **Status:** mounted `POST /api/direct-send-gift` on the shared D1 Worker with legacy validation order, VIP/interact guards, coin and diamond debit/credit ledgers and creator-share pricing. The gift transaction, both ledger rows, balance updates and profile-marker clears commit in one guarded batch; gift XP, relationship XP, DM and notification are non-fatal post-commit side effects. [Evidence](docs/handoffs/2026-11-25-d1-direct-send-gift.md)
+- **Verification:** full workspace typecheck, auth Worker 1/1, endpoint audit and `git diff --check` passed. Audit: 638 legacy / 259 D1 / 254 matched / 384 missing; `/api/direct-send-gift` 1/0.
+- **Boundary:** no new migration was needed. MongoDB remains authoritative; hosted migrations, live FCM/realtime delivery and deployed gift acceptance remain open.
+
+### 2026-11-25 — D1 subscription routes
+
+- **Status:** mounted all five `/api/subscriptions` patterns. Prices, expiry, validation order and DTO shape follow the legacy route. The 299/2999-coin debit, subscription row and creator notification commit in one guarded batch with a `SUBSCRIPTION` ledger row; `0023_subscription_unique.sql` adds the legacy unique pair and lookup indexes. [Evidence](docs/handoffs/2026-11-25-d1-subscriptions.md)
+- **Verification:** both typechecks, auth Worker 1/1, endpoint audit and `git diff --check` passed. Audit: 638 legacy / 258 D1 / 253 matched / 385 missing; `/api/subscriptions` 5/0.
+- **Boundary:** `0023` is not applied to the recovered local database or hosted D1. MongoDB remains authoritative; hosted migrations, live payments, realtime events and deployed acceptance remain open.
+
+### 2026-11-25 — D1 referral routes
+
+- **Status:** mounted all four `/api/referrals` patterns. Code generation keeps the legacy prefix/random suffix; claim validation, replay and post-commit notification follow the legacy handler. Both 100-coin credits and the referral record commit in one guarded batch; `0022_referral_unique.sql` adds code/referral uniqueness and lookup indexes. [Evidence](docs/handoffs/2026-11-25-d1-referrals.md)
+- **Verification:** both typechecks, auth Worker 1/1, endpoint audit and `git diff --check` passed. Audit: `/api/referrals` 4/0.
+- **Boundary:** `0022` is not applied to the recovered local database or hosted D1. MongoDB remains authoritative; hosted migrations, FCM, realtime events and deployed acceptance remain open.
+
+### 2026-11-25 — D1 battle-pass routes
+
+- **Status:** mounted all three `/api/battle-pass` patterns on the shared D1 Worker. Active seasons and passes are created lazily while imported IDs remain valid. Purchase performs a guarded 999-coin debit and premium upgrade in one batch; claim stages all five reward types with legacy idempotency keys and level-up coins. `prepareD1XpGrant()` now supports a battle-pass reward opt-out so the reward does not recursively grant battle-pass XP. [Evidence](docs/handoffs/2026-11-25-d1-battle-pass.md)
+- **Verification:** both typechecks, auth Worker 1/1 and `git diff --check` passed. Audit: 638 legacy / 249 D1 / 244 matched / 394 missing; `/api/battle-pass` 3/0.
+- **Boundary:** no migration file was needed; existing season, pass, wallet and XP indexes cover the writes. MongoDB remains authoritative. Hosted `0003`–`0021`, live payments, realtime events and deployed acceptance remain open.
 
 ### 2026-11-25 — D1 admin config, audit and support routes
 

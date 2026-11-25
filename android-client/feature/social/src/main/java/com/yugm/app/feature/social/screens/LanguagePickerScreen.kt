@@ -36,6 +36,8 @@ import com.yugm.app.core.ui.theme.Panel
 import com.yugm.app.core.ui.theme.TextMuted
 import com.yugm.app.core.ui.theme.TextPrimary
 
+import com.yugm.app.core.ui.components.YugmTopBar
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LanguagePickerScreen(
@@ -58,14 +60,9 @@ fun LanguagePickerScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Language", color = TextPrimary, fontWeight = FontWeight.Black) },
-                navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text("Back", color = Gold, fontWeight = FontWeight.Bold)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
+            YugmTopBar(
+                title = "Language",
+                onBack = onBack
             )
         },
         containerColor = Background

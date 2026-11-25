@@ -1,5 +1,7 @@
 package com.yugm.app.feature.social.screens
 
+import com.yugm.app.core.ui.components.YugmTopBar
+
 import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -14,7 +16,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
@@ -139,18 +140,12 @@ fun AchievementsScreen(token: String, onBack: () -> Unit) {
         containerColor = colors.background,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
-                title = { Text("Achievements & Badges", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
+            YugmTopBar(
+                title = "Achievements & Badges",
+                onBack = onBack,
                 actions = {
                     IconButton(onClick = { rules = true }) { Icon(Icons.Filled.Info, contentDescription = "Badge rules") }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.background, titleContentColor = colors.textPrimary,
-                    navigationIconContentColor = colors.textPrimary, actionIconContentColor = colors.textPrimary)
             )
         }
     ) { padding ->

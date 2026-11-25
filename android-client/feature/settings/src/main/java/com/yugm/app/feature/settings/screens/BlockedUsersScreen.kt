@@ -24,6 +24,8 @@ import com.yugm.app.core.ui.components.LoadingState
 import com.yugm.app.core.ui.theme.*
 import com.yugm.app.feature.settings.viewmodel.BlockedUsersViewModel
 
+import com.yugm.app.core.ui.components.YugmTopBar
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BlockedUsersScreen(
@@ -38,14 +40,9 @@ fun BlockedUsersScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Blocked Users", color = Color.White, fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text("Back", color = Gold, fontWeight = FontWeight.Bold)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
+            YugmTopBar(
+                title = "Blocked Users",
+                onBack = onBack
             )
         },
         containerColor = Background

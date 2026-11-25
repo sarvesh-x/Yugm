@@ -16,6 +16,7 @@ import com.yugm.app.core.model.VipPrivacySettings
 import com.yugm.app.core.api.YugmApi
 import kotlinx.coroutines.launch
 import com.yugm.app.core.ui.components.YugmLoadingSpinner
+import com.yugm.app.core.ui.components.YugmTopBar
 
 private val PrivacyBackground = Color(0xFF100D18)
 private val PrivacyCard = Color(0xFFF5EEE6)
@@ -35,7 +36,12 @@ fun VipPrivacyScreen(token: String, onBack: () -> Unit) {
     }
     Scaffold(
         containerColor = PrivacyBackground,
-        topBar = { TopAppBar(title = { Text("VIP Privacy", color = Color.White, fontWeight = FontWeight.Bold) }, navigationIcon = { TextButton(onClick = onBack) { Text("‹", color = Color.White, fontSize = 30.sp) } }, colors = TopAppBarDefaults.topAppBarColors(containerColor = PrivacyBackground)) }
+        topBar = {
+            YugmTopBar(
+                title = "VIP Privacy",
+                onBack = onBack,
+            )
+        }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp, vertical = 26.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("Your VIP, your boundaries", color = Color(0xFFBEB7C8), fontSize = 14.sp)

@@ -25,6 +25,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -37,12 +38,16 @@ import com.yugm.app.core.ui.components.GlassButton
 import com.yugm.app.core.ui.components.GlassCard
 import com.yugm.app.core.ui.components.GlassTextField
 import com.yugm.app.core.ui.components.ToggleRow
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ExperimentalMaterial3Api
+import com.yugm.app.core.ui.components.YugmTopBar
 import com.yugm.app.core.ui.components.YugmAmbientBackground
 import com.yugm.app.core.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DailyQuestionScreen(
     token: String,
@@ -73,14 +78,22 @@ fun DailyQuestionScreen(
     AutomaticSyncEffect(token, topics = setOf(SyncTopic.SOCIAL), enabled = token.isNotBlank(), isBusy = { isLoading }) { load() }
 
     YugmAmbientBackground {
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            Text("Daily Question", color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Black)
-            Spacer(Modifier.height(16.dp))
-
-            if (isLoading && (question == null)) {
-                com.yugm.app.core.ui.components.LoadingState("Loading...")
-            } else {
-                question?.let { q ->
+        Scaffold(
+            topBar = {
+                YugmTopBar(
+                    title = "Daily Question",
+                    onBack = onBack
+                )
+            },
+            containerColor = Color.Transparent
+        ) { padding ->
+            Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+                if (isLoading && (question == null)) {
+                    com.yugm.app.core.ui.components.LoadingState("Loading...")
+                } else if (question == null) {
+                    com.yugm.app.core.ui.components.LoadingState("Loading question...")
+                } else {
+                    val q = question!!
                     GlassCard {
                         Text("Today's Question", color = Gold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         Spacer(Modifier.height(8.dp))
@@ -159,11 +172,8 @@ fun DailyQuestionScreen(
                             }
                         }
                     }
-                } ?: com.yugm.app.core.ui.components.LoadingState("Loading question...")
+                }
             }
-
-            Spacer(Modifier.height(12.dp))
-            GlassButton(text = "Back", gradient = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Purple, Pink)), onClick = onBack)
         }
     }
 }

@@ -2,6 +2,7 @@ package com.yugm.app.feature.social.screens
 
 import com.yugm.app.core.api.SyncTopic
 import com.yugm.app.core.ui.components.AutomaticSyncEffect
+import com.yugm.app.core.ui.components.YugmTopBar
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -96,15 +97,9 @@ fun LevelLeaderboardScreen(
     Scaffold(
         containerColor = colors.background,
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Level leaderboard", color = colors.textPrimary, fontWeight = FontWeight.Bold)
-                        Text("All time · ranked by level and XP", color = colors.textSecondary, fontSize = 11.sp)
-                    }
-                },
-                navigationIcon = { TextButton(onClick = onBack) { Text("‹", color = colors.textPrimary, fontSize = 28.sp) } },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.background)
+            YugmTopBar(
+                title = "Level leaderboard",
+                onBack = onBack,
             )
         }
     ) { padding ->

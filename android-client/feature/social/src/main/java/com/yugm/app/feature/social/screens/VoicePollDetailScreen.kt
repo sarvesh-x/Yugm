@@ -30,6 +30,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ExperimentalMaterial3Api
+import com.yugm.app.core.ui.components.YugmTopBar
 import com.yugm.app.core.api.SocialApi
 import com.yugm.app.core.model.VoicePoll
 import com.yugm.app.core.ui.components.GlassButton
@@ -78,9 +81,16 @@ fun VoicePollDetailScreen(
     AutomaticSyncEffect(pollId, token, topics = setOf(SyncTopic.SOCIAL), enabled = token.isNotBlank(), isBusy = { isLoading }) { loadPoll() }
 
     YugmAmbientBackground {
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            Text("Poll", color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Black)
-            Spacer(Modifier.height(16.dp))
+        Scaffold(
+            topBar = {
+                YugmTopBar(
+                    title = "Poll",
+                    onBack = onBack
+                )
+            },
+            containerColor = Color.Transparent
+        ) { padding ->
+            Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
 
             when {
                 isLoading && (poll == null) -> LoadingState("Loading poll...")
@@ -229,9 +239,7 @@ fun VoicePollDetailScreen(
                     }
                 }
             }
-
-            Spacer(Modifier.weight(1f))
-            GlassButton(text = "Back", gradient = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Purple, Pink)), onClick = onBack)
         }
     }
+}
 }

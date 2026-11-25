@@ -3,8 +3,7 @@ package com.yugm.app.feature.discover.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -22,6 +21,9 @@ import kotlinx.coroutines.launch
 import com.yugm.app.core.ui.theme.TextMuted
 import com.yugm.app.core.ui.theme.TextPrimary
 
+import com.yugm.app.core.ui.theme.Background
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
     token: String,
@@ -67,12 +69,17 @@ fun SearchScreen(
         }
     }
     
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-        Spacer(modifier = Modifier.height(18.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = onBack) { Text("Back", color = TextMuted) }
-            Text("Search", color = TextPrimary, fontSize = 32.sp, fontWeight = FontWeight.Black)
-        }
+    Scaffold(
+        topBar = {
+            YugmTopBar(
+                title = "Search",
+                onBack = onBack
+            )
+        },
+        containerColor = Background
+    ) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp)) {
+            Spacer(modifier = Modifier.height(18.dp))
         YugmTextField(
             value = query,
             onValueChange = { query = it },
@@ -119,4 +126,5 @@ fun SearchScreen(
             }
         }
     }
+}
 }

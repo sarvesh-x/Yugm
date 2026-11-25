@@ -51,6 +51,11 @@ import com.yugm.app.core.ui.theme.TextMuted
 import com.yugm.app.core.ui.theme.TextPrimary
 import kotlinx.coroutines.launch
 
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ExperimentalMaterial3Api
+import com.yugm.app.core.ui.components.YugmTopBar
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ThemeGalleryScreen(
     token: String,
@@ -81,35 +86,40 @@ fun ThemeGalleryScreen(
     }
 
     YugmBackground(style = YugmBackgroundStyle.Ambient) {
-        Column(Modifier.fillMaxSize().padding(top = 18.dp)) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                TextButton(onClick = onBack) { Text("Back", color = TextMuted) }
-                Text("Immersive Themes", color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Black)
-                Spacer(Modifier.size(1.dp))
-            }
-            if (equipped != null) {
-                Text(
-                    "Current: ${equipped?.room?.replace("theme_", "")?.replace("_", " ")?.uppercase() ?: "None"}",
-                    color = Gold, fontSize = 12.sp,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
+        Scaffold(
+            topBar = {
+                YugmTopBar(
+                    title = "Immersive Themes",
+                    onBack = onBack
                 )
-            }
-            when {
-                isLoading && (themes.isEmpty()) -> LoadingState("Loading themes...")
-                error != null -> Text(error ?: "", color = TextMuted, modifier = Modifier.padding(20.dp))
-                else -> LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    contentPadding = PaddingValues(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(themes, key = { it.key }) { theme ->
-                        ThemeCard(
-                            theme = theme,
-                            isOwned = owned.any { it.key == theme.key },
-                            isEquipped = equipped?.room == theme.key,
-                            onClick = { selectedTheme = theme }
-                        )
+            },
+            containerColor = Color.Transparent
+        ) { padding ->
+            Column(Modifier.fillMaxSize().padding(padding)) {
+                if (equipped != null) {
+                    Text(
+                        "Current: ${equipped?.room?.replace("theme_", "")?.replace("_", " ")?.uppercase() ?: "None"}",
+                        color = Gold, fontSize = 12.sp,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
+                    )
+                }
+                when {
+                    isLoading && (themes.isEmpty()) -> LoadingState("Loading themes...")
+                    error != null -> Text(error ?: "", color = TextMuted, modifier = Modifier.padding(20.dp))
+                    else -> LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        contentPadding = PaddingValues(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(themes, key = { it.key }) { theme ->
+                            ThemeCard(
+                                theme = theme,
+                                isOwned = owned.any { it.key == theme.key },
+                                isEquipped = equipped?.room == theme.key,
+                                onClick = { selectedTheme = theme }
+                            )
+                        }
                     }
                 }
             }

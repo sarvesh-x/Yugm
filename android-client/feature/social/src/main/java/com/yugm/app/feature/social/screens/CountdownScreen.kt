@@ -37,11 +37,15 @@ import com.yugm.app.core.ui.components.GlassButton
 import com.yugm.app.core.ui.components.GlassCard
 import com.yugm.app.core.ui.components.YugmAmbientBackground
 import com.yugm.app.core.ui.theme.*
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ExperimentalMaterial3Api
+import com.yugm.app.core.ui.components.YugmTopBar
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CountdownScreen(
     token: String,
@@ -56,27 +60,31 @@ fun CountdownScreen(
     }
 
     YugmAmbientBackground {
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            Text("Countdowns", color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Black)
-            Spacer(Modifier.height(16.dp))
-
-            if (isLoading && (events.isEmpty())) {
-                com.yugm.app.core.ui.components.LoadingState("Loading...")
-            } else if (events.isEmpty()) {
-                GlassCard {
-                    Text("No upcoming events", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
-                    Text("Countdown events will appear here", color = TextMuted, fontSize = 13.sp)
-                }
-            } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(events, key = { it.id }) { event ->
-                        CountdownCard(event)
+        Scaffold(
+            topBar = {
+                YugmTopBar(
+                    title = "Countdowns",
+                    onBack = onBack
+                )
+            },
+            containerColor = Color.Transparent
+        ) { padding ->
+            Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+                if (isLoading && (events.isEmpty())) {
+                    com.yugm.app.core.ui.components.LoadingState("Loading...")
+                } else if (events.isEmpty()) {
+                    GlassCard {
+                        Text("No upcoming events", color = TextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                        Text("Countdown events will appear here", color = TextMuted, fontSize = 13.sp)
+                    }
+                } else {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(events, key = { it.id }) { event ->
+                            CountdownCard(event)
+                        }
                     }
                 }
             }
-
-            Spacer(Modifier.weight(1f))
-            GlassButton(text = "Back", gradient = androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Purple, Pink)), onClick = onBack)
         }
     }
 }

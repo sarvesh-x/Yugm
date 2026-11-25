@@ -12,18 +12,24 @@ import { createD1AdminRouter } from "./d1AdminConfig.js";
 import { createD1AdminReportsRouter } from "./d1AdminReports.js";
 import { createD1AdminSupportRouter } from "./d1AdminSupport.js";
 import { createD1AuthRouter } from "./d1AuthRouter.js";
+import { createD1BattlePassRouter } from "./d1BattlePass.js";
 import { createD1BondsRouter } from "./d1Bonds.js";
 import { createD1ClansRouter } from "./d1Clans.js";
 import { createD1CosmeticsRouter } from "./d1Cosmetics.js";
 import { createD1DatingRouter } from "./d1Dating.js";
+import { createD1DirectGiftsRouter } from "./d1DirectGifts.js";
+import { createD1FeedRouter } from "./d1Feed.js";
 import { readD1GameCatalog } from "./d1GameCatalog.js";
 import { createD1GiftCatalogRouter } from "./d1GiftCatalog.js";
+import { createD1HighlightsRouter } from "./d1Highlights.js";
 import { createD1InboxRouter } from "./d1Inbox.js";
 import { createD1LiveKitRouter, type D1LiveKitConfig } from "./d1LiveKit.js";
 import { createD1MediaRouter, type D1MediaRouterOptions } from "./d1Media.js";
+import { createD1MissionsRouter } from "./d1Missions.js";
 import { createD1NotificationRouter } from "./d1Notifications.js";
 import { createD1ProfileEditRouter } from "./d1ProfileEdits.js";
 import { createD1ProgressionRouter } from "./d1Progression.js";
+import { createD1ReferralsRouter } from "./d1Referrals.js";
 import { createD1ReportsRouter } from "./d1Reports.js";
 import { createD1RoomGiftsRouter } from "./d1RoomGifts.js";
 import { createD1RoomsRouter } from "./d1Rooms.js";
@@ -31,11 +37,14 @@ import { createD1RoomInvitesRouter } from "./d1RoomInvites.js";
 import { createD1RoomReactionsRouter } from "./d1RoomReactions.js";
 import { createD1PaymentProviders, type D1PaymentConfig } from "./d1Payments.js";
 import { createD1SocialRouter } from "./d1Social.js";
+import { createD1StoriesRouter } from "./d1Stories.js";
+import { createD1SubscriptionsRouter } from "./d1Subscriptions.js";
 import { createD1SupportRouter } from "./d1Support.js";
 import { createD1ThemesRouter } from "./d1Themes.js";
 import type { D1UserRateLimit } from "./d1UserRateLimit.js";
 import { createD1WalletRouter } from "./d1Wallet.js";
 import { createD1WatchPartyRouter } from "./d1WatchParty.js";
+import { createD1WishlistRouter } from "./d1Wishlist.js";
 
 export interface D1WalletConfig extends D1PaymentConfig {
   devRecharge?: boolean;
@@ -72,11 +81,15 @@ export function createD1App(
   app.use("/api", createD1ProgressionRouter(db));
   app.use("/api/users/messages", createD1InboxRouter(db, limits.chat));
   app.use("/api", createD1SocialRouter(db));
+  app.use("/api", createD1FeedRouter(db));
+  app.use("/api", createD1StoriesRouter(db));
+  app.use("/api", createD1HighlightsRouter(db));
   app.use("/api", createD1CosmeticsRouter(db, resolvePublicOrigin));
   app.use("/api", createD1WalletRouter(db, {
     payments: createD1PaymentProviders(wallet),
     devRecharge: wallet.devRecharge
   }));
+  app.use("/api", createD1DirectGiftsRouter(db, wallet.diamondsEnabled));
   app.use("/api/clans", createD1ClansRouter(db, limits));
   app.use("/api/notifications", createD1NotificationRouter(db));
   app.use("/api/support", createD1SupportRouter(db, limits.create));
@@ -89,6 +102,11 @@ export function createD1App(
   app.use("/api", createD1RoomGiftsRouter(db, limits.gift, wallet.diamondsEnabled));
   app.use("/api", createD1RoomReactionsRouter(db));
   app.use("/api", createD1WatchPartyRouter(db));
+  app.use("/api", createD1WishlistRouter(db));
+  app.use("/api", createD1MissionsRouter(db));
+  app.use("/api", createD1BattlePassRouter(db));
+  app.use("/api", createD1ReferralsRouter(db));
+  app.use("/api", createD1SubscriptionsRouter(db));
   app.use("/api/bonds", createD1BondsRouter(db));
   app.use("/api", createD1LiveKitRouter(db, livekit));
   const access = createD1AccessSessionReader(db, "http");

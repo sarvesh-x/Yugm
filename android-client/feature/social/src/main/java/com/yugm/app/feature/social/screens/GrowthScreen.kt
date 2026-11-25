@@ -22,17 +22,10 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.Button
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import com.yugm.app.core.ui.components.YugmTopBar
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
@@ -79,27 +72,31 @@ fun GrowthScreen(
     AutomaticSyncEffect(token, topics = setOf(SyncTopic.TASKS), enabled = token.isNotBlank(), isBusy = { viewModel.isLoading }) { viewModel.load(token) }
     LaunchedEffect(home) { home?.let { streakCount = it.streakCount } }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
-        contentPadding = PaddingValues(top = 18.dp, bottom = 100.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                TextButton(onClick = onBack) { Text("Back", color = colors.textSecondary) }
-                Column(Modifier.weight(1f)) {
-                    Text("Progress & rewards", color = colors.textPrimary, fontSize = 25.sp, fontWeight = FontWeight.Black)
-                    Text("Your level, streak, missions, and season progress.", color = colors.textSecondary, fontSize = 12.sp)
+    Scaffold(
+        topBar = {
+            YugmTopBar(
+                title = "Progress & rewards",
+                onBack = onBack,
+                actions = {
+                    TextButton(onClick = onCreateRoom) {
+                        Text("Create", color = colors.accent, fontWeight = FontWeight.Black)
+                    }
                 }
-                TextButton(onClick = onCreateRoom) { Text("Create", color = colors.accent, fontWeight = FontWeight.Black) }
-            }
-        }
-        when {
-            isLoading && home == null -> item { LoadingState("Loading growth cockpit...") }
-            error != null -> item { Text(error ?: "", color = colors.textSecondary) }
-            home != null -> {
-                val payload = home!!
-                val scheduledRooms = if (payload.userRole in setOf("HOST", "MODERATOR", "ADMIN")) creator?.scheduledRooms.orEmpty() else payload.scheduledRooms
+            )
+        },
+        containerColor = colors.background
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(innerPadding).padding(horizontal = 20.dp),
+            contentPadding = PaddingValues(top = 18.dp, bottom = 100.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            when {
+                isLoading && home == null -> item { LoadingState("Loading growth cockpit...") }
+                error != null -> item { Text(error ?: "", color = colors.textSecondary) }
+                home != null -> {
+                    val payload = home!!
+                    val scheduledRooms = if (payload.userRole in setOf("HOST", "MODERATOR", "ADMIN")) creator?.scheduledRooms.orEmpty() else payload.scheduledRooms
                 val creatorSteps = creator?.nextSteps.orEmpty()
 
                 item {
@@ -431,6 +428,7 @@ fun GrowthScreen(
             }
         }
     }
+}
 }
 
 private fun Int.formatCompactNumber(): String = when {

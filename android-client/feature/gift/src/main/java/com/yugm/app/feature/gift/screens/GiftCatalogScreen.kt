@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.yugm.app.feature.gift.viewmodel.GiftViewModel
 import com.yugm.app.core.ui.components.YugmLoadingSpinner
+import com.yugm.app.core.ui.components.YugmTopBar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,11 +48,9 @@ fun GiftCatalogScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Gift Catalog") },
-                navigationIcon = {
-                    TextButton(onClick = onBack) { Text("< Back") }
-                }
+            YugmTopBar(
+                title = "Gift Catalog",
+                onBack = onBack,
             )
         }
     ) { padding ->

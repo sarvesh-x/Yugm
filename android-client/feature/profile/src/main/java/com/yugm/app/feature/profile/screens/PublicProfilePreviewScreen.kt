@@ -2,6 +2,7 @@ package com.yugm.app.feature.profile.screens
 
 import com.yugm.app.core.api.SyncTopic
 import com.yugm.app.core.ui.components.AutomaticSyncEffect
+import com.yugm.app.core.ui.components.YugmTopBar
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -10,7 +11,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
@@ -49,18 +49,9 @@ fun PublicProfilePreviewScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Public Profile Preview", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Black)
-                        Text("How others see your profile", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = TextPrimary)
-                    }
-                },
+            YugmTopBar(
+                title = "Public Profile Preview",
+                onBack = onBack,
                 actions = {
                     TextButton(onClick = onOpenCustomize) {
                         Icon(Icons.Filled.Edit, contentDescription = null, tint = Gold, modifier = Modifier.size(16.dp))
@@ -68,7 +59,6 @@ fun PublicProfilePreviewScreen(
                         Text("Customize", color = Gold, fontWeight = FontWeight.Bold)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
             )
         },
         bottomBar = {

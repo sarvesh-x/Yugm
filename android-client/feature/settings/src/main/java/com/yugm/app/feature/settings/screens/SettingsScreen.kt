@@ -170,26 +170,14 @@ fun SettingsScreen(
         Scaffold(
             topBar = {
                 if (pane == SettingsPane.About) {
-                    CenterAlignedTopAppBar(
-                        title = { Text("About", color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Bold) },
-                        navigationIcon = {
-                            TextButton(onClick = { pane = SettingsPane.Home }) {
-                                Box(Modifier.size(42.dp).clip(CircleShape).background(LocalYugmColors.current.surface), contentAlignment = Alignment.Center) {
-                                    Text("←", color = LocalYugmColors.current.textPrimary, fontSize = 24.sp)
-                                }
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                    YugmTopBar(
+                        title = "About",
+                        onBack = { pane = SettingsPane.Home }
                     )
                 } else {
-                    TopAppBar(
-                        title = { Text(paneTitle(pane), color = LocalYugmColors.current.textPrimary, fontWeight = FontWeight.Black) },
-                        navigationIcon = {
-                            TextButton(onClick = { if (pane == SettingsPane.Home) onBack() else pane = SettingsPane.Home }) {
-                                Text("Back", color = LocalYugmColors.current.secondary, fontWeight = FontWeight.Bold)
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                    YugmTopBar(
+                        title = paneTitle(pane),
+                        onBack = { if (pane == SettingsPane.Home) onBack() else pane = SettingsPane.Home }
                     )
                 }
             },

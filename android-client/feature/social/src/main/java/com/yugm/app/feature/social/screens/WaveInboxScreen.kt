@@ -33,6 +33,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ExperimentalMaterial3Api
+import com.yugm.app.core.ui.components.YugmTopBar
+import androidx.compose.ui.graphics.Color
 import com.yugm.app.core.api.SocialApi
 import com.yugm.app.core.model.WaveNudge
 import com.yugm.app.core.ui.components.Avatar

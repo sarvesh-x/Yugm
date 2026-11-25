@@ -10,14 +10,14 @@ import { sendD1DirectMessage } from "./d1MessageSend.js";
 import { d1UserId, person, personJson, visiblePerson } from "./d1People.js";
 import { enforceD1UserRateLimit, type D1UserRateLimit } from "./d1UserRateLimit.js";
 
-type InboxMessage = {
+export type InboxMessage = {
   source_id: string; message: string; sender_json: string; receiver_json: string; room_id: string | null;
   media_url: string; media_type: string; duration: number; forwarded: number; is_edited: number; read: number;
   created_at: string | null; updated_at: string | null; edited_at: string | null; reactions_json: string;
   reply_to_message_id: string; reply_to_author: string; reply_to_author_id: string | null; reply_to_text: string; reply_to_media_url: string;
 };
 
-function presentMessage(row: InboxMessage) {
+export function presentD1InboxMessage(row: InboxMessage) {
   return {
     _id: row.source_id, senderId: person(row.sender_json), receiverId: person(row.receiver_json),
     roomId: row.room_id ?? undefined, message: row.message, mediaUrl: row.media_url, mediaType: row.media_type,
@@ -59,7 +59,7 @@ function pageLimit(value: unknown, max: number) {
 }
 
 function pageOfMessages(rows: InboxMessage[], limit: number, chronological = false) {
-  const messages = rows.slice(0, limit).map(presentMessage);
+  const messages = rows.slice(0, limit).map(presentD1InboxMessage);
   const nextBefore = messages.at(-1)?.createdAt ?? null;
   if (chronological) messages.reverse();
   return { messages, hasMore: rows.length > limit, nextBefore };
@@ -143,7 +143,7 @@ export function createD1InboxRouter(db: D1Database, allowDirectMessage?: D1UserR
     const { message, relationship, xpGrant } = await sendD1DirectMessage<InboxMessage>(
       db, claims, recipient, req.body ?? {}, id => db.prepare(`${messageList} WHERE m.source_id = ?`).bind(id)
     );
-    sendOk(res, { message: presentMessage(message), relationship, xpGrant }, 201);
+    sendOk(res, { message: presentD1InboxMessage(message), relationship, xpGrant }, 201);
   }));
 
   router.put("/:userId/mute", asyncHandler(async (req, res) => {

@@ -1,5 +1,29 @@
 # Development progress
 
+## 2026-11-25 — D1 direct-send-gift
+
+- Mounted `POST /api/direct-send-gift` with the legacy validation order, VIP and interact guards, coin and diamond debit/credit ledgers and creator-share pricing. The gift transaction, both ledger rows, balance updates and profile marker clears commit in one guarded batch; XP, relationship XP, DM and notification are non-fatal post-commit side effects. The audit reports 254 shared and 384 legacy-only patterns. [Verification and remaining work](handoffs/2026-11-25-d1-direct-send-gift.md)
+
+## 2026-11-25 — D1 subscriptions
+
+- Mounted all five `/api/subscriptions` routes. Prices, expiry, validation order and response shape match the legacy contract. The wallet debit, subscription and creator notification commit in one guarded D1 batch with a `SUBSCRIPTION` ledger row; `0023_subscription_unique.sql` closes the concurrent duplicate race. The audit reports 253 shared and 385 legacy-only patterns. [Verification and remaining work](handoffs/2026-11-25-d1-subscriptions.md)
+
+## 2026-11-25 — D1 referrals
+
+- Mounted all four `/api/referrals` routes. Code generation keeps the legacy prefix/random suffix, claim validation preserves the legacy order, replay returns the legacy success message, and both 100-coin credits commit with the referral in one guarded batch. Added `0022_referral_unique.sql`. [Verification and remaining work](handoffs/2026-11-25-d1-referrals.md)
+
+## 2026-11-25 — D1 battle pass
+
+- Mounted all three `/api/battle-pass` routes. Active-season creation preserves legacy monthly keys and imported pass IDs; purchase debits 999 coins in one guarded batch; claims grant coins, diamonds, cosmetics, titles or XP with legacy idempotency keys. Battle-pass XP rewards no longer create recursive battle-pass grants. The audit reports 244 shared and 394 legacy-only patterns. [Verification and remaining work](handoffs/2026-11-25-d1-battle-pass.md)
+
+## 2026-11-25 — D1 missions
+
+- Mounted all four `/api/missions` routes. Moved the mission catalog to a host-neutral seed module that the legacy model re-exports, preserving lazy seeding without importing Mongoose into the Worker. Progress upserts use the new `0021_user_mission_unique.sql` key; claims grant XP and coins under one guarded D1 batch with the legacy idempotency keys. The audit reports 241 shared and 397 legacy-only patterns. [Verification and remaining work](handoffs/2026-11-25-d1-missions.md)
+
+## 2026-11-25 — D1 feed, highlights, comments and wishlist
+
+- Mounted the feed, gift leaderboard, story-comment deletion, fail-closed inventory trade, all six highlight routes and all five wishlist routes. Wishlist sends use one guarded D1 batch for the debit, creator-share credit, charm XP, gift transaction and item deletion. Comment deletion removes replies because D1 enforces the self reference; the legacy handler left them orphaned. Added `0020_wishlist_unique.sql`. The audit reports 237 shared and 401 legacy-only patterns; `/api/badge-art` remains legacy-only pending the R2 badge cutover. [Verification and remaining work](handoffs/2026-11-25-d1-feed-highlights-wishlist.md)
+
 ## 2026-11-25 — D1 route coverage checkpoint
 
 - Reconciled the migration trackers and local/hosted runbooks with the route audit. It reports 222 shared patterns, 416 legacy-only patterns, all 59 room patterns and 15 of 215 admin patterns. [Coverage, migrations and remaining work](handoffs/2026-11-25-d1-route-coverage-checkpoint.md)

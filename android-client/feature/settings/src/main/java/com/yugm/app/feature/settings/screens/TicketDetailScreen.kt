@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yugm.app.core.model.SupportTicket
 import com.yugm.app.core.model.TicketMessage
+import com.yugm.app.core.ui.components.YugmTopBar
 import com.yugm.app.core.ui.theme.*
 import com.yugm.app.feature.settings.viewmodel.SupportViewModel
 import com.yugm.app.core.util.UiState
@@ -55,13 +56,9 @@ fun TicketDetailScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Ticket", color = Color.White, fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text("Back", color = Gold, fontWeight = FontWeight.Bold)
-                    }
-                },
+            YugmTopBar(
+                title = "Ticket",
+                onBack = onBack,
                 actions = {
                     ticket?.let { t ->
                         if (t.status != "CLOSED") {
@@ -73,8 +70,7 @@ fun TicketDetailScreen(
                             }
                         }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
+                }
             )
         },
         containerColor = Background

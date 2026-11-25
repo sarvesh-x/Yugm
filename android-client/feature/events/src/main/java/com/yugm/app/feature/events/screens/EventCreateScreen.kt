@@ -38,6 +38,8 @@ import com.yugm.app.core.ui.theme.PrimaryPurple
 import com.yugm.app.core.ui.theme.TextMuted
 import com.yugm.app.core.ui.theme.TextPrimary
 
+import com.yugm.app.core.ui.components.YugmTopBar
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EventCreateScreen(
@@ -62,14 +64,9 @@ fun EventCreateScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Create Event", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text("Back", color = TextPrimary)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
+            YugmTopBar(
+                title = "Create Event",
+                onBack = onBack
             )
         },
         containerColor = Background

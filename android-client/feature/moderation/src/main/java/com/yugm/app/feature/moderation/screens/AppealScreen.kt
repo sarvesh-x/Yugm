@@ -16,6 +16,8 @@ import com.yugm.app.feature.moderation.viewmodel.ModerationAction
 import com.yugm.app.feature.moderation.viewmodel.ModerationViewModel
 import com.yugm.app.core.ui.components.YugmLoadingSpinner
 
+import com.yugm.app.core.ui.components.YugmTopBar
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppealScreen(
@@ -31,11 +33,9 @@ fun AppealScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Appeal", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    TextButton(onClick = onBack) { Text("Back", color = MaterialTheme.colorScheme.primary) }
-                },
+            YugmTopBar(
+                title = "Appeal",
+                onBack = onBack
             )
         },
         containerColor = MaterialTheme.colorScheme.background,

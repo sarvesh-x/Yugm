@@ -28,7 +28,7 @@ import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Flag
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.runtime.*
@@ -961,7 +961,7 @@ private fun EditProfilePage(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onClose, enabled = !isBusy, modifier = Modifier.size(42.dp).clip(CircleShape).background(colors.surfaceElevated)) {
-                Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = colors.textPrimary)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = colors.textPrimary)
             }
             Text("Edit Profile", color = colors.textPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).padding(start = 12.dp))
             IconButton(onClick = onChangePassword, enabled = !isBusy) {

@@ -20,6 +20,8 @@ import com.yugm.app.core.ui.theme.*
 import com.yugm.app.feature.social.viewmodel.SocialViewModel
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 
+import com.yugm.app.core.ui.components.YugmTopBar
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SafetyScreen(
@@ -35,14 +37,9 @@ fun SafetyScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Safety & Moderation", color = Color.White, fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text("Back", color = Gold, fontWeight = FontWeight.Bold)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
+            YugmTopBar(
+                title = "Safety & Moderation",
+                onBack = onBack
             )
         },
         containerColor = Background

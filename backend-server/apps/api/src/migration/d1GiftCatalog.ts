@@ -1,8 +1,11 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import { Router } from "express";
+import { z } from "zod";
 import { requireHttpSession } from "../middleware/httpAccessSession.js";
-import { asyncHandler, sendOk } from "../utils/http.js";
+import { validateBody } from "../middleware/validate.js";
+import { asyncHandler, ErrorCode, HttpError, isValidObjectId, sendOk } from "../utils/http.js";
 import { createD1AccessSessionReader } from "./d1AccessSession.js";
+import { person, personJson } from "./d1People.js";
 
 type GiftRow = {
   source_id: string; name: string; icon: string; coin_price: number; diamond_price: number; pk_points: number;
@@ -21,6 +24,34 @@ type InventoryRow = GiftRow & {
   inventory_id: string; inventory_source: string; inventory_tradable: number; quantity: number; upgrade_level: number;
 };
 type CollectionGift = GiftRow & { collection: string };
+type LeaderboardRow = { party_id: string; total_coins: number; gift_count: number; user_json: string | null };
+
+const tradeGiftSchema = z.object({
+  targetUserId: z.string().min(1),
+  offerItems: z.array(z.string().min(1)).min(1).max(20),
+  requestItems: z.array(z.string().min(1)).min(1).max(20)
+});
+
+function periodStart(period: string) {
+  if (period === "daily") {
+    const start = new Date(); start.setHours(0, 0, 0, 0); return start.toISOString();
+  }
+  if (period === "weekly") {
+    const start = new Date(); start.setDate(start.getDate() - start.getDay()); start.setHours(0, 0, 0, 0);
+    return start.toISOString();
+  }
+  if (period === "monthly") {
+    const start = new Date(); start.setDate(1); start.setHours(0, 0, 0, 0); return start.toISOString();
+  }
+  return null;
+}
+
+function leaderboardEntry(row: LeaderboardRow) {
+  return {
+    _id: row.party_id, totalCoins: row.total_coins, giftCount: row.gift_count,
+    ...(row.user_json ? { user: person(row.user_json) } : {})
+  };
+}
 
 const available = "g.is_active = 1 AND g.category <> 'bonds' AND (g.expires_at IS NULL OR g.expires_at > ?)";
 const projection = `g.*, (SELECT json_group_array(value) FROM (
@@ -102,6 +133,35 @@ export function createD1GiftCatalogRouter(db: D1Database) {
       tradable: Boolean(row.inventory_tradable), source: row.inventory_source, upgradeLevel: row.upgrade_level,
       upgradeCost: row.upgradeable ? Math.floor(row.coin_price * 1.5) : 0
     })) });
+  }));
+
+  router.get("/gift-leaderboard", authenticate, asyncHandler(async (req, res) => {
+    const period = typeof req.query.period === "string" && req.query.period ? req.query.period : "all";
+    const limit = Math.trunc(Math.min(Math.max(Number(req.query.limit) || 20, 1), 50));
+    const skip = Math.trunc(Math.max(Number(req.query.skip) || 0, 0));
+    const since = periodStart(period);
+    const read = (party: "sender_id" | "receiver_id") => db.prepare(`SELECT g.${party} AS party_id,
+        SUM(g.coin_amount) AS total_coins, COUNT(*) AS gift_count,
+        CASE WHEN u.source_id IS NULL THEN NULL ELSE ${personJson("u")} END AS user_json
+      FROM gift_transactions AS g LEFT JOIN users AS u ON u.source_id = g.${party}
+      WHERE (?1 IS NULL OR g.created_at >= ?1)
+      GROUP BY g.${party} ORDER BY total_coins DESC, party_id LIMIT ?2 OFFSET ?3`)
+      .bind(since, limit, skip).all<LeaderboardRow>()
+      .then(result => result.results.map(leaderboardEntry));
+    const [topSenders, topReceivers] = await Promise.all([read("sender_id"), read("receiver_id")]);
+    sendOk(res, { topSenders, topReceivers, period });
+  }));
+
+  router.post("/inventory/trade", authenticate, validateBody(tradeGiftSchema), asyncHandler(async (req, res) => {
+    const { targetUserId, offerItems, requestItems } = req.body as z.infer<typeof tradeGiftSchema>;
+    if (!isValidObjectId(targetUserId)) throw new HttpError(400, "Invalid targetUserId", ErrorCode.VALIDATION);
+    for (const id of [...offerItems, ...requestItems]) {
+      if (!isValidObjectId(id)) throw new HttpError(400, "Invalid inventory item ID", ErrorCode.VALIDATION);
+    }
+    // The legacy endpoint stays fail-closed until an authenticated offer/accept workflow exists.
+    throw new HttpError(409,
+      "Inventory trades require acceptance from both users and are currently unavailable. Your items have not moved.",
+      ErrorCode.CONFLICT);
   }));
   return router;
 }

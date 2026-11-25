@@ -4,7 +4,6 @@ import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.net.NetworkRequest
 import android.os.Build
 import android.os.Bundle
 import android.Manifest
@@ -42,8 +41,6 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import com.yugm.app.core.api.YugmApi
 import com.yugm.app.core.api.YugmMediaRoom
 import com.yugm.app.core.api.ApiHttpException
-import com.yugm.app.core.model.CoinPack
-import com.yugm.app.core.model.RazorpayCheckoutData
 import com.yugm.app.core.api.YugmHttpClient
 import com.yugm.app.navigation.NavGraph
 import com.yugm.app.core.navigation.PushNavigation
@@ -59,17 +56,15 @@ import com.yugm.app.payments.GooglePlayBillingManager
 import com.razorpay.PaymentData
 import com.razorpay.PaymentResultWithDataListener
 import com.google.firebase.FirebaseApp
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
+import kotlin.time.Duration.Companion.seconds
 import javax.inject.Inject
 
-private const val TAG = "MainActivity"
 private const val NAVIGATION_ACCOUNT_ID = "yugm.navigation_account_id"
 
 @AndroidEntryPoint
@@ -110,7 +105,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                 else -> isSystemInDarkTheme()
             }
             LaunchedEffect(darkTheme) {
-                androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)?.apply {
+                androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
                     isAppearanceLightStatusBars = !darkTheme
                     isAppearanceLightNavigationBars = !darkTheme
                 }
@@ -129,7 +124,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                 val inAppNotification = mainViewModel.inAppNotification
                 LaunchedEffect(inAppNotification?.id) {
                     if (inAppNotification != null) {
-                        kotlinx.coroutines.delay(5_000)
+                        kotlinx.coroutines.delay(5.seconds)
                         mainViewModel.dismissInAppNotification()
                     }
                 }
@@ -264,6 +259,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                                 savedInstanceState.getString(NAVIGATION_ACCOUNT_ID) != navigationAccountId())) {
                             navController.restoreState(Bundle())
                         }
+                        true
                     }
                     NavGraph(
                         navController = navController,

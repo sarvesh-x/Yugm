@@ -18,6 +18,8 @@ interface GrantInput {
   lastDailyCheckInAt?: string;
   balanceBefore: number;
   cap?: { capped: boolean; cap: number; earnedToday: number; remainingToday: number };
+  /** Battle-pass XP rewards must not create another battle-pass XP grant. */
+  skipBattlePass?: boolean;
 }
 
 const activeSeason = `SELECT source_id, name, end_date, max_level FROM seasons
@@ -76,7 +78,7 @@ function battlePassStatements(write: D1GuardedStatement, guard: string, userId: 
 /** Stage XP and its progression effects under the caller's in-batch operation claim. */
 export function prepareD1XpGrant(write: D1GuardedStatement, guard: string, now: Date, input: GrantInput) {
   const { userId, event, actionKey, requestedXp, xpAwarded, previousXp, previousLevel,
-    lastDailyCheckInAt, balanceBefore, cap } = input;
+    lastDailyCheckInAt, balanceBefore, cap, skipBattlePass } = input;
   const time = now.toISOString();
   const xp = previousXp + xpAwarded;
   if (!Number.isSafeInteger(xp)) throw new HttpError(409, "XP requires reconciliation", ErrorCode.CONFLICT);
@@ -108,6 +110,6 @@ export function prepareD1XpGrant(write: D1GuardedStatement, guard: string, now: 
     newId(), userId, `You reached Level ${level.level}: ${level.title}.`,
     JSON.stringify({ type: "LEVEL_UP", level: level.level, reward: levelUpReward }), time, time));
   }
-  if (xpAwarded > 0) statements.push(...battlePassStatements(write, guard, userId, actionKey, event, xpAwarded, now));
+  if (xpAwarded > 0 && !skipBattlePass) statements.push(...battlePassStatements(write, guard, userId, actionKey, event, xpAwarded, now));
   return { xpGrant, columns, statements };
 }
