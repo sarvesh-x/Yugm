@@ -35,6 +35,7 @@ import { verifyD1Reports } from "./d1-reports.mjs";
 import { verifyD1RoomInvites } from "./d1-room-invites.mjs";
 import { verifyD1RoomGifts } from "./d1-room-gifts.mjs";
 import { verifyD1RoomMessages } from "./d1-room-messages.mjs";
+import { verifyD1InboxMutations } from "./d1-inbox-mutations.mjs";
 import { verifyD1RoomModes } from "./d1-room-modes.mjs";
 import { verifyD1RoomPkHistory } from "./d1-room-pk-history.mjs";
 import { verifyD1RoomPolls } from "./d1-room-polls.mjs";
@@ -225,7 +226,7 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
       "0023_subscription_unique", "0024_event_participants_unique", "0025_dating_swipes",
       "0026_vibe_graph_unique", "0027_group_participants_unique", "0028_story_views_unique", "0029_social_unique",
       "0030_experience_claim_unique", "0031_admin_account_indexes", "0032_asset_registry_indexes", "0033_report_admin_reviewer",
-      "0034_admin_purchase_refunds"];
+      "0034_admin_purchase_refunds", "0035_direct_message_reaction_catalog"];
     for (const file of runtimeMigrations) {
       const migration = await readFile(pathFromHere(`../../api/migrations/d1/${file}.sql`), "utf8");
       await db.batch(unstable_splitSqlQuery(migration).map(sql => db.prepare(sql)));
@@ -902,6 +903,7 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     await verifyD1Vibe(db, request, feedOwner, feedVisitor);
     await verifyD1Groups(db, request, feedOwner, feedVisitor, returning);
     await verifyD1Stories(db, request, returning, feedVisitor, chatHost);
+    await verifyD1InboxMutations(db, request, feedOwner, feedVisitor, chatGuest);
     await verifyD1Moderation(db, request, returning);
     await verifyD1Maintenance(worker, db, returning, visitor);
 

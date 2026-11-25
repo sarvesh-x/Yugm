@@ -5,6 +5,7 @@ import type { z } from "zod";
 import { authClientIpHeader } from "../middleware/authRateLimitKeys.js";
 import { requireHttpSession } from "../middleware/httpAccessSession.js";
 import { validateBody } from "../middleware/validate.js";
+import type { AccessClaims } from "../services/accessSession.js";
 import { addMessageSchema, createTicketSchema, publicRequestSchema } from "../services/supportContract.js";
 import { asyncHandler, ErrorCode, HttpError, isValidObjectId, sendOk } from "../utils/http.js";
 import { bindD1LiveUser, createD1AccessSessionReader, d1LiveUserFilter } from "./d1AccessSession.js";
@@ -20,6 +21,24 @@ const readThread = `SELECT t.*, (SELECT json_group_array(json_object('_id', sour
   )) AS messages_json FROM support_tickets AS t`;
 const ticketNotFound = () => new HttpError(404, "Ticket not found", ErrorCode.VALIDATION);
 const present = (row: Thread) => ticketJson(row, JSON.parse(row.messages_json));
+
+export async function createD1OwnedTicket(db: D1Database, claims: AccessClaims, input: {
+  subject: string; message: string; category: string; priority: string;
+}, trackLastMessage = false) {
+  const ticket = id();
+  const time = new Date().toISOString();
+  const [created, , stored] = await db.batch<Thread>([
+    db.prepare(`INSERT INTO support_tickets (source_id, user_id, subject, message, category, priority, status,
+      last_message_at, created_at, updated_at) SELECT ?, ?, ?, ?, ?, ?, 'OPEN', ?, ?, ? WHERE ${liveOwner}`)
+      .bind(ticket, claims.sub, input.subject, input.message, input.category, input.priority,
+        trackLastMessage ? time : null, time, time, ...bindD1LiveUser(claims, time)),
+    db.prepare(`INSERT INTO support_ticket_messages (source_id, sender_id, sender_role, message, created_at, support_tickets_id, position)
+      SELECT ?, user_id, 'USER', message, created_at, source_id, 0 FROM support_tickets WHERE source_id = ?`).bind(id(), ticket),
+    db.prepare(`${readThread} WHERE t.source_id = ?`).bind(ticket)
+  ]);
+  if (!created.meta.changes) throw new HttpError(401, "Session revoked", ErrorCode.UNAUTHORIZED);
+  return present(stored.results[0]);
+}
 
 function ticketId(value: string) {
   if (!isValidObjectId(value)) throw new HttpError(400, "Invalid ticket ID", ErrorCode.VALIDATION);
@@ -58,19 +77,8 @@ export function createD1SupportRouter(db: D1Database, publicRequestLimit?: D1Use
   }));
 
   router.post("/tickets", requireOwner, validateBody(createTicketSchema), asyncHandler(async (req, res) => {
-    const { user, claims } = res.locals.supportSession as Awaited<ReturnType<typeof authenticate>>;
-    const { subject, message, category, priority } = req.body as z.infer<typeof createTicketSchema>;
-    const ticket = id();
-    const time = new Date().toISOString();
-    const [created] = await db.batch([
-      db.prepare(`INSERT INTO support_tickets (source_id, user_id, subject, message, category, priority, status, created_at, updated_at)
-        SELECT ?, ?, ?, ?, ?, ?, 'OPEN', ?, ? WHERE ${liveOwner}`)
-        .bind(ticket, user.id, subject, message, category, priority, time, time, ...bindD1LiveUser(claims, time)),
-      db.prepare(`INSERT INTO support_ticket_messages (source_id, sender_id, sender_role, message, created_at, support_tickets_id, position)
-        SELECT ?, user_id, 'USER', message, created_at, source_id, 0 FROM support_tickets WHERE source_id = ?`).bind(id(), ticket)
-    ]);
-    if (!created.meta.changes) throw new HttpError(401, "Session revoked", ErrorCode.UNAUTHORIZED);
-    sendOk(res, { ticket: present(await readOwned(user.id, ticket)) }, 201);
+    const { claims } = res.locals.supportSession as Awaited<ReturnType<typeof authenticate>>;
+    sendOk(res, { ticket: await createD1OwnedTicket(db, claims, req.body as z.infer<typeof createTicketSchema>) }, 201);
   }));
 
   router.get("/tickets", asyncHandler(async (req, res) => {

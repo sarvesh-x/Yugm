@@ -1,5 +1,9 @@
 # Development progress
 
+## 2026-11-25 — D1 inbox and profile activity
+
+- Mounted five inbox mutation routes and three profile routes. The route audit reports 542 of 638 legacy patterns mounted, with 96 remaining outside admin. Applied `0035` to the backed-up recovered emulator database and confirmed no pending migrations. Backend typechecking and both Worker suites passed. [Routes and verification](handoffs/2026-11-25-d1-inbox-profile-activity.md)
+
 ## 2026-11-25 — D1 admin route coverage
 
 - Added the final 81 admin patterns plus badge and reaction art delivery. The audit reports 215 of 215 admin patterns and 534 of 638 legacy patterns overall. Admin sessions use local credentials in debug and Firebase in the hosted Worker. D1 keeps wallet and finance transitions, and R2 holds managed and protected media. Applied migrations `0020`–`0034` to the backed-up local emulator database. [Setup and verification](handoffs/2026-11-25-d1-admin-auth-and-media.md)

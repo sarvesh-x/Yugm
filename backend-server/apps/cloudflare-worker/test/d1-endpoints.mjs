@@ -23,6 +23,42 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor) {
   const requestAs = (account, path, status, options = {}) =>
     request(path, status, { accessToken: account.accessToken, ...options });
 
+  const visits = `/api/users/${ownerId}/visitors`;
+  await request(visits, 401);
+  await requestAs(visitor, visits, 403);
+  const priorVip = await db.prepare("SELECT vip_level, vip_tier, vip_expires_at, vip_frozen FROM users WHERE source_id = ?").bind(ownerId).first();
+  await db.prepare("UPDATE users SET vip_level = 0, vip_tier = NULL, vip_expires_at = NULL, vip_frozen = 0 WHERE source_id = ?").bind(ownerId).run();
+  await requestAs(owner, visits, 403);
+  await db.prepare("UPDATE users SET vip_level = 1, vip_tier = 'VIP1', vip_expires_at = ?, vip_frozen = 0 WHERE source_id = ?")
+    .bind(new Date(now.getTime() + 86_400_000).toISOString(), ownerId).run();
+  try {
+    await db.prepare(`INSERT INTO profile_visits (source_id, profile_id, visitor_id, last_visited_at)
+      VALUES (?, ?, ?, ?) ON CONFLICT(profile_id, visitor_id) DO UPDATE SET last_visited_at = excluded.last_visited_at`)
+      .bind(newId(), ownerId, visitorId, time).run();
+    const listed = (await requestAs(owner, visits, 200)).data.users;
+    assert.ok(listed.some(user => user._id === visitorId && user.visitedAt === time));
+  } finally {
+    await db.prepare("UPDATE users SET vip_level = ?, vip_tier = ?, vip_expires_at = ?, vip_frozen = ? WHERE source_id = ?")
+      .bind(priorVip.vip_level, priorVip.vip_tier, priorVip.vip_expires_at, priorVip.vip_frozen, ownerId).run();
+  }
+  const stats = (await requestAs(owner, `/api/users/${visitorId}/stats`, 200)).data;
+  assert.equal(stats.roomsHosted, await db.prepare("SELECT COUNT(*) AS count FROM rooms WHERE host_id = ?").bind(visitorId).first("count"));
+  assert.equal(stats.roomsLive, await db.prepare("SELECT COUNT(*) AS count FROM rooms WHERE host_id = ? AND status = 'LIVE'").bind(visitorId).first("count"));
+  const feedback = (await requestAs(owner, "/api/users/me/feedback", 201, {
+    body: { category: "BUG", subject: "Fixture support question", message: "Fixture feedback message." }
+  })).data.ticket;
+  try {
+    assert.equal(feedback.category, "Technical");
+    assert.equal(feedback.messages[0].senderId, ownerId);
+    assert.equal((await requestAs(owner, `/api/support/tickets/${feedback._id}`, 200)).data.ticket.lastMessageAt, feedback.lastMessageAt);
+    await requestAs(visitor, `/api/support/tickets/${feedback._id}`, 404);
+  } finally {
+    await db.batch([
+      db.prepare("DELETE FROM support_ticket_messages WHERE support_tickets_id = ?").bind(feedback._id),
+      db.prepare("DELETE FROM support_tickets WHERE source_id = ?").bind(feedback._id)
+    ]);
+  }
+
   const deviceToken = "fixture-device-" + newId();
   const device = "/api/notifications/device-token";
   await request(device, 401, { body: { token: deviceToken, platform: "android" } });

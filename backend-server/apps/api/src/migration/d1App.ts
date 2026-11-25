@@ -54,6 +54,7 @@ import { createD1MissionsRouter } from "./d1Missions.js";
 import { createD1ModerationRouter } from "./d1Moderation.js";
 import { createD1NotificationRouter } from "./d1Notifications.js";
 import { createD1ProfileEditRouter } from "./d1ProfileEdits.js";
+import { createD1ProfileActivityRouter } from "./d1ProfileActivity.js";
 import { createD1ProgressionRouter } from "./d1Progression.js";
 import { createD1ReferralsRouter } from "./d1Referrals.js";
 import { createD1ReportsRouter } from "./d1Reports.js";
@@ -131,6 +132,7 @@ export function createD1App(
   app.use("/api/badge-art", createD1BadgeArtRouter(db, media?.buckets.assets));
   app.use("/api/reaction-art", createD1ReactionArtRouter(db, media?.buckets.assets));
   app.use("/api/users", createD1ProfileEditRouter(db));
+  app.use("/api/users", createD1ProfileActivityRouter(db));
   app.use("/api", createD1ProgressionRouter(db));
   app.use("/api/users/messages", createD1InboxRouter(db, limits.chat));
   app.use("/api", createD1SocialRouter(db));

@@ -92,6 +92,7 @@ The production audit documents explain their baselines and verification limits. 
 - [D1 Arcade read routes](handoffs/2026-11-25-d1-games-reads.md)
 - [D1 social features](handoffs/2026-11-25-d1-social-features.md)
 - [D1 experience routes](handoffs/2026-11-25-d1-experience.md)
+- [D1 inbox mutations and profile activity](handoffs/2026-11-25-d1-inbox-profile-activity.md)
 - [D1 admin route coverage, setup and verification](handoffs/2026-11-25-d1-admin-auth-and-media.md)
 - [D1 dashboard, finance reads and catalog operations](handoffs/2026-11-25-d1-admin-operations.md)
 - [D1 admin core routes](handoffs/2026-11-25-d1-admin-core.md)
