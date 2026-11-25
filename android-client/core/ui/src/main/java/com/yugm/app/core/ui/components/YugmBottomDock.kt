@@ -1,21 +1,17 @@
 package com.yugm.app.core.ui.components
 
 import android.view.HapticFeedbackConstants
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
@@ -34,20 +30,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Outline
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.asAndroidPath
-import androidx.compose.ui.graphics.ClipOp
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipPath
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
@@ -55,15 +47,11 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected as selectedSemantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.Density
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -73,62 +61,35 @@ import com.yugm.app.core.ui.avatar.AvatarDescriptor
 import com.yugm.app.core.ui.avatar.AvatarParts
 import com.yugm.app.core.ui.avatar.GeneratedAvatar
 import com.yugm.app.core.ui.theme.*
+import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.seconds
+import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.roundToInt
 
-// ===========================================================================
-// SINGLE COORDINATE SYSTEM
-// ===========================================================================
-// The dock is laid out in a single Box of height = topPadding + barHeight + bottomInset.
-//
-//   y=0 ──────────────────────────────────────────────  (dock top)
-//   y=topPadding ──────────────────────────────────────  (surface top / circle center)
-//   y=topPadding+barHeight ────────────────────────────  (bar bottom)
-//   y=totalDockHeight ─────────────────────────────────  (physical bottom)
-//
-// Regions:
-//   [0, topPadding)          : cradle zone — active circle center sits at y=topPadding
-//   [topPadding, topPadding+barHeight): bar content area (icons + labels)
-//   [topPadding+barHeight, totalDockHeight): system nav inset (filled by surface color)
-//
-// The concave notch (cradle) is cut into the surface from y=topPadding down to
-// y=topPadding+notchDepth, centered at the active tab's X position.
-//
-// Responsibilities are separated into distinct composable layers:
-//   1. DockBackground  — Canvas drawing the curved surface path
-//   2. ActiveIndicator — elevated circle with gradient + icon
-//   3. TabRow          — icons + labels + badges per tab
-//   4. TouchTargets    — selectable modifiers on each tab Box
-//   5. InsetHandling   — bottomInset in totalDockHeight
-// ===========================================================================
+// Painted surface height for bottom content clearance calculations.
+val YugmBottomDockBarHeight = 72.dp
 
-// Painted surface height (bar only) — bottomInset is added at runtime by MainTabsScreen.
-// The transparent cradle zone (topPadding) is NOT included; content extends behind it.
-val YugmBottomDockBarHeight = 55.dp
+// Active circle is self-contained within the dock height.
+val YugmBottomDockActiveIconProtrusion = 0.dp
 
-// Active circle protrudes this much above the painted surface top.
-val YugmBottomDockActiveIconProtrusion = 25.dp
-
-// Extra breathing room so the last item clears the dock comfortably.
+// Extra breathing room so content clears the dock comfortably.
 val YugmBottomDockBreathingSpace = 12.dp
 
 /**
  * Bottom content clearance for scrollable containers in main tabs where the dock is visible.
  * Ensures the last interactive item can scroll fully above the highest point of the dock.
- *
- * Clearance = painted bar height + active icon protrusion + system nav inset + breathing space.
- * Use as LazyColumn/LazyGrid contentPadding bottom, or as trailing padding in verticalScroll.
  */
 @Composable
-fun mainDockBottomClearance(): androidx.compose.ui.unit.Dp {
+fun mainDockBottomClearance(): Dp {
     val navBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     return YugmBottomDockBarHeight + YugmBottomDockActiveIconProtrusion + navBarInset + YugmBottomDockBreathingSpace
 }
 
 /**
  * CompositionLocal providing the dock bottom clearance for main tabs. 0.dp when dock is not shown.
- * Prefer [mainDockBottomClearance] or read this local in tab screens to keep padding consistent.
  */
-val LocalMainDockBottomClearance = androidx.compose.runtime.compositionLocalOf { 0.dp }
+val LocalMainDockBottomClearance = compositionLocalOf { 0.dp }
 
 private data class MainDockItem(
     val tab: YugmDockTab,
@@ -139,8 +100,18 @@ private data class MainDockItem(
     val accessibilityLabel: String = label,
 )
 
+/**
+ * Yugm Focus Dock — Minimal, backgroundless floating navigation carousel.
+ *
+ * The circular selection ring stays permanently fixed at the horizontal center of the screen,
+ * while all 5 tab icons slide through it as the user navigates or swipes.
+ *
+ * When idle (after 2 seconds of inactivity), inactive icons fade out to transparent (0% opacity).
+ * Only the active icon inside the center ring remains visible.
+ * Swiping content, tapping the center ring, or dragging immediately fades inactive icons back in.
+ */
 @Composable
-fun YugmBottomDock(
+fun YugmFocusDock(
     selected: YugmDockTab,
     modifier: Modifier = Modifier,
     onTabSelected: (YugmDockTab) -> Unit = {},
@@ -149,6 +120,8 @@ fun YugmBottomDock(
     userAvatar: String? = null,
     userAvatarType: String? = null,
     userAvatarParts: AvatarPartsPayload? = null,
+    pagerIndexProvider: (() -> Float)? = null,
+    isScrollingProvider: (() -> Boolean)? = null,
 ) {
     val items = remember {
         listOf(
@@ -162,310 +135,247 @@ fun YugmBottomDock(
 
     val colors = LocalYugmColors.current
     val motionEnabled = LocalMotionEnabled.current
-    val density = LocalDensity.current
-
-    val targetIndex = items.indexOfFirst { it.tab == selected }.coerceAtLeast(0)
-    var previousIndex by remember { androidx.compose.runtime.mutableIntStateOf(targetIndex) }
-    val direction = when {
-        targetIndex > previousIndex -> 1f
-        targetIndex < previousIndex -> -1f
-        else -> 0f
-    }
-
-    // Position: notch/circle slide — responsive spring.
-    val animatedIndex by animateFloatAsState(
-        targetValue = targetIndex.toFloat(),
-        animationSpec = if (motionEnabled) spring(dampingRatio = 0.84f, stiffness = 320f) else snap(),
-        label = "curvedDockPositionIndex"
-    )
-
-    // Content: icon/label crossfade — slightly softer so it settles after the circle arrives.
-    val contentIndex by animateFloatAsState(
-        targetValue = targetIndex.toFloat(),
-        animationSpec = if (motionEnabled) spring(dampingRatio = 0.88f, stiffness = 260f) else snap(),
-        label = "curvedDockContentIndex"
-    )
-
-    // Subtle settle scale on the active circle when selection lands.
-    val settleScale = remember { Animatable(1f) }
-    LaunchedEffect(targetIndex, motionEnabled) {
-        if (previousIndex != targetIndex) {
-            previousIndex = targetIndex
-        }
-        if (!motionEnabled) {
-            settleScale.snapTo(1f)
-        } else {
-            settleScale.snapTo(0.96f)
-            settleScale.animateTo(
-                1f,
-                animationSpec = spring(dampingRatio = 0.55f, stiffness = 500f)
-            )
-        }
-    }
-
-    // === Dimensions (single source of truth) ===
-    // All notch geometry is derived from the active indicator to keep circle and cradle in sync.
-    val activeCircleSize = 50.dp
-    val activeBorderWidth = 2.dp
-    val notchClearance = 3.5.dp
-    val cradleRadius = activeCircleSize / 2 + notchClearance // 28.5dp — includes clearance around indicator
-    val shoulderWidth = 22.dp
-
-    val topPadding = activeCircleSize / 2 + 3.dp   // 28dp: circle center on surface top
-    val labelFontSize = 12.sp
-    val labelLineHeight = 14.sp
-
-    // Label positioned beneath the cradle's deepest point.
-    val labelTop = topPadding + cradleRadius + 4.dp
-
-    // Bar height from label position + measured text height + bottom clearance.
-    val labelSlotHeight = labelLineHeight.value.toInt().dp
-    val bottomClearance = 8.dp
-    val barHeight = (labelTop - topPadding) + labelSlotHeight + bottomClearance
-
-    val activeIconSize = 32.dp
-    val inactiveIconSize = 30.dp
-    val touchTargetMin = 48.dp
-
-    // Reactive inset handling: use Compose WindowInsets directly (no cached view lookup).
-    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val totalDockHeight = topPadding + barHeight + bottomInset
-
-    val dockColor = colors.bottomDockSurface
-    val ringColor = colors.bottomDockSurface
-    val shadowElevation = if (colors.isDark) 5.dp else 7.dp
     val view = LocalView.current
 
+    val selectedIndex = remember(selected) {
+        items.indexOfFirst { it.tab == selected }.coerceAtLeast(0)
+    }
+
+    val rawPagerIndex = pagerIndexProvider?.invoke()
+    val isScrolling = isScrollingProvider?.invoke() ?: false
+
+    val animatedIndex by animateFloatAsState(
+        targetValue = rawPagerIndex ?: selectedIndex.toFloat(),
+        animationSpec = if (motionEnabled) spring(dampingRatio = 0.85f, stiffness = 380f) else snap(),
+        label = "focus_dock_index"
+    )
+
+    val currentIndex = rawPagerIndex ?: animatedIndex
+
+    // Expanded / Idle State
+    var isExpanded by remember { mutableStateOf(true) }
+    var lastInteractionTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
+
+    fun wakeUp() {
+        isExpanded = true
+        lastInteractionTime = System.currentTimeMillis()
+    }
+
+    LaunchedEffect(isScrolling, rawPagerIndex, selectedIndex) {
+        wakeUp()
+    }
+
+    LaunchedEffect(isExpanded, lastInteractionTime) {
+        if (isExpanded) {
+            delay(2.seconds)
+            isExpanded = false
+        }
+    }
+
+    val inactiveAlphaTarget = if (isExpanded) 0.55f else 0.0f
+    val inactiveAlpha by animateFloatAsState(
+        targetValue = inactiveAlphaTarget,
+        animationSpec = tween(durationMillis = if (isExpanded) 200 else 600, easing = FastOutSlowInEasing),
+        label = "focus_dock_inactive_alpha"
+    )
+
+    val navBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
+    // Dimensions
+    val ringDiameter = 72.dp
+    val itemSpacing = 78.dp
+
     val brandGradient = remember {
-        Brush.linearGradient(
+        Brush.horizontalGradient(
             colors = listOf(
-                com.yugm.app.core.ui.theme.OnboardingBrandStart,
-                com.yugm.app.core.ui.theme.OnboardingBrandMiddle,
-                com.yugm.app.core.ui.theme.OnboardingBrandEnd
+                OnboardingBrandStart,
+                OnboardingBrandMiddle,
+                OnboardingBrandEnd
             )
         )
     }
 
-    // === Layout ===
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(totalDockHeight),
-        contentAlignment = Alignment.BottomCenter
+            .padding(bottom = navBarInset + 8.dp)
+            .height(ringDiameter + 16.dp)
+            .selectableGroup(),
+        contentAlignment = Alignment.Center
     ) {
-        BoxWithConstraints(
+        // 1. Fixed Center Ring (Selector)
+        Box(
+            modifier = Modifier
+                .size(ringDiameter)
+                .align(Alignment.Center)
+                .shadow(
+                    elevation = if (colors.isDark) 8.dp else 4.dp,
+                    shape = CircleShape,
+                    ambientColor = OnboardingBrandMiddle.copy(alpha = 0.35f),
+                    spotColor = OnboardingBrandStart.copy(alpha = 0.45f)
+                )
+                .clip(CircleShape)
+                .border(2.dp, brandGradient, CircleShape)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    role = Role.Button
+                ) {
+                    if (view.isHapticFeedbackEnabled) {
+                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    }
+                    if (!isExpanded) {
+                        wakeUp()
+                    } else {
+                        wakeUp()
+                        onTabReselected(items[selectedIndex].tab)
+                    }
+                }
+        )
+
+        // 2. Icon Track (Translates through the fixed center ring)
+        val density = LocalDensity.current
+        val itemSpacingPx = with(density) { itemSpacing.toPx() }
+
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(totalDockHeight)
+                .height(ringDiameter),
+            contentAlignment = Alignment.Center
         ) {
-            val totalWidthPx = constraints.maxWidth.toFloat()
-            val notchXPx = BottomDockGeometry.animatedNotchCenterPx(animatedIndex, totalWidthPx, items.size)
+            items.forEachIndexed { i, item ->
+                val distFromCenter = abs(i - currentIndex)
+                val proximity = (1.0f - distFromCenter.coerceIn(0f, 1f))
 
-            val topPaddingPx = with(density) { topPadding.toPx() }
-            val cradleRadiusPx = with(density) { cradleRadius.toPx() }
-            val shoulderWidthPx = with(density) { shoulderWidth.toPx() }
-            val circleSizePx = with(density) { activeCircleSize.toPx() }
+                // Interpolated size & alpha
+                val iconSize = lerp(32.dp, 58.dp, proximity)
+                val itemAlpha = max(proximity, inactiveAlpha)
 
-            // No additional vertical spring lift: circle stays on the surface top boundary.
-            val liftPx = 0f
+                val xOffsetPx = (i - currentIndex) * itemSpacingPx
 
-            val curvedShape = remember(notchXPx, topPaddingPx, cradleRadiusPx, shoulderWidthPx, constraints.maxWidth, constraints.maxHeight) {
-                CurvedDockShape(
-                    centerX = notchXPx,
-                    topY = topPaddingPx,
-                    cradleRadiusPx = cradleRadiusPx,
-                    shoulderWidthPx = shoulderWidthPx
-                )
-            }
+                Box(
+                    modifier = Modifier
+                        .offset { IntOffset(x = xOffsetPx.roundToInt(), y = 0) }
+                        .size(60.dp)
+                        .clip(CircleShape)
+                        .graphicsLayer {
+                            alpha = itemAlpha
+                        }
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            role = Role.Tab
+                        ) {
+                            wakeUp()
+                            if (view.isHapticFeedbackEnabled) {
+                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                            }
+                            if (item.tab == selected) {
+                                onTabReselected(item.tab)
+                            } else {
+                                onTabSelected(item.tab)
+                            }
+                        }
+                        .semantics {
+                            selectedSemantics = (item.tab == selected)
+                            contentDescription = item.accessibilityLabel
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    val badgeCount = if (item.tab == YugmDockTab.CHAT) chatUnreadCount.coerceAtLeast(0) else 0
 
-            // 1. Background surface — drawn via Canvas (no Shape clipping).
-            DockBackground(
-                curvedShape = curvedShape,
-                dockColor = dockColor,
-                shadowColor = colors.bottomDockShadow,
-                shadowElevationPx = with(density) { shadowElevation.toPx() },
-                outlineColor = colors.bottomDockOutline,
-                modifier = Modifier.fillMaxSize()
-            )
-
-            // 2. Elevated active circular indicator.
-            ActiveIndicator(
-                notchXPx = notchXPx,
-                topPaddingPx = topPaddingPx,
-                circleSizePx = circleSizePx,
-                liftPx = liftPx,
-                brandGradient = brandGradient,
-                ringColor = ringColor,
-                activeIconSize = activeIconSize,
-                items = items,
-                contentIndex = contentIndex,
-                colors = colors,
-                motionEnabled = motionEnabled,
-                userAvatar = userAvatar,
-                userAvatarType = userAvatarType,
-                userAvatarParts = userAvatarParts,
-                selectedTab = selected,
-                onTabReselected = onTabReselected,
-                settleScale = settleScale.value,
-                direction = direction
-            )
-
-            // 3 & 4. Tab row with icons, labels, badges, and touch targets.
-            TabRow(
-                items = items,
-                selected = selected,
-                contentIndex = contentIndex,
-                topPadding = topPadding,
-                barHeight = barHeight,
-                inactiveIconSize = inactiveIconSize,
-                activeIconSize = activeIconSize,
-                labelSlotHeight = labelSlotHeight,
-                labelFontSize = labelFontSize,
-                labelTop = labelTop,
-                touchTargetMin = touchTargetMin,
-                chatUnreadCount = chatUnreadCount,
-                colors = colors,
-                motionEnabled = motionEnabled,
-                density = density,
-                view = view,
-                onTabSelected = onTabSelected,
-                onTabReselected = onTabReselected,
-                userAvatar = userAvatar,
-                userAvatarType = userAvatarType,
-                userAvatarParts = userAvatarParts,
-                direction = direction
-            )
-        }
-    }
-}
-
-// ===========================================================================
-// Separated composable layers
-// ===========================================================================
-
-@Composable
-private fun DockBackground(
-    curvedShape: CurvedDockShape,
-    dockColor: Color,
-    shadowColor: Color,
-    shadowElevationPx: Float,
-    outlineColor: Color,
-    modifier: Modifier = Modifier
-) {
-    Canvas(modifier = modifier) {
-        val outline = curvedShape.createOutline(size, layoutDirection, this)
-        if (outline is Outline.Generic) {
-            val path = outline.path
-            // Shape-aware soft shadow: follows the dock curve but not the transparent notch opening.
-            val notchOpening = curvedShape.createNotchOpeningPath(size)
-            clipPath(notchOpening, clipOp = ClipOp.Difference) {
-                drawIntoCanvas { canvas ->
-                    val frameworkPaint = androidx.compose.ui.graphics.Paint().asFrameworkPaint().apply {
-                        isAntiAlias = true
-                        color = android.graphics.Color.TRANSPARENT
-                        setShadowLayer(shadowElevationPx, 0f, 0f, shadowColor.toArgb())
+                    if (item.tab == YugmDockTab.PROFILE) {
+                        val profileSize = lerp(32.dp, 60.dp, proximity)
+                        DockAvatar(
+                            avatar = userAvatar,
+                            avatarType = userAvatarType,
+                            avatarParts = userAvatarParts,
+                            size = profileSize,
+                        )
+                    } else {
+                        Box(contentAlignment = Alignment.TopEnd) {
+                            val isActive = item.tab == selected
+                            Icon(
+                                imageVector = if (isActive) item.activeIcon else item.icon,
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(iconSize)
+                                    .then(
+                                        if (isActive) {
+                                            Modifier
+                                                .graphicsLayer {
+                                                    compositingStrategy = CompositingStrategy.Offscreen
+                                                }
+                                                .drawWithCache {
+                                                    onDrawWithContent {
+                                                        drawContent()
+                                                        drawRect(
+                                                            brush = brandGradient,
+                                                            blendMode = BlendMode.SrcAtop
+                                                        )
+                                                    }
+                                                }
+                                        } else Modifier
+                                    ),
+                                tint = if (isActive) Color.White else colors.textSecondary
+                            )
+                            if (badgeCount > 0) {
+                                val badgeText = if (badgeCount > 99) "99+" else badgeCount.toString()
+                                Box(
+                                    modifier = Modifier
+                                        .padding(start = 16.dp, top = 0.dp)
+                                        .clip(CircleShape)
+                                        .background(colors.secondary)
+                                        .heightIn(min = 14.dp)
+                                        .widthIn(min = 14.dp)
+                                        .padding(horizontal = 3.dp, vertical = 1.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = badgeText,
+                                        color = Color.White,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
                     }
-                    canvas.nativeCanvas.drawPath(path.asAndroidPath(), frameworkPaint)
                 }
             }
-            drawPath(path, color = dockColor)
-            drawPath(path, color = outlineColor, style = Stroke(width = 1.dp.toPx()))
         }
     }
 }
 
-private fun Color.toArgb(): Int = android.graphics.Color.argb(
-    (alpha * 255f).roundToInt(),
-    (red * 255f).roundToInt(),
-    (green * 255f).roundToInt(),
-    (blue * 255f).roundToInt()
-)
-
+/**
+ * Backward-compatible entrypoint mapping YugmBottomDock callers directly to YugmFocusDock.
+ */
 @Composable
-private fun ActiveIndicator(
-    notchXPx: Float,
-    topPaddingPx: Float,
-    circleSizePx: Float,
-    liftPx: Float,
-    brandGradient: Brush,
-    ringColor: Color,
-    activeIconSize: androidx.compose.ui.unit.Dp,
-    items: List<MainDockItem>,
-    contentIndex: Float,
-    colors: YugmColors,
-    motionEnabled: Boolean,
+fun YugmBottomDock(
+    selected: YugmDockTab,
+    modifier: Modifier = Modifier,
+    onTabSelected: (YugmDockTab) -> Unit = {},
+    onTabReselected: (YugmDockTab) -> Unit = {},
+    chatUnreadCount: Int = 0,
     userAvatar: String? = null,
     userAvatarType: String? = null,
     userAvatarParts: AvatarPartsPayload? = null,
-    selectedTab: YugmDockTab = YugmDockTab.DISCOVER,
-    onTabReselected: (YugmDockTab) -> Unit = {},
-    settleScale: Float = 1f,
-    direction: Float = 0f,
+    pagerIndexProvider: (() -> Float)? = null,
+    isScrollingProvider: (() -> Boolean)? = null,
 ) {
-    val circleX = (notchXPx - circleSizePx / 2f).roundToInt()
-    val circleY = (topPaddingPx - circleSizePx / 2f - liftPx).roundToInt()
-
-    Box(
-        modifier = Modifier
-            .offset { IntOffset(circleX, circleY) }
-            .size(with(LocalDensity.current) { circleSizePx.toDp() })
-            .graphicsLayer {
-                scaleX = settleScale
-                scaleY = settleScale
-            }
-            .shadow(if (colors.isDark) 3.dp else 1.5.dp, CircleShape, clip = false)
-            .clip(CircleShape)
-            .background(brandGradient)
-            .border(2.dp, ringColor, CircleShape)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) { onTabReselected(selectedTab) },
-        contentAlignment = Alignment.Center
-    ) {
-        items.forEachIndexed { i, item ->
-            val factor = (1f - kotlin.math.abs(contentIndex - i)).coerceIn(0f, 1f)
-            if (factor > 0f) {
-                val isProfileWithAvatar = item.tab == YugmDockTab.PROFILE && (
-                    (userAvatarType == "GENERATED" && userAvatarParts != null) ||
-                    !userAvatar.isNullOrBlank()
-                )
-                val iconShiftPx = with(LocalDensity.current) { 6.dp.toPx() }
-                if (isProfileWithAvatar) {
-                    DockAvatar(
-                        avatar = userAvatar,
-                        avatarType = userAvatarType,
-                        avatarParts = userAvatarParts,
-                        size = with(LocalDensity.current) { circleSizePx.toDp() },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer {
-                                alpha = factor
-                                val s = 0.84f + 0.16f * factor
-                                scaleX = s
-                                scaleY = s
-                                translationX = direction * (1f - factor) * iconShiftPx
-                            }
-                    )
-                } else {
-                    Icon(
-                        imageVector = item.activeIcon,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier
-                            .size(activeIconSize)
-                            .graphicsLayer {
-                                alpha = factor
-                                val s = 0.84f + 0.16f * factor
-                                scaleX = s
-                                scaleY = s
-                                translationX = direction * (1f - factor) * iconShiftPx
-                            }
-                    )
-                }
-            }
-        }
-    }
+    YugmFocusDock(
+        selected = selected,
+        modifier = modifier,
+        onTabSelected = onTabSelected,
+        onTabReselected = onTabReselected,
+        chatUnreadCount = chatUnreadCount,
+        userAvatar = userAvatar,
+        userAvatarType = userAvatarType,
+        userAvatarParts = userAvatarParts,
+        pagerIndexProvider = pagerIndexProvider,
+        isScrollingProvider = isScrollingProvider
+    )
 }
 
 @Composable
@@ -473,18 +383,15 @@ private fun DockAvatar(
     avatar: String?,
     avatarType: String?,
     avatarParts: AvatarPartsPayload?,
-    size: androidx.compose.ui.unit.Dp,
+    size: Dp,
     modifier: Modifier = Modifier,
-    borderColor: Color = Color.Transparent,
-    borderWidth: androidx.compose.ui.unit.Dp = 0.dp,
 ) {
     val resolvedUrl = remember(avatar) { resolveMediaUrl(avatar) }
     val shape = CircleShape
     Box(
         modifier = modifier
             .size(size)
-            .clip(shape)
-            .then(if (borderWidth > 0.dp) Modifier.border(borderWidth, borderColor, shape) else Modifier),
+            .clip(shape),
         contentAlignment = Alignment.Center
     ) {
         if (avatarType == "GENERATED" && avatarParts != null) {
@@ -515,198 +422,36 @@ private fun DockAvatar(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )
-        }
-    }
-}
-
-@Composable
-private fun TabRow(
-    items: List<MainDockItem>,
-    selected: YugmDockTab,
-    contentIndex: Float,
-    topPadding: androidx.compose.ui.unit.Dp,
-    barHeight: androidx.compose.ui.unit.Dp,
-    inactiveIconSize: androidx.compose.ui.unit.Dp,
-    activeIconSize: androidx.compose.ui.unit.Dp,
-    labelSlotHeight: androidx.compose.ui.unit.Dp,
-    labelFontSize: androidx.compose.ui.unit.TextUnit,
-    labelTop: androidx.compose.ui.unit.Dp,
-    touchTargetMin: androidx.compose.ui.unit.Dp,
-    chatUnreadCount: Int,
-    colors: YugmColors,
-    motionEnabled: Boolean,
-    density: Density,
-    view: android.view.View,
-    onTabSelected: (YugmDockTab) -> Unit,
-    onTabReselected: (YugmDockTab) -> Unit,
-    userAvatar: String? = null,
-    userAvatarType: String? = null,
-    userAvatarParts: AvatarPartsPayload? = null,
-    direction: Float = 0f,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(topPadding + barHeight)
-            .selectableGroup(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Top
-    ) {
-        items.forEachIndexed { i, item ->
-            val isSelected = item.tab == selected
-            val factor = (1f - kotlin.math.abs(contentIndex - i)).coerceIn(0f, 1f)
-            val badgeCount = if (item.tab == YugmDockTab.CHAT) chatUnreadCount.coerceAtLeast(0) else 0
-            val badgeText = when {
-                badgeCount <= 0 -> null
-                badgeCount > 99 -> "99+"
-                else -> badgeCount.toString()
-            }
-            val description = if (badgeCount > 0) {
-                "${item.accessibilityLabel}, $badgeCount unread messages"
-            } else {
-                item.accessibilityLabel
-            }
-            val itemInteractionSource = remember { MutableInteractionSource() }
-            val pressed by itemInteractionSource.collectIsPressedAsState()
-            val touchAlpha by animateFloatAsState(
-                targetValue = if (pressed) 0.12f else 0f,
-                animationSpec = if (motionEnabled) tween(durationMillis = 90) else snap(),
-                label = "dockTabTouch"
-            )
-
-            // Touch target — bar area only; cradle zone above stays transparent to scroll/touch-through.
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight(),
-                contentAlignment = Alignment.TopCenter
-            ) {
-                Box(
-                    modifier = Modifier
-                        .padding(top = topPadding)
-                        .fillMaxWidth()
-                        .height(barHeight)
-                        .heightIn(min = touchTargetMin)
-                        .selectable(
-                            selected = isSelected,
-                            interactionSource = itemInteractionSource,
-                            indication = null,
-                            role = Role.Tab,
-                            onClick = {
-                                view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                                if (isSelected) onTabReselected(item.tab) else onTabSelected(item.tab)
-                            }
-                        )
-                        .semantics(mergeDescendants = true) {
-                            contentDescription = description
-                            selectedSemantics = isSelected
-                        }
-                )
-
-                // Inactive icon — vertically centered in the bar content area.
-                // Bar content area is [topPadding .. topPadding + barHeight) within the Row.
-                // The Row starts at dock top (0), so bar content starts at topPadding.
-                val iconTopInRow = topPadding + (barHeight - inactiveIconSize) / 2
-                Box(
-                    modifier = Modifier
-                        .padding(top = iconTopInRow)
-                        .size(inactiveIconSize),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (touchAlpha > 0f) {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(colors.textPrimary.copy(alpha = touchAlpha))
-                        )
-                    }
-                    if (factor < 0.995f) {
-                        val isProfileWithAvatar = item.tab == YugmDockTab.PROFILE && (
-                            (userAvatarType == "GENERATED" && userAvatarParts != null) ||
-                            !userAvatar.isNullOrBlank()
-                        )
-                        if (isProfileWithAvatar) {
-                            DockAvatar(
-                                avatar = userAvatar,
-                                avatarType = userAvatarType,
-                                avatarParts = userAvatarParts,
-                                size = inactiveIconSize,
-                                modifier = Modifier
-                                    .graphicsLayer {
-                                        alpha = 1f - factor
-                                        scaleX = 0.92f + 0.08f * (1f - factor)
-                                        scaleY = 0.92f + 0.08f * (1f - factor)
-                                        translationX = -direction * factor * with(density) { 4.dp.toPx() }
-                                    }
-                            )
-                        } else {
-                            Icon(
-                                imageVector = item.icon,
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .size(inactiveIconSize)
-                                    .graphicsLayer {
-                                        alpha = 1f - factor
-                                        scaleX = 0.92f + 0.08f * (1f - factor)
-                                        scaleY = 0.92f + 0.08f * (1f - factor)
-                                        translationX = -direction * factor * with(density) { 4.dp.toPx() }
-                                    },
-                                tint = colors.bottomDockInactiveContent
-                            )
-                        }
-                    }
-                }
-
-                // Selected label — directly below the icon slot.
-                if (factor > 0.01f) {
-                    Text(
-                        text = item.compactLabel,
-                        color = colors.primary,
-                        fontSize = labelFontSize,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Visible,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .padding(top = labelTop)
-                            .graphicsLayer {
-                                alpha = factor
-                                translationY = (1f - factor) * with(density) { 4.dp.toPx() }
-                                translationX = direction * (1f - factor) * with(density) { 6.dp.toPx() }
-                            }
+        } else {
+            val brandGradient = remember {
+                Brush.horizontalGradient(
+                    colors = listOf(
+                        OnboardingBrandStart,
+                        OnboardingBrandMiddle,
+                        OnboardingBrandEnd
                     )
-                }
-
-                // Unread notification badge.
-                if (badgeText != null) {
-                    val badgeTop = if (factor > 0.5f) {
-                        topPadding - 4.dp
-                    } else {
-                        iconTopInRow - 4.dp
-                    }
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(start = 22.dp, top = badgeTop)
-                            .clip(CircleShape)
-                            .background(colors.secondary)
-                            .heightIn(min = 16.dp)
-                            .widthIn(min = 16.dp)
-                            .padding(horizontal = 4.dp, vertical = 1.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = badgeText,
-                            color = Color.White,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1
-                        )
-                    }
-                }
+                )
             }
+            Icon(
+                imageVector = Icons.Filled.Person,
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(4.dp)
+                    .graphicsLayer {
+                        compositingStrategy = CompositingStrategy.Offscreen
+                    }
+                    .drawWithCache {
+                        onDrawWithContent {
+                            drawContent()
+                            drawRect(
+                                brush = brandGradient,
+                                blendMode = BlendMode.SrcAtop
+                            )
+                        }
+                    },
+                tint = Color.White
+            )
         }
     }
 }
@@ -719,7 +464,7 @@ private fun TabRow(
 @Composable
 private fun PreviewDockLightDiscover() {
     YugmTheme(darkTheme = false) {
-        YugmBottomDock(selected = YugmDockTab.DISCOVER)
+        YugmFocusDock(selected = YugmDockTab.DISCOVER)
     }
 }
 
@@ -727,7 +472,7 @@ private fun PreviewDockLightDiscover() {
 @Composable
 private fun PreviewDockDarkChat() {
     YugmTheme(darkTheme = true) {
-        YugmBottomDock(selected = YugmDockTab.CHAT, chatUnreadCount = 5)
+        YugmFocusDock(selected = YugmDockTab.CHAT, chatUnreadCount = 5)
     }
 }
 
@@ -735,7 +480,7 @@ private fun PreviewDockDarkChat() {
 @Composable
 private fun PreviewDockLightArcade() {
     YugmTheme(darkTheme = false) {
-        YugmBottomDock(selected = YugmDockTab.GAME_ZONE)
+        YugmFocusDock(selected = YugmDockTab.GAME_ZONE)
     }
 }
 
@@ -743,7 +488,7 @@ private fun PreviewDockLightArcade() {
 @Composable
 private fun PreviewDockDarkParty() {
     YugmTheme(darkTheme = true) {
-        YugmBottomDock(selected = YugmDockTab.LIVE)
+        YugmFocusDock(selected = YugmDockTab.LIVE)
     }
 }
 
@@ -751,6 +496,6 @@ private fun PreviewDockDarkParty() {
 @Composable
 private fun PreviewDockLightProfile() {
     YugmTheme(darkTheme = false) {
-        YugmBottomDock(selected = YugmDockTab.PROFILE)
+        YugmFocusDock(selected = YugmDockTab.PROFILE)
     }
 }

@@ -351,7 +351,9 @@ fun MainTabsScreen(
                 chatUnreadCount = chatUnreadBadge,
                 userAvatar = userAvatar,
                 userAvatarType = userAvatarType,
-                userAvatarParts = userAvatarParts
+                userAvatarParts = userAvatarParts,
+                pagerIndexProvider = { pagerState.currentPage + pagerState.currentPageOffsetFraction },
+                isScrollingProvider = { pagerState.isScrollInProgress },
             )
         }
     }
