@@ -1,8 +1,40 @@
 # Development progress
 
+## 2026-11-25 — D1 social features
+
+- Mounted all 20 `/api/social` mood, activity, wave, daily-question, voice-poll and countdown routes with router-scoped auth before validation, legacy DTO omission rules, replay conflicts and guarded poll votes. A disposable MongoDB characterization confirmed `activityRoomId: null` after activity, compact populated users, `WAVE` notification persistence, local-day question seeding, option/ballot `_id` fields and `409 Already voted`. Added `0029_social_unique.sql` plus a Worker fixture; poll children are read directly because SQLite cannot correlate nested `FROM` subqueries. The audit reports 322 shared and 316 legacy-only patterns. [Verification and boundary](handoffs/2026-11-25-d1-social-features.md)
+
+## 2026-11-25 — D1 Arcade read routes
+
+- Mounted `GET /api/games/missions`, `GET /api/games/leaderboard` and `GET /api/games/challenges` with router-scoped auth before query work, UTC mission windows, compact populated projections and the legacy raw `personalBest`. A disposable MongoDB characterization found that legacy leaderboard row order is undefined because `$group` follows `$sort`; D1 uses deterministic score-descending order. The negative-limit `$limit` 500 is preserved directly, and the routes perform no writes. Score writes remain paused and score sharing needs Socket.IO fan-out. The audit reports 302 shared and 336 legacy-only patterns. [Verification and boundary](handoffs/2026-11-25-d1-games-reads.md)
+
+## 2026-11-25 — D1 moderation text checks
+
+- Mounted `POST /api/v1/moderation/check-text` and `POST /api/v1/moderation/check-voice` with auth before validation, host-neutral keyword/regex scoring, the legacy zero-value AI placeholders and the unusual direct-Zod-parse 500 body. The Worker fixture confirms read-only behavior and a clean emitted bundle. Report, appeal and status remain legacy-only because their v1 semantics differ from the mounted D1 report flow. The audit reports 299 shared and 339 legacy-only patterns. [Verification and boundary](handoffs/2026-11-25-d1-moderation-checks.md)
+
+## 2026-11-25 — D1 stories
+
+- Mounted all 11 `/api/stories` routes with auth before validation, the legacy create limiter, compact populated DTOs, view replay, guarded comment/count/notification batches and owner-only hide/delete. A disposable MongoDB characterization confirmed create defaults, trimmed caption/text, feed grouping, viewer order, reply notifications and the legacy orphan-retention behavior. Added `0028_story_views_unique.sql` and a Worker fixture. The audit reports 297 shared and 341 legacy-only patterns. [Verification and remaining work](handoffs/2026-11-25-d1-stories.md)
+
+## 2026-11-25 — D1 groups
+
+- Mounted all eight `/api/groups` routes with auth before validation, chat limiting, legacy populated DTOs, guarded participant/message writes, creator transfer and last-member deletion. A disposable MongoDB characterization confirmed raw lean `__v`, partial `avatarParts`, and the group `updatedAt` change on message send. Added `0027_group_participants_unique.sql` and a Worker fixture. The audit reports 286 shared and 352 legacy-only patterns. [Verification and remaining work](handoffs/2026-11-25-d1-groups.md)
+
+## 2026-11-25 — D1 vibe
+
+- Mounted all eight `/api/vibe` routes with the legacy auth-before-validation order, scoring, pagination, DTOs and upsert behavior. A disposable MongoDB characterization confirmed that undeclared `preferences` are dropped and a new preferences upsert uses city `""` with score `0`; malformed page/limit values remain unbounded as in legacy `parseInt`. Added `0026_vibe_graph_unique.sql` and a Worker fixture. The audit reports 278 shared and 360 legacy-only patterns. [Verification and remaining work](handoffs/2026-11-25-d1-vibe.md)
+
+## 2026-11-25 — D1 dating
+
+- Mounted preference read/update, like, pass and match listing on the shared D1 Worker. Like/pass preserve shadow-ban and block guards, validation order and replay; mutual likes commit one guarded match, relationship XP and notification batch. `0025_dating_swipes.sql` adds fresh-fixture uniqueness keys. `GET /api/dating/explore` stays legacy-only because its presence fields require live Socket.IO/Redis state. The audit reports 270 shared and 368 legacy-only patterns. [Verification and remaining work](handoffs/2026-11-25-d1-dating.md)
+
+## 2026-11-25 — D1 events
+
+- Mounted all seven `/api/events` handlers at the canonical and older double-prefixed paths. List, detail and user event DTOs match the legacy populated projections; join uses a conditional D1 insert with replay/full/closed classification and a non-fatal host notification. Added `0024_event_participants_unique.sql`. The audit reports 268 shared and 370 legacy-only patterns. [Verification and remaining work](handoffs/2026-11-25-d1-events.md)
+
 ## 2026-11-25 — D1 direct-send-gift
 
-- Mounted `POST /api/direct-send-gift` with the legacy validation order, VIP and interact guards, coin and diamond debit/credit ledgers and creator-share pricing. The gift transaction, both ledger rows, balance updates and profile marker clears commit in one guarded batch; XP, relationship XP, DM and notification are non-fatal post-commit side effects. The audit reports 254 shared and 384 legacy-only patterns. [Verification and remaining work](handoffs/2026-11-25-d1-direct-send-gift.md)
+- Mounted `POST /api/direct-send-gift` with the legacy validation order, VIP and interact guards, coin and diamond debit/credit ledgers and creator-share pricing. The gift transaction, both ledger rows, balance updates and profile marker clears commit in one guarded batch; XP, relationship XP, DM and notification are non-fatal post-commit side effects. [Verification and remaining work](handoffs/2026-11-25-d1-direct-send-gift.md)
 
 ## 2026-11-25 — D1 subscriptions
 

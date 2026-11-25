@@ -18,14 +18,18 @@ import { createD1ClansRouter } from "./d1Clans.js";
 import { createD1CosmeticsRouter } from "./d1Cosmetics.js";
 import { createD1DatingRouter } from "./d1Dating.js";
 import { createD1DirectGiftsRouter } from "./d1DirectGifts.js";
+import { createD1EventsRouter } from "./d1Events.js";
 import { createD1FeedRouter } from "./d1Feed.js";
 import { readD1GameCatalog } from "./d1GameCatalog.js";
+import { createD1GamesReadsRouter } from "./d1GamesReads.js";
 import { createD1GiftCatalogRouter } from "./d1GiftCatalog.js";
+import { createD1GroupsRouter } from "./d1Groups.js";
 import { createD1HighlightsRouter } from "./d1Highlights.js";
 import { createD1InboxRouter } from "./d1Inbox.js";
 import { createD1LiveKitRouter, type D1LiveKitConfig } from "./d1LiveKit.js";
 import { createD1MediaRouter, type D1MediaRouterOptions } from "./d1Media.js";
 import { createD1MissionsRouter } from "./d1Missions.js";
+import { createD1ModerationRouter } from "./d1Moderation.js";
 import { createD1NotificationRouter } from "./d1Notifications.js";
 import { createD1ProfileEditRouter } from "./d1ProfileEdits.js";
 import { createD1ProgressionRouter } from "./d1Progression.js";
@@ -37,10 +41,12 @@ import { createD1RoomInvitesRouter } from "./d1RoomInvites.js";
 import { createD1RoomReactionsRouter } from "./d1RoomReactions.js";
 import { createD1PaymentProviders, type D1PaymentConfig } from "./d1Payments.js";
 import { createD1SocialRouter } from "./d1Social.js";
+import { createD1SocialFeaturesRouter } from "./d1SocialFeatures.js";
 import { createD1StoriesRouter } from "./d1Stories.js";
 import { createD1SubscriptionsRouter } from "./d1Subscriptions.js";
 import { createD1SupportRouter } from "./d1Support.js";
 import { createD1ThemesRouter } from "./d1Themes.js";
+import { createD1VibeRouter } from "./d1Vibe.js";
 import type { D1UserRateLimit } from "./d1UserRateLimit.js";
 import { createD1WalletRouter } from "./d1Wallet.js";
 import { createD1WatchPartyRouter } from "./d1WatchParty.js";
@@ -81,8 +87,11 @@ export function createD1App(
   app.use("/api", createD1ProgressionRouter(db));
   app.use("/api/users/messages", createD1InboxRouter(db, limits.chat));
   app.use("/api", createD1SocialRouter(db));
+  app.use("/api", createD1SocialFeaturesRouter(db));
+  app.use("/api", createD1ModerationRouter(db));
+  app.use("/api", createD1GroupsRouter(db, limits.chat));
   app.use("/api", createD1FeedRouter(db));
-  app.use("/api", createD1StoriesRouter(db));
+  app.use("/api", createD1StoriesRouter(db, limits.create));
   app.use("/api", createD1HighlightsRouter(db));
   app.use("/api", createD1CosmeticsRouter(db, resolvePublicOrigin));
   app.use("/api", createD1WalletRouter(db, {
@@ -94,6 +103,11 @@ export function createD1App(
   app.use("/api/notifications", createD1NotificationRouter(db));
   app.use("/api/support", createD1SupportRouter(db, limits.create));
   app.use("/api/dating", createD1DatingRouter(db));
+  // The legacy app mounts this router twice, preserving both the canonical
+  // /api/events paths and older double-prefixed clients.
+  const events = createD1EventsRouter(db, limits.create);
+  app.use("/api/events", events);
+  app.use("/api", events);
   app.use("/api", createD1ThemesRouter(db));
   app.use("/api/rooms", createD1RoomsRouter(db, limits.chat));
   app.use("/api/rooms", createD1RoomInvitesRouter(db));
@@ -107,8 +121,10 @@ export function createD1App(
   app.use("/api", createD1BattlePassRouter(db));
   app.use("/api", createD1ReferralsRouter(db));
   app.use("/api", createD1SubscriptionsRouter(db));
+  app.use("/api", createD1VibeRouter(db));
   app.use("/api/bonds", createD1BondsRouter(db));
   app.use("/api", createD1LiveKitRouter(db, livekit));
+  app.use("/api", createD1GamesReadsRouter(db));
   const access = createD1AccessSessionReader(db, "http");
   app.get("/api/games/catalog", asyncHandler(async (req, res) => {
     const { user } = await requireHttpSession(req.headers.authorization, access);

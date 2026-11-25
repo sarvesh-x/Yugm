@@ -16,12 +16,17 @@ import { verifyD1Admin } from "./d1-admin.mjs";
 import { verifyD1AdminSupport } from "./d1-admin-support.mjs";
 import { verifyD1BattlePass } from "./d1-battle-pass.mjs";
 import { verifyD1Bonds } from "./d1-bonds.mjs";
+import { verifyD1Dating } from "./d1-dating.mjs";
 import { verifyD1DirectGifts } from "./d1-direct-gifts.mjs";
 import { verifyD1AppEndpoints } from "./d1-endpoints.mjs";
+import { verifyD1Events } from "./d1-events.mjs";
 import { verifyD1Feed } from "./d1-feed.mjs";
+import { verifyD1GamesReads } from "./d1-games-reads.mjs";
 import { verifyD1GiftCatalog } from "./d1-gift-catalog.mjs";
+import { verifyD1Groups } from "./d1-groups.mjs";
 import { verifyD1Highlights } from "./d1-highlights.mjs";
 import { verifyD1Missions } from "./d1-missions.mjs";
+import { verifyD1Moderation } from "./d1-moderation.mjs";
 import { verifyD1Wishlist } from "./d1-wishlist.mjs";
 import { verifyD1Maintenance, verifyD1Progression, verifyD1PushDelivery } from "./d1-maintenance.mjs";
 import { verifyD1Referrals } from "./d1-referrals.mjs";
@@ -33,8 +38,11 @@ import { verifyD1RoomModes } from "./d1-room-modes.mjs";
 import { verifyD1RoomPkHistory } from "./d1-room-pk-history.mjs";
 import { verifyD1RoomPolls } from "./d1-room-polls.mjs";
 import { verifyD1RoomReactions } from "./d1-room-reactions.mjs";
+import { verifyD1SocialFeatures } from "./d1-social-features.mjs";
+import { verifyD1Stories } from "./d1-stories.mjs";
 import { verifyD1Subscriptions } from "./d1-subscriptions.mjs";
 import { verifyD1Themes } from "./d1-themes.mjs";
+import { verifyD1Vibe } from "./d1-vibe.mjs";
 import { verifyD1Wallet } from "./d1-wallet.mjs";
 import { verifyD1WatchParty } from "./d1-watch-party.mjs";
 
@@ -180,7 +188,8 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
       "0011_room_poll_indexes", "0012_room_invite_index", "0013_room_activity_indexes", "0014_room_message_progression",
       "0015_room_mode_state", "0016_pk_room_history_indexes", "0017_report_review_indexes", "0018_gift_catalog_indexes",
       "0019_room_gift_transfers", "0020_wishlist_unique", "0021_user_mission_unique", "0022_referral_unique",
-      "0023_subscription_unique"];
+      "0023_subscription_unique", "0024_event_participants_unique", "0025_dating_swipes",
+      "0026_vibe_graph_unique", "0027_group_participants_unique", "0028_story_views_unique", "0029_social_unique"];
     for (const file of runtimeMigrations) {
       const migration = await readFile(pathFromHere(`../../api/migrations/d1/${file}.sql`), "utf8");
       await db.batch(unstable_splitSqlQuery(migration).map(sql => db.prepare(sql)));
@@ -819,6 +828,8 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     const { data: feedOwner } = await signIn(true, project, 200, "feed-owner-fixture");
     const { data: feedVisitor } = await signIn(true, project, 200, "feed-visitor-fixture");
     await verifyD1Feed(db, request, feedOwner, feedVisitor);
+    await verifyD1GamesReads(db, request, feedOwner, feedVisitor);
+    await verifyD1SocialFeatures(db, request, feedOwner, feedVisitor);
     await verifyD1Highlights(db, request, feedOwner, feedVisitor);
     await verifyD1Wishlist(db, request, feedOwner, feedVisitor);
     await verifyD1Missions(db, request, feedOwner, feedVisitor);
@@ -826,6 +837,12 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     await verifyD1Referrals(db, request, feedOwner, feedVisitor);
     await verifyD1Subscriptions(db, request, feedOwner, feedVisitor);
     await verifyD1DirectGifts(db, request, feedOwner, feedVisitor);
+    await verifyD1Events(db, request, feedOwner, feedVisitor);
+    await verifyD1Dating(db, request, feedOwner, feedVisitor);
+    await verifyD1Vibe(db, request, feedOwner, feedVisitor);
+    await verifyD1Groups(db, request, feedOwner, feedVisitor, returning);
+    await verifyD1Stories(db, request, returning, feedVisitor, chatHost);
+    await verifyD1Moderation(db, request, returning);
     await verifyD1Maintenance(worker, db, returning, visitor);
 
     // Invalid bodies exercise the rate limits without reaching Firebase or changing sessions.

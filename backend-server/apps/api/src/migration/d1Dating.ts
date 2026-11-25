@@ -6,10 +6,11 @@ import { requireHttpSession } from "../middleware/httpAccessSession.js";
 import { validateBody } from "../middleware/validate.js";
 import { startOfUtcDay } from "../services/dailyWalletReward.js";
 import { datingPreferenceSchema } from "../services/datingPreferences.js";
-import { calculateRelationshipLevel, getRelationshipStatus } from "../services/relationshipPresentation.js";
+import { calculateRelationshipLevel, getRelationshipStatus, relationshipPairKey, relationshipStreak } from "../services/relationshipPresentation.js";
 import { getVipStatus } from "../services/vip.js";
-import { asyncHandler, ErrorCode, HttpError, sendOk } from "../utils/http.js";
+import { asyncHandler, ErrorCode, HttpError, isValidObjectId, sendOk } from "../utils/http.js";
 import { bindD1LiveUser, createD1AccessSessionReader, d1LiveUserFilter } from "./d1AccessSession.js";
+import { newId } from "./d1Cosmetics.js";
 import { person, personJson, visiblePerson } from "./d1People.js";
 
 type MatchRow = {
@@ -17,6 +18,13 @@ type MatchRow = {
   vip_tier: string | null; vip_started_at: string | null; vip_expires_at: string | null;
   interests_json: string; languages_json: string; xp: number; level: number;
   streak_days: number; last_interaction_at: string | null;
+};
+
+type LikeRow = { source_id: string; liker_id: string; liked_id: string; type: string; created_at: string | null };
+type NewMatchRow = { source_id: string; users_json: string; created_at: string | null; updated_at: string | null };
+type RelationshipState = {
+  source_id: string; xp: number; level: number; streak_days: number;
+  last_streak_at: string | null; last_interaction_at: string | null;
 };
 
 const matches = `SELECT m.source_id, m.created_at,
@@ -28,9 +36,32 @@ const fromMatches = `FROM matched JOIN users AS peer ON peer.source_id = matched
   WHERE ${visiblePerson("peer", "?1")}`;
 const pairKey = "MIN(?1, peer.source_id) || ':' || MAX(?1, peer.source_id)";
 
+const parseStrings = (value: string | null | undefined) => JSON.parse(value ?? "[]") as string[];
+
+function likeView(row: LikeRow) {
+  return {
+    _id: row.source_id,
+    likerId: row.liker_id,
+    likedId: row.liked_id,
+    type: row.type,
+    createdAt: row.created_at ?? undefined
+  };
+}
+
+function matchView(row: NewMatchRow) {
+  return {
+    _id: row.source_id,
+    users: parseStrings(row.users_json),
+    createdAt: row.created_at ?? undefined,
+    updatedAt: row.updated_at ?? undefined
+  };
+}
+
 export function createD1DatingRouter(db: D1Database) {
   const router = Router();
   const access = createD1AccessSessionReader(db, "http");
+  // GET /dating/explore stays on the legacy Socket.IO/Redis path: onlineOnly
+  // and isOnline depend on live socket presence, not durable D1 state.
 
   router.get("/preferences", asyncHandler(async (req, res) => {
     const { user } = await requireHttpSession(req.headers.authorization, access);
@@ -132,5 +163,200 @@ export function createD1DatingRouter(db: D1Database) {
       }
     })) });
   }));
+  const requireSafeActor = async (authorization?: string) => {
+    const session = await requireHttpSession(authorization, access);
+    const shadow = await db.prepare(`SELECT 1 FROM user_safety_statuses
+      WHERE user_id = ? AND is_shadow_banned = 1`).bind(session.user.id).first();
+    if (shadow) throw new HttpError(403, "Account restricted", ErrorCode.FORBIDDEN);
+    return session;
+  };
+
+  router.post("/like", asyncHandler(async (req, res) => {
+    const { claims, user } = await requireSafeActor(req.headers.authorization);
+    const actorId = user.id;
+    const body = req.body as { likedId?: unknown; type?: unknown };
+    const rawLikedId = typeof body.likedId === "string" ? body.likedId : "";
+    if (!rawLikedId || !isValidObjectId(rawLikedId)) {
+      throw new HttpError(400, "Invalid likedId", ErrorCode.VALIDATION);
+    }
+    if (actorId === rawLikedId) throw new HttpError(400, "You cannot like yourself", ErrorCode.VALIDATION);
+    const likedId = rawLikedId.toLowerCase();
+
+    const blocked = await db.prepare(`SELECT 1 FROM blocks WHERE
+      (blocker_id = ? AND blocked_user_id = ?) OR (blocker_id = ? AND blocked_user_id = ?) LIMIT 1`)
+      .bind(actorId, likedId, likedId, actorId).first();
+    if (blocked) throw new HttpError(403, "Cannot like this user", ErrorCode.FORBIDDEN);
+    const existing = await db.prepare("SELECT 1 FROM likes WHERE liker_id = ? AND liked_id = ?")
+      .bind(actorId, likedId).first();
+    if (existing) throw new HttpError(400, "Already swiped on this user", ErrorCode.VALIDATION);
+    const type = body.type === undefined ? "LIKE" : String(body.type);
+    if (type !== "LIKE" && type !== "SUPER_LIKE" && type !== "PASS") {
+      throw new HttpError(400, `Like validation failed: type: \`${type}\` is not a valid enum value for path \`type\`.`, ErrorCode.VALIDATION);
+    }
+
+    const mutual = await db.prepare(`SELECT source_id, type FROM likes WHERE liker_id = ? AND liked_id = ?
+      AND type IN ('LIKE', 'SUPER_LIKE') ORDER BY created_at, source_id LIMIT 1`)
+      .bind(likedId, actorId).first<{ source_id: string; type: string }>();
+    const isMatch = Boolean(mutual && (type === "LIKE" || type === "SUPER_LIKE"));
+    const pair = relationshipPairKey(actorId, likedId);
+    const existingMatch = await db.prepare(`SELECT m.source_id FROM matches AS m WHERE m.pair_key = ?
+      OR EXISTS (SELECT 1 FROM match_users AS a WHERE a.matches_id = m.source_id AND a.value = ?
+        AND EXISTS (SELECT 1 FROM match_users AS b WHERE b.matches_id = m.source_id AND b.value = ?)) LIMIT 1`)
+      .bind(pair, actorId, likedId).first();
+    const relationship = await db.prepare(`SELECT source_id, xp, level, streak_days, last_streak_at, last_interaction_at
+      FROM relationships WHERE pair_key = ? ORDER BY source_id LIMIT 1`).bind(pair).first<RelationshipState>();
+
+    const now = new Date();
+    const time = now.toISOString();
+    const likeId = newId();
+    const matchId = newId();
+    const relationshipId = newId();
+    const actorValues = bindD1LiveUser(claims, time);
+    const claimed = "EXISTS (SELECT 1 FROM likes WHERE source_id = ? AND liker_id = ? AND liked_id = ?)";
+    const claimValues = [likeId, actorId, likedId];
+    const newMatch = `NOT EXISTS (SELECT 1 FROM matches WHERE pair_key = ?)
+      AND NOT EXISTS (SELECT 1 FROM match_users AS a WHERE a.value = ?
+        AND EXISTS (SELECT 1 FROM match_users AS b WHERE b.matches_id = a.matches_id AND b.value = ?))`;
+    const version = relationship
+      ? JSON.stringify([relationship.source_id, relationship.xp, relationship.level, relationship.streak_days, relationship.last_streak_at])
+      : null;
+    const relationGuard = `(SELECT json_array(source_id, xp, level, streak_days, last_streak_at)
+      FROM relationships WHERE pair_key = ?) IS ?`;
+    const statements = [db.prepare(`INSERT INTO likes (source_id, liker_id, liked_id, type, created_at, updated_at)
+      SELECT ?, ?, ?, ?, ?, ? FROM users AS u
+      WHERE NOT EXISTS (SELECT 1 FROM likes WHERE liker_id = ? AND liked_id = ?)
+        AND NOT EXISTS (SELECT 1 FROM blocks WHERE (blocker_id = ? AND blocked_user_id = ?)
+          OR (blocker_id = ? AND blocked_user_id = ?))
+        AND NOT EXISTS (SELECT 1 FROM user_safety_statuses WHERE user_id = ? AND is_shadow_banned = 1)
+        AND ${d1LiveUserFilter}`)
+      .bind(likeId, actorId, likedId, type, time, time, actorId, likedId, actorId, likedId, likedId, actorId,
+        actorId, ...actorValues)];
+
+    if (isMatch && !existingMatch) {
+      const event = type === "SUPER_LIKE" || mutual?.type === "SUPER_LIKE" ? "SUPER_LIKE_MATCH" : "MATCH_CREATED";
+      const awarded = relationshipXpEvents[event];
+      const xp = (relationship?.xp ?? 0) + awarded;
+      const streak = relationshipStreak(relationship?.last_streak_at, relationship?.streak_days ?? 0, now);
+      const status = getRelationshipStatus({ xp, level: relationship?.level, streakDays: streak.streakDays, lastInteractionAt: time });
+      const priorLevel = relationship?.level ?? 1;
+      const lastStreak = new Date(streak.lastStreakAt).toISOString();
+      const versionAfter = JSON.stringify([relationship?.source_id ?? relationshipId, xp, status.level,
+        streak.streakDays, lastStreak]);
+
+      if (relationship) {
+        statements.push(db.prepare(`UPDATE relationships SET xp = ?, level = ?, level_title = ?, streak_days = ?,
+          last_streak_at = ?, last_interaction_at = ?, updated_at = ? WHERE source_id = ?
+          AND ${relationGuard} AND ${newMatch} AND ${claimed}`)
+          .bind(xp, status.level, status.title, streak.streakDays, lastStreak, time, time, relationship.source_id,
+            pair, version, pair, actorId, likedId, ...claimValues));
+      } else {
+        statements.push(db.prepare(`INSERT INTO relationships (source_id, pair_key, xp, level, level_title,
+          streak_days, last_streak_at, last_interaction_at, created_at, updated_at)
+          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${relationGuard} AND ${newMatch} AND ${claimed}`)
+          .bind(relationshipId, pair, xp, status.level, status.title, streak.streakDays, lastStreak, time, time, time,
+            pair, version, pair, actorId, likedId, ...claimValues));
+        for (const [position, member] of [actorId, likedId].entries()) {
+          statements.push(db.prepare(`INSERT INTO relationship_users (source_id, value, relationships_id, position)
+            SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM relationships WHERE source_id = ?) AND ${claimed}`)
+            .bind(`${relationshipId}:users:${position}`, member, relationshipId, position, relationshipId, ...claimValues));
+        }
+      }
+      if (status.level > priorLevel) {
+        for (const userId of [actorId, likedId]) {
+          statements.push(db.prepare(`INSERT INTO notifications (source_id, user_id, type, title, body, data, read, created_at, updated_at)
+            SELECT ?, ?, 'SYSTEM', ?, ?, ?, 0, ?, ? WHERE ${relationGuard} AND ${newMatch} AND ${claimed}`)
+            .bind(newId(), userId, "Relationship level up!", `Your bond reached Level ${status.level}: ${status.title}.`,
+              JSON.stringify({ type: "RELATIONSHIP_LEVEL_UP", partnerIds: [actorId, likedId], level: status.level }),
+              time, time, pair, versionAfter, pair, actorId, likedId, ...claimValues));
+        }
+      }
+      if (streak.streakDays > 1 && streak.streakDays % 7 === 0) {
+        for (const userId of [actorId, likedId]) {
+          statements.push(db.prepare(`INSERT INTO notifications (source_id, user_id, type, title, body, data, read, created_at, updated_at)
+            SELECT ?, ?, 'SYSTEM', ?, ?, ?, 0, ?, ? WHERE ${relationGuard} AND ${newMatch} AND ${claimed}`)
+            .bind(newId(), userId, "Duo streak!", `You have a ${streak.streakDays}-day relationship streak.`,
+              JSON.stringify({ type: "RELATIONSHIP_STREAK", partnerIds: [actorId, likedId], streakDays: streak.streakDays }),
+              time, time, pair, versionAfter, pair, actorId, likedId, ...claimValues));
+        }
+      }
+
+      statements.push(db.prepare(`INSERT INTO matches (source_id, pair_key, created_at, updated_at)
+        SELECT ?, ?, ?, ? WHERE ${newMatch} AND ${claimed}`)
+        .bind(matchId, pair, time, time, pair, actorId, likedId, ...claimValues));
+      for (const [position, member] of [actorId, likedId].entries()) {
+        statements.push(db.prepare(`INSERT INTO match_users (source_id, value, matches_id, position)
+          SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM matches WHERE source_id = ?) AND ${claimed}
+          ON CONFLICT (matches_id, value) DO NOTHING`)
+          .bind(`${matchId}:users:${position}`, member, matchId, position, matchId, ...claimValues));
+      }
+
+      const actorName = await db.prepare("SELECT name FROM users WHERE source_id = ?").bind(actorId).first<string>("name");
+      const otherName = await db.prepare("SELECT name FROM users WHERE source_id = ?").bind(likedId).first<string>("name");
+      const notices = [
+        { userId: likedId, body: `You matched with ${actorName ?? "someone"}! Start chatting now.`, partnerId: actorId },
+        { userId: actorId, body: `You matched with ${otherName ?? "someone"}! Start chatting now.`, partnerId: likedId }
+      ];
+      for (const notice of notices) {
+        statements.push(db.prepare(`INSERT INTO notifications (source_id, user_id, type, title, body, data, read, created_at, updated_at)
+          SELECT ?, ?, 'SYSTEM', ?, ?, ?, 0, ?, ? WHERE EXISTS (SELECT 1 FROM matches WHERE source_id = ?) AND ${claimed}`)
+          .bind(newId(), notice.userId, "It's a Yugm!", notice.body,
+            JSON.stringify({ type: "MATCH", matchId, partnerId: notice.partnerId }), time, time, matchId, ...claimValues));
+      }
+    }
+
+    try {
+      await db.batch(statements);
+    } catch (error) {
+      const stored = await db.prepare("SELECT 1 FROM likes WHERE liker_id = ? AND liked_id = ?")
+        .bind(actorId, likedId).first();
+      if (stored) throw new HttpError(400, "Already swiped on this user", ErrorCode.VALIDATION);
+      throw error;
+    }
+    const like = await db.prepare("SELECT source_id, liker_id, liked_id, type, created_at FROM likes WHERE source_id = ?")
+      .bind(likeId).first<LikeRow>();
+    if (!like) throw new HttpError(400, "Already swiped on this user", ErrorCode.VALIDATION);
+    const match = isMatch
+      ? await db.prepare(`SELECT m.source_id, m.created_at, m.updated_at,
+          (SELECT json_group_array(value) FROM (SELECT value FROM match_users WHERE matches_id = m.source_id ORDER BY position)) AS users_json
+          FROM matches AS m WHERE m.source_id = ?`).bind(matchId).first<NewMatchRow>()
+      : null;
+    sendOk(res, { like: likeView(like), isMatch, match: match ? matchView(match) : null });
+  }));
+
+  router.post("/pass", asyncHandler(async (req, res) => {
+    const { claims, user } = await requireSafeActor(req.headers.authorization);
+    const actorId = user.id;
+    const body = req.body as { likedId?: unknown };
+    const rawLikedId = typeof body.likedId === "string" ? body.likedId : "";
+    if (!rawLikedId || !isValidObjectId(rawLikedId)) {
+      throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
+    }
+    const likedId = rawLikedId.toLowerCase();
+    const existing = await db.prepare("SELECT 1 FROM likes WHERE liker_id = ? AND liked_id = ?")
+      .bind(actorId, likedId).first();
+    if (existing) throw new HttpError(400, "Already swiped on this user", ErrorCode.VALIDATION);
+
+    const time = new Date().toISOString();
+    const passId = newId();
+    const actorValues = bindD1LiveUser(claims, time);
+    try {
+      await db.batch([db.prepare(`INSERT INTO likes (source_id, liker_id, liked_id, type, created_at, updated_at)
+        SELECT ?, ?, ?, 'PASS', ?, ? FROM users AS u
+        WHERE NOT EXISTS (SELECT 1 FROM likes WHERE liker_id = ? AND liked_id = ?)
+          AND NOT EXISTS (SELECT 1 FROM user_safety_statuses WHERE user_id = ? AND is_shadow_banned = 1)
+          AND ${d1LiveUserFilter}`)
+        .bind(passId, actorId, likedId, time, time, actorId, likedId, actorId, ...actorValues)]);
+    } catch (error) {
+      const stored = await db.prepare("SELECT 1 FROM likes WHERE liker_id = ? AND liked_id = ?")
+        .bind(actorId, likedId).first();
+      if (stored) throw new HttpError(400, "Already swiped on this user", ErrorCode.VALIDATION);
+      throw error;
+    }
+    const pass = await db.prepare("SELECT source_id, liker_id, liked_id, type, created_at FROM likes WHERE source_id = ?")
+      .bind(passId).first<LikeRow>();
+    if (!pass) throw new HttpError(400, "Already swiped on this user", ErrorCode.VALIDATION);
+    sendOk(res, { pass: likeView(pass) });
+  }));
+
   return router;
 }
