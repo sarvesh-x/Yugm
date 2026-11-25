@@ -1,5 +1,7 @@
 # D1 schema and reference catalog setup
 
+The counts below record the initial setup. The recovered emulator database later reached `0019`. Hosted application after `0002` remains unverified. [Current schema and coverage checkpoint](2026-11-25-d1-route-coverage-checkpoint.md)
+
 Both Wrangler configurations bind `AUTH_DB` to a database named `yugm`. Android debug uses the local simulation. The production config points to the existing hosted database. Both configurations load the same versioned SQL under `backend-server/apps/api/migrations/d1`. [Cloudflare D1 migrations](https://developers.cloudflare.com/d1/reference/migrations/)
 
 ## Run setup

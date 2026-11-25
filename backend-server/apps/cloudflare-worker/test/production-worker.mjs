@@ -35,9 +35,9 @@ test("the production entrypoint uses D1 and configures hosted R2 with a media pa
   assert.notEqual(localConfig.d1_databases[0].database_id, binding.database_id);
   assert.deepEqual(config.ratelimits.map(({ name, simple }) => [name, simple.limit, simple.period]), [
     ["AUTH_REQUESTS", 20, 60], ["AUTH_IDENTIFIER", 10, 60], ["AUTH_REFRESH", 30, 60], ["CHAT_SEND", 12, 10],
-    ["REPORT_REQUESTS", 5, 60]
+    ["REPORT_REQUESTS", 5, 60], ["CREATE_REQUESTS", 10, 60], ["GIFT_SEND", 20, 10]
   ]);
-  assert.equal(new Set([...config.ratelimits, ...localConfig.ratelimits].map(({ namespace_id }) => namespace_id)).size, 10);
+  assert.equal(new Set([...config.ratelimits, ...localConfig.ratelimits].map(({ namespace_id }) => namespace_id)).size, 14);
   assert.deepEqual(Object.fromEntries(config.r2_buckets.map(({ binding, bucket_name }) => [binding, bucket_name])), {
     ASSETS: "yugm-assets", PUBLIC_MEDIA: "yugm-public-media", PRIVATE_MEDIA: "yugm-private-media",
     ORIGINALS: "yugm-originals", STAGING: "yugm-staging"
@@ -95,12 +95,21 @@ test("the production entrypoint uses D1 and configures hosted R2 with a media pa
 
     const db = await worker.getD1Database(binding.binding);
     const migrations = ["0001_initial", "0003_direct_message_indexes", "0004_direct_message_writes", "0005_clan_chat_indexes",
-      "0006_scheduled_maintenance", "0007_notification_push_jobs", "0008_wallet_purchase_indexes", "0009_app_config_key_unique", "0010_support_ticket_sender"];
+      "0006_scheduled_maintenance", "0007_notification_push_jobs", "0008_wallet_purchase_indexes", "0009_app_config_key_unique",
+      "0010_support_ticket_sender", "0011_room_poll_indexes", "0012_room_invite_index", "0013_room_activity_indexes",
+      "0014_room_message_progression", "0015_room_mode_state", "0016_pk_room_history_indexes", "0017_report_review_indexes",
+      "0018_gift_catalog_indexes", "0019_room_gift_transfers"];
     const schema = (await Promise.all(migrations.map(file => readFile(pathFromHere(`../../api/migrations/d1/${file}.sql`), "utf8")))).join("\n");
     await db.batch(unstable_splitSqlQuery(schema).map(sql => db.prepare(sql)));
     const readiness = await worker.dispatchFetch(origin + "/api/ready");
     assert.equal(readiness.status, 200);
     assert.deepEqual(await readiness.json(), { ok: true, service: "yugm-api", storage: "d1", managedMedia: false });
+    const themeCatalog = await worker.dispatchFetch(origin + "/api/themes");
+    assert.equal(themeCatalog.status, 401);
+    assert.equal((await themeCatalog.json()).error.code, "UNAUTHORIZED");
+    const contactPage = await worker.dispatchFetch(origin + "/legal/contact");
+    assert.equal(contactPage.status, 200);
+    assert.match(await contactPage.text(), /\/api\/support\/public-requests/);
     const missingAppCheck = await worker.dispatchFetch(origin + "/api/auth/google", {
       method: "POST", headers: { "content-type": "application/json" }, body: "{}"
     });

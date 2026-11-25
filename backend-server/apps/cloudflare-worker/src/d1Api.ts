@@ -12,6 +12,8 @@ import { installCloudflareImageProcessor } from "./imageProcessor.js";
 interface D1ApiEnv extends AuthRateLimitBindings {
   CHAT_SEND?: RateLimit;
   REPORT_REQUESTS?: RateLimit;
+  CREATE_REQUESTS?: RateLimit;
+  GIFT_SEND?: RateLimit;
   AUTH_DB: D1Database;
   ASSETS: R2Bucket;
   PUBLIC_MEDIA: R2Bucket;
@@ -25,6 +27,7 @@ interface D1ApiEnv extends AuthRateLimitBindings {
   YUGM_FCM_PUSH_ENABLED?: string;
   YUGM_BONDS_ENABLED?: string;
   YUGM_BOND_SLOTS?: string;
+  MONETIZATION_DIAMONDS_ENABLED?: string;
   MEDIA_GRANT_SECRET?: string;
   JWT_SECRET?: string;
   ADMIN_JWT_SECRET?: string;
@@ -95,9 +98,10 @@ async function checkD1Schema(db: D1Database) {
         "room_speakers", "room_moderators", "room_admins", "room_cohosts", "room_locked_seats", "room_participants",
         "speaker_requests", "chat_messages", "room_activities", "direct_messages", "direct_message_reactions",
         "message_hidden_for", "conversation_mutes", "pk_battles", "matches", "match_users",
-        "relationships", "relationship_users", "purchases", "diamond_transactions"]
+        "relationships", "relationship_users", "purchases", "diamond_transactions", "support_tickets"]
         .map(table => `(SELECT source_id FROM ${table} LIMIT 0) AS ${table}`).join(", ")),
-      db.prepare("SELECT notification_id, device_id FROM notification_push_jobs LIMIT 0")
+      db.prepare("SELECT notification_id, device_id FROM notification_push_jobs LIMIT 0"),
+      db.prepare("SELECT sender_id, sender_admin_id FROM support_ticket_messages LIMIT 0")
     ]);
   } catch {
     throw new D1SetupError("D1_SCHEMA_UNAVAILABLE", "The local D1 schema is missing or out of date. Check the emulator setup instructions.");
@@ -150,7 +154,10 @@ async function startD1Runtime(env: D1ApiEnv, stage: ApiStage) {
       staging: env.STAGING
     },
     grantSecret: mediaGrantSecret
-  } : undefined, { chat: limitByUser(env.CHAT_SEND), report: limitByUser(env.REPORT_REQUESTS) }, {
+  } : undefined, {
+    chat: limitByUser(env.CHAT_SEND), report: limitByUser(env.REPORT_REQUESTS),
+    create: limitByUser(env.CREATE_REQUESTS), gift: limitByUser(env.GIFT_SEND)
+  }, {
     apiKey: env.LIVEKIT_API_KEY,
     apiSecret: env.LIVEKIT_API_SECRET,
     url: env.LIVEKIT_URL,
@@ -162,7 +169,8 @@ async function startD1Runtime(env: D1ApiEnv, stage: ApiStage) {
     googlePlayClientEmail: env.GOOGLE_PLAY_CLIENT_EMAIL,
     googlePlayPrivateKey: env.GOOGLE_PLAY_PRIVATE_KEY,
     production: stage === "production",
-    devRecharge: stage === "local"
+    devRecharge: stage === "local",
+    diamondsEnabled: env.MONETIZATION_DIAMONDS_ENABLED === "true" || env.MONETIZATION_DIAMONDS_ENABLED === "1"
   }, {
     jwtSecret: env.ADMIN_JWT_SECRET ?? env.JWT_SECRET
   });

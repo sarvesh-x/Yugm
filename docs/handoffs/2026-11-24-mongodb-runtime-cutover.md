@@ -1,5 +1,7 @@
 # MongoDB runtime cutover status
 
+This records the 2026-11-24 baseline. [Current route audit and cutover checkpoint](2026-11-25-d1-route-coverage-checkpoint.md)
+
 `npm run dev` starts the Android debug Worker on port 4000 with local D1 and R2. Both the debug Worker and the production-target Worker bundle without Mongoose, the MongoDB driver, or BSON. Auth and Profile now construct their responses from D1 rows. Legacy Firebase device lookup, Mongo-specific errors and the Mongo session store stay with legacy callers. The shared season rules run without the Season model. The isolated Worker tests check the actual Wrangler bundle manifests. [Cloudflare local bindings](https://developers.cloudflare.com/workers/local-development/#bindings-during-local-development)
 
 ## Routes migrated

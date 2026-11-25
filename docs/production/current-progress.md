@@ -1,5 +1,7 @@
 # Production implementation progress
 
+The D1 migration status is maintained separately from this legacy production audit baseline. [Current D1 coverage and cutover status](../handoffs/2026-11-25-d1-route-coverage-checkpoint.md)
+
 Current review baseline: `b1e8241`, plus the user's existing uncommitted reaction, room and chat changes. Work branch: `codex/production-current-baseline`.
 
 The original audit at `300826a` remains historical evidence. It is not an accurate list of everything still missing in the current repository. The earlier wallet/gift containment work is already present at the current baseline and has not been reapplied. Existing user edits were preserved; this continuation changes separate backend event/payment paths and the isolated regression harness.

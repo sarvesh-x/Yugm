@@ -16,7 +16,17 @@ import { verifyD1Admin } from "./d1-admin.mjs";
 import { verifyD1AdminSupport } from "./d1-admin-support.mjs";
 import { verifyD1Bonds } from "./d1-bonds.mjs";
 import { verifyD1AppEndpoints } from "./d1-endpoints.mjs";
+import { verifyD1GiftCatalog } from "./d1-gift-catalog.mjs";
 import { verifyD1Maintenance, verifyD1Progression, verifyD1PushDelivery } from "./d1-maintenance.mjs";
+import { verifyD1Reports } from "./d1-reports.mjs";
+import { verifyD1RoomInvites } from "./d1-room-invites.mjs";
+import { verifyD1RoomGifts } from "./d1-room-gifts.mjs";
+import { verifyD1RoomMessages } from "./d1-room-messages.mjs";
+import { verifyD1RoomModes } from "./d1-room-modes.mjs";
+import { verifyD1RoomPkHistory } from "./d1-room-pk-history.mjs";
+import { verifyD1RoomPolls } from "./d1-room-polls.mjs";
+import { verifyD1RoomReactions } from "./d1-room-reactions.mjs";
+import { verifyD1Themes } from "./d1-themes.mjs";
 import { verifyD1Wallet } from "./d1-wallet.mjs";
 import { verifyD1WatchParty } from "./d1-watch-party.mjs";
 
@@ -69,6 +79,7 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
       compatibilityFlags: config.compatibility_flags,
       bindings: {
         ...config.vars, FCM_PROJECT_ID: project, JWT_SECRET: randomBytes(32).toString("hex"),
+        MONETIZATION_DIAMONDS_ENABLED: "true",
         ADMIN_JWT_SECRET: adminJwtSecret,
         FCM_CLIENT_EMAIL: `fixture@${project}.iam.gserviceaccount.com`,
         FCM_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }), YUGM_FCM_PUSH_ENABLED: "true",
@@ -157,7 +168,10 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     assert.equal((await request("/api/auth/google", 503, { body: {} })).error.code, "D1_SCHEMA_UNAVAILABLE");
     await db.prepare("ALTER TABLE user_auth_profile ADD COLUMN edit_token TEXT").run();
     const runtimeMigrations = ["0003_direct_message_indexes", "0004_direct_message_writes", "0005_clan_chat_indexes", "0006_scheduled_maintenance",
-      "0007_notification_push_jobs", "0008_wallet_purchase_indexes", "0009_app_config_key_unique", "0010_support_ticket_sender"];
+      "0007_notification_push_jobs", "0008_wallet_purchase_indexes", "0009_app_config_key_unique", "0010_support_ticket_sender",
+      "0011_room_poll_indexes", "0012_room_invite_index", "0013_room_activity_indexes", "0014_room_message_progression",
+      "0015_room_mode_state", "0016_pk_room_history_indexes", "0017_report_review_indexes", "0018_gift_catalog_indexes",
+      "0019_room_gift_transfers"];
     for (const file of runtimeMigrations) {
       const migration = await readFile(pathFromHere(`../../api/migrations/d1/${file}.sql`), "utf8");
       await db.batch(unstable_splitSqlQuery(migration).map(sql => db.prepare(sql)));
@@ -767,8 +781,32 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     assert.equal(googleConsumes, 1);
     await verifyD1WatchParty(db, request, returning, visitor);
     await verifyD1Admin(db, request, adminJwtSecret, returning.accessToken);
-    await verifyD1AdminSupport(db, request, adminJwtSecret, returning.user.id);
+    assert.equal((await request("/", 200)).api, "/api");
+    for (const [path, heading] of [
+      ["privacy", "Privacy Policy"], ["terms", "Terms of Use"], ["child-safety", "Child Safety Standards"],
+      ["account-deletion", "Request Account Deletion"], ["contact", "Contact Yugm"]
+    ]) {
+      const response = await worker.dispatchFetch(`http://127.0.0.1/legal/${path}`);
+      assert.equal(response.status, 200);
+      assert.match(response.headers.get("content-type"), /^text\/html/);
+      const html = await response.text();
+      assert.ok(html.includes(`<h1>${heading}</h1>`));
+      if (path === "account-deletion" || path === "contact") assert.ok(html.includes("/api/support/public-requests"));
+    }
+    await verifyD1AdminSupport(db, request, adminJwtSecret, returning, visitor);
     await verifyD1Progression(db, request, visitor);
+    await verifyD1Themes(db, request, returning, visitor);
+    await verifyD1RoomPolls(db, request, returning, visitor);
+    await verifyD1RoomInvites(db, request, returning, visitor);
+    await verifyD1RoomReactions(db, request, returning, visitor);
+    const { data: chatHost } = await signIn(true, project, 200, "room-chat-host-fixture");
+    const { data: chatGuest } = await signIn(true, project, 200, "room-chat-guest-fixture");
+    await verifyD1RoomMessages(db, request, chatHost, chatGuest);
+    await verifyD1RoomModes(db, request, chatHost, chatGuest, returning);
+    await verifyD1RoomPkHistory(db, request, chatHost, chatGuest);
+    await verifyD1Reports(db, request, adminJwtSecret, chatHost, returning, visitor, chatGuest);
+    await verifyD1GiftCatalog(db, request, chatHost, chatGuest);
+    await verifyD1RoomGifts(db, request, chatHost, chatGuest);
     await verifyD1Maintenance(worker, db, returning, visitor);
 
     // Invalid bodies exercise the rate limits without reaching Firebase or changing sessions.

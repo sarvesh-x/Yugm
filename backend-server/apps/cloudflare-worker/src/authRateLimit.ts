@@ -1,10 +1,10 @@
 import type { RateLimit } from "@cloudflare/workers-types";
 import type { Request } from "express";
-import { authIdentifierKey, refreshKey } from "../../api/src/middleware/authRateLimitKeys.js";
+import { authClientIpHeader, authIdentifierKey, refreshKey } from "../../api/src/middleware/authRateLimitKeys.js";
 import type { AuthRateLimiters } from "../../api/src/routes/authSession.js";
 import { asyncHandler, ErrorCode, HttpError } from "../../api/src/utils/http.js";
 
-export const authClientIpHeader = "x-yugm-client-ip";
+export { authClientIpHeader };
 
 export interface AuthRateLimitBindings {
   AUTH_REQUESTS: RateLimit;

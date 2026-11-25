@@ -1,5 +1,47 @@
 # Development progress
 
+## 2026-11-25 — D1 route coverage checkpoint
+
+- Reconciled the migration trackers and local/hosted runbooks with the route audit. It reports 222 shared patterns, 416 legacy-only patterns, all 59 room patterns and 15 of 215 admin patterns. [Coverage, migrations and remaining work](handoffs/2026-11-25-d1-route-coverage-checkpoint.md)
+
+## 2026-11-25 — D1 room gift transfers
+
+- Mounted coin, inventory and feature-gated diamond room gifts. The Worker fixture covers concurrent duplicate requests, last-unit stock races, wallet authorization, XP and side effects, and rollback on a ledger failure. Applied `0019` to the emulator database. The audit reports 59 of 59 room patterns and 222 shared patterns overall. [Verification and remaining work](handoffs/2026-11-25-d1-room-gift-transfers.md)
+
+## 2026-11-25 — D1 reports and gift browsing
+
+- Mounted both report intake routes and four permission-checked staff review reads. Evidence and moderation queue entries commit with the report. Verified evidence privacy, the shared rate limit, rollback and one automatic mute at the distinct-reporter threshold.
+- Mounted both gift catalogs, collection reads and owner-scoped inventory. Applied migrations `0017` and `0018` to the emulator’s local `yugm` database. The audit reports 221 shared and 417 legacy-only patterns. [Verification and remaining work](handoffs/2026-11-25-d1-reports-and-gift-catalog.md)
+
+## 2026-11-25 — D1 room modes and PK history
+
+- Mounted five room-mode routes and the read-only room PK history route. The fixtures covered legacy Android action payloads, concurrent game updates, permissions, and private-room history filtering. Applied `0015` and `0016` to local `yugm`. [Verification and remaining work](handoffs/2026-11-25-d1-room-modes-and-pk-history.md)
+
+## 2026-11-25 — D1 room messages
+
+- Mounted public room chat and room direct-message sends. Verified membership and block checks, moderation, VIP photo URL handling, public history, inbox delivery, rollback and the room DM relationship cap. Applied `0014_room_message_progression.sql` to local `yugm`. The audit reports 205 shared and 433 legacy-only patterns. [Verification and remaining work](handoffs/2026-11-25-d1-room-messages.md)
+
+## 2026-11-25 — D1 room reactions and missions
+
+- Ported the public reaction catalog, live-room reaction submissions and mission progress. Verified preservation of operator-managed reactions, VIP gating, moderation, stored activity and capped mission counts. Applied `0013_room_activity_indexes.sql` to local `yugm`. The audit reports 203 shared and 435 legacy-only patterns. [Verification and remaining work](handoffs/2026-11-25-d1-room-reactions-and-missions.md)
+
+## 2026-11-25 — D1 room invitations
+
+- Mounted both room invitation routes and verified private-room access, inbox message delivery, notification push enqueueing, block and mute checks, and rollback. Applied `0012_room_invite_index.sql` to the local emulator database. The audit reports 200 shared and 438 legacy-only patterns. [Verification and remaining work](handoffs/2026-11-25-d1-room-invites.md)
+
+## 2026-11-25 — D1 room polls
+
+- Mounted four room poll endpoints and added scheduled D1 expiry. The Worker fixture covers private room access, host control, atomic vote tallies, duplicate votes, rollback, and the 45-second deadline. Applied the index migration to local `yugm`. The audit counts 198 shared and 440 legacy-only patterns. [Verification and remaining work](handoffs/2026-11-25-d1-room-polls.md)
+
+## 2026-11-25 — D1 immersive themes and public pages
+
+- Mounted theme catalog, purchase, owned and equipped reads, equip, and room theme selection in the shared Worker. Reused the existing default catalog and checked wallet balance, entitlement and room control against D1.
+- Mounted the shared legal pages and public service root. The contact and account-deletion forms use the D1 public support route. The audit reports 194 shared and 444 legacy-only patterns. [Verification and cutover notes](handoffs/2026-11-25-d1-themes-and-public-pages.md)
+
+## 2026-11-25 — D1 customer support
+
+- Mounted public requests and the customer ticket lifecycle. Verified cross-account denial, staff replies, concurrent customer replies, close and reopen behavior, and public rate limiting. Corrected the Android client's support paths. [Verification and remaining routes](handoffs/2026-11-25-d1-customer-support.md)
+
 ## 2026-11-25 — D1 admin support routes
 
 - Added the six `/api/admin/support` patterns: list/detail, reply, status, assignment and stats. The admin guard and audit helper are now shared with the config routes, preserving auth-before-validation order and the legacy admin envelope. `0010_support_ticket_sender.sql` separates user and admin ticket-message senders, and the ticket mapping now emits `sender_admin_id` for legacy admin replies.

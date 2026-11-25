@@ -68,6 +68,16 @@ The production audit documents explain their baselines and verification limits. 
 - [Local D1 Profile/social reads and writes](handoffs/2026-11-24-d1-profile-social-writes.md)
 - [Release Google sign-in conflict investigation](handoffs/2026-11-24-release-google-auth-conflict-investigation.md)
 - [Local emulator Google sign-in conflict recovery](handoffs/2026-11-24-local-google-sign-in-conflict.md)
+- [D1 customer support routes](handoffs/2026-11-25-d1-customer-support.md)
+- [D1 immersive themes and public pages](handoffs/2026-11-25-d1-themes-and-public-pages.md)
+- [D1 room polls](handoffs/2026-11-25-d1-room-polls.md)
+- [D1 room invitations](handoffs/2026-11-25-d1-room-invites.md)
+- [D1 room reactions and missions](handoffs/2026-11-25-d1-room-reactions-and-missions.md)
+- [D1 room messages](handoffs/2026-11-25-d1-room-messages.md)
+- [D1 room modes and PK history](handoffs/2026-11-25-d1-room-modes-and-pk-history.md)
+- [D1 reports and gift browsing](handoffs/2026-11-25-d1-reports-and-gift-catalog.md)
+- [D1 room gift transfers](handoffs/2026-11-25-d1-room-gift-transfers.md)
+- [Current D1 route coverage and cutover checkpoint](handoffs/2026-11-25-d1-route-coverage-checkpoint.md)
 - [Whole-app local D1 and R2 scope, cosmetics and clan implementation](handoffs/2026-11-24-local-d1-r2-app-expansion.md)
 - [Production Cloudflare target and Android build routing](handoffs/2026-11-24-production-cloudflare-builds.md)
 - [Hosted R2 verification and D1 endpoint audit](handoffs/2026-11-24-hosted-r2-d1-endpoint-audit.md)
@@ -75,7 +85,7 @@ The production audit documents explain their baselines and verification limits. 
 - [D1 schema and reference catalog setup](handoffs/2026-11-24-d1-schema-and-reference-seed.md)
 - [D1 direct conversations and read state](handoffs/2026-11-24-d1-direct-conversation.md)
 - [D1 direct text messages and replies](handoffs/2026-11-24-d1-direct-message-send.md)
-- [MongoDB runtime cutover status and remaining routes](handoffs/2026-11-24-mongodb-runtime-cutover.md)
+- [Earlier MongoDB cutover inventory](handoffs/2026-11-24-mongodb-runtime-cutover.md)
 - [D1 progression APIs and scheduled jobs](handoffs/2026-11-24-d1-progression-and-jobs.md)
 - [D1 room lifecycle and LiveKit token admission](handoffs/2026-11-24-d1-room-lifecycle-and-livekit.md)
 - [D1 Bonds route group and maintenance](handoffs/2026-11-24-d1-bonds.md)
@@ -125,7 +135,7 @@ The production audit documents explain their baselines and verification limits. 
 
 Phase 0 audit and planning are documented. DCR-2 and the DCR-5 authorization boundary were answered on 2026-11-22 ([ADR-0001](decisions/0001-d1-and-r2-target.md), [ADR-0004](decisions/0004-local-code-and-tests-authorization.md)); DCR-1 was completed on 2026-11-23 ([ADR-0003](decisions/0003-credential-remediation-approach.md)); DCR-3 decision gate completed 2026-11-23 ([ADR-0002](decisions/0002-staged-hybrid-realtime-protocol.md)). DCR-4 decision gate completed 2026-11-23 ([ADR-0005](decisions/0005-r2-media-cutover.md)); DCR-5 plan accepted with one-time commit/push authorization 2026-11-23 ([ADR-0006](decisions/0006-implementation-plan-acceptance.md)). DCR-2 production use is parked and not approved ([ADR-0007](decisions/0007-dcr2-capacity-gate-not-approved.md)); MongoDB remains authoritative and the Hyperdrive fallback is reopened. DCR-4 provisioning values remain open. Provision, deploy, credential rotation and data operations remain unauthorized without new explicit approval.
 
-The execution sequence now starts with independently testable provider replacements on Workers Free. Production D1 remains parked while the plan evaluates a bounded Free-tier rollout. R2 remains conditional on enforcing the included allowance before live use. See [ADR-0008](decisions/0008-zero-spend-cloudflare-migration.md).
+Workers Free, D1, R2, Firebase and RealtimeKit are the current target. Local D1 implementation is in progress and hosted R2 is approved for pre-release use. Production traffic cutover still requires recovery and live acceptance. [Current cutover checkpoint](handoffs/2026-11-25-d1-route-coverage-checkpoint.md) · [Budget decision](decisions/0008-zero-spend-cloudflare-migration.md)
 
 ## Progress and follow up
 

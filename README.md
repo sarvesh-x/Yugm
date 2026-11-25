@@ -21,7 +21,7 @@ Start with [AGENTS.md](AGENTS.md) and the [documentation index](docs/INDEX.md). 
 
 ### Android emulator with local D1 and R2
 
-From `backend-server`, run `npm install`, `npm run d1:setup:local` and `npm run dev`. The default dev command starts the loopback Cloudflare Worker on port 4000 with local D1 and R2. It needs Firebase test settings and a signing secret in the local Worker vars file. See the runbook for setup and the cutover tracker for current API coverage. [Local Worker runbook](docs/handoffs/2026-11-24-local-d1-auth-emulator.md) · [MongoDB cutover status](docs/handoffs/2026-11-24-mongodb-runtime-cutover.md)
+From `backend-server`, run `npm install`, `npm run d1:setup:local` and `npm run dev`. The default dev command starts the loopback Cloudflare Worker on port 4000 with local D1 and R2. It needs Firebase test settings and a signing secret in the local Worker vars file. Use the same persistence directory for migration and startup to retain existing emulator data. [Local Worker runbook](docs/handoffs/2026-11-24-local-d1-auth-emulator.md) · [Current D1 coverage](docs/handoffs/2026-11-25-d1-route-coverage-checkpoint.md)
 
 ### Legacy Node API
 
@@ -120,7 +120,7 @@ For Firebase Auth and FCM, download `google-services.json` from Firebase Console
 android-client/app/google-services.json
 ```
 
-Debug builds use emulator loopback at `http://10.0.2.2:4000/api` with a local D1 database named `yugm` and simulated R2. Release builds use `YUGM_PRODUCTION_ORIGIN` for API and socket addresses. The production Worker config binds the hosted D1 database `yugm` and five hosted R2 buckets. Full API parity and production rollout are pending. [D1 and Redis migration status](docs/handoffs/2026-11-24-d1-database-and-redis-boundary.md) · [Hosted R2 and endpoint coverage](docs/handoffs/2026-11-24-hosted-r2-d1-endpoint-audit.md)
+Debug builds use emulator loopback at `http://10.0.2.2:4000/api` with a local D1 database named `yugm` and simulated R2. Release builds use `YUGM_PRODUCTION_ORIGIN` for API and socket addresses. The production Worker config targets hosted D1 `yugm` and five hosted R2 buckets. The shared Worker mounts 222 legacy API patterns, including all 59 room patterns. Hosted API acceptance, realtime and the MongoDB cutover remain open. [Current D1 coverage](docs/handoffs/2026-11-25-d1-route-coverage-checkpoint.md) · [Hosted R2 verification](docs/handoffs/2026-11-24-hosted-r2-d1-endpoint-audit.md)
 
 ```bash
 ./gradlew :app:assembleDebug --max-workers=2

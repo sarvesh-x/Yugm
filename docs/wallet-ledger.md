@@ -1,6 +1,8 @@
 # Wallet Ledger Safety
 
-Yugm wallet balances must only change through ledger services:
+Yugm wallet changes must commit with a matching ledger entry. The D1 room gift transaction applies stock, inventory, wallet changes and ledger entries together. Request keys are scoped to the sender and ledger keys to the transfer and leg. [D1 gift verification](handoffs/2026-11-25-d1-room-gift-transfers.md)
+
+The legacy runtime uses these ledger services.
 
 - `creditWallet`
 - `debitWallet`

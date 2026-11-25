@@ -1,5 +1,6 @@
 import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
 import { rollVipCycle, VIP_CYCLE_DAYS } from "../services/vip.js";
+import { closeExpiredD1Polls } from "./d1RoomPolls.js";
 
 const dayMs = 86_400_000;
 const uploadGraceMs = 15 * 60_000;
@@ -100,7 +101,8 @@ export async function runD1Maintenance(db: D1Database, now: Date, staging?: R2Bu
       db.prepare(`UPDATE clan_invites SET status = 'EXPIRED', updated_at = ? WHERE source_id IN (SELECT source_id FROM clan_invites
         WHERE status = 'PENDING' AND expires_at <= ? ORDER BY expires_at, source_id LIMIT ?)`).bind(time, time, rowLimit),
       db.prepare(`DELETE FROM clan_message_reactions WHERE clan_messages_id IN (${oldClanMessages})`).bind(clanCutoff, rowLimit),
-      db.prepare(`DELETE FROM clan_messages WHERE source_id IN (${oldClanMessages})`).bind(clanCutoff, rowLimit)
+      db.prepare(`DELETE FROM clan_messages WHERE source_id IN (${oldClanMessages})`).bind(clanCutoff, rowLimit),
+      closeExpiredD1Polls(db, now, rowLimit)
     ]),
     runD1BondMaintenance(db, now),
     rollExpiredVipCycles(db, now),

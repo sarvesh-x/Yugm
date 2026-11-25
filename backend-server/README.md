@@ -6,14 +6,14 @@ This directory is the standalone server project. It contains the Node.js API, ad
 
 ```bash
 npm install
-cp apps/api/.env.example apps/api/.env
+npm run d1:setup:local
 npm run dev
 ```
 
 ## Cloudflare migration
 
-The target is Cloudflare Workers and Pages on the free plan. The API Worker is an experimental compatibility scaffold and is not ready for production; see the [migration audit](../docs/cloudflare-migration/audit.md) for the remaining work and acceptance gates. The [Pages admin guide](apps/admin/CLOUDFLARE_PAGES.md) describes the separate staging and production builds.
+The default development command starts the D1/R2 Worker on port 4000. Prepare Firebase test settings and the local signing secret as described in the [emulator runbook](../docs/handoffs/2026-11-24-local-d1-auth-emulator.md). The debug and release-target Workers share 222 legacy HTTP patterns. Run `npm run audit:d1-endpoints -- --missing` for the exact remaining patterns. [Current coverage and cutover](../docs/handoffs/2026-11-25-d1-route-coverage-checkpoint.md)
 
-The existing hosting configuration is retained solely for the current deployment and rollback until the replacement has passed staging and the cutover is approved. Do not use the Worker scaffold with production data or switch DNS yet.
+The target is Workers Free, D1, R2, Firebase and RealtimeKit, with the admin app on Pages. The legacy Node API still runs via `npm run dev:api` with its separate MongoDB and environment configuration. Hosted verification, recovery and legacy-data transfer remain prerequisites for switching traffic. [Pages admin guide](apps/admin/CLOUDFLARE_PAGES.md)
 
 See the repository [README](../README.md) and `docs/` for configuration and architecture details.

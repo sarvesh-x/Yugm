@@ -11,6 +11,7 @@
   },
   "vars": {
     "YUGM_STAGE": "production",
+    "MONETIZATION_DIAMONDS_ENABLED": "false",
     "YUGM_PRODUCTION_ORIGIN": "https://api.yugm.invalid",
     "YUGM_R2_ENABLED": "true",
     "YUGM_FCM_PUSH_ENABLED": "true",
@@ -36,7 +37,9 @@
     { "name": "AUTH_IDENTIFIER", "namespace_id": "17024102", "simple": { "limit": 10, "period": 60 } },
     { "name": "AUTH_REFRESH", "namespace_id": "17024103", "simple": { "limit": 30, "period": 60 } },
     { "name": "CHAT_SEND", "namespace_id": "17024104", "simple": { "limit": 12, "period": 10 } },
-    { "name": "REPORT_REQUESTS", "namespace_id": "17024105", "simple": { "limit": 5, "period": 60 } }
+    { "name": "REPORT_REQUESTS", "namespace_id": "17024105", "simple": { "limit": 5, "period": 60 } },
+    { "name": "CREATE_REQUESTS", "namespace_id": "17024106", "simple": { "limit": 10, "period": 60 } },
+    { "name": "GIFT_SEND", "namespace_id": "17024107", "simple": { "limit": 20, "period": 10 } }
   ],
   "images": { "binding": "IMAGES" },
   "triggers": { "crons": ["*/15 * * * *", "* * * * *"] },

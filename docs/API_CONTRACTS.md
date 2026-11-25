@@ -7,6 +7,7 @@
 - OpenAPI contract: `backend-server/apps/api/openapi.yaml`.
 - Android API facade and feature APIs: `android-client/core/api/`.
 - Full static route declaration inventory: [production/endpoint-inventory.csv](production/endpoint-inventory.csv).
+- D1 Worker mounts: [shared D1 app](../backend-server/apps/api/src/migration/d1App.ts) and the Worker entrypoint. Run `npm run audit:d1-endpoints -- --missing` from `backend-server` to compare against the legacy router. [Current D1 coverage](handoffs/2026-11-25-d1-route-coverage-checkpoint.md)
 
 Do not hand-maintain a second route list as authoritative. The CSV is generated evidence: mounted paths can overlap, be shadowed, or require middleware-order review. Confirm the actual client request and Express mount when changing an endpoint. Keep OpenAPI, shared schemas, server behavior, and consumers aligned; document auth, authorization, errors, side effects, and idempotency for changed commands.
 
@@ -18,7 +19,7 @@ The API has more than one response envelope in existing paths. Inspect `src/util
 
 - `GET /health` and `GET /api/health` are lightweight liveness probes. They return process metadata and a pointer to `/ready` without querying MongoDB, storage or the image processor. Platform health checks and cheap uptime probes should use these paths.
 - `GET /ready` and `GET /api/ready` are dependency readiness probes. They verify database connectivity, storage configuration and that an image processor is installed, while reporting Redis/job state without requiring it. They return `503` until those dependencies are ready. The response contains only non-sensitive configuration status, never secrets or signed URLs.
-- On the Cloudflare Worker, `/health` is answered by the Durable Object shell before runtime startup; `/ready` is served by Express and therefore also proves that the Worker runtime initialized.
+- The legacy staging Worker answers `/health` in the Durable Object shell. The D1 Worker handles both probes at its fetch entrypoint and reports D1 and managed media status from readiness.
 
 ## Bonds contract (single inner-circle state)
 

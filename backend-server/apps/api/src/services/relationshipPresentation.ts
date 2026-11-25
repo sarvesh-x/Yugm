@@ -2,6 +2,8 @@ import { relationshipLevelMilestones } from "@yugm/shared";
 import { startOfUtcDay } from "./dailyWalletReward.js";
 
 export const dailyRelationshipMessageXpCap = 120;
+export const dailyRelationshipRoomDmXpCap = 80;
+export const dailyRelationshipGiftXpCap = 300;
 
 export function relationshipStreak(lastStreakAt: Date | string | null | undefined, currentStreak: number, now = new Date()) {
   const today = startOfUtcDay(now);

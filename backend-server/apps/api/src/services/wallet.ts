@@ -5,20 +5,11 @@ import { UserSafetyStatus } from "../models/UserSafetyStatus.js";
 import { WalletTransaction } from "../models/WalletTransaction.js";
 import { ErrorCode, HttpError } from "../utils/http.js";
 
-export const PLATFORM_FEE_PERCENTAGE = 10;
-export const CREATOR_SHARE_PERCENTAGE = 100 - PLATFORM_FEE_PERCENTAGE;
+export { creatorShare, platformFee, PLATFORM_FEE_PERCENTAGE, CREATOR_SHARE_PERCENTAGE } from "./giftPricing.js";
 export type WalletSource = (typeof walletSources)[number];
 type WalletEntry = mongoose.HydratedDocument<mongoose.InferSchemaType<typeof WalletTransaction.schema>>;
 type WalletMetadata = Record<string, unknown>;
 const allowedSources = new Set<string>(walletSources);
-
-export function platformFee(amount: number) {
-  return Math.floor(amount * PLATFORM_FEE_PERCENTAGE / 100);
-}
-
-export function creatorShare(amount: number) {
-  return amount - platformFee(amount);
-}
 
 export async function assertWalletNotFrozen(userId: string, session?: mongoose.ClientSession) {
   const query = UserSafetyStatus.findOne({ userId });

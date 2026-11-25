@@ -1,20 +1,38 @@
 import { randomBytes } from "node:crypto";
 import type { D1Database } from "@cloudflare/workers-types";
-import { createRoomSchema, xpDailyCaps, xpEvents } from "@yugm/shared";
+import {
+  chatMessageSchema, createPollSchema, createRoomSchema, directMessageSchema, roomModes, roomModesInfo,
+  votePollSchema, xpDailyCaps, xpEvents
+} from "@yugm/shared";
 import { Router, type Request } from "express";
 import { z } from "zod";
 import { requireHttpSession } from "../middleware/httpAccessSession.js";
 import { validateBody } from "../middleware/validate.js";
+import type { AccessClaims } from "../services/accessSession.js";
+import { moderateContent } from "../services/contentModeration.js";
 import { startOfUtcDay } from "../services/dailyWalletReward.js";
-import { asyncHandler, ErrorCode, HttpError, isValidObjectId, sendOk } from "../utils/http.js";
+import { applyModeAction, modeActionSchema, type ModeAction } from "../services/roomModeGame.js";
+import { pickRandom } from "../services/roomModePrompts.js";
+import { getVipStatus } from "../services/vip.js";
+import { asyncHandler, ErrorCode, HttpError, isValidObjectId, sanitizeText, sendOk } from "../utils/http.js";
 import { bindD1LiveUser, createD1AccessSessionReader, d1LiveUserFilter } from "./d1AccessSession.js";
+import { chatRestricted, recordD1ChatModeration } from "./d1ChatModeration.js";
+import { clearProfileMarkers } from "./d1Cosmetics.js";
+import { sendD1DirectMessage } from "./d1MessageSend.js";
 import { d1UserId, person, personJson, visiblePerson } from "./d1People.js";
+import { roomAccessFor } from "./d1RoomAccess.js";
+import { pollOpen, pollProjection, presentPoll } from "./d1RoomPolls.js";
+import { createRoomMode, readRoomMode, readRoomModeRoster, updateRoomMode } from "./d1RoomModes.js";
+import { readD1RoomPkHistory } from "./d1RoomPkHistory.js";
+import { assertD1ThemeEntitlement, setThemeSchema, usableTheme } from "./d1Themes.js";
+import { enforceD1UserRateLimit, type D1UserRateLimit } from "./d1UserRateLimit.js";
 import { prepareD1XpGrant, type D1GuardedStatement } from "./d1XpGrant.js";
 
 type Row = Record<string, string | number | null>;
 type ActorRow = {
   xp: number; level: number; wallet_balance: number; last_daily_check_in_at: string | null;
   name: string; muted_until: string | null; vip_expires_at: string | null; person_json: string;
+  vip_level: number; vip_tier: string | null; vip_frozen: number;
   room_restricted: number; shadow_banned: number; chat_restricted: number;
 };
 const privilegedRoles = new Set(["HOST", "SPEAKER", "MODERATOR"]);
@@ -30,7 +48,8 @@ const dailyEventXp = "SELECT COALESCE(SUM(amount), 0) AS amount FROM xp_daily_ca
 const restrictedStatus = (column: string) =>
   `EXISTS (SELECT 1 FROM user_safety_statuses WHERE user_id = u.source_id AND ${column} = 1)`;
 const actorQuery = `SELECT u.xp, u.level, u.wallet_balance, u.last_daily_check_in_at, u.name, u.muted_until,
-  u.vip_expires_at, ${personJson("u")} AS person_json, ${restrictedStatus("is_room_restricted")} AS room_restricted,
+  u.vip_expires_at, u.vip_level, u.vip_tier, u.vip_frozen,
+  ${personJson("u")} AS person_json, ${restrictedStatus("is_room_restricted")} AS room_restricted,
   ${restrictedStatus("is_shadow_banned")} AS shadow_banned,
   ${restrictedStatus("is_chat_restricted")} AS chat_restricted
   FROM users AS u WHERE ${d1LiveUserFilter} AND u.deletion_requested_at IS NULL`;
@@ -64,6 +83,7 @@ const adminSchema = z.object({ userId: z.string(), isAdmin: z.boolean().optional
 const micLockSchema = z.object({ locked: z.boolean() });
 const seatLockSchema = z.object({ seatIndex: z.number().int().min(0), locked: z.boolean() });
 const micStateSchema = z.object({ enabled: z.boolean() });
+const setModeSchema = z.object({ mode: z.enum(roomModes) });
 const takeSeatSchema = z.object({ seatIndex: z.number().int().min(0).optional() });
 
 function snake(field: string) {
@@ -78,10 +98,7 @@ const roomValues = Object.entries(roomArrays).map(([field, table]) => `(SELECT j
   SELECT value FROM ${table} WHERE rooms_id = r.source_id ORDER BY position)) AS ${snake(field)}_json`).join(", ");
 const roomProjection = `r.*, ${personJson("host")} AS host_json, ${roomValues}`;
 const fromRooms = "FROM rooms AS r JOIN users AS host ON host.source_id = r.host_id";
-const roomAccess = `r.visibility = 'PUBLIC' OR r.host_id = ?2 OR EXISTS (
-  SELECT 1 FROM room_invites WHERE room_id = r.source_id AND invitee_id = ?2 AND status IN ('PENDING', 'ACCEPTED')
-) OR ${[roomArrays.speakerIds, roomArrays.moderatorIds, roomArrays.roomAdminIds, roomArrays.coHostIds].map(table =>
-  `EXISTS (SELECT 1 FROM ${table} WHERE rooms_id = r.source_id AND value = ?2)`).join(" OR ")}`;
+const roomAccess = roomAccessFor("?2");
 const roomByViewer = `SELECT ${roomProjection}, (${roomAccess}) AS can_read,
   (r.host_id = ?2) AS is_host,
   EXISTS (SELECT 1 FROM room_admins WHERE rooms_id = r.source_id AND value = ?2) AS is_room_admin,
@@ -109,6 +126,21 @@ function roomId(value: string) {
   return value.toLowerCase();
 }
 
+function presentRoomMessage(row: Row) {
+  return {
+    _id: row.source_id, roomId: row.room_id, senderId: person(String(row.user_json)), message: row.message, type: row.type,
+    mediaUrl: row.media_url ?? undefined, mediaType: row.media_type ?? undefined,
+    createdAt: row.created_at ?? undefined, updatedAt: row.updated_at ?? undefined
+  };
+}
+
+function requireRoomChatActor(actor: ActorRow | null) {
+  if (!actor) throw new HttpError(401, "Session revoked", ErrorCode.UNAUTHORIZED);
+  safety(actor, { muted: true });
+  if (actor.chat_restricted) throw new HttpError(403, "Chat access restricted", ErrorCode.FORBIDDEN);
+  return actor;
+}
+
 function visible(row?: Row | null) {
   if (!row) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
   if (!row.can_read) throw new HttpError(403, "This private room is invite only", ErrorCode.FORBIDDEN);
@@ -120,6 +152,17 @@ function pageSize(value: unknown, fallback: number, max: number) {
 }
 
 const newId = () => randomBytes(12).toString("hex");
+const pollControl = "(r.host_id = u.source_id OR u.role = 'ADMIN') AND r.status = 'LIVE'";
+const activeMember = "EXISTS (SELECT 1 FROM room_participants AS m WHERE m.room_id = p.room_id AND m.user_id = u.source_id AND m.left_at IS NULL)";
+
+function activePollError() {
+  return new HttpError(404, "Active poll not found", ErrorCode.NOT_FOUND);
+}
+
+function pollId(value: string) {
+  if (!isValidObjectId(value)) throw new HttpError(400, "Invalid poll ID", ErrorCode.VALIDATION);
+  return value.toLowerCase();
+}
 
 function safety(actor: ActorRow, checks: { muted?: boolean; room?: boolean; shadow?: boolean } = {}) {
   if (checks.muted && actor.muted_until && Date.parse(actor.muted_until) > Date.now()) {
@@ -277,12 +320,110 @@ function participants(rows: Row[], maxSpeakers: number) {
   });
 }
 
-export function createD1RoomsRouter(db: D1Database) {
+export function createD1RoomsRouter(db: D1Database, allowChat?: D1UserRateLimit) {
   const router = Router();
   const access = createD1AccessSessionReader(db, "http");
   const authenticate = (req: Request) => requireHttpSession(req.headers.authorization, access);
+  const authenticateChat = asyncHandler(async (req, res, next) => {
+    const { claims } = await authenticate(req);
+    requireRoomChatActor(await readActor(db, claims, new Date().toISOString()));
+    res.locals.claims = claims;
+    next();
+  });
+  const requirePollSession = asyncHandler(async (req, res, next) => {
+    res.locals.pollSession = await authenticate(req);
+    next();
+  });
+  const readPoll = (id: string, room: string) =>
+    db.prepare(`SELECT ${pollProjection} FROM polls AS p WHERE p.source_id = ? AND p.room_id = ?`).bind(id, room);
+  const requirePollHost = async (id: string, viewer: string) => {
+    const row = await loadRoom(db, id, viewer);
+    if (!row) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
+    control(row, true);
+    if (row.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
+  };
   const lists = async (filter: string, ...values: Array<string | number | null>) =>
     (await db.prepare(`SELECT ${roomProjection} ${fromRooms} ${filter}`).bind(...values).all<Row>()).results;
+
+  const authenticateMode = asyncHandler(async (req, res, next) => {
+    res.locals.modeSession = await authenticate(req);
+    next();
+  });
+
+  router.get("/modes", (_req, res) => { sendOk(res, { modes: roomModesInfo }); });
+
+  router.get("/:roomId/pk-history", asyncHandler(async (req, res) => {
+    const { user } = await authenticate(req);
+    const id = roomId(req.params.roomId);
+    const battles = await readD1RoomPkHistory(db, id, user.id, roomAccessFor);
+    sendOk(res, { battles });
+  }));
+
+  router.post("/mode/random", authenticateMode, asyncHandler(async (_req, res) => {
+    const mode = pickRandom([...roomModes]);
+    const matching = await lists(`WHERE ${livePublic} AND r.mode = ? ${ordered} LIMIT 20`, mode);
+    const selected = matching.length > 0 ? matching : await lists(`WHERE ${livePublic} ${ordered} LIMIT 20`);
+    const rooms = selected.map(room);
+    sendOk(res, { mode: matching.length > 0 ? mode : pickRandom([...roomModes]), room: rooms[0] ?? null, rooms });
+  }));
+
+  router.post("/:id/mode", authenticateMode, validateBody(setModeSchema), asyncHandler(async (req, res) => {
+    const { claims }: Awaited<ReturnType<typeof authenticate>> = res.locals.modeSession;
+    const id = roomId(req.params.id);
+    const current = await loadRoom(db, id, claims.sub);
+    if (!current) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
+    control(current, true);
+    if (current.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
+    if (await readRoomMode(db, id)) throw new HttpError(409, "Room already has an active mode", ErrorCode.CONFLICT);
+    const { mode } = req.body as z.infer<typeof setModeSchema>;
+    const info = roomModesInfo.find(item => item.key === mode)!;
+    const roster = await readRoomModeRoster(db, id);
+    if (roster.length < info.minParticipants) {
+      throw new HttpError(400, `Need at least ${info.minParticipants} participants for ${info.name}`, ErrorCode.VALIDATION);
+    }
+    if (!await createRoomMode(db, claims, id, mode, roster)) {
+      await authenticate(req);
+      throw new HttpError(409, "Room or mode changed. Please try again.", ErrorCode.CONFLICT);
+    }
+    const [updated, modeState] = await Promise.all([loadRoom(db, id, claims.sub), readRoomMode(db, id)]);
+    if (!updated || !modeState) throw new HttpError(404, "Room mode not found", ErrorCode.NOT_FOUND);
+    sendOk(res, { room: room(updated), modeState: modeState.state });
+  }));
+
+  router.get("/:id/mode-state", authenticateMode, asyncHandler(async (req, res) => {
+    const { user }: Awaited<ReturnType<typeof authenticate>> = res.locals.modeSession;
+    const id = roomId(req.params.id);
+    const current = visible(await loadRoom(db, id, user.id));
+    const found = await readRoomMode(db, id);
+    sendOk(res, { mode: found ? current.mode ?? null : null, modeState: found?.state ?? null });
+  }));
+
+  router.post("/:id/mode/action", authenticateMode, validateBody(modeActionSchema), asyncHandler(async (req, res) => {
+    const { claims }: Awaited<ReturnType<typeof authenticate>> = res.locals.modeSession;
+    const id = roomId(req.params.id);
+    const input = req.body as ModeAction;
+    const hostOnly = input.action === "start" || input.action === "next_round" || input.action === "end";
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const current = await loadRoom(db, id, claims.sub);
+      if (!current) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
+      if (hostOnly) control(current, true);
+      else visible(current);
+      if (current.status !== "LIVE") throw new HttpError(400, "Room is not live", ErrorCode.VALIDATION);
+      const found = await readRoomMode(db, id);
+      if (!found) throw new HttpError(404, "No active mode for this room", ErrorCode.NOT_FOUND);
+      if (!hostOnly && (!found.state.participants.includes(claims.sub) || !await activeParticipant(id, claims.sub))) {
+        throw new HttpError(403, "You are not a participant in this room mode", ErrorCode.FORBIDDEN);
+      }
+      const now = new Date();
+      applyModeAction(found.state, input, claims.sub, now);
+      if (await updateRoomMode(db, claims, found.state, found.revision, hostOnly, now.toISOString())) {
+        sendOk(res, { modeState: found.state });
+        return;
+      }
+      await authenticate(req);
+    }
+    throw new HttpError(409, "Room mode changed. Please try again.", ErrorCode.CONFLICT);
+  }));
 
   router.get("/", asyncHandler(async (req, res) => {
     const type = typeof req.query.type === "string" ? req.query.type : null;
@@ -439,11 +580,108 @@ export function createD1RoomsRouter(db: D1Database) {
         .bind(id, user.id, pageSize(req.query.limit, 80, 200))
     ]);
     visible(rooms.results[0]);
-    sendOk(res, { messages: messages.results.reverse().map(row => ({
-      _id: row.source_id, roomId: row.room_id, senderId: person(String(row.user_json)), message: row.message, type: row.type,
-      mediaUrl: row.media_url ?? undefined, mediaType: row.media_type ?? undefined,
-      createdAt: row.created_at ?? undefined, updatedAt: row.updated_at ?? undefined
-    })) });
+    sendOk(res, { messages: messages.results.reverse().map(presentRoomMessage) });
+  }));
+
+  router.post("/:id/messages", authenticateChat, asyncHandler(async (_req, res, next) => {
+    await enforceD1UserRateLimit(allowChat, (res.locals.claims as AccessClaims).sub, res, 10);
+    next();
+  }), validateBody(chatMessageSchema), asyncHandler(async (req, res) => {
+    const claims: AccessClaims = res.locals.claims;
+    const input = req.body as z.infer<typeof chatMessageSchema>;
+    const check = moderateContent(input.message);
+    if (!check.isClean) {
+      await recordD1ChatModeration(db, claims, new Date().toISOString(), check);
+      if (check.action === "BLOCK") throw new HttpError(400, "Content was blocked by auto-moderation", ErrorCode.CONTENT_BLOCKED);
+    }
+    const id = roomId(req.params.id);
+    const media = input.mediaUrl ?? null;
+    const message = sanitizeText(input.message || (media ? "Shared a photo" : ""));
+    if (!message && !media) throw new HttpError(400, "Message cannot be empty", ErrorCode.VALIDATION);
+    const messageId = newId();
+    const saved = "EXISTS (SELECT 1 FROM chat_messages WHERE source_id = ?)";
+    const write: D1GuardedStatement = (sql, ...args) => db.prepare(sql).bind(...args, messageId);
+    const event = "CHAT_MESSAGE";
+    const award = xpEvents[event];
+    const cap = xpDailyCaps[event]!;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const now = new Date();
+      const time = now.toISOString();
+      const day = startOfUtcDay(now).toISOString();
+      const actor = requireRoomChatActor(await readActor(db, claims, time));
+      const current = await db.prepare("SELECT status FROM rooms WHERE source_id = ?").bind(id).first<string>("status");
+      if (!current) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
+      if (current !== "LIVE") throw new HttpError(400, "Room is closed", ErrorCode.VALIDATION);
+      if (!await activeParticipant(id, claims.sub)) {
+        throw new HttpError(403, "You are not a participant in this room", ErrorCode.FORBIDDEN);
+      }
+      if (media && getVipStatus({
+        vipTier: actor.vip_tier, vipLevel: actor.vip_level, vipExpiresAt: actor.vip_expires_at, vipFrozen: Boolean(actor.vip_frozen)
+      }, now).vipLevel < 4) {
+        throw new HttpError(403, "Room image sharing unlocks at VIP 4", ErrorCode.FORBIDDEN);
+      }
+      const points = await xpForEvent(claims.sub, event, day, award, cap);
+      const earned = points.earnedToday + points.xpAwarded;
+      const progress = prepareD1XpGrant(write, saved, now, {
+        userId: claims.sub, event, actionKey: `message:${messageId}`, requestedXp: award, xpAwarded: points.xpAwarded,
+        previousXp: actor.xp, previousLevel: actor.level, balanceBefore: actor.wallet_balance,
+        lastDailyCheckInAt: actor.last_daily_check_in_at ?? undefined,
+        cap: { capped: earned >= cap, cap, earnedToday: earned, remainingToday: Math.max(0, cap - earned) }
+      });
+      const claim = db.prepare(`INSERT INTO chat_messages (source_id, room_id, sender_id, message, type, media_url, media_type, created_at, updated_at)
+        SELECT ?, r.source_id, u.source_id, ?, 'TEXT', ?, ?, ?, ? FROM rooms AS r CROSS JOIN users AS u
+        WHERE r.source_id = ? AND r.status = 'LIVE' AND ${d1LiveUserFilter} AND u.deletion_requested_at IS NULL
+          AND (u.muted_until IS NULL OR u.muted_until <= ?) AND NOT ${chatRestricted}
+          AND EXISTS (SELECT 1 FROM room_participants WHERE room_id = r.source_id AND user_id = u.source_id AND left_at IS NULL)
+          AND (? IS NULL OR (u.vip_tier IS ? AND u.vip_level = ? AND u.vip_frozen = 0 AND u.vip_expires_at IS ?
+            AND u.vip_expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')))
+          AND u.xp = ? AND u.level = ? AND u.wallet_balance = ? AND u.last_daily_check_in_at IS ?
+          AND (${dailyEventXp}) = ?`).bind(messageId, message, media, media ? "IMAGE" : null, time, time, id,
+          ...bindD1LiveUser(claims, time), time, media, actor.vip_tier, actor.vip_level, actor.vip_expires_at,
+          actor.xp, actor.level, actor.wallet_balance, actor.last_daily_check_in_at,
+          claims.sub, event, day, points.earnedToday);
+      const statements = [claim, ...progress.statements];
+      if (points.xpAwarded > 0) {
+        const entries = Object.entries(progress.columns);
+        statements.push(...capStatements(write, saved, claims.sub, event, day, points.xpAwarded, time),
+          write(`UPDATE users SET ${entries.map(([column]) => column + " = ?").join(", ")}, updated_at = ?
+            WHERE source_id = ? AND ${saved}`, ...entries.map(([, value]) => value), time, claims.sub),
+          clearProfileMarkers(db, claims.sub, ["xp", "level", "levelTitle", "walletBalance"], saved, messageId));
+      }
+      const [committed, ...results] = await db.batch<Row>([
+        ...statements, db.prepare(`SELECT m.*, ${personJson("u")} AS user_json FROM chat_messages AS m
+          JOIN users AS u ON u.source_id = m.sender_id WHERE m.source_id = ?`).bind(messageId)
+      ]);
+      if (committed.meta.changes) {
+        sendOk(res, { message: presentRoomMessage(results.at(-1)!.results[0]) }, 201);
+        return;
+      }
+    }
+    throw new HttpError(409, "Room changed. Please try again.", ErrorCode.CONFLICT);
+  }));
+
+  router.post("/:id/messages/direct", authenticateChat, validateBody(directMessageSchema), asyncHandler(async (req, res) => {
+    const claims: AccessClaims = res.locals.claims;
+    const id = roomId(req.params.id);
+    const host = await db.prepare("SELECT host_id FROM rooms WHERE source_id = ?").bind(id).first<string>("host_id");
+    if (!host) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
+    if (!await activeParticipant(id, claims.sub)) {
+      throw new HttpError(403, "You are not a participant in this room", ErrorCode.FORBIDDEN);
+    }
+    const receiver = host === claims.sub ? req.body.receiverId : host;
+    if (!receiver || !isValidObjectId(receiver)) throw new HttpError(400, "Invalid receiver", ErrorCode.VALIDATION);
+    const result = await sendD1DirectMessage<Row>(db, claims, receiver.toLowerCase(), req.body,
+      key => db.prepare("SELECT * FROM direct_messages WHERE source_id = ?").bind(key), id);
+    const row = result.message;
+    sendOk(res, {
+      message: {
+        _id: row.source_id, senderId: row.sender_id, receiverId: row.receiver_id, roomId: row.room_id,
+        message: row.message, mediaUrl: row.media_url, mediaType: row.media_type, duration: row.duration,
+        forwarded: Boolean(row.forwarded), isEdited: Boolean(row.is_edited), read: Boolean(row.read), reactions: [],
+        createdAt: row.created_at, updatedAt: row.updated_at
+      },
+      relationship: result.relationship, xpGrant: result.xpGrant
+    }, 201);
   }));
 
   router.get("/:id/activity", asyncHandler(async (req, res) => {
@@ -462,6 +700,128 @@ export function createD1RoomsRouter(db: D1Database) {
       type: row.type, label: row.label, metadata: JSON.parse(String(row.metadata)),
       createdAt: row.created_at ?? undefined, updatedAt: row.updated_at ?? undefined
     })) });
+  }));
+
+  router.get("/:id/polls", requirePollSession, asyncHandler(async (req, res) => {
+    const { user }: Awaited<ReturnType<typeof authenticate>> = res.locals.pollSession;
+    const id = roomId(req.params.id);
+    const [rooms, polls] = await db.batch<Row>([
+      db.prepare(`SELECT (${roomAccess}) AS can_read FROM rooms AS r WHERE r.source_id = ?1`).bind(id, user.id),
+      db.prepare(`SELECT ${pollProjection} FROM polls AS p JOIN rooms AS r ON r.source_id = p.room_id
+        WHERE r.source_id = ?1 AND (${roomAccess}) AND EXISTS
+          (SELECT 1 FROM room_participants WHERE room_id = r.source_id AND user_id = ?2 AND left_at IS NULL)
+        ORDER BY p.created_at DESC, p.source_id DESC LIMIT 10`).bind(id, user.id)
+    ]);
+    visible(rooms.results[0]);
+    sendOk(res, { polls: polls.results.map(presentPoll) });
+  }));
+
+  router.post("/:id/polls", requirePollSession, validateBody(createPollSchema), asyncHandler(async (req, res) => {
+    const { claims }: Awaited<ReturnType<typeof authenticate>> = res.locals.pollSession;
+    const id = roomId(req.params.id);
+    await requirePollHost(id, claims.sub);
+    const question = sanitizeText(req.body.question);
+    const options = (req.body.options as string[]).map(text => ({ id: newId(), text: sanitizeText(text) }));
+    if (!question || options.some(option => !option.text)) {
+      throw new HttpError(400, "Poll question and options cannot be empty", ErrorCode.VALIDATION);
+    }
+    const key = newId();
+    const time = new Date().toISOString();
+    const [created, , , poll] = await db.batch<Row>([
+      db.prepare(`INSERT INTO polls (source_id, room_id, created_by, question, is_active, created_at, updated_at)
+        SELECT ?, r.source_id, u.source_id, ?, 1, ?, ? FROM rooms AS r CROSS JOIN users AS u
+        WHERE r.source_id = ? AND ${pollControl} AND ${d1LiveUserFilter}`)
+        .bind(key, question, time, time, id, ...bindD1LiveUser(claims, time)),
+      db.prepare(`INSERT INTO poll_options (source_id, text, votes, polls_id, position)
+        SELECT json_extract(o.value, '$.id'), json_extract(o.value, '$.text'), 0, p.source_id, o.key
+        FROM polls AS p CROSS JOIN json_each(?) AS o WHERE p.source_id = ?`).bind(JSON.stringify(options), key),
+      db.prepare(`INSERT INTO room_activities (source_id, room_id, user_id, type, label, metadata, created_at, updated_at)
+        SELECT ?, p.room_id, u.source_id, 'POLL', u.name || ' started a poll', json_object('pollId', p.source_id), ?, ?
+        FROM polls AS p JOIN users AS u ON u.source_id = p.created_by WHERE p.source_id = ?`)
+        .bind(newId(), time, time, key),
+      readPoll(key, id)
+    ]);
+    if (!created.meta.changes) {
+      await authenticate(req);
+      await requirePollHost(id, claims.sub);
+      throw new HttpError(409, "Room changed. Please try again.", ErrorCode.CONFLICT);
+    }
+    sendOk(res, { poll: presentPoll(poll.results[0]) }, 201);
+  }));
+
+  router.post("/:id/polls/:pollId/vote", requirePollSession, validateBody(votePollSchema), asyncHandler(async (req, res) => {
+    const { claims }: Awaited<ReturnType<typeof authenticate>> = res.locals.pollSession;
+    const id = roomId(req.params.id);
+    const key = pollId(req.params.pollId);
+    const index: number = req.body.optionIndex;
+    const vote = newId();
+    const time = new Date().toISOString();
+    const [claimed, , , poll] = await db.batch<Row>([
+      db.prepare(`INSERT INTO poll_votes (source_id, value, polls_id, position)
+        SELECT ?, u.source_id, p.source_id,
+          COALESCE((SELECT MAX(position) + 1 FROM poll_votes WHERE polls_id = p.source_id), 0)
+        FROM polls AS p JOIN poll_options AS o ON o.polls_id = p.source_id AND o.position = ?
+        CROSS JOIN users AS u
+        WHERE p.source_id = ? AND p.room_id = ? AND ${pollOpen} AND ${d1LiveUserFilter} AND ${activeMember}
+          AND NOT EXISTS (SELECT 1 FROM poll_votes WHERE polls_id = p.source_id AND value = u.source_id)`)
+        .bind(vote, index, key, id, ...bindD1LiveUser(claims, time)),
+      db.prepare(`UPDATE poll_options SET votes = votes + 1 WHERE polls_id = ? AND position = ?
+        AND EXISTS (SELECT 1 FROM poll_votes WHERE source_id = ?)`).bind(key, index, vote),
+      db.prepare(`UPDATE polls SET updated_at = ? WHERE source_id = ?
+        AND EXISTS (SELECT 1 FROM poll_votes WHERE source_id = ?)`).bind(time, key, vote),
+      readPoll(key, id)
+    ]);
+    if (!claimed.meta.changes) {
+      await authenticate(req);
+      if (!await activeParticipant(id, claims.sub)) {
+        throw new HttpError(403, "You are not a participant in this room", ErrorCode.FORBIDDEN);
+      }
+      const row = poll.results[0];
+      if (!row?.open) throw activePollError();
+      if (!await db.prepare("SELECT 1 FROM poll_options WHERE polls_id = ? AND position = ?").bind(key, index).first()) {
+        throw new HttpError(400, "Invalid option", ErrorCode.VALIDATION);
+      }
+      throw new HttpError(409, "You already voted", ErrorCode.CONFLICT);
+    }
+    sendOk(res, { poll: presentPoll(poll.results[0]) });
+  }));
+
+  router.post("/:id/polls/:pollId/close", requirePollSession, asyncHandler(async (req, res) => {
+    const { claims }: Awaited<ReturnType<typeof authenticate>> = res.locals.pollSession;
+    const id = roomId(req.params.id);
+    await requirePollHost(id, claims.sub);
+    const key = pollId(req.params.pollId);
+    const time = new Date().toISOString();
+    const [closed, poll] = await db.batch<Row>([
+      db.prepare(`UPDATE polls AS p SET is_active = 0, updated_at = ?
+        WHERE p.source_id = ? AND p.room_id = ? AND ${pollOpen} AND EXISTS (
+          SELECT 1 FROM rooms AS r CROSS JOIN users AS u WHERE r.source_id = p.room_id
+          AND ${pollControl} AND ${d1LiveUserFilter})`)
+        .bind(time, key, id, ...bindD1LiveUser(claims, time)),
+      readPoll(key, id)
+    ]);
+    if (!closed.meta.changes) {
+      await authenticate(req);
+      await requirePollHost(id, claims.sub);
+      throw activePollError();
+    }
+    sendOk(res, { poll: presentPoll(poll.results[0]) });
+  }));
+
+  router.get("/:id/missions", asyncHandler(async (req, res) => {
+    const { user } = await authenticate(req);
+    const id = roomId(req.params.id);
+    const row = visible(await db.prepare(`SELECT (${roomAccess}) AS can_read,
+        (SELECT COUNT(*) FROM (SELECT 1 FROM room_activities WHERE room_id = r.source_id AND type = 'REACTION' LIMIT 10)) AS reactions,
+        (SELECT COUNT(*) FROM (SELECT 1 FROM room_activities WHERE room_id = r.source_id AND type = 'GIFT' LIMIT 3)) AS gifts,
+        (SELECT COUNT(*) FROM (SELECT 1 FROM room_participants WHERE room_id = r.source_id AND left_at IS NULL LIMIT 25)) AS participants
+      FROM rooms AS r WHERE r.source_id = ?1`).bind(id, user.id).first<Row>());
+    const missions = [
+      { id: "react-10", title: "Spark 10 reactions", progress: Number(row.reactions), target: 10, reward: 25 },
+      { id: "gift-3", title: "Send 3 gifts", progress: Number(row.gifts), target: 3, reward: 50 },
+      { id: "crowd-25", title: "Bring 25 people together", progress: Number(row.participants), target: 25, reward: 100 }
+    ].map(mission => ({ ...mission, complete: mission.progress >= mission.target }));
+    sendOk(res, { missions });
   }));
 
   const ownedCosmetics = async (userId: string, fields: { theme?: string; badge?: string; ambience?: string }) => {
@@ -634,10 +994,10 @@ export function createD1RoomsRouter(db: D1Database) {
         db.prepare(`INSERT INTO room_participants (source_id, room_id, user_id, role, mic_enabled, moderator_muted,
             seat_index, camera_enabled, joined_at)
           SELECT ?, r.source_id, ?, ?, 1, 0, NULL, 1, ? FROM rooms AS r
-          WHERE r.source_id = ? AND r.status = 'LIVE'
-            AND NOT EXISTS (SELECT 1 FROM room_participants WHERE room_id = r.source_id AND user_id = ? AND left_at IS NULL)
+          WHERE r.source_id = ? AND r.status = 'LIVE' AND (${roomAccessFor("?2")})
+            AND NOT EXISTS (SELECT 1 FROM room_participants WHERE room_id = r.source_id AND user_id = ?2 AND left_at IS NULL)
             AND ${actorStateGuard}`)
-          .bind(participantId, claims.sub, role, time, id, claims.sub,
+          .bind(participantId, claims.sub, role, time, id,
             ...bindD1LiveUser(claims, time), actor.xp, actor.level, actor.wallet_balance, actor.last_daily_check_in_at),
         db.prepare(`UPDATE rooms SET participant_count = participant_count + 1, updated_at = ?
           WHERE source_id = ? AND EXISTS (SELECT 1 FROM room_participants WHERE source_id = ?)`)
@@ -759,6 +1119,35 @@ export function createD1RoomsRouter(db: D1Database) {
         .bind(...values, time, id).run();
     }
     sendOk(res, { room: room(row) });
+  }));
+
+  router.post("/:id/theme", asyncHandler(async (req, res, next) => {
+    res.locals.themeSession = await authenticate(req);
+    next();
+  }), validateBody(setThemeSchema), asyncHandler(async (req, res) => {
+    const { claims, user }: Awaited<ReturnType<typeof authenticate>> = res.locals.themeSession;
+    const id = roomId(req.params.id);
+    const key: string = req.body.themeKey;
+    const current = await loadRoom(db, id, claims.sub);
+    if (!current) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
+    const cohosts = JSON.parse(String(current.co_host_ids_json)) as string[];
+    if (current.host_id !== user.id && !cohosts.includes(user.id) && user.role !== "ADMIN") {
+      throw new HttpError(403, "Host or co-host control required", ErrorCode.FORBIDDEN);
+    }
+    await assertD1ThemeEntitlement(db, user.id, key);
+    const time = new Date().toISOString();
+    const updated = await db.prepare(`UPDATE rooms AS r SET theme = ?, updated_at = ? WHERE r.source_id = ?
+      AND EXISTS (SELECT 1 FROM users AS u WHERE ${d1LiveUserFilter} AND ${usableTheme}
+        AND (r.host_id = u.source_id OR u.role = 'ADMIN' OR EXISTS (
+          SELECT 1 FROM room_cohosts AS c WHERE c.rooms_id = r.source_id AND c.value = u.source_id)))`)
+      .bind(key, time, id, ...bindD1LiveUser(claims, time), key).run();
+    if (!updated.meta.changes) {
+      await authenticate(req);
+      throw new HttpError(403, "Theme or room control is no longer available", ErrorCode.FORBIDDEN);
+    }
+    const result = await loadRoom(db, id, claims.sub);
+    if (!result) throw new HttpError(404, "Room not found", ErrorCode.NOT_FOUND);
+    sendOk(res, { room: room(result) });
   }));
 
   router.post("/:id/mic-lock", validateBody(micLockSchema), asyncHandler(async (req, res) => {

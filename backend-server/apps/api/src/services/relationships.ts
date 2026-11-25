@@ -3,15 +3,15 @@ import { relationshipXpEvents } from "@yugm/shared";
 import { Relationship } from "../models/Relationship.js";
 import { createNotification } from "./notifications.js";
 
-import { calculateRelationshipLevel, dailyRelationshipMessageXpCap, getRelationshipStatus, relationshipPairKey,
+import { calculateRelationshipLevel, dailyRelationshipGiftXpCap, dailyRelationshipMessageXpCap, dailyRelationshipRoomDmXpCap, getRelationshipStatus, relationshipPairKey,
   relationshipStreak } from "./relationshipPresentation.js";
 
 export { calculateRelationshipLevel, getRelationshipStatus, relationshipPairKey } from "./relationshipPresentation.js";
 
 const dailyRelationshipCaps: Partial<Record<RelationshipXpEvent, number>> = {
   MESSAGE_SENT: dailyRelationshipMessageXpCap,
-  ROOM_DM_SENT: 80,
-  GIFT_SENT: 300
+  ROOM_DM_SENT: dailyRelationshipRoomDmXpCap,
+  GIFT_SENT: dailyRelationshipGiftXpCap
 };
 const relationshipDailyAwards = new Map<string, { amount: number; resetAt: number }>();
 

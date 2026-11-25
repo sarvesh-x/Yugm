@@ -1,5 +1,7 @@
 # Moderation Workflow
 
+The shared D1 Worker creates queue entries at report intake. Staff with `reports.read` can read the evidence through the D1 report routes. Submission responses return a receipt with no evidence. Manual moderator actions below still use the legacy runtime. [D1 report workflow](handoffs/2026-11-25-d1-reports-and-gift-catalog.md)
+
 1. A user report is created by the app.
 2. Admin report listing/detail access ensures a matching `ModerationQueue` item exists.
 3. A moderator assigns, escalates, dismisses, resolves, or acts on the report.

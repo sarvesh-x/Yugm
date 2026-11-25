@@ -1,6 +1,9 @@
-import { Router } from "express";
+import { Router, type RequestHandler } from "express";
 
 export const legalRouter = Router();
+export const publicServiceRoot: RequestHandler = (_req, res) => {
+  res.json({ ok: true, service: "yugm-api", version: "0.1.0", health: "/health", api: "/api" });
+};
 
 function page(title: string, content: string) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} | Yugm</title><style>

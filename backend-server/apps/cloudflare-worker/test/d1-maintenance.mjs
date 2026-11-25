@@ -64,6 +64,7 @@ export async function verifyD1Maintenance(worker, db, owner, visitor) {
   const [session, story, hidden, clan, oldMessage, recentMessage, reaction, invite,
     staleRoom, recentRoom, officialRoom, participant, roomMessage, speakerRequest] = Array.from({ length: 14 }, id);
   const [expiredUpload, processingUpload, freshUpload] = Array.from({ length: 3 }, randomUUID);
+  const [expiredPoll, openPoll] = [id(), id()];
   const staging = await worker.getR2Bucket("STAGING");
   const rooms = [
     [staleRoom, `stale-${staleRoom}`, staleRoomTime],
@@ -102,6 +103,9 @@ export async function verifyD1Maintenance(worker, db, owner, visitor) {
        is_duet, livekit_room_name, allow_audience_mic_requests, mic_locked, vip_only, created_at, updated_at)
       VALUES (?, 'Maintenance fixture', 'VOICE', ?, 'fixture', '[]', 'en', 'LIVE', 'PUBLIC', 8, 1, 0, ?, 0, 0, 0, ?, ?)`)
       .bind(roomId, ownerId, livekitName, createdAt, createdAt)),
+    db.prepare(`INSERT INTO polls (source_id, room_id, created_by, question, is_active, created_at)
+      VALUES (?, ?, ?, 'Expired?', 1, ?), (?, ?, ?, 'Open?', 1, ?)`)
+      .bind(expiredPoll, recentRoom, ownerId, past, openPoll, recentRoom, ownerId, time),
     db.prepare(`INSERT INTO room_participants (source_id, room_id, user_id, role, mic_enabled, moderator_muted,
       seat_index, camera_enabled, joined_at) VALUES (?, ?, ?, 'HOST', 1, 0, 0, 1, ?)`)
       .bind(participant, staleRoom, ownerId, staleRoomTime),
@@ -123,6 +127,9 @@ export async function verifyD1Maintenance(worker, db, owner, visitor) {
   assert.equal(await db.prepare("SELECT status FROM stories WHERE source_id = ?").bind(story).first("status"), "EXPIRED");
   assert.equal(await db.prepare("SELECT status FROM stories WHERE source_id = ?").bind(hidden).first("status"), "HIDDEN");
   assert.equal(await db.prepare("SELECT status FROM clan_invites WHERE source_id = ?").bind(invite).first("status"), "EXPIRED");
+  assert.deepEqual(await db.prepare("SELECT is_active, updated_at FROM polls WHERE source_id = ?").bind(expiredPoll).first(),
+    { is_active: 0, updated_at: new Date(Date.parse(past) + 45_000).toISOString() });
+  assert.equal(await db.prepare("SELECT is_active FROM polls WHERE source_id = ?").bind(openPoll).first("is_active"), 1);
   assert.equal(await db.prepare("SELECT 1 FROM clan_message_reactions WHERE source_id = ?").bind(reaction).first(), null);
   assert.equal(await db.prepare("SELECT 1 FROM clan_messages WHERE source_id = ?").bind(oldMessage).first(), null);
   assert.ok(await db.prepare("SELECT 1 FROM clan_messages WHERE source_id = ?").bind(recentMessage).first());

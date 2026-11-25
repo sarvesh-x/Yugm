@@ -17,6 +17,7 @@ import com.yugm.app.core.model.WalletProgressResult
 import com.yugm.app.core.model.WalletTransaction
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.UUID
 
 object WalletApi {
     suspend fun balance(token: String): Int {
@@ -152,6 +153,7 @@ object WalletApi {
 
     suspend fun sendGift(token: String, roomId: String, gift: GiftItem, receiverId: String, currency: String = "COINS", inventoryItemId: String? = null) {
         val body = JSONObject().put("giftId", gift.id).put("receiverId", receiverId).put("currency", currency)
+            .put("idempotencyKey", UUID.randomUUID().toString())
         inventoryItemId?.let { body.put("inventoryItemId", it) }
         YugmHttpClient.post("/rooms/$roomId/send-gift", token, body)
     }

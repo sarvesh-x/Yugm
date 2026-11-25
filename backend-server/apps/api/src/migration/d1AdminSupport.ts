@@ -1,3 +1,4 @@
+import { ticketJson, type TicketRow } from "./d1SupportPresentation.js";
 import type { D1Database } from "@cloudflare/workers-types";
 import { Router } from "express";
 import { z } from "zod";
@@ -17,23 +18,6 @@ const statusSchema = z.object({
   note: z.string().max(500).optional()
 });
 
-type TicketRow = {
-  source_id: string;
-  user_id: string | null;
-  requester_email: string | null;
-  assigned_to: string | null;
-  category: string;
-  subject: string;
-  message: string;
-  status: string;
-  priority: string;
-  last_message_at: string | null;
-  closed_at: string | null;
-  resolved_at: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-};
-
 type MessageRow = {
   source_id: string;
   sender_id: string | null;
@@ -50,26 +34,6 @@ const userJson = (alias: string) => `json_object('_id', ${alias}.source_id, 'use
 
 function parseJson(value: string | null) {
   return value === null ? null : JSON.parse(value) as Record<string, unknown>;
-}
-
-function ticketJson(row: TicketRow, messages: unknown[], user?: unknown, assignee?: unknown) {
-  return {
-    _id: row.source_id,
-    ...(row.user_id === null ? {} : { userId: user === undefined ? row.user_id : user }),
-    ...(row.requester_email === null ? {} : { requesterEmail: row.requester_email }),
-    ...(row.assigned_to === null ? {} : { assignedTo: assignee === undefined ? row.assigned_to : assignee }),
-    category: row.category,
-    subject: row.subject,
-    message: row.message,
-    status: row.status,
-    priority: row.priority,
-    ...(row.last_message_at === null ? {} : { lastMessageAt: row.last_message_at }),
-    ...(row.closed_at === null ? {} : { closedAt: row.closed_at }),
-    ...(row.resolved_at === null ? {} : { resolvedAt: row.resolved_at }),
-    messages,
-    createdAt: row.created_at ?? undefined,
-    updatedAt: row.updated_at ?? undefined
-  };
 }
 
 function messageJson(row: MessageRow, populateSender: boolean) {
@@ -169,15 +133,14 @@ export function createD1AdminSupportRouter(db: D1Database, adminJwtSecret?: stri
       const row = await findTicket(req.params.ticketId);
       if (!row) throw new HttpError(404, "Ticket not found");
       const time = new Date().toISOString();
-      const next = await db.prepare("SELECT COALESCE(MAX(position), -1) + 1 AS position FROM support_ticket_messages WHERE support_tickets_id = ?")
-        .bind(row.source_id).first<{ position: number }>();
       await db.batch([
         db.prepare(`INSERT INTO support_ticket_messages
           (source_id, sender_id, sender_admin_id, sender_role, message, created_at, support_tickets_id, position)
-          VALUES (?, NULL, ?, 'ADMIN', ?, ?, ?, ?)`)
-          .bind(newId(), admin.id, (req.body as { message: string }).message, time, row.source_id, next?.position ?? 0),
-        db.prepare(`UPDATE support_tickets SET status = ?, updated_at = ? WHERE source_id = ?`)
-          .bind(row.status === "OPEN" ? "IN_PROGRESS" : row.status, time, row.source_id)
+          VALUES (?, NULL, ?, 'ADMIN', ?, ?, ?, (SELECT COALESCE(MAX(position) + 1, 0)
+            FROM support_ticket_messages WHERE support_tickets_id = ?))`)
+          .bind(newId(), admin.id, (req.body as { message: string }).message, time, row.source_id, row.source_id),
+        db.prepare(`UPDATE support_tickets SET status = CASE WHEN status = 'OPEN' THEN 'IN_PROGRESS' ELSE status END,
+          updated_at = ? WHERE source_id = ?`).bind(time, row.source_id)
       ]);
       await insertD1AdminAudit(db, admin, {
         action: "SUPPORT_RESPOND", entityType: "SupportTicket", entityId: row.source_id,

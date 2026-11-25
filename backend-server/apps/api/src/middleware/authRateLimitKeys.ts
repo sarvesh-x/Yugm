@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+export const authClientIpHeader = "x-yugm-client-ip";
+
 export function authIdentifierKey(body: unknown, ip: string) {
   const { email, phone } = (body ?? {}) as { email?: unknown; phone?: unknown };
   const identifier = typeof email === "string" ? email.trim().toLowerCase()

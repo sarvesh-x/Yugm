@@ -13,7 +13,7 @@ object SupportApi {
             put("category", category)
             put("priority", priority)
         }
-        val json = YugmHttpClient.post("/api/support/tickets", token, body)
+        val json = YugmHttpClient.post("/support/tickets", token, body)
         val data = json.getJSONObject("data")
         return parseTicket(data.getJSONObject("ticket"))
     }
@@ -21,7 +21,7 @@ object SupportApi {
     suspend fun listTickets(token: String, status: String? = null, page: Int = 1, limit: Int = 20): Triple<List<SupportTicket>, Int, Int> {
         val params = mutableListOf("page=$page", "limit=$limit")
         if (status != null) params.add("status=$status")
-        val json = YugmHttpClient.get("/api/support/tickets?${params.joinToString("&")}", token)
+        val json = YugmHttpClient.get("/support/tickets?${params.joinToString("&")}", token)
         val data = json.getJSONObject("data")
         val ticketsArray = data.getJSONArray("tickets")
         val tickets = mutableListOf<SupportTicket>()
@@ -34,20 +34,20 @@ object SupportApi {
     }
 
     suspend fun getTicket(token: String, ticketId: String): SupportTicket {
-        val json = YugmHttpClient.get("/api/support/tickets/$ticketId", token)
+        val json = YugmHttpClient.get("/support/tickets/$ticketId", token)
         val data = json.getJSONObject("data")
         return parseTicket(data.getJSONObject("ticket"))
     }
 
     suspend fun addMessage(token: String, ticketId: String, message: String): SupportTicket {
         val body = JSONObject().apply { put("message", message) }
-        val json = YugmHttpClient.post("/api/support/tickets/$ticketId/messages", token, body)
+        val json = YugmHttpClient.post("/support/tickets/$ticketId/messages", token, body)
         val data = json.getJSONObject("data")
         return parseTicket(data.getJSONObject("ticket"))
     }
 
     suspend fun closeTicket(token: String, ticketId: String): SupportTicket {
-        val json = YugmHttpClient.post("/api/support/tickets/$ticketId/close", token, JSONObject())
+        val json = YugmHttpClient.post("/support/tickets/$ticketId/close", token, JSONObject())
         val data = json.getJSONObject("data")
         return parseTicket(data.getJSONObject("ticket"))
     }
