@@ -20,6 +20,7 @@ import { verifyD1Dating } from "./d1-dating.mjs";
 import { verifyD1DirectGifts } from "./d1-direct-gifts.mjs";
 import { verifyD1AppEndpoints } from "./d1-endpoints.mjs";
 import { verifyD1Events } from "./d1-events.mjs";
+import { verifyD1Experience } from "./d1-experience.mjs";
 import { verifyD1Feed } from "./d1-feed.mjs";
 import { verifyD1GamesReads } from "./d1-games-reads.mjs";
 import { verifyD1GiftCatalog } from "./d1-gift-catalog.mjs";
@@ -189,7 +190,8 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
       "0015_room_mode_state", "0016_pk_room_history_indexes", "0017_report_review_indexes", "0018_gift_catalog_indexes",
       "0019_room_gift_transfers", "0020_wishlist_unique", "0021_user_mission_unique", "0022_referral_unique",
       "0023_subscription_unique", "0024_event_participants_unique", "0025_dating_swipes",
-      "0026_vibe_graph_unique", "0027_group_participants_unique", "0028_story_views_unique", "0029_social_unique"];
+      "0026_vibe_graph_unique", "0027_group_participants_unique", "0028_story_views_unique", "0029_social_unique",
+      "0030_experience_claim_unique"];
     for (const file of runtimeMigrations) {
       const migration = await readFile(pathFromHere(`../../api/migrations/d1/${file}.sql`), "utf8");
       await db.batch(unstable_splitSqlQuery(migration).map(sql => db.prepare(sql)));
@@ -830,6 +832,7 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     await verifyD1Feed(db, request, feedOwner, feedVisitor);
     await verifyD1GamesReads(db, request, feedOwner, feedVisitor);
     await verifyD1SocialFeatures(db, request, feedOwner, feedVisitor);
+    await verifyD1Experience(db, request, feedOwner, feedVisitor);
     await verifyD1Highlights(db, request, feedOwner, feedVisitor);
     await verifyD1Wishlist(db, request, feedOwner, feedVisitor);
     await verifyD1Missions(db, request, feedOwner, feedVisitor);

@@ -91,6 +91,7 @@ The production audit documents explain their baselines and verification limits. 
 - [D1 moderation text checks](handoffs/2026-11-25-d1-moderation-checks.md)
 - [D1 Arcade read routes](handoffs/2026-11-25-d1-games-reads.md)
 - [D1 social features](handoffs/2026-11-25-d1-social-features.md)
+- [D1 experience routes](handoffs/2026-11-25-d1-experience.md)
 - [Current D1 route coverage and cutover checkpoint](handoffs/2026-11-25-d1-route-coverage-checkpoint.md)
 - [Whole-app local D1 and R2 scope, cosmetics and clan implementation](handoffs/2026-11-24-local-d1-r2-app-expansion.md)
 - [Production Cloudflare target and Android build routing](handoffs/2026-11-24-production-cloudflare-builds.md)

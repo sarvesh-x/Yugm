@@ -19,6 +19,7 @@ import { createD1CosmeticsRouter } from "./d1Cosmetics.js";
 import { createD1DatingRouter } from "./d1Dating.js";
 import { createD1DirectGiftsRouter } from "./d1DirectGifts.js";
 import { createD1EventsRouter } from "./d1Events.js";
+import { createD1ExperienceRouter } from "./d1Experience.js";
 import { createD1FeedRouter } from "./d1Feed.js";
 import { readD1GameCatalog } from "./d1GameCatalog.js";
 import { createD1GamesReadsRouter } from "./d1GamesReads.js";
@@ -88,6 +89,7 @@ export function createD1App(
   app.use("/api/users/messages", createD1InboxRouter(db, limits.chat));
   app.use("/api", createD1SocialRouter(db));
   app.use("/api", createD1SocialFeaturesRouter(db));
+  app.use("/api", createD1ExperienceRouter(db));
   app.use("/api", createD1ModerationRouter(db));
   app.use("/api", createD1GroupsRouter(db, limits.chat));
   app.use("/api", createD1FeedRouter(db));

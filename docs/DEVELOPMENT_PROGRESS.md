@@ -1,5 +1,9 @@
 # Development progress
 
+## 2026-11-25 — D1 experience routes
+
+- Mounted all 11 `/api/experience` preferences, achievement claim/share, badge gallery/showcase, safety-center, creator-dashboard and home routes with router-scoped auth, explicit user-column projection and guarded one-tier-at-a-time claims. A disposable MongoDB replica-set probe confirmed the validation order, direct-Zod-parse claim failure, tier progress/clamping, share gating, showcase rules and home DTO shape. Added `0030_experience_claim_unique.sql` for the full tier enum and claim uniqueness; home badge sync stays non-blocking. The audit reports 333 shared and 305 legacy-only patterns. [Verification and boundary](handoffs/2026-11-25-d1-experience.md)
+
 ## 2026-11-25 — D1 social features
 
 - Mounted all 20 `/api/social` mood, activity, wave, daily-question, voice-poll and countdown routes with router-scoped auth before validation, legacy DTO omission rules, replay conflicts and guarded poll votes. A disposable MongoDB characterization confirmed `activityRoomId: null` after activity, compact populated users, `WAVE` notification persistence, local-day question seeding, option/ballot `_id` fields and `409 Already voted`. Added `0029_social_unique.sql` plus a Worker fixture; poll children are read directly because SQLite cannot correlate nested `FROM` subqueries. The audit reports 322 shared and 316 legacy-only patterns. [Verification and boundary](handoffs/2026-11-25-d1-social-features.md)

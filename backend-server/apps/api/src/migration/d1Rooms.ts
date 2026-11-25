@@ -97,6 +97,7 @@ const roomArrays = {
 const roomValues = Object.entries(roomArrays).map(([field, table]) => `(SELECT json_group_array(value) FROM (
   SELECT value FROM ${table} WHERE rooms_id = r.source_id ORDER BY position)) AS ${snake(field)}_json`).join(", ");
 const roomProjection = `r.*, ${personJson("host")} AS host_json, ${roomValues}`;
+export const d1RoomProjection = roomProjection;
 const fromRooms = "FROM rooms AS r JOIN users AS host ON host.source_id = r.host_id";
 const roomAccess = roomAccessFor("?2");
 const roomByViewer = `SELECT ${roomProjection}, (${roomAccess}) AS can_read,
@@ -105,10 +106,11 @@ const roomByViewer = `SELECT ${roomProjection}, (${roomAccess}) AS can_read,
   (SELECT role FROM users WHERE source_id = ?2) AS viewer_role
   ${fromRooms} WHERE r.source_id = ?1`;
 
-function room(row: Row) {
+export function presentD1Room(row: Row, populateHost = true) {
   return {
     _id: row.source_id, title: row.title, description: row.description ?? undefined,
-    type: row.type, hostId: person(String(row.host_json)), coverImage: row.cover_image ?? undefined,
+    type: row.type, hostId: populateHost ? person(String(row.host_json)) : row.host_id,
+    coverImage: row.cover_image ?? undefined,
     category: row.category, tags: JSON.parse(String(row.tags)), language: row.language,
     status: row.status, visibility: row.visibility, maxSpeakers: row.max_speakers,
     participantCount: row.participant_count, activePkId: row.active_pk_id ?? undefined, isDuet: Boolean(row.is_duet),
@@ -120,6 +122,8 @@ function room(row: Row) {
     ...Object.fromEntries(Object.keys(roomArrays).map(field => [field, JSON.parse(String(row[`${snake(field)}_json`]))]))
   };
 }
+
+const room = (row: Row) => presentD1Room(row);
 
 function roomId(value: string) {
   if (!isValidObjectId(value)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
