@@ -248,7 +248,7 @@ fun YugmFocusDock(
                 val proximity = (1.0f - distFromCenter.coerceIn(0f, 1f))
 
                 // Interpolated size & alpha
-                val iconSize = lerp(32.dp, 58.dp, proximity)
+                val iconSize = lerp(26.dp, 46.dp, proximity)
                 val itemAlpha = max(proximity, inactiveAlpha)
 
                 val xOffsetPx = (i - currentIndex) * itemSpacingPx
