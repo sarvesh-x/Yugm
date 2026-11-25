@@ -1,11 +1,16 @@
 import { randomBytes } from "node:crypto";
 import type { D1Database } from "@cloudflare/workers-types";
 import { Router } from "express";
+import { z } from "zod";
 import { adminOk, pageParams, paginationMeta } from "../modules/admin/http.js";
 import { asyncHandler, ErrorCode, HttpError, isValidObjectId } from "../utils/http.js";
-import { createD1AdminGuard } from "./d1AdminAuth.js";
+import { validateBody } from "../middleware/validate.js";
+import { adminFrom, createD1AdminGuard, insertD1AdminAudit } from "./d1AdminAuth.js";
 import { person, personJson } from "./d1People.js";
 import { presentD1Report, reportQueueInsert, type ReportRow } from "./d1Reports.js";
+import { createModerationAction, createNotification, refreshSafetyStatus } from "./d1AdminUsers.js";
+import { endD1UnavailableBonds } from "./d1Bonds.js";
+import { endD1Room } from "./d1Rooms.js";
 
 type ReviewRow = ReportRow & { reporter: string | null; target: string | null; room: string | null };
 type QueueRow = {
@@ -51,6 +56,7 @@ function key(value: string, entity: string) {
 export function createD1AdminReportsRouter(db: D1Database, secret?: string) {
   const router = Router();
   const canRead = createD1AdminGuard(db, secret)("reports.read");
+  const canResolve = createD1AdminGuard(db, secret)("reports.resolve");
 
   router.get("/reports", canRead, asyncHandler(async (req, res) => {
     const { page, limit } = pageParams(req.query);
@@ -102,5 +108,152 @@ export function createD1AdminReportsRouter(db: D1Database, secret?: string) {
       .bind(key(req.params.roomId, "room")).all<ReportRow>();
     adminOk(res, results.map(reviewDetails));
   }));
+  const reasonSchema = z.object({ reason: z.string().min(3).max(500), durationHours: z.number().int().min(1).max(8760).optional() });
+
+  router.post("/reports/:reportId/assign", canResolve, validateBody(z.object({ adminId: z.string().optional() })), asyncHandler(async (req, res) => {
+    const reportId = key(req.params.reportId, "report");
+    const row = await db.prepare("SELECT * FROM reports WHERE source_id = ?").bind(reportId).first<ReportRow>();
+    if (!row) throw new HttpError(404, "Report not found", ErrorCode.NOT_FOUND);
+    await reportQueueInsert(db, randomBytes(12).toString("hex"), reportId, new Date().toISOString()).run();
+    const queue = await db.prepare("SELECT * FROM moderation_queues WHERE report_id = ? ORDER BY created_at, source_id LIMIT 1").bind(reportId).first<QueueRow>();
+    const adminId = (req.body as { adminId?: string }).adminId || adminFrom(res).id;
+    if (queue) await db.prepare("UPDATE moderation_queues SET assigned_to = ?, status = 'IN_REVIEW', updated_at = ? WHERE source_id = ?").bind(adminId, new Date().toISOString(), queue.source_id).run();
+    const admin = adminFrom(res);
+    await insertD1AdminAudit(db, admin, { action: "report.assigned", entityType: "report", entityId: reportId, metadata: { assignedTo: adminId }, req });
+    adminOk(res, { assigned: true });
+  }));
+
+  router.post("/reports/:reportId/escalate", canResolve, validateBody(reasonSchema), asyncHandler(async (req, res) => {
+    const reportId = key(req.params.reportId, "report");
+    const row = await db.prepare("SELECT * FROM reports WHERE source_id = ?").bind(reportId).first<ReportRow>();
+    if (!row) throw new HttpError(404, "Report not found", ErrorCode.NOT_FOUND);
+    await reportQueueInsert(db, randomBytes(12).toString("hex"), reportId, new Date().toISOString()).run();
+    const queue = await db.prepare("SELECT * FROM moderation_queues WHERE report_id = ? ORDER BY created_at, source_id LIMIT 1").bind(reportId).first<QueueRow>();
+    if (queue) await db.prepare("UPDATE moderation_queues SET priority = 'CRITICAL', status = 'ESCALATED', notes = ?, updated_at = ? WHERE source_id = ?").bind((req.body as { reason: string }).reason, new Date().toISOString(), queue.source_id).run();
+    const admin = adminFrom(res);
+    await createModerationAction(db, admin.id, { actionType: "ESCALATED", reportId, queueId: queue?.source_id, targetType: row.room_id ? "ROOM" : "USER", targetId: row.room_id ?? row.target_user_id ?? undefined, targetUserId: row.target_user_id ?? undefined, reason: (req.body as { reason: string }).reason });
+    await insertD1AdminAudit(db, admin, { action: "report.escalated", entityType: "report", entityId: reportId, metadata: req.body, req });
+    adminOk(res, { escalated: true });
+  }));
+
+  router.post("/reports/:reportId/dismiss", canResolve, validateBody(z.object({ reason: z.string().min(3).max(500).optional() })), asyncHandler(async (req, res) => {
+    const reportId = key(req.params.reportId, "report");
+    const row = await db.prepare("SELECT * FROM reports WHERE source_id = ?").bind(reportId).first<ReportRow>();
+    if (!row) throw new HttpError(404, "Report not found", ErrorCode.NOT_FOUND);
+    const time = new Date().toISOString();
+    const body = req.body as { reason?: string };
+    await db.prepare("UPDATE reports SET status = 'DISMISSED', reviewed_by = ?, reviewed_at = ?, moderator_note = ?, updated_at = ? WHERE source_id = ?").bind(adminFrom(res).id, time, body.reason ?? null, time, reportId).run();
+    await db.prepare("UPDATE moderation_queues SET status = 'DISMISSED', resolved_at = ?, resolved_by = ?, updated_at = ? WHERE report_id = ?").bind(time, adminFrom(res).id, time, reportId).run();
+    const admin = adminFrom(res);
+    await createModerationAction(db, admin.id, { actionType: "REPORT_DISMISSED", reportId, targetType: "REPORT", targetId: reportId, targetUserId: row.target_user_id ?? undefined, reason: body.reason });
+    await insertD1AdminAudit(db, admin, { action: "report.dismissed", entityType: "report", entityId: reportId, metadata: body, req });
+    adminOk(res, { dismissed: true });
+  }));
+
+  router.post("/reports/:reportId/resolve", canResolve, validateBody(z.object({ resolution: z.string().min(2).max(80), note: z.string().max(500).optional() })), asyncHandler(async (req, res) => {
+    const reportId = key(req.params.reportId, "report");
+    const row = await db.prepare("SELECT * FROM reports WHERE source_id = ?").bind(reportId).first<ReportRow>();
+    if (!row) throw new HttpError(404, "Report not found", ErrorCode.NOT_FOUND);
+    const time = new Date().toISOString();
+    const body = req.body as { resolution: string; note?: string };
+    await db.prepare("UPDATE reports SET status = 'REVIEWED', reviewed_by = ?, reviewed_at = ?, moderator_note = ?, updated_at = ? WHERE source_id = ?").bind(adminFrom(res).id, time, body.note ?? null, time, reportId).run();
+    await db.prepare("UPDATE moderation_queues SET status = 'AUTO_RESOLVED', resolved_at = ?, resolved_by = ?, updated_at = ? WHERE report_id = ?").bind(time, adminFrom(res).id, time, reportId).run();
+    const admin = adminFrom(res);
+    await insertD1AdminAudit(db, admin, { action: "report.resolved", entityType: "report", entityId: reportId, metadata: body, req });
+    adminOk(res, { resolved: true });
+  }));
+
+  router.post("/reports/:reportId/action", canResolve, validateBody(z.object({ action: z.enum(["NO_ACTION", "WARNING", "DELETE_MESSAGE", "HIDE_PROFILE", "REMOVE_PHOTO", "SUSPEND_USER", "BAN_USER", "END_ROOM", "ESCALATE"]), reason: z.string().min(3).max(500), durationHours: z.number().int().min(1).max(8760).optional() })), asyncHandler(async (req, res) => {
+    const reportId = key(req.params.reportId, "report");
+    const row = await db.prepare("SELECT * FROM reports WHERE source_id = ?").bind(reportId).first<ReportRow>();
+    if (!row) throw new HttpError(404, "Report not found", ErrorCode.NOT_FOUND);
+    await reportQueueInsert(db, randomBytes(12).toString("hex"), reportId, new Date().toISOString()).run();
+    const queue = await db.prepare("SELECT * FROM moderation_queues WHERE report_id = ? ORDER BY created_at, source_id LIMIT 1").bind(reportId).first<QueueRow>();
+    const body = req.body as { action: string; reason: string; durationHours?: number };
+    const targetUserId = row.target_user_id ?? undefined;
+    const admin = adminFrom(res);
+    if (body.action === "WARNING" && targetUserId) await createNotification(db, targetUserId, "SYSTEM", "Community warning", body.reason, { reportId });
+    if (body.action === "SUSPEND_USER" && targetUserId) {
+      const suspendedUntil = new Date(Date.now() + (body.durationHours ?? 24) * 60 * 60 * 1000).toISOString();
+      const time = new Date().toISOString();
+      await db.prepare("UPDATE users SET suspended_until = ?, moderation_reason = ?, moderation_strikes = moderation_strikes + 1, updated_at = ? WHERE source_id = ?").bind(suspendedUntil, body.reason, time, targetUserId).run();
+    }
+    if (body.action === "BAN_USER" && targetUserId) {
+      const time = new Date().toISOString();
+      await db.prepare("UPDATE users SET is_blocked = 1, moderation_reason = ?, moderation_strikes = moderation_strikes + 1, token_version = token_version + 1, updated_at = ? WHERE source_id = ?").bind(body.reason, time, targetUserId).run();
+      await endD1UnavailableBonds(db, targetUserId, "TERMINATED_BY_MODERATION");
+    }
+    if (body.action === "END_ROOM" && row.room_id) await endD1Room(db, row.room_id, new Date().toISOString());
+    const time = new Date().toISOString();
+    await db.prepare("UPDATE reports SET status = ?, reviewed_by = ?, reviewed_at = ?, moderator_note = ?, updated_at = ? WHERE source_id = ?")
+      .bind(body.action === "NO_ACTION" ? "DISMISSED" : "ACTION_TAKEN", admin.id, time, body.reason, time, reportId).run();
+    if (queue) await db.prepare("UPDATE moderation_queues SET status = ?, resolved_at = ?, resolved_by = ?, updated_at = ? WHERE source_id = ?")
+      .bind(body.action === "NO_ACTION" ? "DISMISSED" : "ACTION_TAKEN", time, admin.id, time, queue.source_id).run();
+    const actionType = body.action === "NO_ACTION" ? "NO_ACTION" : body.action === "WARNING" ? "WARNING_SENT" : body.action === "SUSPEND_USER" ? "USER_SUSPENDED" : body.action === "BAN_USER" ? "USER_BANNED" : body.action === "END_ROOM" ? "ROOM_ENDED" : "ESCALATED";
+    await createModerationAction(db, admin.id, { actionType, reportId, queueId: queue?.source_id, targetType: row.room_id ? "ROOM" : "USER", targetId: row.room_id ?? row.target_user_id ?? undefined, targetUserId, reason: body.reason, durationHours: body.durationHours });
+    if (targetUserId) await refreshSafetyStatus(db, targetUserId, admin.id);
+    adminOk(res, { action: { actionType } });
+  }));
+
+  router.get("/moderation/queue", canRead, asyncHandler(async (req, res) => {
+    const { page, limit, skip } = pageParams(req.query);
+    const clauses: string[] = [];
+    const params: unknown[] = [];
+    if (typeof req.query.status === "string" && req.query.status) { params.push(req.query.status); clauses.push("status = ?"); }
+    if (typeof req.query.priority === "string" && req.query.priority) { params.push(req.query.priority); clauses.push("priority = ?"); }
+    const assignedTo = typeof req.query.assignedTo === "string" && req.query.assignedTo ? req.query.assignedTo.toLowerCase() : undefined;
+    if (assignedTo) { params.push(assignedTo); clauses.push("assigned_to = ?"); }
+    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+    const [rows, total] = await Promise.all([
+      db.prepare(`SELECT * FROM moderation_queues ${where} ORDER BY CASE priority WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END, created_at DESC, source_id DESC LIMIT ? OFFSET ?`).bind(...params, limit, skip).all<QueueRow>(),
+      db.prepare(`SELECT COUNT(*) AS count FROM moderation_queues ${where}`).bind(...params).first<{ count: number }>()
+    ]);
+    adminOk(res, rows.results.map(queueDetails), paginationMeta(page, limit, total?.count ?? 0));
+  }));
+
+  router.get("/moderation/queue/:queueId", canRead, asyncHandler(async (req, res) => {
+    const queueId = key(req.params.queueId, "queue");
+    const row = await db.prepare("SELECT * FROM moderation_queues WHERE source_id = ?").bind(queueId).first<QueueRow>();
+    if (!row) throw new HttpError(404, "Moderation queue item not found", ErrorCode.NOT_FOUND);
+    adminOk(res, queueDetails(row));
+  }));
+
+  router.post("/moderation/queue/:queueId/assign", canResolve, validateBody(z.object({ adminId: z.string().optional() })), asyncHandler(async (req, res) => {
+    const queueId = key(req.params.queueId, "queue");
+    const row = await db.prepare("SELECT * FROM moderation_queues WHERE source_id = ?").bind(queueId).first<QueueRow>();
+    if (!row) throw new HttpError(404, "Moderation queue item not found", ErrorCode.NOT_FOUND);
+    const adminId = (req.body as { adminId?: string }).adminId || adminFrom(res).id;
+    const time = new Date().toISOString();
+    await db.prepare("UPDATE moderation_queues SET assigned_to = ?, status = 'IN_REVIEW', updated_at = ? WHERE source_id = ?").bind(adminId, time, queueId).run();
+    const updated = await db.prepare("SELECT * FROM moderation_queues WHERE source_id = ?").bind(queueId).first<QueueRow>();
+    adminOk(res, { queue: updated ? queueDetails(updated) : undefined });
+  }));
+
+  router.post("/moderation/queue/:queueId/resolve", canResolve, validateBody(z.object({ status: z.enum(["ACTION_TAKEN", "DISMISSED", "AUTO_RESOLVED"]), notes: z.string().max(500).optional() })), asyncHandler(async (req, res) => {
+    const queueId = key(req.params.queueId, "queue");
+    const row = await db.prepare("SELECT * FROM moderation_queues WHERE source_id = ?").bind(queueId).first<QueueRow>();
+    if (!row) throw new HttpError(404, "Moderation queue item not found", ErrorCode.NOT_FOUND);
+    const body = req.body as { status: string; notes?: string };
+    const time = new Date().toISOString();
+    await db.prepare("UPDATE moderation_queues SET status = ?, notes = ?, resolved_at = ?, resolved_by = ?, updated_at = ? WHERE source_id = ?").bind(body.status, body.notes ?? null, time, adminFrom(res).id, time, queueId).run();
+    const admin = adminFrom(res);
+    await insertD1AdminAudit(db, admin, { action: "moderation_queue.resolved", entityType: "moderation_queue", entityId: queueId, metadata: body, req });
+    const updated = await db.prepare("SELECT * FROM moderation_queues WHERE source_id = ?").bind(queueId).first<QueueRow>();
+    adminOk(res, { queue: updated ? queueDetails(updated) : undefined });
+  }));
+
+  router.post("/moderation/queue/:queueId/escalate", canResolve, validateBody(reasonSchema), asyncHandler(async (req, res) => {
+    const queueId = key(req.params.queueId, "queue");
+    const row = await db.prepare("SELECT * FROM moderation_queues WHERE source_id = ?").bind(queueId).first<QueueRow>();
+    if (!row) throw new HttpError(404, "Moderation queue item not found", ErrorCode.NOT_FOUND);
+    const body = req.body as { reason: string };
+    const time = new Date().toISOString();
+    await db.prepare("UPDATE moderation_queues SET status = 'ESCALATED', priority = 'CRITICAL', notes = ?, updated_at = ? WHERE source_id = ?").bind(body.reason, time, queueId).run();
+    const admin = adminFrom(res);
+    await insertD1AdminAudit(db, admin, { action: "moderation_queue.escalated", entityType: "moderation_queue", entityId: queueId, metadata: body, req });
+    const updated = await db.prepare("SELECT * FROM moderation_queues WHERE source_id = ?").bind(queueId).first<QueueRow>();
+    adminOk(res, { queue: updated ? queueDetails(updated) : undefined });
+  }));
+
   return router;
 }

@@ -1,5 +1,9 @@
 # Development progress
 
+## 2026-11-25 — D1 admin core routes
+
+- Mounted 60 `/api/admin` user, profile, report, moderation-queue, message, chat, and room routes on the shared D1 Worker with router-scoped admin auth, validation order, guarded writes, safety refresh, moderation actions, and audit logs. The audit now reports 393 shared and 245 legacy-only patterns; admin coverage is 75 mounted / 140 missing. Room feature/unfeature and live warnings are audit-only because D1 has no admin socket emitter, and legacy-only analytics/payment/admin surfaces remain. [Verification and boundary](handoffs/2026-11-25-d1-admin-core.md)
+
 ## 2026-11-25 — D1 experience routes
 
 - Mounted all 11 `/api/experience` preferences, achievement claim/share, badge gallery/showcase, safety-center, creator-dashboard and home routes with router-scoped auth, explicit user-column projection and guarded one-tier-at-a-time claims. A disposable MongoDB replica-set probe confirmed the validation order, direct-Zod-parse claim failure, tier progress/clamping, share gating, showcase rules and home DTO shape. Added `0030_experience_claim_unique.sql` for the full tier enum and claim uniqueness; home badge sync stays non-blocking. The audit reports 333 shared and 305 legacy-only patterns. [Verification and boundary](handoffs/2026-11-25-d1-experience.md)
