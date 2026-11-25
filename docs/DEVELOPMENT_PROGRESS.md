@@ -1,5 +1,13 @@
 # Development progress
 
+## 2026-11-25 — D1 admin route coverage
+
+- Added the final 81 admin patterns plus badge and reaction art delivery. The audit reports 215 of 215 admin patterns and 534 of 638 legacy patterns overall. Admin sessions use local credentials in debug and Firebase in the hosted Worker. D1 keeps wallet and finance transitions, and R2 holds managed and protected media. Applied migrations `0020`–`0034` to the backed-up local emulator database. [Setup and verification](handoffs/2026-11-25-d1-admin-auth-and-media.md)
+
+## 2026-11-25 — D1 admin operations
+
+- Mounted 59 additional patterns for dashboard and analytics, progression health, fraud and referrals, finance reads, gift and cosmetic management, and notification campaigns. Reused the D1 notification delivery trigger and fixed the campaign and city-targeting callers in the admin app. The audit reports 452 shared and 186 legacy-only patterns. Admin coverage is 134 mounted of 215 legacy patterns. [Verification and remaining work](handoffs/2026-11-25-d1-admin-operations.md)
+
 ## 2026-11-25 — D1 admin core routes
 
 - Mounted 60 `/api/admin` user, profile, report, moderation-queue, message, chat, and room routes on the shared D1 Worker with router-scoped admin auth, validation order, guarded writes, safety refresh, moderation actions, and audit logs. The audit now reports 393 shared and 245 legacy-only patterns; admin coverage is 75 mounted / 140 missing. Room feature/unfeature and live warnings are audit-only because D1 has no admin socket emitter, and legacy-only analytics/payment/admin surfaces remain. [Verification and boundary](handoffs/2026-11-25-d1-admin-core.md)

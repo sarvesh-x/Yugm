@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
+import jwt from "jsonwebtoken";
 
 const id = () => randomBytes(12).toString("hex");
 
-export async function verifyD1RoomPkHistory(db, request, host, opponent) {
+export async function verifyD1RoomPkHistory(db, request, host, opponent, adminSecret) {
   const [left, right, complete, active] = Array.from({ length: 4 }, id);
   const time = new Date().toISOString();
   const began = new Date(Date.now() - 90_000).toISOString();
@@ -41,4 +42,30 @@ export async function verifyD1RoomPkHistory(db, request, host, opponent) {
   assert.equal(battle.right.members[0].userId, opponent.user.id);
   assert.equal(battle.right.members[0].isReady, true);
   assert.deepEqual((await as(opponent, `/api/rooms/${right}/pk-history`)).data.battles, battles);
+
+  const adminId = id();
+  await db.prepare(`INSERT INTO admin_users (source_id, email, display_name, role, status, is_super_admin, two_factor_enabled)
+    VALUES (?, ?, 'PK fixture', 'ADMIN', 'ACTIVE', 0, 0)`).bind(adminId, `${adminId}@fixture.test`).run();
+  const eventId = id();
+  await db.prepare(`INSERT INTO pk_events (source_id, battle_id, event_type, points, state_version, metadata, created_at)
+    VALUES (?, ?, 'PK_COMPLETED', 0, 2, '{"source":"fixture"}', ?)`).bind(eventId, complete, time).run();
+  const accessToken = jwt.sign({ sub: adminId, type: "admin" }, adminSecret, { expiresIn: "15m" });
+  const adminRoot = "/api/admin/pk/battles";
+  const adminGet = path => request(adminRoot + path, 200, { accessToken });
+  const result = (await adminGet("?status=ENDED")).data.find(item => item.id === complete);
+  assert.deepEqual(result, battle);
+  assert.equal((await adminGet("/live")).data.some(item => item.id === active), true);
+  assert.equal((await adminGet(`/${complete}`)).data.battle.id, complete);
+  const events = (await adminGet(`/${complete}/events`)).data;
+  assert.deepEqual(events.find(item => item._id === eventId).metadata, { source: "fixture" });
+  const flag = await request(`${adminRoot}/${complete}/flag`, 200, { accessToken, body: { reason: "Fixture review" } });
+  assert.equal(flag.data.auditLog.entityId, complete);
+  await db.prepare("UPDATE rooms SET active_pk_id = ? WHERE source_id IN (?, ?)").bind(active, left, right).run();
+  const ended = await request(`${adminRoot}/${active}/end`, 200, { accessToken, body: { reason: "Fixture force end" } });
+  assert.equal(ended.data.battle.status, "ABORTED");
+  assert.equal((await adminGet(`/${active}`)).data.battle.status, "CLOSED");
+  const attempt = await request(`${adminRoot}/${active}/end`, 200, { accessToken, body: { reason: "Fixture retry" } });
+  assert.equal(attempt.data.battle.status, "CLOSED");
+  assert.deepEqual(new Set((await adminGet(`/${active}/events`)).data.map(event => event.eventType)), new Set(["PK_ABORTED", "PK_CLOSED"]));
+  assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM rooms WHERE active_pk_id = ?").bind(active).first("count"), 0);
 }

@@ -40,6 +40,12 @@ export interface D1PaymentProviders {
   createRazorpayOrder(input: { amountInPaise: number; receipt: string; notes?: Record<string, string> }): Promise<D1RazorpayOrder>;
   verifyRazorpaySignature(input: { orderId: string; paymentId: string; signature: string }): Promise<boolean>;
   fetchRazorpayPayment(paymentId: string): Promise<D1RazorpayPayment>;
+  fetchRazorpayPayout(payoutId: string): Promise<{ id: string; status: string; reference_id?: string; amount: number; currency: string }>;
+  razorpayRefund(input: { paymentId: string; amount: number; key: string; refundId?: string }): Promise<{
+    id: string; status: string; payment_id: string; amount: number; currency: string;
+  }>;
+  googlePlayOrder(orderId: string): Promise<{ orderId: string; state: string; purchaseToken?: string }>;
+  refundGooglePlayOrder(orderId: string): Promise<void>;
   verifyGooglePlayProduct(input: { productId: string; purchaseToken: string }): Promise<D1GooglePlayProduct>;
   consumeGooglePlayProduct(input: { productId: string; purchaseToken: string }): Promise<void>;
 }
@@ -173,6 +179,39 @@ export function createD1PaymentProviders(config: D1PaymentConfig): D1PaymentProv
       const json = await response.json().catch(() => ({})) as D1RazorpayPayment & { error?: { description?: string } };
       if (!response.ok) providerError(response.status, json?.error?.description ?? "Failed to verify Razorpay payment");
       return json;
+    },
+    async fetchRazorpayPayout(payoutId) {
+      const result = await fetch(`https://api.razorpay.com/v1/payouts/${encodeURIComponent(payoutId)}`, {
+        headers: { Authorization: razorpayAuthHeader() }, signal: AbortSignal.timeout(10_000)
+      });
+      if (!result.ok) providerError(result.status === 404 ? 404 : 502, "Razorpay payout could not be verified");
+      return await result.json() as Awaited<ReturnType<D1PaymentProviders["fetchRazorpayPayout"]>>;
+    },
+    async razorpayRefund(input) {
+      const result = input.refundId
+        ? await fetch(`https://api.razorpay.com/v1/refunds/${encodeURIComponent(input.refundId)}`, {
+          headers: { Authorization: razorpayAuthHeader() }, signal: AbortSignal.timeout(10_000)
+        })
+        : await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(input.paymentId)}/refund`, {
+          method: "POST", headers: { Authorization: razorpayAuthHeader(), "Content-Type": "application/json",
+            "X-Refund-Idempotency": input.key }, signal: AbortSignal.timeout(10_000),
+          body: JSON.stringify({ amount: input.amount, receipt: input.key })
+        });
+      if (!result.ok) providerError(result.status === 409 ? 409 : 502, "Razorpay refund requires reconciliation");
+      return await result.json() as Awaited<ReturnType<D1PaymentProviders["razorpayRefund"]>>;
+    },
+    async googlePlayOrder(orderId) {
+      const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(requirePackageName())}/orders/${encodeURIComponent(orderId)}`;
+      const result = await fetch(url, { headers: { Authorization: `Bearer ${await googleAccessToken()}` },
+        signal: AbortSignal.timeout(10_000) });
+      if (!result.ok) providerError(502, "Google Play order could not be verified");
+      return await result.json() as Awaited<ReturnType<D1PaymentProviders["googlePlayOrder"]>>;
+    },
+    async refundGooglePlayOrder(orderId) {
+      const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(requirePackageName())}/orders/${encodeURIComponent(orderId)}:refund?revoke=true`;
+      const result = await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${await googleAccessToken()}` },
+        signal: AbortSignal.timeout(10_000) });
+      if (!result.ok) providerError(502, "Google Play refund requires reconciliation");
     },
     async verifyGooglePlayProduct(input) {
       const packageName = requirePackageName();

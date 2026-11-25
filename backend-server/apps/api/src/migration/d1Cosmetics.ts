@@ -95,13 +95,14 @@ export function walletLevel(row: WardrobeRow) {
 
 export async function seedDefaultCosmetics(db: D1Database) {
   const now = new Date().toISOString();
-  await db.prepare(`INSERT INTO cosmetics
+  const result = await db.prepare(`INSERT INTO cosmetics
     (source_id, type, name, coin_price, rarity, preview, is_active, reward_only, asset_kind, asset_url, created_at, updated_at)
     SELECT value ->> '$.id', value ->> '$.type', value ->> '$.name', value ->> '$.coinPrice',
       value ->> '$.rarity', value ->> '$.preview', 1, 0, value ->> '$.assetKind', value ->> '$.assetUrl', ?2, ?2
     FROM json_each(?1) AS defaults
     WHERE NOT EXISTS (SELECT 1 FROM cosmetics WHERE source_id = defaults.value ->> '$.id')
     ON CONFLICT (source_id) DO NOTHING`).bind(JSON.stringify(profileCosmetics), now).run();
+  return result.meta.changes ?? 0;
 }
 
 const ownerHasCosmetic = `EXISTS (SELECT 1 FROM user_owned_cosmetics AS owned
@@ -559,13 +560,14 @@ export async function readD1PublishedCosmeticAsset(db: D1Database, bucket: R2Buc
   if (request.method !== "GET" && request.method !== "HEAD") return;
   const pathname = new URL(request.url).pathname;
   if (!pathname.startsWith(`${publishedAssetPath}/`)) return;
-  const match = /^([a-f0-9]{24})\/([a-z0-9_-]{1,64})\/?$/i.exec(pathname.slice(publishedAssetPath.length + 1));
+  const match = /^([a-f0-9]{24}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})\/([a-z0-9_-]{1,64})\/?$/i
+    .exec(pathname.slice(publishedAssetPath.length + 1));
   const notFound = () => new Response(null, { status: 404 });
   if (!match) return notFound();
 
   const variant = await db.prepare(`SELECT v.key, v.content_type
     FROM asset_variants AS v JOIN assets AS a ON a.source_id = v.assets_id
-    WHERE a.source_id = ? AND v.name = ? AND a.owner_type = 'cosmetic' AND a.status = 'published'
+    WHERE a.source_id = ? AND v.name = ? AND a.status = 'published'
       AND v.key <> a.staging_key AND v.content_type IN ${publicImageTypes}`)
     .bind(match[1], match[2]).first<{ key: string; content_type: string }>();
   if (!variant) return notFound();

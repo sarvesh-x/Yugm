@@ -31,6 +31,9 @@ interface D1ApiEnv extends AuthRateLimitBindings {
   MEDIA_GRANT_SECRET?: string;
   JWT_SECRET?: string;
   ADMIN_JWT_SECRET?: string;
+  ADMIN_REFRESH_SECRET?: string;
+  ADMIN_FIREBASE_WEB_API_KEY?: string;
+  ADMIN_PANEL_ORIGIN?: string;
   FCM_PROJECT_ID?: string;
   GOOGLE_OAUTH_CLIENT_ID?: string;
   APP_CHECK_ENFORCE?: string;
@@ -52,6 +55,9 @@ const D1_API_PORT = 8789;
 type ApiStage = "local" | "production";
 // Android's emulator aliases the host loopback interface to 10.0.2.2.
 const loopbackHosts = new Set(["127.0.0.1", "localhost", "[::1]", "10.0.2.2"]);
+const localAdminOrigins = new Set(["http://127.0.0.1:5173", "http://localhost:5173"]);
+const adminAllowedMethods = "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS";
+const adminAllowedHeaders = "Authorization, Content-Type, Idempotency-Key, X-Approval-Admin-Token";
 const forwardedSettings = [
   "JWT_SECRET", "ADMIN_JWT_SECRET", "FCM_PROJECT_ID", "GOOGLE_OAUTH_CLIENT_ID", "APP_CHECK_ENFORCE",
   "FCM_CLIENT_EMAIL", "FCM_PRIVATE_KEY", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "LIVEKIT_URL",
@@ -172,8 +178,11 @@ async function startD1Runtime(env: D1ApiEnv, stage: ApiStage) {
     devRecharge: stage === "local",
     diamondsEnabled: env.MONETIZATION_DIAMONDS_ENABLED === "true" || env.MONETIZATION_DIAMONDS_ENABLED === "1"
   }, {
-    jwtSecret: env.ADMIN_JWT_SECRET ?? env.JWT_SECRET
-  });
+    jwtSecret: env.ADMIN_JWT_SECRET ?? env.JWT_SECRET,
+    refreshSecret: env.ADMIN_REFRESH_SECRET,
+    firebaseApiKey: env.ADMIN_FIREBASE_WEB_API_KEY,
+    production: stage === "production"
+  }, createWorkerAuthRateLimiters(env, "admin:"));
   const server = createServer(app);
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
@@ -204,12 +213,33 @@ export function createD1ApiWorker(stage: ApiStage) {
       const url = new URL(request.url);
       const validOrigin = stage === "local" ? loopbackHosts.has(url.hostname) : url.origin === configuredProductionOrigin(env.YUGM_PRODUCTION_ORIGIN);
       if (env.YUGM_STAGE !== stage || !validOrigin) return Response.json({ ok: false }, { status: 404 });
+      const adminRequest = /^\/api\/admin(?:\/|$)/i.test(url.pathname);
+      const requestOrigin = request.headers.get("Origin");
+      const allowedOrigin = adminRequest && requestOrigin && (stage === "local"
+        ? localAdminOrigins.has(requestOrigin) : requestOrigin === configuredProductionOrigin(env.ADMIN_PANEL_ORIGIN))
+        ? requestOrigin : null;
+      const adminResponse = (response: Response) => {
+        if (!adminRequest) return response;
+        const headers = new Headers(response.headers);
+        headers.append("Vary", "Origin");
+        headers.set("Cache-Control", "private, no-store");
+        if (allowedOrigin) headers.set("Access-Control-Allow-Origin", allowedOrigin);
+        return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+      };
+      if (adminRequest && request.method === "OPTIONS" && requestOrigin) {
+        if (!allowedOrigin) return adminResponse(new Response(null, { status: 403 }));
+        return adminResponse(new Response(null, { status: 204, headers: {
+          "Access-Control-Allow-Methods": adminAllowedMethods,
+          "Access-Control-Allow-Headers": adminAllowedHeaders,
+          "Access-Control-Max-Age": "600"
+        } }));
+      }
 
       if (request.method === "GET" && (url.pathname === "/health" || url.pathname === "/api/health")) {
         return Response.json({ ok: true, service });
       }
       if (env.MONGODB_URI || env.REDIS_URL || process.env.MONGODB_URI || process.env.REDIS_URL) {
-        return Response.json({ ok: false, error: { message: "Use the isolated D1 configuration without legacy database bindings" } }, { status: 503 });
+        return adminResponse(Response.json({ ok: false, error: { message: "Use the isolated D1 configuration without legacy database bindings" } }, { status: 503 }));
       }
       try {
         startup ??= startD1Runtime(env, stage).catch((error: unknown) => {
@@ -242,14 +272,14 @@ export function createD1ApiWorker(stage: ApiStage) {
         forwarded.headers.set("x-yugm-request-origin", url.origin);
         const connectingIp = request.headers.get("CF-Connecting-IP") ?? "";
         forwarded.headers.set(authClientIpHeader, stage === "local" ? "loopback" : isIP(connectingIp) ? connectingIp : "unknown");
-        return await handleAsNodeRequest(D1_API_PORT, forwarded);
+        return adminResponse(await handleAsNodeRequest(D1_API_PORT, forwarded));
       } catch (error) {
         const detail = error instanceof D1SetupError ? error.code : error instanceof Error ? error.name : "Error";
         console.error("D1 API Worker unavailable", detail);
         if (stage === "local" && error instanceof D1SetupError) {
-          return Response.json({ ok: false, error: { code: error.code, message: error.message } }, { status: 503 });
+          return adminResponse(Response.json({ ok: false, error: { code: error.code, message: error.message } }, { status: 503 }));
         }
-        return Response.json({ ok: false, error: { message: "D1 API is unavailable. Check its configuration and schema." } }, { status: 503 });
+        return adminResponse(Response.json({ ok: false, error: { message: "D1 API is unavailable. Check its configuration and schema." } }, { status: 503 }));
       }
     }
   };

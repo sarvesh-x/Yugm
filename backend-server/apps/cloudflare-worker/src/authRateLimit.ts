@@ -12,12 +12,12 @@ export interface AuthRateLimitBindings {
   AUTH_REFRESH: RateLimit;
 }
 
-export function createWorkerAuthRateLimiters(env: AuthRateLimitBindings): AuthRateLimiters {
+export function createWorkerAuthRateLimiters(env: AuthRateLimitBindings, namespace = ""): AuthRateLimiters {
   const { AUTH_REQUESTS, AUTH_IDENTIFIER, AUTH_REFRESH } = env;
   const clientIp = (req: Request) => req.get(authClientIpHeader) ?? "unknown";
   function forKey(binding: RateLimit, key: (req: Request) => string) {
     return asyncHandler(async (req, res, next) => {
-      const { success } = await binding.limit({ key: key(req) });
+      const { success } = await binding.limit({ key: namespace + key(req) });
       if (!success) {
         res.setHeader("Retry-After", "60");
         throw new HttpError(429, "Too many requests, please try again later.", ErrorCode.RATE_LIMITED);
@@ -28,7 +28,8 @@ export function createWorkerAuthRateLimiters(env: AuthRateLimitBindings): AuthRa
 
   return {
     authLimiter: forKey(AUTH_REQUESTS, clientIp),
-    authIdentifierLimiter: forKey(AUTH_IDENTIFIER, req => authIdentifierKey(req.body, clientIp(req))),
+    authIdentifierLimiter: forKey(AUTH_IDENTIFIER, req =>
+      authIdentifierKey(namespace && req.body?.adminId ? { email: req.body.adminId } : req.body, clientIp(req))),
     refreshLimiter: forKey(AUTH_REFRESH, req => refreshKey(req.body, clientIp(req)))
   };
 }

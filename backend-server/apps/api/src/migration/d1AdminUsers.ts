@@ -139,7 +139,7 @@ export async function flagSafetyState(db: D1Database, userId: string, update: Re
   return db.prepare("SELECT * FROM user_safety_statuses WHERE user_id = ?").bind(userId).first<Row>();
 }
 
-function presentSafety(row: Row | null | undefined) {
+export function presentSafety(row: Row | null | undefined) {
   if (!row) return undefined;
   return {
     _id: row.source_id,

@@ -22,7 +22,7 @@ export interface ReportRow {
   source_id: string; reporter_id: string; target_user_id: string | null; room_id: string | null;
   reason: string; description: string | null; evidence: string; risk_score: number;
   auto_flagged: number; auto_action_taken: string | null; moderator_note: string | null;
-  reviewed_by: string | null; reviewed_at: string | null; status: string;
+  reviewed_by: string | null; reviewed_by_admin_id?: string | null; reviewed_at: string | null; status: string;
   created_at: string | null;
 }
 

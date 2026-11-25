@@ -1,10 +1,7 @@
 import mongoose, { Schema } from "mongoose";
 
-export const badgeTiers = ["BRONZE", "SILVER", "GOLD", "PLATINUM", "DIAMOND", "MASTER"] as const;
-export type AchievementTier = typeof badgeTiers[number];
-export const badgeMetrics = ["profile_complete", "daily_streak_3", "follow_10", "host_3", "gift_5", "chat_25", "level_5", "room_join_10", "game_plays_10", "gift_received_5"] as const;
-export const honorMetrics = ["host_3", "gift_5", "gift_received_5"] as const;
-export const badgeIcons = ["trophy", "sparkles", "flame", "users", "radio", "gift", "message-circle", "star", "headphones", "gamepad-2", "heart", "shield", "medal"] as const;
+import { badgeTiers, badgeMetrics, badgeIcons, type AchievementTier } from "../modules/admin/badgeDefinition.js";
+export { badgeTiers, badgeMetrics, badgeIcons, honorMetrics, type AchievementTier } from "../modules/admin/badgeDefinition.js";
 
 export interface IAchievementTier {
   tier: AchievementTier;

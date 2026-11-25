@@ -12,7 +12,7 @@ health, and uploads the admin build to `yugm-admin-staging`. Set the
 branch. The token needs permission to deploy the staging Worker and Pages
 project. The Worker retains its existing runtime secrets in Cloudflare.
 
-Current release/production endpoints:
+Legacy staging endpoints:
 
 - API: `https://yugm-api-staging.sarveshkumar10101.workers.dev` (Android uses `/api`)
 - Admin: `https://yugm-admin-staging.pages.dev`
@@ -38,9 +38,9 @@ Current release/production endpoints:
 4. Add the environment secret `CLOUDFLARE_API_TOKEN` with permission to deploy
    Pages projects. Never put this token or backend secrets in Vite variables.
    The API URL is public and is embedded in the JavaScript bundle.
-5. Allow the exact Pages origin in the corresponding API's `CORS_ORIGIN` and
-   configure `ADMIN_PANEL_ORIGIN` if the API uses it. Keep the staging API and
-   its database separate from production.
+5. Set `ADMIN_PANEL_ORIGIN` to the exact HTTPS Pages or custom-domain origin
+   for the D1 Worker. Set `CORS_ORIGIN` separately on the legacy staging API.
+   Keep staging API and database resources separate from production.
 
 Dispatch **Cloudflare Pages admin** for `cloudflare-staging` after the staging
 Worker is working. The workflow builds with `VITE_ADMIN_BASE_PATH=/` and deploys
@@ -54,8 +54,11 @@ and obtain the configured environment approval. A successful Pages upload is
 not a production API cutover. Follow the migration cutover and rollback plan
 before changing production traffic.
 
-For local development the default base remains `/admin/`; the existing Node
-deployment continues to serve that path. To inspect the Pages build locally:
+For local development, run the D1 Worker on port 4000 and the Vite admin app
+on port 5173. The default base remains `/admin/`. The Worker allows the
+`localhost` and `127.0.0.1` Vite origins. The [D1 admin setup](../../../docs/handoffs/2026-11-25-d1-admin-auth-and-media.md)
+covers the first admin account and the hosted Firebase settings. To inspect the
+Pages build locally:
 
 ```sh
 cd backend-server

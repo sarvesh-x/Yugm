@@ -7,7 +7,7 @@ import { asyncHandler, ErrorCode, HttpError, isValidObjectId, sendOk } from "../
 import { createD1AccessSessionReader } from "./d1AccessSession.js";
 import { person, personJson } from "./d1People.js";
 
-type GiftRow = {
+export type GiftRow = {
   source_id: string; name: string; icon: string; coin_price: number; diamond_price: number; pk_points: number;
   is_active: number; effect3d: string; interactive: number; animation_key: string; expires_at: string | null;
   combo_multiplier: number; category: string; theme: string; rarity: string; collection_id: string | null;
@@ -54,12 +54,13 @@ function leaderboardEntry(row: LeaderboardRow) {
 }
 
 const available = "g.is_active = 1 AND g.category <> 'bonds' AND (g.expires_at IS NULL OR g.expires_at > ?)";
-const projection = `g.*, (SELECT json_group_array(value) FROM (
+export const d1GiftProjection = `g.*, (SELECT json_group_array(value) FROM (
   SELECT value FROM gift_upgrade_paths WHERE gifts_id = g.source_id ORDER BY position
 )) AS upgrade_path`;
+const projection = d1GiftProjection;
 const byPrice = "ORDER BY g.coin_price, g.source_id";
 
-function presentGift(row: GiftRow) {
+export function presentGift(row: GiftRow) {
   return {
     _id: row.source_id, name: row.name, icon: row.icon, coinPrice: row.coin_price, diamondPrice: row.diamond_price,
     pkPoints: row.pk_points, isActive: Boolean(row.is_active), effect3d: row.effect3d, interactive: Boolean(row.interactive),

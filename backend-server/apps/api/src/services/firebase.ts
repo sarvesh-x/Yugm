@@ -185,6 +185,12 @@ export async function verifyIdToken(idToken: string): Promise<VerifiedFirebaseId
   }
 }
 
+export async function createFirebasePasswordAccount(uid: string, email: string, password: string) {
+  if (!admin?.apps.length) throw Object.assign(new Error("Firebase account provisioning is not configured"), { status: 503 });
+  const firebase = await fb();
+  return firebase.auth().createUser({ uid, email, password });
+}
+
 export async function verifyAppCheckToken(token: string) {
   if (!admin?.apps.length) {
     throw new Error("App Check enforcement requires FCM_CLIENT_EMAIL and FCM_PRIVATE_KEY for Firebase Admin verification");

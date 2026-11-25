@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { generateKeyPairSync, randomBytes } from "node:crypto";
-import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import test from "node:test";
@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { unstable_splitSqlQuery } from "wrangler";
+import jwt from "jsonwebtoken";
 
 const run = promisify(execFile);
 const pathFromHere = relative => fileURLToPath(new URL(relative, import.meta.url));
@@ -53,7 +54,7 @@ test("the production entrypoint uses D1 and configures hosted R2 with a media pa
     assert.deepEqual(Object.keys(bundle.inputs).filter(path =>
       /(?:^|[/\\])(?:sharp[/\\]|imageProcessor\.node\.ts$|runtime\.ts$|livekit-server-sdk[/\\]|mongoose[/\\]|mongodb[/\\]|bson[/\\]|ioredis[/\\]|bullmq[/\\]|redis-adapter[/\\]|redis\.ts$)/.test(path)), []);
 
-    function makeWorker(bindings) {
+    function makeWorker(bindings, outboundService = () => { throw new Error("Unexpected external request in the production fixture"); }) {
       const worker = new Miniflare(convertV4MiniflareOptions({
         modulesRoot: directory,
         modules: [{ type: "ESModule", path: join(directory, "production.js") }],
@@ -65,9 +66,7 @@ test("the production entrypoint uses D1 and configures hosted R2 with a media pa
         r2Buckets: Object.fromEntries(config.r2_buckets.map(({ binding, bucket_name }) => [binding, bucket_name])),
         images: { binding: "IMAGES" },
         cf: false,
-        outboundService() {
-          throw new Error("Unexpected external request in the production fixture");
-        }
+        outboundService
       }));
       workers.push(worker);
       return worker;
@@ -80,7 +79,7 @@ test("the production entrypoint uses D1 and configures hosted R2 with a media pa
     assert.equal((await missingSecrets.dispatchFetch(origin + "/api/health")).status, 200);
     assert.equal((await missingSecrets.dispatchFetch(origin + "/ready")).status, 503);
 
-    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     const firebaseFixture = {
       YUGM_PRODUCTION_ORIGIN: origin,
       JWT_SECRET: randomBytes(32).toString("hex"),
@@ -88,19 +87,44 @@ test("the production entrypoint uses D1 and configures hosted R2 with a media pa
       FCM_CLIENT_EMAIL: "firebase-fixture@yugm-production-fixture.iam.gserviceaccount.com",
       FCM_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" })
     };
-    const worker = makeWorker({ ...firebaseFixture, YUGM_R2_ENABLED: "false" });
+    const adminFirebaseUid = "production-admin-fixture";
+    const adminEmail = "fixture@example.test";
+    const hostedPassword = "production-fixture-password";
+    const token = jwt.sign({ auth_time: Math.floor(Date.now() / 1000), email: adminEmail,
+      firebase: { sign_in_provider: "password" } }, privateKey, {
+      algorithm: "RS256", keyid: "fixture-key", subject: adminFirebaseUid, audience: firebaseFixture.FCM_PROJECT_ID,
+      issuer: `https://securetoken.google.com/${firebaseFixture.FCM_PROJECT_ID}`, expiresIn: "15m"
+    });
+    const worker = makeWorker({
+      ...firebaseFixture, YUGM_R2_ENABLED: "false", ADMIN_FIREBASE_WEB_API_KEY: "fixture-key",
+      ADMIN_REFRESH_SECRET: randomBytes(32).toString("hex"), ADMIN_PANEL_ORIGIN: "https://admin.yugm.test"
+    }, async req => {
+      if (req.url === "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=fixture-key") {
+        const body = await req.json();
+        if (body.email !== adminEmail || body.password !== hostedPassword) {
+          return Response.json({ error: { message: "INVALID_LOGIN_CREDENTIALS" } }, { status: 400 });
+        }
+        return Response.json({ idToken: token });
+      }
+      if (req.url === "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com") {
+        return Response.json({ "fixture-key": publicKey.export({ type: "spki", format: "pem" }) }, {
+          headers: { "cache-control": "max-age=300" }
+        });
+      }
+      throw new Error("Unexpected external request in the production fixture");
+    });
     assert.equal((await worker.dispatchFetch("http://127.0.0.1/health")).status, 404);
     assert.equal((await worker.dispatchFetch("https://unrelated.test/health")).status, 404);
     assert.equal((await worker.dispatchFetch(origin + "/ready")).status, 503);
 
     const db = await worker.getD1Database(binding.binding);
-    const migrations = ["0001_initial", "0003_direct_message_indexes", "0004_direct_message_writes", "0005_clan_chat_indexes",
-      "0006_scheduled_maintenance", "0007_notification_push_jobs", "0008_wallet_purchase_indexes", "0009_app_config_key_unique",
-      "0010_support_ticket_sender", "0011_room_poll_indexes", "0012_room_invite_index", "0013_room_activity_indexes",
-      "0014_room_message_progression", "0015_room_mode_state", "0016_pk_room_history_indexes", "0017_report_review_indexes",
-      "0018_gift_catalog_indexes", "0019_room_gift_transfers"];
-    const schema = (await Promise.all(migrations.map(file => readFile(pathFromHere(`../../api/migrations/d1/${file}.sql`), "utf8")))).join("\n");
-    await db.batch(unstable_splitSqlQuery(schema).map(sql => db.prepare(sql)));
+    const migrationDir = pathFromHere("../../api/migrations/d1/");
+    const migrations = (await readdir(migrationDir)).filter(file => /^\d{4}_.+\.sql$/.test(file)).sort();
+    const schema = await Promise.all(migrations.map(file => readFile(join(migrationDir, file), "utf8")));
+    async function applyMigrations(database) {
+      for (const migration of schema) await database.batch(unstable_splitSqlQuery(migration).map(sql => database.prepare(sql)));
+    }
+    await applyMigrations(db);
     const readiness = await worker.dispatchFetch(origin + "/api/ready");
     assert.equal(readiness.status, 200);
     assert.deepEqual(await readiness.json(), { ok: true, service: "yugm-api", storage: "d1", managedMedia: false });
@@ -123,11 +147,51 @@ test("the production entrypoint uses D1 and configures hosted R2 with a media pa
     assert.equal((await worker.dispatchFetch(origin + "/api/media/uploads", { method: "POST" })).status, 503);
     assert.equal((await worker.dispatchFetch(origin + "/api/assets/published/none/full")).status, 503);
 
+    const adminId = randomBytes(12).toString("hex");
+    const sessionId = randomBytes(12).toString("hex");
+    await db.batch([
+      db.prepare(`INSERT INTO admin_users (source_id, email, display_name, role, status, is_super_admin, two_factor_enabled, firebase_uid)
+        VALUES (?, ?, 'Production fixture', 'ADMIN', 'ACTIVE', 0, 0, ?)`).bind(adminId, adminEmail, adminFirebaseUid),
+      db.prepare(`INSERT INTO admin_sessions (source_id, admin_id, refresh_token_hash, expires_at)
+        VALUES (?, ?, 'fixture', ?)`).bind(sessionId, adminId, new Date(Date.now() + 900_000).toISOString())
+    ]);
+    const adminToken = jwt.sign({ sub: adminId, sessionId, type: "admin", role: "ADMIN" },
+      firebaseFixture.JWT_SECRET, { expiresIn: "15m" });
+    const adminPath = origin + "/api/admin";
+    const preflight = await worker.dispatchFetch(adminPath + "/auth/login", { method: "OPTIONS", headers: {
+      Origin: "https://admin.yugm.test", "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type"
+    } });
+    assert.equal(preflight.status, 204);
+    assert.equal(preflight.headers.get("Access-Control-Allow-Origin"), "https://admin.yugm.test");
+    assert.match(preflight.headers.get("Access-Control-Allow-Headers"), /Idempotency-Key/i);
+    assert.equal((await worker.dispatchFetch(adminPath + "/auth/login", {
+      method: "OPTIONS", headers: { Origin: "https://unrelated.test" }
+    })).status, 403);
+    assert.equal((await worker.dispatchFetch(adminPath + "/dashboard/overview")).status, 401);
+    for (const path of ["/dashboard/overview", "/payments/recharges", "/gifts", "/cosmetics", "/notifications/campaigns"]) {
+      const response = await worker.dispatchFetch(adminPath + path, { headers: { Authorization: `Bearer ${adminToken}` } });
+      assert.equal(response.status, 200, path);
+      assert.equal((await response.json()).success, true);
+    }
+    const hostedLogin = await worker.dispatchFetch(adminPath + "/auth/login", {
+      method: "POST", headers: { "content-type": "application/json", Origin: "https://admin.yugm.test" },
+      body: JSON.stringify({ email: adminEmail, password: hostedPassword })
+    });
+    assert.equal(hostedLogin.status, 200);
+    assert.equal(hostedLogin.headers.get("Access-Control-Allow-Origin"), "https://admin.yugm.test");
+    const hostedSession = (await hostedLogin.json()).data;
+    assert.equal(hostedSession.admin.id, adminId);
+    const hostedRefresh = await worker.dispatchFetch(adminPath + "/auth/refresh", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ refreshToken: hostedSession.refreshToken })
+    });
+    assert.equal(hostedRefresh.status, 200);
+
     const missingMediaSecret = makeWorker(firebaseFixture);
     assert.equal((await missingMediaSecret.dispatchFetch(origin + "/ready")).status, 503);
     const withMedia = makeWorker({ ...firebaseFixture, MEDIA_GRANT_SECRET: randomBytes(32).toString("hex") });
     const mediaDb = await withMedia.getD1Database(binding.binding);
-    await mediaDb.batch(unstable_splitSqlQuery(schema).map(sql => mediaDb.prepare(sql)));
+    await applyMigrations(mediaDb);
     const assetId = randomBytes(12).toString("hex");
     const bytes = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jF9kAAAAASUVORK5CYII=", "base64");
     const key = "assets/fixture-full.png";

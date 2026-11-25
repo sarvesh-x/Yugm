@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -25,7 +25,7 @@ import {
   Users,
   Wallet
 } from "lucide-react";
-import { Admin, adminApi, adminApiMultipart, adminApiWithMeta, formatDate, formatNumber, login, refreshAdminSession, Session } from "./api";
+import { Admin, adminApi, adminApiMultipart, adminApiWithMeta, ApiError, formatDate, formatNumber, login, refreshAdminSession, Session } from "./api";
 import { AssetsPage } from "./AssetsPage";
 import { MediaPage } from "./MediaPage";
 import { BadgesPage } from "./BadgesPage";
@@ -89,26 +89,38 @@ export function App() {
 
   useEffect(() => {
     if (!session?.refreshToken) return;
+    let active = true;
     const refresh = async () => {
       try {
         const next = await refreshAdminSession(session.refreshToken!);
-        saveSession({ ...session, admin: next.admin, accessToken: next.accessToken });
+        if (active) saveSession({ ...session, admin: next.admin, accessToken: next.accessToken });
       } catch {
-        saveSession(null);
+        if (active) saveSession(null);
       }
     };
     const timer = window.setInterval(refresh, 12 * 60 * 1000);
-    return () => window.clearInterval(timer);
+    return () => { active = false; window.clearInterval(timer); };
   }, [session?.refreshToken]);
 
   if (!session) return <LoginScreen onLogin={saveSession} />;
+  const logout = async () => {
+    try {
+      await adminApi("/auth/logout", { token: session.accessToken, method: "POST" });
+    } catch (error) {
+      if (!(error instanceof ApiError && error.status === 401)) {
+        setNotice({ tone: "error", text: error instanceof Error ? error.message : "Could not log out" });
+        return;
+      }
+    }
+    saveSession(null);
+  };
 
   return (
     <div className="app-shell">
-      <Sidebar current={view} onNavigate={setView} admin={session.admin} onLogout={() => saveSession(null)} />
+      <Sidebar current={view} onNavigate={setView} admin={session.admin} onLogout={logout} />
       <main className="workspace">
         <Topbar view={view} admin={session.admin} notice={notice} onClearNotice={() => setNotice(null)} />
-        <ViewRenderer view={view} session={session} setNotice={setNotice} onLogout={() => saveSession(null)} />
+        <ViewRenderer view={view} session={session} setNotice={setNotice} onLogout={logout} />
       </main>
     </div>
   );
@@ -800,19 +812,34 @@ function WalletPage({ token, setNotice }: { token: string; setNotice: (notice: N
   const [userId, setUserId] = useState("");
   const [amount, setAmount] = useState(100);
   const [reason, setReason] = useState("Admin adjustment");
+  const [approverToken, setApproverToken] = useState("");
+  const [adjusting, setAdjusting] = useState(false);
+  const adjustment = useRef<{ payload: string; id: string; pending: boolean } | null>(null);
   const resource = useResourceWithMeta<any[]>("/wallet/transactions", token);
 
   const adjust = async (type: "CREDIT" | "DEBIT") => {
+    if (adjustment.current?.pending) return;
+    const body = JSON.stringify({ type, amount, reason });
+    const payload = userId.trim() + body;
+    const id = adjustment.current?.payload === payload ? adjustment.current.id : crypto.randomUUID();
+    adjustment.current = { payload, id, pending: true };
+    setAdjusting(true);
     try {
-      await adminApi(`/wallet/users/${userId}/adjust`, {
+      await adminApi(`/wallet/users/${encodeURIComponent(userId.trim())}/adjust`, {
         token,
         method: "POST",
-        body: JSON.stringify({ type, amount, reason })
+        headers: { "Idempotency-Key": id, ...(approverToken.trim() ? { "X-Approval-Admin-Token": approverToken.trim() } : {}) },
+        body
       });
+      adjustment.current = null;
+      setApproverToken("");
       setNotice({ tone: "success", text: `${type} adjustment created` });
       resource.refresh();
-    } catch (err: any) {
-      setNotice({ tone: "error", text: err.message });
+    } catch (error) {
+      adjustment.current = { payload, id, pending: false };
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : "Adjustment failed" });
+    } finally {
+      setAdjusting(false);
     }
   };
 
@@ -820,13 +847,15 @@ function WalletPage({ token, setNotice }: { token: string; setNotice: (notice: N
     <div className="page-grid">
       <Panel title="Manual ledger adjustment" action="Finance only">
         <div className="form-grid">
-          <label>User ID<input value={userId} onChange={(event) => setUserId(event.target.value)} placeholder="Mongo user id" /></label>
+          <label>User ID<input value={userId} onChange={(event) => setUserId(event.target.value)} /></label>
           <label>Amount<input type="number" value={amount} onChange={(event) => setAmount(Number(event.target.value))} /></label>
           <label className="full">Reason<input value={reason} onChange={(event) => setReason(event.target.value)} /></label>
+          {amount >= 10000 && <label className="full">Second admin access token<input type="password" autoComplete="off"
+            value={approverToken} onChange={(event) => setApproverToken(event.target.value)} /></label>}
         </div>
         <div className="action-row">
-          <button onClick={() => adjust("CREDIT")}>Credit</button>
-          <button className="danger" onClick={() => adjust("DEBIT")}>Debit</button>
+          <button disabled={adjusting || (amount >= 10000 && !approverToken.trim())} onClick={() => adjust("CREDIT")}>Credit</button>
+          <button disabled={adjusting || (amount >= 10000 && !approverToken.trim())} className="danger" onClick={() => adjust("DEBIT")}>Debit</button>
         </div>
       </Panel>
       <SimpleResource token={token} title="Wallet Transactions" endpoint="/wallet/transactions" columns={walletColumns} />
@@ -1292,8 +1321,8 @@ function CampaignsPage({ token, admin, setNotice }: { token: string; admin: Admi
   const [showCreate, setShowCreate] = useState(false);
   const [busy, setBusy] = useState("");
 
-  const resource = useResourceWithMeta<any[]>("/notifications/campaigns", token);
-  const rows = resource.data ?? [];
+  const resource = useResourceWithMeta<{ campaigns: any[] }>("/notifications/campaigns", token);
+  const rows = resource.data?.campaigns ?? [];
 
   const [form, setForm] = useState({
     title: "",
@@ -1313,7 +1342,8 @@ function CampaignsPage({ token, admin, setNotice }: { token: string; admin: Admi
     try {
       const body: Record<string, any> = { title: form.title, body: form.body, segment: form.segment };
       if (form.segment === "city" && form.segmentValue.trim()) body.segmentValue = form.segmentValue.trim();
-      if (form.scheduledAt.trim()) body.scheduledAt = form.scheduledAt;
+      if (form.segment === "custom" && form.segmentValue.trim()) body.filters = { city: form.segmentValue.trim() };
+      if (form.scheduledAt.trim()) body.scheduledFor = new Date(form.scheduledAt).toISOString();
       await adminApi("/notifications/campaigns", { token, method: "POST", body: JSON.stringify(body) });
       setNotice({ tone: "success", text: "Campaign draft created" });
       setShowCreate(false);
@@ -1365,9 +1395,9 @@ function CampaignsPage({ token, admin, setNotice }: { token: string; admin: Admi
 
   return (
     <div className="page-grid">
-      <ResourceFrame title="Notification Campaigns" subtitle="Create, schedule, send and track push notification campaigns." loading={resource.loading} error={resource.error} onRetry={resource.refresh}>
+      <ResourceFrame title="Notification Campaigns" subtitle="Draft and send push notification campaigns." loading={resource.loading} error={resource.error} onRetry={resource.refresh}>
         <div className="section-heading" style={{ marginBottom: 16 }}>
-          <span>{formatNumber(resource.meta?.pagination?.total ?? rows.length)} campaigns</span>
+          <span>{formatNumber(resource.meta?.total ?? rows.length)} campaigns</span>
           <button className="primary-action compact" onClick={openNew}>New Campaign</button>
         </div>
         <DataTable
@@ -1402,10 +1432,10 @@ function CampaignsPage({ token, admin, setNotice }: { token: string; admin: Admi
             <option value="vip">VIP</option>
             <option value="custom">Custom</option>
           </select></label>
-          {form.segment === "city" && (
+          {(form.segment === "city" || form.segment === "custom") && (
             <label>City name<input value={form.segmentValue} onChange={(e) => setForm({ ...form, segmentValue: e.target.value })} placeholder="e.g. Mumbai" /></label>
           )}
-          <label>Scheduled date<input type="datetime-local" value={form.scheduledAt} onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })} /></label>
+          <label>Planned send date<input type="datetime-local" value={form.scheduledAt} onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })} /></label>
         </div>
         <button className="primary-action compact" onClick={createCampaign} style={{ marginTop: 12 }}>Create draft</button>
       </Drawer>
@@ -1451,11 +1481,14 @@ function NotificationsPage({ token, setNotice }: { token: string; setNotice: (no
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [segment, setSegment] = useState("all_users");
+  const [city, setCity] = useState("");
 
   const send = async () => {
     try {
       const endpoint = segment === "all_users" ? "/notifications/send-all" : "/notifications/send-segment";
-      await adminApi(endpoint, { token, method: "POST", body: JSON.stringify({ title, body, type: "SYSTEM", segment }) });
+      await adminApi(endpoint, { token, method: "POST", body: JSON.stringify({
+        title, body, type: "SYSTEM", segment, ...(segment === "city" ? { city: city.trim() } : {})
+      }) });
       setNotice({ tone: "success", text: "Notification sent" });
     } catch (err: any) {
       setNotice({ tone: "error", text: err.message });
@@ -1468,7 +1501,8 @@ function NotificationsPage({ token, setNotice }: { token: string; setNotice: (no
         <label>Title<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Late Night Talks is live" /></label>
         <label>Body<textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder="Join rooms matching your vibe now." /></label>
         <label>Segment<select value={segment} onChange={(event) => setSegment(event.target.value)}><option value="all_users">All users</option><option value="hosts">Hosts</option><option value="city">City</option></select></label>
-        <button className="primary-action compact" onClick={send}>Send notification</button>
+        {segment === "city" && <label>City name<input value={city} onChange={(event) => setCity(event.target.value)} /></label>}
+        <button className="primary-action compact" disabled={segment === "city" && !city.trim()} onClick={send}>Send notification</button>
       </div>
     </Panel>
   );

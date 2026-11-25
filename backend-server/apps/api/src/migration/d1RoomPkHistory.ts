@@ -1,7 +1,7 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import { person, personJson } from "./d1People.js";
 
-interface BattleRow {
+export interface BattleRow {
   source_id: string; battle_code: string; title: string; status: string; state_version: number;
   mode: string; format: string; scope: string; team_size: number; selected_gift_id: string | null;
   battle_type: string; duration_seconds: number; countdown_ends_at: string | null; termination_reason: string;
@@ -37,24 +37,15 @@ const roomCount = (alias: string) => `COALESCE(NULLIF((
   SELECT COUNT(*) FROM room_participants WHERE room_id = ${alias}.source_id AND left_at IS NULL
 ), 0), ${alias}.participant_count, 0)`;
 const ended = "status IN ('ENDED', 'FORCE_ENDED')";
-
-export async function readD1RoomPkHistory(db: D1Database, room: string, viewer: string, roomAccess: RoomAccess) {
-  const { results } = await db.prepare(`WITH matching AS (
-    SELECT source_id FROM pk_battles WHERE left_room_id = ?1 AND ${ended}
-    UNION SELECT source_id FROM pk_battles WHERE right_room_id = ?1 AND ${ended}
-  )
-  SELECT b.*, l.title AS left_title, r.title AS right_title, ${roomCount("l")} AS left_count,
+export const pkBattleProjection = `b.*, l.title AS left_title, r.title AS right_title, ${roomCount("l")} AS left_count,
     ${roomCount("r")} AS right_count, ${personJson("lh")} AS left_host, ${personJson("rh")} AS right_host,
     (SELECT json_group_array(json_object('side', p.side, 'userId', p.user_id, 'user', ${personJson("u")}, 'isReady', p.is_ready, 'team', p.team_name))
       FROM pk_participants AS p JOIN users AS u ON u.source_id = p.user_id
-      WHERE p.battle_id = b.source_id AND p.left_at IS NULL) AS members
-  FROM matching AS m JOIN pk_battles AS b ON b.source_id = m.source_id
-  JOIN rooms AS l ON l.source_id = b.left_room_id JOIN rooms AS r ON r.source_id = b.right_room_id
-  JOIN users AS lh ON lh.source_id = b.left_host_id JOIN users AS rh ON rh.source_id = b.right_host_id
-  WHERE (${roomAccess("?2", "l")}) AND (${roomAccess("?2", "r")})
-  ORDER BY b.created_at DESC, b.source_id DESC LIMIT 50`).bind(room, viewer).all<BattleRow>();
-  const now = Date.now();
-  return results.map(row => {
+      WHERE p.battle_id = b.source_id AND p.left_at IS NULL) AS members`;
+export const pkBattleJoins = `JOIN rooms AS l ON l.source_id = b.left_room_id JOIN rooms AS r ON r.source_id = b.right_room_id
+  JOIN users AS lh ON lh.source_id = b.left_host_id JOIN users AS rh ON rh.source_id = b.right_host_id`;
+
+export function presentPkBattle(row: BattleRow, now = Date.now()) {
     const members = JSON.parse(row.members) as ParticipantRow[];
     const countdown = row.countdown_ends_at ? Math.max(0, Math.ceil((Date.parse(row.countdown_ends_at) - now) / 1000)) : 0;
     const remaining = row.started_at ? Math.max(0, row.duration_seconds - Math.floor((now - Date.parse(row.started_at)) / 1000))
@@ -69,5 +60,16 @@ export async function readD1RoomPkHistory(db: D1Database, room: string, viewer: 
       winnerSide: row.winner_side ?? undefined, terminationReason: row.termination_reason,
       startedAt: row.started_at ?? undefined, endedAt: row.ended_at ?? undefined
     };
-  });
+}
+
+export async function readD1RoomPkHistory(db: D1Database, room: string, viewer: string, roomAccess: RoomAccess) {
+  const { results } = await db.prepare(`WITH matching AS (
+    SELECT source_id FROM pk_battles WHERE left_room_id = ?1 AND ${ended}
+    UNION SELECT source_id FROM pk_battles WHERE right_room_id = ?1 AND ${ended}
+  )
+  SELECT ${pkBattleProjection} FROM matching AS m JOIN pk_battles AS b ON b.source_id = m.source_id ${pkBattleJoins}
+  WHERE (${roomAccess("?2", "l")}) AND (${roomAccess("?2", "r")})
+  ORDER BY b.created_at DESC, b.source_id DESC LIMIT 50`).bind(room, viewer).all<BattleRow>();
+  const now = Date.now();
+  return results.map(row => presentPkBattle(row, now));
 }

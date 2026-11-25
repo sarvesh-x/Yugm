@@ -9,11 +9,29 @@ import { asyncHandler, HttpError, sendOk } from "../utils/http.js";
 import { responseError } from "../utils/responseError.js";
 import { createD1AccessSessionReader } from "./d1AccessSession.js";
 import { createD1AdminRouter } from "./d1AdminConfig.js";
+import { createD1AdminAccountsRouter } from "./d1AdminAccounts.js";
+import { createD1AdminAssetsRouter } from "./d1AdminAssets.js";
+import { createD1AdminBadgesRouter, createD1BadgeArtRouter } from "./d1AdminBadges.js";
+import { createD1AdminAnalyticsRouter } from "./d1AdminAnalytics.js";
+import { createD1AdminCosmeticsRouter } from "./d1AdminCosmetics.js";
+import { createD1AdminDmReviewsRouter } from "./d1AdminDmReviews.js";
+import { createD1AdminFinanceRouter } from "./d1AdminFinance.js";
+import { createD1AdminGiftsRouter } from "./d1AdminGifts.js";
+import { createD1AdminLiveOperationsRouter } from "./d1AdminLiveOperations.js";
+import { createD1LegacyModerationRouter } from "./d1LegacyModeration.js";
 import { createD1AdminMessagesRouter } from "./d1AdminMessages.js";
+import { createD1AdminMediaRouter } from "./d1AdminMedia.js";
+import { createD1AdminNotificationsRouter } from "./d1AdminNotifications.js";
+import { createD1AdminPayoutDecisionsRouter } from "./d1AdminPayoutDecisions.js";
+import { createD1AdminPaymentsRouter } from "./d1AdminPayments.js";
 import { createD1AdminReportsRouter } from "./d1AdminReports.js";
+import { createD1AdminReactionsRouter, createD1ReactionArtRouter } from "./d1AdminReactions.js";
+import { createD1AdminRefundsRouter } from "./d1AdminRefunds.js";
+import { createD1AdminSessionsRouter, type AdminSessionConfig } from "./d1AdminSessions.js";
 import { createD1AdminRoomsRouter } from "./d1AdminRooms.js";
 import { createD1AdminSupportRouter } from "./d1AdminSupport.js";
 import { createD1AdminUsersRouter } from "./d1AdminUsers.js";
+import { createD1AdminVerificationRouter } from "./d1AdminVerification.js";
 import { createD1AuthRouter } from "./d1AuthRouter.js";
 import { createD1BattlePassRouter } from "./d1BattlePass.js";
 import { createD1BondsRouter } from "./d1Bonds.js";
@@ -68,7 +86,8 @@ export function createD1App(
   limits: { chat?: D1UserRateLimit; report?: D1UserRateLimit; create?: D1UserRateLimit; gift?: D1UserRateLimit } = {},
   livekit: D1LiveKitConfig = {},
   wallet: D1WalletConfig = { production: true },
-  admin: { jwtSecret?: string } = {}
+  admin: AdminSessionConfig = {},
+  adminRateLimiters = rateLimiters
 ) {
   const resolvePublicOrigin = (request: ExpressRequest) => {
     // The fetch handler validates the origin and discards any incoming value.
@@ -77,6 +96,7 @@ export function createD1App(
     return value;
   };
   const app = express();
+  const paymentProviders = createD1PaymentProviders(wallet);
   app.disable("x-powered-by");
   app.get("/", publicServiceRoot);
   app.use("/legal", legalRouter);
@@ -84,12 +104,32 @@ export function createD1App(
   app.use("/api/media/uploads/:sessionId/bytes", express.raw({ type: () => true, limit: "6mb" }));
   app.use(express.json({ limit: "1mb" }));
   app.use("/api/auth", requireAppCheck, createD1AuthRouter(db, rateLimiters));
+  app.use("/api/admin", createD1AdminSessionsRouter(db, adminRateLimiters, admin));
+  app.use("/api/admin", createD1AdminAccountsRouter(db, adminRateLimiters, admin));
   app.use("/api/admin", createD1AdminRouter(db, admin.jwtSecret));
   app.use("/api/admin", createD1AdminSupportRouter(db, admin.jwtSecret));
   app.use("/api/admin", createD1AdminReportsRouter(db, admin.jwtSecret));
   app.use("/api/admin", createD1AdminUsersRouter(db, admin.jwtSecret));
   app.use("/api/admin", createD1AdminMessagesRouter(db, admin.jwtSecret));
   app.use("/api/admin", createD1AdminRoomsRouter(db, admin.jwtSecret));
+  app.use("/api/admin", createD1AdminAnalyticsRouter(db, admin.jwtSecret));
+  app.use("/api/admin", createD1AdminCosmeticsRouter(db, admin.jwtSecret));
+  app.use("/api/admin", createD1AdminFinanceRouter(db, admin.jwtSecret));
+  app.use("/api/admin", createD1AdminPayoutDecisionsRouter(db, paymentProviders, admin.jwtSecret));
+  app.use("/api/admin", createD1AdminPaymentsRouter(db, paymentProviders, admin.jwtSecret));
+  app.use("/api/admin", createD1AdminRefundsRouter(db, paymentProviders, admin.jwtSecret));
+  app.use("/api/admin", createD1AdminGiftsRouter(db, admin.jwtSecret));
+  app.use("/api/admin", createD1AdminNotificationsRouter(db, admin.jwtSecret));
+  app.use("/api/admin", createD1AdminMediaRouter(db, admin.jwtSecret));
+  app.use("/api/admin", createD1AdminAssetsRouter(db, resolvePublicOrigin, media?.buckets, admin.jwtSecret));
+  app.use("/api/admin", createD1AdminBadgesRouter(db, admin.jwtSecret, media?.buckets.assets));
+  app.use("/api/admin", createD1AdminReactionsRouter(db, resolvePublicOrigin, admin.jwtSecret, media?.buckets.assets));
+  app.use("/api/admin", createD1AdminVerificationRouter(db, admin.jwtSecret, media?.buckets["private-media"]));
+  app.use("/api/admin", createD1AdminDmReviewsRouter(db, admin.jwtSecret));
+  app.use("/api/admin", createD1AdminLiveOperationsRouter(db, admin.jwtSecret));
+  app.use("/api/admin", createD1LegacyModerationRouter(db));
+  app.use("/api/badge-art", createD1BadgeArtRouter(db, media?.buckets.assets));
+  app.use("/api/reaction-art", createD1ReactionArtRouter(db, media?.buckets.assets));
   app.use("/api/users", createD1ProfileEditRouter(db));
   app.use("/api", createD1ProgressionRouter(db));
   app.use("/api/users/messages", createD1InboxRouter(db, limits.chat));
@@ -103,7 +143,7 @@ export function createD1App(
   app.use("/api", createD1HighlightsRouter(db));
   app.use("/api", createD1CosmeticsRouter(db, resolvePublicOrigin));
   app.use("/api", createD1WalletRouter(db, {
-    payments: createD1PaymentProviders(wallet),
+    payments: paymentProviders,
     devRecharge: wallet.devRecharge
   }));
   app.use("/api", createD1DirectGiftsRouter(db, wallet.diamondsEnabled));
@@ -146,7 +186,7 @@ export function createD1App(
     const requestId = crypto.randomUUID();
     if (status >= 500) console.error("D1 API request failed", requestId, status);
     const errorBody = { message: status >= 500 ? "Unexpected server error" : message, code, requestId };
-    res.status(status).json(req.path.startsWith("/api/admin")
+    res.status(status).json(req.path.startsWith("/api/admin") && !res.locals.legacyAdminRoute
       ? { success: false, error: errorBody }
       : { ok: false, error: errorBody });
   };

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Router, type NextFunction, type Request, type Response } from "express";
 import multer from "multer";
-import { z } from "zod";
+import { badgeId, definitionSchema } from "../modules/admin/badgeDefinition.js";
 import { requireAdminAuth, requirePermission, type AdminAuthRequest } from "../middleware/adminAuth.js";
 import { Achievement, badgeIcons, badgeMetrics, badgeTiers, honorMetrics } from "../models/Achievement.js";
 import { adminOk } from "../modules/admin/http.js";
@@ -16,36 +16,7 @@ export const badgeArtRouter = Router();
 adminBadgesRouter.use(requireAdminAuth);
 adminBadgesRouter.use("/badges", requirePermission("cosmetics.write"));
 
-const badgeId = z.string().trim().regex(/^[a-z0-9_-]{1,64}$/);
 const imageUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 512 * 1024, files: 1, fields: 1 } });
-const definitionSchema = z.object({
-  id: badgeId,
-  title: z.string().trim().min(1).max(60),
-  description: z.string().trim().min(1).max(240),
-  kind: z.enum(["ACHIEVEMENT", "HONOR"]),
-  metric: z.enum(badgeMetrics),
-  icon: z.enum(badgeIcons),
-  order: z.number().int().min(0).max(10000),
-  hidden: z.boolean().default(false),
-  assetRef: z.string().max(64).optional(),
-  removeImage: z.boolean().optional(),
-  weeklyTarget: z.number().int().min(1).max(1_000_000).optional(),
-  tiers: z.array(z.object({
-    tier: z.enum(badgeTiers),
-    target: z.number().int().min(1).max(1_000_000),
-    rewardCoins: z.number().int().min(0).max(1_000_000),
-    rewardCosmetic: z.string().max(64).optional()
-  })).max(badgeTiers.length)
-}).superRefine((definition, ctx) => {
-  if (definition.kind === "HONOR") {
-    if (!definition.weeklyTarget || !honorMetrics.some(metric => metric === definition.metric) || definition.tiers.length) {
-      ctx.addIssue({ code: "custom", message: "Honor badges need a weekly hosting or gifting target and no tiers." });
-    }
-  } else if (!definition.tiers.length || definition.weeklyTarget || definition.tiers.some((tier, index, tiers) =>
-    tier.tier !== badgeTiers[index] || (index > 0 && tier.target <= tiers[index - 1].target))) {
-    ctx.addIssue({ code: "custom", message: "Achievement tiers must start at Bronze and have strictly increasing targets." });
-  }
-});
 
 /** Pure validation shared by create/update and unit tests. */
 export function assertBadgeAssetTarget(

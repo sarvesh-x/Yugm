@@ -33,6 +33,7 @@
     "d1:setup:local": "wrangler d1 migrations apply yugm --config apps/cloudflare-worker/auth-local/wrangler.jsonc --local",
     "d1:setup:production": "wrangler d1 migrations apply yugm --config apps/cloudflare-worker/wrangler.production.jsonc --remote",
     "d1:seed:sql": "tsx scripts/d1-reference-seed.mts",
+    "d1:admin:sql": "tsx scripts/d1-admin-bootstrap.mts",
     "test:d1-setup": "node --test scripts/d1-reference-seed.test.mjs",
     "test:openapi": "node --test scripts/check-openapi.test.mjs",
     "config:manifest": "node scripts/config-backup-manifest.mjs",

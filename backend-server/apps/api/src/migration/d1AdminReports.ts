@@ -29,7 +29,7 @@ const joined = `SELECT p.*, CASE WHEN reporter.source_id IS NOT NULL THEN ${pers
 function reviewDetails(row: ReportRow) {
   return { ...presentD1Report(row), evidence: JSON.parse(row.evidence), riskScore: row.risk_score,
     autoFlagged: Boolean(row.auto_flagged), autoActionTaken: row.auto_action_taken ?? undefined,
-    moderatorNote: row.moderator_note ?? undefined, reviewedBy: row.reviewed_by ?? undefined,
+    moderatorNote: row.moderator_note ?? undefined, reviewedBy: row.reviewed_by_admin_id ?? row.reviewed_by ?? undefined,
     reviewedAt: row.reviewed_at ?? undefined };
 }
 
@@ -142,7 +142,7 @@ export function createD1AdminReportsRouter(db: D1Database, secret?: string) {
     if (!row) throw new HttpError(404, "Report not found", ErrorCode.NOT_FOUND);
     const time = new Date().toISOString();
     const body = req.body as { reason?: string };
-    await db.prepare("UPDATE reports SET status = 'DISMISSED', reviewed_by = ?, reviewed_at = ?, moderator_note = ?, updated_at = ? WHERE source_id = ?").bind(adminFrom(res).id, time, body.reason ?? null, time, reportId).run();
+    await db.prepare("UPDATE reports SET status = 'DISMISSED', reviewed_by_admin_id = ?, reviewed_by = NULL, reviewed_at = ?, moderator_note = ?, updated_at = ? WHERE source_id = ?").bind(adminFrom(res).id, time, body.reason ?? null, time, reportId).run();
     await db.prepare("UPDATE moderation_queues SET status = 'DISMISSED', resolved_at = ?, resolved_by = ?, updated_at = ? WHERE report_id = ?").bind(time, adminFrom(res).id, time, reportId).run();
     const admin = adminFrom(res);
     await createModerationAction(db, admin.id, { actionType: "REPORT_DISMISSED", reportId, targetType: "REPORT", targetId: reportId, targetUserId: row.target_user_id ?? undefined, reason: body.reason });
@@ -156,7 +156,7 @@ export function createD1AdminReportsRouter(db: D1Database, secret?: string) {
     if (!row) throw new HttpError(404, "Report not found", ErrorCode.NOT_FOUND);
     const time = new Date().toISOString();
     const body = req.body as { resolution: string; note?: string };
-    await db.prepare("UPDATE reports SET status = 'REVIEWED', reviewed_by = ?, reviewed_at = ?, moderator_note = ?, updated_at = ? WHERE source_id = ?").bind(adminFrom(res).id, time, body.note ?? null, time, reportId).run();
+    await db.prepare("UPDATE reports SET status = 'REVIEWED', reviewed_by_admin_id = ?, reviewed_by = NULL, reviewed_at = ?, moderator_note = ?, updated_at = ? WHERE source_id = ?").bind(adminFrom(res).id, time, body.note ?? null, time, reportId).run();
     await db.prepare("UPDATE moderation_queues SET status = 'AUTO_RESOLVED', resolved_at = ?, resolved_by = ?, updated_at = ? WHERE report_id = ?").bind(time, adminFrom(res).id, time, reportId).run();
     const admin = adminFrom(res);
     await insertD1AdminAudit(db, admin, { action: "report.resolved", entityType: "report", entityId: reportId, metadata: body, req });
@@ -185,7 +185,7 @@ export function createD1AdminReportsRouter(db: D1Database, secret?: string) {
     }
     if (body.action === "END_ROOM" && row.room_id) await endD1Room(db, row.room_id, new Date().toISOString());
     const time = new Date().toISOString();
-    await db.prepare("UPDATE reports SET status = ?, reviewed_by = ?, reviewed_at = ?, moderator_note = ?, updated_at = ? WHERE source_id = ?")
+    await db.prepare("UPDATE reports SET status = ?, reviewed_by_admin_id = ?, reviewed_by = NULL, reviewed_at = ?, moderator_note = ?, updated_at = ? WHERE source_id = ?")
       .bind(body.action === "NO_ACTION" ? "DISMISSED" : "ACTION_TAKEN", admin.id, time, body.reason, time, reportId).run();
     if (queue) await db.prepare("UPDATE moderation_queues SET status = ?, resolved_at = ?, resolved_by = ?, updated_at = ? WHERE source_id = ?")
       .bind(body.action === "NO_ACTION" ? "DISMISSED" : "ACTION_TAKEN", time, admin.id, time, queue.source_id).run();

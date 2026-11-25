@@ -1,4 +1,10 @@
-# Experimental Cloudflare Worker
+# Cloudflare Worker
+
+The local and production D1 entrypoints use the `yugm` database with separate
+bindings. The [D1 admin setup](../../../docs/handoffs/2026-11-25-d1-admin-auth-and-media.md)
+covers login, Pages CORS, local and hosted bootstrap SQL, and the admin
+migration status. The prototype information below describes the legacy
+staging entrypoint.
 
 The Worker is a staging prototype. Production startup is deliberately disabled
 until the migration acceptance checks in [the audit](../../../docs/cloudflare-migration/audit.md)

@@ -13,7 +13,7 @@ import { asyncHandler, ErrorCode, HttpError, isValidObjectId, sendOk } from "../
 import { bindD1LiveUser, createD1AccessSessionReader, d1LiveUserFilter } from "./d1AccessSession.js";
 import { chatRestricted } from "./d1ChatModeration.js";
 
-interface ReactionRow {
+export interface ReactionRow {
   source_id: string;
   label: string;
   emoji: string;
@@ -47,7 +47,7 @@ function vipUser(row: VipRow | null) {
   };
 }
 
-async function ensureDefaultReactions(db: D1Database) {
+export async function ensureDefaultReactions(db: D1Database) {
   const missing = await db.prepare(`SELECT 1 FROM json_each(?) AS t
     LEFT JOIN room_reactions AS r ON r.source_id = json_extract(t.value, '$.id')
     WHERE r.source_id IS NULL OR (r.emoji = '' AND json_extract(t.value, '$.backfillEmoji') = 1) LIMIT 1`)

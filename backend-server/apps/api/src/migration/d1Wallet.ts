@@ -12,7 +12,7 @@ import { clearProfileMarkers, newId, readWardrobe, walletFrozen, walletRow, wall
 import type { D1PaymentProviders } from "./d1Payments.js";
 import { prepareD1XpGrant, type D1GuardedStatement } from "./d1XpGrant.js";
 
-type PurchaseRow = {
+export type PurchaseRow = {
   source_id: string;
   user_id: string;
   provider: "RAZORPAY" | "GOOGLE_PLAY";
@@ -70,7 +70,7 @@ function parseMetadata(row: PurchaseRow) {
   return JSON.parse(row.metadata || "{}") as Record<string, unknown>;
 }
 
-function presentPurchase(row: PurchaseRow) {
+export function presentPurchase(row: PurchaseRow, includeProviderSecrets = true) {
   const metadata = parseMetadata(row);
   const mapped: Record<string, unknown> = {
     _id: row.source_id,
@@ -83,16 +83,16 @@ function presentPurchase(row: PurchaseRow) {
     diamondAmount: row.diamond_amount,
     amountInr: row.amount_inr,
     currency: row.currency,
-    metadata,
+    ...(includeProviderSecrets ? { metadata } : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
   const optional = {
     providerOrderId: row.provider_order_id,
     providerPaymentId: row.provider_payment_id,
-    providerSignature: row.provider_signature,
+    providerSignature: includeProviderSecrets ? row.provider_signature : undefined,
     productId: row.product_id,
-    purchaseToken: row.purchase_token,
+    purchaseToken: includeProviderSecrets ? row.purchase_token : undefined,
     googleOrderId: row.google_order_id,
     creditedTransactionId: row.credited_transaction_id,
     creditedDiamondTransactionId: row.credited_diamond_transaction_id,
@@ -133,7 +133,7 @@ async function assertWalletNotFrozen(db: D1Database, userId: string) {
   if (state?.frozen) throw new HttpError(403, "Wallet is frozen", ErrorCode.FORBIDDEN);
 }
 
-async function markPurchasePaid(db: D1Database, purchaseId: string, userId: string, fields: PaidFields) {
+export async function markPurchasePaid(db: D1Database, purchaseId: string, userId: string, fields: PaidFields) {
   const current = await readPurchase(db, purchaseId, userId);
   if (!current) throw new HttpError(404, "Purchase not found", ErrorCode.NOT_FOUND);
   if (current.status === "CREDITED") return current;
@@ -160,7 +160,7 @@ async function markPurchasePaid(db: D1Database, purchaseId: string, userId: stri
   return readPurchase(db, purchaseId, userId) as Promise<PurchaseRow>;
 }
 
-async function creditPurchase(db: D1Database, userId: string, purchaseId: string, extra: Record<string, unknown>) {
+export async function creditPurchase(db: D1Database, userId: string, purchaseId: string, extra: Record<string, unknown>) {
   for (let attempt = 0; attempt < 4; attempt++) {
     const purchase = await readPurchase(db, purchaseId, userId);
     if (!purchase) throw new HttpError(404, "Purchase not found", ErrorCode.NOT_FOUND);
@@ -168,6 +168,7 @@ async function creditPurchase(db: D1Database, userId: string, purchaseId: string
     if (purchase.status !== "PAID") {
       throw new HttpError(409, "Only verified paid purchases can be credited", ErrorCode.CONFLICT);
     }
+    await assertWalletNotFrozen(db, userId);
     const [account] = await db.batch([db.prepare(readWardrobe).bind(userId)]);
     const row = walletRow(account.results[0]);
     const now = new Date();
@@ -196,10 +197,8 @@ async function creditPurchase(db: D1Database, userId: string, purchaseId: string
     const idempotencyKey = `purchase:${purchaseId}`;
     // The ledger row is the claim. The purchase foreign key points at it only after the
     // insert succeeds in the same batch, so no transaction can observe a dangling ID.
-    const claim = diamonds
-      ? "EXISTS (SELECT 1 FROM diamond_transactions WHERE idempotency_key = ?)"
-      : "EXISTS (SELECT 1 FROM wallet_transactions AS w WHERE w.user_id = ? AND json_extract(w.metadata, '$.idempotencyKey') = ?)";
-    const claimValues = diamonds ? [idempotencyKey] : [userId, idempotencyKey];
+    const claim = `EXISTS (SELECT 1 FROM ${diamonds ? "diamond_transactions" : "wallet_transactions"} WHERE source_id = ?)`;
+    const claimValues = [creditId];
     const write: D1GuardedStatement = (sql, ...values) => db.prepare(sql).bind(...values, ...claimValues);
     const metadata = { ...parseMetadata(purchase), ...extra };
     const ledgerMetadata = {
@@ -211,22 +210,30 @@ async function creditPurchase(db: D1Database, userId: string, purchaseId: string
       ${creditColumn} = ?, metadata = ?, updated_at = ?
       WHERE source_id = ? AND user_id = ? AND status = 'PAID' AND ${claim}`)
       .bind(time, creditId, JSON.stringify(metadata), time, purchaseId, userId, ...claimValues);
+    const eligibleAccount = `u.source_id = ? AND u.${diamonds ? "diamond_balance" : "wallet_balance"} = ?
+      AND u.vip_tier IS ? AND u.vip_level = ? AND u.vip_exp = ? AND u.vip_started_at IS ? AND u.vip_expires_at IS ?
+      AND u.vip_frozen = ? AND u.vip_freeze_started_at IS ? AND NOT ${walletFrozen}
+      AND EXISTS (SELECT 1 FROM purchases AS p WHERE p.source_id = ? AND p.user_id = u.source_id
+        AND p.status = 'PAID' AND p.asset_currency = ? AND p.coin_amount = ? AND p.diamond_amount = ? AND p.amount_inr = ?)`;
+    const eligibilityArgs = [userId, balance, row.vip_tier, row.vip_level, row.vip_exp,
+      row.vip_started_at, row.vip_expires_at, row.vip_frozen, row.vip_freeze_started_at, purchaseId,
+      purchase.asset_currency, purchase.coin_amount, purchase.diamond_amount, purchase.amount_inr];
     const ledger = diamonds
       ? db.prepare(`INSERT INTO diamond_transactions (source_id, user_id, type, source, amount, balance_before,
           balance_after, metadata, idempotency_key, created_at, updated_at)
           SELECT ?, u.source_id, 'CREDIT', ?, ?, u.diamond_balance, u.diamond_balance + ?, ?, ?, ?, ?
-          FROM users AS u WHERE u.source_id = ? AND u.diamond_balance = ?
+          FROM users AS u WHERE ${eligibleAccount}
             AND NOT EXISTS (SELECT 1 FROM diamond_transactions WHERE idempotency_key = ?)`)
         .bind(creditId, `${purchase.provider}_PURCHASE`, amount, amount, JSON.stringify(ledgerMetadata),
-          idempotencyKey, time, time, userId, balance, idempotencyKey)
+          idempotencyKey, time, time, ...eligibilityArgs, idempotencyKey)
       : db.prepare(`INSERT INTO wallet_transactions (source_id, user_id, type, source, amount, balance_before,
           balance_after, metadata, credited_at, created_at, updated_at)
           SELECT ?, u.source_id, 'CREDIT', ?, ?, u.wallet_balance, u.wallet_balance + ?, ?, ?, ?, ?
-          FROM users AS u WHERE u.source_id = ? AND u.wallet_balance = ?
+          FROM users AS u WHERE ${eligibleAccount}
             AND NOT EXISTS (SELECT 1 FROM wallet_transactions AS w WHERE w.user_id = u.source_id
               AND json_extract(w.metadata, '$.idempotencyKey') = ?)`)
         .bind(creditId, `${purchase.provider}_PURCHASE`, amount, amount, JSON.stringify(ledgerMetadata),
-          time, time, time, userId, balance, idempotencyKey);
+          time, time, time, ...eligibilityArgs, idempotencyKey);
     const columns: Record<string, string | number | null> = {
       ...(diamonds ? { diamond_balance: balance + amount } : { wallet_balance: balance + amount }),
       vip_tier: vip.vipTier ?? null,
@@ -239,12 +246,8 @@ async function creditPurchase(db: D1Database, userId: string, purchaseId: string
       updated_at: time
     };
     const assignments = Object.keys(columns).map(column => `${column} = ?`).join(", ");
-    const userUpdate = write(`UPDATE users SET ${assignments}
-      WHERE source_id = ? AND ${diamonds ? "diamond_balance" : "wallet_balance"} = ?
-        AND vip_tier IS ? AND vip_level = ? AND vip_exp = ? AND vip_started_at IS ?
-        AND vip_expires_at IS ? AND vip_frozen = ? AND vip_freeze_started_at IS ? AND ${claim}`,
-      ...Object.values(columns), userId, balance, row.vip_tier, row.vip_level, row.vip_exp,
-      row.vip_started_at, row.vip_expires_at, row.vip_frozen, row.vip_freeze_started_at);
+    const userUpdate = write(`UPDATE users SET ${assignments} WHERE source_id = ? AND ${claim}`,
+      ...Object.values(columns), userId);
     const statements = [ledger, claimPurchase, userUpdate];
     if (!diamonds) statements.push(clearProfileMarkers(db, userId, ["walletBalance"], claim, ...claimValues));
     const [claimed] = await db.batch(statements);
@@ -293,7 +296,7 @@ export function createD1WalletRouter(db: D1Database, options: D1WalletOptions) {
   router.get("/wallet/purchases", authenticate, asyncHandler(async (_req, res) => {
     const { results } = await db.prepare(`SELECT ${purchaseColumns} FROM purchases WHERE user_id = ?
       ORDER BY created_at DESC, source_id DESC LIMIT 50`).bind(res.locals.userId).all<PurchaseRow>();
-    sendOk(res, { purchases: results.map(presentPurchase) });
+    sendOk(res, { purchases: results.map(row => presentPurchase(row)) });
   }));
 
   router.post("/wallet/vip/activate", authenticate, walletNotFrozen, validateBody(purchaseVipSchema),

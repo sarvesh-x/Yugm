@@ -19,7 +19,9 @@ export async function verifyD1RoomReactions(db, request, host, guest) {
       moderator_muted, camera_enabled, joined_at) VALUES (?, ?, ?, 'HOST', 0, 0, 0, ?)`).bind(id(), roomId, hostId, now),
     db.prepare(`INSERT INTO room_reactions (source_id, label, emoji, asset_kind, access, is_active, sort_order)
       VALUES ('heart', 'Custom heart', '', 'STATIC', 'EVERYONE', 1, 0),
-             ('fire', 'Disabled fire', '🔥', 'STATIC', 'EVERYONE', 0, 1)`),
+             ('fire', 'Disabled fire', '🔥', 'STATIC', 'EVERYONE', 0, 1)
+      ON CONFLICT (source_id) DO UPDATE SET label = excluded.label, emoji = excluded.emoji,
+        is_active = excluded.is_active, sort_order = excluded.sort_order`),
     db.prepare("UPDATE users SET vip_level = 0, vip_tier = NULL, vip_expires_at = NULL, vip_frozen = 0 WHERE source_id = ?").bind(hostId)
   ]);
   const root = `/api/rooms/${roomId}`;

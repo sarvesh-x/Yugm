@@ -33,19 +33,24 @@ export async function verifyD1AdminToken(token: string, secret: string): Promise
   if (parts.length !== 3) throw new HttpError(401, "Invalid admin auth token", ErrorCode.UNAUTHORIZED);
   let header: { alg?: string };
   let claims: Claims;
+  let signature: Uint8Array;
   try {
     header = JSON.parse(text(decodePart(parts[0]))) as { alg?: string };
     claims = JSON.parse(text(decodePart(parts[1]))) as Claims;
+    signature = decodePart(parts[2]);
   } catch {
     throw new HttpError(401, "Invalid admin auth token", ErrorCode.UNAUTHORIZED);
   }
-  if (header.alg !== "HS256") throw new HttpError(401, "Invalid admin auth token", ErrorCode.UNAUTHORIZED);
+  if (header?.alg !== "HS256" || !claims || typeof claims !== "object") {
+    throw new HttpError(401, "Invalid admin auth token", ErrorCode.UNAUTHORIZED);
+  }
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret),
     { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
-  const valid = await crypto.subtle.verify("HMAC", key, decodePart(parts[2]),
+  const valid = await crypto.subtle.verify("HMAC", key, signature,
     new TextEncoder().encode(`${parts[0]}.${parts[1]}`));
-  if (!valid || claims.type !== "admin" || !claims.sub ||
-      (claims.exp !== undefined && claims.exp <= Math.floor(Date.now() / 1000))) {
+  if (!valid || claims.type !== "admin" || typeof claims.sub !== "string" || !isValidObjectId(claims.sub) ||
+      typeof claims.exp !== "number" || claims.exp <= Math.floor(Date.now() / 1000) ||
+      (claims.sessionId !== undefined && (typeof claims.sessionId !== "string" || !isValidObjectId(claims.sessionId)))) {
     throw new HttpError(401, "Invalid admin token", ErrorCode.UNAUTHORIZED);
   }
   return claims;
@@ -89,10 +94,12 @@ export function requireD1Permission(admin: D1Admin, permission: AdminPermission)
 
 /** Legacy installs requireAdminAuth before requirePermission and validateBody. */
 export function createD1AdminGuard(db: D1Database, secret?: string) {
-  return (permission: AdminPermission) => async (req: Request, res: Response, next: NextFunction) => {
+  return (...permissions: [AdminPermission, ...AdminPermission[]]) => async (req: Request, res: Response, next: NextFunction) => {
     try {
       const admin = await requireD1Admin(db, req.headers.authorization, secret);
-      requireD1Permission(admin, permission);
+      if (!admin.isSuperAdmin && !permissions.some(permission => admin.permissions.includes(permission))) {
+        throw new HttpError(403, "You do not have permission to perform this action", ErrorCode.FORBIDDEN);
+      }
       res.locals.d1Admin = admin;
       next();
     } catch (error) {
@@ -105,24 +112,29 @@ export function adminFrom(res: { locals: Record<string, unknown> }) {
   return res.locals.d1Admin as D1Admin;
 }
 
-export async function insertD1AdminAudit(db: D1Database, admin: D1Admin, input: {
+export function prepareD1AdminAudit(db: D1Database, admin: Pick<D1Admin, "id">, input: {
   action: string;
+  auditId?: string;
   entityType: string;
   entityId?: string;
   targetUserId?: string;
   metadata?: Record<string, unknown>;
   req: Request;
-}) {
+}, onlyAfterChange = false) {
   const entityId = input.entityId && isValidObjectId(input.entityId) ? input.entityId : null;
   const metadata = {
     ...(input.metadata ?? {}),
     ...(input.entityId && !entityId ? { entityId: input.entityId } : {})
   };
   const time = new Date().toISOString();
-  await db.prepare(`INSERT INTO admin_audit_logs
+  return db.prepare(`INSERT INTO admin_audit_logs
     (source_id, admin_id, action, entity_type, entity_id, target_user_id, metadata, ip_address, user_agent, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .bind(newId(), admin.id, input.action, input.entityType, entityId,
+    SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? ${onlyAfterChange ? "WHERE changes() > 0" : ""}`)
+    .bind(input.auditId ?? newId(), admin.id, input.action, input.entityType, entityId,
       input.targetUserId ?? null, JSON.stringify(metadata), input.req.ip ?? null,
-      input.req.get("user-agent") ?? null, time, time).run();
+      input.req.get("user-agent") ?? null, time, time);
+}
+
+export async function insertD1AdminAudit(...args: Parameters<typeof prepareD1AdminAudit>) {
+  await prepareD1AdminAudit(...args).run();
 }

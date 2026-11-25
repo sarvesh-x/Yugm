@@ -31,7 +31,7 @@ interface DeviceTokenRow {
   updated_at: string | null;
 }
 
-function presentNotification(row: InboxRow) {
+export function presentNotification(row: InboxRow) {
   return {
     _id: row.source_id, userId: row.user_id, type: row.type, title: row.title, body: row.body,
     data: row.data === null ? undefined : JSON.parse(row.data), read: Boolean(row.read),

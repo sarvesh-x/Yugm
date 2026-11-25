@@ -12,7 +12,7 @@ import jwt from "jsonwebtoken";
 import { convertV4MiniflareOptions, Miniflare, Response } from "miniflare";
 import sharp from "sharp";
 import { unstable_splitSqlQuery } from "wrangler";
-import { verifyD1Admin } from "./d1-admin.mjs";
+import { fixturePayoutWithdrawalId, verifyD1Admin, verifyD1AdminAssets, verifyD1AdminSessions } from "./d1-admin.mjs";
 import { verifyD1AdminSupport } from "./d1-admin-support.mjs";
 import { verifyD1BattlePass } from "./d1-battle-pass.mjs";
 import { verifyD1Bonds } from "./d1-bonds.mjs";
@@ -89,6 +89,8 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     let certificateRequests = 0;
     const pushAttempts = new Map();
     let googleConsumes = 0;
+    let googleRefunds = 0;
+    let googleRefundReads = 0;
     worker = new Miniflare(convertV4MiniflareOptions({
       modulesRoot: directory,
       modules: [{ type: "ESModule", path: join(directory, "authLocal.js") }],
@@ -124,7 +126,37 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
           assert.equal(request.headers.get("Authorization"), razorpayAuth);
           return Response.json({ id: "pay_fixture", order_id: "order_fixture", status: "captured", amount: 2900, currency: "INR" });
         }
+        if (request.url === "https://api.razorpay.com/v1/payments/pay_admin_fixture") {
+          assert.equal(request.headers.get("Authorization"), razorpayAuth);
+          return Response.json({ id: "pay_admin_fixture", order_id: "order_admin_fixture", currency: "INR", amount: 2900,
+            status: "captured", email: "private-provider-field@example.test" });
+        }
+        if (request.url === "https://api.razorpay.com/v1/payments/pay_admin_fixture/refund") {
+          assert.equal(request.headers.get("Authorization"), razorpayAuth);
+          assert.match(request.headers.get("X-Refund-Idempotency"), /^refund_[a-f0-9]{24}$/);
+          assert.equal((await request.json()).amount, 2900);
+          return Response.json({ id: "refund_fixture", payment_id: "pay_admin_fixture", status: "processed", amount: 2900, currency: "INR" });
+        }
+        if (request.url.startsWith("https://api.razorpay.com/v1/payouts/pout_fixture")) {
+          assert.equal(request.headers.get("Authorization"), razorpayAuth);
+          const payoutId = request.url.split("/").at(-1);
+          return Response.json({ id: payoutId, reference_id: `wd_${fixturePayoutWithdrawalId}`,
+            amount: 500, currency: "INR", status: payoutId.endsWith("queued") ? "queued" : "processed" });
+        }
         const googlePlayBase = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${googlePlayPackage}/purchases/products/`;
+        const googleRefundOrder = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${googlePlayPackage}/orders/GPA.ADMIN.REFUND`;
+        if (request.url === googleRefundOrder) {
+          assert.equal(request.headers.get("Authorization"), "Bearer fixture-fcm-access");
+          googleRefundReads += 1;
+          const state = googleRefundReads < 2 ? "PROCESSED" : googleRefundReads === 2 ? "PENDING_REFUND" : "REFUNDED";
+          return Response.json({ orderId: "GPA.ADMIN.REFUND", purchaseToken: "fixture-admin-refund-token", state });
+        }
+        if (request.url === googleRefundOrder + ":refund?revoke=true") {
+          assert.equal(request.method, "POST");
+          assert.equal(request.headers.get("Authorization"), "Bearer fixture-fcm-access");
+          googleRefunds += 1;
+          return new Response(null, { status: 200 });
+        }
         if (request.url.startsWith(googlePlayBase)) {
           assert.equal(request.headers.get("Authorization"), "Bearer fixture-fcm-access");
           if (request.url.endsWith(":consume")) {
@@ -157,12 +189,13 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
       }
     }));
 
-    async function request(path, status, { body, accessToken, method = body === undefined ? "GET" : "POST" } = {}) {
+    async function request(path, status, { body, accessToken, ip, headers = {}, method = body === undefined ? "GET" : "POST" } = {}) {
       const response = await worker.dispatchFetch(`http://127.0.0.1${path}`, {
         method,
         headers: {
           ...(body !== undefined && { "Content-Type": "application/json" }),
-          ...(accessToken && { Authorization: `Bearer ${accessToken}` })
+          ...(accessToken && { Authorization: `Bearer ${accessToken}` }),
+          ...(ip && { "CF-Connecting-IP": ip }), ...headers
         },
         ...(body !== undefined && { body: JSON.stringify(body) })
       });
@@ -191,7 +224,8 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
       "0019_room_gift_transfers", "0020_wishlist_unique", "0021_user_mission_unique", "0022_referral_unique",
       "0023_subscription_unique", "0024_event_participants_unique", "0025_dating_swipes",
       "0026_vibe_graph_unique", "0027_group_participants_unique", "0028_story_views_unique", "0029_social_unique",
-      "0030_experience_claim_unique"];
+      "0030_experience_claim_unique", "0031_admin_account_indexes", "0032_asset_registry_indexes", "0033_report_admin_reviewer",
+      "0034_admin_purchase_refunds"];
     for (const file of runtimeMigrations) {
       const migration = await readFile(pathFromHere(`../../api/migrations/d1/${file}.sql`), "utf8");
       await db.batch(unstable_splitSqlQuery(migration).map(sql => db.prepare(sql)));
@@ -801,6 +835,7 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     assert.equal(googleConsumes, 1);
     await verifyD1WatchParty(db, request, returning, visitor);
     await verifyD1Admin(db, request, adminJwtSecret, returning.accessToken);
+    await verifyD1AdminSessions(db, request);
     assert.equal((await request("/", 200)).api, "/api");
     for (const [path, heading] of [
       ["privacy", "Privacy Policy"], ["terms", "Terms of Use"], ["child-safety", "Child Safety Standards"],
@@ -821,9 +856,31 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     await verifyD1RoomReactions(db, request, returning, visitor);
     const { data: chatHost } = await signIn(true, project, 200, "room-chat-host-fixture");
     const { data: chatGuest } = await signIn(true, project, 200, "room-chat-guest-fixture");
+    await verifyD1AdminAssets(db, worker, adminJwtSecret, avatarPng);
+    assert.equal(googleRefunds, 1);
+    const previousRole = await db.prepare("SELECT role FROM users WHERE source_id = ?").bind(chatHost.user.id).first("role");
+    await db.prepare("UPDATE users SET role = 'MODERATOR' WHERE source_id = ?").bind(chatHost.user.id).run();
+    try {
+      const report = await request("/api/reports", 201, { accessToken: chatGuest.accessToken,
+        body: { targetUserId: chatHost.user.id, reason: "Fixture reporting" } });
+      await request(`/api/admin/reports/${report.data.report._id}`, 200, { method: "PATCH", accessToken: chatHost.accessToken,
+        body: { status: "REVIEWED", moderatorNote: "Fixture reviewed" } });
+      const moderatorReport = await db.prepare("SELECT reviewed_by FROM reports WHERE source_id = ?")
+        .bind(report.data.report._id).first("reviewed_by");
+      assert.equal(moderatorReport, chatHost.user.id);
+      await request("/api/admin/moderation/actions", 403, { accessToken: chatGuest.accessToken });
+      const warning = await request("/api/admin/moderation/actions", 201, { accessToken: chatHost.accessToken,
+        body: { action: "WARN", targetUserId: chatGuest.user.id, reason: "Fixture warning" } });
+      assert.equal(warning.data.action.moderatorId, chatHost.user.id);
+      const actions = await request("/api/admin/moderation/actions", 200, { accessToken: chatHost.accessToken });
+      assert.ok(actions.data.actions.some(item => item._id === warning.data.action._id));
+      await request(`/api/admin/users/${chatGuest.user.id}/moderation`, 200, { accessToken: chatHost.accessToken });
+    } finally {
+      await db.prepare("UPDATE users SET role = ? WHERE source_id = ?").bind(previousRole, chatHost.user.id).run();
+    }
     await verifyD1RoomMessages(db, request, chatHost, chatGuest);
     await verifyD1RoomModes(db, request, chatHost, chatGuest, returning);
-    await verifyD1RoomPkHistory(db, request, chatHost, chatGuest);
+    await verifyD1RoomPkHistory(db, request, chatHost, chatGuest, adminJwtSecret);
     await verifyD1Reports(db, request, adminJwtSecret, chatHost, returning, visitor, chatGuest);
     await verifyD1GiftCatalog(db, request, chatHost, chatGuest);
     await verifyD1RoomGifts(db, request, chatHost, chatGuest);
