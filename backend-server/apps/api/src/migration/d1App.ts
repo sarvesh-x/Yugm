@@ -37,6 +37,7 @@ import { createD1BattlePassRouter } from "./d1BattlePass.js";
 import { createD1BondsRouter } from "./d1Bonds.js";
 import { createD1ClansRouter } from "./d1Clans.js";
 import { createD1CosmeticsRouter } from "./d1Cosmetics.js";
+import { createD1CreatorRouter } from "./d1Creator.js";
 import { createD1DatingRouter } from "./d1Dating.js";
 import { createD1DirectGiftsRouter } from "./d1DirectGifts.js";
 import { createD1EventsRouter } from "./d1Events.js";
@@ -55,7 +56,9 @@ import { createD1ModerationRouter } from "./d1Moderation.js";
 import { createD1NotificationRouter } from "./d1Notifications.js";
 import { createD1ProfileEditRouter } from "./d1ProfileEdits.js";
 import { createD1ProfileActivityRouter } from "./d1ProfileActivity.js";
+import { createD1UserDiscoveryRouter } from "./d1UserDiscovery.js";
 import { createD1ProgressionRouter } from "./d1Progression.js";
+import { createD1RecordingsRouter } from "./d1Recordings.js";
 import { createD1ReferralsRouter } from "./d1Referrals.js";
 import { createD1ReportsRouter } from "./d1Reports.js";
 import { createD1RoomGiftsRouter } from "./d1RoomGifts.js";
@@ -78,6 +81,7 @@ import { createD1WishlistRouter } from "./d1Wishlist.js";
 export interface D1WalletConfig extends D1PaymentConfig {
   devRecharge?: boolean;
   diamondsEnabled?: boolean;
+  payoutKycEncryptionKey?: string;
 }
 
 export function createD1App(
@@ -133,6 +137,7 @@ export function createD1App(
   app.use("/api/reaction-art", createD1ReactionArtRouter(db, media?.buckets.assets));
   app.use("/api/users", createD1ProfileEditRouter(db));
   app.use("/api/users", createD1ProfileActivityRouter(db));
+  app.use("/api/users", createD1UserDiscoveryRouter(db));
   app.use("/api", createD1ProgressionRouter(db));
   app.use("/api/users/messages", createD1InboxRouter(db, limits.chat));
   app.use("/api", createD1SocialRouter(db));
@@ -161,6 +166,7 @@ export function createD1App(
   app.use("/api", createD1ThemesRouter(db));
   app.use("/api/rooms", createD1RoomsRouter(db, limits.chat));
   app.use("/api/rooms", createD1RoomInvitesRouter(db));
+  app.use("/api/recordings", createD1RecordingsRouter(db));
   app.use("/api", createD1ReportsRouter(db, limits.report));
   app.use("/api", createD1GiftCatalogRouter(db));
   app.use("/api", createD1RoomGiftsRouter(db, limits.gift, wallet.diamondsEnabled));
@@ -173,6 +179,7 @@ export function createD1App(
   app.use("/api", createD1SubscriptionsRouter(db));
   app.use("/api", createD1VibeRouter(db));
   app.use("/api/bonds", createD1BondsRouter(db));
+  app.use("/api/creator", createD1CreatorRouter(db, { payoutKycEncryptionKey: wallet.payoutKycEncryptionKey }));
   app.use("/api", createD1LiveKitRouter(db, livekit));
   app.use("/api", createD1GamesReadsRouter(db));
   const access = createD1AccessSessionReader(db, "http");

@@ -648,4 +648,139 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor) {
     }
   }
   assert.equal(rateLimited, true);
+
+  const roomId = newId();
+  const recordingTime = new Date().toISOString();
+  await db.batch([
+    db.prepare(`INSERT INTO rooms (source_id, title, description, type, host_id, category, tags, language, status, visibility, max_speakers, participant_count, is_duet, livekit_room_name, allow_audience_mic_requests, mic_locked, vip_only, created_at, updated_at)
+      VALUES (?, 'Recording Room', 'desc', 'VOICE', ?, 'chill', '[]', 'en', 'LIVE', 'PUBLIC', 8, 1, 0, ?, 1, 0, 0, ?, ?)`),
+    db.prepare(`INSERT INTO room_participants (source_id, room_id, user_id, role, mic_enabled, moderator_muted, seat_index, camera_enabled, joined_at)
+      VALUES (?, ?, ?, 'HOST', 1, 0, 0, 0, ?)`)
+  ].map((statement, index) => index === 0
+    ? statement.bind(roomId, ownerId, roomId, recordingTime, recordingTime)
+    : statement.bind(newId(), roomId, ownerId, recordingTime)));
+  try {
+    await request("/api/recordings", 401, { method: "POST", body: { roomId } });
+    await requestAs(owner, "/api/recordings", 422, { method: "POST", body: { roomId: "bad" } });
+    const created = (await requestAs(owner, "/api/recordings", 201, { method: "POST", body: { roomId, title: "My Rec" } })).data;
+    assert.equal(created.roomId, roomId);
+    assert.equal(created.hostId, ownerId);
+    assert.equal(created.title, "My Rec");
+    assert.equal(created.status, "PROCESSING");
+    assert.equal(created.viewCount, 0);
+
+    const list = (await requestAs(visitor, `/api/recordings/room/${roomId}`, 200)).data;
+    assert.equal(list[0]._id, created._id);
+    const fetched = (await requestAs(visitor, `/api/recordings/${created._id}`, 200)).data;
+    assert.equal(fetched._id, created._id);
+
+    const viewed = (await requestAs(visitor, `/api/recordings/${created._id}/view`, 200, { method: "POST" })).data;
+    assert.equal(viewed.viewCount, 0);
+    const viewedAgain = (await requestAs(visitor, `/api/recordings/${created._id}/view`, 200, { method: "POST" })).data;
+    assert.equal(viewedAgain.viewCount, 1);
+
+    await requestAs(visitor, `/api/recordings/${created._id}/stop`, 403, { method: "PATCH", body: { recordingUrl: "https://example.test/rec.mp4", duration: 10 } });
+    const stopped = (await requestAs(owner, `/api/recordings/${created._id}/stop`, 200, { method: "PATCH", body: { recordingUrl: "https://example.test/rec.mp4", duration: 10 } })).data;
+    assert.equal(stopped.status, "PUBLISHED");
+    assert.equal(stopped.recordingUrl, "https://example.test/rec.mp4");
+    assert.equal(stopped.duration, 10);
+
+    const updated = (await requestAs(owner, `/api/recordings/${created._id}`, 200, { method: "PATCH", body: { title: "Renamed" } })).data;
+    assert.equal(updated.title, "Renamed");
+    await requestAs(visitor, `/api/recordings/${created._id}`, 403, { method: "DELETE" });
+    const deletedRecording = (await requestAs(owner, `/api/recordings/${created._id}`, 200, { method: "DELETE" })).data;
+    assert.equal(deletedRecording.message, "Recording deleted");
+    await requestAs(owner, `/api/recordings/${created._id}`, 404);
+  } finally {
+    await db.batch([
+      db.prepare("DELETE FROM room_recordings WHERE room_id = ?").bind(roomId),
+      db.prepare("DELETE FROM room_participants WHERE room_id = ?").bind(roomId),
+      db.prepare("DELETE FROM rooms WHERE source_id = ?").bind(roomId)
+    ]);
+  }
+
+  await request("/api/users/search?q=ab", 401);
+  await requestAs(owner, "/api/users/search?q=a", 400);
+  const searchResults = (await requestAs(owner, "/api/users/search?q=zz&limit=10", 200)).data.users;
+  assert.ok(Array.isArray(searchResults));
+  assert.ok(searchResults.every(user => user._id !== ownerId));
+
+  const suggestedHosts = (await requestAs(owner, "/api/users/hosts/suggested?limit=10", 200)).data.users;
+  assert.ok(Array.isArray(suggestedHosts));
+  const recommendedChat = (await requestAs(owner, "/api/users/recommended-chat", 200)).data.users;
+  assert.deepEqual(recommendedChat, []);
+
+  const pkHistoryBattles = (await requestAs(owner, `/api/users/${visitorId}/pk-history`, 200)).data.battles;
+  assert.ok(Array.isArray(pkHistoryBattles));
+
+  await request("/api/users/me/profile-media", 401, { method: "POST", body: { url: "https://example.test/a.jpg", type: "IMAGE" } });
+  const addedMedia = (await requestAs(owner, "/api/users/me/profile-media", 201, {
+    body: { url: "https://example.test/a.jpg", type: "IMAGE", caption: "cap" }
+  })).data;
+  assert.equal(addedMedia.media.url, "https://example.test/a.jpg");
+  assert.equal(addedMedia.media.caption, "cap");
+  assert.ok(addedMedia.media._id);
+  const removedMedia = (await requestAs(owner, `/api/users/me/profile-media/${addedMedia.media._id}`, 200, { method: "DELETE" })).data;
+  assert.ok(removedMedia.user);
+
+  await request("/api/creator/payout-kyc", 401);
+  await requestAs(visitor, "/api/creator/payout-kyc", 403);
+  await db.prepare("UPDATE users SET role = 'HOST' WHERE source_id = ?").bind(ownerId).run();
+  try {
+    const kyc = (await requestAs(owner, "/api/creator/payout-kyc", 200)).data.kyc;
+    assert.equal(kyc.userId, ownerId);
+    const kycStatus = (await requestAs(owner, "/api/creator/payout-kyc/status", 200)).data;
+    assert.equal(kycStatus.kycStatus, kyc.kycStatus);
+    const eligibility = (await requestAs(owner, "/api/creator/withdrawals/eligibility", 200)).data;
+    assert.equal(eligibility.kycStatus, kycStatus.kycStatus);
+    const withdrawals = (await requestAs(owner, "/api/creator/withdrawals", 200)).data;
+    assert.ok(Array.isArray(withdrawals.withdrawals));
+    assert.ok(withdrawals.balance);
+  } finally {
+    await db.prepare("UPDATE users SET role = 'USER' WHERE source_id = ?").bind(ownerId).run();
+  }
+
+  // Gift mutations (D1)
+  const giftId = newId();
+  const upgradeTargetId = newId();
+  const giftNow = new Date().toISOString();
+  await db.batch([
+    db.prepare(`INSERT INTO gifts (source_id,name,icon,coin_price,pk_points,diamond_price,is_active,effect3d,interactive,animation_key,expires_at,combo_multiplier,category,bond_purpose,bond_kind,bond_points,bond_minimum_days,bond_cosmetic_id,theme,rarity,limited_edition_active,limited_edition_total,limited_edition_remaining,collection_id,tradable,upgradeable,achievement_gift,pet_gift,vehicle_gift,created_at,updated_at)
+      VALUES (?,?,?,?,0,0,1,'',0,'',NULL,1,'normal',NULL,NULL,0,0,NULL,'default','common',0,0,0,NULL,1,1,0,0,0,?,?)`)
+      .bind(giftId, "Test Gift", "🎁", 100, giftNow, giftNow),
+    db.prepare(`INSERT INTO gifts (source_id,name,icon,coin_price,pk_points,diamond_price,is_active,effect3d,interactive,animation_key,expires_at,combo_multiplier,category,bond_purpose,bond_kind,bond_points,bond_minimum_days,bond_cosmetic_id,theme,rarity,limited_edition_active,limited_edition_total,limited_edition_remaining,collection_id,tradable,upgradeable,achievement_gift,pet_gift,vehicle_gift,created_at,updated_at)
+      VALUES (?,?,?,?,0,0,1,'',0,'',NULL,1,'normal',NULL,NULL,0,0,NULL,'default','rare',0,0,0,NULL,1,0,0,0,0,?,?)`)
+      .bind(upgradeTargetId, "Upgraded Gift", "💎", 200, giftNow, giftNow),
+    db.prepare("INSERT INTO gift_upgrade_paths (source_id,value,gifts_id,position) VALUES (?,?,?,0)")
+      .bind(newId(), upgradeTargetId, giftId),
+    db.prepare("UPDATE users SET wallet_balance = 5000 WHERE source_id = ?").bind(ownerId)
+  ]);
+
+  await request("/api/gifts/purchase", 401, { method: "POST", body: { giftId } });
+  const purchase = await requestAs(owner, "/api/gifts/purchase", 201, { body: { giftId } });
+  assert.equal(purchase.data.gift._id, giftId);
+
+  const combo = await requestAs(owner, "/api/gifts/combo", 409, { body: { roomId: live, giftId, participants: [ownerId, visitorId] } });
+  assert.equal(combo.error.code, "CONFLICT");
+
+  const surprise = await requestAs(owner, "/api/gifts/surprise-box", 200, { body: { tier: "basic" } });
+  assert.ok(surprise.data.revealedGift);
+
+  const inv = (await requestAs(owner, "/api/inventory", 200)).data.items;
+  const purchasedInv = inv.find(item => item.gift?._id === giftId || item.gift?.id === giftId);
+  assert.ok(purchasedInv);
+  const upgrade = await requestAs(owner, "/api/gifts/upgrade", 200, { body: { inventoryId: purchasedInv.id || purchasedInv._id } });
+  assert.equal(upgrade.data.upgradedGift._id, upgradeTargetId);
+
+  const roomWide = await requestAs(owner, "/api/gifts/room-wide", 200, { body: { roomId: live, giftId: upgradeTargetId, receiverIds: [visitorId] } });
+  assert.equal(roomWide.data.receiverCount, 1);
+
+  // Cleanup fixture pollution for later tests (bonds counts gift_transactions by sender).
+  await db.batch([
+    db.prepare("DELETE FROM gift_transactions WHERE sender_id = ? AND gift_id IN (?, ?)").bind(ownerId, giftId, upgradeTargetId),
+    db.prepare("DELETE FROM gift_inventories WHERE user_id = ? AND gift_id IN (?, ?)").bind(ownerId, giftId, upgradeTargetId),
+    db.prepare("DELETE FROM gift_inventories WHERE user_id = ? AND source = 'mystery'").bind(ownerId),
+    db.prepare("DELETE FROM gift_upgrade_paths WHERE gifts_id = ?").bind(giftId),
+    db.prepare("DELETE FROM gifts WHERE source_id IN (?, ?)").bind(giftId, upgradeTargetId),
+  ]);
 }

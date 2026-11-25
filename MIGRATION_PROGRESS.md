@@ -31,6 +31,30 @@ The current work is local documentation, tests and compatibility preparation. Pr
 
 ## Work log
 
+### 2026-11-25 - D1 gifts mutations
+
+- **Status:** mounted 5 `/api/gifts` mutation routes on the shared D1 Worker: purchase, combo, room-wide, surprise-box, upgrade. Auth/validation, wallet guards, guarded inventory/wallet writes, and combo fail-closed behavior preserved. [Evidence](docs/handoffs/2026-11-25-d1-gifts-mutations.md)
+- **Verification:** full workspace typecheck, auth Worker 1/1, endpoint audit, strict credential check, and scoped `git diff --check` (LF/CRLF warning only) passed. Audit: 638 legacy / 573 D1 / 567 matched / 71 missing; `/api/gifts` 8/0.
+- **Boundary:** No new migration. D1 `gift_inventories` lacks Mongo unique `(user_id,gift_id)` schema parity; room-wide XP grants not wired and mid-loop partial failures need reconciliation. MongoDB remains authoritative.
+
+### 2026-11-25 - D1 creator payout-kyc and withdrawals
+
+- **Status:** mounted all 7 `/api/creator` routes on the shared D1 Worker for payout KYC, status, submit/update, withdrawal eligibility, list, and creation. Auth before validation, creator role gates, encrypted sensitive KYC fields, guarded withdrawal/review batch writes, and D1 fraud checks preserved. [Evidence](docs/handoffs/2026-11-25-d1-creator.md)
+- **Verification:** full workspace typecheck, auth Worker 1/1, endpoint audit, strict credential check, and scoped `git diff --check` passed. Audit: 638 legacy / 568 D1 / 562 matched / 76 missing; `/api/creator` 7/0.
+- **Boundary:** No new migration. D1 schema lacks Mongo partial unique indexes for `creator_payout_kycs.user_id` and active `withdrawal_requests` lock; code uses guarded checks/batch inserts. MongoDB remains authoritative.
+
+### 2026-11-25 - D1 user discovery and profile-media
+
+- **Status:** mounted 6 `/api/users` routes on the shared D1 Worker: search, hosts suggested, recommended chat, PK history, profile-media add/delete. Auth before validation, legacy validation/DTO behavior, D1 profile-media position/slice semantics, and PK history reuse the D1 battle presenter. `recommended-chat` returns empty because D1 has no live presence source. [Evidence](docs/handoffs/2026-11-25-d1-user-discovery.md)
+- **Verification:** full workspace typecheck, auth Worker 1/1 (passed on rerun; intermittent unrelated `d1-reports` count assertion observed on an intermediate run), endpoint audit, strict credential check, and scoped `git diff --check` passed. Audit: 638 legacy / 561 D1 / 555 matched / 83 missing; `/api/users` 48/5.
+- **Boundary:** No new migration. Recommended-chat live presence remains legacy-only. Remaining `/api/users` routes: DELETE /me, friend-match (3), messages/:userId/call. MongoDB remains authoritative.
+
+### 2026-11-25 - D1 recordings
+
+- **Status:** mounted all seven `/api/recordings` routes on the shared D1 Worker with auth-before-validation, host-only guards, LIVE-room start check, legacy DTO shape, pre-increment view response, and no D1 socket fan-out for `recording:started`/`recording:stopped`. Uses existing `room_recordings` table. [Evidence](docs/handoffs/2026-11-25-d1-recordings.md)
+- **Verification:** full workspace typecheck, auth Worker 1/1 (rerun; first run hit intermittent unrelated `d1-reports` count assertion), endpoint audit, strict credential check, and scoped `git diff --check` passed. Audit: 638 legacy / 555 D1 / 549 matched / 89 missing; `/api/recordings` 7/0.
+- **Boundary:** No new migration. Recording realtime broadcast remains legacy-only. MongoDB remains authoritative; 89 legacy routes remain unmounted across PK, trust verification, AI, upload, creator, discover, games writes/share, gifts mutations, users, v1 moderation report/appeal/status, dating explore, payments webhook, and `/api/`.
+
 ### 2026-11-25 - D1 admin core routes
 
 - **Status:** mounted 60 admin core routes for users, profiles, reports, moderation queue, messages, chats, and rooms on the shared D1 Worker. Admin auth and permission checks run before validation; D1 table writes, safety refresh, moderation actions, and audit logs are preserved. Admin sockets, user disconnect, and other realtime side effects remain legacy-only. [Evidence](docs/handoffs/2026-11-25-d1-admin-core.md)

@@ -47,6 +47,7 @@ interface D1ApiEnv extends AuthRateLimitBindings {
   GOOGLE_PLAY_PACKAGE_NAME?: string;
   GOOGLE_PLAY_CLIENT_EMAIL?: string;
   GOOGLE_PLAY_PRIVATE_KEY?: string;
+  PAYOUT_KYC_ENCRYPTION_KEY?: string;
   MONGODB_URI?: string;
   REDIS_URL?: string;
 }
@@ -176,7 +177,8 @@ async function startD1Runtime(env: D1ApiEnv, stage: ApiStage) {
     googlePlayPrivateKey: env.GOOGLE_PLAY_PRIVATE_KEY,
     production: stage === "production",
     devRecharge: stage === "local",
-    diamondsEnabled: env.MONETIZATION_DIAMONDS_ENABLED === "true" || env.MONETIZATION_DIAMONDS_ENABLED === "1"
+    diamondsEnabled: env.MONETIZATION_DIAMONDS_ENABLED === "true" || env.MONETIZATION_DIAMONDS_ENABLED === "1",
+    payoutKycEncryptionKey: env.PAYOUT_KYC_ENCRYPTION_KEY
   }, {
     jwtSecret: env.ADMIN_JWT_SECRET ?? env.JWT_SECRET,
     refreshSecret: env.ADMIN_REFRESH_SECRET,

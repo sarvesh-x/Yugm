@@ -1285,3 +1285,47 @@ See [production/current-progress.md](production/current-progress.md) for the las
 - **Verification:** `:core:ui:compileDebugKotlin :core:ui:compileDebugUnitTestKotlin :feature:discover:compileDebugKotlin :feature:room:compileDebugKotlin :feature:chat:compileDebugKotlin :feature:profile:compileDebugKotlin :feature:social:compileDebugKotlin :app:compileDebugKotlin` BUILD SUCCESSFUL; `:core:ui:testDebugUnitTest --tests BottomDockGeometryTest` BUILD SUCCESSFUL (Android Studio JBR, `--console=plain --max-workers=2`).
 - **Build-state recovery (not a source defect):** `:app:compileDebugKotlin` intermittently failed with `Unresolved reference 'ClanChatScreen'` in `ChatListScreen.kt` because `feature:social`'s incremental ASM transform output was incomplete (compiled-classes jar missing ~205/538 classes while `tmp/kotlin-classes/debug` had all 538). Fixed with `:feature:social:clean`, a fresh `:feature:social:bundleLibCompileToJarDebug --no-build-cache`, then `:app:compileDebugKotlin --no-build-cache` � BUILD SUCCESSFUL. No Kotlin source changes were needed; avoid running Android Studio and CLI builds against the same module concurrently.
 - **Not run:** device/emulator visual QA for seamless pager transitions, notch/content-behind-dock, light/dark/system, gesture/3-button nav, font scaling, keyboard/IME, TalkBack, and dock touch-through behavior. Lint/broader tests not run. Task changes committed and pushed; local build-log `.txt` files remain untracked.
+
+## 2026-11-25 - D1 recordings
+
+- Mounted all seven /api/recordings routes in the shared D1 Worker (ackend-server/apps/api/src/migration/d1Recordings.ts, mounted in d1App.ts) with auth-before-validation, host-only guards, LIVE-room start check, legacy DTO shape, pre-increment view response, and no D1 socket fan-out for ecording:started/ecording:stopped.
+- Added recordings coverage to pps/cloudflare-worker/test/d1-endpoints.mjs.
+- Verification: 
+pm.cmd run typecheck (backend-server) pass; 
+pm.cmd run audit:d1-endpoints -- --missing 638/555/549/89 with /api/recordings 7/0; 
+pm.cmd run test:auth-worker --workspace apps/cloudflare-worker pass on rerun (first run hit intermittent unrelated d1-reports count assertion); 
+pm.cmd run secrets:check:strict pass; scoped git diff --check pass.
+- Boundaries: no new migration (uses oom_recordings in 0001_initial); no realtime recording broadcast; no hosted data ops/deploy/credentials. 89 legacy routes remain unmounted.
+
+## 2026-11-25 - D1 user discovery and profile-media
+
+- Mounted 6 /api/users routes in the shared D1 Worker (ackend-server/apps/api/src/migration/d1UserDiscovery.ts, mounted in d1App.ts): search, hosts suggested, recommended chat, PK history, profile-media add/delete.
+- Preserved auth-before-validation, legacy search/profile-media validation, D1 profile-media position/slice behavior, and PK history via D1 battle presenter. ecommended-chat returns empty on D1 due no live presence source.
+- Verification: 
+pm.cmd run typecheck pass; 
+pm.cmd run audit:d1-endpoints -- --missing 638/561/555/83 with /api/users 48/5; 
+pm.cmd run test:auth-worker --workspace apps/cloudflare-worker pass on rerun (intermittent unrelated d1-reports count assertion on intermediate run); 
+pm.cmd run secrets:check:strict pass; scoped git diff --check pass.
+- Boundaries: no new migration; live presence for recommended-chat remains legacy-only; remaining users routes are DELETE /me, friend-match (3), messages/:userId/call.
+
+## 2026-11-25 - D1 creator payout-kyc and withdrawals
+
+- Mounted all 7 /api/creator routes in the shared D1 Worker (ackend-server/apps/api/src/migration/d1Creator.ts, mounted in d1App.ts, wired PAYOUT_KYC_ENCRYPTION_KEY in Worker env/config) for payout KYC, status, submit/update, withdrawal eligibility, list, and creation.
+- Preserved auth-before-validation, creator role gates, legacy KYC validation, encrypted sensitive KYC fields, D1 fraud checks, and guarded withdrawal/review batch writes.
+- Verification: 
+pm.cmd run typecheck pass; 
+pm.cmd run audit:d1-endpoints -- --missing 638/568/562/76 with /api/creator 7/0; 
+pm.cmd run test:auth-worker --workspace apps/cloudflare-worker pass (1/1); 
+pm.cmd run secrets:check:strict pass; scoped git diff --check pass.
+- Boundaries: no new migration; D1 schema lacks Mongo partial unique indexes for creator KYC user and active withdrawal lock (guarded in code); MongoDB remains authoritative.
+
+## 2026-11-25 - D1 gifts mutations
+
+- Mounted 5 /api/gifts mutation routes in shared D1 Worker (ackend-server/apps/api/src/migration/d1GiftCatalog.ts): purchase, combo, room-wide, surprise-box, upgrade.
+- Preserved auth/validation, wallet-frozen/insufficient-balance guards, guarded wallet/inventory writes, combo fail-closed 409, and room-wide pre-validation/compensation behavior.
+- Verification: 
+pm.cmd run typecheck pass; 
+pm.cmd run audit:d1-endpoints -- --missing 638/573/567/71 with /api/gifts 8/0; 
+pm.cmd run test:auth-worker --workspace apps/cloudflare-worker pass (1/1); 
+pm.cmd run secrets:check:strict pass; scoped git diff --check LF/CRLF warning only.
+- Boundaries: no new migration; D1 gift_inventories lacks unique(user_id,gift_id) schema parity; room-wide XP grants not wired; mid-loop room-wide partial failures need reconciliation; MongoDB remains authoritative.

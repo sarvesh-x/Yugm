@@ -51,8 +51,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.util.lerp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.yugm.app.core.api.resolveMediaUrl
@@ -62,13 +62,13 @@ import com.yugm.app.core.ui.avatar.AvatarParts
 import com.yugm.app.core.ui.avatar.GeneratedAvatar
 import com.yugm.app.core.ui.theme.*
 import kotlinx.coroutines.delay
-import kotlin.time.Duration.Companion.seconds
 import kotlin.math.abs
-import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration.Companion.seconds
 
 // Painted surface height for bottom content clearance calculations.
-val YugmBottomDockBarHeight = 72.dp
+val YugmBottomDockBarHeight = 52.dp
 
 // Active circle is self-contained within the dock height.
 val YugmBottomDockActiveIconProtrusion = 0.dp
@@ -91,6 +91,20 @@ fun mainDockBottomClearance(): Dp {
  */
 val LocalMainDockBottomClearance = compositionLocalOf { 0.dp }
 
+private fun focusDockScale(distance: Float): Float {
+    return when {
+        distance <= 1.0f -> lerp(1.00f, 0.86f, distance)
+        else -> lerp(0.86f, 0.72f, (distance - 1.0f).coerceIn(0f, 1f))
+    }
+}
+
+private fun focusDockBaseAlpha(distance: Float): Float {
+    return when {
+        distance <= 1.0f -> lerp(1.00f, 0.60f, distance)
+        else -> lerp(0.60f, 0.28f, (distance - 1.0f).coerceIn(0f, 1f))
+    }
+}
+
 private data class MainDockItem(
     val tab: YugmDockTab,
     val icon: ImageVector,
@@ -101,14 +115,18 @@ private data class MainDockItem(
 )
 
 /**
- * Yugm Focus Dock — Minimal, backgroundless floating navigation carousel.
+ * Yugm Focus Dock — Minimal, backgroundless floating navigation carousel with strong visual depth hierarchy.
  *
  * The circular selection ring stays permanently fixed at the horizontal center of the screen,
- * while all 5 tab icons slide through it as the user navigates or swipes.
+ * while all 5 tab icons slide through it synchronized with pager scrolling.
  *
- * When idle (after 2 seconds of inactivity), inactive icons fade out to transparent (0% opacity).
- * Only the active icon inside the center ring remains visible.
- * Swiping content, tapping the center ring, or dragging immediately fades inactive icons back in.
+ * Distance-based hierarchy:
+ * - Active center icon (distance 0): scale 1.0, alpha 1.0, snugly framed by 52dp ring.
+ * - Near inactive icons (distance 1): scale ~0.86, alpha ~0.60 when expanded.
+ * - Far inactive icons (distance 2): scale ~0.72, alpha ~0.28 when expanded.
+ *
+ * When idle (after 2 seconds of inactivity), inactive icons auto-fade to 0% opacity.
+ * Only the active center selector and icon remain visible.
  */
 @Composable
 fun YugmFocusDock(
@@ -152,7 +170,7 @@ fun YugmFocusDock(
 
     val currentIndex = rawPagerIndex ?: animatedIndex
 
-    // Expanded / Idle State
+    // Expanded vs Idle Auto-Fade
     var isExpanded by remember { mutableStateOf(true) }
     var lastInteractionTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
@@ -172,18 +190,18 @@ fun YugmFocusDock(
         }
     }
 
-    val inactiveAlphaTarget = if (isExpanded) 0.55f else 0.0f
-    val inactiveAlpha by animateFloatAsState(
-        targetValue = inactiveAlphaTarget,
+    val expandedFactor by animateFloatAsState(
+        targetValue = if (isExpanded) 1.0f else 0.0f,
         animationSpec = tween(durationMillis = if (isExpanded) 200 else 600, easing = FastOutSlowInEasing),
-        label = "focus_dock_inactive_alpha"
+        label = "focus_dock_expanded_factor"
     )
 
     val navBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
-    // Dimensions
-    val ringDiameter = 72.dp
-    val itemSpacing = 78.dp
+    // Dimensions: Snug ring diameter (52dp) and 38dp active icon
+    val ringDiameter = 52.dp
+    val baseIconSize = 38.dp
+    val itemSpacing = 64.dp
 
     val brandGradient = remember {
         Brush.horizontalGradient(
@@ -199,20 +217,20 @@ fun YugmFocusDock(
         modifier = modifier
             .fillMaxWidth()
             .padding(bottom = navBarInset + 8.dp)
-            .height(ringDiameter + 16.dp)
+            .height(ringDiameter + 12.dp)
             .selectableGroup(),
         contentAlignment = Alignment.Center
     ) {
-        // 1. Fixed Center Ring (Selector)
+        // 1. Fixed Snug Selection Ring (Center Anchored)
         Box(
             modifier = Modifier
                 .size(ringDiameter)
                 .align(Alignment.Center)
                 .shadow(
-                    elevation = if (colors.isDark) 8.dp else 4.dp,
+                    elevation = if (colors.isDark) 6.dp else 3.dp,
                     shape = CircleShape,
-                    ambientColor = OnboardingBrandMiddle.copy(alpha = 0.35f),
-                    spotColor = OnboardingBrandStart.copy(alpha = 0.45f)
+                    ambientColor = OnboardingBrandMiddle.copy(alpha = 0.30f),
+                    spotColor = OnboardingBrandStart.copy(alpha = 0.40f)
                 )
                 .clip(CircleShape)
                 .border(2.dp, brandGradient, CircleShape)
@@ -233,7 +251,7 @@ fun YugmFocusDock(
                 }
         )
 
-        // 2. Icon Track (Translates through the fixed center ring)
+        // 2. Icon Track (Translates through the fixed center ring with distance hierarchy)
         val density = LocalDensity.current
         val itemSpacingPx = with(density) { itemSpacing.toPx() }
 
@@ -245,18 +263,19 @@ fun YugmFocusDock(
         ) {
             items.forEachIndexed { i, item ->
                 val distFromCenter = abs(i - currentIndex)
-                val proximity = (1.0f - distFromCenter.coerceIn(0f, 1f))
+                val scale = focusDockScale(distFromCenter)
+                val baseAlpha = focusDockBaseAlpha(distFromCenter)
 
-                // Interpolated size & alpha
-                val iconSize = lerp(26.dp, 46.dp, proximity)
-                val itemAlpha = max(proximity, inactiveAlpha)
+                // Active icon (dist = 0) stays 1.0 alpha; inactive icons fade with expandedFactor
+                val itemAlpha = if (distFromCenter < 0.05f) 1.0f else (baseAlpha * expandedFactor)
+                val iconSize = baseIconSize * scale
 
                 val xOffsetPx = (i - currentIndex) * itemSpacingPx
 
                 Box(
                     modifier = Modifier
                         .offset { IntOffset(x = xOffsetPx.roundToInt(), y = 0) }
-                        .size(60.dp)
+                        .size(52.dp)
                         .clip(CircleShape)
                         .graphicsLayer {
                             alpha = itemAlpha
@@ -285,18 +304,17 @@ fun YugmFocusDock(
                     val badgeCount = if (item.tab == YugmDockTab.CHAT) chatUnreadCount.coerceAtLeast(0) else 0
 
                     if (item.tab == YugmDockTab.PROFILE) {
-                        val profileSize = lerp(32.dp, 60.dp, proximity)
                         DockAvatar(
                             avatar = userAvatar,
                             avatarType = userAvatarType,
                             avatarParts = userAvatarParts,
-                            size = profileSize,
+                            size = iconSize,
                         )
                     } else {
                         Box(contentAlignment = Alignment.TopEnd) {
-                            val isActive = item.tab == selected
+                            val isActive = distFromCenter < 0.3f
                             Icon(
-                                imageVector = if (isActive) item.activeIcon else item.icon,
+                                imageVector = if (item.tab == selected) item.activeIcon else item.icon,
                                 contentDescription = null,
                                 modifier = Modifier
                                     .size(iconSize)
@@ -323,7 +341,7 @@ fun YugmFocusDock(
                                 val badgeText = if (badgeCount > 99) "99+" else badgeCount.toString()
                                 Box(
                                     modifier = Modifier
-                                        .padding(start = 16.dp, top = 0.dp)
+                                        .padding(start = 14.dp, top = 0.dp)
                                         .clip(CircleShape)
                                         .background(colors.secondary)
                                         .heightIn(min = 14.dp)

@@ -1,10 +1,13 @@
+import { randomInt } from "node:crypto";
 import type { D1Database } from "@cloudflare/workers-types";
 import { Router } from "express";
 import { z } from "zod";
 import { requireHttpSession } from "../middleware/httpAccessSession.js";
 import { validateBody } from "../middleware/validate.js";
+import { getVipStatus } from "../services/vip.js";
 import { asyncHandler, ErrorCode, HttpError, isValidObjectId, sendOk } from "../utils/http.js";
 import { createD1AccessSessionReader } from "./d1AccessSession.js";
+import { newId, walletFrozen } from "./d1Cosmetics.js";
 import { person, personJson } from "./d1People.js";
 
 export type GiftRow = {
@@ -151,6 +154,275 @@ export function createD1GiftCatalogRouter(db: D1Database) {
       .then(result => result.results.map(leaderboardEntry));
     const [topSenders, topReceivers] = await Promise.all([read("sender_id"), read("receiver_id")]);
     sendOk(res, { topSenders, topReceivers, period });
+  }));
+
+  const comboGiftSchema = z.object({
+    roomId: z.string().min(1),
+    giftId: z.string().min(1),
+    participants: z.array(z.string().min(1)).min(2).max(50)
+  });
+  const roomWideGiftSchema = z.object({
+    roomId: z.string().min(1),
+    giftId: z.string().min(1),
+    receiverIds: z.array(z.string().min(1)).min(1).max(100)
+  });
+  const surpriseBoxSchema = z.object({
+    roomId: z.string().min(1).optional(),
+    tier: z.enum(["basic", "premium", "luxury"])
+  });
+  const upgradeGiftSchema = z.object({ inventoryId: z.string().min(1) });
+  const purchaseGiftSchema = z.object({ giftId: z.string().min(1) });
+
+  const asNum = (value: unknown) => Number(value ?? 0);
+  const readUser = (userId: string) => db.prepare(
+    `SELECT source_id, name, username, avatar, wallet_balance, diamond_balance, xp, level, charm_exp, wealth_exp, last_daily_check_in_at, vip_level, vip_tier, vip_exp, vip_frozen, vip_freeze_started_at, vip_expires_at, role, is_blocked, suspended_until
+     FROM users WHERE source_id = ?`
+  ).bind(userId).first<Record<string, string | number | null>>();
+
+  async function assertWalletActive(userId: string) {
+    const row = await db.prepare(`SELECT ${walletFrozen} AS frozen FROM users AS u WHERE source_id = ?`).bind(userId).first<{ frozen: number }>();
+    if (!row) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+    if (row.frozen) throw new HttpError(403, "Wallet is frozen", ErrorCode.FORBIDDEN);
+  }
+
+  async function assertVipGiftAccess(userId: string, gift: GiftRow) {
+    if (String(gift.category).toLowerCase() !== "vip") return;
+    const user = await readUser(userId);
+    if (!user) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+    const vip = getVipStatus({
+      vipTier: user.vip_tier, vipLevel: asNum(user.vip_level), vipExp: asNum(user.vip_exp),
+      vipFrozen: Boolean(user.vip_frozen), vipFreezeStartedAt: user.vip_freeze_started_at, vipExpiresAt: user.vip_expires_at
+    } as any);
+    if ((vip.vipLevel ?? 0) < 1) throw new HttpError(403, "VIP gifts unlock at VIP 1", ErrorCode.FORBIDDEN);
+  }
+
+  router.post("/gifts/purchase", authenticate, validateBody(purchaseGiftSchema), asyncHandler(async (req, res) => {
+    const { giftId } = req.body as z.infer<typeof purchaseGiftSchema>;
+    if (!isValidObjectId(giftId)) throw new HttpError(400, "Invalid giftId", ErrorCode.VALIDATION);
+    const userId = res.locals.giftViewer as string;
+    await assertWalletActive(userId);
+    const gift = await db.prepare(`SELECT ${d1GiftProjection} FROM gifts AS g WHERE g.source_id = ? AND g.is_active = 1 AND g.category <> 'bonds'`).bind(giftId).first<GiftRow>();
+    if (!gift) throw new HttpError(404, "Gift not found", ErrorCode.NOT_FOUND);
+    await assertVipGiftAccess(userId, gift);
+
+    const owned = await db.prepare("SELECT 1 AS ok FROM gift_inventories WHERE user_id = ? AND gift_id = ? LIMIT 1").bind(userId, giftId).first();
+    if (owned) throw new HttpError(409, "Gift already in inventory", ErrorCode.CONFLICT);
+
+    const txId = newId();
+    const invId = newId();
+    const now = new Date().toISOString();
+    const price = Number(gift.coin_price);
+    const batch = await db.batch([
+      db.prepare(`INSERT INTO wallet_transactions (source_id, user_id, type, source, amount, balance_before, balance_after, metadata, credited_at, created_at, updated_at)
+        SELECT ?, u.source_id, 'DEBIT', 'GIFT_PURCHASE', ?, u.wallet_balance, u.wallet_balance - ?, json_object('giftId', ?, 'purchaseId', ?), NULL, ?, ?
+        FROM users AS u WHERE u.source_id = ? AND NOT ${walletFrozen} AND u.wallet_balance >= ?`)
+        .bind(txId, price, price, giftId, txId, now, now, userId, price),
+      db.prepare("UPDATE users SET wallet_balance = wallet_balance - ?, updated_at = ? WHERE source_id = ? AND EXISTS (SELECT 1 FROM wallet_transactions WHERE source_id = ?)")
+        .bind(price, now, userId, txId),
+      db.prepare(`INSERT INTO gift_inventories (source_id, user_id, gift_id, quantity, source, upgrade_level, tradable, created_at, updated_at)
+        SELECT ?, ?, ?, 1, 'purchased', 1, 1, ?, ?
+        WHERE EXISTS (SELECT 1 FROM wallet_transactions WHERE source_id = ? AND user_id = ?)`)
+        .bind(invId, userId, giftId, now, now, txId, userId)
+    ]);
+    if (Number(batch[0]?.meta?.changes ?? 0) < 1) {
+      const frozen = await db.prepare(`SELECT ${walletFrozen} AS frozen FROM users AS u WHERE source_id = ?`).bind(userId).first<{ frozen: number }>();
+      if (frozen?.frozen) throw new HttpError(403, "Wallet is frozen", ErrorCode.FORBIDDEN);
+      throw new HttpError(402, "Insufficient coins", ErrorCode.INSUFFICIENT_FUNDS);
+    }
+    if (Number(batch[2]?.meta?.changes ?? 0) < 1) {
+      throw new HttpError(409, "Gift already in inventory", ErrorCode.CONFLICT);
+    }
+    sendOk(res, { gift: presentGift(gift) }, 201);
+  }));
+
+  router.post("/gifts/combo", authenticate, validateBody(comboGiftSchema), asyncHandler(async (req, res) => {
+    const { giftId } = req.body as z.infer<typeof comboGiftSchema>;
+    if (!isValidObjectId(giftId)) throw new HttpError(400, "Invalid giftId", ErrorCode.VALIDATION);
+    throw new HttpError(409, "Combo gifts require approval from every payer and are currently unavailable. Send an individual gift instead.", ErrorCode.CONFLICT);
+  }));
+
+  router.post("/gifts/room-wide", authenticate, validateBody(roomWideGiftSchema), asyncHandler(async (req, res) => {
+    const { roomId, giftId, receiverIds } = req.body as z.infer<typeof roomWideGiftSchema>;
+    if (!isValidObjectId(giftId)) throw new HttpError(400, "Invalid giftId", ErrorCode.VALIDATION);
+    const senderId = res.locals.giftViewer as string;
+    await assertWalletActive(senderId);
+    const gift = await db.prepare(`SELECT ${d1GiftProjection} FROM gifts AS g WHERE g.source_id = ? AND g.is_active = 1 AND g.category <> 'bonds'`).bind(giftId).first<GiftRow>();
+    if (!gift) throw new HttpError(404, "Gift not found", ErrorCode.NOT_FOUND);
+    await assertVipGiftAccess(senderId, gift);
+
+    const MAX_RECEIVERS = 100;
+    const uniqueReceivers = [...new Set(receiverIds.filter((id): id is string => typeof id === "string" && id !== senderId))];
+    if (uniqueReceivers.length > MAX_RECEIVERS) {
+      throw new HttpError(400, `Cannot send room-wide gift to more than ${MAX_RECEIVERS} recipients`, ErrorCode.VALIDATION);
+    }
+    if (uniqueReceivers.length === 0) throw new HttpError(400, "No valid receivers", ErrorCode.VALIDATION);
+    for (const rid of uniqueReceivers) {
+      if (!isValidObjectId(rid)) throw new HttpError(400, "Invalid receiverId", ErrorCode.VALIDATION);
+    }
+    const placeholders = uniqueReceivers.map(() => "?").join(",");
+    const found = await db.prepare(`SELECT source_id FROM users WHERE source_id IN (${placeholders})`).bind(...uniqueReceivers).all<{ source_id: string }>();
+    if (found.results.length !== uniqueReceivers.length) throw new HttpError(404, "Recipient not found", ErrorCode.NOT_FOUND);
+    const totalCost = Number(gift.coin_price) * uniqueReceivers.length;
+    const now = new Date().toISOString();
+    const actionId = newId();
+
+    // Debit sender first with guard.
+    const debitTxId = newId();
+    const debit = await db.batch([
+      db.prepare(`INSERT INTO wallet_transactions (source_id, user_id, type, source, amount, balance_before, balance_after, metadata, credited_at, created_at, updated_at)
+        SELECT ?, u.source_id, 'DEBIT', 'GIFT_SENT', ?, u.wallet_balance, u.wallet_balance - ?, json_object('giftId',?, 'roomId',?, 'type','room_wide','idempotencyKey',?), NULL, ?, ?
+        FROM users AS u WHERE u.source_id = ? AND NOT ${walletFrozen} AND u.wallet_balance >= ?`)
+        .bind(debitTxId, totalCost, totalCost, giftId, roomId, `room-wide:${actionId}:sender-debit`, now, now, senderId, totalCost),
+      db.prepare("UPDATE users SET wallet_balance = wallet_balance - ?, updated_at = ? WHERE source_id = ? AND EXISTS (SELECT 1 FROM wallet_transactions WHERE source_id = ?)")
+        .bind(totalCost, now, senderId, debitTxId)
+    ]);
+    if (Number(debit[0]?.meta?.changes ?? 0) < 1) {
+      const frozen = await db.prepare(`SELECT ${walletFrozen} AS frozen FROM users AS u WHERE source_id = ?`).bind(senderId).first<{ frozen: number }>();
+      if (frozen?.frozen) throw new HttpError(403, "Wallet is frozen", ErrorCode.FORBIDDEN);
+      throw new HttpError(402, "Insufficient coins", ErrorCode.INSUFFICIENT_FUNDS);
+    }
+
+    const txns: any[] = [];
+    try {
+      for (const rid of uniqueReceivers) {
+        const share = Math.floor(Number(gift.coin_price) * 0.7);
+        const platformFee = Number(gift.coin_price) - share;
+        const creditTxId = newId();
+        const giftTxId = newId();
+        const creditBatch = await db.batch([
+          db.prepare(`INSERT INTO wallet_transactions (source_id, user_id, type, source, amount, balance_before, balance_after, metadata, credited_at, created_at, updated_at)
+            SELECT ?, u.source_id, 'CREDIT', 'GIFT_RECEIVED', ?, u.wallet_balance, u.wallet_balance + ?, json_object('giftId',?, 'roomId',?, 'type','room_wide','platformFee',?, 'idempotencyKey',?), ?, ?, ?
+            FROM users AS u WHERE u.source_id = ?`)
+            .bind(creditTxId, share, share, giftId, roomId, platformFee, `room-wide:${actionId}:${rid}:credit`, now, now, now, rid),
+          db.prepare("UPDATE users SET wallet_balance = wallet_balance + ?, charm_exp = charm_exp + ?, updated_at = ? WHERE source_id = ? AND EXISTS (SELECT 1 FROM wallet_transactions WHERE source_id = ?)")
+            .bind(share, Number(gift.coin_price) + platformFee, now, rid, creditTxId),
+          db.prepare(`INSERT INTO gift_transactions (source_id, room_id, sender_id, receiver_id, gift_id, coin_amount, diamond_amount, currency, type, combo_count, total_value, effect, metadata, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, 0, 'COINS', 'room_wide', 1, ?, 'room_wide', ?, ?, ?)`)
+            .bind(giftTxId, roomId, senderId, rid, giftId, Number(gift.coin_price), Number(gift.coin_price), JSON.stringify({ idempotencyKey: `room-wide:${actionId}:${rid}` }), now, now)
+        ]);
+        if (Number(creditBatch[0]?.meta?.changes ?? 0) < 1) {
+          throw new HttpError(404, "Recipient not found", ErrorCode.NOT_FOUND);
+        }
+        txns.push({ _id: giftTxId, roomId, senderId, receiverId: rid, giftId, coinAmount: Number(gift.coin_price), type: "room_wide" });
+      }
+    } catch (error) {
+      // Best-effort compensation: refund sender for unprocessed receivers. Partial receiver credits may have committed; mark for reconciliation.
+      const processed = txns.length;
+      const refundCoins = Number(gift.coin_price) * Math.max(0, uniqueReceivers.length - processed);
+      if (refundCoins > 0) {
+        const refundId = newId();
+        const refundAt = new Date().toISOString();
+        await db.batch([
+          db.prepare(`INSERT INTO wallet_transactions (source_id, user_id, type, source, amount, balance_before, balance_after, metadata, credited_at, created_at, updated_at)
+            SELECT ?, u.source_id, 'CREDIT', 'ADMIN_ADJUSTMENT', ?, u.wallet_balance, u.wallet_balance + ?, json_object('reason','room_wide_partial_failure_refund','actionId',?, 'processed',?, 'total',?), ?, ?, ?
+            FROM users AS u WHERE u.source_id = ?`)
+            .bind(refundId, refundCoins, refundCoins, actionId, processed, uniqueReceivers.length, refundAt, refundAt, refundAt, senderId),
+          db.prepare("UPDATE users SET wallet_balance = wallet_balance + ?, updated_at = ? WHERE source_id = ?").bind(refundCoins, refundAt, senderId)
+        ]);
+      }
+      throw error;
+    }
+
+    sendOk(res, { totalCost, receiverCount: uniqueReceivers.length, transactions: txns, xpGrant: { sender: undefined, receivers: uniqueReceivers.map(() => undefined) } });
+  }));
+
+  router.post("/gifts/surprise-box", authenticate, validateBody(surpriseBoxSchema), asyncHandler(async (req, res) => {
+    const { tier } = req.body as z.infer<typeof surpriseBoxSchema>;
+    const userId = res.locals.giftViewer as string;
+    await assertWalletActive(userId);
+    const tierPricing: Record<string, number> = { basic: 500, premium: 2000, luxury: 10000 };
+    const price = tierPricing[tier];
+    if (!price) throw new HttpError(400, "Invalid tier", ErrorCode.VALIDATION);
+    const rarities: Record<string, string[]> = { basic: ["common", "rare"], premium: ["rare", "epic"], luxury: ["epic", "legendary", "mythic"] };
+    const allowed = rarities[tier];
+    const placeholders = allowed.map(() => "?").join(",");
+    const pool = await db.prepare(`SELECT ${d1GiftProjection} FROM gifts AS g WHERE g.is_active = 1 AND g.category <> 'bonds' AND g.rarity IN (${placeholders})`).bind(...allowed).all<GiftRow>();
+    if (pool.results.length === 0) throw new HttpError(500, "No gifts available in this tier");
+    const randomGift = pool.results[randomInt(0, pool.results.length)];
+
+    const txId = newId();
+    const invId = newId();
+    const now = new Date().toISOString();
+    const batch = await db.batch([
+      db.prepare(`INSERT INTO wallet_transactions (source_id, user_id, type, source, amount, balance_before, balance_after, metadata, credited_at, created_at, updated_at)
+        SELECT ?, u.source_id, 'DEBIT', 'SURPRISE_BOX', ?, u.wallet_balance, u.wallet_balance - ?, json_object('tier', ?), NULL, ?, ?
+        FROM users AS u WHERE u.source_id = ? AND NOT ${walletFrozen} AND u.wallet_balance >= ?`)
+        .bind(txId, price, price, tier, now, now, userId, price),
+      db.prepare(`UPDATE gift_inventories SET quantity = quantity + 1, updated_at = ?
+        WHERE user_id = ? AND gift_id = ? AND EXISTS (SELECT 1 FROM wallet_transactions WHERE source_id = ? AND user_id = ?)`)
+        .bind(now, userId, randomGift.source_id, txId, userId),
+      db.prepare(`INSERT INTO gift_inventories (source_id, user_id, gift_id, quantity, source, upgrade_level, tradable, created_at, updated_at)
+        SELECT ?, ?, ?, 1, 'mystery', 1, 1, ?, ?
+        WHERE EXISTS (SELECT 1 FROM wallet_transactions WHERE source_id = ? AND user_id = ?)
+          AND NOT EXISTS (SELECT 1 FROM gift_inventories WHERE user_id = ? AND gift_id = ?)`)
+        .bind(invId, userId, randomGift.source_id, now, now, txId, userId, userId, randomGift.source_id),
+      db.prepare("UPDATE users SET wallet_balance = wallet_balance - ?, updated_at = ? WHERE source_id = ? AND EXISTS (SELECT 1 FROM wallet_transactions WHERE source_id = ?)")
+        .bind(price, now, userId, txId)
+    ]);
+    if (Number(batch[0]?.meta?.changes ?? 0) < 1) {
+      const frozen = await db.prepare(`SELECT ${walletFrozen} AS frozen FROM users AS u WHERE source_id = ?`).bind(userId).first<{ frozen: number }>();
+      if (frozen?.frozen) throw new HttpError(403, "Wallet is frozen", ErrorCode.FORBIDDEN);
+      throw new HttpError(402, "Insufficient coins", ErrorCode.INSUFFICIENT_FUNDS);
+    }
+    sendOk(res, { tier, price, revealedGift: presentGift(randomGift), source: "mystery" });
+  }));
+
+  router.post("/gifts/upgrade", authenticate, validateBody(upgradeGiftSchema), asyncHandler(async (req, res) => {
+    const { inventoryId } = req.body as z.infer<typeof upgradeGiftSchema>;
+    if (!isValidObjectId(inventoryId)) throw new HttpError(400, "Invalid inventoryId", ErrorCode.VALIDATION);
+    const userId = res.locals.giftViewer as string;
+    await assertWalletActive(userId);
+
+    const inv = await db.prepare(`SELECT i.source_id, i.user_id, i.gift_id, i.quantity, g.coin_price, g.upgradeable, g.is_active, g.name, g.source_id AS gift_source_id
+      FROM gift_inventories i JOIN gifts g ON g.source_id = i.gift_id WHERE i.source_id = ?`).bind(inventoryId).first<Record<string, string | number | null>>();
+    if (!inv) throw new HttpError(404, "Inventory item not found", ErrorCode.NOT_FOUND);
+    if (String(inv.user_id) !== userId) throw new HttpError(403, "Not your item", ErrorCode.FORBIDDEN);
+    if (!Number(inv.upgradeable)) throw new HttpError(400, "Gift is not upgradeable", ErrorCode.VALIDATION);
+
+    // Legacy uses gift.upgradePath[0]; D1 normalizes upgrade paths into gift_upgrade_paths.
+    const giftRow = await db.prepare(`SELECT ${d1GiftProjection} FROM gifts AS g WHERE g.source_id = ?`).bind(String(inv.gift_id)).first<GiftRow>();
+    if (!giftRow) throw new HttpError(404, "Gift not found", ErrorCode.NOT_FOUND);
+    const upgradePath = (() => { try { const v = JSON.parse(String((giftRow as any).upgrade_path ?? "[]")); return Array.isArray(v) ? v.map(String) : []; } catch { return []; } })();
+    if (upgradePath.length === 0) throw new HttpError(400, "No upgrade path", ErrorCode.VALIDATION);
+    const nextGiftId = upgradePath[0];
+    const upgradedGift = await db.prepare(`SELECT ${d1GiftProjection} FROM gifts AS g WHERE g.source_id = ?`).bind(nextGiftId).first<GiftRow>();
+    if (!upgradedGift || !Number(upgradedGift.is_active)) throw new HttpError(409, "The next gift in this upgrade path is unavailable", ErrorCode.CONFLICT);
+
+    const upgradeCost = Math.floor(Number(inv.coin_price) * 1.5);
+    const txId = newId();
+    const newInvId = newId();
+    const now = new Date().toISOString();
+    const quantity = Number(inv.quantity ?? 0);
+
+    const statements = [
+      db.prepare(`INSERT INTO wallet_transactions (source_id, user_id, type, source, amount, balance_before, balance_after, metadata, credited_at, created_at, updated_at)
+        SELECT ?, u.source_id, 'DEBIT', 'GIFT_UPGRADE', ?, u.wallet_balance, u.wallet_balance - ?, json_object('inventoryId',?, 'fromGiftId',?), NULL, ?, ?
+        FROM users AS u WHERE u.source_id = ? AND NOT ${walletFrozen} AND u.wallet_balance >= ?`)
+        .bind(txId, upgradeCost, upgradeCost, inventoryId, String(inv.gift_id), now, now, userId, upgradeCost),
+      db.prepare("UPDATE users SET wallet_balance = wallet_balance - ?, updated_at = ? WHERE source_id = ? AND EXISTS (SELECT 1 FROM wallet_transactions WHERE source_id = ?)")
+        .bind(upgradeCost, now, userId, txId),
+      ...(quantity > 1
+        ? [db.prepare("UPDATE gift_inventories SET quantity = quantity - 1, updated_at = ? WHERE source_id = ? AND user_id = ? AND quantity > 0 AND EXISTS (SELECT 1 FROM wallet_transactions WHERE source_id = ?)")
+            .bind(now, inventoryId, userId, txId)]
+        : [db.prepare("DELETE FROM gift_inventories WHERE source_id = ? AND user_id = ? AND EXISTS (SELECT 1 FROM wallet_transactions WHERE source_id = ?)")
+            .bind(inventoryId, userId, txId)]),
+      db.prepare(`UPDATE gift_inventories SET quantity = quantity + 1, updated_at = ?
+        WHERE user_id = ? AND gift_id = ? AND EXISTS (SELECT 1 FROM wallet_transactions WHERE source_id = ? AND user_id = ?)`)
+        .bind(now, userId, nextGiftId, txId, userId),
+      db.prepare(`INSERT INTO gift_inventories (source_id, user_id, gift_id, quantity, source, upgrade_level, tradable, created_at, updated_at)
+        SELECT ?, ?, ?, 1, 'upgrade', 1, 1, ?, ?
+        WHERE EXISTS (SELECT 1 FROM wallet_transactions WHERE source_id = ? AND user_id = ?)
+          AND NOT EXISTS (SELECT 1 FROM gift_inventories WHERE user_id = ? AND gift_id = ?)`)
+        .bind(newInvId, userId, nextGiftId, now, now, txId, userId, userId, nextGiftId)
+    ];
+    const batch = await db.batch(statements);
+    if (Number(batch[0]?.meta?.changes ?? 0) < 1) {
+      const frozen = await db.prepare(`SELECT ${walletFrozen} AS frozen FROM users AS u WHERE source_id = ?`).bind(userId).first<{ frozen: number }>();
+      if (frozen?.frozen) throw new HttpError(403, "Wallet is frozen", ErrorCode.FORBIDDEN);
+      throw new HttpError(402, "Insufficient coins", ErrorCode.INSUFFICIENT_FUNDS);
+    }
+
+    sendOk(res, { upgradeCost, fromGift: presentGift(giftRow as unknown as GiftRow), upgradedGift: presentGift(upgradedGift) });
   }));
 
   router.post("/inventory/trade", authenticate, validateBody(tradeGiftSchema), asyncHandler(async (req, res) => {
