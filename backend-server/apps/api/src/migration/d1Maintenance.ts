@@ -1,5 +1,6 @@
 import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
-import { rollVipCycle, VIP_CYCLE_DAYS } from "../services/vip.js";
+import { randomBytes } from "node:crypto";
+import { rollVipCycle, vipCycleNotice, VIP_CYCLE_DAYS } from "../services/vip.js";
 import { closeExpiredD1Polls } from "./d1RoomPolls.js";
 import type { D1LiveKitConfig } from "./d1LiveKit.js";
 
@@ -17,7 +18,7 @@ type VipRow = {
   vip_started_at: string | null; vip_expires_at: string | null; vip_frozen: number; vip_freeze_started_at: string | null;
 };
 
-async function rollExpiredVipCycles(db: D1Database, now: Date) {
+export async function rollExpiredVipCycles(db: D1Database, now: Date) {
   const time = now.toISOString();
   const freezeThrough = new Date(now.getTime() - VIP_CYCLE_DAYS * dayMs).toISOString();
   const { results } = await db.prepare(`SELECT source_id, vip_tier, vip_level, vip_exp, vip_started_at,
@@ -28,22 +29,42 @@ async function rollExpiredVipCycles(db: D1Database, now: Date) {
     .bind(time, freezeThrough, vipLimit).all<VipRow>();
   if (!results.length) return 0;
 
-  const updated = await db.batch(results.map(row => {
+  const guard = `source_id = ? AND vip_tier IS ? AND vip_level = ? AND vip_exp = ?
+    AND vip_expires_at IS ? AND vip_frozen = ? AND vip_freeze_started_at IS ?`;
+  const guardValues = (row: VipRow) => [row.source_id, row.vip_tier, row.vip_level, row.vip_exp,
+    row.vip_expires_at, row.vip_frozen, row.vip_freeze_started_at];
+  const updateIndices: number[] = [];
+  let offset = 0;
+  const statements = results.flatMap(row => {
     const date = (value: string | null) => value ? new Date(value) : undefined;
     const vip = {
       vipTier: row.vip_tier ?? undefined, vipLevel: row.vip_level, vipExp: row.vip_exp,
       vipStartedAt: date(row.vip_started_at), vipExpiresAt: date(row.vip_expires_at),
       vipFrozen: Boolean(row.vip_frozen), vipFreezeStartedAt: date(row.vip_freeze_started_at)
     };
+    const beforeLevel = row.vip_level;
     rollVipCycle(vip, now);
-    return db.prepare(`UPDATE users SET vip_tier = ?, vip_level = ?, vip_exp = ?, vip_started_at = ?, vip_expires_at = ?,
-      vip_frozen = ?, vip_freeze_started_at = ?, updated_at = ? WHERE source_id = ? AND vip_tier IS ? AND vip_level = ?
-      AND vip_exp = ? AND vip_expires_at IS ? AND vip_frozen = ? AND vip_freeze_started_at IS ?`)
-      .bind(vip.vipTier ?? null, vip.vipLevel, vip.vipExp, vip.vipStartedAt?.toISOString() ?? null,
-        vip.vipExpiresAt?.toISOString() ?? null, Number(vip.vipFrozen), vip.vipFreezeStartedAt?.toISOString() ?? null,
-        time, row.source_id, row.vip_tier, row.vip_level, row.vip_exp, row.vip_expires_at, row.vip_frozen, row.vip_freeze_started_at);
-  }));
-  return updated.reduce((count, result) => count + result.meta.changes, 0);
+    const nextValues = [vip.vipTier ?? null, vip.vipLevel, vip.vipExp, vip.vipStartedAt?.toISOString() ?? null,
+      vip.vipExpiresAt?.toISOString() ?? null, Number(vip.vipFrozen), vip.vipFreezeStartedAt?.toISOString() ?? null];
+    const statements = [db.prepare(`UPDATE users SET vip_tier = ?, vip_level = ?, vip_exp = ?, vip_started_at = ?,
+      vip_expires_at = ?, vip_frozen = ?, vip_freeze_started_at = ?, updated_at = ?
+      WHERE ${guard}`)
+      .bind(...nextValues, time, ...guardValues(row))];
+    updateIndices.push(offset);
+    const notice = vipCycleNotice(beforeLevel, vip.vipLevel);
+    if (notice) {
+      statements.push(db.prepare(`INSERT INTO notifications
+        (source_id, user_id, type, title, body, data, read, created_at, updated_at)
+        SELECT ?, ?, 'SYSTEM', ?, ?, ?, 0, ?, ? FROM users WHERE ${guard}`)
+        .bind(randomBytes(12).toString("hex"), row.source_id, notice.title, notice.body,
+          JSON.stringify(notice.data), time, time, row.source_id, nextValues[0], nextValues[1],
+          nextValues[2], nextValues[4], nextValues[5], nextValues[6]));
+    }
+    offset += statements.length;
+    return statements;
+  });
+  const updated = await db.batch(statements);
+  return updateIndices.reduce((count, index) => count + updated[index].meta.changes, 0);
 }
 
 async function sweepMediaUploads(db: D1Database, staging: R2Bucket, now: Date) {

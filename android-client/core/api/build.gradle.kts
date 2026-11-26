@@ -36,4 +36,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
     implementation(libs.livekit.android)
     testImplementation(libs.junit)
+    // Android's local unit-test stubs throw for JSONObject methods; use the real
+    // implementation on the test classpath so parser tests actually run.
+    testImplementation("org.json:json:20090211")
 }

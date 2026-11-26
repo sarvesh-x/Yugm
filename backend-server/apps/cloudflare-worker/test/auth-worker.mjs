@@ -249,7 +249,7 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
       "0030_experience_claim_unique", "0031_admin_account_indexes", "0032_asset_registry_indexes", "0033_report_admin_reviewer",
       "0034_admin_purchase_refunds", "0035_direct_message_reaction_catalog", "0036_deletion_cleanup",
       "0037_pk_battle_status_check", "0038_pk_uniqueness", "0039_gift_inventory_unique",
-      "0040_creator_trust_withdrawal_unique", "0041_friend_match_indexes"];
+      "0040_creator_trust_withdrawal_unique", "0041_friend_match_indexes", "0042_user_domain_integrity"];
     for (const file of runtimeMigrations) {
       const migration = await readFile(pathFromHere(`../../api/migrations/d1/${file}.sql`), "utf8");
       await db.batch(unstable_splitSqlQuery(migration).map(sql => db.prepare(sql)));

@@ -32,7 +32,10 @@ import com.yugm.app.core.model.Host
 import org.json.JSONArray
 import org.json.JSONObject
 
-fun JSONObject.toUser(): YugmUser = YugmUser(
+fun JSONObject.toUser(): YugmUser {
+    // auth/me and users/me send VIP fields flat; wallet responses nest them.
+    val vip = optJSONObject("vip")?.toVipStatus() ?: toVipStatus()
+    return YugmUser(
     id = optString("_id", optString("id", "")),
     name = optString("name", ""),
     username = optString("username", ""),
@@ -52,14 +55,16 @@ fun JSONObject.toUser(): YugmUser = YugmUser(
     profileCompleted = optBoolean("profileCompleted", false),
     emailVerified = optBoolean("emailVerified", false),
     walletBalance = optInt("walletBalance", 0),
-    isVip = optBoolean("isVip", false),
-    vipTier = optString("vipTier", ""),
+    isVip = vip.isVip || optBoolean("isVip", false),
+    vipTier = vip.vipTier.ifBlank { optString("vipTier", "") },
+    vip = vip,
     level = optJSONObject("levelStatus")?.optInt("level", optInt("level", 1)) ?: optInt("level", 1),
     levelTitle = optJSONObject("levelStatus")?.optString("title", optString("levelTitle", "New Vibe")) ?: optString("levelTitle", "New Vibe"),
     xp = optJSONObject("levelStatus")?.optInt("xp", optInt("xp", 0)) ?: optInt("xp", 0),
     levelStatus = optJSONObject("levelStatus")?.toLevelStatus() ?: LevelStatus(level = optInt("level", 1), title = optString("levelTitle", "New Vibe"), xp = optInt("xp", 0)),
     activeCosmetics = optJSONObject("activeCosmetics")?.toActiveCosmetics() ?: ActiveCosmetics()
-)
+    )
+}
 
 fun JSONObject.toLevelStatus(): LevelStatus = LevelStatus(
     level = optInt("level", 1),

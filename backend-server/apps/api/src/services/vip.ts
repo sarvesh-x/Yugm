@@ -113,6 +113,21 @@ export function changeVipExp(user: any, delta: number, now = new Date()) {
   return getVipStatus(user, now);
 }
 
+/** Notification payload for a 90-day review that changed the member's tier. */
+export function vipCycleNotice(beforeLevel: number, afterLevel: number) {
+  if (beforeLevel === afterLevel) return null;
+  if (afterLevel === 0) return {
+    title: "VIP membership ended",
+    body: "Your VIP cycle review ended your membership.",
+    data: { type: "VIP_CYCLE", fromLevel: beforeLevel, toLevel: 0 }
+  };
+  return {
+    title: "VIP tier updated",
+    body: `Your VIP cycle review set your tier to VIP${afterLevel}.`,
+    data: { type: "VIP_CYCLE", fromLevel: beforeLevel, toLevel: afterLevel }
+  };
+}
+
 /** Apply the 90-day review: keep the current tier if it was maintained, otherwise downgrade. */
 export function rollVipCycle(user: any, now = new Date()) {
   const currentLevel = levelFromTier(user?.vipTier, user?.vipLevel);

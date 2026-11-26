@@ -1492,5 +1492,36 @@ Removed MongoDB from the repository. Local and production both use the Cloudflar
 - Converted the seven still-reachable Mongoose imports to host-neutral types (uthAccounts, uthSession, cosmeticPresentation); pps/api/src now has zero mongoose imports.
 - Removed Mongo env config (MONGODB_URI, MONGODB_DB_NAME, MONGODB_MEDIA_MAX_BYTES, STORAGE_DRIVER=mongodb), the mongoose/mongodb-memory-server dependencies and legacy npm scripts; regenerated package-lock offline. docker-compose.yml no longer starts mongo.
 - Worker no longer disables itself on MONGODB_URI/REDIS_URL bindings (d1Api.ts, d1PkAlarm.ts). Stages are local and production only; the STAGING R2 bucket remains the media upload staging area.
-- Verification: backend typecheck all workspaces pass; 	est:d1-worker 2/2; production Worker dry-run passes; dry-run bundle contains 0 mongoose/mongodb references. Not run: live hosted API acceptance, legacy data reconciliation (no data to transfer).
+- Verification: backend typecheck all workspaces pass; test:d1-worker 2/2; production Worker dry-run passes; dry-run bundle contains 0 mongoose/mongodb references. Not run: live hosted API acceptance, legacy data reconciliation (no data to transfer).
 - No commit, push, deploy or provisioning. Historical staging/MongoDB references in dated evidence docs are preserved as evidence, not current claims.
+
+## 2026-11-26 — User-domain schema integrity (migration 0042)
+
+- Added `backend-server/apps/api/migrations/d1/0042_user_domain_integrity.sql`: unique `(users_id, value)` for `user_owned_cosmetics` (with a dedup DELETE first), partial unique active bond per `pair_key`, and indexes for `bonds(pair_key, status)`, `bond_requests(status, expires_at)` and `bond_points(kind, created_at)`.
+- Added `apps/cloudflare-worker/test/user-domain-integrity.mjs`: applies `0001` + `0042` to a fresh Miniflare D1 database, seeds pre-migration duplicate ownership rows to exercise the dedup step, then asserts the unique indexes reject duplicate ownership and a second ACTIVE bond for the same pair while an ENDED bond is still allowed. Wired into `test:d1-worker`; `auth-worker` now applies `0042` too.
+- Verification: backend `npm run typecheck` all workspaces pass; `npm run test:d1-worker` 3/3 (includes the full Auth/Worker suite and the new integrity test). No hosted migration was applied and nothing was deployed.
+- Handoff: [2026-11-26-user-domain-schema-integrity.md](handoffs/2026-11-26-user-domain-schema-integrity.md).
+
+## 2026-11-26 — VIP cycle review notifications
+
+- `services/vip.ts` exports `vipCycleNotice(beforeLevel, afterLevel)`: a null result when the tier is unchanged, otherwise a system notification payload ("VIP tier updated" or "VIP membership ended").
+- `d1Maintenance.rollExpiredVipCycles()` now inserts that notification in the same guarded D1 batch as the user update; the notification guard checks the *post-update* values, so it cannot fire if the CAS update lost. The returned count still counts only user updates.
+- New runtime test `apps/cloudflare-worker/test/vip-lifecycle.mts` (wired via `npm run test:domain`): a downgrade, a full expiry and a maintained tier are rolled in one pass; asserts persisted tiers and exactly two notifications with correct payloads.
+- **Decision:** `todayXpCap` was NOT changed. Tracing `GrowthScreen` showed `todayXpEarned` and `todayXpCap` are matched earned/total-cap values across the same capped events; the existing behavior is coherent. Banked sub-threshold `vipExp` was also left as-is — resetting it needs a product decision and a timestamp column, not a silent behavior change.
+- Verification: backend typecheck all workspaces pass; `test:d1-worker` 3/3; `test:domain` 2/2. No hosted migration, deploy or commit.
+- Handoff: [2026-11-26-vip-cycle-notifications.md](handoffs/2026-11-26-vip-cycle-notifications.md).
+
+## 2026-11-26 — Reward-only cosmetic cleanup
+
+- `d1Bonds.ts` now exports `expireD1BondRewards(db, now)` and, on bond-reward expiry, clears the item from **every** `active_cosmetics_*` slot (not only `avatar_frame`), while preserving a slot when another active grant of the same reward-only item exists. `runD1BondMaintenance` calls the extracted helper.
+- New runtime test `apps/cloudflare-worker/test/cosmetic-reward-cleanup.mts`: an expired frame with a second active grant stays equipped, an expired badge with no active grant is unequipped and its ownership row removed.
+- Verification: backend typecheck all workspaces pass; `test:domain` 3/3; `test:d1-worker` 3/3 (includes the scheduled-maintenance fixture, which initially caught a missing timestamp variable and now passes). No hosted migration, deploy or commit.
+- Handoff: [2026-11-26-cosmetic-reward-cleanup.md](handoffs/2026-11-26-cosmetic-reward-cleanup.md).
+
+## 2026-11-26 — Android user-model alignment
+
+- `YugmUser` now carries the full `VipStatus` the server already emits; `ProfileParser.toUser()` prefers a nested `vip` object and falls back to the flat auth/me fields. No new API call is needed for session-level VIP expiry/level.
+- Added `ProfileParserAlignmentTest` covering the flat auth payload, a nested wallet payload and the existing `Host` profile contract.
+- `core/api` unit tests now put the real `org.json` implementation on the test classpath (test-only). Android's local unit-test stubs threw for `JSONObject` methods; with this change `:core:api:testDebugUnitTest` runs **41/41 with 0 failures** (previously 12 failures).
+- Verification: `:core:api:testDebugUnitTest` 41/41, targeted parser test 3/3, `:feature:auth` and `:feature:profile` Kotlin compile pass. No backend change in this slice.
+- Handoff: [2026-11-26-android-user-model-alignment.md](handoffs/2026-11-26-android-user-model-alignment.md).

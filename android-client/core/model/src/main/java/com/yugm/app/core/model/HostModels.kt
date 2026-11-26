@@ -90,6 +90,8 @@ data class YugmUser(
     val walletBalance: Int = 0,
     val isVip: Boolean = false,
     val vipTier: String = "",
+    /** Full VIP status from auth/me (flat payload) or the wallet payload (nested "vip"). */
+    val vip: VipStatus = VipStatus(),
     val level: Int = 1,
     val levelTitle: String = "New Vibe",
     val xp: Int = 0,

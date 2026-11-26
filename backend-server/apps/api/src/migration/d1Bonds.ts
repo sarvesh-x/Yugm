@@ -8,7 +8,7 @@ import { validateBody } from "../middleware/validate.js";
 import { moderateContent } from "../services/contentModeration.js";
 import type { AccessClaims } from "../services/accessSession.js";
 import { asyncHandler, ErrorCode, HttpError, sendOk } from "../utils/http.js";
-import { AVATAR_PART_KEYS } from "./authProfileFields.js";
+import { ACTIVE_COSMETIC_KEYS, AVATAR_PART_KEYS } from "./authProfileFields.js";
 import { bindD1LiveUser, createD1AccessSessionReader, d1LiveUserFilter } from "./d1AccessSession.js";
 import { d1UserId } from "./d1People.js";
 import {
@@ -1257,30 +1257,39 @@ export function createD1BondsRouter(db: D1Database) {
   return router;
 }
 
-export async function runD1BondMaintenance(db: D1Database, now = new Date()) {
-  await expireD1BondRequests(db, now);
+/** Expire reward-only cosmetics and unequip them from every cosmetic slot. */
+export async function expireD1BondRewards(db: D1Database, now = new Date()) {
   const time = now.toISOString();
   const dueRewards = await db.prepare(`SELECT source_id, user_id, item_id FROM bond_rewards
     WHERE expired_at IS NULL AND expires_at <= ? ORDER BY expires_at LIMIT 25`).bind(time).all<{
       source_id: string; user_id: string; item_id: string;
     }>();
+  const stillHeld = `NOT EXISTS (SELECT 1 FROM bond_rewards AS r WHERE r.user_id = ?
+    AND r.item_id = ? AND r.expired_at IS NULL AND (r.expires_at IS NULL OR r.expires_at > ?))`;
   for (const reward of dueRewards.results) {
-    await db.batch([
+    const statements = [
       db.prepare(`UPDATE bond_rewards SET expired_at = ? WHERE source_id = ? AND expired_at IS NULL`)
         .bind(time, reward.source_id),
       db.prepare(`DELETE FROM user_owned_cosmetics WHERE users_id = ? AND value = ? AND EXISTS (
-        SELECT 1 FROM cosmetics AS c WHERE c.source_id = ? AND c.reward_only = 1) AND NOT EXISTS (
-        SELECT 1 FROM bond_rewards AS r WHERE r.user_id = ? AND r.item_id = ? AND r.expired_at IS NULL
-          AND (r.expires_at IS NULL OR r.expires_at > ?))`)
-        .bind(reward.user_id, reward.item_id, reward.item_id, reward.user_id, reward.item_id, time),
-      db.prepare(`UPDATE users SET active_cosmetics_avatar_frame = NULL WHERE source_id = ?
-        AND active_cosmetics_avatar_frame = ? AND EXISTS (
-          SELECT 1 FROM cosmetics AS c WHERE c.source_id = ? AND c.reward_only = 1) AND NOT EXISTS (
-          SELECT 1 FROM bond_rewards AS r WHERE r.user_id = ? AND r.item_id = ? AND r.expired_at IS NULL
-            AND (r.expires_at IS NULL OR r.expires_at > ?))`)
+        SELECT 1 FROM cosmetics AS c WHERE c.source_id = ? AND c.reward_only = 1) AND ${stillHeld}`)
         .bind(reward.user_id, reward.item_id, reward.item_id, reward.user_id, reward.item_id, time)
-    ]);
+    ];
+    for (const key of ACTIVE_COSMETIC_KEYS) {
+      const column = `active_cosmetics_${key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)}`;
+      statements.push(db.prepare(`UPDATE users SET ${column} = NULL, updated_at = ?
+        WHERE source_id = ? AND ${column} = ? AND EXISTS (
+          SELECT 1 FROM cosmetics AS c WHERE c.source_id = ? AND c.reward_only = 1) AND ${stillHeld}`)
+        .bind(time, reward.user_id, reward.item_id, reward.item_id, reward.user_id, reward.item_id, time));
+    }
+    await db.batch(statements);
   }
+  return dueRewards.results.length;
+}
+
+export async function runD1BondMaintenance(db: D1Database, now = new Date()) {
+  await expireD1BondRequests(db, now);
+  await expireD1BondRewards(db, now);
+  const time = now.toISOString();
   if (!bondEnabled()) return;
   await ensureD1BondCatalog(db);
   const dueBonds = await db.prepare(`SELECT source_id FROM bonds WHERE status = 'ACTIVE'
