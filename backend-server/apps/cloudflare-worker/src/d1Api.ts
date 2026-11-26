@@ -266,6 +266,9 @@ export function createD1ApiWorker(stage: ApiStage) {
             url.pathname.toLowerCase().startsWith("/api/upload/story") ||
             url.pathname.toLowerCase().startsWith("/api/upload/voice-note") ||
             url.pathname.toLowerCase().startsWith("/api/upload/recording") ||
+            url.pathname.toLowerCase().startsWith("/api/upload/avatar") ||
+            url.pathname.toLowerCase().startsWith("/api/upload/trust-verification") ||
+            url.pathname.toLowerCase().startsWith("/api/trust-verification/media/") ||
             url.pathname.startsWith("/api/assets/published/")) {
           if (!mediaEnabled(env, stage)) {
             return Response.json({ ok: false, error: { message: "Managed media is unavailable" } }, { status: 503 });

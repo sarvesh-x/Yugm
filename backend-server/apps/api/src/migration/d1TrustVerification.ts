@@ -1,4 +1,4 @@
-import type { D1Database } from "@cloudflare/workers-types";
+import type { D1Database, R2Bucket as R2BucketBinding } from "@cloudflare/workers-types";
 import { Router, type Response } from "express";
 import { requireHttpSession } from "../middleware/httpAccessSession.js";
 import { validateBody } from "../middleware/validate.js";
@@ -16,6 +16,7 @@ import {
 import { asyncHandler, ErrorCode, HttpError, sendOk } from "../utils/http.js";
 import { createD1AccessSessionReader } from "./d1AccessSession.js";
 import { newId } from "./d1Cosmetics.js";
+import { trustMediaKey, trustMediaMime, trustOwnerMediaReference } from "./d1TrustMedia.js";
 
 type Row = Record<string, string | number | null>;
 type SubmissionTable = "face_verification_submissions" | "voice_verification_submissions";
@@ -89,7 +90,7 @@ const presentVoiceSubmission = (row: Row) => ({
   __v: 0
 });
 
-export function createD1TrustVerificationRouter(db: D1Database) {
+export function createD1TrustVerificationRouter(db: D1Database, privateMedia?: R2BucketBinding) {
   const router = Router();
   const access = createD1AccessSessionReader(db, "http");
   const authenticate = asyncHandler(async (req, res, next) => {
@@ -120,6 +121,24 @@ export function createD1TrustVerificationRouter(db: D1Database) {
     if (!created) throw new HttpError(500, "Trust verification unavailable", ErrorCode.INTERNAL);
     return created;
   }
+
+  // Private verification media keeps the legacy owner-prefix authorization:
+  // the filename itself carries the owning user id, so a foreign reference is
+  // rejected before storage is touched. Missing objects stay 404.
+  router.get("/media/:fileName", authenticate, asyncHandler(async (req, res) => {
+    const name = req.params.fileName;
+    const match = trustOwnerMediaReference.exec(name);
+    const fallbackType = match ? trustMediaMime[match[1].toLowerCase()] : undefined;
+    if (!fallbackType) throw new HttpError(400, "Invalid verification media reference", ErrorCode.VALIDATION);
+    if (!name.startsWith(`${viewerId(res)}_`)) {
+      throw new HttpError(403, "You cannot access this verification media", ErrorCode.FORBIDDEN);
+    }
+    if (!privateMedia) throw new HttpError(503, "Managed media is unavailable", ErrorCode.INTERNAL);
+    const object = await privateMedia.get(trustMediaKey(name));
+    if (!object) throw new HttpError(404, "Verification media not found", ErrorCode.NOT_FOUND);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.type(object.httpMetadata?.contentType ?? fallbackType).send(Buffer.from(await object.arrayBuffer()));
+  }));
 
   router.get("/me", authenticate, asyncHandler(async (_req, res) => {
     const verification = await ensureVerification(viewerId(res));

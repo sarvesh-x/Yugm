@@ -9,6 +9,7 @@ import { asyncHandler, ErrorCode, HttpError, isValidObjectId } from "../utils/ht
 import { adminFrom, createD1AdminGuard, insertD1AdminAudit, prepareD1AdminAudit, type D1Admin } from "./d1AdminAuth.js";
 import { newId } from "./d1Cosmetics.js";
 import { person, personJson } from "./d1People.js";
+import { trustMediaMime, trustMediaPath, trustMediaReference } from "./d1TrustMedia.js";
 
 type Row = Record<string, string | number | null>;
 const note = z.object({ adminNotes: z.string().max(2000).optional() });
@@ -32,17 +33,10 @@ const validationId = (value: string, label = "id") => {
 };
 const trustNotFound = () => new HttpError(404, "Trust verification not found", ErrorCode.NOT_FOUND);
 const kycNotFound = () => new HttpError(404, "Creator payout KYC not found", ErrorCode.NOT_FOUND);
-const trustMediaPath = "/api/trust-verification/media/";
-const assetMime: Record<string, string> = {
-  jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp",
-  mp4: "video/mp4", m4v: "video/mp4", mov: "video/quicktime", webm: "video/webm",
-  m4a: "audio/mp4", mp3: "audio/mpeg", wav: "audio/wav", aac: "audio/aac", ogg: "audio/ogg"
-};
-const mediaReference = /^[a-f0-9]{24}_[0-9]{1,20}_[a-z0-9]{6}\.(\w{2,5})$/i;
 const adminMediaUrl = (value: string | number | null) => {
   if (typeof value !== "string" || !value.startsWith(trustMediaPath)) return null;
   const name = value.slice(trustMediaPath.length);
-  return mediaReference.test(name) ? `/api/admin/trust-verifications/media/${encodeURIComponent(name)}` : null;
+  return trustMediaReference.test(name) ? `/api/admin/trust-verifications/media/${encodeURIComponent(name)}` : null;
 };
 
 export function createD1AdminVerificationRouter(db: D1Database, secret?: string, privateMedia?: R2Bucket) {
@@ -101,8 +95,8 @@ export function createD1AdminVerificationRouter(db: D1Database, secret?: string,
   }));
   router.get("/trust-verifications/media/:fileName", guard("trust_verification.media.read"), asyncHandler(async (req, res) => {
     const name = req.params.fileName;
-    const match = mediaReference.exec(name);
-    const type = match ? assetMime[match[1].toLowerCase()] : undefined;
+    const match = trustMediaReference.exec(name);
+    const type = match ? trustMediaMime[match[1].toLowerCase()] : undefined;
     if (!type) throw new HttpError(400, "Invalid verification media reference", ErrorCode.VALIDATION);
     const userId = name.slice(0, 24);
     const ref = trustMediaPath + name;

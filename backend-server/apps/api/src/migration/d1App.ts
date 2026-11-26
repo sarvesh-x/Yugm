@@ -41,6 +41,7 @@ import { createD1CosmeticsRouter } from "./d1Cosmetics.js";
 import { createD1CoverUploadRouter } from "./d1CoverUpload.js";
 import { createD1CreatorRouter } from "./d1Creator.js";
 import { createD1AudioUploadRouter } from "./d1AudioUpload.js";
+import { createD1AvatarUploadRouter } from "./d1AvatarUpload.js";
 import { createD1ProfileMediaUploadRouter } from "./d1ProfileMediaUpload.js";
 import { createD1DatingRouter } from "./d1Dating.js";
 import { createD1DirectGiftsRouter } from "./d1DirectGifts.js";
@@ -81,6 +82,7 @@ import { createD1SubscriptionsRouter } from "./d1Subscriptions.js";
 import { createD1SupportRouter } from "./d1Support.js";
 import { createD1ThemesRouter } from "./d1Themes.js";
 import { createD1TrustVerificationRouter } from "./d1TrustVerification.js";
+import { createD1TrustVerificationUploadRouter } from "./d1TrustVerificationUpload.js";
 import { createD1VibeRouter } from "./d1Vibe.js";
 import type { D1UserRateLimit } from "./d1UserRateLimit.js";
 import { createD1WalletRouter } from "./d1Wallet.js";
@@ -211,7 +213,7 @@ export function createD1App(
   app.use("/api", createD1SubscriptionsRouter(db));
   app.use("/api", createD1VibeRouter(db));
   app.use("/api/ai", createD1AiWingmanRouter(db));
-  app.use("/api/trust-verification", createD1TrustVerificationRouter(db));
+  app.use("/api/trust-verification", createD1TrustVerificationRouter(db, media?.buckets["private-media"]));
   app.use("/api/bonds", createD1BondsRouter(db));
   app.use("/api/creator", createD1CreatorRouter(db, { payoutKycEncryptionKey: wallet.payoutKycEncryptionKey }));
   app.use("/api", createD1LiveKitRouter(db, livekit));
@@ -227,6 +229,8 @@ export function createD1App(
   if (media) app.use("/api/upload", createD1CoverUploadRouter({ db, resolvePublicOrigin, buckets: media.buckets }));
   if (media) app.use("/api/upload", createD1ProfileMediaUploadRouter({ db, resolvePublicOrigin, buckets: media.buckets }));
   if (media) app.use("/api/upload", createD1AudioUploadRouter({ db, resolvePublicOrigin, buckets: media.buckets }));
+  if (media) app.use("/api/upload", createD1AvatarUploadRouter({ db, resolvePublicOrigin, buckets: media.buckets }));
+  if (media) app.use("/api/upload", createD1TrustVerificationUploadRouter({ db, buckets: media.buckets }));
   if (media) app.use("/api/media", createD1MediaRouter({ db, resolvePublicOrigin, ...media }));
   app.use((_req, res) => res.status(404).json({ ok: false, error: { message: "Route not found" } }));
   const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {

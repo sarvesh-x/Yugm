@@ -1,5 +1,13 @@
 # Development progress
 
+## 2026-11-26 — D1 trust verification upload and private media
+
+- Mounted `POST /api/upload/trust-verification` and `GET /api/trust-verification/media/:fileName` with auth before multipart/filename validation, legacy purpose filtering and signatures, the Worker 10 MB cap, private R2 keys and registry rows committed before success. The delivery route preserves owner-prefix authorization and `private, no-store` headers; a shared helper keeps the user and admin reference rules in step. `/api/upload` is now 7/7 and `/api/trust-verification` is 10/0. Typecheck, Worker fixture suite, endpoint audit, strict secret check and `git diff --check` passed. [Routes and verification](handoffs/2026-11-26-d1-trust-verification-media.md)
+
+## 2026-11-26 — D1 avatar upload
+
+- Mounted `POST /api/upload/avatar` with auth before multipart, the legacy image extension/MIME/signature checks, a 5 MB multipart cap and the separate 220 KB avatar limit. The media registry row, variant, prior-object supersede and guarded authoritative profile update commit in one D1 batch; the previous public R2 object is removed after success. `/api/upload` is now 6/7 and the audit reports 613 of 638 legacy patterns mounted, with 25 remaining outside admin. Typecheck, Worker fixture suite, endpoint audit, strict secret check and `git diff --check` passed. [Routes and verification](handoffs/2026-11-26-d1-avatar-upload.md)
+
 ## 2026-11-26 — D1 voice-note and recording uploads
 
 - Mounted `POST /api/upload/voice-note` and `POST /api/upload/recording` with auth before multipart, legacy extension/MIME validation, the Worker 10 MB cap, server-derived R2 keys in `public-media`, and the `{ url, type, storage }` response. No signature check was added because neither legacy handler has one; public media rows commit before the response. `/api/upload` is now 5/7 and the audit reports 612 of 638 legacy patterns mounted, with 26 remaining outside admin. Typecheck, Worker fixture suite, endpoint audit, strict secret check and `git diff --check` passed. Two test-only fixture assertions were made order-independent. [Routes and verification](handoffs/2026-11-26-d1-voice-note-and-recording-uploads.md)

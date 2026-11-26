@@ -107,6 +107,8 @@ The production audit documents explain their baselines and verification limits. 
 - [D1 cover upload](handoffs/2026-11-26-d1-cover-upload.md)
 - [D1 profile-media and story uploads](handoffs/2026-11-26-d1-profile-media-and-story-uploads.md)
 - [D1 voice-note and recording uploads](handoffs/2026-11-26-d1-voice-note-and-recording-uploads.md)
+- [D1 avatar upload](handoffs/2026-11-26-d1-avatar-upload.md)
+- [D1 trust verification upload and private media](handoffs/2026-11-26-d1-trust-verification-media.md)
 - [D1 admin route coverage, setup and verification](handoffs/2026-11-25-d1-admin-auth-and-media.md)
 - [D1 dashboard, finance reads and catalog operations](handoffs/2026-11-25-d1-admin-operations.md)
 - [D1 admin core routes](handoffs/2026-11-25-d1-admin-core.md)

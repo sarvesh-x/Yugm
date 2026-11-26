@@ -1752,4 +1752,315 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor, gamer = 
     await db.prepare("DELETE FROM media_counters WHERE source_id = ?").bind(`USER:${ownerId}:VOICE_MESSAGE`).run();
     await db.prepare("DELETE FROM media_counters WHERE source_id = ?").bind(`USER:${ownerId}:ATTACHMENT`).run();
   }
+
+  // Direct avatar upload commits the media registry and the authoritative
+  // profile change together, superseding the previous avatar object.
+  const originalAvatar = await db.prepare(`SELECT avatar, avatar_media_id, avatar_type, active_cosmetics_avatar_asset,
+    avatar_parts_background, avatar_parts_clothes, avatar_parts_head, avatar_parts_mouth, avatar_parts_eyes,
+    avatar_parts_top, updated_at FROM users WHERE source_id = ?`).bind(ownerId).first();
+  const originalMarkers = await db.prepare("SELECT null_fields, missing_fields FROM user_auth_profile WHERE source_id = ?")
+    .bind(ownerId).first();
+  const originalCounter = await db.prepare("SELECT seq FROM media_counters WHERE source_id = ?")
+    .bind(`USER:${ownerId}:AVATAR`).first();
+  // Isolate this fixture from any earlier managed-avatar object so its cleanup
+  // only has to restore the owner row, not another test's R2 bytes.
+  await db.prepare("UPDATE users SET avatar_media_id = NULL WHERE source_id = ?").bind(ownerId).run();
+
+  const avatarForm = (fileName = "avatar.png", contentType = "image/png", bytes = coverPng) => {
+    const form = new FormData();
+    form.set("avatar", new Blob([bytes], { type: contentType }), fileName);
+    return form;
+  };
+  const avatarUpload = (form, accessToken) => uploadForm("/api/upload/avatar", form, accessToken);
+
+  assert.equal((await avatarUpload(avatarForm())).status, 401);
+  const emptyAvatarForm = new FormData();
+  emptyAvatarForm.set("other", "value");
+  const missingAvatar = await avatarUpload(emptyAvatarForm, owner.accessToken);
+  assert.equal(missingAvatar.status, 400);
+  assert.equal(missingAvatar.payload.error.message, "No file uploaded");
+  const avatarBadExtension = await avatarUpload(avatarForm("avatar.txt"), owner.accessToken);
+  assert.equal(avatarBadExtension.status, 400);
+  assert.equal(avatarBadExtension.payload.error.message, "Only images (jpg, jpeg, png, gif, webp) allowed");
+  const avatarBadMime = await avatarUpload(avatarForm("avatar.png", "text/plain"), owner.accessToken);
+  assert.equal(avatarBadMime.status, 400);
+  assert.equal(avatarBadMime.payload.error.message, "Only image uploads are allowed");
+  const avatarBadSignature = await avatarUpload(avatarForm("avatar.png", "image/png", Buffer.from("not-an-image")), owner.accessToken);
+  assert.equal(avatarBadSignature.status, 400);
+  assert.equal(avatarBadSignature.payload.error.message, "Invalid image file");
+  const avatarOversized = await avatarUpload(
+    avatarForm("avatar.png", "image/png", Buffer.concat([coverPng, Buffer.alloc(220 * 1024 + 1)])), owner.accessToken);
+  assert.equal(avatarOversized.status, 400);
+  assert.equal(avatarOversized.payload.error.message, "Avatar image is too large. Please choose or crop a smaller image.");
+  const avatarMultipartOversized = await avatarUpload(
+    avatarForm("avatar.png", "image/png", Buffer.alloc(5 * 1024 * 1024 + 1)), owner.accessToken);
+  assert.equal(avatarMultipartOversized.status, 413);
+  assert.equal(avatarMultipartOversized.payload.error.message, "Uploaded file is too large");
+
+  const createdAvatars = [];
+  try {
+    const firstResult = await avatarUpload(avatarForm("Avatar.PNG"), owner.accessToken);
+    assert.equal(firstResult.status, 200, JSON.stringify(firstResult.payload));
+    const firstAvatar = firstResult.payload.data;
+    assert.deepEqual(Object.keys(firstAvatar).sort(), ["storage", "url"]);
+    assert.equal(firstAvatar.storage, "s3");
+    assert.match(firstAvatar.url, /^http:\/\/127\.0\.0\.1\/api\/media\/public\/[a-f0-9-]{36}\/avatar\.png$/);
+    const firstId = new URL(firstAvatar.url).pathname.split("/")[4];
+    const firstRow = await db.prepare(`SELECT version, media_type, category, bucket, storage_key, content_type, file_size,
+      checksum, visibility, processing_status, moderation_status FROM media_objects WHERE source_id = ?`).bind(firstId).first();
+    assert.ok(firstRow);
+    assert.equal(firstRow.media_type, "IMAGE");
+    assert.equal(firstRow.category, "AVATAR");
+    assert.equal(firstRow.bucket, "public-media");
+    assert.equal(firstRow.content_type, "image/png");
+    assert.equal(firstRow.file_size, coverPng.byteLength);
+    assert.equal(firstRow.checksum, createHash("sha256").update(coverPng).digest("hex"));
+    assert.equal(firstRow.visibility, "PUBLIC");
+    assert.equal(firstRow.processing_status, "READY");
+    assert.equal(firstRow.moderation_status, "APPROVED");
+    assert.ok(firstRow.storage_key.startsWith(`users/${ownerId}/avatars/`));
+    assert.ok(firstRow.storage_key.endsWith("/avatar.png"));
+    createdAvatars.push({ id: firstId, key: firstRow.storage_key });
+
+    const firstVariant = await db.prepare(`SELECT name, bucket, key, url, content_type, bytes
+      FROM media_variants WHERE source_id = ?`).bind(`${firstId}:avatar`).first();
+    assert.equal(firstVariant.name, "avatar");
+    assert.equal(firstVariant.bucket, "public-media");
+    assert.equal(firstVariant.key, firstRow.storage_key);
+    assert.equal(firstVariant.url, firstAvatar.url);
+    assert.equal(firstVariant.content_type, "image/png");
+    assert.equal(firstVariant.bytes, coverPng.byteLength);
+
+    const firstProfile = await db.prepare(`SELECT avatar, avatar_media_id, avatar_type, active_cosmetics_avatar_asset,
+      avatar_parts_background, avatar_parts_head FROM users WHERE source_id = ?`).bind(ownerId).first();
+    assert.equal(firstProfile.avatar, firstAvatar.url);
+    assert.equal(firstProfile.avatar_media_id, firstId);
+    assert.equal(firstProfile.avatar_type, "UPLOADED");
+    assert.equal(firstProfile.active_cosmetics_avatar_asset, "");
+    assert.equal(firstProfile.avatar_parts_background, null);
+    assert.equal(firstProfile.avatar_parts_head, null);
+    const firstMarkers = await db.prepare("SELECT null_fields, missing_fields FROM user_auth_profile WHERE source_id = ?")
+      .bind(ownerId).first();
+    assert.ok(!JSON.parse(firstMarkers.null_fields ?? "[]").includes("avatar"));
+    assert.ok(!JSON.parse(firstMarkers.null_fields ?? "[]").includes("avatarParts"));
+
+    assert.ok(await publicBucket.head(firstRow.storage_key));
+    const servedAvatar = await worker.dispatchFetch(firstAvatar.url);
+    assert.equal(servedAvatar.status, 200);
+    assert.equal(servedAvatar.headers.get("content-type"), "image/png");
+    assert.equal(servedAvatar.headers.get("cache-control"), "public, max-age=31536000, immutable");
+    assert.deepEqual(Buffer.from(await servedAvatar.arrayBuffer()), coverPng);
+
+    const secondResult = await avatarUpload(avatarForm("second.png"), owner.accessToken);
+    assert.equal(secondResult.status, 200, JSON.stringify(secondResult.payload));
+    const secondAvatar = secondResult.payload.data;
+    const secondId = new URL(secondAvatar.url).pathname.split("/")[4];
+    assert.notEqual(secondId, firstId);
+    const secondRow = await db.prepare("SELECT version, storage_key FROM media_objects WHERE source_id = ?")
+      .bind(secondId).first();
+    assert.equal(secondRow.version, firstRow.version + 1);
+    createdAvatars.push({ id: secondId, key: secondRow.storage_key });
+
+    const superseded = await db.prepare("SELECT superseded_by_id FROM media_objects WHERE source_id = ?").bind(firstId).first();
+    assert.equal(superseded.superseded_by_id, secondId);
+    assert.equal(await publicBucket.head(firstRow.storage_key), null);
+    const secondProfile = await db.prepare("SELECT avatar, avatar_media_id FROM users WHERE source_id = ?").bind(ownerId).first();
+    assert.equal(secondProfile.avatar, secondAvatar.url);
+    assert.equal(secondProfile.avatar_media_id, secondId);
+    assert.ok(await publicBucket.head(secondRow.storage_key));
+  } finally {
+    for (const media of createdAvatars) {
+      await db.batch([
+        db.prepare("DELETE FROM media_variants WHERE media_objects_id = ?").bind(media.id),
+        db.prepare("DELETE FROM media_objects WHERE source_id = ?").bind(media.id)
+      ]);
+      await publicBucket.delete(media.key);
+    }
+    await db.prepare(`UPDATE users SET avatar = ?, avatar_media_id = ?, avatar_type = ?, active_cosmetics_avatar_asset = ?,
+      avatar_parts_background = ?, avatar_parts_clothes = ?, avatar_parts_head = ?, avatar_parts_mouth = ?,
+      avatar_parts_eyes = ?, avatar_parts_top = ?, updated_at = ? WHERE source_id = ?`)
+      .bind(originalAvatar.avatar ?? null, originalAvatar.avatar_media_id ?? null, originalAvatar.avatar_type ?? null,
+        originalAvatar.active_cosmetics_avatar_asset ?? null, originalAvatar.avatar_parts_background ?? null,
+        originalAvatar.avatar_parts_clothes ?? null, originalAvatar.avatar_parts_head ?? null,
+        originalAvatar.avatar_parts_mouth ?? null, originalAvatar.avatar_parts_eyes ?? null,
+        originalAvatar.avatar_parts_top ?? null, originalAvatar.updated_at ?? null, ownerId).run();
+    if (originalMarkers) {
+      await db.prepare("UPDATE user_auth_profile SET null_fields = ?, missing_fields = ? WHERE source_id = ?")
+        .bind(originalMarkers.null_fields ?? "[]", originalMarkers.missing_fields ?? "[]", ownerId).run();
+    }
+    if (originalCounter) {
+      await db.prepare("UPDATE media_counters SET seq = ? WHERE source_id = ?")
+        .bind(originalCounter.seq, `USER:${ownerId}:AVATAR`).run();
+    } else {
+      await db.prepare("DELETE FROM media_counters WHERE source_id = ?").bind(`USER:${ownerId}:AVATAR`).run();
+    }
+  }
+
+  // Trust verification upload and private delivery keep the legacy owner-prefix
+  // authorization, purpose filtering and signatures while storing bytes in the
+  // private-media bucket with a matching registry row.
+  const privateBucket = await worker.getR2Bucket("PRIVATE_MEDIA");
+  const trustUpload = (form, accessToken) => uploadForm("/api/upload/trust-verification", form, accessToken);
+  const trustForm = (purpose, fileName, contentType, bytes) => {
+    const form = new FormData();
+    form.set("purpose", purpose);
+    form.set("media", new Blob([bytes], { type: contentType }), fileName);
+    return form;
+  };
+  const fetchTrustMedia = (path, accessToken) => worker.dispatchFetch(
+    new URL(path, "http://127.0.0.1").toString(),
+    { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} }
+  );
+
+  assert.equal((await trustUpload(trustForm("FACE", "selfie.png", "image/png", coverPng))).status, 401);
+  const emptyTrustForm = new FormData();
+  emptyTrustForm.set("purpose", "FACE");
+  const missingTrust = await trustUpload(emptyTrustForm, owner.accessToken);
+  assert.equal(missingTrust.status, 400);
+  assert.equal(missingTrust.payload.error.message, "No file uploaded");
+  const badTrustPurpose = await trustUpload(trustForm("OTHER", "selfie.png", "image/png", coverPng), owner.accessToken);
+  assert.equal(badTrustPurpose.status, 400);
+  assert.equal(badTrustPurpose.payload.error.message, "Invalid trust verification upload purpose");
+  const badFaceExtension = await trustUpload(trustForm("FACE", "selfie.txt", "image/png", coverPng), owner.accessToken);
+  assert.equal(badFaceExtension.status, 400);
+  assert.equal(badFaceExtension.payload.error.message, "Only image/video uploads are allowed for face and liveness verification");
+  const badFaceMime = await trustUpload(trustForm("FACE", "selfie.png", "text/plain", coverPng), owner.accessToken);
+  assert.equal(badFaceMime.status, 400);
+  assert.equal(badFaceMime.payload.error.message, "Only image/video uploads are allowed for face and liveness verification");
+  const badFaceSignature = await trustUpload(trustForm("FACE", "selfie.png", "image/png", Buffer.from("not-an-image")), owner.accessToken);
+  assert.equal(badFaceSignature.status, 400);
+  assert.equal(badFaceSignature.payload.error.message, "Invalid verification media file");
+  const badVoiceExtension = await trustUpload(trustForm("VOICE", "voice.png", "audio/mpeg", Buffer.from("ID3fixture")), owner.accessToken);
+  assert.equal(badVoiceExtension.status, 400);
+  assert.equal(badVoiceExtension.payload.error.message, "Only audio uploads are allowed for voice verification");
+  const badVoiceMime = await trustUpload(trustForm("VOICE", "voice.mp3", "text/plain", Buffer.from("ID3fixture")), owner.accessToken);
+  assert.equal(badVoiceMime.status, 400);
+  assert.equal(badVoiceMime.payload.error.message, "Only audio uploads are allowed for voice verification");
+  const badVoiceSignature = await trustUpload(trustForm("VOICE", "voice.mp3", "audio/mpeg", Buffer.from("not-audio")), owner.accessToken);
+  assert.equal(badVoiceSignature.status, 400);
+  assert.equal(badVoiceSignature.payload.error.message, "Invalid verification media file");
+  const trustOversized = await trustUpload(
+    trustForm("FACE", "selfie.png", "image/png", Buffer.alloc(10 * 1024 * 1024 + 1)), owner.accessToken);
+  assert.equal(trustOversized.status, 413);
+  assert.equal(trustOversized.payload.error.message, "Uploaded file is too large");
+
+  const invalidReference = await fetchTrustMedia("/api/trust-verification/media/not-a-reference.png", owner.accessToken);
+  assert.equal(invalidReference.status, 400);
+  // The owner route keeps storage.ts's unbounded timestamp rule, not the
+  // admin route's 1-20 digit reference pattern. A well-formed longer reference
+  // reaches storage and returns 404 when absent.
+  const longTimestampReference = await fetchTrustMedia(
+    `/api/trust-verification/media/${ownerId}_123456789012345678901_abcdef.png`, owner.accessToken);
+  assert.equal(longTimestampReference.status, 404);
+  const originalTrustCounters = {
+    ATTACHMENT: await db.prepare("SELECT seq FROM media_counters WHERE source_id = ?")
+      .bind(`USER:${ownerId}:ATTACHMENT`).first(),
+    VOICE_MESSAGE: await db.prepare("SELECT seq FROM media_counters WHERE source_id = ?")
+      .bind(`USER:${ownerId}:VOICE_MESSAGE`).first()
+  };
+  const createdTrustMedia = [];
+  try {
+    const faceResult = await trustUpload(trustForm("FACE", "Selfie.PNG", "image/png", coverPng), owner.accessToken);
+    assert.equal(faceResult.status, 200, JSON.stringify(faceResult.payload));
+    const face = faceResult.payload.data;
+    assert.deepEqual(Object.keys(face).sort(), ["purpose", "storage", "url"]);
+    assert.equal(face.purpose, "FACE");
+    assert.equal(face.storage, "private-s3");
+    assert.match(face.url, new RegExp(`^/api/trust-verification/media/${ownerId}_\\d{13}_[a-f0-9]{6}\\.png$`));
+    const faceName = face.url.slice("/api/trust-verification/media/".length);
+    const faceKey = `trust-verification/${faceName}`;
+    assert.ok(await privateBucket.head(faceKey));
+    assert.deepEqual(Buffer.from(await (await privateBucket.get(faceKey)).arrayBuffer()), coverPng);
+    const faceRow = await db.prepare(`SELECT source_id, version, owner_type, owner_id, media_type, category, bucket,
+      storage_key, content_type, file_size, checksum, visibility, processing_status, moderation_status
+      FROM media_objects WHERE storage_key = ?`).bind(faceKey).first();
+    assert.ok(faceRow);
+    assert.equal(faceRow.version, Number(originalTrustCounters.ATTACHMENT?.seq ?? 0) + 1);
+    assert.equal(faceRow.owner_type, "USER");
+    assert.equal(faceRow.owner_id, ownerId);
+    assert.equal(faceRow.media_type, "IMAGE");
+    assert.equal(faceRow.category, "ATTACHMENT");
+    assert.equal(faceRow.bucket, "private-media");
+    assert.equal(faceRow.content_type, "image/png");
+    assert.equal(faceRow.file_size, coverPng.byteLength);
+    assert.equal(faceRow.checksum, createHash("sha256").update(coverPng).digest("hex"));
+    assert.equal(faceRow.visibility, "PRIVATE");
+    assert.equal(faceRow.processing_status, "READY");
+    assert.equal(faceRow.moderation_status, "APPROVED");
+    createdTrustMedia.push({ id: faceRow.source_id, key: faceKey, variant: "face" });
+    const faceVariant = await db.prepare(`SELECT name, bucket, key, url, content_type, bytes
+      FROM media_variants WHERE source_id = ?`).bind(`${faceRow.source_id}:face`).first();
+    assert.equal(faceVariant.name, "face");
+    assert.equal(faceVariant.bucket, "private-media");
+    assert.equal(faceVariant.key, faceKey);
+    assert.equal(faceVariant.url, face.url);
+    assert.equal(faceVariant.content_type, "image/png");
+    assert.equal(faceVariant.bytes, coverPng.byteLength);
+
+    const faceDelivery = await fetchTrustMedia(face.url, owner.accessToken);
+    assert.equal(faceDelivery.status, 200);
+    assert.equal(faceDelivery.headers.get("content-type"), "image/png");
+    assert.equal(faceDelivery.headers.get("cache-control"), "private, no-store");
+    assert.deepEqual(Buffer.from(await faceDelivery.arrayBuffer()), coverPng);
+    assert.equal((await fetchTrustMedia(face.url)).status, 401);
+    assert.equal((await fetchTrustMedia(face.url, visitor.accessToken)).status, 403);
+    const absentName = `${ownerId}_${Date.now()}_abcdef.png`;
+    assert.equal((await fetchTrustMedia(`/api/trust-verification/media/${absentName}`, owner.accessToken)).status, 404);
+
+    const trustVideoBytes = Buffer.from("webmfixture", "utf8");
+    const livenessResult = await trustUpload(
+      trustForm("LIVENESS", "liveness.WEBM", "video/webm", trustVideoBytes), owner.accessToken);
+    assert.equal(livenessResult.status, 200, JSON.stringify(livenessResult.payload));
+    const liveness = livenessResult.payload.data;
+    assert.equal(liveness.purpose, "LIVENESS");
+    assert.match(liveness.url, new RegExp(`^/api/trust-verification/media/${ownerId}_\\d{13}_[a-f0-9]{6}\\.webm$`));
+    const livenessKey = `trust-verification/${liveness.url.slice("/api/trust-verification/media/".length)}`;
+    assert.deepEqual(Buffer.from(await (await privateBucket.get(livenessKey)).arrayBuffer()), trustVideoBytes);
+    const livenessRow = await db.prepare(`SELECT source_id, version, media_type, category, bucket, content_type
+      FROM media_objects WHERE storage_key = ?`).bind(livenessKey).first();
+    assert.equal(livenessRow.version, Number(originalTrustCounters.ATTACHMENT?.seq ?? 0) + 2);
+    assert.equal(livenessRow.media_type, "VIDEO");
+    assert.equal(livenessRow.category, "ATTACHMENT");
+    assert.equal(livenessRow.bucket, "private-media");
+    assert.equal(livenessRow.content_type, "video/webm");
+    createdTrustMedia.push({ id: livenessRow.source_id, key: livenessKey, variant: "liveness" });
+
+    const trustVoiceBytes = Buffer.from("ID3fixture", "utf8");
+    const voiceResult = await trustUpload(trustForm("VOICE", "voice.MP3", "audio/mpeg", trustVoiceBytes), owner.accessToken);
+    assert.equal(voiceResult.status, 200, JSON.stringify(voiceResult.payload));
+    const voice = voiceResult.payload.data;
+    assert.equal(voice.purpose, "VOICE");
+    assert.equal(voice.storage, "private-s3");
+    assert.match(voice.url, new RegExp(`^/api/trust-verification/media/${ownerId}_\\d{13}_[a-f0-9]{6}\\.mp3$`));
+    const voiceKey = `trust-verification/${voice.url.slice("/api/trust-verification/media/".length)}`;
+    assert.deepEqual(Buffer.from(await (await privateBucket.get(voiceKey)).arrayBuffer()), trustVoiceBytes);
+    const voiceRow = await db.prepare(`SELECT source_id, version, media_type, category, bucket, content_type
+      FROM media_objects WHERE storage_key = ?`).bind(voiceKey).first();
+    assert.equal(voiceRow.version, Number(originalTrustCounters.VOICE_MESSAGE?.seq ?? 0) + 1);
+    assert.equal(voiceRow.media_type, "AUDIO");
+    assert.equal(voiceRow.category, "VOICE_MESSAGE");
+    assert.equal(voiceRow.bucket, "private-media");
+    assert.equal(voiceRow.content_type, "audio/mpeg");
+    createdTrustMedia.push({ id: voiceRow.source_id, key: voiceKey, variant: "voice" });
+    const voiceDelivery = await fetchTrustMedia(voice.url, owner.accessToken);
+    assert.equal(voiceDelivery.status, 200);
+    assert.equal(voiceDelivery.headers.get("content-type"), "audio/mpeg");
+    assert.deepEqual(Buffer.from(await voiceDelivery.arrayBuffer()), trustVoiceBytes);
+  } finally {
+    for (const media of createdTrustMedia) {
+      await db.batch([
+        db.prepare("DELETE FROM media_variants WHERE source_id = ?").bind(`${media.id}:${media.variant}`),
+        db.prepare("DELETE FROM media_objects WHERE source_id = ?").bind(media.id)
+      ]);
+      await privateBucket.delete(media.key);
+    }
+    for (const [category, original] of Object.entries(originalTrustCounters)) {
+      const counterId = `USER:${ownerId}:${category}`;
+      if (original) {
+        await db.prepare("UPDATE media_counters SET seq = ? WHERE source_id = ?").bind(original.seq, counterId).run();
+      } else {
+        await db.prepare("DELETE FROM media_counters WHERE source_id = ?").bind(counterId).run();
+      }
+    }
+  }
 }
