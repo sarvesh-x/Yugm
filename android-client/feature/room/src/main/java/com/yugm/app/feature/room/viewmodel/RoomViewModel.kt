@@ -66,6 +66,18 @@ class RoomViewModel @Inject constructor(
     private val roomSocket = RoomSocketClient()
     private val mediaOwnerId = UUID.randomUUID().toString()
 
+    init {
+        // LiveKit exhausted its own reconnect; re-mint a fresh (non-expired, correctly-granted) token and reconnect.
+        viewModelScope.launch {
+            YugmMediaRoom.mediaDisconnected.collect {
+                if (isConnected && unavailableMediaRoomId != roomId && roomId.isNotBlank()) {
+                    val isHostVideoRoom = isVideo && roomDetail?.room?.host?.id == currentUserId
+                    connectRoomMedia(isHostVideoRoom, YugmMediaRoom.isMicEnabled())
+                }
+            }
+        }
+    }
+
     var roomDetail by mutableStateOf<RoomDetail?>(null)
         private set
 
@@ -449,6 +461,7 @@ class RoomViewModel @Inject constructor(
                     } else {
                         pkLeaderboard = emptyList()
                         pkOpponentMedia = null
+                        YugmMediaRoom.disconnectOpponent()
                     }
                 }
             }
@@ -493,6 +506,10 @@ class RoomViewModel @Inject constructor(
                                         pkOpponentMedia = it
                                         it?.let { YugmMediaRoom.connectOpponent(it.token, it.url, it.roomName) }
                                     }
+                                } else {
+                                    // PK over: stop subscribing to the opponent room (no audio leak after battle).
+                                    pkOpponentMedia = null
+                                    YugmMediaRoom.disconnectOpponent()
                                 }
                             }
                         },

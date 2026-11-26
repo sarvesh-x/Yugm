@@ -216,7 +216,7 @@ export function createD1App(
   app.use("/api/events", events);
   app.use("/api", events);
   app.use("/api", createD1ThemesRouter(db));
-  app.use("/api/rooms", createD1RoomsRouter(db, limits.chat, realtime));
+  app.use("/api/rooms", createD1RoomsRouter(db, limits.chat, realtime, livekit));
   app.use("/api/rooms", createD1RoomInvitesRouter(db));
   app.use("/api/recordings", createD1RecordingsRouter(db));
   app.use("/api", createD1ReportsRouter(db, limits.report));

@@ -22,6 +22,8 @@ import { sendD1DirectMessage } from "./d1MessageSend.js";
 import { d1UserId, person, personJson, visiblePerson } from "./d1People.js";
 import { roomAccessFor } from "./d1RoomAccess.js";
 import { emitD1Realtime, noD1Realtime, type D1RealtimePort } from "./d1Realtime.js";
+import type { D1LiveKitConfig } from "./d1LiveKit.js";
+import { deleteLiveKitRoom, removeLiveKitParticipant, setLiveKitCanPublish } from "./d1LiveKitAdmin.js";
 import { pollOpen, pollProjection, presentPoll } from "./d1RoomPolls.js";
 import { createRoomMode, readRoomMode, readRoomModeRoster, updateRoomMode } from "./d1RoomModes.js";
 import { readD1RoomPkHistory } from "./d1RoomPkHistory.js";
@@ -273,7 +275,7 @@ function capStatements(write: D1GuardedStatement, guard: string, userId: string,
   ];
 }
 
-export async function endD1Room(db: D1Database, id: string, time: string) {
+export async function endD1Room(db: D1Database, id: string, time: string, livekit: D1LiveKitConfig = {}) {
   const room = await db.prepare("SELECT status, type, livekit_room_name FROM rooms WHERE source_id = ?").bind(id)
     .first<{ status: string; type: string; livekit_room_name: string }>();
   if (!room || room.status !== "LIVE" || (room.type === "VOICE" && room.livekit_room_name === "official-yugm-trending")) {
@@ -291,7 +293,10 @@ export async function endD1Room(db: D1Database, id: string, time: string) {
       WHERE room_id = ? AND status = 'PENDING' AND EXISTS (
         SELECT 1 FROM rooms WHERE source_id = ? AND status = 'ENDED' AND ended_at = ?)`).bind(time, id, id, time)
   ]);
-  return Boolean(ended.meta.changes);
+  if (!ended.meta.changes) return false;
+  // Ending a room must also disconnect media; DB state alone doesn't eject connected clients.
+  await deleteLiveKitRoom(livekit ?? {}, room.livekit_room_name);
+  return true;
 }
 
 export async function readD1HostRooms(db: D1Database, hostId: string, viewer: string, limit: unknown) {
@@ -335,7 +340,7 @@ function participants(rows: Row[], maxSpeakers: number) {
   });
 }
 
-export function createD1RoomsRouter(db: D1Database, allowChat?: D1UserRateLimit, realtime: D1RealtimePort = noD1Realtime) {
+export function createD1RoomsRouter(db: D1Database, allowChat?: D1UserRateLimit, realtime: D1RealtimePort = noD1Realtime, livekit: D1LiveKitConfig = {}) {
   const router = Router();
   const access = createD1AccessSessionReader(db, "http");
   const authenticate = (req: Request) => requireHttpSession(req.headers.authorization, access);
@@ -1270,6 +1275,8 @@ export function createD1RoomsRouter(db: D1Database, allowChat?: D1UserRateLimit,
         .bind(seatIndex, participant.source_id, request.source_id)
     ]);
     if (!approved.meta.changes) throw new HttpError(404, "Pending speaker request not found", ErrorCode.NOT_FOUND);
+    // Grant publish server-side so the speaker doesn't depend on a token re-mint to speak.
+    await setLiveKitCanPublish(livekit, String(row.livekit_room_name ?? ""), userId, true);
     sendOk(res, { approved: true });
   }));
 
@@ -1384,6 +1391,8 @@ export function createD1RoomsRouter(db: D1Database, allowChat?: D1UserRateLimit,
     if (!participant) throw new HttpError(404, "Active participant not found", ErrorCode.NOT_FOUND);
     await db.prepare("UPDATE room_participants SET mic_enabled = 0, moderator_muted = 1 WHERE source_id = ? AND left_at IS NULL")
       .bind(participant.source_id).run();
+    // Enforce server-side; a client can't unmute itself at the media layer.
+    await setLiveKitCanPublish(livekit, String(row.livekit_room_name ?? ""), userId, false);
     sendOk(res, { muted: true });
   }));
 
@@ -1401,6 +1410,7 @@ export function createD1RoomsRouter(db: D1Database, allowChat?: D1UserRateLimit,
     if (!participant) throw new HttpError(404, "Active participant not found", ErrorCode.NOT_FOUND);
     await db.prepare("UPDATE room_participants SET mic_enabled = 1, moderator_muted = 0 WHERE source_id = ? AND left_at IS NULL")
       .bind(participant.source_id).run();
+    await setLiveKitCanPublish(livekit, String(row.livekit_room_name ?? ""), userId, true);
     sendOk(res, { unmuted: true });
   }));
 
@@ -1470,6 +1480,8 @@ export function createD1RoomsRouter(db: D1Database, allowChat?: D1UserRateLimit,
       db.prepare(`UPDATE speaker_requests SET status = 'REJECTED', updated_at = ?
         WHERE room_id = ? AND user_id = ? AND status = 'PENDING'`).bind(time, id, userId)
     ]);
+    // Kick from media too, not just the room roster.
+    await removeLiveKitParticipant(livekit, String(row.livekit_room_name ?? ""), userId);
     sendOk(res, { removed: true });
   }));
 

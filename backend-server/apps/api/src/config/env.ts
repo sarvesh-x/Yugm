@@ -30,9 +30,7 @@ const envSchema = z.object({
   NODE_ENV: z.string().default("development"),
   YUGM_RUNTIME: z.enum(["node", "cloudflare"]).default("node"),
   PORT: z.coerce.number().default(4000),
-  MONGODB_URI: z.string().min(1, "MONGODB_URI is required").optional(),
   YUGM_D1_API: z.literal("true").optional(),
-  MONGODB_DB_NAME: z.string().min(1).default("Yugm"),
   REDIS_URL: z.string().optional(),
   JWT_SECRET: z.preprocess(
     (v) => (typeof v === "string" && (v.length < 16 || PLACEHOLDER_SECRETS.has(v)) ? undefined : v),
@@ -76,8 +74,6 @@ const envSchema = z.object({
   GOOGLE_PLAY_PUBSUB_SERVICE_ACCOUNT: z.string().optional(),
   MONETIZATION_DIAMONDS_ENABLED: z.preprocess((v) => v === true || v === "true" || v === "1", z.boolean()).default(false),
   PAYOUT_KYC_ENCRYPTION_KEY: z.string().min(24).optional(),
-  STORAGE_DRIVER: z.enum(["local", "s3", "mongodb"]).default("local"),
-  MONGODB_MEDIA_MAX_BYTES: z.coerce.number().int().min(1).default(128 * 1024 * 1024),
   S3_BUCKET: z.string().optional(),
   S3_REGION: z.string().optional(),
   S3_ENDPOINT: z.string().optional(),
@@ -100,10 +96,6 @@ const envSchema = z.object({
     (value) => (typeof value === "string" && !value.trim() ? undefined : value),
     z.coerce.number().int().min(60).max(3600).default(900)
   )
-}).superRefine((config, ctx) => {
-  if (!config.MONGODB_URI && !(config.YUGM_RUNTIME === "cloudflare" && config.YUGM_D1_API === "true")) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["MONGODB_URI"], message: "MONGODB_URI is required" });
-  }
 });
 
 const parsed = envSchema.parse(process.env);
@@ -120,13 +112,6 @@ const effectiveS3 = {
   S3_SECRET_ACCESS_KEY: parsed.S3_SECRET_ACCESS_KEY ?? parsed.R2_SECRET_ACCESS_KEY
 };
 
-if (parsed.STORAGE_DRIVER === "s3" && effectiveS3.S3_ENDPOINT && !parsed.S3_PUBLIC_BASE_URL &&
-    !parsed.R2_ASSETS_PUBLIC_URL && !parsed.R2_MEDIA_PUBLIC_URL) {
-  console.warn("R2/S3 storage uses a custom endpoint but no public base URL is set; public media uploads will fail until R2_ASSETS_PUBLIC_URL/R2_MEDIA_PUBLIC_URL or S3_PUBLIC_BASE_URL is configured.");
-}
-if (r2Endpoint && parsed.STORAGE_DRIVER !== "s3") {
-  console.warn("R2 is configured but STORAGE_DRIVER is not 's3'; managed media uploads are disabled until it is enabled.");
-}
 if (parsed.NODE_ENV === "production" && parsed.YUGM_RUNTIME !== "cloudflare" && (!parsed.LIVEKIT_URL.startsWith("wss://") || !parsed.LIVEKIT_API_KEY || !parsed.LIVEKIT_API_SECRET)) {
   console.warn("LiveKit is not fully configured; the API will start, but voice/video room tokens will be unavailable.");
 }

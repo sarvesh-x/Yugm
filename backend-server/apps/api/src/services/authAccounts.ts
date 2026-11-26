@@ -1,15 +1,62 @@
-import type { IUser } from "../models/User.js";
 import { ErrorCode, HttpError } from "../utils/http.js";
 import { hasFirebaseIdentityConflict } from "./authSessionRules.js";
 
-export type AuthUser = Pick<IUser,
+/** Host-neutral user fields; the authoritative account record lives in D1. */
+interface UserFields {
+  name: string;
+  username: string;
+  email?: string;
+  phone?: string;
+  firebaseUid?: string;
+  avatar?: string;
+  avatarType?: "UPLOADED" | "GENERATED" | "DEFAULT";
+  avatarParts?: {
+    background: number; clothes: number; head: number; mouth: number; eyes: number; top: number;
+  };
+  isVerified: boolean;
+  emailVerified: boolean;
+  role: "USER" | "HOST" | "MODERATOR" | "ADMIN";
+  tokenVersion: number;
+  walletBalance: number;
+  xp: number;
+  lastDailyCheckInAt?: Date;
+  activeCosmetics: Record<string, string | null | undefined>;
+  ownedCosmeticIds: string[];
+  vipTier?: string;
+  vipLevel?: number;
+  vipExp?: number;
+  vipStartedAt?: Date;
+  vipExpiresAt?: Date;
+  vipFrozen?: boolean;
+  vipFreezeStartedAt?: Date;
+  interests: string[];
+  languages: string[];
+  city?: string;
+  state?: string;
+  bio?: string;
+  vibeLine?: string;
+  gender?: string;
+  age?: number;
+  hobbies: string[];
+  interestedIn?: string;
+  lookingFor?: string;
+  datingAgeMin?: number;
+  datingAgeMax?: number;
+  profileCompletedAt?: Date;
+  termsAcceptedAt?: Date;
+  deletionRequestedAt?: Date;
+  followersCount: number;
+  followingCount: number;
+}
+
+export type AuthUser = Pick<UserFields,
   "name" | "username" | "email" | "phone" | "firebaseUid" | "avatar" | "avatarType" |
   "isVerified" | "emailVerified" | "role" | "tokenVersion" | "walletBalance" | "xp" | "lastDailyCheckInAt" |
   "activeCosmetics" | "ownedCosmeticIds" | "vipTier" | "vipLevel" | "vipExp" | "vipStartedAt" | "vipExpiresAt" |
   "vipFrozen" | "vipFreezeStartedAt" | "interests" | "languages" | "city" | "state" | "bio" | "vibeLine" |
   "gender" | "age" | "hobbies" | "interestedIn" | "lookingFor" | "datingAgeMin" | "datingAgeMax" |
   "profileCompletedAt" | "termsAcceptedAt" | "deletionRequestedAt" | "followersCount" | "followingCount"
-> & { id: string; avatarParts?: Partial<NonNullable<IUser["avatarParts"]>> | null };
+> & { id: string; avatarParts?: Partial<NonNullable<UserFields["avatarParts"]>> | null };
 
 export type IdentityPatch = Partial<Pick<AuthUser,
   "name" | "username" | "email" | "phone" | "firebaseUid" | "avatar" | "isVerified" |
@@ -30,8 +77,12 @@ export interface AuthAccountStore {
   isIdentityConflict(error: unknown): boolean;
 }
 
-export function asAuthUser(user: IUser): AuthUser {
-  return { ...user.toObject({ minimize: false }), id: String(user._id) };
+export function asAuthUser(user: Record<string, unknown> & {
+  _id?: unknown;
+  toObject?: (options?: { minimize?: boolean }) => Record<string, unknown>;
+}): AuthUser {
+  const record = user.toObject?.({ minimize: false }) ?? user;
+  return { ...record, id: String(user._id ?? record.id ?? "") } as AuthUser;
 }
 
 async function generateUniqueUsername(store: AuthAccountStore) {

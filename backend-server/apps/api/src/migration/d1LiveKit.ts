@@ -45,7 +45,7 @@ function base64Url(value: string | Uint8Array) {
 
 /** Build the same HS256 access token the LiveKit server SDK issues, using host-neutral Web Crypto. */
 export async function createLiveKitToken(config: Required<Pick<D1LiveKitConfig, "apiKey" | "apiSecret" | "url">>,
-  input: { identity: string; roomName: string; publishSources: string[] }
+  input: { identity: string; roomName: string; publishSources: string[]; name?: string }
 ) {
   const issuedAt = Math.floor(Date.now() / 1000);
   const header = base64Url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
@@ -55,7 +55,8 @@ export async function createLiveKitToken(config: Required<Pick<D1LiveKitConfig, 
       roomJoin: true,
       canPublish: input.publishSources.length > 0,
       canPublishSources: input.publishSources,
-      canSubscribe: true
+      canSubscribe: true,
+      ...(input.name ? { name: input.name } : {})
     },
     iss: config.apiKey,
     sub: input.identity,
@@ -110,8 +111,10 @@ export function createD1LiveKitRouter(db: D1Database, config: D1LiveKitConfig) {
       ...(canSpeak ? [microphoneSource] : []),
       ...(canPublishRoomMusic ? [roomMusicSource] : [])
     ];
+    const participantName = await db.prepare("SELECT name FROM users WHERE source_id = ?").bind(claims.sub)
+      .first<{ name: string | null }>();
     const token = await createLiveKitToken(media, {
-      identity: claims.sub, roomName: room.livekit_room_name, publishSources
+      identity: claims.sub, roomName: room.livekit_room_name, publishSources, name: participantName?.name ?? undefined
     });
     sendOk(res, {
       token, url: media.url, identity: claims.sub, roomName: room.livekit_room_name,

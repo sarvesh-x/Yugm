@@ -1,6 +1,7 @@
 import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
 import { rollVipCycle, VIP_CYCLE_DAYS } from "../services/vip.js";
 import { closeExpiredD1Polls } from "./d1RoomPolls.js";
+import type { D1LiveKitConfig } from "./d1LiveKit.js";
 
 const dayMs = 86_400_000;
 const uploadGraceMs = 15 * 60_000;
@@ -65,7 +66,7 @@ async function sweepMediaUploads(db: D1Database, staging: R2Bucket, now: Date) {
   return { expired: expired.meta.changes, stagingCleaned: results.length };
 }
 
-async function endStaleRooms(db: D1Database, now: Date) {
+async function endStaleRooms(db: D1Database, now: Date, livekit: D1LiveKitConfig) {
   // Loaded lazily to keep the scheduled startup graph free of route bindings.
   const { endD1Room } = await import("./d1Rooms.js");
   const cutoff = new Date(now.getTime() - staleRoomAfterMs).toISOString();
@@ -74,12 +75,12 @@ async function endStaleRooms(db: D1Database, now: Date) {
   const time = now.toISOString();
   let ended = 0;
   for (const row of results) {
-    if (await endD1Room(db, row.source_id, time)) ended += 1;
+    if (await endD1Room(db, row.source_id, time, livekit)) ended += 1;
   }
   return ended;
 }
 
-export async function runD1Maintenance(db: D1Database, now: Date, staging?: R2Bucket) {
+export async function runD1Maintenance(db: D1Database, now: Date, staging?: R2Bucket, livekit: D1LiveKitConfig = {}) {
   // Load after the Worker runtime has set YUGM_RUNTIME=cloudflare; d1Bonds imports env.ts.
   const { runD1BondMaintenance } = await import("./d1Bonds.js");
   const { purgeExpiredD1Accounts } = await import("./d1AccountDeletion.js");
@@ -108,7 +109,7 @@ export async function runD1Maintenance(db: D1Database, now: Date, staging?: R2Bu
     runD1BondMaintenance(db, now),
     rollExpiredVipCycles(db, now),
     staging ? sweepMediaUploads(db, staging, now) : Promise.resolve({ expired: 0, stagingCleaned: 0 }),
-    endStaleRooms(db, now),
+    endStaleRooms(db, now, livekit),
     purgeExpiredD1Accounts(db, now)
   ]);
 

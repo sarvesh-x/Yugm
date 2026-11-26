@@ -1,5 +1,4 @@
-import { Router, type RequestHandler, type Response } from "express";
-import type { AuthRequest } from "../middleware/auth.js";
+import { Router, type Request, type RequestHandler, type Response } from "express";
 import { validateBody } from "../middleware/validate.js";
 import { verifyIdToken } from "../services/firebase.js";
 import { getVipStatus } from "../services/vip.js";
@@ -10,6 +9,9 @@ import { z } from "zod";
 import { isProfileCompleted } from "../services/profileCompletion.js";
 import { asAuthUser, findOrCreateFirebaseUser, type AuthAccountStore, type AuthUser } from "../services/authAccounts.js";
 import type { AuthSessionStore } from "../services/authSessionStore.js";
+
+// Host-neutral request shape; the legacy Mongoose auth middleware is retired.
+type AuthRequest = Request & { user?: AuthUser };
 
 export function publicAuthUser(user: AuthUser) {
   const levelStatus = getLevelStatus(user);

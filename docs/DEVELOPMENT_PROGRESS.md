@@ -1463,3 +1463,34 @@ npm.cmd run audit:d1-endpoints -- --missing 638/605/599/39 with /api/trust-verif
 npm.cmd run test:auth-worker --workspace apps/cloudflare-worker pass (1/1) with unauthenticated 401-before-validation, 422 boundaries, empty-face 400, all nine response shapes, consent/face/voice guard order, review/retry transitions, submission DTOs and persisted rows plus clean-bundle assertions;
 npm.cmd run secrets:check:strict pass; scoped git diff --check LF/CRLF warnings only.
 - Boundaries: the D1 user index is non-unique, so imported duplicate rows need reconciliation; D1 has no sync:invalidate emitter for successful POSTs. MongoDB remains authoritative.
+
+## 2026-11-26 - LiveKit media-layer hardening (no provider migration)
+
+Decision: keep self-hosted LiveKit OSS; RealtimeKit migration abandoned. No production LiveKit server/credentials provisioned.
+
+Server (legacy Express + D1 Worker):
+- D1 endD1Room now tears down media (RoomService.DeleteRoom); room-end, host-leave, stale-room sweep disconnect everyone. Legacy already had terminateLiveKitRoom.
+- Server-side publish enforcement: moderator-mute/unmute -> UpdateParticipant(can_publish); kick -> RemoveParticipant. New Worker-safe host-neutral Twirp admin client apps/api/src/migration/d1LiveKitAdmin.ts (HS256 roomAdmin token, fetch, best-effort, never fails the room mutation). Wired into D1 + legacy rooms. Speaker approval grants server-side.
+- Error parity: legacy 503s use ROOM_MEDIA_UNCONFIGURED, matching D1.
+- Participant name added to issued tokens (fixes hex-ID video-tile labels).
+- Added backend-server/livekit/livekit.yaml.example + docs/infrastructure/livekit-self-host.md. Production wrangler.production.jsonc has no LIVEKIT_*; secrets must be set via wrangler secret. No provisioning/deploy.
+
+Android (:core:api, :feature:room):
+- PK: disconnectOpponent() when battle ends/not video; opponent room uses tuned RoomVoiceAudio options. Fixes audio leak after PK.
+- Room-audio mute re-applied on RoomEvent.TrackSubscribed.
+- RoomEvent.Disconnected (non-CLIENT_INITIATED) re-mints a fresh token and reconnects; addresses 2h-token reconnect failure. No forced full-reconnect removal for speaker grants.
+
+Verification: backend npm run typecheck (all workspaces) pass; @yugm/api 515/515; test:d1-worker 2/2; test:secrets 8/8; Android :core:api + :feature:room:compileDebugKotlin pass.
+
+NOT verified (needs live LiveKit + two devices): UpdateParticipant permission semantics, DeleteRoom/RemoveParticipant, token name, Android reconnect-on-Disconnected, audio tuning, TURN reachability, room-music parity. LiveKit cannot revoke already-issued tokens; with 2h TTL + server UpdateParticipant a bounded residual window remains. NOT addressed: LiveKit webhook consumer, eliminating full reconnect on speaker grant, production host provisioning.
+
+## 2026-11-26 - MongoDB and staging retired
+
+Removed MongoDB from the repository. Local and production both use the Cloudflare Worker with D1 and R2; there is no legacy MongoDB runtime, no staging target, and no data to transfer.
+
+- Deleted 365 legacy-only TypeScript files (Mongoose models, legacy routes/services/scripts/tests, legacy Node app entry) plus two Mongo-backed test runners; kept every file reachable from the Worker entrypoints.
+- Converted the seven still-reachable Mongoose imports to host-neutral types (uthAccounts, uthSession, cosmeticPresentation); pps/api/src now has zero mongoose imports.
+- Removed Mongo env config (MONGODB_URI, MONGODB_DB_NAME, MONGODB_MEDIA_MAX_BYTES, STORAGE_DRIVER=mongodb), the mongoose/mongodb-memory-server dependencies and legacy npm scripts; regenerated package-lock offline. docker-compose.yml no longer starts mongo.
+- Worker no longer disables itself on MONGODB_URI/REDIS_URL bindings (d1Api.ts, d1PkAlarm.ts). Stages are local and production only; the STAGING R2 bucket remains the media upload staging area.
+- Verification: backend typecheck all workspaces pass; 	est:d1-worker 2/2; production Worker dry-run passes; dry-run bundle contains 0 mongoose/mongodb references. Not run: live hosted API acceptance, legacy data reconciliation (no data to transfer).
+- No commit, push, deploy or provisioning. Historical staging/MongoDB references in dated evidence docs are preserved as evidence, not current claims.

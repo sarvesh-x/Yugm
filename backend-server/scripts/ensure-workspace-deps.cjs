@@ -6,8 +6,7 @@ const backendRoot = path.resolve(__dirname, "..");
 const requiredPackages = [
   "node_modules/@types/node/package.json",
   "node_modules/@yugm/shared/package.json",
-  "node_modules/express/package.json",
-  "node_modules/mongoose/package.json"
+  "node_modules/express/package.json"
 ];
 const missing = requiredPackages.filter((relativePath) => !existsSync(path.join(backendRoot, relativePath)));
 

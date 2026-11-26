@@ -6,6 +6,8 @@ import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.net.Uri
 import io.livekit.android.LiveKit
+import io.livekit.android.events.DisconnectReason
+import io.livekit.android.events.RoomEvent
 import io.livekit.android.room.Room
 import io.livekit.android.room.track.RemoteAudioTrack
 import io.livekit.android.room.track.LocalAudioTrack
@@ -61,6 +63,9 @@ object YugmMediaRoom {
     private var opponentRoomName: String? = null
     private val mutableSpeakingIdentities = MutableStateFlow<Set<String>>(emptySet())
     val speakingIdentities = mutableSpeakingIdentities.asStateFlow()
+    // Monotonic counter incremented when LiveKit reports an unexpected disconnect; callers re-mint a token and reconnect.
+    private val mutableMediaDisconnected = MutableStateFlow(0L)
+    val mediaDisconnected = mutableMediaDisconnected.asStateFlow()
 
     fun initialize(context: Context) {
         appContext = context.applicationContext
@@ -114,9 +119,27 @@ object YugmMediaRoom {
                     throw IllegalStateException("LiveKit could not publish your camera")
                 }
                 speakingObserver = scope.launch {
-                    nextRoom::activeSpeakers.flow.collect { speakers ->
-                        mutableSpeakingIdentities.value = speakers.mapNotNull { it.identity?.value }.toSet()
-                        if (roomAudioMuted) muteRemoteParticipants(nextRoom, true)
+                    launch {
+                        nextRoom::activeSpeakers.flow.collect { speakers ->
+                            mutableSpeakingIdentities.value = speakers.mapNotNull { it.identity?.value }.toSet()
+                            if (roomAudioMuted) muteRemoteParticipants(nextRoom, true)
+                        }
+                    }
+                    launch {
+                        nextRoom.events.events.collect { event ->
+                            when (event) {
+                                // A remote track subscribing must respect an already-active room-audio mute.
+                                is RoomEvent.TrackSubscribed -> if (roomAudioMuted) muteRemoteParticipants(nextRoom, true)
+                                is RoomEvent.Disconnected -> {
+                                    connected = false
+                                    // Our own disconnects are intentional; anything else needs a fresh token + reconnect.
+                                    if (event.reason != DisconnectReason.CLIENT_INITIATED) {
+                                        mutableMediaDisconnected.value = mutableMediaDisconnected.value + 1
+                                    }
+                                }
+                                else -> Unit
+                            }
+                        }
                     }
                 }
                 connected = true
@@ -334,7 +357,9 @@ object YugmMediaRoom {
         scope.launch {
             runCatching {
                 opponentRoom?.disconnect()
-                opponentRoom = LiveKit.create(context).also { it.connect(url, token) }
+                // Same tuned audio pipeline as the main room; it's subscribe-only, never publishing.
+                opponentRoom = LiveKit.create(context, RoomVoiceAudio.roomOptions(), RoomVoiceAudio.overrides())
+                    .also { it.connect(url, token) }
                 Timber.tag(TAG).d("Connected to opponent media room: $roomName")
             }.onFailure { Timber.tag(TAG).e(it, "Opponent media connection failed") }
         }

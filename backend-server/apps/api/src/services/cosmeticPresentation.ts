@@ -1,6 +1,3 @@
-import type { CosmeticDocument } from "../models/Cosmetic.js";
-import type { PublicAsset } from "./assets.js";
-
 const activeCosmeticKeys = {
   AVATAR_ASSET: "avatarAsset",
   AVATAR_FRAME: "avatarFrame",
@@ -28,10 +25,19 @@ const activeCosmeticKeys = {
   ROOM_AMBIENCE: "roomAmbience"
 } as const;
 
-export type RawCosmetic = Pick<
-  CosmeticDocument,
-  "type" | "name" | "coinPrice" | "rarity" | "preview" | "isActive" | "assetKind" | "assetUrl" | "assetRef"
-> & { _id: unknown };
+export type RawCosmetic = {
+  _id: unknown;
+  type: string;
+  name: string;
+  coinPrice: number;
+  rarity: string;
+  preview: string;
+  isActive: boolean;
+  rewardOnly?: boolean;
+  assetKind?: string;
+  assetUrl?: string;
+  assetRef?: string;
+};
 
 export interface PublicAssetVariant {
   name: string;
@@ -61,7 +67,20 @@ export interface PublicCosmetic {
  * the legacy `assetUrl` remains the compatibility fallback so older documents
  * and old clients keep working. The asset registry owns variants/version.
  */
-export function toPublicCosmetic<Asset extends Pick<PublicAsset, "id" | "version" | "publicUrl" | "variants">>(
+type CosmeticAssetView = {
+  id: string;
+  version: number;
+  publicUrl?: string;
+  variants: Array<{
+    name: string;
+    url: string;
+    contentType: string;
+    width?: number;
+    height?: number;
+  }>;
+};
+
+export function toPublicCosmetic<Asset extends CosmeticAssetView>(
   cosmetic: RawCosmetic, asset?: Asset
 ): PublicCosmetic {
   const assetUrl = asset?.publicUrl

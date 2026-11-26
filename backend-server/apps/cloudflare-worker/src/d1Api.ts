@@ -204,7 +204,7 @@ export function createD1ApiWorker(stage: ApiStage) {
   const service = stage === "local" ? "yugm-auth-local" : "yugm-api";
   return {
     async scheduled(controller: ScheduledController, env: D1ApiEnv) {
-      if (env.YUGM_STAGE !== stage || env.MONGODB_URI || env.REDIS_URL) return;
+      if (env.YUGM_STAGE !== stage) return;
       if (stage === "production" && !configuredProductionOrigin(env.YUGM_PRODUCTION_ORIGIN)) return;
       const now = new Date(Math.min(controller.scheduledTime, Date.now()));
       // Cron is the recovery path when no HTTP request has woken the PK alarm.
@@ -214,7 +214,12 @@ export function createD1ApiWorker(stage: ApiStage) {
         console.error("D1 PK alarm cron wake failed", error instanceof Error ? error.message : String(error));
       }
       if (controller.cron === "*/15 * * * *") {
-        await runD1Maintenance(env.AUTH_DB, now, mediaEnabled(env, stage) ? env.STAGING : undefined);
+        await runD1Maintenance(env.AUTH_DB, now, mediaEnabled(env, stage) ? env.STAGING : undefined, {
+          apiKey: env.LIVEKIT_API_KEY,
+          apiSecret: env.LIVEKIT_API_SECRET,
+          url: env.LIVEKIT_URL,
+          production: stage === "production"
+        });
       }
       if (controller.cron === "* * * * *" && env.YUGM_FCM_PUSH_ENABLED === "true" && env.FCM_PROJECT_ID &&
         env.FCM_CLIENT_EMAIL && env.FCM_PRIVATE_KEY) {

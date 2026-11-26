@@ -1,0 +1,27 @@
+# Production LiveKit (`livekit-server`) config example. Copy to livekit.yaml, replace placeholders.
+# Do NOT commit real secrets. The Worker needs only: LIVEKIT_URL=wss://<livekit-host>,
+# LIVEKIT_API_KEY=<key>, LIVEKIT_API_SECRET=<secret> (set as Cloudflare secrets, NOT in wrangler vars).
+# A LiveKit server can NOT run on Cloudflare Workers; host it on a VPS / always-on host.
+#
+# Host requirements:
+#   - Public IP, trusted TLS cert for a wss:// domain, separate TURN/TLS domain + cert.
+#   - Open UDP 50000-60000 (RTC media), TCP 7881, UDP/TCP 443 for TURN.
+#   - Reverse proxy/load balancer for 7880 (TLS). Redis for multi-node; single node works for pilots.
+port: 7880
+log_level: info
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 60000
+  use_external_ip: true
+# redis:                       # enable for multi-node
+#   address: redis:6379
+keys:
+  # <LIVEKIT_API_KEY>: <LIVEKIT_API_SECRET>
+  yugm: REPLACE_WITH_STRONG_RANDOM_SECRET
+turn:
+  enabled: true
+  tls_port: 443                 # set 5349 when not behind a 443 TCP load balancer
+  domain: REPLACE_WITH_TURN_DOMAIN
+  cert_file: /path/to/turn.crt
+  key_file: /path/to/turn.key

@@ -9,8 +9,6 @@ export interface D1PkAlarmEnv extends NativeRealtimeBindingEnv {
   AUTH_DB: D1Database;
   YUGM_STAGE: string;
   YUGM_PRODUCTION_ORIGIN?: string;
-  MONGODB_URI?: string;
-  REDIS_URL?: string;
 }
 
 function errorDetails(error: unknown) {
@@ -29,7 +27,6 @@ function configuredProductionOrigin(env: D1PkAlarmEnv) {
 }
 
 function alarmEnabled(env: D1PkAlarmEnv) {
-  if (env.MONGODB_URI || env.REDIS_URL) return false;
   if (env.YUGM_STAGE !== "local" && env.YUGM_STAGE !== "production") return false;
   return env.YUGM_STAGE === "local" || configuredProductionOrigin(env);
 }
