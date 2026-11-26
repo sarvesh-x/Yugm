@@ -1,5 +1,7 @@
 # 2026-11-26 — D1 Discover, Dating explore and final Users routes
 
+> Route counts and the remaining-PK list below are historical. Accept/start/ready were mounted later in [the PK accept/start/ready handoff](2026-11-26-d1-pk-accept-start-ready.md).
+
 ## Scope
 
 Completed the remaining non-PK route-parity slice requested for `/api/discover`, `/api/users` and `/api/dating`.

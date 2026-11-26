@@ -193,6 +193,12 @@ export async function runD1PkDeadlines(db: D1Database, now = new Date()) {
   }
 }
 
+/** Expires a pending invite with the same guarded commit used by deadline recovery. */
+export async function expireD1PkInvite(db: D1Database,
+  invite: Record<string, string | number | null>, now = new Date()) {
+  return expireInvite(db, invite, now.toISOString());
+}
+
 /** Earliest persisted PK deadline; active battles need a five-second tick. */
 export async function nextD1PkDeadline(db: D1Database, now = new Date()) {
   const [active, ready, countdown, completed, invite] = await Promise.all([

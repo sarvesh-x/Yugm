@@ -35,7 +35,7 @@ function presentUser(record: string) {
   };
 }
 
-function presentInvite(row: Row) {
+export function presentInvite(row: Row) {
   return {
     _id: row.source_id,
     battleId: row.battle_id,

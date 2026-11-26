@@ -4,9 +4,12 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireHttpSession } from "../middleware/httpAccessSession.js";
 import { validateBody } from "../middleware/validate.js";
+import { assertPkTransition } from "../services/pkStateMachine.js";
 import { asyncHandler, ErrorCode, HttpError, isValidObjectId, sendOk } from "../utils/http.js";
 import { createD1AccessSessionReader } from "./d1AccessSession.js";
 import { newId } from "./d1Cosmetics.js";
+import { expireD1PkInvite } from "./d1PkDeadlines.js";
+import { presentInvite } from "./d1PkReads.js";
 import { pkBattleJoins, pkBattleProjection, presentPkBattle, type BattleRow } from "./d1RoomPkHistory.js";
 
 type Row = Record<string, string | number | null>;
@@ -118,25 +121,72 @@ export function createD1PkWritesRouter(db: D1Database) {
     if (!isManager) throw new HttpError(403, "Only the room host or admin can cancel PK", ErrorCode.FORBIDDEN);
   };
 
-  const expireInvite = async (invite: Row) => {
-    const time = new Date().toISOString();
+  const acceptInvite = async (userId: string, inviteId: string) => {
+    const invite = await db.prepare("SELECT * FROM pk_invites WHERE source_id = ?").bind(inviteId).first<Row>();
+    if (!invite) throw new HttpError(404, "PK invite not found", ErrorCode.NOT_FOUND);
+    if (String(invite.invitee_user_id) !== userId) throw new HttpError(403, "Only invitee can accept", ErrorCode.FORBIDDEN);
+    if (invite.status !== "PENDING") throw new HttpError(409, "Invite is not pending", ErrorCode.CONFLICT);
+    if (invite.expires_at && Date.parse(String(invite.expires_at)) < Date.now()) {
+      await expireD1PkInvite(db, invite);
+      throw new HttpError(409, "PK invite expired", ErrorCode.CONFLICT);
+    }
     const battleId = String(invite.battle_id);
-    const inviteId = String(invite.source_id);
-    const roomIds = [String(invite.inviter_room_id), String(invite.invitee_room_id)];
-    const guard: Guard = {
-      sql: `EXISTS (SELECT 1 FROM pk_invites WHERE source_id = ? AND status = 'EXPIRED' AND responded_at = ?)
-        AND EXISTS (SELECT 1 FROM pk_battles WHERE source_id = ? AND status = 'EXPIRED' AND ended_at = ?)`,
-      params: [inviteId, time, battleId, time]
-    };
-    const committed = await db.batch([
-      db.prepare("UPDATE pk_invites SET status = 'EXPIRED', responded_at = ?, updated_at = ? WHERE source_id = ? AND status = 'PENDING' AND expires_at <= ?")
-        .bind(time, time, inviteId, time),
-      db.prepare("UPDATE pk_battles SET status = 'EXPIRED', ended_at = ?, updated_at = ?, state_version = state_version + 1 WHERE source_id = ? AND status = 'INVITED'")
-        .bind(time, time, battleId),
-      releaseRoomLocks(db, battleId, roomIds, time),
-      guardedEventInsert(db, guard, newId(), battleId, "PK_INVITE_EXPIRED", time, { userId: String(invite.invitee_user_id) })
+    const battle = await readBattle(battleId);
+    if (!battle) throw new HttpError(404, "PK battle not found", ErrorCode.NOT_FOUND);
+    const [leftRoom, rightRoom] = await db.batch([
+      db.prepare("SELECT status FROM rooms WHERE source_id = ?").bind(battle.left_room_id),
+      db.prepare("SELECT status FROM rooms WHERE source_id = ?").bind(battle.right_room_id)
     ]);
-    return Boolean(committed[1]?.meta?.changes);
+    if ((leftRoom.results[0] as Row | undefined)?.status !== "LIVE"
+      || (rightRoom.results[0] as Row | undefined)?.status !== "LIVE") {
+      throw new HttpError(400, "Both rooms must be live", ErrorCode.VALIDATION);
+    }
+    assertPkTransition(battle.status, "PREPARING");
+    const time = new Date().toISOString();
+    const nextVersion = Number(battle.state_version) + 1;
+    const guard: Guard = {
+      sql: `EXISTS (SELECT 1 FROM pk_invites WHERE source_id = ? AND status = 'ACCEPTED' AND responded_at = ?)
+        AND EXISTS (SELECT 1 FROM pk_battles WHERE source_id = ? AND status = 'PREPARING' AND state_version = ?)`,
+      params: [inviteId, time, battleId, nextVersion]
+    };
+    const hosts = [
+      [battle.left_host_id, battle.left_room_id, "LEFT", "A"],
+      [battle.right_host_id, battle.right_room_id, "RIGHT", "B"]
+    ] as const;
+    const committed = await db.batch([
+      db.prepare(`UPDATE pk_invites SET status = 'ACCEPTED', responded_at = ?, updated_at = ?
+        WHERE source_id = ? AND status = 'PENDING' AND expires_at > ?
+          AND EXISTS (SELECT 1 FROM pk_battles WHERE source_id = ? AND status = 'INVITED')`)
+        .bind(time, time, inviteId, time, battleId),
+      db.prepare(`UPDATE pk_battles SET status = 'PREPARING', state_version = state_version + 1, updated_at = ?
+        WHERE source_id = ? AND status = 'INVITED' AND state_version = ?`)
+        .bind(time, battleId, battle.state_version),
+      ...hosts.flatMap(([hostId, roomId, side, team]) => [
+        db.prepare(`UPDATE pk_participants SET room_id = ?, side = ?, role = 'HOST', is_ready = 0, joined_at = ?
+          WHERE battle_id = ? AND user_id = ?
+            AND EXISTS (SELECT 1 FROM pk_battles WHERE source_id = ? AND status = 'PREPARING' AND state_version = ?)`)
+          .bind(roomId, side, time, battleId, hostId, battleId, nextVersion),
+        db.prepare(`WITH guard AS (SELECT 1 AS allowed WHERE
+            EXISTS (SELECT 1 FROM pk_battles WHERE source_id = ? AND status = 'PREPARING' AND state_version = ?)
+            AND NOT EXISTS (SELECT 1 FROM pk_participants WHERE battle_id = ? AND user_id = ?))
+          INSERT INTO pk_participants (source_id, battle_id, user_id, room_id, side, role, is_ready, team_name, joined_at)
+          SELECT ?, ?, ?, ?, ?, 'HOST', 0, ?, ? FROM guard WHERE allowed = 1`)
+          .bind(battleId, nextVersion, battleId, hostId, newId(), battleId, hostId, roomId, side, team, time)
+      ]),
+      guardedEventInsert(db, guard, newId(), battleId, "PK_INVITE_ACCEPTED", time, { userId })
+    ]);
+    if (!committed[0]?.meta?.changes) {
+      throw new HttpError(409, "Invitation was already answered or expired", ErrorCode.CONFLICT);
+    }
+    if (!committed[1]?.meta?.changes) throw new HttpError(409, "PK is no longer available", ErrorCode.CONFLICT);
+    const [acceptedBattle, acceptedInvite] = await Promise.all([
+      readBattle(battleId),
+      db.prepare("SELECT * FROM pk_invites WHERE source_id = ?").bind(inviteId).first<Row>()
+    ]);
+    if (!acceptedBattle || !acceptedInvite) {
+      throw new HttpError(500, "Failed to load accepted PK invite", ErrorCode.INTERNAL);
+    }
+    return { battle: presentPkBattle(acceptedBattle), invite: presentInvite(acceptedInvite) };
   };
 
   router.use(authenticate);
@@ -237,7 +287,7 @@ export function createD1PkWritesRouter(db: D1Database) {
     if (invite.invitee_user_id !== userId) throw new HttpError(403, "Only invitee can reject", ErrorCode.FORBIDDEN);
     if (invite.status !== "PENDING") throw new HttpError(409, "Invite is not pending", ErrorCode.CONFLICT);
     if (invite.expires_at && Date.parse(String(invite.expires_at)) < Date.now()) {
-      await expireInvite(invite);
+      await expireD1PkInvite(db, invite);
       throw new HttpError(409, "PK invite expired", ErrorCode.CONFLICT);
     }
     const time = new Date().toISOString();
@@ -263,6 +313,14 @@ export function createD1PkWritesRouter(db: D1Database) {
     }
     if (!committed[1]?.meta?.changes) throw new HttpError(409, "PK is no longer available", ErrorCode.CONFLICT);
     sendOk(res, { rejected: true });
+  }));
+
+  router.post("/accept", validateBody(inviteActionSchema), asyncHandler(async (req, res) => {
+    sendOk(res, await acceptInvite(viewerId(res), req.body.inviteId as string));
+  }));
+
+  router.post("/start", validateBody(inviteActionSchema), asyncHandler(async (req, res) => {
+    sendOk(res, await acceptInvite(viewerId(res), req.body.inviteId as string));
   }));
 
   router.post("/cancel", validateBody(battleActionSchema), asyncHandler(async (req, res) => {
@@ -294,6 +352,68 @@ export function createD1PkWritesRouter(db: D1Database) {
     ]);
     if (!committed[0]?.meta?.changes) throw new HttpError(409, "PK changed while cancelling", ErrorCode.CONFLICT);
     sendOk(res, { cancelled: true });
+  }));
+
+  router.post("/:battleId/ready", validateBody(z.object({})), asyncHandler(async (req, res) => {
+    if (!isValidObjectId(req.params.battleId)) throw new HttpError(400, "Invalid battleId", ErrorCode.VALIDATION);
+    const battleId = req.params.battleId.toLowerCase();
+    const battle = await readBattle(battleId);
+    if (!battle || battle.status !== "PREPARING") {
+      throw new HttpError(409, "PK preparation is closed", ErrorCode.CONFLICT);
+    }
+    assertPkTransition(battle.status, "READY");
+    const userId = viewerId(res);
+    const participant = await db.prepare(`SELECT side, room_id FROM pk_participants
+      WHERE battle_id = ? AND user_id = ? AND left_at IS NULL LIMIT 1`).bind(battleId, userId).first<Row>();
+    if (!participant) throw new HttpError(403, "Only a PK participant can ready up", ErrorCode.FORBIDDEN);
+    const time = new Date().toISOString();
+    const readyGuard: Guard = {
+      sql: "EXISTS (SELECT 1 FROM pk_battles WHERE source_id = ? AND status = 'PREPARING' AND state_version = ?)",
+      params: [battleId, battle.state_version]
+    };
+    const committed = await db.batch([
+      db.prepare(`UPDATE pk_participants SET is_ready = 1 WHERE battle_id = ? AND user_id = ? AND left_at IS NULL
+        AND EXISTS (SELECT 1 FROM pk_battles WHERE source_id = ? AND status = 'PREPARING' AND state_version = ?)`)
+        .bind(battleId, userId, battleId, battle.state_version),
+      guardedEventInsert(db, readyGuard, newId(), battleId, "PK_READY", time, {
+        roomId: String(participant.room_id), userId, metadata: { side: participant.side }
+      }),
+      db.prepare(`SELECT COUNT(*) AS required, COALESCE(SUM(is_ready), 0) AS ready
+        FROM pk_participants WHERE battle_id = ? AND left_at IS NULL`).bind(battleId)
+    ]);
+    if (!committed[0]?.meta?.changes) {
+      throw new HttpError(403, "Only a PK participant can ready up", ErrorCode.FORBIDDEN);
+    }
+    const counts = committed[2].results[0] as { required: number; ready: number } | undefined;
+    if (counts && Number(counts.required) > 0 && Number(counts.ready) === Number(counts.required)) {
+      const readyVersion = Number(battle.state_version) + 1;
+      const countdownVersion = readyVersion + 1;
+      const countdownEndsAt = new Date(Date.now() + 3_000).toISOString();
+      const allReadyGuard: Guard = {
+        sql: "EXISTS (SELECT 1 FROM pk_battles WHERE source_id = ? AND status = 'READY' AND state_version = ?)",
+        params: [battleId, readyVersion]
+      };
+      const countdownGuard: Guard = {
+        sql: "EXISTS (SELECT 1 FROM pk_battles WHERE source_id = ? AND status = 'COUNTDOWN' AND state_version = ?)",
+        params: [battleId, countdownVersion]
+      };
+      await db.batch([
+        db.prepare(`UPDATE pk_battles SET status = 'READY', state_version = state_version + 1, updated_at = ?
+          WHERE source_id = ? AND status = 'PREPARING' AND state_version = ?`)
+          .bind(time, battleId, battle.state_version),
+        guardedEventInsert(db, allReadyGuard, newId(), battleId, "PK_READY", time, {
+          metadata: { participantsReady: Number(counts.ready) }
+        }),
+        db.prepare(`UPDATE pk_battles SET status = 'COUNTDOWN', countdown_ends_at = ?,
+          state_version = state_version + 1, updated_at = ?
+          WHERE source_id = ? AND status = 'READY' AND state_version = ?`)
+          .bind(countdownEndsAt, time, battleId, readyVersion),
+        guardedEventInsert(db, countdownGuard, newId(), battleId, "PK_COUNTDOWN", time)
+      ]);
+    }
+    const current = await readBattle(battleId);
+    if (!current) throw new HttpError(404, "PK battle not found", ErrorCode.NOT_FOUND);
+    sendOk(res, { battle: { ...presentPkBattle(current), myReady: true }, ready: true });
   }));
 
   router.post("/:battleId/close", validateBody(z.object({})), asyncHandler(async (req, res) => {

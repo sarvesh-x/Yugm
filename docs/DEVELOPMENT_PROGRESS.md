@@ -1,5 +1,9 @@
 # Development progress
 
+## 2026-11-26 — D1 PK accept, start and ready
+
+- Mounted `POST /api/pk/accept`, `POST /api/pk/start` and `POST /api/pk/:battleId/ready` with router-scoped auth before validation, one guarded invite-acceptance handler, shared deadline expiry, host participant upserts, the full `PREPARING → READY → COUNTDOWN` chain and legacy DTOs/messages. The audit is now 638 legacy / 637 D1 / 631 matched / 7 missing; `/api/pk` is 15 mounted / 7 missing. Both typechecks, both Worker suites, endpoint audit, strict secret check, fixture syntax check and `git diff --check` passed. No SQL migration was added and no commit, push, deploy or hosted operation was performed. [Scope, verification and boundary](handoffs/2026-11-26-d1-pk-accept-start-ready.md)
+
 ## 2026-11-26 — D1 Discover, Dating explore and final Users routes
 
 - Completed the requested non-PK parity slice: mounted all six `/api/discover` routes, added `GET /api/dating/explore`, and added `DELETE /api/users/me` plus `POST /api/users/friend-match/search`. Account deletion now guards the tombstone and auth-profile unset fields, terminates bonds, revokes sessions/device tokens, uses injected best-effort realtime and Firebase callbacks, and returns the legacy 30-day schedule. Friend-match search preserves state races and guarded room creation but stays WAITING without a live presence adapter. The audit is now 638 legacy / 634 D1 / 628 matched / 10 missing; only deferred `/api/pk` writes remain. Typechecks, both Worker suites, endpoint audit, strict secret check, fixture syntax checks and `git diff --check` passed. [Scope, verification and boundary](handoffs/2026-11-26-d1-discover-dating-users-completion.md)

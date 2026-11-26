@@ -984,12 +984,21 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor, gamer = 
   // the authoritative HTTP commit and guarded batches.
   const pkWriteRoomId = newId();
   const pkOtherRoomId = newId();
+  const pkEndedRoomId = newId();
   const pkRejectBattleId = newId();
   const pkExpiredBattleId = newId();
   const pkCancelBattleId = newId();
   const pkCloseBattleId = newId();
+  const pkAcceptBattleId = newId();
+  const pkStartBattleId = newId();
+  const pkAcceptExpiredBattleId = newId();
+  const pkNonLiveBattleId = newId();
   const pkRejectInviteId = newId();
   const pkExpiredInviteId = newId();
+  const pkAcceptInviteId = newId();
+  const pkStartInviteId = newId();
+  const pkAcceptExpiredInviteId = newId();
+  const pkNonLiveInviteId = newId();
   const pkExpired = new Date(now.getTime() - 60_000).toISOString();
   let startedBattleId = "";
   try {
@@ -1003,6 +1012,12 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor, gamer = 
          mic_locked, vip_only, created_at, updated_at)
         VALUES (?, ?, 'desc', 'VOICE', ?, 'chill', '[]', 'en', 'LIVE', 'PUBLIC', 8, 1, 0, ?, 1, 0, 0, ?, ?)`)
         .bind(id, title, host, id, time, time)),
+      db.prepare(`INSERT INTO rooms
+        (source_id, title, description, type, host_id, category, tags, language, status, visibility,
+         max_speakers, participant_count, is_duet, livekit_room_name, allow_audience_mic_requests,
+         mic_locked, vip_only, created_at, updated_at)
+        VALUES (?, 'PK Ended', 'desc', 'VOICE', ?, 'chill', '[]', 'en', 'ENDED', 'PUBLIC', 8, 1, 0, ?, 1, 0, 0, ?, ?)`)
+        .bind(pkEndedRoomId, visitorId, pkEndedRoomId, time, time),
       db.prepare(`INSERT INTO room_participants
         (source_id, room_id, user_id, role, mic_enabled, moderator_muted, seat_index, camera_enabled, joined_at)
         VALUES (?, ?, ?, 'HOST', 1, 0, 0, 0, ?)`).bind(newId(), pkWriteRoomId, ownerId, time),
@@ -1013,7 +1028,10 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor, gamer = 
         [pkRejectBattleId, "INVITED", pkPast],
         [pkExpiredBattleId, "INVITED", pkPast],
         [pkCancelBattleId, "PREPARING", pkPast],
-        [pkCloseBattleId, "COMPLETED", pkPast]
+        [pkCloseBattleId, "COMPLETED", pkPast],
+        [pkAcceptBattleId, "INVITED", null],
+        [pkStartBattleId, "INVITED", null],
+        [pkAcceptExpiredBattleId, "INVITED", null]
       ].map(([id, status, ended]) => db.prepare(`INSERT INTO pk_battles (source_id, battle_code, title, mode, format, scope, team_size, status,
         battle_type, duration_seconds, in_room_battle, state_version, event_sequence, termination_reason,
         started_by_user_id, left_room_id, right_room_id, left_host_id, right_host_id, left_score, right_score,
@@ -1021,18 +1039,33 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor, gamer = 
         VALUES (?, ?, 'PK Write Fixture', 'VOTE', 'PLAYER', 'CROSS_ROOM', 1, ?, 'VOICE', 180, 0, 1, 0, '',
         ?, ?, ?, ?, ?, 0, 0, ?, ?, ?)`)
         .bind(id, id, status, ownerId, pkWriteRoomId, pkOtherRoomId, ownerId, visitorId, ended, time, time)),
+      db.prepare(`INSERT INTO pk_battles (source_id, battle_code, title, mode, format, scope, team_size, status,
+        battle_type, duration_seconds, in_room_battle, state_version, event_sequence, termination_reason,
+        started_by_user_id, left_room_id, right_room_id, left_host_id, right_host_id, left_score, right_score,
+        ended_at, created_at, updated_at)
+        VALUES (?, ?, 'PK Ended Room', 'VOTE', 'PLAYER', 'CROSS_ROOM', 1, 'INVITED', 'VOICE', 180, 0, 1, 0, '',
+        ?, ?, ?, ?, ?, 0, 0, ?, ?, ?)`)
+        .bind(pkNonLiveBattleId, pkNonLiveBattleId, ownerId, pkWriteRoomId, pkEndedRoomId, ownerId, visitorId, null, time, time),
       ...[
-        [pkRejectInviteId, pkRejectBattleId, pkFuture],
-        [pkExpiredInviteId, pkExpiredBattleId, pkExpired]
-      ].map(([id, battleId, expires]) => db.prepare(`INSERT INTO pk_invites (source_id, battle_id, inviter_user_id, invitee_user_id,
+        [pkRejectInviteId, pkRejectBattleId, pkFuture, pkOtherRoomId],
+        [pkExpiredInviteId, pkExpiredBattleId, pkExpired, pkOtherRoomId],
+        [pkAcceptInviteId, pkAcceptBattleId, pkFuture, pkOtherRoomId],
+        [pkStartInviteId, pkStartBattleId, pkFuture, pkOtherRoomId],
+        [pkAcceptExpiredInviteId, pkAcceptExpiredBattleId, pkExpired, pkOtherRoomId],
+        [pkNonLiveInviteId, pkNonLiveBattleId, pkFuture, pkEndedRoomId]
+      ].map(([id, battleId, expires, inviteeRoomId]) => db.prepare(`INSERT INTO pk_invites (source_id, battle_id, inviter_user_id, invitee_user_id,
         inviter_room_id, invitee_room_id, status, expires_at, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?)`)
-        .bind(id, battleId, ownerId, visitorId, pkWriteRoomId, pkOtherRoomId, expires, time, time))
+        .bind(id, battleId, ownerId, visitorId, pkWriteRoomId, inviteeRoomId, expires, time, time))
     ]);
 
-    for (const path of ["/api/pk/room-start", "/api/pk/reject", "/api/pk/cancel", `/api/pk/${pkCloseBattleId}/close`]) {
+    for (const path of ["/api/pk/room-start", "/api/pk/reject", "/api/pk/accept", "/api/pk/start",
+      "/api/pk/cancel", `/api/pk/${pkCloseBattleId}/ready`, `/api/pk/${pkCloseBattleId}/close`]) {
       await request(path, 401, { body: {} });
     }
+    await requestAs(visitor, "/api/pk/accept", 422, { body: { inviteId: "bad" } });
+    await requestAs(visitor, "/api/pk/start", 422, { body: {} });
+    await requestAs(owner, "/api/pk/not-an-id/ready", 400, { body: {} });
 
     await requestAs(owner, "/api/pk/room-start", 400, {
       body: { roomId: pkWriteRoomId, leftPlayerId: ownerId, rightPlayerId: visitorId, mode: "VOTE", durationSeconds: 1800 }
@@ -1080,6 +1113,72 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor, gamer = 
     assert.equal(await db.prepare("SELECT status FROM pk_battles WHERE source_id = ?").bind(pkExpiredBattleId).first("status"), "EXPIRED");
     assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM pk_events WHERE battle_id = ? AND event_type = 'PK_INVITE_EXPIRED'").bind(pkExpiredBattleId).first("count"), 1);
 
+    // Accept and start share one guarded invite acceptance handler.
+    const notInvitee = await requestAs(owner, "/api/pk/accept", 403, { body: { inviteId: pkAcceptInviteId } });
+    assert.equal(notInvitee.error.message, "Only invitee can accept");
+    const accepted = (await requestAs(visitor, "/api/pk/accept", 200, { body: { inviteId: pkAcceptInviteId } })).data;
+    assert.equal(accepted.battle.status, "PREPARING");
+    assert.equal(accepted.battle.stateVersion, 2);
+    assert.equal(accepted.invite._id, pkAcceptInviteId);
+    assert.equal(accepted.invite.status, "ACCEPTED");
+    assert.ok(accepted.invite.respondedAt);
+    assert.equal(await db.prepare("SELECT status FROM pk_battles WHERE source_id = ?").bind(pkAcceptBattleId).first("status"), "PREPARING");
+    assert.equal(await db.prepare("SELECT state_version FROM pk_battles WHERE source_id = ?").bind(pkAcceptBattleId).first("state_version"), 2);
+    const acceptedHosts = (await db.prepare("SELECT side, role, is_ready FROM pk_participants WHERE battle_id = ? ORDER BY side")
+      .bind(pkAcceptBattleId).all()).results;
+    assert.deepEqual(acceptedHosts.map(row => row.side), ["LEFT", "RIGHT"]);
+    assert.ok(acceptedHosts.every(row => row.role === "HOST" && row.is_ready === 0));
+    assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM pk_events WHERE battle_id = ? AND event_type = 'PK_INVITE_ACCEPTED'")
+      .bind(pkAcceptBattleId).first("count"), 1);
+    const acceptedReplay = await requestAs(visitor, "/api/pk/accept", 409, { body: { inviteId: pkAcceptInviteId } });
+    assert.equal(acceptedReplay.error.message, "Invite is not pending");
+    assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM pk_events WHERE battle_id = ? AND event_type = 'PK_INVITE_ACCEPTED'")
+      .bind(pkAcceptBattleId).first("count"), 1);
+    assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM pk_participants WHERE battle_id = ?").bind(pkAcceptBattleId).first("count"), 2);
+
+    const startedViaStart = (await requestAs(visitor, "/api/pk/start", 200, { body: { inviteId: pkStartInviteId } })).data;
+    assert.equal(startedViaStart.battle.status, "PREPARING");
+    assert.equal(startedViaStart.invite._id, pkStartInviteId);
+    assert.equal(await db.prepare("SELECT status FROM pk_invites WHERE source_id = ?").bind(pkStartInviteId).first("status"), "ACCEPTED");
+
+    const expiredAccept = await requestAs(visitor, "/api/pk/accept", 409, { body: { inviteId: pkAcceptExpiredInviteId } });
+    assert.equal(expiredAccept.error.message, "PK invite expired");
+    assert.equal(await db.prepare("SELECT status FROM pk_invites WHERE source_id = ?").bind(pkAcceptExpiredInviteId).first("status"), "EXPIRED");
+    assert.equal(await db.prepare("SELECT status FROM pk_battles WHERE source_id = ?").bind(pkAcceptExpiredBattleId).first("status"), "EXPIRED");
+    assert.equal(await db.prepare("SELECT event_sequence FROM pk_battles WHERE source_id = ?").bind(pkAcceptExpiredBattleId).first("event_sequence"), 1);
+    assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM pk_events WHERE battle_id = ? AND event_type = 'PK_INVITE_EXPIRED'")
+      .bind(pkAcceptExpiredBattleId).first("count"), 1);
+    const nonLive = await requestAs(visitor, "/api/pk/accept", 400, { body: { inviteId: pkNonLiveInviteId } });
+    assert.equal(nonLive.error.message, "Both rooms must be live");
+
+    // Ready completes PREPARING -> READY -> COUNTDOWN; the DO alarm continues from there.
+    const nonParticipant = await requestAs(gamer, `/api/pk/${startedBattleId}/ready`, 403, { body: {} });
+    assert.equal(nonParticipant.error.message, "Only a PK participant can ready up");
+    const closedReady = await requestAs(owner, `/api/pk/${pkRejectBattleId}/ready`, 409, { body: {} });
+    assert.equal(closedReady.error.message, "PK preparation is closed");
+    const firstReady = (await requestAs(owner, `/api/pk/${startedBattleId}/ready`, 200, { body: {} })).data;
+    assert.equal(firstReady.ready, true);
+    assert.equal(firstReady.battle.status, "PREPARING");
+    assert.equal(firstReady.battle.myReady, true);
+    assert.equal(await db.prepare("SELECT is_ready FROM pk_participants WHERE battle_id = ? AND user_id = ?")
+      .bind(startedBattleId, ownerId).first("is_ready"), 1);
+    assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM pk_events WHERE battle_id = ? AND event_type = 'PK_READY'")
+      .bind(startedBattleId).first("count"), 1);
+    const allReady = (await requestAs(visitor, `/api/pk/${startedBattleId}/ready`, 200, { body: {} })).data;
+    assert.equal(allReady.battle.status, "COUNTDOWN");
+    assert.equal(allReady.battle.stateVersion, 3);
+    assert.ok(allReady.battle.countdownEndsAt);
+    assert.equal(allReady.battle.myReady, true);
+    assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM pk_events WHERE battle_id = ? AND event_type = 'PK_READY'")
+      .bind(startedBattleId).first("count"), 3);
+    assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM pk_events WHERE battle_id = ? AND event_type = 'PK_COUNTDOWN'")
+      .bind(startedBattleId).first("count"), 1);
+    assert.equal((await requestAs(owner, `/api/pk/active/${pkWriteRoomId}`, 200)).data.battle.myReady, true);
+    const readyReplay = await requestAs(visitor, `/api/pk/${startedBattleId}/ready`, 409, { body: {} });
+    assert.equal(readyReplay.error.message, "PK preparation is closed");
+    assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM pk_events WHERE battle_id = ? AND event_type = 'PK_COUNTDOWN'")
+      .bind(startedBattleId).first("count"), 1);
+
     await requestAs(visitor, "/api/pk/cancel", 403, { body: { battleId: pkCancelBattleId } });
     assert.deepEqual((await requestAs(owner, "/api/pk/cancel", 200, { body: { battleId: pkCancelBattleId } })).data, { cancelled: true });
     assert.equal(await db.prepare("SELECT status FROM pk_battles WHERE source_id = ?").bind(pkCancelBattleId).first("status"), "CANCELLED");
@@ -1101,16 +1200,22 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor, gamer = 
     assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM pk_events WHERE battle_id = ? AND event_type = 'PK_CLOSED'").bind(pkCloseBattleId).first("count"), 1);
     await requestAs(owner, "/api/pk/not-an-id/close", 400, { body: {} });
   } finally {
-    await db.prepare("UPDATE rooms SET active_pk_id = NULL WHERE source_id IN (?, ?)").bind(pkWriteRoomId, pkOtherRoomId).run();
-    await db.prepare("DELETE FROM pk_events WHERE battle_id IN (?, ?, ?, ?, ?)")
-      .bind(startedBattleId ?? "", pkRejectBattleId, pkExpiredBattleId, pkCancelBattleId, pkCloseBattleId).run();
-    await db.prepare("DELETE FROM pk_invites WHERE battle_id IN (?, ?, ?)").bind(pkRejectBattleId, pkExpiredBattleId, pkCancelBattleId).run();
-    await db.prepare("DELETE FROM pk_participants WHERE battle_id IN (?, ?, ?, ?, ?)")
-      .bind(startedBattleId ?? "", pkRejectBattleId, pkExpiredBattleId, pkCancelBattleId, pkCloseBattleId).run();
-    await db.prepare("DELETE FROM pk_battles WHERE source_id IN (?, ?, ?, ?, ?)")
-      .bind(startedBattleId ?? "", pkRejectBattleId, pkExpiredBattleId, pkCancelBattleId, pkCloseBattleId).run();
+    await db.prepare("UPDATE rooms SET active_pk_id = NULL WHERE source_id IN (?, ?, ?)")
+      .bind(pkWriteRoomId, pkOtherRoomId, pkEndedRoomId).run();
+    await db.prepare("DELETE FROM pk_events WHERE battle_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(startedBattleId ?? "", pkRejectBattleId, pkExpiredBattleId, pkCancelBattleId, pkCloseBattleId,
+        pkAcceptBattleId, pkStartBattleId, pkAcceptExpiredBattleId, pkNonLiveBattleId).run();
+    await db.prepare("DELETE FROM pk_invites WHERE battle_id IN (?, ?, ?, ?, ?, ?, ?)")
+      .bind(pkRejectBattleId, pkExpiredBattleId, pkCancelBattleId, pkAcceptBattleId, pkStartBattleId,
+        pkAcceptExpiredBattleId, pkNonLiveBattleId).run();
+    await db.prepare("DELETE FROM pk_participants WHERE battle_id IN (?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(startedBattleId ?? "", pkRejectBattleId, pkExpiredBattleId, pkCancelBattleId, pkCloseBattleId,
+        pkAcceptBattleId, pkStartBattleId, pkAcceptExpiredBattleId).run();
+    await db.prepare("DELETE FROM pk_battles WHERE source_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(startedBattleId ?? "", pkRejectBattleId, pkExpiredBattleId, pkCancelBattleId, pkCloseBattleId,
+        pkAcceptBattleId, pkStartBattleId, pkAcceptExpiredBattleId, pkNonLiveBattleId).run();
     await db.prepare("DELETE FROM room_participants WHERE room_id IN (?, ?)").bind(pkWriteRoomId, pkOtherRoomId).run();
-    await db.prepare("DELETE FROM rooms WHERE source_id IN (?, ?)").bind(pkWriteRoomId, pkOtherRoomId).run();
+    await db.prepare("DELETE FROM rooms WHERE source_id IN (?, ?, ?)").bind(pkWriteRoomId, pkOtherRoomId, pkEndedRoomId).run();
   }
 
   // D1 PK deadline recovery runs from a singleton Durable Object alarm. Socket.IO
