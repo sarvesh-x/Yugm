@@ -1,5 +1,21 @@
 # Development progress
 
+## 2026-11-26 — D1 voice-note and recording uploads
+
+- Mounted `POST /api/upload/voice-note` and `POST /api/upload/recording` with auth before multipart, legacy extension/MIME validation, the Worker 10 MB cap, server-derived R2 keys in `public-media`, and the `{ url, type, storage }` response. No signature check was added because neither legacy handler has one; public media rows commit before the response. `/api/upload` is now 5/7 and the audit reports 612 of 638 legacy patterns mounted, with 26 remaining outside admin. Typecheck, Worker fixture suite, endpoint audit, strict secret check and `git diff --check` passed. Two test-only fixture assertions were made order-independent. [Routes and verification](handoffs/2026-11-26-d1-voice-note-and-recording-uploads.md)
+
+## 2026-11-26 — D1 profile-media and story uploads
+
+- Mounted `POST /api/upload/profile-media` and `POST /api/upload/story` with auth before multipart, legacy image/video validation, a 10 MB Worker cap, server-derived R2 `gallery` keys and the `{ url, type, storage }` response. Public media object and variant rows commit before the response; a shared `nextD1MediaVersion` helper now allocates owner/category versions for AVATAR, COVER and GALLERY, which also fixes repeated cover uploads. `/api/upload` is now 3/7 and the audit reports 610 of 638 legacy patterns mounted, with 28 remaining outside admin. Typecheck, Worker fixture suite, endpoint audit, strict secret check and `git diff --check` passed. [Routes and verification](handoffs/2026-11-26-d1-profile-media-and-story-uploads.md)
+
+## 2026-11-26 — D1 cover upload
+
+- Mounted `POST /api/upload/cover` with auth before multipart, legacy 5 MB/extension/MIME/signature checks, a server-derived R2 `covers` key and the `{ url, storage }` response. The route registers a public media object and variant before returning; the R2 object is removed if that commit fails. `/api/upload` is now 1/7 and the route audit reports 608 of 638 legacy patterns mounted, with 30 remaining outside admin. Typecheck, Worker fixture suite, endpoint audit, strict secret check and `git diff --check` passed. [Routes and verification](handoffs/2026-11-26-d1-cover-upload.md)
+
+## 2026-11-26 — D1 PK read routes
+
+- Mounted eight read-only `/api/pk` patterns on the shared D1 Worker with auth before validation, legacy active/history/event/leaderboard DTOs, pending-invite and viewer vote/ready reads, and host-neutral LiveKit-compatible media sessions. PK writes, deadlines, active-battle job ending and socket fan-out stay legacy-only. The route audit reports 607 of 638 legacy patterns mounted, with 31 remaining outside admin. Typecheck, Worker fixture suite, endpoint audit, strict secret check and `git diff --check` passed. [Routes and verification](handoffs/2026-11-26-d1-pk-read-routes.md)
+
 ## 2026-11-25 — D1 inbox and profile activity
 
 - Mounted five inbox mutation routes and three profile routes. The route audit reports 542 of 638 legacy patterns mounted, with 96 remaining outside admin. Applied `0035` to the backed-up recovered emulator database and confirmed no pending migrations. Backend typechecking and both Worker suites passed. [Routes and verification](handoffs/2026-11-25-d1-inbox-profile-activity.md)

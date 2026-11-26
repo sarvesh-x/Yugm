@@ -434,7 +434,12 @@ export async function verifyD1AdminAssets(db, worker, secret, png, razorpayWebho
   await json(`/reactions/${owner}`, 200, "DELETE");
   assert.equal(await stored.get(createdReaction.assetStorageKey), null);
 
-  const user = await db.prepare("SELECT source_id, is_verified FROM users ORDER BY source_id LIMIT 1").first();
+  // Earlier fixtures may already have created a KYC row for the lexicographically
+  // first user. Pick a user without one so the detail assertion is deterministic.
+  const user = await db.prepare(`SELECT u.source_id, u.is_verified FROM users AS u
+    WHERE NOT EXISTS (SELECT 1 FROM creator_payout_kycs AS k WHERE k.user_id = u.source_id)
+    ORDER BY u.source_id LIMIT 1`).first();
+  assert.ok(user);
   const verificationId = id();
   const creatorKycId = id();
   const time = new Date().toISOString();

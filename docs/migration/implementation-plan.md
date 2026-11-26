@@ -1,6 +1,6 @@
 # Yugm behavior-preserving Cloudflare migration on a $0 budget
 
-**Updated:** 2026-11-24
+**Updated:** 2026-11-26
 
 **Status:** Active 18-phase plan for local work and isolated validation under the owner's behavior-preservation directive. The [$0 budget decision](../decisions/0008-zero-spend-cloudflare-migration.md) still governs activation. Provider activation, production data access, cutover and removal have separate approvals.
 
@@ -23,6 +23,8 @@ The owner set the execution order below. Complete the local contract work for th
 | 5 | **Chat** | Conversation visibility, send/history/read, mute/block, attachments and delivery through the supported legacy and native transports. Reuse the existing direct-message and push fixtures. |
 | 6 | **Rooms** | Discovery-to-join, permissions, seats, presence, voice/video, moderation, reconnect and PK lifecycle. |
 | Later | **Remaining journeys** | Order the remaining social, media, progression, commerce and admin journeys by their dependencies after the six above. Arcade writes are mounted on the local D1 Worker; receiving-client realtime remains open. |
+
+The Rooms journey now includes eight read-only PK patterns verified with local D1 fixtures. PK writes, deadline recovery, active-battle job ending and PK socket fan-out remain legacy boundaries; do not treat the PK lifecycle as migrated until those paths have D1-compatible evidence. Direct cover, profile-media, story, voice-note and recording uploads are mounted as bounded R2/registry slices with owner/category version allocation; the avatar and trust-verification upload handlers, managed `COVER` sessions and live Android upload QA remain open. [Cover upload evidence](handoffs/2026-11-26-d1-cover-upload.md) · [Profile-media and story evidence](handoffs/2026-11-26-d1-profile-media-and-story-uploads.md) · [Audio upload evidence](handoffs/2026-11-26-d1-voice-note-and-recording-uploads.md)
 
 ## Phase gates
 

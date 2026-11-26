@@ -833,7 +833,7 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     assert.equal(left.data.clan, null);
     assert.equal(await db.prepare("SELECT 1 FROM clans WHERE source_id = ?").bind(leaveClan.id).first(), null);
     const { data: gamer } = await signIn(true, project, 200, "games-writes-fixture");
-    await verifyD1AppEndpoints(db, request, returning, visitor, gamer);
+    await verifyD1AppEndpoints(db, request, returning, visitor, gamer, worker);
     await verifyD1Bonds(db, request, returning, visitor);
     await verifyD1Wallet(db, request, returning, visitor);
     assert.equal(googleConsumes, 1);

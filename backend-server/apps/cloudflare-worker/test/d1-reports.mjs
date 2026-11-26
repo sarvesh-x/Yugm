@@ -22,6 +22,8 @@ export async function verifyD1Reports(db, request, secret, host, second, third, 
       (source_id, email, display_name, role, status, is_super_admin, two_factor_enabled)
       VALUES (?, ?, 'Report fixture', ?, 'ACTIVE', 0, 0)`).bind(key, `${key}@fixture.test`, role))
   ]);
+  const initialReportCount = await db.prepare("SELECT COUNT(*) AS count FROM reports WHERE target_user_id = ?")
+    .bind(targetId).first("count");
   const reportPath = `/api/rooms/${room}/report`;
   const as = (account, path, status, body) => request(path, status, { accessToken: account.accessToken, body });
   const payload = { targetUserId: targetId, reason: "Fixture abuse report" };
@@ -41,7 +43,7 @@ export async function verifyD1Reports(db, request, secret, host, second, third, 
   try {
     await as(third, "/api/reports", 500, payload);
     assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM reports WHERE target_user_id = ?")
-      .bind(targetId).first("count"), 3);
+      .bind(targetId).first("count"), initialReportCount + 3);
   } finally {
     await db.prepare("DROP TRIGGER fixture_report_mute_failure").run();
   }

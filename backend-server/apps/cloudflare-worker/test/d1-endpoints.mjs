@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHmac, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 
 const newId = () => randomBytes(12).toString("hex");
 const livekitKey = "fixture-livekit-key";
@@ -14,7 +14,7 @@ function readLiveKitToken(token) {
   };
 }
 
-export async function verifyD1AppEndpoints(db, request, owner, visitor, gamer = owner) {
+export async function verifyD1AppEndpoints(db, request, owner, visitor, gamer = owner, worker) {
   const ownerId = owner.user.id;
   const visitorId = visitor.user.id;
   const gamerId = gamer.user.id;
@@ -801,6 +801,158 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor, gamer = 
   const pkHistoryBattles = (await requestAs(owner, `/api/users/${visitorId}/pk-history`, 200)).data.battles;
   assert.ok(Array.isArray(pkHistoryBattles));
 
+  // PK read routes (D1). Writes, deadlines, and Socket.IO fan-out remain legacy-only.
+  const pkLeftRoomId = newId();
+  const pkRightRoomId = newId();
+  const pkOpponentRoomId = newId();
+  const pkActiveBattleId = newId();
+  const pkEndedBattleId = newId();
+  const pkInviteId = newId();
+  const pkEventId = newId();
+  const pkVoteId = newId();
+  const pkLeaderboardId = newId();
+  const pkPast = new Date(now.getTime() - 60_000).toISOString();
+  const pkFuture = new Date(now.getTime() + 60_000).toISOString();
+  try {
+    await db.batch([
+      ...[
+        [pkLeftRoomId, "PK Left", ownerId],
+        [pkRightRoomId, "PK Right", visitorId],
+        [pkOpponentRoomId, "PK Opponent", visitorId]
+      ].map(([id, title, host]) => db.prepare(`INSERT INTO rooms
+        (source_id, title, description, type, host_id, category, tags, language, status, visibility,
+         max_speakers, participant_count, is_duet, livekit_room_name, allow_audience_mic_requests,
+         mic_locked, vip_only, created_at, updated_at)
+        VALUES (?, ?, 'desc', 'VIDEO', ?, 'chill', '[]', 'en', 'LIVE', 'PUBLIC', 8, 1, 0, ?, 1, 0, 0, ?, ?)`)
+        .bind(id, title, host, id, time, time)),
+      db.prepare(`INSERT INTO room_participants
+        (source_id, room_id, user_id, role, mic_enabled, moderator_muted, seat_index, camera_enabled, joined_at)
+        VALUES (?, ?, ?, 'HOST', 1, 0, 0, 0, ?)`).bind(newId(), pkLeftRoomId, ownerId, time),
+      db.prepare(`INSERT INTO room_participants
+        (source_id, room_id, user_id, role, mic_enabled, moderator_muted, seat_index, camera_enabled, joined_at)
+        VALUES (?, ?, ?, 'HOST', 1, 0, 0, 0, ?)`).bind(newId(), pkRightRoomId, visitorId, time),
+      db.prepare(`INSERT INTO room_participants
+        (source_id, room_id, user_id, role, mic_enabled, moderator_muted, seat_index, camera_enabled, joined_at)
+        VALUES (?, ?, ?, 'HOST', 1, 0, 0, 0, ?)`).bind(newId(), pkOpponentRoomId, visitorId, time),
+      db.prepare(`INSERT INTO pk_battles (source_id, battle_code, title, mode, format, scope, team_size, status,
+        battle_type, duration_seconds, in_room_battle, state_version, event_sequence, termination_reason,
+        started_by_user_id, left_room_id, right_room_id, left_host_id, right_host_id, left_score, right_score,
+        winner_side, winner_user_id, ended_at, created_at)
+        VALUES (?, ?, 'PK Fixture', 'VOTE', 'LIVESTREAM', 'CROSS_ROOM', 1, 'ACTIVE', 'VIDEO', 180, 0, 2, 1, '',
+        ?, ?, ?, ?, ?, 5, 10, NULL, NULL, NULL, ?)`)
+        .bind(pkActiveBattleId, pkActiveBattleId, ownerId, pkLeftRoomId, pkRightRoomId, ownerId, visitorId, time),
+      db.prepare(`INSERT INTO pk_battles (source_id, battle_code, title, mode, format, scope, team_size, status,
+        battle_type, duration_seconds, in_room_battle, state_version, event_sequence, termination_reason,
+        started_by_user_id, left_room_id, right_room_id, left_host_id, right_host_id, left_score, right_score,
+        winner_side, winner_user_id, ended_at, created_at)
+        VALUES (?, ?, 'PK Fixture Ended', 'VOTE', 'LIVESTREAM', 'CROSS_ROOM', 1, 'ENDED', 'VIDEO', 180, 0, 3, 1, '',
+        ?, ?, ?, ?, ?, 12, 4, 'LEFT', ?, ?, ?)`)
+        .bind(pkEndedBattleId, pkEndedBattleId, ownerId, pkLeftRoomId, pkRightRoomId, ownerId, visitorId, ownerId, pkPast, pkPast),
+      db.prepare(`INSERT INTO pk_participants (source_id, battle_id, user_id, room_id, side, role, is_ready, team_name, joined_at, left_at)
+        VALUES (?, ?, ?, ?, 'LEFT', 'HOST', 1, 'A', ?, NULL)`).bind(newId(), pkActiveBattleId, ownerId, pkLeftRoomId, time),
+      db.prepare(`INSERT INTO pk_participants (source_id, battle_id, user_id, room_id, side, role, is_ready, team_name, joined_at, left_at)
+        VALUES (?, ?, ?, ?, 'RIGHT', 'HOST', 0, 'B', ?, NULL)`).bind(newId(), pkActiveBattleId, visitorId, pkRightRoomId, time),
+      db.prepare(`INSERT INTO pk_participants (source_id, battle_id, user_id, room_id, side, role, is_ready, team_name, joined_at, left_at)
+        VALUES (?, ?, ?, ?, 'LEFT', 'HOST', 0, 'A', ?, NULL)`).bind(newId(), pkEndedBattleId, ownerId, pkLeftRoomId, pkPast),
+      db.prepare(`INSERT INTO pk_participants (source_id, battle_id, user_id, room_id, side, role, is_ready, team_name, joined_at, left_at)
+        VALUES (?, ?, ?, ?, 'RIGHT', 'HOST', 0, 'B', ?, NULL)`).bind(newId(), pkEndedBattleId, visitorId, pkRightRoomId, pkPast),
+      db.prepare(`INSERT INTO pk_invites (source_id, battle_id, inviter_user_id, invitee_user_id,
+        inviter_room_id, invitee_room_id, status, expires_at, responded_at, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?, NULL, ?, ?)`)
+        .bind(pkInviteId, pkActiveBattleId, ownerId, visitorId, pkLeftRoomId, pkRightRoomId, pkFuture, time, time),
+      db.prepare(`INSERT INTO pk_votes (source_id, battle_id, voter_id, side, room_id, created_at, updated_at)
+        VALUES (?, ?, ?, 'RIGHT', ?, ?, ?)`).bind(pkVoteId, pkActiveBattleId, ownerId, pkRightRoomId, time, time),
+      db.prepare(`INSERT INTO pk_events (source_id, battle_id, room_id, user_id, event_type, side, points,
+        state_version, sequence, gift_transaction_id, metadata, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 'PK_CREATED', NULL, 0, 1, 1, NULL, ?, ?, ?)`)
+        .bind(pkEventId, pkActiveBattleId, pkLeftRoomId, ownerId, '{"fixture":true}', time, time),
+      db.prepare(`INSERT INTO pk_leaderboard_entries (source_id, battle_id, user_id, side, total_points, total_gifts_sent, created_at, updated_at)
+        VALUES (?, ?, ?, 'RIGHT', 25, 2, ?, ?)`).bind(pkLeaderboardId, pkActiveBattleId, visitorId, time, time)
+    ]);
+
+    for (const path of [
+      `/api/pk/active/${pkLeftRoomId}`,
+      "/api/pk/available-opponents",
+      `/api/pk/history/user/${visitorId}`,
+      `/api/pk/history/room/${pkLeftRoomId}`,
+      `/api/pk/${pkActiveBattleId}/events`,
+      `/api/pk/${pkActiveBattleId}/leaderboard`,
+      `/api/pk/${pkActiveBattleId}/media-sessions?roomId=${pkLeftRoomId}`,
+      `/api/pk/${pkActiveBattleId}`
+    ]) await request(path, 401);
+
+    await requestAs(owner, "/api/pk/active/not-an-id", 400);
+    const active = (await requestAs(owner, `/api/pk/active/${pkLeftRoomId}`, 200)).data;
+    assert.equal(active.battle.battleId, pkActiveBattleId);
+    assert.equal(active.battle.myVote, "RIGHT");
+    assert.equal(active.battle.myReady, true);
+    assert.equal(active.invite._id, pkInviteId);
+    assert.equal(active.invite.status, "PENDING");
+    const idle = (await requestAs(owner, `/api/pk/active/${pkOpponentRoomId}`, 200)).data;
+    assert.deepEqual(idle, { battle: null, invite: null });
+
+    const opponents = (await requestAs(owner, "/api/pk/available-opponents?limit=50", 200)).data.opponents;
+    assert.ok(opponents.some(opponent => opponent.roomId === pkOpponentRoomId));
+    assert.equal(opponents.some(opponent => opponent.roomId === pkRightRoomId), false);
+
+    await requestAs(owner, "/api/pk/history/user/not-an-id", 400);
+    const userHistory = (await requestAs(owner, `/api/pk/history/user/${visitorId}`, 200)).data.battles;
+    assert.ok(userHistory.some(battle => battle.battleId === pkEndedBattleId));
+    assert.equal(userHistory.some(battle => battle.battleId === pkActiveBattleId), false);
+    await requestAs(owner, "/api/pk/history/room/not-an-id", 400);
+    const roomHistory = (await requestAs(owner, `/api/pk/history/room/${pkLeftRoomId}`, 200)).data.battles;
+    assert.ok(roomHistory.some(battle => battle.battleId === pkEndedBattleId));
+
+    await requestAs(owner, "/api/pk/not-an-id/events", 400);
+    const events = (await requestAs(owner, `/api/pk/${pkActiveBattleId}/events`, 200)).data.events;
+    assert.equal(events.length, 1);
+    assert.equal(events[0]._id, pkEventId);
+    assert.equal(events[0].eventType, "PK_CREATED");
+    assert.deepEqual(events[0].metadata, { fixture: true });
+
+    await requestAs(owner, "/api/pk/not-an-id/leaderboard", 400);
+    const entries = (await requestAs(owner, `/api/pk/${pkActiveBattleId}/leaderboard`, 200)).data.entries;
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0]._id, pkLeaderboardId);
+    assert.equal(entries[0].userId._id, visitorId);
+    assert.equal(entries[0].totalPoints, 25);
+
+    await requestAs(owner, "/api/pk/not-an-id", 400);
+    const detail = (await requestAs(owner, `/api/pk/${pkActiveBattleId}`, 200)).data;
+    assert.equal(detail.battle.battleId, pkActiveBattleId);
+    assert.equal(detail.invite._id, pkInviteId);
+    assert.equal(detail.battle.left.roomId, pkLeftRoomId);
+    assert.equal(detail.battle.right.roomId, pkRightRoomId);
+
+    const mediaPath = `/api/pk/${pkActiveBattleId}/media-sessions?roomId=${pkLeftRoomId}`;
+    await requestAs(owner, "/api/pk/not-an-id/media-sessions?roomId=" + pkLeftRoomId, 400);
+    await requestAs(owner, `/api/pk/${pkActiveBattleId}/media-sessions?roomId=bad`, 400);
+    await requestAs(gamer, mediaPath, 403);
+    await requestAs(owner, `/api/pk/${pkActiveBattleId}/media-sessions?roomId=${pkOpponentRoomId}`, 403);
+    const session = (await requestAs(owner, mediaPath, 200)).data.opponent;
+    assert.equal(session.roomId, pkRightRoomId);
+    assert.equal(session.roomName, pkRightRoomId);
+    assert.equal(session.title, "PK Right");
+    assert.equal(session.role, "PK_OPPONENT_VIEWER");
+    assert.equal(session.url, "wss://livekit.fixture");
+    const claims = readLiveKitToken(session.token);
+    assert.equal(claims.payload.sub, `${ownerId}:pk:${pkActiveBattleId}:opponent`);
+    assert.equal(claims.payload.video.room, pkRightRoomId);
+    assert.equal(claims.payload.video.canPublish, false);
+    assert.deepEqual(claims.payload.video.canPublishSources, []);
+  } finally {
+    await db.batch([
+      db.prepare("DELETE FROM pk_events WHERE battle_id IN (?, ?)").bind(pkActiveBattleId, pkEndedBattleId),
+      db.prepare("DELETE FROM pk_leaderboard_entries WHERE battle_id IN (?, ?)").bind(pkActiveBattleId, pkEndedBattleId),
+      db.prepare("DELETE FROM pk_votes WHERE battle_id = ?").bind(pkActiveBattleId),
+      db.prepare("DELETE FROM pk_invites WHERE battle_id = ?").bind(pkActiveBattleId),
+      db.prepare("DELETE FROM pk_participants WHERE battle_id IN (?, ?)").bind(pkActiveBattleId, pkEndedBattleId),
+      db.prepare("DELETE FROM pk_battles WHERE source_id IN (?, ?)").bind(pkActiveBattleId, pkEndedBattleId),
+      db.prepare("DELETE FROM room_participants WHERE room_id IN (?, ?, ?)").bind(pkLeftRoomId, pkRightRoomId, pkOpponentRoomId),
+      db.prepare("DELETE FROM rooms WHERE source_id IN (?, ?, ?)").bind(pkLeftRoomId, pkRightRoomId, pkOpponentRoomId)
+    ]);
+  }
+
   await request("/api/users/me/profile-media", 401, { method: "POST", body: { url: "https://example.test/a.jpg", type: "IMAGE" } });
   const addedMedia = (await requestAs(owner, "/api/users/me/profile-media", 201, {
     body: { url: "https://example.test/a.jpg", type: "IMAGE", caption: "cap" }
@@ -1227,5 +1379,377 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor, gamer = 
       db.prepare("DELETE FROM voice_verification_submissions WHERE user_id = ?").bind(visitorId),
       db.prepare("DELETE FROM trust_verifications WHERE user_id = ?").bind(visitorId)
     ]);
+  }
+
+  // Direct cover upload has no room context or authoritative user write. It
+  // stores original bytes in public-media and registers a public media object
+  // so the existing media delivery route can serve the returned URL.
+  const coverPng = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl61ZsAAAAASUVORK5CYII=", "base64");
+  const coverForm = (fileName = "cover.png", contentType = "image/png", bytes = coverPng) => {
+    const form = new FormData();
+    form.set("cover", new Blob([bytes], { type: contentType }), fileName);
+    return form;
+  };
+  const uploadForm = async (uploadPath, form, accessToken) => {
+    const multipartRequest = new Request(`http://127.0.0.1${uploadPath}`, {
+      method: "POST",
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      body: form
+    });
+    const response = await worker.dispatchFetch(multipartRequest.url, {
+      method: "POST",
+      headers: [...multipartRequest.headers],
+      body: new Uint8Array(await multipartRequest.arrayBuffer())
+    });
+    return { status: response.status, payload: JSON.parse(await response.text()) };
+  };
+  const coverUpload = (form, accessToken) => uploadForm("/api/upload/cover", form, accessToken);
+
+  assert.equal((await coverUpload(coverForm())).status, 401);
+  const emptyForm = new FormData();
+  emptyForm.set("other", "value");
+  const missingCover = await coverUpload(emptyForm, owner.accessToken);
+  assert.equal(missingCover.status, 400);
+  assert.equal(missingCover.payload.error.message, "No file uploaded");
+  const badExtension = await coverUpload(coverForm("cover.txt"), owner.accessToken);
+  assert.equal(badExtension.status, 400);
+  assert.equal(badExtension.payload.error.message, "Only images (jpg, jpeg, png, gif, webp) allowed");
+  const badMime = await coverUpload(coverForm("cover.png", "text/plain"), owner.accessToken);
+  assert.equal(badMime.status, 400);
+  assert.equal(badMime.payload.error.message, "Only image uploads are allowed");
+  const badSignature = await coverUpload(coverForm("cover.png", "image/png", Buffer.from("not-an-image")), owner.accessToken);
+  assert.equal(badSignature.status, 400);
+  assert.equal(badSignature.payload.error.message, "Invalid image file");
+  const oversized = await coverUpload(coverForm("cover.png", "image/png", Buffer.alloc(5 * 1024 * 1024 + 1)), owner.accessToken);
+  assert.equal(oversized.status, 413);
+  assert.equal(oversized.payload.error.message, "Uploaded file is too large");
+
+  const publicBucket = await worker.getR2Bucket("PUBLIC_MEDIA");
+  const createdCovers = [];
+  let coverMediaId;
+  let coverKey;
+  try {
+    const uploaded = await coverUpload(coverForm("Room Cover.PNG"), owner.accessToken);
+    assert.equal(uploaded.status, 200, JSON.stringify(uploaded.payload));
+    const cover = uploaded.payload.data;
+    assert.deepEqual(Object.keys(cover).sort(), ["storage", "url"]);
+    assert.equal(cover.storage, "s3");
+    assert.match(cover.url, /^http:\/\/127\.0\.0\.1\/api\/media\/public\/[a-f0-9-]{36}\/cover\.png$/);
+    coverMediaId = new URL(cover.url).pathname.split("/")[4];
+
+    const mediaRow = await db.prepare(`SELECT version, owner_type, owner_id, media_type, category, bucket, storage_key,
+      content_type, file_size, checksum, visibility, processing_status, moderation_status
+      FROM media_objects WHERE source_id = ?`).bind(coverMediaId).first();
+    assert.ok(mediaRow);
+    assert.equal(mediaRow.version, 1);
+    assert.equal(mediaRow.owner_type, "USER");
+    assert.equal(mediaRow.owner_id, ownerId);
+    assert.equal(mediaRow.media_type, "IMAGE");
+    assert.equal(mediaRow.category, "COVER");
+    assert.equal(mediaRow.bucket, "public-media");
+    assert.equal(mediaRow.content_type, "image/png");
+    assert.equal(mediaRow.file_size, coverPng.byteLength);
+    assert.equal(mediaRow.checksum, createHash("sha256").update(coverPng).digest("hex"));
+    assert.equal(mediaRow.visibility, "PUBLIC");
+    assert.equal(mediaRow.processing_status, "READY");
+    assert.equal(mediaRow.moderation_status, "APPROVED");
+    coverKey = mediaRow.storage_key;
+    createdCovers.push({ id: coverMediaId, key: coverKey });
+    assert.ok(coverKey.startsWith(`users/${ownerId}/covers/`));
+    assert.ok(coverKey.endsWith("/cover.png"));
+
+    const variantRow = await db.prepare(`SELECT name, bucket, key, url, content_type, bytes
+      FROM media_variants WHERE source_id = ?`).bind(`${coverMediaId}:cover`).first();
+    assert.equal(variantRow.name, "cover");
+    assert.equal(variantRow.bucket, "public-media");
+    assert.equal(variantRow.key, coverKey);
+    assert.equal(variantRow.url, cover.url);
+    assert.equal(variantRow.content_type, "image/png");
+    assert.equal(variantRow.bytes, coverPng.byteLength);
+
+    assert.ok(await publicBucket.head(coverKey));
+    assert.deepEqual(Buffer.from(await (await publicBucket.get(coverKey)).arrayBuffer()), coverPng);
+    const served = await worker.dispatchFetch(cover.url);
+    assert.equal(served.status, 200);
+    assert.equal(served.headers.get("content-type"), "image/png");
+    assert.equal(served.headers.get("cache-control"), "public, max-age=31536000, immutable");
+    assert.deepEqual(Buffer.from(await served.arrayBuffer()), coverPng);
+
+    const repeatedUpload = await coverUpload(coverForm("second-cover.png"), owner.accessToken);
+    assert.equal(repeatedUpload.status, 200, JSON.stringify(repeatedUpload.payload));
+    const repeatedId = new URL(repeatedUpload.payload.data.url).pathname.split("/")[4];
+    assert.notEqual(repeatedId, coverMediaId);
+    const repeatedRow = await db.prepare("SELECT version, storage_key FROM media_objects WHERE source_id = ?")
+      .bind(repeatedId).first();
+    assert.ok(repeatedRow);
+    assert.equal(repeatedRow.version, 2);
+    createdCovers.push({ id: repeatedId, key: repeatedRow.storage_key });
+  } finally {
+    for (const cover of createdCovers) {
+      await db.batch([
+        db.prepare("DELETE FROM media_variants WHERE media_objects_id = ?").bind(cover.id),
+        db.prepare("DELETE FROM media_objects WHERE source_id = ?").bind(cover.id)
+      ]);
+      await publicBucket.delete(cover.key);
+    }
+    await db.prepare("DELETE FROM media_counters WHERE source_id = ?").bind(`USER:${ownerId}:COVER`).run();
+  }
+
+  // Profile-media and story uploads share the legacy image/video validator and
+  // return { url, type, storage }. Neither route writes a user or story row.
+  const mediaMp4 = Buffer.from("ftypfixture", "utf8");
+  const mediaForm = (fileName = "media.png", contentType = "image/png", bytes = coverPng) => {
+    const form = new FormData();
+    form.set("media", new Blob([bytes], { type: contentType }), fileName);
+    return form;
+  };
+  const profileUpload = (form, accessToken) => uploadForm("/api/upload/profile-media", form, accessToken);
+  const storyUpload = (form, accessToken) => uploadForm("/api/upload/story", form, accessToken);
+
+  assert.equal((await profileUpload(mediaForm(), undefined)).status, 401);
+  assert.equal((await storyUpload(mediaForm(), undefined)).status, 401);
+  const emptyMediaForm = new FormData();
+  emptyMediaForm.set("other", "value");
+  const missingMedia = await profileUpload(emptyMediaForm, owner.accessToken);
+  assert.equal(missingMedia.status, 400);
+  assert.equal(missingMedia.payload.error.message, "No file uploaded");
+  const mediaBadExtension = await profileUpload(mediaForm("media.txt"), owner.accessToken);
+  assert.equal(mediaBadExtension.status, 400);
+  assert.equal(mediaBadExtension.payload.error.message, "Only image/video uploads are allowed");
+  const mediaBadMime = await profileUpload(mediaForm("media.png", "text/plain"), owner.accessToken);
+  assert.equal(mediaBadMime.status, 400);
+  assert.equal(mediaBadMime.payload.error.message, "Only image/video uploads are allowed");
+  const mediaBadImage = await profileUpload(mediaForm("media.png", "image/png", Buffer.from("not-an-image")), owner.accessToken);
+  assert.equal(mediaBadImage.status, 400);
+  assert.equal(mediaBadImage.payload.error.message, "Invalid media file");
+  const mediaBadVideo = await profileUpload(mediaForm("media.mp4", "video/mp4", Buffer.from("not-a-video")), owner.accessToken);
+  assert.equal(mediaBadVideo.status, 400);
+  assert.equal(mediaBadVideo.payload.error.message, "Invalid media file");
+  const mediaOversized = await storyUpload(mediaForm("media.png", "image/png", Buffer.alloc(10 * 1024 * 1024 + 1)), owner.accessToken);
+  assert.equal(mediaOversized.status, 413);
+  assert.equal(mediaOversized.payload.error.message, "Uploaded file is too large");
+
+  const createdMedia = [];
+  try {
+    const imageUpload = await profileUpload(mediaForm("Profile.PNG"), owner.accessToken);
+    assert.equal(imageUpload.status, 200, JSON.stringify(imageUpload.payload));
+    const image = imageUpload.payload.data;
+    assert.deepEqual(Object.keys(image).sort(), ["storage", "type", "url"]);
+    assert.equal(image.storage, "s3");
+    assert.equal(image.type, "IMAGE");
+    assert.match(image.url, /^http:\/\/127\.0\.0\.1\/api\/media\/public\/[a-f0-9-]{36}\/profile\.png$/);
+    const imageId = new URL(image.url).pathname.split("/")[4];
+    const imageRow = await db.prepare(`SELECT version, owner_type, owner_id, media_type, category, bucket, storage_key,
+      content_type, file_size, checksum, visibility, processing_status, moderation_status
+      FROM media_objects WHERE source_id = ?`).bind(imageId).first();
+    assert.ok(imageRow);
+    assert.equal(imageRow.version, 1);
+    assert.equal(imageRow.owner_type, "USER");
+    assert.equal(imageRow.owner_id, ownerId);
+    assert.equal(imageRow.media_type, "IMAGE");
+    assert.equal(imageRow.category, "GALLERY");
+    assert.equal(imageRow.bucket, "public-media");
+    assert.equal(imageRow.content_type, "image/png");
+    assert.equal(imageRow.file_size, coverPng.byteLength);
+    assert.equal(imageRow.checksum, createHash("sha256").update(coverPng).digest("hex"));
+    assert.equal(imageRow.visibility, "PUBLIC");
+    assert.equal(imageRow.processing_status, "READY");
+    assert.equal(imageRow.moderation_status, "APPROVED");
+    assert.ok(imageRow.storage_key.startsWith(`users/${ownerId}/gallery/`));
+    assert.ok(imageRow.storage_key.endsWith("/profile.png"));
+    createdMedia.push({ id: imageId, key: imageRow.storage_key });
+
+    const imageVariant = await db.prepare(`SELECT name, bucket, key, url, content_type, bytes
+      FROM media_variants WHERE source_id = ?`).bind(`${imageId}:profile`).first();
+    assert.equal(imageVariant.name, "profile");
+    assert.equal(imageVariant.bucket, "public-media");
+    assert.equal(imageVariant.key, imageRow.storage_key);
+    assert.equal(imageVariant.url, image.url);
+    assert.equal(imageVariant.content_type, "image/png");
+    assert.equal(imageVariant.bytes, coverPng.byteLength);
+
+    assert.ok(await publicBucket.head(imageRow.storage_key));
+    assert.deepEqual(Buffer.from(await (await publicBucket.get(imageRow.storage_key)).arrayBuffer()), coverPng);
+    const servedImage = await worker.dispatchFetch(image.url);
+    assert.equal(servedImage.status, 200);
+    assert.equal(servedImage.headers.get("content-type"), "image/png");
+    assert.equal(servedImage.headers.get("cache-control"), "public, max-age=31536000, immutable");
+    assert.deepEqual(Buffer.from(await servedImage.arrayBuffer()), coverPng);
+
+    const videoUpload = await storyUpload(mediaForm("story.mp4", "video/mp4", mediaMp4), owner.accessToken);
+    assert.equal(videoUpload.status, 200, JSON.stringify(videoUpload.payload));
+    const video = videoUpload.payload.data;
+    assert.equal(video.storage, "s3");
+    assert.equal(video.type, "VIDEO");
+    assert.match(video.url, /^http:\/\/127\.0\.0\.1\/api\/media\/public\/[a-f0-9-]{36}\/story\.mp4$/);
+    const videoId = new URL(video.url).pathname.split("/")[4];
+    const videoRow = await db.prepare(`SELECT version, media_type, category, bucket, storage_key, content_type, file_size
+      FROM media_objects WHERE source_id = ?`).bind(videoId).first();
+    assert.ok(videoRow);
+    assert.equal(videoRow.version, 2);
+    assert.equal(videoRow.media_type, "VIDEO");
+    assert.equal(videoRow.category, "GALLERY");
+    assert.equal(videoRow.bucket, "public-media");
+    assert.equal(videoRow.content_type, "video/mp4");
+    assert.equal(videoRow.file_size, mediaMp4.byteLength);
+    assert.ok(videoRow.storage_key.endsWith("/story.mp4"));
+    createdMedia.push({ id: videoId, key: videoRow.storage_key });
+
+    const videoVariant = await db.prepare(`SELECT name, key, url, content_type, bytes
+      FROM media_variants WHERE source_id = ?`).bind(`${videoId}:story`).first();
+    assert.equal(videoVariant.name, "story");
+    assert.equal(videoVariant.key, videoRow.storage_key);
+    assert.equal(videoVariant.url, video.url);
+    assert.equal(videoVariant.content_type, "video/mp4");
+    assert.equal(videoVariant.bytes, mediaMp4.byteLength);
+
+    assert.ok(await publicBucket.head(videoRow.storage_key));
+    const servedVideo = await worker.dispatchFetch(video.url);
+    assert.equal(servedVideo.status, 200);
+    assert.equal(servedVideo.headers.get("content-type"), "video/mp4");
+    assert.deepEqual(Buffer.from(await servedVideo.arrayBuffer()), mediaMp4);
+  } finally {
+    for (const media of createdMedia) {
+      await db.batch([
+        db.prepare("DELETE FROM media_variants WHERE media_objects_id = ?").bind(media.id),
+        db.prepare("DELETE FROM media_objects WHERE source_id = ?").bind(media.id)
+      ]);
+      await publicBucket.delete(media.key);
+    }
+    await db.prepare("DELETE FROM media_counters WHERE source_id = ?").bind(`USER:${ownerId}:GALLERY`).run();
+  }
+
+  // Voice-note and recording uploads carry audio/video bytes without a legacy
+  // signature check and return { url, type, storage }.
+  const voiceBytes = Buffer.from("ID3fixture", "utf8");
+  const recordingBytes = Buffer.from("ftypfixture", "utf8");
+  const audioForm = (fileName = "voice.mp3", contentType = "audio/mpeg", bytes = voiceBytes) => {
+    const form = new FormData();
+    form.set("media", new Blob([bytes], { type: contentType }), fileName);
+    return form;
+  };
+  const voiceUpload = (form, accessToken) => uploadForm("/api/upload/voice-note", form, accessToken);
+  const recordingUpload = (form, accessToken) => uploadForm("/api/upload/recording", form, accessToken);
+
+  assert.equal((await voiceUpload(audioForm(), undefined)).status, 401);
+  assert.equal((await recordingUpload(audioForm(), undefined)).status, 401);
+  const emptyAudioForm = new FormData();
+  emptyAudioForm.set("other", "value");
+  const missingVoice = await voiceUpload(emptyAudioForm, owner.accessToken);
+  assert.equal(missingVoice.status, 400);
+  assert.equal(missingVoice.payload.error.message, "No file uploaded");
+  const missingRecording = await recordingUpload(emptyAudioForm, owner.accessToken);
+  assert.equal(missingRecording.status, 400);
+  assert.equal(missingRecording.payload.error.message, "No file uploaded");
+  const voiceBadExtension = await voiceUpload(audioForm("voice.txt"), owner.accessToken);
+  assert.equal(voiceBadExtension.status, 400);
+  assert.equal(voiceBadExtension.payload.error.message, "Only audio files are allowed");
+  const voiceBadMime = await voiceUpload(audioForm("voice.mp3", "text/plain"), owner.accessToken);
+  assert.equal(voiceBadMime.status, 400);
+  assert.equal(voiceBadMime.payload.error.message, "Only audio uploads are allowed");
+  const recordingBadExtension = await recordingUpload(audioForm("recording.txt"), owner.accessToken);
+  assert.equal(recordingBadExtension.status, 400);
+  assert.equal(recordingBadExtension.payload.error.message, "Only audio/video recording files are allowed");
+  const recordingBadMime = await recordingUpload(audioForm("recording.mp3", "text/plain"), owner.accessToken);
+  assert.equal(recordingBadMime.status, 400);
+  assert.equal(recordingBadMime.payload.error.message, "Only audio/video uploads are allowed");
+  const audioOversized = await voiceUpload(audioForm("voice.mp3", "audio/mpeg", Buffer.alloc(10 * 1024 * 1024 + 1)), owner.accessToken);
+  assert.equal(audioOversized.status, 413);
+  assert.equal(audioOversized.payload.error.message, "Uploaded file is too large");
+
+  const createdAudio = [];
+  try {
+    const voiceResult = await voiceUpload(audioForm("Voice Note.MP3"), owner.accessToken);
+    assert.equal(voiceResult.status, 200, JSON.stringify(voiceResult.payload));
+    const voice = voiceResult.payload.data;
+    assert.deepEqual(Object.keys(voice).sort(), ["storage", "type", "url"]);
+    assert.equal(voice.storage, "s3");
+    assert.equal(voice.type, "AUDIO");
+    assert.match(voice.url, /^http:\/\/127\.0\.0\.1\/api\/media\/public\/[a-f0-9-]{36}\/voice_note\.mp3$/);
+    const voiceId = new URL(voice.url).pathname.split("/")[4];
+    const voiceRow = await db.prepare(`SELECT version, owner_type, owner_id, media_type, category, bucket, storage_key,
+      content_type, file_size, checksum, visibility, processing_status, moderation_status
+      FROM media_objects WHERE source_id = ?`).bind(voiceId).first();
+    assert.ok(voiceRow);
+    assert.equal(voiceRow.version, 1);
+    assert.equal(voiceRow.owner_type, "USER");
+    assert.equal(voiceRow.owner_id, ownerId);
+    assert.equal(voiceRow.media_type, "AUDIO");
+    assert.equal(voiceRow.category, "VOICE_MESSAGE");
+    assert.equal(voiceRow.bucket, "public-media");
+    assert.equal(voiceRow.content_type, "audio/mpeg");
+    assert.equal(voiceRow.file_size, voiceBytes.byteLength);
+    assert.equal(voiceRow.checksum, createHash("sha256").update(voiceBytes).digest("hex"));
+    assert.equal(voiceRow.visibility, "PUBLIC");
+    assert.equal(voiceRow.processing_status, "READY");
+    assert.equal(voiceRow.moderation_status, "APPROVED");
+    assert.ok(voiceRow.storage_key.startsWith(`users/${ownerId}/voice-messages/`));
+    assert.ok(voiceRow.storage_key.endsWith("/voice_note.mp3"));
+    createdAudio.push({ id: voiceId, key: voiceRow.storage_key });
+
+    const voiceVariant = await db.prepare(`SELECT name, bucket, key, url, content_type, bytes
+      FROM media_variants WHERE source_id = ?`).bind(`${voiceId}:voice_note`).first();
+    assert.equal(voiceVariant.name, "voice_note");
+    assert.equal(voiceVariant.bucket, "public-media");
+    assert.equal(voiceVariant.key, voiceRow.storage_key);
+    assert.equal(voiceVariant.url, voice.url);
+    assert.equal(voiceVariant.content_type, "audio/mpeg");
+    assert.equal(voiceVariant.bytes, voiceBytes.byteLength);
+
+    assert.ok(await publicBucket.head(voiceRow.storage_key));
+    assert.deepEqual(Buffer.from(await (await publicBucket.get(voiceRow.storage_key)).arrayBuffer()), voiceBytes);
+    const servedVoice = await worker.dispatchFetch(voice.url);
+    assert.equal(servedVoice.status, 200);
+    assert.equal(servedVoice.headers.get("content-type"), "audio/mpeg");
+    assert.equal(servedVoice.headers.get("cache-control"), "public, max-age=31536000, immutable");
+    assert.deepEqual(Buffer.from(await servedVoice.arrayBuffer()), voiceBytes);
+
+    const recordingResult = await recordingUpload(audioForm("call.MP4", "video/mp4", recordingBytes), owner.accessToken);
+    assert.equal(recordingResult.status, 200, JSON.stringify(recordingResult.payload));
+    const recording = recordingResult.payload.data;
+    assert.deepEqual(Object.keys(recording).sort(), ["storage", "type", "url"]);
+    assert.equal(recording.storage, "s3");
+    assert.equal(recording.type, "VIDEO");
+    assert.match(recording.url, /^http:\/\/127\.0\.0\.1\/api\/media\/public\/[a-f0-9-]{36}\/recording\.mp4$/);
+    const recordingId = new URL(recording.url).pathname.split("/")[4];
+    const recordingRow = await db.prepare(`SELECT version, owner_type, owner_id, media_type, category, bucket, storage_key,
+      content_type, file_size, checksum, visibility, processing_status, moderation_status
+      FROM media_objects WHERE source_id = ?`).bind(recordingId).first();
+    assert.ok(recordingRow);
+    assert.equal(recordingRow.version, 1);
+    assert.equal(recordingRow.owner_id, ownerId);
+    assert.equal(recordingRow.media_type, "VIDEO");
+    assert.equal(recordingRow.category, "ATTACHMENT");
+    assert.equal(recordingRow.bucket, "public-media");
+    assert.equal(recordingRow.content_type, "video/mp4");
+    assert.equal(recordingRow.file_size, recordingBytes.byteLength);
+    assert.equal(recordingRow.checksum, createHash("sha256").update(recordingBytes).digest("hex"));
+    assert.ok(recordingRow.storage_key.startsWith(`users/${ownerId}/attachments/`));
+    assert.ok(recordingRow.storage_key.endsWith("/recording.mp4"));
+    createdAudio.push({ id: recordingId, key: recordingRow.storage_key });
+
+    const recordingVariant = await db.prepare(`SELECT name, bucket, key, url, content_type, bytes
+      FROM media_variants WHERE source_id = ?`).bind(`${recordingId}:recording`).first();
+    assert.equal(recordingVariant.name, "recording");
+    assert.equal(recordingVariant.key, recordingRow.storage_key);
+    assert.equal(recordingVariant.url, recording.url);
+    assert.equal(recordingVariant.content_type, "video/mp4");
+    assert.equal(recordingVariant.bytes, recordingBytes.byteLength);
+
+    assert.ok(await publicBucket.head(recordingRow.storage_key));
+    const servedRecording = await worker.dispatchFetch(recording.url);
+    assert.equal(servedRecording.status, 200);
+    assert.equal(servedRecording.headers.get("content-type"), "video/mp4");
+    assert.deepEqual(Buffer.from(await servedRecording.arrayBuffer()), recordingBytes);
+  } finally {
+    for (const media of createdAudio) {
+      await db.batch([
+        db.prepare("DELETE FROM media_variants WHERE media_objects_id = ?").bind(media.id),
+        db.prepare("DELETE FROM media_objects WHERE source_id = ?").bind(media.id)
+      ]);
+      await publicBucket.delete(media.key);
+    }
+    await db.prepare("DELETE FROM media_counters WHERE source_id = ?").bind(`USER:${ownerId}:VOICE_MESSAGE`).run();
+    await db.prepare("DELETE FROM media_counters WHERE source_id = ?").bind(`USER:${ownerId}:ATTACHMENT`).run();
   }
 }

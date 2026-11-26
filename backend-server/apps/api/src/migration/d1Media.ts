@@ -75,7 +75,7 @@ export interface D1MediaRouterOptions {
 
 const SESSION_ID = /^[a-f0-9-]{36}$/i;
 const MEDIA_ID = /^[a-f0-9-]{36}$/i;
-const PUBLIC_VARIANT = /^([a-z0-9_]+)\.(webp|png|jpe?g|gif)$/i;
+const PUBLIC_VARIANT = /^([a-z0-9_]+)\.(webp|png|jpe?g|gif|mp3|m4a|aac|wav|ogg|mp4|mov|m4v|webm)$/i;
 const PRIVATE_CACHE = "private, no-store";
 const PUBLIC_CACHE = "public, max-age=31536000, immutable";
 
@@ -133,8 +133,8 @@ async function transitionSession(
     WHERE source_id = ? AND status = ?`).bind(status, now, session.source_id, session.status).run();
 }
 
-async function nextMediaVersion(db: D1Database, userId: string) {
-  const counterId = `USER:${userId}:AVATAR`;
+export async function nextD1MediaVersion(db: D1Database, userId: string, category: string) {
+  const counterId = `USER:${userId}:${category}`;
   await db.prepare("INSERT INTO media_counters (source_id, seq) VALUES (?, 0) ON CONFLICT (source_id) DO NOTHING")
     .bind(counterId).run();
   const version = await db.prepare("UPDATE media_counters SET seq = seq + 1 WHERE source_id = ? RETURNING seq")
@@ -290,7 +290,7 @@ export function createD1MediaRouter(options: D1MediaRouterOptions) {
 
       const mediaId = randomUUID();
       const versionId = randomUUID();
-      const version = await nextMediaVersion(db, user.id);
+      const version = await nextD1MediaVersion(db, user.id, "AVATAR");
       const extension = session.staging_key.split(".").pop() ?? "";
       const originalKey = buildMediaKey({
         bucket: "originals", ownerType: "USER", ownerId: user.id, category: "AVATAR",

@@ -44,7 +44,7 @@ function base64Url(value: string | Uint8Array) {
 }
 
 /** Build the same HS256 access token the LiveKit server SDK issues, using host-neutral Web Crypto. */
-async function createLiveKitToken(config: Required<Pick<D1LiveKitConfig, "apiKey" | "apiSecret" | "url">>,
+export async function createLiveKitToken(config: Required<Pick<D1LiveKitConfig, "apiKey" | "apiSecret" | "url">>,
   input: { identity: string; roomName: string; publishSources: string[] }
 ) {
   const issuedAt = Math.floor(Date.now() / 1000);

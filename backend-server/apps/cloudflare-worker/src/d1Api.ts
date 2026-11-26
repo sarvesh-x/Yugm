@@ -260,7 +260,13 @@ export function createD1ApiWorker(stage: ApiStage) {
           const response = await readD1ProfileRequest(env.AUTH_DB, request, promise => ctx.waitUntil(promise));
           if (response) return response;
         }
-        if (url.pathname.toLowerCase().startsWith("/api/media/") || url.pathname.startsWith("/api/assets/published/")) {
+        if (url.pathname.toLowerCase().startsWith("/api/media/") ||
+            url.pathname.toLowerCase().startsWith("/api/upload/cover") ||
+            url.pathname.toLowerCase().startsWith("/api/upload/profile-media") ||
+            url.pathname.toLowerCase().startsWith("/api/upload/story") ||
+            url.pathname.toLowerCase().startsWith("/api/upload/voice-note") ||
+            url.pathname.toLowerCase().startsWith("/api/upload/recording") ||
+            url.pathname.startsWith("/api/assets/published/")) {
           if (!mediaEnabled(env, stage)) {
             return Response.json({ ok: false, error: { message: "Managed media is unavailable" } }, { status: 503 });
           }

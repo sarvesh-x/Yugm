@@ -38,7 +38,10 @@ import { createD1BattlePassRouter } from "./d1BattlePass.js";
 import { createD1BondsRouter } from "./d1Bonds.js";
 import { createD1ClansRouter } from "./d1Clans.js";
 import { createD1CosmeticsRouter } from "./d1Cosmetics.js";
+import { createD1CoverUploadRouter } from "./d1CoverUpload.js";
 import { createD1CreatorRouter } from "./d1Creator.js";
+import { createD1AudioUploadRouter } from "./d1AudioUpload.js";
+import { createD1ProfileMediaUploadRouter } from "./d1ProfileMediaUpload.js";
 import { createD1DatingRouter } from "./d1Dating.js";
 import { createD1DirectGiftsRouter } from "./d1DirectGifts.js";
 import { createD1EventsRouter } from "./d1Events.js";
@@ -70,6 +73,7 @@ import { createD1RoomInvitesRouter } from "./d1RoomInvites.js";
 import { createD1RoomReactionsRouter } from "./d1RoomReactions.js";
 import { createD1PaymentProviders, type D1PaymentConfig } from "./d1Payments.js";
 import { createD1PayoutWebhookHandler } from "./d1PayoutWebhook.js";
+import { createD1PkReadsRouter } from "./d1PkReads.js";
 import { createD1SocialRouter } from "./d1Social.js";
 import { createD1SocialFeaturesRouter } from "./d1SocialFeatures.js";
 import { createD1StoriesRouter } from "./d1Stories.js";
@@ -211,6 +215,7 @@ export function createD1App(
   app.use("/api/bonds", createD1BondsRouter(db));
   app.use("/api/creator", createD1CreatorRouter(db, { payoutKycEncryptionKey: wallet.payoutKycEncryptionKey }));
   app.use("/api", createD1LiveKitRouter(db, livekit));
+  app.use("/api/pk", createD1PkReadsRouter(db, livekit));
   app.use("/api", createD1GamesReadsRouter(db));
   app.use("/api", createD1GamesRouter(db, limits.chat));
   const access = createD1AccessSessionReader(db, "http");
@@ -219,6 +224,9 @@ export function createD1App(
     const { scores } = await readD1GameCatalog(db, user.id);
     sendOk(res, presentGameCatalog(scores));
   }));
+  if (media) app.use("/api/upload", createD1CoverUploadRouter({ db, resolvePublicOrigin, buckets: media.buckets }));
+  if (media) app.use("/api/upload", createD1ProfileMediaUploadRouter({ db, resolvePublicOrigin, buckets: media.buckets }));
+  if (media) app.use("/api/upload", createD1AudioUploadRouter({ db, resolvePublicOrigin, buckets: media.buckets }));
   if (media) app.use("/api/media", createD1MediaRouter({ db, resolvePublicOrigin, ...media }));
   app.use((_req, res) => res.status(404).json({ ok: false, error: { message: "Route not found" } }));
   const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {
