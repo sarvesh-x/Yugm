@@ -1276,6 +1276,20 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor, gamer = 
     ]);
 
     await pkAlarmRun();
+    const realtimeNamespace = await worker.getDurableObjectNamespace("NATIVE_REALTIME");
+    const realtimeEvents = async (scope) => {
+      const stub = realtimeNamespace.get(realtimeNamespace.idFromName(scope));
+      const response = await stub.fetch(`https://native-realtime/history?scope=${encodeURIComponent(scope)}`);
+      assert.equal(response.status, 200);
+      return (await response.json()).envelopes.map((envelope) => envelope.event);
+    };
+    const leftRoomScope = `room:${pkAlarmRoomId}`;
+    const rightRoomScope = `room:${pkAlarmOtherRoomId}`;
+    assert.ok((await realtimeEvents(leftRoomScope)).includes("pk:started"));
+    assert.ok((await realtimeEvents(rightRoomScope)).includes("pk:started"));
+    assert.ok((await realtimeEvents(leftRoomScope)).includes("pk:ended"));
+    assert.ok((await realtimeEvents(leftRoomScope)).includes("pk:invite:expired"));
+    assert.ok((await realtimeEvents(`user:${visitorId}`)).includes("pk:invite:expired"));
     const battleState = async (id) => db.prepare("SELECT status, state_version AS stateVersion, event_sequence AS eventSequence, winner_side AS winnerSide, winner_user_id AS winnerUserId FROM pk_battles WHERE source_id = ?")
       .bind(id).first();
     const eventCount = async (id, type) => db.prepare("SELECT COUNT(*) AS count FROM pk_events WHERE battle_id = ? AND event_type = ?")

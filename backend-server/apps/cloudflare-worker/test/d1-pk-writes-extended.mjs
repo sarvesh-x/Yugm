@@ -7,13 +7,21 @@ const batchIfNeeded = async (db, statements) => {
   if (statements.length > 0) await db.batch(statements);
 };
 
-export async function verifyD1PkWritesExtended(db, request, owner, visitor, gamer = owner) {
+export async function verifyD1PkWritesExtended(db, request, owner, visitor, gamer = owner, worker) {
   const ownerId = owner.user.id;
   const visitorId = visitor.user.id;
   const gamerId = gamer.user.id;
   const userIds = [...new Set([ownerId, visitorId, gamerId])];
   const requestAs = (account, path, status, options = {}) =>
     request(path, status, { accessToken: account.accessToken, ...options });
+  const realtimeEvents = async (scope) => {
+    assert.ok(worker, "PK fan-out assertions require the Worker instance");
+    const namespace = await worker.getDurableObjectNamespace("NATIVE_REALTIME");
+    const stub = namespace.get(namespace.idFromName(scope));
+    const response = await stub.fetch(`https://native-realtime/history?scope=${encodeURIComponent(scope)}`);
+    assert.equal(response.status, 200);
+    return (await response.json()).envelopes.map((envelope) => envelope.event);
+  };
 
   const now = new Date();
   const time = now.toISOString();
@@ -350,6 +358,11 @@ export async function verifyD1PkWritesExtended(db, request, owner, visitor, game
       WHERE user_id = ? AND json_extract(metadata, '$.pkBattleId') = ?`).bind(gamerId, giftBattleId).first("count"), 1);
     assert.equal(await db.prepare(`SELECT COUNT(*) AS count FROM room_activities
       WHERE room_id = ? AND json_extract(metadata, '$.pkBattleId') = ?`).bind(roomB, giftBattleId).first("count"), 1);
+    for (const scope of [`room:${roomA}`, `room:${roomB}`]) {
+      const events = await realtimeEvents(scope);
+      assert.ok(events.includes("pk:gift:received"), `${scope} missing pk:gift:received`);
+      assert.ok(events.includes("pk:score:update"), `${scope} missing pk:score:update`);
+    }
     const replayGift = (await requestAs(gamer, giftPath, 201, {
       body: { giftId, side: "RIGHT", idempotencyKey: "pk-gift-success", quantity: 1 }
     })).data;
@@ -358,6 +371,18 @@ export async function verifyD1PkWritesExtended(db, request, owner, visitor, game
     assert.equal(row.right_score, 5);
     assert.equal(row.state_version, 2);
     assert.equal(await eventCount(giftBattleId, "GIFT_SENT"), 1);
+    // The process-local combo counter advances once per committed gift request
+    // (not per quantity) and is keyed by battle, sender and side. An idempotent
+    // replay above did not advance it.
+    const comboValues = async () => (await db.prepare(`SELECT json_extract(metadata, '$.combo') AS combo
+      FROM pk_events WHERE battle_id = ? AND event_type = 'GIFT_SENT'
+      ORDER BY created_at, source_id`).bind(giftBattleId).all()).results.map(event => event.combo);
+    assert.deepEqual(await comboValues(), [1]);
+    const comboGift = (await requestAs(gamer, giftPath, 201, {
+      body: { giftId, side: "RIGHT", idempotencyKey: "pk-gift-combo", quantity: 2 }
+    })).data;
+    assert.equal(comboGift.battle.right.score, 15);
+    assert.deepEqual(await comboValues(), [1, 2]);
 
     const reactionPath = `/api/pk/${reactionBattleId}/reactions`;
     const badReactionBattle = await requestAs(gamer, "/api/pk/not-an-id/reactions", 400, { body: { side: "RIGHT", type: "heart" } });
@@ -379,6 +404,12 @@ export async function verifyD1PkWritesExtended(db, request, owner, visitor, game
     assert.equal(await eventCount(reactionBattleId, "REACTION_SENT"), 5);
     assert.equal(await eventCount(reactionBattleId, "LEAD_CHANGED"), 1);
     assert.equal(await eventCount(reactionBattleId, "GIFT_SENT"), 0);
+    for (const scope of [`room:${roomA}`, `room:${roomB}`]) {
+      const events = await realtimeEvents(scope);
+      assert.ok(events.includes("pk:reaction:received"), `${scope} missing pk:reaction:received`);
+      assert.ok(events.includes("pk:score:update"), `${scope} missing pk:score:update`);
+      assert.ok(events.includes("pk:lead:changed"), `${scope} missing pk:lead:changed`);
+    }
 
     await db.prepare("UPDATE rooms SET active_pk_id = ? WHERE source_id IN (?, ?)")
       .bind(endBattleId, roomA, roomB).run();

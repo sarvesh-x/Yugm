@@ -12,6 +12,7 @@ import { getVipStatus } from "../services/vip.js";
 import { asyncHandler, ErrorCode, HttpError, isValidObjectId, sendOk } from "../utils/http.js";
 import { bindD1LiveUser, createD1AccessSessionReader, d1LiveUserFilter } from "./d1AccessSession.js";
 import { newId } from "./d1Cosmetics.js";
+import { noD1Presence, type D1PresencePort } from "./d1Presence.js";
 import { person, personJson, visiblePerson } from "./d1People.js";
 
 type MatchRow = {
@@ -71,7 +72,7 @@ function matchView(row: NewMatchRow) {
   };
 }
 
-export function createD1DatingRouter(db: D1Database) {
+export function createD1DatingRouter(db: D1Database, presence: D1PresencePort = noD1Presence) {
   const router = Router();
   const access = createD1AccessSessionReader(db, "http");
 
@@ -201,9 +202,10 @@ export function createD1DatingRouter(db: D1Database) {
     const actorInterests = parseStrings(actor.interests_json);
     const actorLanguages = parseStrings(actor.languages_json);
 
-    // Socket.IO/Redis presence has no D1 equivalent. Preserve the legacy empty
-    // shape rather than pairing or presenting users as online from stale rows.
-    if (onlineOnly || (sharedOnly && actorInterests.length === 0)) {
+    // An empty live-presence set preserves the legacy empty shape. Shared
+    // interests with no actor interests cannot overlap either.
+    const onlineIds = onlineOnly ? await presence.getOnlineUserIds() : [];
+    if ((onlineOnly && onlineIds.length === 0) || (sharedOnly && actorInterests.length === 0)) {
       return sendOk(res, { candidates: [] });
     }
 
@@ -240,6 +242,11 @@ export function createD1DatingRouter(db: D1Database) {
         JOIN user_interests AS interest ON interest.users_id = u.source_id AND interest.value = wanted.value)`,
       JSON.stringify(actorInterests));
     }
+    if (onlineOnly) {
+      const placeholders = onlineIds.map(() => `?${nextBinding++}`).join(", ");
+      filters.push(`u.source_id IN (${placeholders})`);
+      values.push(...onlineIds);
+    }
 
     const rows = await db.prepare(`SELECT u.source_id, ${personJson("u", true)} AS person_json,
       u.age, u.gender, u.vibe_line, u.role, u.looking_for, u.is_verified,
@@ -251,7 +258,7 @@ export function createD1DatingRouter(db: D1Database) {
         WHERE users_id = u.source_id ORDER BY position)) AS languages_json
       FROM users AS u WHERE ${filters.join(" AND ")} ORDER BY RANDOM() LIMIT 40`)
       .bind(...values).all<ExploreRow>();
-    sendOk(res, { candidates: rows.results.map(row => {
+    sendOk(res, { candidates: await Promise.all(rows.results.map(async row => {
       const candidateInterests = parseStrings(row.interests_json);
       const candidateLanguages = parseStrings(row.languages_json);
       const base = person(row.person_json) as Record<string, unknown>;
@@ -284,9 +291,9 @@ export function createD1DatingRouter(db: D1Database) {
         matchReasons: compatibility.reasons,
         sharedInterests: compatibility.sharedInterests,
         sharedLanguages: compatibility.sharedLanguages,
-        isOnline: false
+        isOnline: await presence.isUserOnline(row.source_id)
       };
-    }) });
+    })) });
   }));
 
   router.post("/like", asyncHandler(async (req, res) => {

@@ -9,6 +9,7 @@ import { getVipStatus } from "../services/vip.js";
 import { asyncHandler, ErrorCode, HttpError, isValidObjectId, sanitizeText, sendOk } from "../utils/http.js";
 import { createD1AccessSessionReader } from "./d1AccessSession.js";
 import { newId } from "./d1Cosmetics.js";
+import { noD1Presence, type D1PresencePort } from "./d1Presence.js";
 import { d1UserId } from "./d1People.js";
 import { prepareD1Profile, restoreD1Profile, type ProfileRow } from "./d1ProfileReads.js";
 import { pkBattleJoins, pkBattleProjection, presentPkBattle, type BattleRow } from "./d1RoomPkHistory.js";
@@ -154,6 +155,30 @@ function listUser(row: UserListRow, interests: string[], isFollowing: boolean) {
   return { ...user, ...vip, xp: level.xp, level: level.level, levelTitle: level.title, levelStatus: level, isFollowing };
 }
 
+// The legacy recommended-chat projection is narrower than the user search DTO:
+// it omits city/followers/interests/role and marks every returned user online
+// because the candidate set comes from live presence.
+function recommendedChatUser(row: UserListRow) {
+  const user = {
+    _id: row.source_id,
+    name: row.name ?? undefined,
+    username: row.username ?? undefined,
+    avatar: row.avatar ?? undefined,
+    avatarType: row.avatar_type ?? undefined,
+    avatarParts: optionalParts(row),
+    activeCosmetics: optionalCosmetics(row),
+    vipTier: row.vip_tier ?? undefined,
+    vipExpiresAt: row.vip_expires_at ?? undefined,
+    xp: row.xp ?? 0,
+    level: row.level ?? 1,
+    levelTitle: row.level_title ?? undefined
+  };
+  const vip = getVipStatus(user);
+  const level = getLevelStatus(user);
+  return { ...user, ...vip, xp: level.xp, level: level.level, levelTitle: level.title,
+    isOnline: true, isFollowing: false };
+}
+
 const USER_LIST_SELECT = `u.source_id, u.name, u.username, u.avatar, u.avatar_type,
   u.avatar_parts_background, u.avatar_parts_clothes, u.avatar_parts_head, u.avatar_parts_mouth, u.avatar_parts_eyes, u.avatar_parts_top,
   u.city, u.followers_count, u.role, u.xp, u.level, u.level_title,
@@ -167,7 +192,7 @@ const USER_LIST_SELECT = `u.source_id, u.name, u.username, u.avatar, u.avatar_ty
   u.active_cosmetics_gift_shelf, u.active_cosmetics_chat_bubble, u.active_cosmetics_seasonal_event,
   u.active_cosmetics_video_call_overlay, u.active_cosmetics_room_badge, u.active_cosmetics_room_ambience`;
 
-export function createD1UserDiscoveryRouter(db: D1Database) {
+export function createD1UserDiscoveryRouter(db: D1Database, presence: D1PresencePort = noD1Presence) {
   const router = Router();
   const access = createD1AccessSessionReader(db, "http");
   const authenticate = (req: import("express").Request) => requireHttpSession(req.headers.authorization, access);
@@ -220,10 +245,20 @@ export function createD1UserDiscoveryRouter(db: D1Database) {
   }));
 
   router.get("/recommended-chat", asyncHandler(async (req, res) => {
-    await authenticate(req);
-    // D1 Worker has no Socket.IO/Redis live presence; legacy returns empty when
-    // no online IDs are available. Preserve the empty shape until presence migrates.
-    sendOk(res, { users: [] });
+    const { user } = await authenticate(req);
+    const onlineIds = await presence.getOnlineUserIds();
+    if (onlineIds.length === 0) return sendOk(res, { users: [] });
+    const limit = Math.min(Number(req.query.limit) || 30, 60);
+    const placeholders = onlineIds.map((_, index) => `?${index + 2}`).join(", ");
+    const { results } = await db.prepare(`SELECT ${USER_LIST_SELECT} FROM users AS u
+      WHERE u.source_id <> ?1 AND u.source_id IN (${placeholders})
+        AND u.is_blocked = 0 AND u.deletion_requested_at IS NULL
+        AND NOT EXISTS (SELECT 1 FROM blocks AS b
+          WHERE (b.blocker_id = ?1 AND b.blocked_user_id = u.source_id)
+            OR (b.blocker_id = u.source_id AND b.blocked_user_id = ?1))
+      ORDER BY RANDOM() LIMIT ?${onlineIds.length + 2}`)
+      .bind(user.id, ...onlineIds, limit).all<UserListRow>();
+    sendOk(res, { users: results.map(recommendedChatUser) });
   }));
 
   router.get("/:userId/pk-history", asyncHandler(async (req, res) => {

@@ -32,6 +32,7 @@ type MatchRequest = {
   status: string;
   matched_user_id: string | null;
   room_id: string | null;
+  expires_at: string | null;
 };
 
 const privateCallSchema = z.object({ type: z.enum(["VOICE", "VIDEO"]) });
@@ -134,13 +135,15 @@ export function createD1UserMatchingRouter(db: D1Database, allowChat?: D1UserRat
     const waitingUntil = new Date(started.getTime() + 90_000).toISOString();
     const matchedUntil = new Date(started.getTime() + 5 * 60_000).toISOString();
     const existing = await db.prepare(`SELECT source_id, status, matched_user_id, room_id, expires_at
-      FROM friend_match_requests WHERE user_id = ? AND expires_at > ?
-      ORDER BY created_at ASC, source_id ASC LIMIT 1`).bind(user.id, now).first<MatchRequest>();
+      FROM friend_match_requests WHERE user_id = ?
+      ORDER BY created_at ASC, source_id ASC LIMIT 1`).bind(user.id).first<MatchRequest>();
     if (existing?.status === "MATCHED" && existing.room_id && existing.matched_user_id) {
       const matched = await readFriendMatchState(user.id, now);
       if (matched.status === "MATCHED") return sendOk(res, matched);
     }
-    if (existing?.status === "PAIRING") return sendOk(res, { status: "WAITING" });
+    if (existing?.status === "PAIRING" && existing.expires_at && existing.expires_at > now) {
+      return sendOk(res, { status: "WAITING" });
+    }
 
     const ownId = existing?.source_id ?? newId();
     if (existing) {
@@ -373,7 +376,11 @@ export function createD1UserMatchingRouter(db: D1Database, allowChat?: D1UserRat
           AND token_version IS ?`)
         .bind(time, `deleted_${userId.toLowerCase()}`, time, userId, claims.tokenVersion ?? null),
       db.prepare(`UPDATE user_auth_profile SET null_fields = ?, missing_fields = ?, edit_token = NULL
-        WHERE source_id = ?`).bind(JSON.stringify(nullFields), JSON.stringify(missingFields), userId)
+        WHERE source_id = ?`).bind(JSON.stringify(nullFields), JSON.stringify(missingFields), userId),
+      db.prepare(`INSERT INTO account_deletions (source_id, deletion_requested_at, hard_deleted_at)
+        SELECT ?, ?, NULL WHERE EXISTS (SELECT 1 FROM users WHERE source_id = ? AND deletion_requested_at = ?)
+        ON CONFLICT(source_id) DO UPDATE SET deletion_requested_at = excluded.deletion_requested_at,
+          hard_deleted_at = NULL`).bind(userId, time, userId, time)
     ]);
     if (!tombstone[0]?.meta.changes) throw new HttpError(409, "Account changed. Please try again.", ErrorCode.CONFLICT);
 

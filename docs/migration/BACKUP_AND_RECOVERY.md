@@ -1,7 +1,7 @@
 # Backup and recovery inventory (Phase 1)
 
-**Date:** 2026-11-22
-**Status:** Planning inventory only. **No backup has been created and no restore has been tested.** Recovery procedures are unverified; the Phase 1 gate is not satisfied. No credential, production snapshot, export or data operation is authorized by this document.
+**Date:** 2026-11-22; local fixture replay added 2026-11-26
+**Status:** Production backup and restore remain unverified. A synthetic, isolated local D1 restore replay now passes, but no production backup has been created or restored and the Phase 1 gate is not satisfied. No credential, production snapshot, export or data operation is authorized by this document.
 
 ## 1. Purpose
 
@@ -41,11 +41,14 @@ Historical evidence: `docs/cloudflare-migration/audit.md` records that existing 
 | Legacy media reference scanner | `backend-server/apps/api/src/migration/legacyMediaReferences.ts`, CLI `src/scripts/legacy-media-references.ts`, npm script `inventory:legacy-media` | Read-only scan of exported records or a copied snapshot for legacy public `/uploads`, private trust/staging, badge-art, inline data URLs and managed upload endpoints. Emits counts, field paths, extensions and de-queried URL digests only; never raw URLs, and does not check binary existence |
 | Snapshot delta diff | `backend-server/apps/api/src/migration/snapshotDiff.ts`, CLI `src/scripts/snapshot-diff.ts`, npm script `snapshot:diff` | Read-only comparison of two copied snapshots: added/removed/changed records, changed top-level field names, duplicate/invalid IDs and watermark ordering. Emits source IDs and content digests only; not a backup restore check or a delta-import implementation |
 | Combined backup rehearsal | `backend-server/apps/api/src/migration/backupRehearsal.ts`, CLI `src/scripts/backup-rehearse.ts`, npm script `backup:rehearse` | Chains `backup:verify` with the existing dry-run importer and writes one artifact set. Skips rehearsal when integrity fails; PASS means copy integrity plus mapping/validation dry run, not a tested restore |
+| Fixture-only local D1 restore replay | `backend-server/apps/cloudflare-worker/test/d1-restore-rehearsal.mts`, npm script `test:restore-rehearsal` | Applies `0001`–`0041` to an ephemeral Miniflare D1 database, imports a checked-in synthetic snapshot through the real mapped importer with persisted checkpoints, reads rows back, reconciles wallet/media references and replays to prove idempotency. Refuses remote bindings; not a production restore |
 | Recovery evidence checker | `backend-server/apps/api/src/migration/dcr2RecoveryEvidence.ts`, CLI `src/scripts/dcr2-recovery-evidence.ts`, npm script `capacity:recovery` | Checks backup verification output, rehearsal artifacts and owner attestation for internal completeness. It does not perform a restore and does not treat attestation booleans as tool-verified proof |
 | Config manifest | `backend-server/scripts/config-backup-manifest.mjs`, npm scripts `config:manifest` / `test:config-manifest` | Value-free inventory of tracked config files with path, byte count and SHA-256 only. It does not capture ignored `.env`/`.dev.vars` values or external provider config and is not a config backup |
 | D1 draft schema | `backend-server/apps/api/migrations/d1/0001_initial.sql` | Review draft, not approved |
 
 These tools were exercised only against generated fixtures during earlier work (138 migration tests and local `migrate:rehearse` smokes). They have **not** been run against a production snapshot, D1 instance or R2 bucket.
+
+On 2026-11-26, `npm run test:restore-rehearsal --workspace apps/cloudflare-worker` added a synthetic but real restore replay: a fresh local D1 database applies the schema and migrations `0003`–`0041`, the checked-in snapshot in `backend-server/apps/cloudflare-worker/test/fixtures/d1-restore/` is imported through `FileSystemSnapshotStore`, `D1TargetWriter` and `importMappedCollection` with filesystem checkpoints, authoritative rows are read back, the wallet ledger is reconciled with the restored balance, media ownership/bucket/key are checked, and a second import skips the committed batches without duplicating rows. It rejects remote D1/R2 bindings and the production config. This is fixture-only evidence and does not satisfy the production restore gate.
 
 The snapshot-copy verifier was added on 2026-11-22 to cover procedure step 7 (top-level checksum verification after copy). It reads only a local directory: it never connects to MongoDB, D1, R2 or any remote service and never modifies the snapshot. `verifyBackup` detects missing or unreadable batch files, record/byte count drift, changed batch content, unexpected batch files and a digest mismatch when the source digest is supplied. Its 4 unit tests and a CLI smoke against a generated fixture passed, but this is **fixture-only evidence**. It does not create a backup, prove a restore, or change any item in section 5. Usage:
 
@@ -77,9 +80,9 @@ For procedure step 5, `npm run config:manifest -- [--out <report.json>]` records
 | Verified MongoDB backups | **No** |
 | Verified media backups | **No** |
 | Verified configuration backup | **No** |
-| Restore rehearsal in isolated environment | **No** |
-| Financial reconciliation against restored copy | **No** |
-| Media reference resolution against restored copy | **No** |
+| Restore rehearsal in isolated environment | **No** for production data; synthetic local D1 replay passed |
+| Financial reconciliation against restored copy | **No** for production data; synthetic ledger/balance check passed |
+| Media reference resolution against restored copy | **No** for production binaries; synthetic registry read-back passed |
 | RPO/RTO measured | **No** |
 | Backup access controls and encryption confirmed | **No** |
 

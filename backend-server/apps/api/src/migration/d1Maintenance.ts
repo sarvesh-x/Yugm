@@ -82,11 +82,12 @@ async function endStaleRooms(db: D1Database, now: Date) {
 export async function runD1Maintenance(db: D1Database, now: Date, staging?: R2Bucket) {
   // Load after the Worker runtime has set YUGM_RUNTIME=cloudflare; d1Bonds imports env.ts.
   const { runD1BondMaintenance } = await import("./d1Bonds.js");
+  const { purgeExpiredD1Accounts } = await import("./d1AccountDeletion.js");
   const time = now.toISOString();
   const clanCutoff = new Date(now.getTime() - 30 * dayMs).toISOString();
   const oldClanMessages = "SELECT source_id FROM clan_messages WHERE created_at <= ? ORDER BY created_at, source_id LIMIT ?";
 
-  const [lifecycle, bonds, vip, media, rooms] = await Promise.allSettled([
+  const [lifecycle, bonds, vip, media, rooms, accounts] = await Promise.allSettled([
     db.batch([
       db.prepare(`DELETE FROM auth_sessions WHERE source_id IN (SELECT source_id FROM auth_sessions
         WHERE expires_at <= ? ORDER BY expires_at, source_id LIMIT ?)`).bind(time, rowLimit),
@@ -107,7 +108,8 @@ export async function runD1Maintenance(db: D1Database, now: Date, staging?: R2Bu
     runD1BondMaintenance(db, now),
     rollExpiredVipCycles(db, now),
     staging ? sweepMediaUploads(db, staging, now) : Promise.resolve({ expired: 0, stagingCleaned: 0 }),
-    endStaleRooms(db, now)
+    endStaleRooms(db, now),
+    purgeExpiredD1Accounts(db, now)
   ]);
 
   console.info("D1 scheduled maintenance", {
@@ -115,10 +117,11 @@ export async function runD1Maintenance(db: D1Database, now: Date, staging?: R2Bu
     bonds: bonds.status === "fulfilled" ? "done" : "failed",
     vip: vip.status === "fulfilled" ? vip.value : "failed",
     media: media.status === "fulfilled" ? media.value : "failed",
-    rooms: rooms.status === "fulfilled" ? rooms.value : "failed"
+    rooms: rooms.status === "fulfilled" ? rooms.value : "failed",
+    accounts: accounts.status === "fulfilled" ? accounts.value : `failed: ${String(accounts.reason)}`
   });
   if (lifecycle.status === "rejected" || bonds.status === "rejected" || vip.status === "rejected" ||
-      media.status === "rejected" || rooms.status === "rejected") {
+      media.status === "rejected" || rooms.status === "rejected" || accounts.status === "rejected") {
     throw new Error("D1 scheduled maintenance has failed tasks");
   }
 }

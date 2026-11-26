@@ -1,0 +1,1 @@
+{"_id":"650000000000000000000101","amount":500,"balanceAfter":500,"balanceBefore":0,"createdAt":"2026-11-26T00:00:00.000Z","metadata":{"idempotencyKey":"restore-fixture-1"},"source":"RECHARGE","type":"CREDIT","updatedAt":"2026-11-26T00:00:00.000Z","userId":"650000000000000000000001"}

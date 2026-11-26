@@ -74,9 +74,9 @@ export async function verifyD1Reports(db, request, secret, host, second, third, 
   assert.equal(detail.report.evidence.recentUniqueReporterCount, 1);
   assert.equal(detail.queue.targetId, room);
   assert.equal(detail.queue.aiScore, 28);
-  assert.equal(detail.related.length, 5);
+  assert.equal(detail.related.length, initialReportCount + 5);
   assert.equal((await as(adminToken(admin), `/api/admin/rooms/${room}/reports`, 200)).data.length, 2);
-  assert.equal((await as(adminToken(admin), `/api/admin/users/${targetId}/reports`, 200)).data.length, 5);
+  assert.equal((await as(adminToken(admin), `/api/admin/users/${targetId}/reports`, 200)).data.length, initialReportCount + 5);
   await as(host, reportPath, 201, payload);
   await as(host, "/api/reports", 429, payload);
 }

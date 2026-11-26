@@ -1,8 +1,7 @@
 /**
- * Unwired hibernation-compatible Durable Object adapter for the native realtime
- * protocol. It is deliberately not exported from `index.ts` and has no binding
- * in any Wrangler config, so it cannot receive production traffic yet.
- *
+ * Hibernation-compatible Durable Object adapter for the native realtime
+ * protocol. WebSocket upgrade and publish endpoints are internal only: the D1
+ * Worker uses a bound stub, and no public HTTP route forwards to this object.
  * Connection identity/scope live in WebSocket attachments; cursors, seen IDs,
  * sequences and bounded history live in Durable Object storage. No mutable
  * in-memory Map is required across hibernation.
@@ -10,6 +9,7 @@
 import { DurableObject } from "cloudflare:workers";
 import {
   NATIVE_PROTOCOL_VERSION,
+  deliveryClassSchema,
   nativeCommandAckSchema,
   nativeCommandSchema,
   nativeEnvelopeSchema,
@@ -24,7 +24,12 @@ import {
 
 const MAX_HISTORY = 200;
 const MAX_SEEN_IDS = 5000;
+const PRESENCE_KEY = "native:presence";
+const PRESENCE_TTL_MS = 5 * 60_000;
 const SCOPE_PATTERN = /^[a-zA-Z][a-zA-Z0-9:_-]{1,120}$/;
+const USER_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9:_-]{1,120}$/;
+
+type PresenceRecord = Record<string, number>;
 
 interface NativeAttachment {
   connectionId: string;
@@ -64,6 +69,26 @@ function errorFrame(code: string, message: string): string {
   return JSON.stringify(frame);
 }
 
+function badRequest(message: string) {
+  return Response.json({ ok: false, error: message }, { status: 400 });
+}
+
+function parsePublishInput(value: unknown): NativePublishInput {
+  if (!value || typeof value !== "object") throw new Error("Publish body must be an object");
+  const record = value as Record<string, unknown>;
+  if (typeof record.event !== "string" || !record.event.trim()) throw new Error("event is required");
+  if (typeof record.scope !== "string" || !SCOPE_PATTERN.test(record.scope)) throw new Error("Invalid scope");
+  if (!("data" in record)) throw new Error("data is required");
+  const delivery = deliveryClassSchema.safeParse(record.delivery);
+  if (!delivery.success) throw new Error("Invalid delivery class");
+  return { event: record.event, scope: record.scope, data: record.data, delivery: delivery.data };
+}
+
+function parseUserId(value: unknown): string {
+  if (typeof value !== "string" || !USER_ID_PATTERN.test(value)) throw new Error("Invalid userId");
+  return value;
+}
+
 function rememberSeenIds(seen: string[], ids: readonly string[]): string[] {
   const next = [...seen];
   for (const id of ids) {
@@ -76,14 +101,65 @@ function rememberSeenIds(seen: string[], ids: readonly string[]): string[] {
 
 export class NativeRealtimeDurableObject extends DurableObject<NativeRealtimeDoEnv> {
   /**
-   * Sequence allocation, bounded history and connection cursors are all
-   * read-modify-write operations. Serialising them prevents concurrent
-   * publishers from allocating the same sequence or losing a cursor write.
+   * Sequence allocation, bounded history, presence changes and connection
+   * cursors are read-modify-write operations. Serialising them prevents
+   * concurrent publishers from allocating the same sequence or losing a write.
    */
   private readonly operations = new SerializedOperations();
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    if (request.method === "POST" && url.pathname === "/publish") {
+      let input: NativePublishInput;
+      try {
+        input = parsePublishInput(await request.json());
+        const envelope = await this.publish(input);
+        return Response.json({ ok: true, envelope });
+      } catch (error) {
+        return badRequest(error instanceof Error ? error.message : "Invalid publish");
+      }
+    }
+    if (request.method === "GET" && url.pathname === "/presence/count") {
+      return Response.json({ count: Object.keys(await this.livePresence()).length });
+    }
+    if (request.method === "GET" && url.pathname === "/presence/online") {
+      return Response.json({ userIds: Object.keys(await this.livePresence()).sort() });
+    }
+    if (request.method === "GET" && url.pathname === "/presence/is-online") {
+      try {
+        const userId = parseUserId(url.searchParams.get("userId"));
+        return Response.json({ online: Boolean((await this.livePresence())[userId]) });
+      } catch (error) {
+        return badRequest(error instanceof Error ? error.message : "Invalid userId");
+      }
+    }
+    if (request.method === "POST" && (url.pathname === "/presence/online" || url.pathname === "/presence/offline")) {
+      try {
+        const body = await request.json() as { userId?: unknown };
+        const userId = parseUserId(body.userId);
+        if (url.pathname === "/presence/online") await this.markOnline(userId);
+        else await this.markOffline(userId);
+        return Response.json({ ok: true });
+      } catch (error) {
+        return badRequest(error instanceof Error ? error.message : "Invalid presence request");
+      }
+    }
+    if (request.method === "POST" && url.pathname === "/presence/emit-user") {
+      try {
+        const body = await request.json() as { userId?: unknown; event?: unknown; payload?: unknown };
+        const userId = parseUserId(body.userId);
+        if (typeof body.event !== "string" || !body.event.trim()) throw new Error("event is required");
+        await this.emitUser(userId, body.event, body.payload ?? {});
+        return Response.json({ ok: true });
+      } catch (error) {
+        return badRequest(error instanceof Error ? error.message : "Invalid user event");
+      }
+    }
+    if (request.method === "GET" && url.pathname === "/history") {
+      const scope = url.searchParams.get("scope") ?? "";
+      if (!SCOPE_PATTERN.test(scope)) return badRequest("Invalid scope");
+      return Response.json({ envelopes: await this.ctx.storage.get<NativeEnvelope[]>(this.historyKey(scope)) ?? [] });
+    }
     if (request.method !== "GET" || request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
       return new Response("WebSocket upgrade required", { status: 400 });
     }
@@ -159,9 +235,47 @@ export class NativeRealtimeDurableObject extends DurableObject<NativeRealtimeDoE
     await this.webSocketClose(ws);
   }
 
-  /** Future authoritative publishers call this after the source write commits. */
+  /** Authoritative publishers call this after the source write commits. */
   async publish(input: NativePublishInput): Promise<NativeEnvelope> {
     return this.operations.run(() => this.publishOnce(input));
+  }
+
+  async markOnline(userId: string): Promise<void> {
+    parseUserId(userId);
+    await this.operations.run(async () => {
+      const presence = await this.livePresence();
+      presence[userId] = Date.now();
+      await this.ctx.storage.put(PRESENCE_KEY, presence);
+    });
+    await this.publish({ event: "user:online", scope: "public", delivery: "ephemeral", data: { userId } });
+  }
+
+  async markOffline(userId: string): Promise<void> {
+    parseUserId(userId);
+    await this.operations.run(async () => {
+      const presence = await this.livePresence();
+      delete presence[userId];
+      await this.ctx.storage.put(PRESENCE_KEY, presence);
+    });
+    await this.publish({ event: "user:offline", scope: "public", delivery: "ephemeral", data: { userId } });
+  }
+
+  async emitUser(userId: string, event: string, payload: unknown): Promise<void> {
+    parseUserId(userId);
+    await this.publish({ event, scope: `user:${userId}`, delivery: "invalidation", data: payload });
+  }
+
+  private async livePresence(): Promise<PresenceRecord> {
+    const presence = await this.ctx.storage.get<PresenceRecord>(PRESENCE_KEY) ?? {};
+    const now = Date.now();
+    let expired = false;
+    for (const [userId, seenAt] of Object.entries(presence)) {
+      if (now - seenAt <= PRESENCE_TTL_MS) continue;
+      delete presence[userId];
+      expired = true;
+    }
+    if (expired) await this.ctx.storage.put(PRESENCE_KEY, presence);
+    return presence;
   }
 
   private async publishOnce(input: NativePublishInput): Promise<NativeEnvelope> {

@@ -63,6 +63,8 @@ import { createD1ModerationRouter } from "./d1Moderation.js";
 import { createD1NotificationRouter } from "./d1Notifications.js";
 import { createD1ProfileEditRouter } from "./d1ProfileEdits.js";
 import { createD1ProfileActivityRouter } from "./d1ProfileActivity.js";
+import { noD1Presence, type D1PresencePort } from "./d1Presence.js";
+import { noD1Realtime, type D1RealtimePort } from "./d1Realtime.js";
 import { createD1UserDiscoveryRouter } from "./d1UserDiscovery.js";
 import { createD1UserMatchingRouter, type D1UserMatchingSideEffects } from "./d1UserMatching.js";
 import { createD1ProgressionRouter } from "./d1Progression.js";
@@ -107,13 +109,25 @@ export function createD1App(
   wallet: D1WalletConfig = { production: true },
   admin: AdminSessionConfig = {},
   adminRateLimiters = rateLimiters,
-  userMatching: D1UserMatchingSideEffects = {}
+  userMatching: D1UserMatchingSideEffects = {},
+  presence: D1PresencePort = noD1Presence,
+  realtime: D1RealtimePort = noD1Realtime
 ) {
   const resolvePublicOrigin = (request: ExpressRequest) => {
     // The fetch handler validates the origin and discards any incoming value.
     const value = request.header("x-yugm-request-origin");
     if (!value) throw new HttpError(400, "Media origin is unavailable");
     return value;
+  };
+  // Explicit matching callbacks win; otherwise the shared presence port supplies
+  // ephemeral online state and user-scoped invalidation. Presence never changes
+  // the outcome of a guarded D1 commit.
+  const matchingSideEffects: D1UserMatchingSideEffects = {
+    ...userMatching,
+    isUserOnline: userMatching.isUserOnline ?? ((userId) => presence.isUserOnline(userId)),
+    disconnectUser: userMatching.disconnectUser ?? ((userId) =>
+      presence.disconnectUser?.(userId) ?? presence.markOffline(userId)),
+    emitUser: userMatching.emitUser ?? ((userId, event, payload) => presence.emitUser?.(userId, event, payload))
   };
   const app = express();
   const paymentProviders = createD1PaymentProviders(wallet);
@@ -173,11 +187,11 @@ export function createD1App(
   app.use("/api/reaction-art", createD1ReactionArtRouter(db, media?.buckets.assets));
   app.use("/api/users", createD1ProfileEditRouter(db));
   app.use("/api/users", createD1ProfileActivityRouter(db));
-  app.use("/api/users", createD1UserDiscoveryRouter(db));
-  app.use("/api/users", createD1UserMatchingRouter(db, limits.chat, userMatching));
+  app.use("/api/users", createD1UserDiscoveryRouter(db, presence));
+  app.use("/api/users", createD1UserMatchingRouter(db, limits.chat, matchingSideEffects));
   app.use("/api", createD1ProgressionRouter(db));
   app.use("/api/users/messages", createD1InboxRouter(db, limits.chat));
-  app.use("/api", createD1DiscoverRouter(db));
+  app.use("/api", createD1DiscoverRouter(db, presence));
   app.use("/api", createD1SocialRouter(db));
   app.use("/api", createD1SocialFeaturesRouter(db));
   app.use("/api", createD1ExperienceRouter(db));
@@ -195,7 +209,7 @@ export function createD1App(
   app.use("/api/clans", createD1ClansRouter(db, limits));
   app.use("/api/notifications", createD1NotificationRouter(db));
   app.use("/api/support", createD1SupportRouter(db, limits.create));
-  app.use("/api/dating", createD1DatingRouter(db));
+  app.use("/api/dating", createD1DatingRouter(db, presence));
   // The legacy app mounts this router twice, preserving both the canonical
   // /api/events paths and older double-prefixed clients.
   const events = createD1EventsRouter(db, limits.create);
@@ -222,7 +236,7 @@ export function createD1App(
   app.use("/api/creator", createD1CreatorRouter(db, { payoutKycEncryptionKey: wallet.payoutKycEncryptionKey }));
   app.use("/api", createD1LiveKitRouter(db, livekit));
   app.use("/api/pk", createD1PkReadsRouter(db, livekit));
-  app.use("/api/pk", createD1PkWritesRouter(db));
+  app.use("/api/pk", createD1PkWritesRouter(db, realtime));
   app.use("/api", createD1GamesReadsRouter(db));
   app.use("/api", createD1GamesRouter(db, limits.chat));
   const access = createD1AccessSessionReader(db, "http");

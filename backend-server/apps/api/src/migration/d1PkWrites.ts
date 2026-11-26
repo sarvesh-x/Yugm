@@ -12,7 +12,9 @@ import { createNotification } from "./d1AdminUsers.js";
 import { newId } from "./d1Cosmetics.js";
 import { expireD1PkInvite } from "./d1PkDeadlines.js";
 import { person, personJson } from "./d1People.js";
+import { emitD1PkBattleState } from "./d1PkRealtime.js";
 import { presentInvite } from "./d1PkReads.js";
+import { emitD1Realtime, noD1Realtime, type D1RealtimePort } from "./d1Realtime.js";
 import { pkBattleJoins, pkBattleProjection, presentPkBattle, type BattleRow } from "./d1RoomPkHistory.js";
 
 type Row = Record<string, string | number | null>;
@@ -123,7 +125,7 @@ const releaseRoomLocks = (db: D1Database, battleId: string, roomIds: string[], t
     .bind(...roomIds, time, battleId);
 };
 
-export function createD1PkWritesRouter(db: D1Database) {
+export function createD1PkWritesRouter(db: D1Database, realtime: D1RealtimePort = noD1Realtime) {
   const router = Router();
   const access = createD1AccessSessionReader(db, "http");
   const authenticate = asyncHandler(async (req, res, next) => {
@@ -143,6 +145,17 @@ export function createD1PkWritesRouter(db: D1Database) {
 
   const readBattle = (battleId: string) => db.prepare(`SELECT ${pkBattleProjection}
     FROM pk_battles AS b ${pkBattleJoins} WHERE b.source_id = ? LIMIT 1`).bind(battleId).first<WritableBattleRow>();
+
+  // Every call below happens after a guarded D1 batch has been checked. Delivery
+  // is best effort: a publish failure never rewrites or invalidates the commit.
+  const publishToRooms = (battle: WritableBattleRow, event: string, data?: unknown) =>
+    emitD1PkBattleState(realtime, presentPkBattle(battle), event, data);
+  const publishToScope = (scope: string, event: string, data: Record<string, unknown>) =>
+    emitD1Realtime(realtime, { event, scope, delivery: "durable", data });
+  const publishToUser = (userId: string, event: string, data: Record<string, unknown>) =>
+    publishToScope(`user:${userId}`, event, data);
+  const publishToRoom = (roomId: string, event: string, data: Record<string, unknown>) =>
+    publishToScope(`room:${roomId}`, event, data);
 
   const assertLiveRoomManager = async (userId: string, roomId: string) => {
     const [roomRow, managerRow, userRow] = await db.batch([
@@ -192,7 +205,7 @@ export function createD1PkWritesRouter(db: D1Database) {
     if (String(invite.invitee_user_id) !== userId) throw new HttpError(403, "Only invitee can accept", ErrorCode.FORBIDDEN);
     if (invite.status !== "PENDING") throw new HttpError(409, "Invite is not pending", ErrorCode.CONFLICT);
     if (invite.expires_at && Date.parse(String(invite.expires_at)) < Date.now()) {
-      await expireD1PkInvite(db, invite);
+      await expireD1PkInvite(db, invite, new Date(), realtime);
       throw new HttpError(409, "PK invite expired", ErrorCode.CONFLICT);
     }
     const battleId = String(invite.battle_id);
@@ -251,6 +264,8 @@ export function createD1PkWritesRouter(db: D1Database) {
     if (!acceptedBattle || !acceptedInvite) {
       throw new HttpError(500, "Failed to load accepted PK invite", ErrorCode.INTERNAL);
     }
+    await publishToRooms(acceptedBattle, "pk:state");
+    await publishToUser(battle.left_host_id, "pk:invite:accepted", presentPkBattle(acceptedBattle));
     return { battle: presentPkBattle(acceptedBattle), invite: presentInvite(acceptedInvite) };
   };
 
@@ -264,6 +279,7 @@ export function createD1PkWritesRouter(db: D1Database) {
     mode: "GIFT" | "VOTE" | "REACTION" | "MIXED";
     durationSeconds: number;
     title?: string;
+    previousBattleId?: string;
   };
 
   const assertInviteHost = async (userId: string, roomId: string): Promise<InviteHostRoom> => {
@@ -386,7 +402,16 @@ export function createD1PkWritesRouter(db: D1Database) {
       db.prepare("SELECT * FROM pk_invites WHERE source_id = ?").bind(inviteId).first<Row>()
     ]);
     if (!battle || !invite) throw new HttpError(500, "Failed to load PK invite", ErrorCode.INTERNAL);
-    return { battle: presentPkBattle(battle), invite: presentInvite(invite) };
+    const presentedBattle = presentPkBattle(battle);
+    const presentedInvite = presentInvite(invite);
+    await publishToUser(opponentHostId, "pk:invite:received", { battle: presentedBattle, invite: presentedInvite });
+    await publishToRoom(roomId, "pk:invite:sent", { battle: presentedBattle, invite: presentedInvite });
+    if (input.previousBattleId) {
+      await publishToUser(opponentHostId, "pk:rematch:requested", {
+        battleId, previousBattleId: input.previousBattleId, userId: input.userId
+      });
+    }
+    return { battle: presentedBattle, invite: presentedInvite };
   };
 
   router.use(authenticate);
@@ -476,6 +501,7 @@ export function createD1PkWritesRouter(db: D1Database) {
     }
     const battle = await readBattle(battleId);
     if (!battle) throw new HttpError(500, "Failed to load PK battle", ErrorCode.INTERNAL);
+    await publishToRooms(battle, "pk:state");
     sendOk(res, { battle: presentPkBattle(battle) }, 201);
   }));
 
@@ -534,7 +560,7 @@ export function createD1PkWritesRouter(db: D1Database) {
     if (invite.invitee_user_id !== userId) throw new HttpError(403, "Only invitee can reject", ErrorCode.FORBIDDEN);
     if (invite.status !== "PENDING") throw new HttpError(409, "Invite is not pending", ErrorCode.CONFLICT);
     if (invite.expires_at && Date.parse(String(invite.expires_at)) < Date.now()) {
-      await expireD1PkInvite(db, invite);
+      await expireD1PkInvite(db, invite, new Date(), realtime);
       throw new HttpError(409, "PK invite expired", ErrorCode.CONFLICT);
     }
     const time = new Date().toISOString();
@@ -559,6 +585,9 @@ export function createD1PkWritesRouter(db: D1Database) {
       throw new HttpError(409, "Invitation was already answered or expired", ErrorCode.CONFLICT);
     }
     if (!committed[1]?.meta?.changes) throw new HttpError(409, "PK is no longer available", ErrorCode.CONFLICT);
+    await publishToRoom(roomIds[0], "pk:invite:rejected", { battleId, inviteId });
+    const rejectedBattle = await readBattle(battleId);
+    if (rejectedBattle) await publishToRooms(rejectedBattle, "pk:ended");
     sendOk(res, { rejected: true });
   }));
 
@@ -598,6 +627,8 @@ export function createD1PkWritesRouter(db: D1Database) {
       guardedEventInsert(db, guard, newId(), battleId, "PK_CANCELLED", time, { userId })
     ]);
     if (!committed[0]?.meta?.changes) throw new HttpError(409, "PK changed while cancelling", ErrorCode.CONFLICT);
+    const cancelledBattle = await readBattle(battleId);
+    if (cancelledBattle) await publishToRooms(cancelledBattle, "pk:ended");
     sendOk(res, { cancelled: true });
   }));
 
@@ -635,6 +666,7 @@ export function createD1PkWritesRouter(db: D1Database) {
       const changed = await readBattle(battleId);
       if (!changed) throw new HttpError(500, "Failed to load PK battle", ErrorCode.INTERNAL);
       finalizing = changed;
+      await publishToRooms(changed, "pk:state");
     }
     const terminalStatus = preStart ? "CANCELLED" : "COMPLETED";
     assertPkTransition(finalizing.status, terminalStatus);
@@ -663,6 +695,7 @@ export function createD1PkWritesRouter(db: D1Database) {
     }
     const ended = await readBattle(battleId);
     if (!ended) throw new HttpError(404, "PK battle not found", ErrorCode.NOT_FOUND);
+    await publishToRooms(ended, "pk:ended");
     sendOk(res, { battle: presentPkBattle(ended) });
   }));
 
@@ -690,7 +723,8 @@ export function createD1PkWritesRouter(db: D1Database) {
       battleType: oldBattle.battle_type as "VOICE" | "VIDEO",
       mode: oldBattle.mode as "GIFT" | "VOTE" | "REACTION" | "MIXED",
       durationSeconds: oldBattle.duration_seconds,
-      title: `Rematch: ${oldBattle.title || "PK Battle"}`
+      title: `Rematch: ${oldBattle.title || "PK Battle"}`,
+      previousBattleId: battleId
     }), 201);
   }));
 
@@ -737,19 +771,29 @@ export function createD1PkWritesRouter(db: D1Database) {
         sql: "EXISTS (SELECT 1 FROM pk_battles WHERE source_id = ? AND status = 'COUNTDOWN' AND state_version = ?)",
         params: [battleId, countdownVersion]
       };
-      await db.batch([
+      const readyCommitted = await db.batch([
         db.prepare(`UPDATE pk_battles SET status = 'READY', state_version = state_version + 1, updated_at = ?
           WHERE source_id = ? AND status = 'PREPARING' AND state_version = ?`)
           .bind(time, battleId, battle.state_version),
         guardedEventInsert(db, allReadyGuard, newId(), battleId, "PK_READY", time, {
           metadata: { participantsReady: Number(counts.ready) }
-        }),
-        db.prepare(`UPDATE pk_battles SET status = 'COUNTDOWN', countdown_ends_at = ?,
-          state_version = state_version + 1, updated_at = ?
-          WHERE source_id = ? AND status = 'READY' AND state_version = ?`)
-          .bind(countdownEndsAt, time, battleId, readyVersion),
-        guardedEventInsert(db, countdownGuard, newId(), battleId, "PK_COUNTDOWN", time)
+        })
       ]);
+      if (readyCommitted[0]?.meta?.changes) {
+        const readyBattle = await readBattle(battleId);
+        if (readyBattle) await publishToRooms(readyBattle, "pk:state");
+        const countdownCommitted = await db.batch([
+          db.prepare(`UPDATE pk_battles SET status = 'COUNTDOWN', countdown_ends_at = ?,
+            state_version = state_version + 1, updated_at = ?
+            WHERE source_id = ? AND status = 'READY' AND state_version = ?`)
+            .bind(countdownEndsAt, time, battleId, readyVersion),
+          guardedEventInsert(db, countdownGuard, newId(), battleId, "PK_COUNTDOWN", time)
+        ]);
+        if (countdownCommitted[0]?.meta?.changes) {
+          const countdownBattle = await readBattle(battleId);
+          if (countdownBattle) await publishToRooms(countdownBattle, "pk:state");
+        }
+      }
     }
     const current = await readBattle(battleId);
     if (!current) throw new HttpError(404, "PK battle not found", ErrorCode.NOT_FOUND);
@@ -775,7 +819,7 @@ export function createD1PkWritesRouter(db: D1Database) {
       sql: "EXISTS (SELECT 1 FROM pk_battles WHERE source_id = ? AND status = 'CLOSED' AND closed_at = ?)",
       params: [battleId, time]
     };
-    await db.batch([
+    const committed = await db.batch([
       db.prepare(`UPDATE pk_battles SET status = 'CLOSED', closed_at = ?, updated_at = ?, state_version = state_version + 1
         WHERE source_id = ? AND status = ?`).bind(time, time, battleId, battle.status),
       releaseRoomLocks(db, battleId, roomIds, time),
@@ -783,6 +827,7 @@ export function createD1PkWritesRouter(db: D1Database) {
     ]);
     const closed = await readBattle(battleId);
     if (!closed) throw new HttpError(404, "PK battle not found", ErrorCode.NOT_FOUND);
+    if (committed[0]?.meta?.changes) await publishToRooms(closed, "pk:ended");
     sendOk(res, { battle: presentPkBattle(closed) });
   }));
 
@@ -841,6 +886,7 @@ export function createD1PkWritesRouter(db: D1Database) {
     }
     const updated = await readBattle(battleId);
     if (!updated) throw new HttpError(404, "PK battle not found", ErrorCode.NOT_FOUND);
+    await publishToRooms(updated, "pk:score:update");
     sendOk(res, { battle: { ...presentPkBattle(updated), myVote: side }, voted: true }, 201);
   }));
 
@@ -1047,7 +1093,28 @@ export function createD1PkWritesRouter(db: D1Database) {
       db.prepare("SELECT * FROM gift_transactions WHERE source_id = ?").bind(giftTransactionId).first<Row>()
     ]);
     if (!updatedBattle || !transaction) throw new HttpError(500, "Failed to load PK gift", ErrorCode.INTERNAL);
-    sendOk(res, { battle: presentPkBattle(updatedBattle), giftTransaction: presentGiftTransaction(transaction) }, 201);
+    const state = presentPkBattle(updatedBattle);
+    if (newLeader !== oldLeader && newLeader !== "DRAW" && committed[8]?.meta?.changes) {
+      const leadData = {
+        battleId, leader: newLeader, leftScore: Number(updatedBattle.left_score),
+        rightScore: Number(updatedBattle.right_score)
+      };
+      await publishToRoom(state.left.roomId, "pk:lead:changed", leadData);
+      if (state.right.roomId !== state.left.roomId) {
+        await publishToRoom(state.right.roomId, "pk:lead:changed", leadData);
+      }
+    }
+    await publishToRooms(updatedBattle, "pk:score:update");
+    const giftData = {
+      battleId, side: body.side, senderId: userId, giftId, giftName: gift.name,
+      coinAmount: totalPrice, quantity, pointsAdded: totalPoints, combo,
+      leftScore: Number(updatedBattle.left_score), rightScore: Number(updatedBattle.right_score)
+    };
+    await publishToRoom(state.left.roomId, "pk:gift:received", giftData);
+    if (state.right.roomId !== state.left.roomId) {
+      await publishToRoom(state.right.roomId, "pk:gift:received", giftData);
+    }
+    sendOk(res, { battle: state, giftTransaction: presentGiftTransaction(transaction) }, 201);
   }));
 
   router.post("/:battleId/reactions", requireNotMuted, validateBody(pkReactionSchema), asyncHandler(async (req, res) => {
@@ -1092,9 +1159,36 @@ export function createD1PkWritesRouter(db: D1Database) {
       })
     ]);
     if (!committed[0]?.meta?.changes) throw new HttpError(500, "Failed to update PK battle", ErrorCode.INTERNAL);
+    const leadChanged = newLeader !== oldLeader && newLeader !== "DRAW";
+    if (leadChanged && !committed[1]?.meta?.changes) {
+      throw new HttpError(500, "Failed to record PK lead change", ErrorCode.INTERNAL);
+    }
+    const reactionEventIndex = leadChanged ? 2 : 1;
+    if (!committed[reactionEventIndex]?.meta?.changes) {
+      throw new HttpError(500, "Failed to record PK reaction", ErrorCode.INTERNAL);
+    }
     const updated = await readBattle(battleId);
     if (!updated) throw new HttpError(404, "PK battle not found", ErrorCode.NOT_FOUND);
-    sendOk(res, { battle: presentPkBattle(updated) }, 201);
+    const state = presentPkBattle(updated);
+    if (leadChanged) {
+      const leadData = {
+        battleId, leader: newLeader, leftScore: Number(updated.left_score), rightScore: Number(updated.right_score)
+      };
+      await publishToRoom(state.left.roomId, "pk:lead:changed", leadData);
+      if (state.right.roomId !== state.left.roomId) {
+        await publishToRoom(state.right.roomId, "pk:lead:changed", leadData);
+      }
+    }
+    await publishToRooms(updated, "pk:score:update");
+    const reactionData = {
+      battleId, side: body.side, type: body.type, pointsAdded: points,
+      bucketRemaining: Math.max(0, 10 - (used + points))
+    };
+    await publishToRoom(state.left.roomId, "pk:reaction:received", reactionData);
+    if (state.right.roomId !== state.left.roomId) {
+      await publishToRoom(state.right.roomId, "pk:reaction:received", reactionData);
+    }
+    sendOk(res, { battle: state }, 201);
   }));
 
   return router;

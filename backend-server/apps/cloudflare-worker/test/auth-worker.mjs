@@ -30,7 +30,7 @@ import { verifyD1Highlights } from "./d1-highlights.mjs";
 import { verifyD1Missions } from "./d1-missions.mjs";
 import { verifyD1Moderation } from "./d1-moderation.mjs";
 import { verifyD1Wishlist } from "./d1-wishlist.mjs";
-import { verifyD1Maintenance, verifyD1Progression, verifyD1PushDelivery } from "./d1-maintenance.mjs";
+import { verifyD1AccountDeletion, verifyD1Maintenance, verifyD1Progression, verifyD1PushDelivery } from "./d1-maintenance.mjs";
 import { verifyD1Referrals } from "./d1-referrals.mjs";
 import { verifyD1Reports } from "./d1-reports.mjs";
 import { verifyD1RoomInvites } from "./d1-room-invites.mjs";
@@ -82,8 +82,12 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     assert.equal(binding.database_name, "yugm");
     assert.equal(binding.database_id, "00000000-0000-4000-8000-000000000004");
     assert.equal(binding.remote, false);
-    assert.deepEqual(config.durable_objects.bindings, [{ name: "PK_DEADLINES", class_name: "D1PkAlarm" }]);
+    assert.deepEqual(config.durable_objects.bindings, [
+      { name: "PK_DEADLINES", class_name: "D1PkAlarm" },
+      { name: "NATIVE_REALTIME", class_name: "NativeRealtimeDurableObject" }
+    ]);
     assert.ok(config.migrations.some(({ new_sqlite_classes: classes }) => classes?.includes("D1PkAlarm")));
+    assert.ok(config.migrations.some(({ new_sqlite_classes: classes }) => classes?.includes("NativeRealtimeDurableObject")));
     assert.equal(config.r2_buckets.length, 5);
     assert.deepEqual(config.r2_buckets.map(({ bucket_name: name }) => name),
       ["assets", "public-media", "private-media", "originals", "staging"]);
@@ -116,7 +120,10 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
         GOOGLE_PLAY_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" })
       },
       d1Databases: { [binding.binding]: binding.database_id },
-      durableObjects: { PK_DEADLINES: { className: "D1PkAlarm", useSQLite: true } },
+      durableObjects: {
+        PK_DEADLINES: { className: "D1PkAlarm", useSQLite: true },
+        NATIVE_REALTIME: { className: "NativeRealtimeDurableObject", useSQLite: true }
+      },
       ratelimits: Object.fromEntries(config.ratelimits.map(({ name, ...settings }) => [name, settings])),
       r2Buckets: Object.fromEntries(config.r2_buckets.map(({ binding: name, bucket_name: bucket }) => [name, bucket])),
       images: { binding: config.images.binding },
@@ -238,11 +245,34 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
       "0023_subscription_unique", "0024_event_participants_unique", "0025_dating_swipes",
       "0026_vibe_graph_unique", "0027_group_participants_unique", "0028_story_views_unique", "0029_social_unique",
       "0030_experience_claim_unique", "0031_admin_account_indexes", "0032_asset_registry_indexes", "0033_report_admin_reviewer",
-      "0034_admin_purchase_refunds", "0035_direct_message_reaction_catalog"];
+      "0034_admin_purchase_refunds", "0035_direct_message_reaction_catalog", "0036_deletion_cleanup",
+      "0037_pk_battle_status_check", "0038_pk_uniqueness", "0039_gift_inventory_unique",
+      "0040_creator_trust_withdrawal_unique", "0041_friend_match_indexes"];
     for (const file of runtimeMigrations) {
       const migration = await readFile(pathFromHere(`../../api/migrations/d1/${file}.sql`), "utf8");
       await db.batch(unstable_splitSqlQuery(migration).map(sql => db.prepare(sql)));
     }
+    const pkBattlesSql = await db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'pk_battles'").first("sql");
+    assert.match(pkBattlesSql, /'OVERTIME'/);
+    const indexRows = (await db.prepare("SELECT name, sql FROM sqlite_master WHERE type = 'index'").all()).results;
+    const indexNames = new Set(indexRows.map(row => row.name));
+    for (const name of ["idx_pk_participants_battle_user", "idx_pk_votes_battle_voter",
+      "idx_pk_leaderboard_entries_battle_user", "idx_pk_leaderboard_entries_battle_points",
+      "idx_pk_events_battle_sequence", "idx_pk_events_gift_transaction", "idx_pk_events_battle_created",
+      "idx_gift_inventories_user_gift", "idx_gift_inventories_tradable_user", "idx_creator_payout_kycs_user",
+      "idx_creator_payout_kycs_kyc_status", "idx_creator_payout_kycs_payout_status",
+      "idx_creator_payout_kycs_kyc_status_submitted_at", "idx_withdrawal_requests_active_lock",
+      "idx_withdrawal_requests_user_created", "idx_withdrawal_requests_status", "idx_trust_verifications_user",
+      "idx_trust_verifications_status_submitted", "idx_friend_match_requests_user",
+      "idx_friend_match_requests_status", "idx_friend_match_requests_status_created_expires",
+      "idx_friend_match_requests_expires_at", "idx_pk_history_left_room", "idx_pk_history_right_room"]) {
+      assert.ok(indexNames.has(name), `missing D1 index ${name}`);
+    }
+    const indexSql = name => indexRows.find(row => row.name === name)?.sql ?? "";
+    assert.match(indexSql("idx_withdrawal_requests_active_lock"), /WHERE\s+"active_lock"\s*=\s*1/);
+    assert.match(indexSql("idx_pk_events_battle_sequence"), /WHERE\s+"sequence"\s+IS NOT NULL/);
+    assert.match(indexSql("idx_pk_events_gift_transaction"), /WHERE\s+"gift_transaction_id"\s+IS NOT NULL/);
+    assert.match(indexSql("idx_pk_history_left_room"), /status IN \('ENDED', 'FORCE_ENDED'\)/);
     assert.equal((await request("/ready", 200)).storage, "d1");
     assert.equal((await worker.dispatchFetch("http://yugm.example/health")).status, 404);
     await request("/api/users", 404);
@@ -844,7 +874,7 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     assert.equal(await db.prepare("SELECT 1 FROM clans WHERE source_id = ?").bind(leaveClan.id).first(), null);
     const { data: gamer } = await signIn(true, project, 200, "games-writes-fixture");
     await verifyD1AppEndpoints(db, request, returning, visitor, gamer, worker);
-    await verifyD1PkWritesExtended(db, request, returning, visitor, gamer);
+    await verifyD1PkWritesExtended(db, request, returning, visitor, gamer, worker);
     await verifyD1Bonds(db, request, returning, visitor);
     await verifyD1Wallet(db, request, returning, visitor);
     assert.equal(googleConsumes, 1);
@@ -920,6 +950,7 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     await verifyD1InboxMutations(db, request, feedOwner, feedVisitor, chatGuest);
     await verifyD1Moderation(db, request, returning);
     await verifyD1Maintenance(worker, db, returning, visitor);
+    await verifyD1AccountDeletion(worker, db, returning, visitor);
 
     // Invalid bodies exercise the rate limits without reaching Firebase or changing sessions.
     async function rateLimitedRequest(path, body, forwardedIp) {

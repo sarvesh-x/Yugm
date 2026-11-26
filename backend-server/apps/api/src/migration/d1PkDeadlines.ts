@@ -1,5 +1,8 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import { randomBytes } from "node:crypto";
+import type { DeliveryClass } from "@yugm/shared";
+import { emitD1PkBattleEvent } from "./d1PkRealtime.js";
+import { emitD1Realtime, noD1Realtime, type D1RealtimePort } from "./d1Realtime.js";
 
 type Row = Record<string, string | number | null>;
 
@@ -47,6 +50,15 @@ function readBattle(db: D1Database, battleId: string) {
   return db.prepare(`SELECT ${battleFields} FROM pk_battles WHERE source_id = ?`).bind(battleId).first<DeadlineBattleRow>();
 }
 
+type BattlePublisher = (battleId: string, event: string, data?: unknown,
+  extraScopes?: string[], delivery?: DeliveryClass) => Promise<void>;
+
+function battlePublisher(db: D1Database, realtime: D1RealtimePort): BattlePublisher {
+  // Delivery is best effort and only called after the guarded transition commits.
+  return (battleId, event, data, extraScopes = [], delivery = "durable") =>
+    emitD1PkBattleEvent(db, realtime, battleId, event, data, extraScopes, delivery);
+}
+
 function releaseRoomLocks(db: D1Database, battle: DeadlineBattleRow, time: string) {
   return db.prepare("UPDATE rooms SET active_pk_id = NULL, updated_at = ? WHERE source_id IN (?, ?) AND active_pk_id = ?")
     .bind(time, battle.left_room_id, battle.right_room_id, battle.source_id);
@@ -86,7 +98,8 @@ async function transitionBattle(db: D1Database, battle: DeadlineBattleRow, fromS
   }
 }
 
-async function expireInvite(db: D1Database, invite: Row, time: string) {
+async function expireInvite(db: D1Database, invite: Row, time: string, publish: BattlePublisher,
+  realtime: D1RealtimePort) {
   const battleId = String(invite.battle_id);
   const inviteId = String(invite.source_id);
   const battle = await readBattle(db, battleId);
@@ -112,32 +125,49 @@ async function expireInvite(db: D1Database, invite: Row, time: string) {
       guardedEvent(db, battleId, "PK_INVITE_EXPIRED", "EXPIRED", version, sequence, time,
         { userId: String(invite.invitee_user_id) })
     ]);
-    return Boolean(committed[1]?.meta?.changes);
+    const expired = Boolean(committed[1]?.meta?.changes);
+    if (expired) {
+      const payload = { battleId, inviteId };
+      await publish(battleId, "pk:ended");
+      // Legacy expiry targets the inviter room and the invitee user only.
+      await emitD1Realtime(realtime, {
+        event: "pk:invite:expired", scope: `room:${roomIds[0]}`, delivery: "durable", data: payload
+      });
+      await emitD1Realtime(realtime, {
+        event: "pk:invite:expired", scope: `user:${String(invite.invitee_user_id)}`,
+        delivery: "durable", data: payload
+      });
+    }
+    return expired;
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(`D1 PK invite expiry ${inviteId} failed: ${detail}`);
   }
 }
 
-async function finishBattle(db: D1Database, battle: DeadlineBattleRow, time: string) {
+async function finishBattle(db: D1Database, battle: DeadlineBattleRow, time: string, publish: BattlePublisher) {
   let current = battle;
   if (current.status === "ACTIVE" || current.status === "FINAL_CRUNCH") {
-    await transitionBattle(db, current, [current.status], "FINALIZING", time, "PK_FINALIZING");
+    if (!await transitionBattle(db, current, [current.status], "FINALIZING", time, "PK_FINALIZING")) return;
     const changed = await readBattle(db, current.source_id);
     if (!changed) return;
     current = changed;
+    await publish(current.source_id, "pk:state");
   }
   if (current.status !== "FINALIZING") return;
   const side = winnerSide(current);
   const winnerUserId = side === "LEFT" ? current.left_host_id : side === "RIGHT" ? current.right_host_id : null;
-  await transitionBattle(db, current, ["FINALIZING"], "COMPLETED", time, "PK_COMPLETED",
+  if (await transitionBattle(db, current, ["FINALIZING"], "COMPLETED", time, "PK_COMPLETED",
     "winner_side = ?, winner_user_id = ?, ended_at = ?, finalized_at = ?, termination_reason = ?",
     [side, winnerUserId, time, time, ""],
     { side, metadata: { reason: "" } },
-    [releaseRoomLocks(db, current, time)]);
+    [releaseRoomLocks(db, current, time)])) {
+    await publish(current.source_id, "pk:ended");
+  }
 }
 
-export async function runD1PkDeadlines(db: D1Database, now = new Date()) {
+export async function runD1PkDeadlines(db: D1Database, now = new Date(), realtime: D1RealtimePort = noD1Realtime) {
+  const publish = battlePublisher(db, realtime);
   const time = now.toISOString();
   const readyThreshold = new Date(now.getTime() - readyGraceMs).toISOString();
   const closeThreshold = new Date(now.getTime() - closeGraceMs).toISOString();
@@ -153,50 +183,60 @@ export async function runD1PkDeadlines(db: D1Database, now = new Date()) {
   for (const row of ready.results) {
     const battle = await readBattle(db, String(row.source_id));
     if (battle?.status !== "READY") continue;
-    await transitionBattle(db, battle, ["READY"], "COUNTDOWN", time, "PK_COUNTDOWN",
-      "countdown_ends_at = ?", [new Date(now.getTime() + 3000).toISOString()]);
+    if (await transitionBattle(db, battle, ["READY"], "COUNTDOWN", time, "PK_COUNTDOWN",
+      "countdown_ends_at = ?", [new Date(now.getTime() + 3000).toISOString()])) {
+      await publish(battle.source_id, "pk:state");
+    }
   }
   for (const row of countdowns.results) {
     const battle = await readBattle(db, String(row.source_id));
     if (battle?.status !== "COUNTDOWN" || !battle.countdown_ends_at) continue;
-    await transitionBattle(db, battle, ["COUNTDOWN"], "ACTIVE", time, "PK_STARTED",
-      "started_at = ?, countdown_ends_at = NULL", [String(battle.countdown_ends_at)]);
+    if (await transitionBattle(db, battle, ["COUNTDOWN"], "ACTIVE", time, "PK_STARTED",
+      "started_at = ?, countdown_ends_at = NULL", [String(battle.countdown_ends_at)])) {
+      await publish(battle.source_id, "pk:started");
+      await publish(battle.source_id, "pk:timer:tick", undefined, [], "ephemeral");
+    }
   }
   for (const row of active.results) {
     let battle = await readBattle(db, String(row.source_id));
     if (!battle || !activeStatuses.includes(battle.status)) continue;
     if (battle.status === "FINALIZING") {
-      await finishBattle(db, battle, time);
+      await finishBattle(db, battle, time, publish);
       continue;
     }
-    if (battle.status === "ACTIVE" && remainingSeconds(battle, now) <= 10) {
-      await transitionBattle(db, battle, ["ACTIVE"], "FINAL_CRUNCH", time, "PK_FINAL_CRUNCH");
+    if (battle.status === "ACTIVE" && remainingSeconds(battle, now) <= 10 &&
+      await transitionBattle(db, battle, ["ACTIVE"], "FINAL_CRUNCH", time, "PK_FINAL_CRUNCH")) {
+      await publish(battle.source_id, "pk:state");
+      await publish(battle.source_id, "pk:timer:tick", undefined, [], "ephemeral");
       const changed = await readBattle(db, battle.source_id);
       if (!changed) continue;
       battle = changed;
     }
     if (remainingSeconds(battle, now) > 0) continue;
-    await transitionBattle(db, battle, [battle.status], "FINALIZING", time, "PK_FINALIZING");
+    if (!await transitionBattle(db, battle, [battle.status], "FINALIZING", time, "PK_FINALIZING")) continue;
+    await publish(battle.source_id, "pk:state");
     const finalizing = await readBattle(db, battle.source_id);
-    if (finalizing) await finishBattle(db, finalizing, time);
+    if (finalizing) await finishBattle(db, finalizing, time, publish);
   }
   for (const row of completed.results) {
     const battle = await readBattle(db, String(row.source_id));
     if (!battle || battle.status !== "COMPLETED" || !closableStatuses.includes(battle.status)) continue;
-    await transitionBattle(db, battle, ["COMPLETED"], "CLOSED", time, "PK_CLOSED",
-      "closed_at = ?", [time], {}, [releaseRoomLocks(db, battle, time)]);
+    if (await transitionBattle(db, battle, ["COMPLETED"], "CLOSED", time, "PK_CLOSED",
+      "closed_at = ?", [time], {}, [releaseRoomLocks(db, battle, time)])) {
+      await publish(battle.source_id, "pk:ended");
+    }
   }
   for (const row of expiredInvites.results) {
     const invite = await db.prepare("SELECT * FROM pk_invites WHERE source_id = ? AND status = 'PENDING' AND expires_at <= ?")
       .bind(String(row.source_id), time).first<Row>();
-    if (invite) await expireInvite(db, invite, time);
+    if (invite) await expireInvite(db, invite, time, publish, realtime);
   }
 }
 
 /** Expires a pending invite with the same guarded commit used by deadline recovery. */
 export async function expireD1PkInvite(db: D1Database,
-  invite: Record<string, string | number | null>, now = new Date()) {
-  return expireInvite(db, invite, now.toISOString());
+  invite: Record<string, string | number | null>, now = new Date(), realtime: D1RealtimePort = noD1Realtime) {
+  return expireInvite(db, invite, now.toISOString(), battlePublisher(db, realtime), realtime);
 }
 
 /** Earliest persisted PK deadline; active battles need a five-second tick. */

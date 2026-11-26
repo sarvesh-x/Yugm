@@ -1,10 +1,11 @@
 import { DurableObject } from "cloudflare:workers";
 import type { D1Database } from "@cloudflare/workers-types";
 import { nextD1PkDeadline, runD1PkDeadlines } from "../../api/src/migration/d1PkDeadlines.js";
+import { createNativeRealtimePort, type NativeRealtimeBindingEnv } from "./nativeRealtimePort.js";
 
 const RETRY_MS = 30_000;
 
-export interface D1PkAlarmEnv {
+export interface D1PkAlarmEnv extends NativeRealtimeBindingEnv {
   AUTH_DB: D1Database;
   YUGM_STAGE: string;
   YUGM_PRODUCTION_ORIGIN?: string;
@@ -59,7 +60,7 @@ export class D1PkAlarm extends DurableObject<D1PkAlarmEnv> {
   async alarm(): Promise<void> {
     if (!alarmEnabled(this.env)) return;
     try {
-      await runD1PkDeadlines(this.env.AUTH_DB);
+      await runD1PkDeadlines(this.env.AUTH_DB, undefined, createNativeRealtimePort(this.env));
     } catch (error) {
       console.error(JSON.stringify({
         level: "error", event: "d1_pk_deadline_failed", retryMs: RETRY_MS, ...errorDetails(error)

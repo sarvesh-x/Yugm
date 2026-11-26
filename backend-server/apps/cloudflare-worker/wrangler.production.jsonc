@@ -42,9 +42,15 @@
     { "name": "GIFT_SEND", "namespace_id": "17024107", "simple": { "limit": 20, "period": 10 } }
   ],
   "durable_objects": {
-    "bindings": [{ "name": "PK_DEADLINES", "class_name": "D1PkAlarm" }]
+    "bindings": [
+      { "name": "PK_DEADLINES", "class_name": "D1PkAlarm" },
+      { "name": "NATIVE_REALTIME", "class_name": "NativeRealtimeDurableObject" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["D1PkAlarm"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["D1PkAlarm"] },
+    { "tag": "v2", "new_sqlite_classes": ["NativeRealtimeDurableObject"] }
+  ],
   "images": { "binding": "IMAGES" },
   "triggers": { "crons": ["*/15 * * * *", "* * * * *"] },
   "observability": {

@@ -158,6 +158,140 @@ export async function verifyD1Maintenance(worker, db, owner, visitor) {
   assert.equal(await db.prepare("SELECT status FROM rooms WHERE source_id = ?").bind(officialRoom).first("status"), "LIVE");
 }
 
+async function insertD1DeletionUser(db, templateId, userId, requestedAt, time) {
+  const { results: columns } = await db.prepare("PRAGMA table_info(users)").all();
+  const template = await db.prepare("SELECT * FROM users WHERE source_id = ?").bind(templateId).first();
+  assert.ok(template, "deletion fixture template user is missing");
+  const overrides = {
+    source_id: userId,
+    name: "Fixture User",
+    username: `deleted-${userId}`,
+    email: `${userId}@example.invalid`,
+    phone: `+9100000${userId.slice(-4)}`,
+    firebase_uid: `fixture-uid-${userId}`,
+    avatar: "fixture-avatar",
+    bio: "fixture bio",
+    city: "Fixture City",
+    state: "Fixture State",
+    profile_completed_at: time,
+    deletion_requested_at: requestedAt,
+    terms_accepted_at: time,
+    referral_code: null,
+    hard_deleted_at: null
+  };
+  const values = columns.map(column => overrides[column.name] ?? template[column.name]);
+  await db.batch([
+    db.prepare(`INSERT INTO users (${columns.map(column => `"${column.name}"`).join(", ")})
+      VALUES (${columns.map(() => "?").join(", ")})`).bind(...values),
+    db.prepare(`INSERT INTO account_deletions (source_id, deletion_requested_at, hard_deleted_at)
+      VALUES (?, ?, NULL)`).bind(userId, requestedAt)
+  ]);
+}
+
+export async function verifyD1AccountDeletion(worker, db, owner, visitor) {
+  const now = new Date();
+  const time = now.toISOString();
+  const oldTime = new Date(now.getTime() - 31 * dayMs).toISOString();
+  const recentTime = new Date(now.getTime() - 29 * dayMs).toISOString();
+  const oldId = id();
+  const recentId = id();
+  const [session, device, follow, block, notification, message, room, participant, chat,
+    successionClan, successionOldMember, successionNewMember, emptyClan, emptyMember, walletTx] =
+    Array.from({ length: 15 }, id);
+
+  await insertD1DeletionUser(db, owner.user.id, oldId, oldTime, time);
+  await insertD1DeletionUser(db, owner.user.id, recentId, recentTime, time);
+  await db.batch([
+    db.prepare(`INSERT INTO auth_sessions (source_id, user_id, family_id, refresh_hash, expires_at, last_used_at, token_version_present)
+      VALUES (?, ?, ?, ?, ?, ?, 0)`).bind(session, oldId, id(), id(), time, time),
+    db.prepare(`INSERT INTO device_tokens (source_id, user_id, token, platform, last_seen_at)
+      VALUES (?, ?, ?, 'android', ?)`).bind(device, oldId, `fixture-token-${device}`, time),
+    db.prepare("INSERT INTO follows (source_id, follower_id, following_id) VALUES (?, ?, ?)")
+      .bind(follow, oldId, visitor.user.id),
+    db.prepare("INSERT INTO blocks (source_id, blocker_id, blocked_user_id) VALUES (?, ?, ?)")
+      .bind(block, visitor.user.id, oldId),
+    db.prepare(`INSERT INTO notifications (source_id, user_id, type, title, body, data, read, created_at, updated_at)
+      VALUES (?, ?, 'SYSTEM', 'fixture', 'fixture', '{}', 0, ?, ?)`).bind(notification, oldId, time, time),
+    db.prepare(`INSERT INTO direct_messages (source_id, sender_id, receiver_id, message, media_url, media_type,
+      duration, forwarded, is_edited, read, created_at, updated_at, reply_to_message_id, reply_to_author,
+      reply_to_author_id, reply_to_text, reply_to_media_url)
+      VALUES (?, ?, ?, 'fixture', '', '', 0, 0, 0, 0, ?, ?, '', '', NULL, '', '')`)
+      .bind(message, oldId, visitor.user.id, time, time),
+    db.prepare(`INSERT INTO rooms (source_id, title, type, host_id, category, tags, language, status, visibility,
+      max_speakers, participant_count, is_duet, livekit_room_name, allow_audience_mic_requests, mic_locked,
+      vip_only, created_at, updated_at)
+      VALUES (?, 'Deletion fixture', 'VOICE', ?, 'fixture', '[]', 'en', 'LIVE', 'PUBLIC', 8, 1, 0, ?, 0, 0, 0, ?, ?)`)
+      .bind(room, oldId, `deletion-${room}`, time, time),
+    db.prepare(`INSERT INTO room_participants (source_id, room_id, user_id, role, mic_enabled, moderator_muted,
+      seat_index, camera_enabled, joined_at) VALUES (?, ?, ?, 'HOST', 1, 0, 0, 1, ?)`)
+      .bind(participant, room, oldId, time),
+    db.prepare(`INSERT INTO chat_messages (source_id, room_id, sender_id, message, type, created_at, updated_at)
+      VALUES (?, ?, ?, 'fixture', 'TEXT', ?, ?)`).bind(chat, room, oldId, time, time),
+    db.prepare(`INSERT INTO clans (source_id, owner_id, name, slug, privacy, family_label, member_count)
+      VALUES (?, ?, 'Succession Fixture', ?, 'PUBLIC', 'Family', 2)`).bind(successionClan, oldId, `succession-${successionClan}`),
+    db.prepare("INSERT INTO clan_members (source_id, value, clans_id, position) VALUES (?, ?, ?, ?)")
+      .bind(successionOldMember, oldId, successionClan, 0),
+    db.prepare("INSERT INTO clan_members (source_id, value, clans_id, position) VALUES (?, ?, ?, ?)")
+      .bind(successionNewMember, visitor.user.id, successionClan, 1),
+    db.prepare(`INSERT INTO clan_member_roles (source_id, user_id, role, clans_id, position)
+      VALUES (?, ?, 'LEADER', ?, 0), (?, ?, 'MEMBER', ?, 1)`)
+      .bind(`${successionClan}:old`, oldId, successionClan, `${successionClan}:new`, visitor.user.id, successionClan),
+    db.prepare(`INSERT INTO clans (source_id, owner_id, name, slug, privacy, family_label, member_count)
+      VALUES (?, ?, 'Empty Fixture', ?, 'PUBLIC', 'Family', 1)`).bind(emptyClan, oldId, `empty-${emptyClan}`),
+    db.prepare("INSERT INTO clan_members (source_id, value, clans_id, position) VALUES (?, ?, ?, 0)")
+      .bind(emptyMember, oldId, emptyClan),
+    db.prepare(`INSERT INTO wallet_transactions (source_id, user_id, type, source, amount, balance_before,
+      balance_after, metadata, created_at, updated_at)
+      VALUES (?, ?, 'CREDIT', 'RECHARGE', 100, 0, 100, '{}', ?, ?)`).bind(walletTx, oldId, time, time)
+  ]);
+
+  const entrypoint = await worker.getWorker();
+  const invoke = async () => {
+    const result = await entrypoint.scheduled({ cron: "*/15 * * * *", scheduledTime: now });
+    assert.equal(result.outcome, "ok");
+  };
+  await invoke();
+  await invoke();
+
+  const purged = await db.prepare(`SELECT u.name, u.username, u.email, u.phone, u.firebase_uid, u.avatar, u.bio,
+    u.city, u.state, u.profile_completed_at, u.deletion_requested_at, u.token_version,
+    d.hard_deleted_at FROM users AS u JOIN account_deletions AS d ON d.source_id = u.source_id
+    WHERE u.source_id = ?`).bind(oldId).first();
+  assert.equal(purged.name, "Deleted User");
+  assert.equal(purged.username, `deleted_${oldId}`);
+  assert.equal(purged.email, null);
+  assert.equal(purged.phone, null);
+  assert.equal(purged.firebase_uid, null);
+  assert.equal(purged.avatar, null);
+  assert.equal(purged.bio, null);
+  assert.equal(purged.city, null);
+  assert.equal(purged.state, null);
+  assert.equal(purged.profile_completed_at, null);
+  assert.equal(purged.deletion_requested_at, oldTime);
+  assert.ok(purged.hard_deleted_at);
+  const retained = await db.prepare(`SELECT u.deletion_requested_at, d.hard_deleted_at FROM users AS u
+    JOIN account_deletions AS d ON d.source_id = u.source_id WHERE u.source_id = ?`).bind(recentId).first();
+  assert.equal(retained.deletion_requested_at, recentTime);
+  assert.equal(retained.hard_deleted_at, null);
+
+  for (const [table, key] of [["auth_sessions", session], ["device_tokens", device], ["follows", follow],
+    ["blocks", block], ["notifications", notification], ["direct_messages", message],
+    ["rooms", room], ["room_participants", participant],
+    ["chat_messages", chat], ["clans", emptyClan], ["clan_members", emptyMember]]) {
+    assert.equal(await db.prepare(`SELECT 1 FROM ${table} WHERE source_id = ?`).bind(key).first(), null, table);
+  }
+  assert.equal(await db.prepare("SELECT 1 FROM clan_members WHERE source_id = ?").bind(successionOldMember).first(), null);
+  assert.equal(await db.prepare("SELECT role FROM clan_member_roles WHERE clans_id = ? AND user_id = ?")
+    .bind(successionClan, visitor.user.id).first("role"), "LEADER");
+  assert.equal(await db.prepare("SELECT 1 FROM clan_member_roles WHERE clans_id = ? AND user_id = ?")
+    .bind(successionClan, oldId).first(), null);
+  assert.equal(await db.prepare("SELECT owner_id, member_count FROM clans WHERE source_id = ?")
+    .bind(successionClan).first("owner_id"), visitor.user.id);
+  assert.equal(await db.prepare("SELECT member_count FROM clans WHERE source_id = ?")
+    .bind(successionClan).first("member_count"), 1);
+  assert.ok(await db.prepare("SELECT 1 FROM wallet_transactions WHERE source_id = ?").bind(walletTx).first());
+}
+
 export async function verifyD1PushDelivery(worker, db, owner, visitor, attempts) {
   const now = new Date();
   const time = now.toISOString();

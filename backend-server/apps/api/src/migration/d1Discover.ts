@@ -3,6 +3,7 @@ import { Router, type Request } from "express";
 import { requireHttpSession } from "../middleware/httpAccessSession.js";
 import { asyncHandler, sendOk } from "../utils/http.js";
 import { createD1AccessSessionReader } from "./d1AccessSession.js";
+import { noD1Presence, type D1PresencePort } from "./d1Presence.js";
 import { person, personJson } from "./d1People.js";
 import { d1RoomProjection, presentD1Room } from "./d1Rooms.js";
 
@@ -51,7 +52,7 @@ function presentRoom(row: Row) {
   return { ...presentD1Room(row, false), host: Object.keys(host).length ? host : undefined };
 }
 
-function presentUser(row: Row) {
+function presentUser(row: Row, isOnline: boolean) {
   const personJsonValue = person(String(row.person_json ?? "{}")) as Record<string, unknown>;
   return {
     _id: personJsonValue._id,
@@ -62,22 +63,21 @@ function presentUser(row: Row) {
     username: personJsonValue.username,
     level: personJsonValue.level,
     levelTitle: personJsonValue.levelTitle,
-    city: personJsonValue.city
+    city: personJsonValue.city,
+    isOnline
   };
 }
 
 const liveRooms = `FROM rooms AS r LEFT JOIN users AS host ON host.source_id = r.host_id WHERE r.status = 'LIVE'`;
 const discoveryOrder = `ORDER BY r.participant_count DESC, r.created_at DESC, r.source_id DESC`;
 
-export function createD1DiscoverRouter(db: D1Database) {
+export function createD1DiscoverRouter(db: D1Database, presence: D1PresencePort = noD1Presence) {
   const router = Router();
   const access = createD1AccessSessionReader(db, "http");
 
-  // Socket.IO/Redis presence has no D1 binding. Preserve the response shape and
-  // return the empty/zero result used when legacy presence has no live users.
   router.get("/discover/presence-count", asyncHandler(async (req, res) => {
     await requireHttpSession(req.headers.authorization, access);
-    sendOk(res, { count: 0 });
+    sendOk(res, { count: await presence.getPresenceCount() });
   }));
 
   router.get("/discover/trending", asyncHandler(async (req, res) => {
@@ -118,15 +118,32 @@ export function createD1DiscoverRouter(db: D1Database) {
     ]);
     sendOk(res, {
       rooms: rooms.results.map(row => ({ item: presentRoom(row), reason: "Matches your interests" })),
-      users: users.results.map(row => ({ item: presentUser(row), reason: "Similar vibe" })),
+      users: await Promise.all(users.results.map(async row => ({
+        item: presentUser(row, await presence.isUserOnline(String(row.source_id))), reason: "Similar vibe"
+      }))),
       events: []
     });
   }));
 
   router.get("/discover/online-now", asyncHandler(async (req, res) => {
     await requireHttpSession(req.headers.authorization, access);
-    const { limit, page } = paging(req);
-    sendOk(res, { users: [], page, limit });
+    const { limit, page, offset } = paging(req);
+    const onlineIds = await presence.getOnlineUserIds();
+    if (!onlineIds.length) return sendOk(res, { users: [], page, limit });
+    const cutoff = new Date(Date.now() - 10 * 60_000).toISOString();
+    const placeholders = onlineIds.map(() => "?").join(", ");
+    const rows = await db.prepare(`SELECT ${personJson("u")} AS person_json FROM users AS u
+      WHERE u.source_id IN (${placeholders}) AND u.updated_at >= ?
+      ORDER BY u.updated_at DESC, u.source_id DESC LIMIT ? OFFSET ?`)
+      .bind(...onlineIds, cutoff, limit, offset).all<Row>();
+    sendOk(res, { users: rows.results.map(row => {
+      const value = person(String(row.person_json ?? "{}")) as Record<string, unknown>;
+      return {
+        _id: value._id, name: value.name, avatar: value.avatar, avatarType: value.avatarType,
+        avatarParts: value.avatarParts, username: value.username, level: value.level,
+        levelTitle: value.levelTitle, city: value.city
+      };
+    }), page, limit });
   }));
 
   router.get("/discover/hubs", asyncHandler(async (req, res) => {

@@ -10,8 +10,9 @@ import { authClientIpHeader, createWorkerAuthRateLimiters, type AuthRateLimitBin
 import type { D1PkAlarmBindingEnv } from "./d1PkAlarmBinding.js";
 import { wakePkAlarm } from "./d1PkAlarmBinding.js";
 import { installCloudflareImageProcessor } from "./imageProcessor.js";
+import { createNativeRealtimePort, type NativeRealtimeBindingEnv } from "./nativeRealtimePort.js";
 
-interface D1ApiEnv extends AuthRateLimitBindings, D1PkAlarmBindingEnv {
+interface D1ApiEnv extends AuthRateLimitBindings, D1PkAlarmBindingEnv, NativeRealtimeBindingEnv {
   CHAT_SEND?: RateLimit;
   REPORT_REQUESTS?: RateLimit;
   CREATE_REQUESTS?: RateLimit;
@@ -147,6 +148,7 @@ async function startD1Runtime(env: D1ApiEnv, stage: ApiStage) {
     throw new Error("Managed media requires a separate persistent media grant secret");
   }
   configureD1Runtime(env);
+  const nativeRealtime = createNativeRealtimePort(env);
 
   const [{ createD1App }, { initFirebase, deleteFirebaseUser }] = await Promise.all([
     import("../../api/src/migration/d1App.js"),
@@ -188,7 +190,7 @@ async function startD1Runtime(env: D1ApiEnv, stage: ApiStage) {
     refreshSecret: env.ADMIN_REFRESH_SECRET,
     firebaseApiKey: env.ADMIN_FIREBASE_WEB_API_KEY,
     production: stage === "production"
-  }, createWorkerAuthRateLimiters(env, "admin:"), { deleteFirebaseUser });
+  }, createWorkerAuthRateLimiters(env, "admin:"), { deleteFirebaseUser }, nativeRealtime, nativeRealtime);
   const server = createServer(app);
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);

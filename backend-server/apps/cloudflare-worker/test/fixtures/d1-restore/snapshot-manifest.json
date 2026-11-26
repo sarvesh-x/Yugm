@@ -1,0 +1,45 @@
+{
+  "snapshotId": "fixture-restore-2026-11-26",
+  "sourceDatabase": "fixture-only",
+  "watermark": "2026-11-26T00:00:00.000Z",
+  "toolVersion": "1.0.0",
+  "createdAt": "2026-11-26T00:00:00.000Z",
+  "collections": [
+    {
+      "name": "users",
+      "count": 1,
+      "batches": [
+        {
+          "index": 0,
+          "count": 1,
+          "bytes": 238,
+          "checksum": "18621eabeb957e3a75f702f199839ee835505c7f1a1732ffca351673ed5f3bdd"
+        }
+      ]
+    },
+    {
+      "name": "wallet_transactions",
+      "count": 1,
+      "batches": [
+        {
+          "index": 0,
+          "count": 1,
+          "bytes": 284,
+          "checksum": "0ad7aed234dee0aa51195f96cc452a70cc438d547c140dd151ede24b083f3970"
+        }
+      ]
+    },
+    {
+      "name": "media_objects",
+      "count": 1,
+      "batches": [
+        {
+          "index": 0,
+          "count": 1,
+          "bytes": 491,
+          "checksum": "827ed4e6385411cf69b4c01a2cf96a8b5bb5a677038a26cad7561d231297e021"
+        }
+      ]
+    }
+  ]
+}

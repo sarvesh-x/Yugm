@@ -4,5 +4,5 @@
     "rootDir": "..",
     "noEmit": true
   },
-  "include": ["src/runtime.ts", "src/authLocal.ts", "src/production.ts", "src/cloudflare-node.d.ts", "src/cloudflare-workers.d.ts", "../api/src"]
+  "include": ["src/runtime.ts", "src/authLocal.ts", "src/production.ts", "src/cloudflare-node.d.ts", "src/cloudflare-workers.d.ts", "src/cloudflare-websocket.d.ts", "../api/src"]
 }

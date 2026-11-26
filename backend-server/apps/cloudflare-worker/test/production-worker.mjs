@@ -25,8 +25,12 @@ test("the production entrypoint uses D1 and configures hosted R2 with a media pa
   assert.equal(config.vars.YUGM_R2_ENABLED, "true");
   assert.equal(config.vars.APP_CHECK_ENFORCE, "true");
   assert.deepEqual(config.triggers.crons, ["*/15 * * * *", "* * * * *"]);
-  assert.deepEqual(config.durable_objects.bindings, [{ name: "PK_DEADLINES", class_name: "D1PkAlarm" }]);
+  assert.deepEqual(config.durable_objects.bindings, [
+    { name: "PK_DEADLINES", class_name: "D1PkAlarm" },
+    { name: "NATIVE_REALTIME", class_name: "NativeRealtimeDurableObject" }
+  ]);
   assert.ok(config.migrations.some(({ new_sqlite_classes: classes }) => classes?.includes("D1PkAlarm")));
+  assert.ok(config.migrations.some(({ new_sqlite_classes: classes }) => classes?.includes("NativeRealtimeDurableObject")));
   assert.ok(!("MONGODB_DB_NAME" in config.vars));
   assert.equal(config.d1_databases.length, 1);
   const [binding] = config.d1_databases;
@@ -63,7 +67,10 @@ test("the production entrypoint uses D1 and configures hosted R2 with a media pa
         compatibilityFlags: config.compatibility_flags,
         bindings: { ...config.vars, ...bindings },
         d1Databases: { [binding.binding]: binding.database_id },
-        durableObjects: { PK_DEADLINES: { className: "D1PkAlarm", useSQLite: true } },
+        durableObjects: {
+          PK_DEADLINES: { className: "D1PkAlarm", useSQLite: true },
+          NATIVE_REALTIME: { className: "NativeRealtimeDurableObject", useSQLite: true }
+        },
         ratelimits: Object.fromEntries(config.ratelimits.map(({ name, ...settings }) => [name, settings])),
         r2Buckets: Object.fromEntries(config.r2_buckets.map(({ binding, bucket_name }) => [binding, bucket_name])),
         images: { binding: "IMAGES" },

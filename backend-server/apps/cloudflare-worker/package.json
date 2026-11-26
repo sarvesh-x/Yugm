@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.runtime.json",
     "test:production-worker": "node --test test/production-worker.mjs",
     "test:auth-worker": "node --test test/auth-worker.mjs",
+    "test:restore-rehearsal": "tsx --test test/d1-restore-rehearsal.mts",
     "test:realtime": "node test/realtime.mjs",
     "test:push-queue": "node --test test/push-queue.mjs",
     "test:staging": "node test/staging-smoke.mjs --confirm-isolated-staging",
