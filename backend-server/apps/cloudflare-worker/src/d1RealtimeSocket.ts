@@ -1,7 +1,7 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import { createD1AccessSessionReader } from "../../api/src/migration/d1AccessSession.js";
 import { HttpError } from "../../api/src/utils/http.js";
-import { canReceiveRealtime } from "./d1RealtimeAccess.js";
+import { readRealtimeAccess } from "./d1RealtimeAccess.js";
 import type { NativeRealtimeBindingEnv } from "./nativeRealtimePort.js";
 
 export async function connectD1Realtime(request: Request, env: NativeRealtimeBindingEnv & { AUTH_DB: D1Database }) {
@@ -17,7 +17,7 @@ export async function connectD1Realtime(request: Request, env: NativeRealtimeBin
     const roomId = new URL(request.url).searchParams.get("roomId")?.toLowerCase() ?? null;
     if (roomId !== null && !/^[a-f0-9]{24}$/i.test(roomId)) return new Response("Invalid room ID", { status: 400 });
     const scope = roomId ? `room:${roomId}` : `user:${user.id}`;
-    if (roomId && !await canReceiveRealtime(env.AUTH_DB, claims, scope)) {
+    if (roomId && !await readRealtimeAccess(env.AUTH_DB, claims, scope)) {
       return new Response("Join the room first", { status: 403 });
     }
     return await binding.get(binding.idFromName(scope)).fetch(new Request(

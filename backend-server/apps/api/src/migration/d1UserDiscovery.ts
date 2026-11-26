@@ -248,16 +248,16 @@ export function createD1UserDiscoveryRouter(db: D1Database, presence: D1Presence
     const { user } = await authenticate(req);
     const onlineIds = await presence.getOnlineUserIds();
     if (onlineIds.length === 0) return sendOk(res, { users: [] });
-    const limit = Math.min(Number(req.query.limit) || 30, 60);
-    const placeholders = onlineIds.map((_, index) => `?${index + 2}`).join(", ");
+    const requestedLimit = Number(req.query.limit);
+    const limit = Number.isFinite(requestedLimit) && requestedLimit > 0 ? Math.max(1, Math.min(Math.trunc(requestedLimit), 60)) : 30;
     const { results } = await db.prepare(`SELECT ${USER_LIST_SELECT} FROM users AS u
-      WHERE u.source_id <> ?1 AND u.source_id IN (${placeholders})
+      WHERE u.source_id <> ?1 AND u.source_id IN (SELECT value FROM json_each(?2))
         AND u.is_blocked = 0 AND u.deletion_requested_at IS NULL
         AND NOT EXISTS (SELECT 1 FROM blocks AS b
           WHERE (b.blocker_id = ?1 AND b.blocked_user_id = u.source_id)
             OR (b.blocker_id = u.source_id AND b.blocked_user_id = ?1))
-      ORDER BY RANDOM() LIMIT ?${onlineIds.length + 2}`)
-      .bind(user.id, ...onlineIds, limit).all<UserListRow>();
+      ORDER BY RANDOM() LIMIT ?3`)
+      .bind(user.id, JSON.stringify(onlineIds), limit).all<UserListRow>();
     sendOk(res, { users: results.map(recommendedChatUser) });
   }));
 

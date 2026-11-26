@@ -22,7 +22,7 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 import timber.log.Timber
 
-class ApiHttpException(val statusCode: Int, message: String) : IllegalStateException(message)
+class ApiHttpException(val statusCode: Int, message: String, val errorCode: String? = null) : IllegalStateException(message)
 class ApiProtocolException(message: String, cause: Throwable? = null) : IllegalStateException(message, cause)
 
 internal fun isSafeRetryMethod(method: String): Boolean = method.equals("GET", ignoreCase = true)
@@ -189,19 +189,13 @@ object YugmHttpClient {
                             Timber.tag(TAG).e(e, "Error parsing error response")
                             null
                         }
-val errMsg = apiError?.optString("message")?.takeIf { it.isNotBlank() }
-    ?: "API ${response.code}"
-val requestId = apiError?.optString("requestId")?.takeIf { it.isNotBlank() && it != "null" }
-
-// Show full error context: status code, request ID, and server message
-// This helps debugging when server returns inconsistent errors (e.g., 422 with "Unexpected server error")
-val errorContext = when {
-    response.code >= 500 && requestId != null -> "$errMsg (reference: $requestId)"
-    response.code == 422 && requestId != null -> "Validation error (reference: $requestId)"
-    response.code >= 500 -> "$errMsg"
-    else -> errMsg
-}
-throw ApiHttpException(response.code, errorContext)
+                        val message = apiError?.optString("message")?.takeIf { it.isNotBlank() }
+                            ?: "API ${response.code}"
+                        val errorCode = apiError?.optString("code")?.takeIf { it.isNotBlank() && it != "null" }
+                        val requestId = apiError?.optString("requestId")?.takeIf { it.isNotBlank() && it != "null" }
+                        val errorContext = if ((response.code >= 500 || response.code == 422) && requestId != null &&
+                            errorCode != "ROOM_MEDIA_UNCONFIGURED") "$message (reference: $requestId)" else message
+                        throw ApiHttpException(response.code, errorContext, errorCode)
                     }
                     val payload = try {
                         JSONObject(raw)

@@ -10,6 +10,7 @@ export enum ErrorCode {
   INTERNAL = "INTERNAL",
   RATE_LIMITED = "RATE_LIMITED",
   CONTENT_BLOCKED = "CONTENT_BLOCKED",
+  ROOM_MEDIA_UNCONFIGURED = "ROOM_MEDIA_UNCONFIGURED",
 }
 
 export class HttpError extends Error {

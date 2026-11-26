@@ -69,6 +69,17 @@ export async function createLiveKitToken(config: Required<Pick<D1LiveKitConfig, 
   return `${signingInput}.${base64Url(new Uint8Array(signature))}`;
 }
 
+export function validatedD1LiveKitConfig(config: D1LiveKitConfig): Required<Pick<D1LiveKitConfig, "apiKey" | "apiSecret" | "url">> {
+  const url = config.url?.trim();
+  const endpoint = url && URL.canParse(url) ? new URL(url) : null;
+  if (!config.apiKey?.trim() || !config.apiSecret?.trim() || !url || !endpoint || endpoint.username || endpoint.password ||
+      (endpoint.protocol !== "wss:" && (config.production || endpoint.protocol !== "ws:"))) {
+    throw new HttpError(503, "Voice and video are unavailable in this environment. Room chat is still available.",
+      ErrorCode.ROOM_MEDIA_UNCONFIGURED);
+  }
+  return { apiKey: config.apiKey, apiSecret: config.apiSecret, url };
+}
+
 export function createD1LiveKitRouter(db: D1Database, config: D1LiveKitConfig) {
   const router = Router();
   const access = createD1AccessSessionReader(db, "http");
@@ -77,12 +88,6 @@ export function createD1LiveKitRouter(db: D1Database, config: D1LiveKitConfig) {
     const { claims } = await requireHttpSession(req.headers.authorization, access);
     const body = req.body as z.infer<typeof livekitTokenSchema>;
     if (!isValidObjectId(body.roomId)) throw new HttpError(400, "Invalid room ID", ErrorCode.VALIDATION);
-    if (!config.apiKey || !config.apiSecret) {
-      throw new HttpError(503, "LiveKit credentials are not configured");
-    }
-    if (!config.url?.trim() || (config.production && !config.url.startsWith("wss://"))) {
-      throw new HttpError(503, "LiveKit URL is not configured for production");
-    }
     const id = body.roomId.toLowerCase();
     const room = await db.prepare("SELECT type, status, livekit_room_name FROM rooms WHERE source_id = ?")
       .bind(id).first<RoomRow>();
@@ -93,6 +98,7 @@ export function createD1LiveKitRouter(db: D1Database, config: D1LiveKitConfig) {
     if (!participant) {
       throw new HttpError(403, "Join the room before requesting a media token", ErrorCode.FORBIDDEN);
     }
+    const media = validatedD1LiveKitConfig(config);
     const role = participant.role ?? "AUDIENCE";
     const canSpeak = Boolean(participant.mic_enabled) && !participant.moderator_muted && speakingRoles.has(role);
     // Audience members still receive the separate screen-share-audio capability for room music.
@@ -104,11 +110,11 @@ export function createD1LiveKitRouter(db: D1Database, config: D1LiveKitConfig) {
       ...(canSpeak ? [microphoneSource] : []),
       ...(canPublishRoomMusic ? [roomMusicSource] : [])
     ];
-    const token = await createLiveKitToken({ apiKey: config.apiKey, apiSecret: config.apiSecret, url: config.url }, {
+    const token = await createLiveKitToken(media, {
       identity: claims.sub, roomName: room.livekit_room_name, publishSources
     });
     sendOk(res, {
-      token, url: config.url, identity: claims.sub, roomName: room.livekit_room_name,
+      token, url: media.url, identity: claims.sub, roomName: room.livekit_room_name,
       role, canPublishMicrophone: canSpeak
     });
   }));

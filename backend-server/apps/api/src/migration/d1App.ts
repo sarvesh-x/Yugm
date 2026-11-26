@@ -5,7 +5,7 @@ import { requireHttpSession } from "../middleware/httpAccessSession.js";
 import type { AuthRateLimiters } from "../routes/authSession.js";
 import { legalRouter, publicServiceRoot } from "../routes/legal.js";
 import { presentGameCatalog } from "../services/gameCatalog.js";
-import { asyncHandler, HttpError, sendOk } from "../utils/http.js";
+import { asyncHandler, ErrorCode, HttpError, sendOk } from "../utils/http.js";
 import { responseError } from "../utils/responseError.js";
 import { createD1AccessSessionReader } from "./d1AccessSession.js";
 import { createD1AiWingmanRouter } from "./d1AiWingman.js";
@@ -256,7 +256,8 @@ export function createD1App(
     const { status, message, code } = responseError(error);
     const requestId = crypto.randomUUID();
     if (status >= 500) console.error("D1 API request failed", requestId, status);
-    const errorBody = { message: status >= 500 ? "Unexpected server error" : message, code, requestId };
+    const publicMessage = status < 500 || code === ErrorCode.ROOM_MEDIA_UNCONFIGURED;
+    const errorBody = { message: publicMessage ? message : "Unexpected server error", code, requestId };
     res.status(status).json(req.path.startsWith("/api/admin") && !res.locals.legacyAdminRoute
       ? { success: false, error: errorBody }
       : { ok: false, error: errorBody });

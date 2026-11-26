@@ -3,7 +3,7 @@ import { Router } from "express";
 import { requireHttpSession } from "../middleware/httpAccessSession.js";
 import { asyncHandler, ErrorCode, HttpError, isValidObjectId, sendOk } from "../utils/http.js";
 import { createD1AccessSessionReader } from "./d1AccessSession.js";
-import { createLiveKitToken, type D1LiveKitConfig } from "./d1LiveKit.js";
+import { createLiveKitToken, validatedD1LiveKitConfig, type D1LiveKitConfig } from "./d1LiveKit.js";
 import { person, personJson } from "./d1People.js";
 import { pkBattleJoins, pkBattleProjection, presentPkBattle, type BattleRow } from "./d1RoomPkHistory.js";
 
@@ -255,13 +255,8 @@ export function createD1PkReadsRouter(db: D1Database, livekit: D1LiveKitConfig =
     const opponentRoom = await db.prepare("SELECT title, livekit_room_name FROM rooms WHERE source_id = ?")
       .bind(opponentRoomId).first<Row>();
     if (!opponentRoom) throw new HttpError(404, "Opponent room not found", ErrorCode.NOT_FOUND);
-    if (!livekit.apiKey || !livekit.apiSecret) {
-      throw new HttpError(503, "LiveKit credentials are not configured");
-    }
-    if (!livekit.url?.trim() || (livekit.production && !livekit.url.startsWith("wss://"))) {
-      throw new HttpError(503, "LiveKit URL is not configured for production");
-    }
-    const token = await createLiveKitToken({ apiKey: livekit.apiKey, apiSecret: livekit.apiSecret, url: livekit.url }, {
+    const media = validatedD1LiveKitConfig(livekit);
+    const token = await createLiveKitToken(media, {
       identity: `${viewerId(res)}:pk:${req.params.battleId}:opponent`,
       roomName: String(opponentRoom.livekit_room_name),
       publishSources: []
@@ -269,7 +264,7 @@ export function createD1PkReadsRouter(db: D1Database, livekit: D1LiveKitConfig =
     sendOk(res, {
       opponent: {
         token,
-        url: livekit.url,
+        url: media.url,
         roomId: opponentRoomId,
         roomName: opponentRoom.livekit_room_name,
         title: opponentRoom.title,

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash, generateKeyPairSync, randomBytes } from "node:crypto";
+import { once } from "node:events";
 import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -101,7 +102,7 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     let googleRefunds = 0;
     let googleRefundReads = 0;
     let firebaseDeletes = 0;
-    worker = new Miniflare(convertV4MiniflareOptions({
+    const workerOptions = {
       modulesRoot: directory,
       modules: [{ type: "ESModule", path: join(directory, "authLocal.js") }],
       compatibilityDate: config.compatibility_date,
@@ -207,10 +208,11 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
         certificateRequests += 1;
         return Response.json({ [keyId]: signingCert }, { headers: { "Cache-Control": "max-age=300" } });
       }
-    }));
+    };
+    worker = new Miniflare(convertV4MiniflareOptions(workerOptions));
 
-    async function request(path, status, { body, accessToken, ip, headers = {}, method = body === undefined ? "GET" : "POST" } = {}) {
-      const response = await worker.dispatchFetch(`http://127.0.0.1${path}`, {
+    async function request(path, status, { body, accessToken, ip, headers = {}, method = body === undefined ? "GET" : "POST", target = worker } = {}) {
+      const response = await target.dispatchFetch(`http://127.0.0.1${path}`, {
         method,
         headers: {
           ...(body !== undefined && { "Content-Type": "application/json" }),
@@ -298,7 +300,7 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     assert.equal(legacyReady.status, 503);
     assert.match(await legacyReady.text(), /isolated D1 configuration/);
 
-    function signIn(emailVerified, audience = project, status = 200, account = "worker-fixture-uid", provider = "email") {
+    function signIn(emailVerified, audience = project, status = 200, account = "worker-fixture-uid", provider = "email", target = worker) {
       const idToken = jwt.sign({
         email: `${account}@example.test`,
         email_verified: emailVerified,
@@ -308,7 +310,7 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
         algorithm: "RS256", keyid: keyId, issuer: `https://securetoken.google.com/${project}`,
         audience, subject: account, expiresIn: "5m"
       });
-      return request("/api/auth/google", status, { body: { idToken, acceptTerms: true, provider } });
+      return request("/api/auth/google", status, { body: { idToken, acceptTerms: true, provider }, target });
     }
     assert.equal((await signIn(true, "another-fixture-project", 401)).error.code, "VALIDATION");
     assert.equal((await signIn(false, project, 403)).error.code, "FORBIDDEN");
@@ -1001,8 +1003,39 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     await db.prepare(`INSERT INTO device_tokens (source_id, user_id, token, platform, last_seen_at, created_at)
       VALUES (?, ?, ?, 'android', ?, ?)`).bind(randomBytes(12).toString("hex"), deletableId,
       "delete-fixture-token", new Date().toISOString(), new Date().toISOString()).run();
+    await db.prepare(`INSERT INTO direct_messages (source_id, sender_id, receiver_id, message, media_url, media_type,
+      duration, forwarded, is_edited, read, created_at, reply_to_message_id, reply_to_author, reply_to_text, reply_to_media_url)
+      VALUES (?, ?, ?, 'Account deletion socket fixture', '', '', 0, 0, 0, 0, ?, '', '', '', '')`)
+      .bind(randomBytes(12).toString("hex"), deletableId, returning.user.id, new Date().toISOString()).run();
     const beforeDeletion = await db.prepare("SELECT token_version FROM users WHERE source_id = ?").bind(deletableId).first();
-    const deletion = await request("/api/users/me", 200, { method: "DELETE", accessToken: deletable.accessToken });
+    const deletionSockets = await Promise.all([deletable, returning].map(account => worker.dispatchFetch("http://127.0.0.1/realtime", {
+      headers: { Upgrade: "websocket", Authorization: `Bearer ${account.accessToken}` }
+    })));
+    assert.deepEqual(deletionSockets.map(response => response.status), [101, 101]);
+    const [accountSocket, partnerSocket] = deletionSockets.map(response => response.webSocket);
+    const nextSocketEvent = (socket, event) => once(socket, event, { signal: AbortSignal.timeout(5000) })
+      .catch(error => { throw new Error(`Account deletion socket ${event} timed out`, { cause: error }); });
+    const readySockets = [accountSocket, partnerSocket].map(socket => {
+      const ready = nextSocketEvent(socket, "message");
+      socket.accept();
+      return ready;
+    });
+    await Promise.all(readySockets);
+    let deletion;
+    try {
+      const [deletionResponse, [revoked], [message]] = await Promise.all([
+        request("/api/users/me", 200, { method: "DELETE", accessToken: deletable.accessToken }),
+        nextSocketEvent(accountSocket, "message"), nextSocketEvent(partnerSocket, "message")
+      ]);
+      deletion = deletionResponse;
+      assert.deepEqual(JSON.parse(revoked.data), { v: 1, type: "access-revoked" });
+      const frame = JSON.parse(message.data);
+      assert.equal(frame.event, "direct:conversation:deleted");
+      assert.deepEqual(frame.data, { partnerId: deletableId });
+    } finally {
+      accountSocket.close(1000);
+      partnerSocket.close(1000);
+    }
     const expectedDeletion = Date.now() + 30 * 24 * 60 * 60 * 1000;
     assert.ok(Math.abs(Date.parse(deletion.data.deletionScheduledAt) - expectedDeletion) < 10_000);
     const tombstone = await db.prepare(`SELECT deletion_requested_at, name, username, email_verified, is_verified,
@@ -1020,6 +1053,35 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
       .bind(deletableId).first("count"), 0);
     await request("/api/auth/me", 401, deletable);
     assert.equal(firebaseDeletes, 1);
+
+    const { LIVEKIT_API_KEY: _mediaKey, LIVEKIT_API_SECRET: _mediaSecret, LIVEKIT_URL: _mediaUrl, ...noMediaBindings } = workerOptions.bindings;
+    const withoutVoice = new Miniflare(convertV4MiniflareOptions({ ...workerOptions, bindings: noMediaBindings }));
+    try {
+      const withoutVoiceDb = await withoutVoice.getD1Database(binding.binding);
+      for (const sql of [schema, ...await Promise.all(runtimeMigrations.map(file =>
+        readFile(pathFromHere(`../../api/migrations/d1/${file}.sql`), "utf8")))]) {
+        await withoutVoiceDb.batch(unstable_splitSqlQuery(sql).map(statement => withoutVoiceDb.prepare(statement)));
+      }
+      const { data: host } = await signIn(true, project, 200, "no-media-host", "email", withoutVoice);
+      const { data: guest } = await signIn(true, project, 200, "no-media-guest", "email", withoutVoice);
+      const room = (await request("/api/rooms", 201, { accessToken: host.accessToken, target: withoutVoice,
+        body: { title: "Local room without media", type: "VOICE", category: "test", language: "English" } })).data.room;
+      assert.equal(room.status, "LIVE");
+      const path = `/api/rooms/${room._id}`;
+      const tokenRequest = { target: withoutVoice, body: { roomId: room._id } };
+      await request("/api/livekit/token", 401, tokenRequest);
+      await request("/api/livekit/token", 403, { ...tokenRequest, accessToken: guest.accessToken });
+      const joined = await request(path + "/join", 200, { accessToken: guest.accessToken, target: withoutVoice, body: {} });
+      assert.equal(joined.data.joined, true);
+      const media = await request("/api/livekit/token", 503, { ...tokenRequest, accessToken: guest.accessToken });
+      assert.equal(media.error.code, "ROOM_MEDIA_UNCONFIGURED");
+      assert.match(media.error.message, /Room chat is still available/);
+      await request(path + "/messages", 201, { accessToken: guest.accessToken, target: withoutVoice, body: { message: "Chat still works" } });
+      const history = await request(path + "/messages", 200, { accessToken: guest.accessToken, target: withoutVoice });
+      assert.deepEqual(history.data.messages.map(message => message.message), ["Chat still works"]);
+    } finally {
+      await withoutVoice.dispose();
+    }
   } finally {
     await worker?.dispose();
     await legacyWorker?.dispose();

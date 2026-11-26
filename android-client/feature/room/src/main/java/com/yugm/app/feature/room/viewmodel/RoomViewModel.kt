@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yugm.app.core.api.IYugmApi
+import com.yugm.app.core.api.ApiHttpException
 import com.yugm.app.core.api.ReactionCatalogCache
 import com.yugm.app.core.api.RoomSocketClient
 import com.yugm.app.core.api.YugmMediaRoom
@@ -44,6 +45,7 @@ import com.yugm.app.core.util.UiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -117,6 +119,8 @@ class RoomViewModel @Inject constructor(
 
     var isConnected by mutableStateOf(false)
         private set
+    private var mediaConnectJob: Job? = null
+    private var unavailableMediaRoomId: String? = null
     var forcedMuteVersion by mutableStateOf(0)
         private set
     var forcedRemoveVersion by mutableStateOf(0)
@@ -250,6 +254,10 @@ class RoomViewModel @Inject constructor(
             if (roomDetail == null) refresh()
             return
         }
+        if (connectedRoomKey != nextRoomKey) {
+            mediaConnectJob?.cancel()
+            unavailableMediaRoomId = null
+        }
         connectedRoomKey = nextRoomKey
         realtimeRefreshJob?.cancel()
         pendingRealtimeEvents.clear()
@@ -325,6 +333,7 @@ class RoomViewModel @Inject constructor(
     }
 
     private suspend fun closeMediaConnections() {
+        mediaConnectJob?.cancel()
         realtimeRefreshJob?.cancel()
         pendingRealtimeEvents.clear()
         roomRecoveryJob?.cancel()
@@ -337,6 +346,7 @@ class RoomViewModel @Inject constructor(
     }
 
     private fun stopRoomConnections() {
+        mediaConnectJob?.cancel()
         realtimeRefreshJob?.cancel()
         pendingRealtimeEvents.clear()
         roomRecoveryJob?.cancel()
@@ -450,43 +460,20 @@ class RoomViewModel @Inject constructor(
     fun joinVideo(publishCamera: Boolean, publishMicrophone: Boolean) = joinInternal(publishCamera, publishMicrophone)
 
     private fun joinInternal(cameraPermissionGranted: Boolean? = null, microphonePermissionGranted: Boolean? = null) {
+        val requestedRoomId = roomId
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    yugmApi.joinRoom(authToken, roomId)
-                    YugmMediaRoom.claimRoom(mediaOwnerId)
+                    yugmApi.joinRoom(authToken, requestedRoomId)
                     // Keep the snapshot loaded before joining. Clearing here forced
                     // an empty-then-refill flash and discarded messages that were
                     // already fetched for the lobby preview.
-                    // Keep chat/reaction delivery available even if LiveKit is
-                    // temporarily unreachable or microphone publishing fails.
-                    viewModelScope.launch(Dispatchers.IO) {
-                        runCatching {
-                            val mediaSession = yugmApi.liveKitToken(authToken, roomId)
-                            val isHostVideoRoom = isVideo && roomDetail?.room?.host?.id == currentUserId
-                            // An approved viewer was previously listening with mic off.
-                            // Apply their explicit permission choice before reconnecting.
-                            microphonePermissionGranted?.let { YugmMediaRoom.setMicEnabled(it) }
-                            YugmMediaRoom.connect(
-                                mediaSession.token,
-                                mediaSession.url,
-                                publishCamera = cameraPermissionGranted ?: isHostVideoRoom,
-                                publishMicrophone = microphonePermissionGranted ?: isHostVideoRoom,
-                                canPublishMicrophone = mediaSession.canPublishMicrophone,
-                                ownerId = mediaOwnerId
-                            )
-                        }.onFailure { error ->
-                            withContext(Dispatchers.Main) {
-                                actionError = error.message ?: "Could not connect room audio"
-                            }
-                        }
-                    }
                     roomSocket.connect(
                         // API calls above may have rotated an expired access token.
                         // Read the session source of truth for Socket.IO too; the
                         // navigation argument can still hold the pre-refresh token.
                         token = sessionManager.authToken.takeIf { it.isNotBlank() } ?: authToken,
-                        roomId = roomId,
+                        roomId = requestedRoomId,
                         onMessage = { message ->
                             viewModelScope.launch { mergeChat(listOf(message)) }
                         },
@@ -582,8 +569,11 @@ class RoomViewModel @Inject constructor(
                 }
             }
             val joinFailure = result.exceptionOrNull()
+            if (roomId != requestedRoomId) return@launch
             if (result.isSuccess) {
                 isConnected = true
+                val isHostVideoRoom = isVideo && roomDetail?.room?.host?.id == currentUserId
+                connectRoomMedia(cameraPermissionGranted ?: isHostVideoRoom, microphonePermissionGranted ?: isHostVideoRoom)
                 // Chat history was already loaded before the join and the socket
                 // ack (onRoomJoined) refreshes the tail; don't repeat the bundle.
             } else if (joinFailure != null) {
@@ -844,21 +834,37 @@ class RoomViewModel @Inject constructor(
     }
 
     private fun refreshMediaSession(enableMicrophone: Boolean = false) {
-        viewModelScope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) { yugmApi.liveKitToken(authToken, roomId) }
-            }.onSuccess {
-                val isHostVideoRoom = isVideo && roomDetail?.room?.host?.id == currentUserId
+        val isHostVideoRoom = isVideo && roomDetail?.room?.host?.id == currentUserId
+        connectRoomMedia(isHostVideoRoom, enableMicrophone || YugmMediaRoom.isMicEnabled())
+    }
+
+    private fun connectRoomMedia(publishCamera: Boolean, publishMicrophone: Boolean) {
+        val requestedRoomId = roomId
+        if (requestedRoomId.isBlank() || unavailableMediaRoomId == requestedRoomId) return
+        mediaConnectJob?.cancel()
+        mediaConnectJob = viewModelScope.launch {
+            try {
+                val token = sessionManager.authToken.ifBlank { authToken }
+                val media = withContext(Dispatchers.IO) { yugmApi.liveKitToken(token, requestedRoomId) }
+                if (roomId != requestedRoomId) return@launch
+                YugmMediaRoom.claimRoom(mediaOwnerId)
                 YugmMediaRoom.connect(
-                    it.token,
-                    it.url,
-                    publishCamera = isHostVideoRoom,
-                    publishMicrophone = enableMicrophone || YugmMediaRoom.isMicEnabled(),
-                    canPublishMicrophone = it.canPublishMicrophone,
+                    media.token,
+                    media.url,
+                    publishCamera = publishCamera,
+                    publishMicrophone = publishMicrophone,
+                    canPublishMicrophone = media.canPublishMicrophone,
                     ownerId = mediaOwnerId
                 )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (roomId != requestedRoomId) return@launch
+                if (error is ApiHttpException && error.errorCode == "ROOM_MEDIA_UNCONFIGURED") {
+                    unavailableMediaRoomId = requestedRoomId
+                }
+                actionError = error.message ?: "Could not connect room audio"
             }
-                .onFailure { actionError = it.message ?: "Could not enable room audio" }
         }
     }
 
@@ -1251,6 +1257,10 @@ class RoomViewModel @Inject constructor(
     fun setOwnMicState(enabled: Boolean) {
         viewModelScope.launch {
             actionError = null
+            if (enabled && unavailableMediaRoomId == roomId) {
+                actionError = "Voice and video are unavailable in this environment. Room chat is still available."
+                return@launch
+            }
             withContext(Dispatchers.IO) {
                 runCatching { yugmApi.setOwnRoomMicState(roomId, enabled, authToken) }
                     .onSuccess {

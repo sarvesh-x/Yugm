@@ -8,6 +8,9 @@ export async function verifyD1RoomPkHistory(db, request, host, opponent, adminSe
   const [left, right, complete, active] = Array.from({ length: 4 }, id);
   const time = new Date().toISOString();
   const began = new Date(Date.now() - 90_000).toISOString();
+  // Earlier fixtures can leave many ACTIVE battles. Give this one the newest
+  // started_at so the admin live list, which is limited to 100 rows, includes it.
+  const liveStart = new Date(Date.now() + 60_000).toISOString();
   const rooms = [[left, host.user.id, "PUBLIC"], [right, opponent.user.id, "PRIVATE"]];
   await db.batch([
     ...rooms.map(([room, owner, visibility]) => db.prepare(`INSERT INTO rooms
@@ -15,12 +18,12 @@ export async function verifyD1RoomPkHistory(db, request, host, opponent, adminSe
         is_duet, livekit_room_name, allow_audience_mic_requests, mic_locked, vip_only)
       VALUES (?, 'PK history fixture', 'VOICE', ?, 'fixture', '[]', 'en', 'LIVE', ?, 8, 1, 0, ?, 0, 0, 0)`)
       .bind(room, owner, visibility, `pk-${room}`)),
-    ...[[complete, "ENDED"], [active, "ACTIVE"]].map(([battle, status]) => db.prepare(`INSERT INTO pk_battles
+    ...[[complete, "ENDED", began], [active, "ACTIVE", liveStart]].map(([battle, status, started]) => db.prepare(`INSERT INTO pk_battles
       (source_id, battle_code, title, mode, format, scope, team_size, status, battle_type, duration_seconds,
         in_room_battle, state_version, event_sequence, termination_reason, started_by_user_id, left_room_id,
         right_room_id, left_host_id, right_host_id, left_score, right_score, winner_side, started_at, created_at)
       VALUES (?, ?, 'Finished PK', 'GIFT', 'ROOM', 'CROSS_ROOM', 1, ?, 'VOICE', 30, 0, 2, 0, '', ?, ?, ?, ?, ?, 12, 3, 'LEFT', ?, ?)`)
-      .bind(battle, `PK-${battle}`, status, host.user.id, left, right, host.user.id, opponent.user.id, began, time)),
+      .bind(battle, `PK-${battle}`, status, host.user.id, left, right, host.user.id, opponent.user.id, started, time)),
     db.prepare(`INSERT INTO pk_participants (source_id, battle_id, user_id, room_id, side, role, is_ready, team_name, joined_at)
       VALUES (?, ?, ?, ?, 'RIGHT', 'HOST', 1, 'B', ?)`).bind(id(), complete, opponent.user.id, right, began)
   ]);

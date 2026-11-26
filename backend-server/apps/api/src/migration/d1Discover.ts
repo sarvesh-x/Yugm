@@ -4,7 +4,8 @@ import { requireHttpSession } from "../middleware/httpAccessSession.js";
 import { asyncHandler, sendOk } from "../utils/http.js";
 import { createD1AccessSessionReader } from "./d1AccessSession.js";
 import { noD1Presence, type D1PresencePort } from "./d1Presence.js";
-import { person, personJson } from "./d1People.js";
+import { person, personJson, visiblePerson } from "./d1People.js";
+import { roomAccessFor } from "./d1RoomAccess.js";
 import { d1RoomProjection, presentD1Room } from "./d1Rooms.js";
 
 type Row = Record<string, string | number | null> & { host_json?: string; person_json?: string };
@@ -28,9 +29,9 @@ function paging(req: Request) {
   const requestedPage = Number.parseInt(String(req.query.page ?? "1"), 10);
   const requestedLimit = Number.parseInt(String(req.query.limit ?? "20"), 10);
   // Legacy NaN values became unbounded queries. D1 guards them to the defaults.
-  const page = Number.isFinite(requestedPage) ? Math.max(1, requestedPage) : 1;
+  const page = Number.isSafeInteger(requestedPage) ? Math.max(1, requestedPage) : 1;
   const limit = Number.isFinite(requestedLimit) ? Math.min(50, Math.max(1, requestedLimit)) : 20;
-  return { page, limit, offset: (page - 1) * limit };
+  return { page, limit, offset: Math.min((page - 1) * limit, Number.MAX_SAFE_INTEGER) };
 }
 
 function strings(value: string | null | undefined) {
@@ -68,7 +69,8 @@ function presentUser(row: Row, isOnline: boolean) {
   };
 }
 
-const liveRooms = `FROM rooms AS r LEFT JOIN users AS host ON host.source_id = r.host_id WHERE r.status = 'LIVE'`;
+const visibleLiveRooms = `r.status = 'LIVE' AND (${roomAccessFor("?1")}) AND ${visiblePerson("host", "?1")}`;
+const liveRooms = `FROM rooms AS r JOIN users AS host ON host.source_id = r.host_id WHERE ${visibleLiveRooms}`;
 const discoveryOrder = `ORDER BY r.participant_count DESC, r.created_at DESC, r.source_id DESC`;
 
 export function createD1DiscoverRouter(db: D1Database, presence: D1PresencePort = noD1Presence) {
@@ -81,10 +83,10 @@ export function createD1DiscoverRouter(db: D1Database, presence: D1PresencePort 
   }));
 
   router.get("/discover/trending", asyncHandler(async (req, res) => {
-    await requireHttpSession(req.headers.authorization, access);
+    const { user } = await requireHttpSession(req.headers.authorization, access);
     const { limit, offset, page } = paging(req);
     const rooms = await db.prepare(`SELECT ${d1RoomProjection} ${liveRooms}
-      ${discoveryOrder} LIMIT ?1 OFFSET ?2`).bind(limit, offset).all<Row>();
+      ${discoveryOrder} LIMIT ?2 OFFSET ?3`).bind(user.id, limit, offset).all<Row>();
     sendOk(res, { rooms: rooms.results.map(presentRoom), page, limit });
   }));
 
@@ -99,43 +101,38 @@ export function createD1DiscoverRouter(db: D1Database, presence: D1PresencePort 
     const interests = strings(actor?.interests_json);
     const languages = strings(actor?.languages_json);
 
-    const clauses = ["u.source_id <> ?1"];
-    const values: unknown[] = [user.id];
-    let nextBinding = 2;
-    const addOverlap = (table: string, candidates: string[]) => {
-      if (!candidates.length) return;
-      const placeholders = candidates.map(() => `?${nextBinding++}`).join(", ");
-      clauses.push(`EXISTS (SELECT 1 FROM ${table} WHERE users_id = u.source_id AND value IN (${placeholders}))`);
-      values.push(...candidates);
-    };
-    addOverlap("user_interests", interests);
-    addOverlap("user_languages", languages);
-
-    const [rooms, users] = await Promise.all([
-      db.prepare(`SELECT ${d1RoomProjection} ${liveRooms} ${discoveryOrder} LIMIT 10`).all<Row>(),
+    const [rooms, users, onlineIds] = await Promise.all([
+      db.prepare(`SELECT ${d1RoomProjection} ${liveRooms} ${discoveryOrder} LIMIT 10`).bind(user.id).all<Row>(),
       db.prepare(`SELECT u.source_id, ${personJson("u")} AS person_json FROM users AS u
-        WHERE ${clauses.join(" AND ")} LIMIT 10`).bind(...values).all<Row>()
+        WHERE u.source_id <> ?1 AND ${visiblePerson("u", "?1")}
+          AND ((json_array_length(?2) = 0 AND json_array_length(?3) = 0)
+            OR EXISTS (SELECT 1 FROM user_interests WHERE users_id = u.source_id
+              AND value IN (SELECT value FROM json_each(?2)))
+            OR EXISTS (SELECT 1 FROM user_languages WHERE users_id = u.source_id
+              AND value IN (SELECT value FROM json_each(?3)))) LIMIT 10`)
+        .bind(user.id, JSON.stringify(interests), JSON.stringify(languages)).all<Row>(),
+      presence.getOnlineUserIds()
     ]);
+    const online = new Set(onlineIds);
     sendOk(res, {
       rooms: rooms.results.map(row => ({ item: presentRoom(row), reason: "Matches your interests" })),
-      users: await Promise.all(users.results.map(async row => ({
-        item: presentUser(row, await presence.isUserOnline(String(row.source_id))), reason: "Similar vibe"
-      }))),
+      users: users.results.map(row => ({
+        item: presentUser(row, online.has(String(row.source_id))), reason: "Similar vibe"
+      })),
       events: []
     });
   }));
 
   router.get("/discover/online-now", asyncHandler(async (req, res) => {
-    await requireHttpSession(req.headers.authorization, access);
+    const { user } = await requireHttpSession(req.headers.authorization, access);
     const { limit, page, offset } = paging(req);
     const onlineIds = await presence.getOnlineUserIds();
     if (!onlineIds.length) return sendOk(res, { users: [], page, limit });
-    const cutoff = new Date(Date.now() - 10 * 60_000).toISOString();
-    const placeholders = onlineIds.map(() => "?").join(", ");
     const rows = await db.prepare(`SELECT ${personJson("u")} AS person_json FROM users AS u
-      WHERE u.source_id IN (${placeholders}) AND u.updated_at >= ?
-      ORDER BY u.updated_at DESC, u.source_id DESC LIMIT ? OFFSET ?`)
-      .bind(...onlineIds, cutoff, limit, offset).all<Row>();
+      WHERE u.source_id <> ?1 AND ${visiblePerson("u", "?1")}
+      AND u.source_id IN (SELECT value FROM json_each(?2))
+      ORDER BY u.updated_at DESC, u.source_id DESC LIMIT ?3 OFFSET ?4`)
+      .bind(user.id, JSON.stringify(onlineIds), limit, offset).all<Row>();
     sendOk(res, { users: rows.results.map(row => {
       const value = person(String(row.person_json ?? "{}")) as Record<string, unknown>;
       return {
@@ -147,23 +144,23 @@ export function createD1DiscoverRouter(db: D1Database, presence: D1PresencePort 
   }));
 
   router.get("/discover/hubs", asyncHandler(async (req, res) => {
-    await requireHttpSession(req.headers.authorization, access);
-    const live = await db.prepare("SELECT tags, language FROM rooms WHERE status = 'LIVE'").all<{
+    const { user } = await requireHttpSession(req.headers.authorization, access);
+    const live = await db.prepare(`SELECT r.tags, r.language ${liveRooms}`).bind(user.id).all<{
       tags: string | null; language: string | null;
     }>();
     const counted = hubs.map(hub => ({ ...hub, count: live.results.filter(row => hub.type === "language"
       ? row.language?.toLowerCase() === hub.key
-      : strings(row.tags).includes(hub.key)).length }));
+      : strings(row.tags).some(tag => tag.toLowerCase() === hub.key)).length }));
     sendOk(res, { hubs: counted });
   }));
 
   router.get("/discover/hub/:key", asyncHandler(async (req, res) => {
-    await requireHttpSession(req.headers.authorization, access);
+    const { user } = await requireHttpSession(req.headers.authorization, access);
     const { limit, offset, page } = paging(req);
-    const key = String(req.params.key ?? "");
+    const key = String(req.params.key ?? "").toLowerCase();
     const rooms = await db.prepare(`SELECT ${d1RoomProjection} ${liveRooms}
-      AND (EXISTS (SELECT 1 FROM json_each(r.tags) WHERE value = ?1) OR r.language = ?1)
-      ${discoveryOrder} LIMIT ?2 OFFSET ?3`).bind(key, limit, offset).all<Row>();
+      AND (EXISTS (SELECT 1 FROM json_each(r.tags) WHERE lower(value) = ?2) OR lower(r.language) = ?2)
+      ${discoveryOrder} LIMIT ?3 OFFSET ?4`).bind(user.id, key, limit, offset).all<Row>();
     sendOk(res, { items: rooms.results.map(presentRoom), page, limit });
   }));
 

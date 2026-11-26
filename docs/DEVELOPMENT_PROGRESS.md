@@ -1,5 +1,13 @@
 # Development progress
 
+## 2026-11-26 — LiveKit connection handling and room-create fixture
+
+- Missing local LiveKit bindings now produce a typed `503 ROOM_MEDIA_UNCONFIGURED` with a clear voice/video unavailable message, and PK media reads use the same validation. Android keeps room chat/realtime available when media cannot connect, suppresses the request reference for that expected code, and caches the unavailable room id. Corrected the no-media Worker fixture's required `category`/`language` fields and made the PK-history live-battle fixture independent of earlier fixtures. No LiveKit credentials were read or used; the local Worker was restarted with its original configuration. Both typechecks, both Worker suites, the endpoint audit, strict secret check, focused Android test and room compile passed. [Details](handoffs/2026-11-26-d1-route-fixes.md)
+
+## 2026-11-26 — D1 route and realtime fixes
+
+- Reused room and profile visibility checks for Discover, tied live presence to authenticated sockets, bounded SQL bindings for online lists, fixed case-insensitive self-swipes, and scoped replay and account-deletion events to their authorized recipients. [Changes and verification](handoffs/2026-11-26-d1-route-fixes.md)
+
 ## 2026-11-26 — One hosted Worker and native WebSockets
 
 - Removed the legacy Cloudflare staging runtime and put production deployments on `yugm-api-production`. GitHub workflow source now verifies D1/R2, applies hosted migrations, and deploys the single API Worker. Android account and room connections use authenticated WebSockets. Worker fixtures, shared protocol tests, and Android room socket lifecycle tests passed. [Deployment and realtime verification](handoffs/2026-11-26-single-worker-native-realtime.md)

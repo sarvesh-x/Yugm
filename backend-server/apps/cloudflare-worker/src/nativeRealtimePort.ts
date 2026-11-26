@@ -48,12 +48,16 @@ export function createNativeRealtimePort(env: NativeRealtimeBindingEnv): D1Prese
       await nativeCall(env, PRESENCE_OBJECT, "/presence/offline", { method: "POST", body: { userId } });
     },
     emitUser: async (userId, event, payload) => {
-      await nativeCall(env, PRESENCE_OBJECT, "/presence/emit-user", {
-        method: "POST", body: { userId, event, payload }
+      const scope = `user:${userId}`;
+      await nativeCall(env, scope, "/publish", {
+        method: "POST", body: { scope, event, delivery: "invalidation", data: payload ?? {} }
       });
     },
     disconnectUser: async (userId) => {
-      await nativeCall(env, PRESENCE_OBJECT, "/presence/offline", { method: "POST", body: { userId } });
+      await Promise.all([
+        nativeCall(env, `user:${userId}`, "/disconnect", { method: "POST" }),
+        nativeCall(env, PRESENCE_OBJECT, "/presence/offline", { method: "POST", body: { userId } })
+      ]);
     },
     publish: async (input: D1RealtimePublish) => {
       await nativeCall(env, input.scope, "/publish", { method: "POST", body: input });

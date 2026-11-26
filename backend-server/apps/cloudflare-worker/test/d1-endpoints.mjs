@@ -286,7 +286,11 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor, gamer = 
   const hubItems = (await requestAs(owner, "/api/discover/hub/English?limit=100", 200)).data;
   assert.deepEqual(hubItems.items.map(item => item._id), [privateVideo, live]);
   assert.equal(hubItems.limit, 50);
-  assert.deepEqual((await requestAs(owner, "/api/discover/hub/english", 200)).data.items, []);
+  assert.deepEqual((await requestAs(owner, "/api/discover/hub/english", 200)).data.items.map(item => item._id), [privateVideo, live]);
+  assert.deepEqual((await requestAs(visitor, "/api/discover/trending", 200)).data.rooms.map(item => item._id), [live]);
+  assert.deepEqual((await requestAs(visitor, "/api/discover/recommended", 200)).data.rooms.map(item => item.item._id), [live]);
+  assert.deepEqual((await requestAs(visitor, "/api/discover/hub/english", 200)).data.items.map(item => item._id), [live]);
+  assert.equal((await requestAs(visitor, "/api/discover/hubs", 200)).data.hubs.find(item => item.key === "english").count, 1);
 
   const messages = (await requestAs(visitor, prefix + "/" + live + "/messages", 200)).data.messages;
   assert.deepEqual(messages.map(item => item.message), ["visible after join"]);
@@ -297,6 +301,7 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor, gamer = 
   await db.prepare(`INSERT INTO room_invites (source_id, room_id, inviter_id, invitee_id, status, created_at, updated_at)
     VALUES (?, ?, ?, ?, 'PENDING', ?, ?)`).bind(newId(), privateVideo, ownerId, visitorId, time, time).run();
   assert.equal((await requestAs(visitor, prefix + "/" + privateVideo, 200)).data.room.type, "VIDEO");
+  assert.deepEqual((await requestAs(visitor, "/api/discover/trending", 200)).data.rooms.map(item => item._id), [privateVideo, live]);
   assert.deepEqual((await requestAs(visitor, prefix + "/" + privateVideo + "/messages", 200)).data.messages, []);
   assert.deepEqual((await requestAs(visitor, prefix + "/" + privateVideo + "/activity", 200)).data.activity, []);
 
@@ -359,6 +364,28 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor, gamer = 
     } finally {
       roomSocket.close(1000);
     }
+    const membership = await db.prepare(`SELECT source_id, joined_at FROM room_participants
+      WHERE room_id = ? AND user_id = ? AND left_at IS NULL`).bind(lifecycleId, visitorId).first();
+    await db.prepare("UPDATE room_participants SET joined_at = ? WHERE source_id = ?")
+      .bind(new Date(Date.now() + 1000).toISOString(), membership.source_id).run();
+    try {
+      const rejoined = await upgrade(visitor, lifecycleId);
+      assert.equal(rejoined.status, 101);
+      const socket = rejoined.webSocket;
+      try {
+        const ready = nextFrame(socket);
+        socket.accept();
+        const { scope } = await ready;
+        const resumed = nextFrame(socket);
+        socket.send(JSON.stringify({ v: 1, type: "resume", scope, afterSeq: 0 }));
+        assert.deepEqual(await resumed, { v: 1, type: "resumed", scope });
+      } finally {
+        socket.close(1000);
+      }
+    } finally {
+      await db.prepare("UPDATE room_participants SET joined_at = ? WHERE source_id = ?")
+        .bind(membership.joined_at, membership.source_id).run();
+    }
     const userConnections = await Promise.all([upgrade(owner), upgrade(visitor)]);
     assert.deepEqual(userConnections.map(response => response.status), [101, 101]);
     const [senderSocket, receiverSocket] = userConnections.map(response => response.webSocket);
@@ -369,6 +396,10 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor, gamer = 
         return frame;
       });
       assert.deepEqual((await Promise.all(ready)).map(frame => frame.scope), [`user:${ownerId}`, `user:${visitorId}`]);
+      assert.equal((await requestAs(owner, "/api/discover/presence-count", 200)).data.count, 2);
+      const online = (await requestAs(owner, "/api/discover/online-now", 200)).data.users;
+      assert.deepEqual(online.map(item => item._id), [visitorId]);
+      assert.deepEqual((await requestAs(owner, "/api/users/recommended-chat?limit=1.5", 200)).data.users.map(item => item._id), [visitorId]);
       const typing = nextFrame(receiverSocket);
       senderSocket.send(JSON.stringify({ v: 1, type: "typing", channel: "direct", target: visitorId, typing: true }));
       const frame = await typing;

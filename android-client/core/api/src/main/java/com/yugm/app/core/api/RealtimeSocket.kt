@@ -36,9 +36,11 @@ internal class WorkerRealtimeSocket(origin: String, token: String, roomId: Strin
     private val callbacks = mutableMapOf<String, MutableList<(Array<Any>) -> Unit>>()
     private var connection: WebSocket? = null
     private var reconnect: Job? = null
+    private var heartbeat: Job? = null
     private var retryDelay = 1_000L
     private var scope: String? = null
     private var sequence = 0L
+    private val seenEvents = LinkedHashSet<String>()
     private var stopped = false
 
     override fun on(event: String, listener: (Array<Any>) -> Unit) {
@@ -59,6 +61,7 @@ internal class WorkerRealtimeSocket(origin: String, token: String, roomId: Strin
         synchronized(lock) {
             stopped = true
             reconnect?.cancel()
+            heartbeat?.cancel()
             connection?.close(1000, null)
             connection = null
         }
@@ -87,6 +90,7 @@ internal class WorkerRealtimeSocket(origin: String, token: String, roomId: Strin
         synchronized(lock) {
             if (connection !== socket || stopped) return
             connection = null
+            heartbeat?.cancel()
             if (!retry) return
             val wait = retryDelay
             retryDelay = (retryDelay * 2).coerceAtMost(30_000L)
@@ -101,13 +105,29 @@ internal class WorkerRealtimeSocket(origin: String, token: String, roomId: Strin
         override fun onMessage(webSocket: WebSocket, text: String) {
             val frame = runCatching { JSONObject(text) }.getOrNull() ?: return
             if (frame.optInt("v") != 1) return
+            if (frame.optString("type") == "access-revoked") {
+                deliver(webSocket, RealtimeSocket.DISCONNECT, "Realtime access expired")
+                lost(webSocket, retry = false)
+                webSocket.close(1000, null)
+                return
+            }
             if (frame.optString("type") == "ready") {
                 val nextScope = frame.optString("scope").takeIf { it.isNotBlank() } ?: return
                 synchronized(lock) {
                     if (connection !== webSocket || stopped) return
-                    if (scope != nextScope) sequence = 0
+                    if (scope != nextScope) {
+                        sequence = 0
+                        seenEvents.clear()
+                    }
                     scope = nextScope
                     retryDelay = 1_000L
+                    heartbeat?.cancel()
+                    heartbeat = background.launch {
+                        while (true) {
+                            delay(60_000L)
+                            if (!webSocket.send("""{"v":1,"type":"heartbeat"}""")) break
+                        }
+                    }
                     if (sequence > 0) webSocket.send(JSONObject().put("v", 1).put("type", "resume")
                         .put("scope", nextScope).put("afterSeq", sequence).toString())
                 }
@@ -115,8 +135,11 @@ internal class WorkerRealtimeSocket(origin: String, token: String, roomId: Strin
                 return
             }
             val event = frame.optString("event").takeIf { it.isNotBlank() } ?: return
+            val id = frame.optString("id").takeIf { it.isNotBlank() } ?: return
             synchronized(lock) {
                 if (connection !== webSocket || frame.optString("scope") != scope) return
+                if (!seenEvents.add(id)) return
+                if (seenEvents.size > 256) seenEvents.remove(seenEvents.first())
                 sequence = maxOf(sequence, frame.optLong("seq"))
             }
             deliver(webSocket, event, frame.opt("data") ?: JSONObject())

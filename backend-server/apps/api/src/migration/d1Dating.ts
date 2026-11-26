@@ -204,7 +204,8 @@ export function createD1DatingRouter(db: D1Database, presence: D1PresencePort = 
 
     // An empty live-presence set preserves the legacy empty shape. Shared
     // interests with no actor interests cannot overlap either.
-    const onlineIds = onlineOnly ? await presence.getOnlineUserIds() : [];
+    const onlineIds = await presence.getOnlineUserIds();
+    const online = new Set(onlineIds);
     if ((onlineOnly && onlineIds.length === 0) || (sharedOnly && actorInterests.length === 0)) {
       return sendOk(res, { candidates: [] });
     }
@@ -243,9 +244,7 @@ export function createD1DatingRouter(db: D1Database, presence: D1PresencePort = 
       JSON.stringify(actorInterests));
     }
     if (onlineOnly) {
-      const placeholders = onlineIds.map(() => `?${nextBinding++}`).join(", ");
-      filters.push(`u.source_id IN (${placeholders})`);
-      values.push(...onlineIds);
+      addFilter("u.source_id IN (SELECT value FROM json_each(?))", JSON.stringify(onlineIds));
     }
 
     const rows = await db.prepare(`SELECT u.source_id, ${personJson("u", true)} AS person_json,
@@ -258,7 +257,7 @@ export function createD1DatingRouter(db: D1Database, presence: D1PresencePort = 
         WHERE users_id = u.source_id ORDER BY position)) AS languages_json
       FROM users AS u WHERE ${filters.join(" AND ")} ORDER BY RANDOM() LIMIT 40`)
       .bind(...values).all<ExploreRow>();
-    sendOk(res, { candidates: await Promise.all(rows.results.map(async row => {
+    sendOk(res, { candidates: rows.results.map(row => {
       const candidateInterests = parseStrings(row.interests_json);
       const candidateLanguages = parseStrings(row.languages_json);
       const base = person(row.person_json) as Record<string, unknown>;
@@ -291,9 +290,9 @@ export function createD1DatingRouter(db: D1Database, presence: D1PresencePort = 
         matchReasons: compatibility.reasons,
         sharedInterests: compatibility.sharedInterests,
         sharedLanguages: compatibility.sharedLanguages,
-        isOnline: await presence.isUserOnline(row.source_id)
+        isOnline: online.has(row.source_id)
       };
-    })) });
+    }) });
   }));
 
   router.post("/like", asyncHandler(async (req, res) => {
@@ -304,8 +303,8 @@ export function createD1DatingRouter(db: D1Database, presence: D1PresencePort = 
     if (!rawLikedId || !isValidObjectId(rawLikedId)) {
       throw new HttpError(400, "Invalid likedId", ErrorCode.VALIDATION);
     }
-    if (actorId === rawLikedId) throw new HttpError(400, "You cannot like yourself", ErrorCode.VALIDATION);
     const likedId = rawLikedId.toLowerCase();
+    if (actorId === likedId) throw new HttpError(400, "You cannot like yourself", ErrorCode.VALIDATION);
 
     const blocked = await db.prepare(`SELECT 1 FROM blocks WHERE
       (blocker_id = ? AND blocked_user_id = ?) OR (blocker_id = ? AND blocked_user_id = ?) LIMIT 1`)
@@ -457,6 +456,7 @@ export function createD1DatingRouter(db: D1Database, presence: D1PresencePort = 
       throw new HttpError(400, "Invalid user ID", ErrorCode.VALIDATION);
     }
     const likedId = rawLikedId.toLowerCase();
+    if (actorId === likedId) throw new HttpError(400, "You cannot pass on yourself", ErrorCode.VALIDATION);
     const existing = await db.prepare("SELECT 1 FROM likes WHERE liker_id = ? AND liked_id = ?")
       .bind(actorId, likedId).first();
     if (existing) throw new HttpError(400, "Already swiped on this user", ErrorCode.VALIDATION);

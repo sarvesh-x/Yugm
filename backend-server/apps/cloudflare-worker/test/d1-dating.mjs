@@ -73,8 +73,11 @@ export async function verifyD1Dating(db, request, owner, visitor) {
     accessToken: owner.accessToken, body: { likedId: "not-an-id" }
   })).error.message, "Invalid user ID");
   assert.equal((await request("/api/dating/like", 400, {
-    accessToken: owner.accessToken, body: { likedId: ownerId }
+    accessToken: owner.accessToken, body: { likedId: ownerId.toUpperCase() }
   })).error.message, "You cannot like yourself");
+  assert.equal((await request("/api/dating/pass", 400, {
+    accessToken: owner.accessToken, body: { likedId: ownerId }
+  })).error.message, "You cannot pass on yourself");
 
   const safetyId = id();
   await db.batch([db.prepare(`INSERT INTO user_safety_statuses (source_id, user_id, trust_score, risk_level,

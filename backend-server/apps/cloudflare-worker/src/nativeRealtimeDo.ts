@@ -8,7 +8,7 @@
 import { DurableObject } from "cloudflare:workers";
 import type { D1Database } from "@cloudflare/workers-types";
 import type { AccessClaims } from "../../api/src/services/accessSession.js";
-import { canReceiveRealtime } from "./d1RealtimeAccess.js";
+import { readRealtimeAccess } from "./d1RealtimeAccess.js";
 import { createNativeRealtimePort, type NativeRealtimeBindingEnv } from "./nativeRealtimePort.js";
 import {
   NATIVE_PROTOCOL_VERSION,
@@ -38,6 +38,7 @@ interface NativeAttachment {
   connectionId: string;
   scope: string;
   auth: AccessClaims;
+  lastHeartbeatAt?: number;
   lastTypingAt?: number;
 }
 
@@ -149,16 +150,9 @@ export class NativeRealtimeDurableObject extends DurableObject<NativeRealtimeDoE
         return badRequest(error instanceof Error ? error.message : "Invalid presence request");
       }
     }
-    if (request.method === "POST" && url.pathname === "/presence/emit-user") {
-      try {
-        const body = await request.json() as { userId?: unknown; event?: unknown; payload?: unknown };
-        const userId = parseUserId(body.userId);
-        if (typeof body.event !== "string" || !body.event.trim()) throw new Error("event is required");
-        await this.emitUser(userId, body.event, body.payload ?? {});
-        return Response.json({ ok: true });
-      } catch (error) {
-        return badRequest(error instanceof Error ? error.message : "Invalid user event");
-      }
+    if (request.method === "POST" && url.pathname === "/disconnect") {
+      for (const socket of this.ctx.getWebSockets()) this.revoke(socket);
+      return new Response(null, { status: 204 });
     }
     if (request.method === "GET" && url.pathname === "/history") {
       const scope = url.searchParams.get("scope") ?? "";
@@ -184,6 +178,7 @@ export class NativeRealtimeDurableObject extends DurableObject<NativeRealtimeDoE
       lastSeq: 0,
       seenIds: [],
     });
+    if (scope === `user:${auth.sub}`) await this.updatePresence(auth.sub, true);
     server.send(JSON.stringify({ v: NATIVE_PROTOCOL_VERSION, type: "ready", scope }));
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -208,6 +203,16 @@ export class NativeRealtimeDurableObject extends DurableObject<NativeRealtimeDoE
       value = JSON.parse(message);
     } catch {
       ws.send(errorFrame("INVALID_JSON", "Frame is not valid JSON"));
+      return;
+    }
+
+    if (typeof value === "object" && value !== null && "type" in value && value.type === "heartbeat") {
+      const now = Date.now();
+      if (now - (attachment.lastHeartbeatAt ?? 0) < 30_000) return;
+      ws.serializeAttachment({ ...attachment, lastHeartbeatAt: now });
+      if (await this.canDeliver(ws, attachment) && attachment.scope === `user:${attachment.auth.sub}`) {
+        await this.updatePresence(attachment.auth.sub, true);
+      }
       return;
     }
 
@@ -238,14 +243,16 @@ export class NativeRealtimeDurableObject extends DurableObject<NativeRealtimeDoE
       return;
     }
 
-    if (!await this.canDeliver(ws, attachment)) return;
-
     await this.operations.run(() => this.resumeOnce(ws, attachment, resume.data));
   }
 
   async webSocketClose(ws: WebSocket, code?: number, reason?: string): Promise<void> {
     const attachment = attachmentOf(ws);
-    if (attachment) await this.ctx.storage.delete(this.connectionKey(attachment.connectionId));
+    if (attachment) {
+      await this.ctx.storage.delete(this.connectionKey(attachment.connectionId));
+      if (attachment.scope === `user:${attachment.auth.sub}` && !this.ctx.getWebSockets().some(socket =>
+        socket !== ws && socket.readyState === WebSocket.OPEN)) await this.updatePresence(attachment.auth.sub, false);
+    }
     if (ws.readyState === WebSocket.CLOSING) ws.close(code === 1005 || code === 1006 ? 1000 : code ?? 1000, reason);
   }
 
@@ -265,7 +272,6 @@ export class NativeRealtimeDurableObject extends DurableObject<NativeRealtimeDoE
       presence[userId] = Date.now();
       await this.ctx.storage.put(PRESENCE_KEY, presence);
     });
-    await this.publish({ event: "user:online", scope: "public", delivery: "ephemeral", data: { userId } });
   }
 
   async markOffline(userId: string): Promise<void> {
@@ -275,25 +281,26 @@ export class NativeRealtimeDurableObject extends DurableObject<NativeRealtimeDoE
       delete presence[userId];
       await this.ctx.storage.put(PRESENCE_KEY, presence);
     });
-    await this.publish({ event: "user:offline", scope: "public", delivery: "ephemeral", data: { userId } });
-  }
-
-  async emitUser(userId: string, event: string, payload: unknown): Promise<void> {
-    parseUserId(userId);
-    await this.publish({ event, scope: `user:${userId}`, delivery: "invalidation", data: payload });
   }
 
   private async livePresence(): Promise<PresenceRecord> {
     const presence = await this.ctx.storage.get<PresenceRecord>(PRESENCE_KEY) ?? {};
     const now = Date.now();
-    let expired = false;
     for (const [userId, seenAt] of Object.entries(presence)) {
       if (now - seenAt <= PRESENCE_TTL_MS) continue;
       delete presence[userId];
-      expired = true;
     }
-    if (expired) await this.ctx.storage.put(PRESENCE_KEY, presence);
     return presence;
+  }
+
+  private async updatePresence(userId: string, online: boolean) {
+    const port = createNativeRealtimePort(this.env);
+    try {
+      if (online) await port.markOnline(userId);
+      else await port.markOffline(userId);
+    } catch {
+      console.warn("Realtime presence update failed");
+    }
   }
 
   private async publishOnce(input: NativePublishInput): Promise<NativeEnvelope> {
@@ -350,6 +357,8 @@ export class NativeRealtimeDurableObject extends DurableObject<NativeRealtimeDoE
   }
 
   private async resumeOnce(ws: WebSocket, attachment: NativeAttachment, frame: NativeResume): Promise<void> {
+    const access = await this.canDeliver(ws, attachment);
+    if (!access) return;
     const state = await this.connectionState(attachment.connectionId, attachment.scope);
     state.lastSeq = frame.afterSeq;
     state.seenIds = rememberSeenIds([], frame.seenIds);
@@ -357,12 +366,13 @@ export class NativeRealtimeDurableObject extends DurableObject<NativeRealtimeDoE
 
     const history = await this.ctx.storage.get<NativeEnvelope[]>(this.historyKey(attachment.scope)) ?? [];
     for (const envelope of history) {
-      if (envelope.seq <= frame.afterSeq || state.seenIds.includes(envelope.id)) continue;
+      if (envelope.seq <= frame.afterSeq || envelope.at < access.visibleSince || state.seenIds.includes(envelope.id)) continue;
       state.seenIds = rememberSeenIds(state.seenIds, [envelope.id]);
       state.lastSeq = Math.max(state.lastSeq, envelope.seq);
       this.safeSend(ws, JSON.stringify(envelope));
     }
     await this.ctx.storage.put(this.connectionKey(attachment.connectionId), state);
+    this.safeSend(ws, JSON.stringify({ v: NATIVE_PROTOCOL_VERSION, type: "resumed", scope: attachment.scope }));
   }
 
   private async connectionState(connectionId: string, scope: string): Promise<NativeConnectionState> {
@@ -389,9 +399,15 @@ export class NativeRealtimeDurableObject extends DurableObject<NativeRealtimeDoE
   }
 
   private async canDeliver(ws: WebSocket, attachment: NativeAttachment) {
-    if (await canReceiveRealtime(this.env.AUTH_DB, attachment.auth, attachment.scope)) return true;
+    const access = await readRealtimeAccess(this.env.AUTH_DB, attachment.auth, attachment.scope);
+    if (!access) this.revoke(ws);
+    return access;
+  }
+
+  private revoke(ws: WebSocket) {
+    if (ws.readyState !== WebSocket.OPEN) return;
+    this.safeSend(ws, JSON.stringify({ v: NATIVE_PROTOCOL_VERSION, type: "access-revoked" }));
     ws.close(1008, "Realtime access expired");
-    return false;
   }
 
   private async sendTyping(ws: WebSocket, attachment: NativeAttachment, value: object) {

@@ -53,7 +53,7 @@ export type D1UserMatchingSideEffects = {
   deleteFirebaseUser?: (uid: string) => Promise<{ deleted: boolean; reason?: "not_configured" | "not_found" }>;
   isUserOnline?: (userId: string) => Promise<boolean> | boolean;
   disconnectUser?: (userId: string) => Promise<void> | void;
-  emitUser?: (userId: string, event: string, payload: unknown) => void;
+  emitUser?: (userId: string, event: string, payload: unknown) => Promise<void> | void;
 };
 
 export function createD1UserMatchingRouter(db: D1Database, allowChat?: D1UserRateLimit,
@@ -387,13 +387,13 @@ export function createD1UserMatchingRouter(db: D1Database, allowChat?: D1UserRat
     await endD1UnavailableBonds(db, userId, "TERMINATED_BY_ACCOUNT_REMOVAL");
     await createD1AuthSessionStore(db).revokeAll(userId, started);
     await db.prepare("DELETE FROM device_tokens WHERE user_id = ?").bind(userId).run();
-    try {
-      await sideEffects.disconnectUser?.(userId);
-      for (const { partner_id } of partners.results) {
-        sideEffects.emitUser?.(partner_id, "direct:conversation:deleted", { partnerId: userId });
-      }
-    } catch (error) {
-      console.warn("D1 account deletion realtime side effects failed", error);
+    const realtimeResults = await Promise.allSettled([
+      Promise.resolve().then(() => sideEffects.disconnectUser?.(userId)),
+      ...partners.results.map(({ partner_id }) => Promise.resolve().then(() =>
+        sideEffects.emitUser?.(partner_id, "direct:conversation:deleted", { partnerId: userId })))
+    ]);
+    if (realtimeResults.some(result => result.status === "rejected")) {
+      console.warn("D1 account deletion realtime side effects failed");
     }
     if (account.firebase_uid && sideEffects.deleteFirebaseUser) {
       await sideEffects.deleteFirebaseUser(account.firebase_uid);
