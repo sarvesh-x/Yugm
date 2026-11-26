@@ -1,5 +1,17 @@
 # Development progress
 
+## 2026-11-26 — D1 Discover, Dating explore and final Users routes
+
+- Completed the requested non-PK parity slice: mounted all six `/api/discover` routes, added `GET /api/dating/explore`, and added `DELETE /api/users/me` plus `POST /api/users/friend-match/search`. Account deletion now guards the tombstone and auth-profile unset fields, terminates bonds, revokes sessions/device tokens, uses injected best-effort realtime and Firebase callbacks, and returns the legacy 30-day schedule. Friend-match search preserves state races and guarded room creation but stays WAITING without a live presence adapter. The audit is now 638 legacy / 634 D1 / 628 matched / 10 missing; only deferred `/api/pk` writes remain. Typechecks, both Worker suites, endpoint audit, strict secret check, fixture syntax checks and `git diff --check` passed. [Scope, verification and boundary](handoffs/2026-11-26-d1-discover-dating-users-completion.md)
+
+## 2026-11-26 — D1 PK deadline recovery alarm
+
+- Added a singleton SQLite Durable Object alarm and D1 deadline job for stale `READY`, due `COUNTDOWN`, active/final-crunch ticks, finalization, 60-second close and pending invite expiry. PK writes and cron wake the alarm; active battles reschedule at ~5 seconds. No HTTP route or SQL migration changed, so the audit remains 619 of 638 legacy patterns mounted with 19 missing. Typecheck, both Worker fixture suites, endpoint audit, strict secret check and `git diff --check` passed. [Alarm and verification](handoffs/2026-11-26-d1-pk-deadlines.md)
+
+## 2026-11-26 — D1 PK writes (first slice)
+
+- Mounted `POST /api/pk/room-start`, `/reject`, `/cancel` and `/:battleId/close` with router-scoped auth before validation, legacy validation/muted/status/authorization messages, conditional D1 batch guards for the room lock and event inserts, `stateVersion` bumps and legacy DTOs. `/api/pk` is now 12/14; invite/accept/ready/vote/gift/reactions/rematch/end/start writes, PK deadlines (since superseded by the D1 PK alarm), active-battle job ending and socket fan-out were legacy-only at this slice. The route audit reports 619 of 638 legacy patterns mounted, with 19 remaining outside admin. Typecheck, Worker fixture suite, endpoint audit, strict secret check and `git diff --check` passed. [Routes and verification](handoffs/2026-11-26-d1-pk-writes.md)
+
 ## 2026-11-26 — D1 trust verification upload and private media
 
 - Mounted `POST /api/upload/trust-verification` and `GET /api/trust-verification/media/:fileName` with auth before multipart/filename validation, legacy purpose filtering and signatures, the Worker 10 MB cap, private R2 keys and registry rows committed before success. The delivery route preserves owner-prefix authorization and `private, no-store` headers; a shared helper keeps the user and admin reference rules in step. `/api/upload` is now 7/7 and `/api/trust-verification` is 10/0. Typecheck, Worker fixture suite, endpoint audit, strict secret check and `git diff --check` passed. [Routes and verification](handoffs/2026-11-26-d1-trust-verification-media.md)

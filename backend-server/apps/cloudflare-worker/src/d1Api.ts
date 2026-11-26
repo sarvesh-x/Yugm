@@ -7,9 +7,11 @@ import process from "node:process";
 import { runD1Maintenance } from "../../api/src/migration/d1Maintenance.js";
 import { createFcmSender, deliverD1PushJobs } from "../../api/src/migration/d1NotificationPush.js";
 import { authClientIpHeader, createWorkerAuthRateLimiters, type AuthRateLimitBindings } from "./authRateLimit.js";
+import type { D1PkAlarmBindingEnv } from "./d1PkAlarmBinding.js";
+import { wakePkAlarm } from "./d1PkAlarmBinding.js";
 import { installCloudflareImageProcessor } from "./imageProcessor.js";
 
-interface D1ApiEnv extends AuthRateLimitBindings {
+interface D1ApiEnv extends AuthRateLimitBindings, D1PkAlarmBindingEnv {
   CHAT_SEND?: RateLimit;
   REPORT_REQUESTS?: RateLimit;
   CREATE_REQUESTS?: RateLimit;
@@ -146,7 +148,7 @@ async function startD1Runtime(env: D1ApiEnv, stage: ApiStage) {
   }
   configureD1Runtime(env);
 
-  const [{ createD1App }, { initFirebase }] = await Promise.all([
+  const [{ createD1App }, { initFirebase, deleteFirebaseUser }] = await Promise.all([
     import("../../api/src/migration/d1App.js"),
     import("../../api/src/services/firebase.js")
   ]);
@@ -186,7 +188,7 @@ async function startD1Runtime(env: D1ApiEnv, stage: ApiStage) {
     refreshSecret: env.ADMIN_REFRESH_SECRET,
     firebaseApiKey: env.ADMIN_FIREBASE_WEB_API_KEY,
     production: stage === "production"
-  }, createWorkerAuthRateLimiters(env, "admin:"));
+  }, createWorkerAuthRateLimiters(env, "admin:"), { deleteFirebaseUser });
   const server = createServer(app);
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
@@ -202,6 +204,12 @@ export function createD1ApiWorker(stage: ApiStage) {
       if (env.YUGM_STAGE !== stage || env.MONGODB_URI || env.REDIS_URL) return;
       if (stage === "production" && !configuredProductionOrigin(env.YUGM_PRODUCTION_ORIGIN)) return;
       const now = new Date(Math.min(controller.scheduledTime, Date.now()));
+      // Cron is the recovery path when no HTTP request has woken the PK alarm.
+      try {
+        await wakePkAlarm(env);
+      } catch (error) {
+        console.error("D1 PK alarm cron wake failed", error instanceof Error ? error.message : String(error));
+      }
       if (controller.cron === "*/15 * * * *") {
         await runD1Maintenance(env.AUTH_DB, now, mediaEnabled(env, stage) ? env.STAGING : undefined);
       }
@@ -245,6 +253,7 @@ export function createD1ApiWorker(stage: ApiStage) {
       if (env.MONGODB_URI || env.REDIS_URL || process.env.MONGODB_URI || process.env.REDIS_URL) {
         return adminResponse(Response.json({ ok: false, error: { message: "Use the isolated D1 configuration without legacy database bindings" } }, { status: 503 }));
       }
+      const mutatesPk = request.method !== "GET" && url.pathname.startsWith("/api/pk/");
       try {
         startup ??= startD1Runtime(env, stage).catch((error: unknown) => {
           startup = undefined;
@@ -285,7 +294,24 @@ export function createD1ApiWorker(stage: ApiStage) {
         forwarded.headers.set("x-yugm-request-origin", url.origin);
         const connectingIp = request.headers.get("CF-Connecting-IP") ?? "";
         forwarded.headers.set(authClientIpHeader, stage === "local" ? "loopback" : isIP(connectingIp) ? connectingIp : "unknown");
-        return adminResponse(await handleAsNodeRequest(D1_API_PORT, forwarded));
+        // Persist a fallback wake before the PK write. If the Worker stops after
+        // the D1 batch commits but before the response, the alarm still recovers it.
+        if (mutatesPk) {
+          try {
+            await wakePkAlarm(env, Date.now() + 15_000);
+          } catch (error) {
+            console.error("D1 PK alarm fallback wake failed", error instanceof Error ? error.message : String(error));
+          }
+        }
+        const response = await handleAsNodeRequest(D1_API_PORT, forwarded);
+        if (mutatesPk) {
+          try {
+            await wakePkAlarm(env);
+          } catch (error) {
+            console.error("D1 PK alarm wake failed", error instanceof Error ? error.message : String(error));
+          }
+        }
+        return adminResponse(response);
       } catch (error) {
         const detail = error instanceof D1SetupError ? error.code : error instanceof Error ? error.name : "Error";
         console.error("D1 API Worker unavailable", detail);

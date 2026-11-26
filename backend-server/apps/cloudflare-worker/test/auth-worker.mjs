@@ -81,6 +81,8 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     assert.equal(binding.database_name, "yugm");
     assert.equal(binding.database_id, "00000000-0000-4000-8000-000000000004");
     assert.equal(binding.remote, false);
+    assert.deepEqual(config.durable_objects.bindings, [{ name: "PK_DEADLINES", class_name: "D1PkAlarm" }]);
+    assert.ok(config.migrations.some(({ new_sqlite_classes: classes }) => classes?.includes("D1PkAlarm")));
     assert.equal(config.r2_buckets.length, 5);
     assert.deepEqual(config.r2_buckets.map(({ bucket_name: name }) => name),
       ["assets", "public-media", "private-media", "originals", "staging"]);
@@ -93,6 +95,7 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     let googleConsumes = 0;
     let googleRefunds = 0;
     let googleRefundReads = 0;
+    let firebaseDeletes = 0;
     worker = new Miniflare(convertV4MiniflareOptions({
       modulesRoot: directory,
       modules: [{ type: "ESModule", path: join(directory, "authLocal.js") }],
@@ -112,6 +115,7 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
         GOOGLE_PLAY_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" })
       },
       d1Databases: { [binding.binding]: binding.database_id },
+      durableObjects: { PK_DEADLINES: { className: "D1PkAlarm", useSQLite: true } },
       ratelimits: Object.fromEntries(config.ratelimits.map(({ name, ...settings }) => [name, settings])),
       r2Buckets: Object.fromEntries(config.r2_buckets.map(({ binding: name, bucket_name: bucket }) => [name, bucket])),
       images: { binding: config.images.binding },
@@ -172,6 +176,11 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
         }
         if (request.url === "https://oauth2.googleapis.com/token") {
           return Response.json({ access_token: "fixture-fcm-access", expires_in: 3600, token_type: "Bearer" });
+        }
+        if (request.url.startsWith("https://identitytoolkit.googleapis.com/")) {
+          assert.equal(request.method, "POST");
+          firebaseDeletes += 1;
+          return Response.json({ localId: project });
         }
         if (request.url === `https://fcm.googleapis.com/v1/projects/${project}/messages:send`) {
           assert.equal(request.headers.get("Authorization"), "Bearer fixture-fcm-access");
@@ -949,6 +958,35 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     assert.equal((await rateLimitedRequest("refresh", {}, "192.0.2.31")).status, 429);
     assert.equal((await rateLimitedRequest("refresh", { refreshToken: "different" }, "192.0.2.31")).status, 422);
     await verifyD1PushDelivery(worker, db, returning, visitor, pushAttempts);
+
+    // DELETE /api/users/me tombstones the account and revokes its sessions.
+    // Reuse the last fixture account so the test does not consume another
+    // /api/auth/google rate-limit slot.
+    const deletable = visitor;
+    const deletableId = deletable.user.id;
+    await request("/api/users/me", 401, { method: "DELETE" });
+    await db.prepare(`INSERT INTO device_tokens (source_id, user_id, token, platform, last_seen_at, created_at)
+      VALUES (?, ?, ?, 'android', ?, ?)`).bind(randomBytes(12).toString("hex"), deletableId,
+      "delete-fixture-token", new Date().toISOString(), new Date().toISOString()).run();
+    const beforeDeletion = await db.prepare("SELECT token_version FROM users WHERE source_id = ?").bind(deletableId).first();
+    const deletion = await request("/api/users/me", 200, { method: "DELETE", accessToken: deletable.accessToken });
+    const expectedDeletion = Date.now() + 30 * 24 * 60 * 60 * 1000;
+    assert.ok(Math.abs(Date.parse(deletion.data.deletionScheduledAt) - expectedDeletion) < 10_000);
+    const tombstone = await db.prepare(`SELECT deletion_requested_at, name, username, email_verified, is_verified,
+      email, phone, firebase_uid, avatar, bio, city, age, token_version FROM users WHERE source_id = ?`)
+      .bind(deletableId).first();
+    assert.ok(tombstone.deletion_requested_at);
+    assert.equal(tombstone.name, "Deleted User");
+    assert.equal(tombstone.username, `deleted_${deletableId}`);
+    assert.deepEqual([tombstone.email_verified, tombstone.is_verified], [0, 0]);
+    for (const field of ["email", "phone", "firebase_uid", "avatar", "bio", "city", "age"]) {
+      assert.equal(tombstone[field], null);
+    }
+    assert.equal(tombstone.token_version, beforeDeletion.token_version + 1);
+    assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM device_tokens WHERE user_id = ?")
+      .bind(deletableId).first("count"), 0);
+    await request("/api/auth/me", 401, deletable);
+    assert.equal(firebaseDeletes, 1);
   } finally {
     await worker?.dispose();
     await legacyWorker?.dispose();

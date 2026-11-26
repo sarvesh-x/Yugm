@@ -44,6 +44,7 @@ import { createD1AudioUploadRouter } from "./d1AudioUpload.js";
 import { createD1AvatarUploadRouter } from "./d1AvatarUpload.js";
 import { createD1ProfileMediaUploadRouter } from "./d1ProfileMediaUpload.js";
 import { createD1DatingRouter } from "./d1Dating.js";
+import { createD1DiscoverRouter } from "./d1Discover.js";
 import { createD1DirectGiftsRouter } from "./d1DirectGifts.js";
 import { createD1EventsRouter } from "./d1Events.js";
 import { createD1ExperienceRouter } from "./d1Experience.js";
@@ -63,7 +64,7 @@ import { createD1NotificationRouter } from "./d1Notifications.js";
 import { createD1ProfileEditRouter } from "./d1ProfileEdits.js";
 import { createD1ProfileActivityRouter } from "./d1ProfileActivity.js";
 import { createD1UserDiscoveryRouter } from "./d1UserDiscovery.js";
-import { createD1UserMatchingRouter } from "./d1UserMatching.js";
+import { createD1UserMatchingRouter, type D1UserMatchingSideEffects } from "./d1UserMatching.js";
 import { createD1ProgressionRouter } from "./d1Progression.js";
 import { createD1RecordingsRouter } from "./d1Recordings.js";
 import { createD1ReferralsRouter } from "./d1Referrals.js";
@@ -75,6 +76,7 @@ import { createD1RoomReactionsRouter } from "./d1RoomReactions.js";
 import { createD1PaymentProviders, type D1PaymentConfig } from "./d1Payments.js";
 import { createD1PayoutWebhookHandler } from "./d1PayoutWebhook.js";
 import { createD1PkReadsRouter } from "./d1PkReads.js";
+import { createD1PkWritesRouter } from "./d1PkWrites.js";
 import { createD1SocialRouter } from "./d1Social.js";
 import { createD1SocialFeaturesRouter } from "./d1SocialFeatures.js";
 import { createD1StoriesRouter } from "./d1Stories.js";
@@ -104,7 +106,8 @@ export function createD1App(
   livekit: D1LiveKitConfig = {},
   wallet: D1WalletConfig = { production: true },
   admin: AdminSessionConfig = {},
-  adminRateLimiters = rateLimiters
+  adminRateLimiters = rateLimiters,
+  userMatching: D1UserMatchingSideEffects = {}
 ) {
   const resolvePublicOrigin = (request: ExpressRequest) => {
     // The fetch handler validates the origin and discards any incoming value.
@@ -171,9 +174,10 @@ export function createD1App(
   app.use("/api/users", createD1ProfileEditRouter(db));
   app.use("/api/users", createD1ProfileActivityRouter(db));
   app.use("/api/users", createD1UserDiscoveryRouter(db));
-  app.use("/api/users", createD1UserMatchingRouter(db, limits.chat));
+  app.use("/api/users", createD1UserMatchingRouter(db, limits.chat, userMatching));
   app.use("/api", createD1ProgressionRouter(db));
   app.use("/api/users/messages", createD1InboxRouter(db, limits.chat));
+  app.use("/api", createD1DiscoverRouter(db));
   app.use("/api", createD1SocialRouter(db));
   app.use("/api", createD1SocialFeaturesRouter(db));
   app.use("/api", createD1ExperienceRouter(db));
@@ -218,6 +222,7 @@ export function createD1App(
   app.use("/api/creator", createD1CreatorRouter(db, { payoutKycEncryptionKey: wallet.payoutKycEncryptionKey }));
   app.use("/api", createD1LiveKitRouter(db, livekit));
   app.use("/api/pk", createD1PkReadsRouter(db, livekit));
+  app.use("/api/pk", createD1PkWritesRouter(db));
   app.use("/api", createD1GamesReadsRouter(db));
   app.use("/api", createD1GamesRouter(db, limits.chat));
   const access = createD1AccessSessionReader(db, "http");

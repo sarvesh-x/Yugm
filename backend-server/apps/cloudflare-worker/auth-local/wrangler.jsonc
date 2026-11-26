@@ -39,6 +39,10 @@
     { "name": "CREATE_REQUESTS", "namespace_id": "17024006", "simple": { "limit": 10, "period": 60 } },
     { "name": "GIFT_SEND", "namespace_id": "17024007", "simple": { "limit": 20, "period": 10 } }
   ],
+  "durable_objects": {
+    "bindings": [{ "name": "PK_DEADLINES", "class_name": "D1PkAlarm" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["D1PkAlarm"] }],
   "images": { "binding": "IMAGES" },
   "triggers": { "crons": ["*/15 * * * *", "* * * * *"] }
 }

@@ -5,6 +5,7 @@ import { relationshipXpEvents } from "@yugm/shared";
 import { requireHttpSession } from "../middleware/httpAccessSession.js";
 import { validateBody } from "../middleware/validate.js";
 import { startOfUtcDay } from "../services/dailyWalletReward.js";
+import { calculateCompatibility } from "../services/datingCompatibility.js";
 import { datingPreferenceSchema } from "../services/datingPreferences.js";
 import { calculateRelationshipLevel, getRelationshipStatus, relationshipPairKey, relationshipStreak } from "../services/relationshipPresentation.js";
 import { getVipStatus } from "../services/vip.js";
@@ -25,6 +26,19 @@ type NewMatchRow = { source_id: string; users_json: string; created_at: string |
 type RelationshipState = {
   source_id: string; xp: number; level: number; streak_days: number;
   last_streak_at: string | null; last_interaction_at: string | null;
+};
+type ExploreActor = {
+  interested_in: string | null; looking_for: string | null; city: string | null;
+  dating_age_min: number | null; dating_age_max: number | null; dating_verified_only: number;
+  is_verified: number; interests_json: string; languages_json: string;
+};
+type ExploreRow = {
+  source_id: string; person_json: string; age: number | null; gender: string | null;
+  vibe_line: string | null; role: string | null; looking_for: string | null; is_verified: number;
+  interests_json: string; languages_json: string;
+  vip_tier: string | null; vip_level: number | null; vip_exp: number | null;
+  vip_started_at: string | null; vip_expires_at: string | null;
+  vip_frozen: number; vip_freeze_started_at: string | null;
 };
 
 const matches = `SELECT m.source_id, m.created_at,
@@ -60,8 +74,6 @@ function matchView(row: NewMatchRow) {
 export function createD1DatingRouter(db: D1Database) {
   const router = Router();
   const access = createD1AccessSessionReader(db, "http");
-  // GET /dating/explore stays on the legacy Socket.IO/Redis path: onlineOnly
-  // and isOnline depend on live socket presence, not durable D1 state.
 
   router.get("/preferences", asyncHandler(async (req, res) => {
     const { user } = await requireHttpSession(req.headers.authorization, access);
@@ -170,6 +182,112 @@ export function createD1DatingRouter(db: D1Database) {
     if (shadow) throw new HttpError(403, "Account restricted", ErrorCode.FORBIDDEN);
     return session;
   };
+
+  router.get("/explore", asyncHandler(async (req, res) => {
+    const { user } = await requireSafeActor(req.headers.authorization);
+    const queryMinAge = req.query.minAge ? Number(req.query.minAge) : undefined;
+    const queryMaxAge = req.query.maxAge ? Number(req.query.maxAge) : undefined;
+    const onlineOnly = req.query.onlineOnly === "true";
+    const sharedOnly = req.query.sharedInterests === "true";
+    const mode = String(req.query.mode ?? "FOR_YOU").toUpperCase();
+    const actor = await db.prepare(`SELECT u.interested_in, u.looking_for, u.city, u.dating_age_min,
+      u.dating_age_max, u.dating_verified_only, u.is_verified,
+      (SELECT json_group_array(value) FROM (SELECT value FROM user_interests
+        WHERE users_id = u.source_id ORDER BY position)) AS interests_json,
+      (SELECT json_group_array(value) FROM (SELECT value FROM user_languages
+        WHERE users_id = u.source_id ORDER BY position)) AS languages_json
+      FROM users AS u WHERE u.source_id = ?`).bind(user.id).first<ExploreActor>();
+    if (!actor) throw new HttpError(404, "User not found", ErrorCode.NOT_FOUND);
+    const actorInterests = parseStrings(actor.interests_json);
+    const actorLanguages = parseStrings(actor.languages_json);
+
+    // Socket.IO/Redis presence has no D1 equivalent. Preserve the legacy empty
+    // shape rather than pairing or presenting users as online from stale rows.
+    if (onlineOnly || (sharedOnly && actorInterests.length === 0)) {
+      return sendOk(res, { candidates: [] });
+    }
+
+    const filters = [
+      "u.source_id <> ?1",
+      visiblePerson("u", "?1"),
+      "NOT EXISTS (SELECT 1 FROM likes WHERE liker_id = ?1 AND liked_id = u.source_id)",
+      "NOT EXISTS (SELECT 1 FROM user_safety_statuses WHERE user_id = u.source_id AND is_shadow_banned = 1)"
+    ];
+    const values: unknown[] = [user.id];
+    let nextBinding = 2;
+    const addFilter = (sql: string, value: unknown) => {
+      filters.push(sql.replace("?", `?${nextBinding}`));
+      values.push(value);
+      nextBinding += 1;
+    };
+
+    const interestedIn = actor.interested_in;
+    const gender = interestedIn === "Women" ? "Female"
+      : interestedIn === "Men" ? "Male"
+        : interestedIn && interestedIn !== "Everyone" ? "Non-binary" : undefined;
+    if (gender) addFilter("u.gender = ?", gender);
+    if (queryMinAge || queryMaxAge) {
+      addFilter("u.age >= ?", queryMinAge || 18);
+      addFilter("u.age <= ?", queryMaxAge || 80);
+    } else if (actor.dating_age_min || actor.dating_age_max) {
+      addFilter("u.age >= ?", actor.dating_age_min || 18);
+      addFilter("u.age <= ?", actor.dating_age_max || 80);
+    }
+    if (actor.dating_verified_only || mode === "VERIFIED") filters.push("u.is_verified = 1");
+    if (mode === "NEARBY" && actor.city?.trim()) addFilter("u.city = ?", actor.city);
+    if (sharedOnly) {
+      addFilter(`EXISTS (SELECT 1 FROM json_each(?) AS wanted
+        JOIN user_interests AS interest ON interest.users_id = u.source_id AND interest.value = wanted.value)`,
+      JSON.stringify(actorInterests));
+    }
+
+    const rows = await db.prepare(`SELECT u.source_id, ${personJson("u", true)} AS person_json,
+      u.age, u.gender, u.vibe_line, u.role, u.looking_for, u.is_verified,
+      u.vip_tier, u.vip_level, u.vip_exp, u.vip_started_at, u.vip_expires_at,
+      u.vip_frozen, u.vip_freeze_started_at,
+      (SELECT json_group_array(value) FROM (SELECT value FROM user_interests
+        WHERE users_id = u.source_id ORDER BY position)) AS interests_json,
+      (SELECT json_group_array(value) FROM (SELECT value FROM user_languages
+        WHERE users_id = u.source_id ORDER BY position)) AS languages_json
+      FROM users AS u WHERE ${filters.join(" AND ")} ORDER BY RANDOM() LIMIT 40`)
+      .bind(...values).all<ExploreRow>();
+    sendOk(res, { candidates: rows.results.map(row => {
+      const candidateInterests = parseStrings(row.interests_json);
+      const candidateLanguages = parseStrings(row.languages_json);
+      const base = person(row.person_json) as Record<string, unknown>;
+      const candidateCity = typeof base.city === "string" ? base.city : undefined;
+      delete base.xp;
+      delete base.level;
+      delete base.levelTitle;
+      const compatibility = calculateCompatibility({
+        city: actor.city ?? undefined, languages: actorLanguages, interests: actorInterests,
+        lookingFor: actor.looking_for ?? undefined, isVerified: Boolean(actor.is_verified)
+      }, {
+        city: candidateCity, languages: candidateLanguages, interests: candidateInterests,
+        lookingFor: row.looking_for ?? undefined, isVerified: Boolean(row.is_verified)
+      });
+      return {
+        ...base,
+        id: row.source_id,
+        age: row.age ?? undefined,
+        gender: row.gender ?? undefined,
+        vibeLine: row.vibe_line ?? undefined,
+        role: row.role ?? undefined,
+        interests: candidateInterests,
+        languages: candidateLanguages,
+        ...getVipStatus({
+          vipTier: row.vip_tier, vipLevel: row.vip_level, vipExp: row.vip_exp,
+          vipStartedAt: row.vip_started_at, vipExpiresAt: row.vip_expires_at,
+          vipFrozen: row.vip_frozen, vipFreezeStartedAt: row.vip_freeze_started_at
+        }),
+        vibeScore: compatibility.score,
+        matchReasons: compatibility.reasons,
+        sharedInterests: compatibility.sharedInterests,
+        sharedLanguages: compatibility.sharedLanguages,
+        isOnline: false
+      };
+    }) });
+  }));
 
   router.post("/like", asyncHandler(async (req, res) => {
     const { claims, user } = await requireSafeActor(req.headers.authorization);
