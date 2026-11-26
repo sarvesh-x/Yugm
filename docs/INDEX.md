@@ -66,6 +66,7 @@ The production audit documents explain their baselines and verification limits. 
 - [Active behavior-preserving $0 migration plan](migration/implementation-plan.md) · [Preservation registries and gate tracker](migration/MIGRATION_PROGRESS.md) · [Budget decision](decisions/0008-zero-spend-cloudflare-migration.md)
 - [Resume the migration in the existing working tree](handoffs/2026-11-24-migration-continuation.md) · [Local D1 + R2 managed avatar media slice](handoffs/2026-11-24-local-d1-r2-media.md)
 - [Local D1 Profile/social reads and writes](handoffs/2026-11-24-d1-profile-social-writes.md)
+- [Local D1 startup and automatic migrations](handoffs/2026-11-26-local-d1-startup.md)
 - [Release Google sign-in conflict investigation](handoffs/2026-11-24-release-google-auth-conflict-investigation.md)
 - [Local emulator Google sign-in conflict recovery](handoffs/2026-11-24-local-google-sign-in-conflict.md)
 - [D1 customer support routes](handoffs/2026-11-25-d1-customer-support.md)

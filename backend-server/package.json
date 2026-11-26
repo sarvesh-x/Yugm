@@ -11,7 +11,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm --workspace @yugm/cloudflare-worker run dev:auth -- --port 4000",
+    "dev": "node scripts/dev-d1-worker.mjs",
     "dev:api": "npm --workspace apps/api run dev",
     "dev:admin": "npm --workspace apps/admin run dev",
     "start": "npm run start:api",

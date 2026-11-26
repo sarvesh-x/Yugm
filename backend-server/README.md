@@ -6,13 +6,12 @@ This directory is the standalone server project. It contains the Node.js API, ad
 
 ```bash
 npm install
-npm run d1:setup:local
 npm run dev
 ```
 
 ## Cloudflare migration
 
-The default development command starts the D1/R2 Worker on port 4000. Prepare Firebase test settings and the local signing secret as described in the [emulator runbook](../docs/handoffs/2026-11-24-local-d1-auth-emulator.md). The debug and release-target Workers share 222 legacy HTTP patterns. Run `npm run audit:d1-endpoints -- --missing` for the exact remaining patterns. [Current coverage and cutover](../docs/handoffs/2026-11-25-d1-route-coverage-checkpoint.md)
+The default development command applies pending migrations to the local `yugm` database, then starts the D1/R2 Worker on port 4000. Use `npm run dev -- --persist-to <path>` to keep using an existing emulator D1/R2 directory. Prepare Firebase test settings and the local signing secret as described in the [emulator runbook](../docs/handoffs/2026-11-24-local-d1-auth-emulator.md). Run `npm run audit:d1-endpoints -- --missing` to check route coverage. [Current cutover status](../docs/CURRENT_TASK.md)
 
 The target is Workers Free, D1, R2, Firebase and RealtimeKit, with the admin app on Pages. The legacy Node API still runs via `npm run dev:api` with its separate MongoDB and environment configuration. Hosted verification, recovery and legacy-data transfer remain prerequisites for switching traffic. [Pages admin guide](apps/admin/CLOUDFLARE_PAGES.md)
 

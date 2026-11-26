@@ -1,5 +1,9 @@
 # Development progress
 
+## 2026-11-26 — Local D1 startup
+
+- Updated both debug launch commands to apply pending `yugm` migrations before starting the Worker, using the same persistence directory in both steps. Verified the default and custom directories through `0041`, `/ready` HTTP 200, Google auth request validation with the emulator Host header, and the local Worker fixture. [Startup and verification](handoffs/2026-11-26-local-d1-startup.md)
+
 ## 2026-11-26 — D1 realtime, presence, deletion cleanup and local recovery readiness
 
 - Added host-neutral `D1PresencePort`/`D1RealtimePort` seams and an internal-only `NATIVE_REALTIME` Durable Object adapter; guarded PK writes and deadlines now publish post-commit events, while `pk:force_ended` and public WebSocket command handling remain intentionally unwired and reaction/gift counters remain process-local. Added the account-deletion cascade with an anonymized user stub, `account_deletions`, and migrations `0036`–`0041` for status/uniqueness/withdrawal/friend-match parity. Checked in a synthetic D1 restore fixture and a real local replay test that applies `0001`–`0041`, imports through the production importer with persisted checkpoints, reconciles wallet/media rows and proves idempotent replay while refusing remote bindings. Diagnosed and fixed the intermittent report-count fixture failure by making shared-user assertions baseline-relative. Both typechecks, both Worker suites (auth suite three consecutive final runs), endpoint audit, strict secret check and `git diff --check` passed. No hosted migration, data import, deploy, provision, credential use, commit or push was performed. [Scope, verification and boundary](handoffs/2026-11-26-d1-realtime-presence-recovery.md)

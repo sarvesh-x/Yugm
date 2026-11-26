@@ -21,7 +21,7 @@ Start with [AGENTS.md](AGENTS.md) and the [documentation index](docs/INDEX.md). 
 
 ### Android emulator with local D1 and R2
 
-From `backend-server`, run `npm install`, `npm run d1:setup:local` and `npm run dev`. The default dev command starts the loopback Cloudflare Worker on port 4000 with local D1 and R2. It needs Firebase test settings and a signing secret in the local Worker vars file. Use the same persistence directory for migration and startup to retain existing emulator data. [Local Worker runbook](docs/handoffs/2026-11-24-local-d1-auth-emulator.md) · [Current D1 coverage](docs/handoffs/2026-11-25-d1-route-coverage-checkpoint.md)
+From `backend-server`, run `npm install` and `npm run dev`. Startup applies pending local `yugm` D1 migrations, then starts the loopback Cloudflare Worker on port 4000 with local D1 and R2. Set Firebase test settings and a signing secret in the local Worker vars file. If you use a custom emulator data directory, pass it to `npm run dev -- --persist-to <path>`. [Local Worker runbook](docs/handoffs/2026-11-24-local-d1-auth-emulator.md) · [Current D1 coverage](docs/CURRENT_TASK.md)
 
 ### Legacy Node API
 

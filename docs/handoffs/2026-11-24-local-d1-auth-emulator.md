@@ -33,21 +33,15 @@ From `backend-server`:
    npm.cmd run test:auth-worker --workspace @yugm/cloudflare-worker
    ```
 
-4. Apply the versioned schema and reference catalog migrations to local `yugm`. Debug uses its original local storage ID and `remote: false`. [Database setup and checks](2026-11-24-d1-schema-and-reference-seed.md)
-
-   ```powershell
-   npm.cmd run d1:setup:local
-   ```
-
-   If an older pre-migration draft is missing columns, use the recovery steps below to initialize a new persistence directory while preserving the old database.
-
-5. Start the Worker on port `4000`:
+4. Start the Worker on port `4000`. Startup applies pending schema and reference catalog migrations to local `yugm` before Wrangler starts.
 
    ```powershell
    npm.cmd run dev
    ```
 
-6. Check the endpoints:
+   The default state is `apps/cloudflare-worker/auth-local/.wrangler/state` under `backend-server`. Use `npm.cmd run dev -- --persist-to <path>` to retain a custom emulator D1/R2 directory. A relative path resolves from the npm package running the command. `npm.cmd run d1:setup:local` remains available for applying migrations without starting the Worker. [Database setup and checks](2026-11-24-d1-schema-and-reference-seed.md)
+
+5. Check the endpoints:
 
    ```powershell
    curl http://127.0.0.1:4000/health
@@ -63,15 +57,14 @@ From `backend-server`:
    ```powershell
    $persist = Join-Path $env:TEMP ("yugm-auth-local-" + [guid]::NewGuid().ToString("N"))
 
-   npm.cmd run d1:setup:local -- --persist-to $persist
-   npm.cmd run dev:auth --workspace @yugm/cloudflare-worker -- --port 4000 --persist-to $persist
+   npm.cmd run dev -- --persist-to $persist
    ```
 
    This exact command sequence was verified: `/ready` returned `storage: "d1"`. If you keep the default persistence directory, fully stop and restart Wrangler as well, because `.dev.vars` is read at startup.
 
    A credential-free `POST /api/auth/google` with an empty JSON body returns `422 VALIDATION` when the route is accepting requests. [Emulator 503 recovery](2026-11-24-emulator-auth-startup-recovery.md)
 
-7. Run a debug build on an Android emulator. Gradle sets the API to `http://10.0.2.2:4000/api` and the event origin to `http://10.0.2.2:4000`. Debug App Check is disabled for this local HTTP host. [Build type routing](../features/release-build-configuration.md)
+6. Run a debug build on an Android emulator. Gradle sets the API to `http://10.0.2.2:4000/api` and the event origin to `http://10.0.2.2:4000`. Debug App Check is disabled for this local HTTP host. [Build type routing](../features/release-build-configuration.md)
 
 ## Expected journey
 

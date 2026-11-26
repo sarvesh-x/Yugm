@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --config wrangler.jsonc",
-    "dev:auth": "wrangler dev --config auth-local/wrangler.jsonc --local --ip 127.0.0.1",
+    "dev:auth": "node ../../scripts/dev-d1-worker.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.runtime.json",
     "test:production-worker": "node --test test/production-worker.mjs",
     "test:auth-worker": "node --test test/auth-worker.mjs",
