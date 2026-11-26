@@ -108,6 +108,7 @@ The production audit documents explain their baselines and verification limits. 
 - [D1 PK deadline recovery alarm](handoffs/2026-11-26-d1-pk-deadlines.md)
 - [D1 Discover, Dating explore and final Users routes](handoffs/2026-11-26-d1-discover-dating-users-completion.md)
 - [D1 PK accept, start and ready](handoffs/2026-11-26-d1-pk-accept-start-ready.md)
+- [D1 PK writes completion](handoffs/2026-11-26-d1-pk-writes-completion.md)
 - [D1 cover upload](handoffs/2026-11-26-d1-cover-upload.md)
 - [D1 profile-media and story uploads](handoffs/2026-11-26-d1-profile-media-and-story-uploads.md)
 - [D1 voice-note and recording uploads](handoffs/2026-11-26-d1-voice-note-and-recording-uploads.md)

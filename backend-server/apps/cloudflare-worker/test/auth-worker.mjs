@@ -19,6 +19,7 @@ import { verifyD1Bonds } from "./d1-bonds.mjs";
 import { verifyD1Dating } from "./d1-dating.mjs";
 import { verifyD1DirectGifts } from "./d1-direct-gifts.mjs";
 import { verifyD1AppEndpoints } from "./d1-endpoints.mjs";
+import { verifyD1PkWritesExtended } from "./d1-pk-writes-extended.mjs";
 import { verifyD1Events } from "./d1-events.mjs";
 import { verifyD1Experience } from "./d1-experience.mjs";
 import { verifyD1Feed } from "./d1-feed.mjs";
@@ -843,6 +844,7 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     assert.equal(await db.prepare("SELECT 1 FROM clans WHERE source_id = ?").bind(leaveClan.id).first(), null);
     const { data: gamer } = await signIn(true, project, 200, "games-writes-fixture");
     await verifyD1AppEndpoints(db, request, returning, visitor, gamer, worker);
+    await verifyD1PkWritesExtended(db, request, returning, visitor, gamer);
     await verifyD1Bonds(db, request, returning, visitor);
     await verifyD1Wallet(db, request, returning, visitor);
     assert.equal(googleConsumes, 1);

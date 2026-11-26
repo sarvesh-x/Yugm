@@ -1,5 +1,9 @@
 # Development progress
 
+## 2026-11-26 — D1 PK writes complete
+
+- Mounted the final seven `/api/pk` writes: `invite`, `auto-match`, `end`, `rematch`, `/:battleId/vote`, `/:battleId/send-gift` and `/:battleId/reactions`. A shared guarded invite helper covers the three invitation paths, and legacy auth/muted order, exact errors, replay order, status codes, wallet guard order, `stateVersion`/`event_sequence` rules, room locks and DTOs are preserved. The audit is now 638 legacy / 644 D1 / 638 matched / 0 missing; `/api/pk` is 22 mounted / 0 missing. Both typechecks, both Worker suites, endpoint audit, strict secret check, fixture syntax checks and `git diff --check` passed. No SQL migration, hosted operation, deploy or data operation was performed; MongoDB remains authoritative. The owner authorized commit and push after verification. [Scope, verification and boundary](handoffs/2026-11-26-d1-pk-writes-completion.md)
+
 ## 2026-11-26 — D1 PK accept, start and ready
 
 - Mounted `POST /api/pk/accept`, `POST /api/pk/start` and `POST /api/pk/:battleId/ready` with router-scoped auth before validation, one guarded invite-acceptance handler, shared deadline expiry, host participant upserts, the full `PREPARING → READY → COUNTDOWN` chain and legacy DTOs/messages. The audit is now 638 legacy / 637 D1 / 631 matched / 7 missing; `/api/pk` is 15 mounted / 7 missing. Both typechecks, both Worker suites, endpoint audit, strict secret check, fixture syntax check and `git diff --check` passed. No SQL migration was added and no commit, push, deploy or hosted operation was performed. [Scope, verification and boundary](handoffs/2026-11-26-d1-pk-accept-start-ready.md)
