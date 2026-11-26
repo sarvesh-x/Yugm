@@ -5,14 +5,13 @@
  * Reads tracked Wrangler configs and prints finding identifiers only. It never
  * prints, copies or logs configuration values, including credential vars.
  * It checks observability, query-string redaction and wildcard CORS for the
- * staging/production configs; it is not a deployment or policy change.
+ * production config; it is not a deployment or policy change.
  */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 export const CONFIGS = [
-  { stage: "staging", file: "apps/cloudflare-worker/wrangler.staging.jsonc" },
   { stage: "production", file: "apps/cloudflare-worker/wrangler.production.jsonc" },
 ];
 

@@ -14,12 +14,12 @@ import timber.log.Timber
 
 /** A lifecycle-owned room connection. Closing one owner cannot close another. */
 open class RoomSocketClient(
-    private val socketFactory: (String, io.socket.client.IO.Options) -> io.socket.client.Socket = { url, options ->
-        io.socket.client.IO.socket(url, options)
+    private val socketFactory: (String, String, String) -> RealtimeSocket = { url, token, roomId ->
+        WorkerRealtimeSocket(url, token, roomId)
     }
 ) {
     private val TAG = "YugmSocket"
-    private var socket: io.socket.client.Socket? = null
+    @Volatile private var socket: RealtimeSocket? = null
     private val lock = Any()
 
     fun connect(
@@ -53,27 +53,13 @@ open class RoomSocketClient(
                 }
             }.distinct()
             val targetUrl = candidates.firstOrNull() ?: throw IllegalStateException("SOCKET_BASE_URL is not configured for this build")
-            val connection = socketFactory(targetUrl, io.socket.client.IO.Options().apply {
-                this.auth = mapOf("token" to token)
-                transports = arrayOf("websocket")
-                forceNew = true
-            })
+            val connection = socketFactory(targetUrl, token, roomId)
             socket = connection
-            socket?.on(io.socket.client.Socket.EVENT_CONNECT) {
+            socket?.on(RealtimeSocket.CONNECT) {
                 if (socket !== connection) return@on
-                Timber.tag(TAG).d("Socket connected; joining room %s", roomId)
-                connection.emit("room:join", JSONObject().put("roomId", roomId), io.socket.client.Ack { ackArgs ->
-                    if (socket !== connection) return@Ack
-                    val result = ackArgs.firstOrNull() as? JSONObject
-                    if (result?.optBoolean("joined") == true) {
-                        Timber.tag(TAG).d("Joined room socket channel %s", roomId)
-                        onRoomJoined()
-                    } else {
-                        Timber.tag(TAG).w("Room socket join was rejected for %s: %s", roomId, result?.optString("reason", "unknown"))
-                    }
-                })
+                onRoomJoined()
             }
-            socket?.on(io.socket.client.Socket.EVENT_CONNECT_ERROR) { args ->
+            socket?.on(RealtimeSocket.CONNECT_ERROR) { args ->
                 Timber.tag(TAG).e("Socket connection failed: %s", args.firstOrNull()?.toString() ?: "unknown error")
             }
             socket?.on("room:chat:message") { args ->

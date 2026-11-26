@@ -13,12 +13,14 @@ declare module "cloudflare:workers" {
     protected ctx: {
       storage: MinimalDurableObjectStorage;
       getWebSockets(): WebSocket[];
+      acceptWebSocket(ws: WebSocket): void;
       props?: Props;
     };
     protected env: Env;
     constructor(ctx: {
       storage: MinimalDurableObjectStorage;
       getWebSockets(): WebSocket[];
+      acceptWebSocket(ws: WebSocket): void;
       props?: Props;
     }, env: Env);
   }

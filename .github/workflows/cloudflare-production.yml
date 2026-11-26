@@ -1,0 +1,57 @@
+name: Cloudflare production API
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'backend-server/**'
+      - '.github/workflows/cloudflare-production.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-production-api
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: cloudflare-production
+    defaults:
+      run:
+        working-directory: backend-server
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend-server/package-lock.json
+      - run: npm ci
+      - run: npm run test:d1-worker
+      - name: Apply D1 migrations and deploy the API
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$CLOUDFLARE_ACCOUNT_ID" || -z "$CLOUDFLARE_API_TOKEN" ]]; then
+            echo '::error::Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN in the cloudflare-production environment.'
+            exit 1
+          fi
+          npm run d1:setup:production
+          npm run deploy:production
+      - name: Verify public readiness when ingress is configured
+        env:
+          PRODUCTION_ORIGIN: ${{ vars.YUGM_PRODUCTION_ORIGIN }}
+        if: vars.YUGM_PRODUCTION_ORIGIN != ''
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 8 --retry-all-errors --max-time 15 "${PRODUCTION_ORIGIN%/}/ready" |
+            jq -e '.ok and .storage == "d1" and .managedMedia'

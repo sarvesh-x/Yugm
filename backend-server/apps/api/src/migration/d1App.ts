@@ -190,7 +190,7 @@ export function createD1App(
   app.use("/api/users", createD1UserDiscoveryRouter(db, presence));
   app.use("/api/users", createD1UserMatchingRouter(db, limits.chat, matchingSideEffects));
   app.use("/api", createD1ProgressionRouter(db));
-  app.use("/api/users/messages", createD1InboxRouter(db, limits.chat));
+  app.use("/api/users/messages", createD1InboxRouter(db, limits.chat, realtime));
   app.use("/api", createD1DiscoverRouter(db, presence));
   app.use("/api", createD1SocialRouter(db));
   app.use("/api", createD1SocialFeaturesRouter(db));
@@ -216,7 +216,7 @@ export function createD1App(
   app.use("/api/events", events);
   app.use("/api", events);
   app.use("/api", createD1ThemesRouter(db));
-  app.use("/api/rooms", createD1RoomsRouter(db, limits.chat));
+  app.use("/api/rooms", createD1RoomsRouter(db, limits.chat, realtime));
   app.use("/api/rooms", createD1RoomInvitesRouter(db));
   app.use("/api/recordings", createD1RecordingsRouter(db));
   app.use("/api", createD1ReportsRouter(db, limits.report));

@@ -11,6 +11,7 @@ import type { D1PkAlarmBindingEnv } from "./d1PkAlarmBinding.js";
 import { wakePkAlarm } from "./d1PkAlarmBinding.js";
 import { installCloudflareImageProcessor } from "./imageProcessor.js";
 import { createNativeRealtimePort, type NativeRealtimeBindingEnv } from "./nativeRealtimePort.js";
+import { connectD1Realtime } from "./d1RealtimeSocket.js";
 
 interface D1ApiEnv extends AuthRateLimitBindings, D1PkAlarmBindingEnv, NativeRealtimeBindingEnv {
   CHAT_SEND?: RateLimit;
@@ -262,6 +263,7 @@ export function createD1ApiWorker(stage: ApiStage) {
           throw error;
         });
         await startup;
+        if (url.pathname === "/realtime") return await connectD1Realtime(request, env);
         if (request.method === "GET" && (url.pathname === "/ready" || url.pathname === "/api/ready")) {
           await checkD1Schema(env.AUTH_DB);
           return Response.json({ ok: true, service, storage: "d1", managedMedia: mediaEnabled(env, stage) });

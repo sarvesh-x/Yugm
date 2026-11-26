@@ -13,6 +13,7 @@ import { chatRestricted, recordD1ChatModeration } from "./d1ChatModeration.js";
 import { sendD1DirectMessage } from "./d1MessageSend.js";
 import { d1UserId, person, personJson, visiblePerson } from "./d1People.js";
 import { ensureDefaultReactions } from "./d1RoomReactions.js";
+import { emitD1Realtime, noD1Realtime, type D1RealtimePort } from "./d1Realtime.js";
 import { enforceD1UserRateLimit, type D1UserRateLimit } from "./d1UserRateLimit.js";
 
 export type InboxMessage = {
@@ -100,7 +101,7 @@ function assertPeer(row: ConversationPeer | null | undefined, blockedMessage: st
   if (!row.accessible) throw new HttpError(403, blockedMessage, ErrorCode.FORBIDDEN);
 }
 
-export function createD1InboxRouter(db: D1Database, allowDirectMessage?: D1UserRateLimit) {
+export function createD1InboxRouter(db: D1Database, allowDirectMessage?: D1UserRateLimit, realtime: D1RealtimePort = noD1Realtime) {
   const router = Router();
   const access = createD1AccessSessionReader(db, "http");
   const authenticate = (req: Request) => requireHttpSession(req.headers.authorization, access);
@@ -186,7 +187,9 @@ export function createD1InboxRouter(db: D1Database, allowDirectMessage?: D1UserR
     const { message, relationship, xpGrant } = await sendD1DirectMessage<InboxMessage>(
       db, claims, recipient, req.body ?? {}, id => db.prepare(`${messageList} WHERE m.source_id = ?`).bind(id)
     );
-    sendOk(res, { message: presentD1InboxMessage(message), relationship, xpGrant }, 201);
+    const presented = presentD1InboxMessage(message);
+    await emitD1Realtime(realtime, { scope: `user:${recipient}`, event: "direct:message:new", delivery: "durable", data: { message: presented } });
+    sendOk(res, { message: presented, relationship, xpGrant }, 201);
   }));
 
   router.put("/:userId/:messageId", asyncHandler(async (req, res, next) => {

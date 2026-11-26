@@ -190,7 +190,6 @@ dependencies {
     implementation(libs.coil.svg)
     implementation(libs.razorpay.checkout)
     implementation(libs.play.billing)
-    implementation(libs.socketio.client)
     implementation(libs.timber)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)

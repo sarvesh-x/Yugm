@@ -21,6 +21,7 @@ import { clearProfileMarkers } from "./d1Cosmetics.js";
 import { sendD1DirectMessage } from "./d1MessageSend.js";
 import { d1UserId, person, personJson, visiblePerson } from "./d1People.js";
 import { roomAccessFor } from "./d1RoomAccess.js";
+import { emitD1Realtime, noD1Realtime, type D1RealtimePort } from "./d1Realtime.js";
 import { pollOpen, pollProjection, presentPoll } from "./d1RoomPolls.js";
 import { createRoomMode, readRoomMode, readRoomModeRoster, updateRoomMode } from "./d1RoomModes.js";
 import { readD1RoomPkHistory } from "./d1RoomPkHistory.js";
@@ -334,7 +335,7 @@ function participants(rows: Row[], maxSpeakers: number) {
   });
 }
 
-export function createD1RoomsRouter(db: D1Database, allowChat?: D1UserRateLimit) {
+export function createD1RoomsRouter(db: D1Database, allowChat?: D1UserRateLimit, realtime: D1RealtimePort = noD1Realtime) {
   const router = Router();
   const access = createD1AccessSessionReader(db, "http");
   const authenticate = (req: Request) => requireHttpSession(req.headers.authorization, access);
@@ -667,7 +668,9 @@ export function createD1RoomsRouter(db: D1Database, allowChat?: D1UserRateLimit)
           JOIN users AS u ON u.source_id = m.sender_id WHERE m.source_id = ?`).bind(messageId)
       ]);
       if (committed.meta.changes) {
-        sendOk(res, { message: presentRoomMessage(results.at(-1)!.results[0]) }, 201);
+        const message = presentRoomMessage(results.at(-1)!.results[0]);
+        await emitD1Realtime(realtime, { scope: `room:${id}`, event: "room:chat:message", delivery: "durable", data: { message } });
+        sendOk(res, { message }, 201);
         return;
       }
     }

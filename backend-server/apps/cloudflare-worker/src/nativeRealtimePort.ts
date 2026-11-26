@@ -31,8 +31,8 @@ async function nativeCall<T>(env: NativeRealtimeBindingEnv, name: string, path: 
 }
 
 /**
- * Local/internal adapter only. The Worker never exposes a public route to this
- * object, and presence remains ephemeral: it is never proof of a D1 commit.
+ * Internal publisher and presence adapter. The Worker exposes only a scoped
+ * authenticated upgrade, and presence remains ephemeral.
  */
 export function createNativeRealtimePort(env: NativeRealtimeBindingEnv): D1PresencePort & D1RealtimePort {
   if (!env.NATIVE_REALTIME) return { ...noD1Presence, ...noD1Realtime };

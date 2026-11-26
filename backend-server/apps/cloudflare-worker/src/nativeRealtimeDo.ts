@@ -1,12 +1,15 @@
 /**
  * Hibernation-compatible Durable Object adapter for the native realtime
- * protocol. WebSocket upgrade and publish endpoints are internal only: the D1
- * Worker uses a bound stub, and no public HTTP route forwards to this object.
+ * protocol. The D1 Worker authenticates public upgrades and selects the scope.
  * Connection identity/scope live in WebSocket attachments; cursors, seen IDs,
  * sequences and bounded history live in Durable Object storage. No mutable
  * in-memory Map is required across hibernation.
  */
 import { DurableObject } from "cloudflare:workers";
+import type { D1Database } from "@cloudflare/workers-types";
+import type { AccessClaims } from "../../api/src/services/accessSession.js";
+import { canReceiveRealtime } from "./d1RealtimeAccess.js";
+import { createNativeRealtimePort, type NativeRealtimeBindingEnv } from "./nativeRealtimePort.js";
 import {
   NATIVE_PROTOCOL_VERSION,
   deliveryClassSchema,
@@ -34,6 +37,8 @@ type PresenceRecord = Record<string, number>;
 interface NativeAttachment {
   connectionId: string;
   scope: string;
+  auth: AccessClaims;
+  lastTypingAt?: number;
 }
 
 interface NativeConnectionState {
@@ -49,14 +54,14 @@ interface NativeServerErrorFrame {
   message: string;
 }
 
-export interface NativeRealtimeDoEnv {
-  [name: string]: unknown;
+export interface NativeRealtimeDoEnv extends NativeRealtimeBindingEnv {
+  AUTH_DB: D1Database;
 }
 
 function isAttachment(value: unknown): value is NativeAttachment {
   if (!value || typeof value !== "object") return false;
   const record = value as Record<string, unknown>;
-  return typeof record.connectionId === "string" && typeof record.scope === "string";
+  return typeof record.connectionId === "string" && typeof record.scope === "string" && !!record.auth;
 }
 
 function attachmentOf(ws: WebSocket): NativeAttachment | undefined {
@@ -160,25 +165,26 @@ export class NativeRealtimeDurableObject extends DurableObject<NativeRealtimeDoE
       if (!SCOPE_PATTERN.test(scope)) return badRequest("Invalid scope");
       return Response.json({ envelopes: await this.ctx.storage.get<NativeEnvelope[]>(this.historyKey(scope)) ?? [] });
     }
-    if (request.method !== "GET" || request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
+    if (url.pathname !== "/connect" || request.method !== "GET" || request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
       return new Response("WebSocket upgrade required", { status: 400 });
     }
     const scope = url.searchParams.get("scope") ?? "";
     if (!SCOPE_PATTERN.test(scope)) return new Response("Invalid scope", { status: 400 });
 
-    // Authentication and resource membership must be enforced by the Worker
-    // before it creates a stub for this object in a later wired slice.
+    const auth = JSON.parse(request.headers.get("X-Realtime-Session") ?? "null") as AccessClaims | null;
+    if (!auth) return new Response("Missing connection authorization", { status: 401 });
     const connectionId = globalThis.crypto.randomUUID();
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
-    server.accept();
-    server.serializeAttachment({ connectionId, scope } satisfies NativeAttachment);
+    this.ctx.acceptWebSocket(server);
+    server.serializeAttachment({ connectionId, scope, auth } satisfies NativeAttachment);
     await this.ctx.storage.put<NativeConnectionState>(this.connectionKey(connectionId), {
       scope,
       lastSeq: 0,
       seenIds: [],
     });
+    server.send(JSON.stringify({ v: NATIVE_PROTOCOL_VERSION, type: "ready", scope }));
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -192,12 +198,21 @@ export class NativeRealtimeDurableObject extends DurableObject<NativeRealtimeDoE
       ws.send(errorFrame("INVALID_FRAME", "Binary frames are not supported"));
       return;
     }
+    if (message.length > 64_000) {
+      ws.close(1009, "Frame too large");
+      return;
+    }
 
     let value: unknown;
     try {
       value = JSON.parse(message);
     } catch {
       ws.send(errorFrame("INVALID_JSON", "Frame is not valid JSON"));
+      return;
+    }
+
+    if (typeof value === "object" && value !== null && "type" in value && value.type === "typing") {
+      await this.sendTyping(ws, attachment, value);
       return;
     }
 
@@ -223,12 +238,15 @@ export class NativeRealtimeDurableObject extends DurableObject<NativeRealtimeDoE
       return;
     }
 
+    if (!await this.canDeliver(ws, attachment)) return;
+
     await this.operations.run(() => this.resumeOnce(ws, attachment, resume.data));
   }
 
-  async webSocketClose(ws: WebSocket): Promise<void> {
+  async webSocketClose(ws: WebSocket, code?: number, reason?: string): Promise<void> {
     const attachment = attachmentOf(ws);
     if (attachment) await this.ctx.storage.delete(this.connectionKey(attachment.connectionId));
+    if (ws.readyState === WebSocket.CLOSING) ws.close(code === 1005 || code === 1006 ? 1000 : code ?? 1000, reason);
   }
 
   async webSocketError(ws: WebSocket): Promise<void> {
@@ -296,7 +314,7 @@ export class NativeRealtimeDurableObject extends DurableObject<NativeRealtimeDoE
 
     await Promise.all([
       this.ctx.storage.put(seqKey, nextSeq),
-      this.appendHistory(input.scope, envelope),
+      input.delivery === "ephemeral" ? Promise.resolve() : this.appendHistory(input.scope, envelope),
     ]);
 
     for (const ws of this.ctx.getWebSockets()) {
@@ -304,6 +322,7 @@ export class NativeRealtimeDurableObject extends DurableObject<NativeRealtimeDoE
       if (!attachment || attachment.scope !== input.scope) continue;
       const state = await this.connectionState(attachment.connectionId, input.scope);
       if (state.seenIds.includes(envelope.id) || envelope.seq <= state.lastSeq) continue;
+      if (!await this.canDeliver(ws, attachment)) continue;
       state.seenIds = rememberSeenIds(state.seenIds, [envelope.id]);
       state.lastSeq = envelope.seq;
       await this.ctx.storage.put(this.connectionKey(attachment.connectionId), state);
@@ -366,6 +385,41 @@ export class NativeRealtimeDurableObject extends DurableObject<NativeRealtimeDoE
       ws.send(text);
     } catch {
       // A closed socket is cleaned up by webSocketClose; do not fail the publish.
+    }
+  }
+
+  private async canDeliver(ws: WebSocket, attachment: NativeAttachment) {
+    if (await canReceiveRealtime(this.env.AUTH_DB, attachment.auth, attachment.scope)) return true;
+    ws.close(1008, "Realtime access expired");
+    return false;
+  }
+
+  private async sendTyping(ws: WebSocket, attachment: NativeAttachment, value: object) {
+    const { auth, scope } = attachment;
+    if (scope !== `user:${auth.sub}`) return;
+    const frame = value as { target?: unknown; channel?: unknown; typing?: unknown };
+    if (typeof frame.typing !== "boolean" || typeof frame.target !== "string" ||
+        !/^[a-f0-9]{24}$/.test(frame.target) || frame.target === auth.sub) return;
+    const now = Date.now();
+    if (now - (attachment.lastTypingAt ?? 0) < 500) return;
+    ws.serializeAttachment({ ...attachment, lastTypingAt: now });
+    if (!await this.canDeliver(ws, attachment)) return;
+    const db = this.env.AUTH_DB;
+    const realtime = createNativeRealtimePort(this.env);
+    if (frame.channel === "direct") {
+      const allowed = await db.prepare(`SELECT 1 FROM users u WHERE u.source_id = ?1 AND u.is_blocked = 0
+        AND u.deletion_requested_at IS NULL AND NOT EXISTS (SELECT 1 FROM blocks WHERE
+          (blocker_id = ?1 AND blocked_user_id = ?2) OR (blocker_id = ?2 AND blocked_user_id = ?1))`)
+        .bind(frame.target, auth.sub).first();
+      if (allowed) await realtime.publish({ scope: `user:${frame.target}`, event: "direct:typing:update",
+        delivery: "ephemeral", data: { userId: auth.sub, typing: frame.typing } });
+    } else if (frame.channel === "clan") {
+      const peers = await db.prepare(`SELECT DISTINCT value FROM clan_members WHERE clans_id = ?1 AND value <> ?2
+        AND EXISTS (SELECT 1 FROM clan_members WHERE clans_id = ?1 AND value = ?2) LIMIT 50`)
+        .bind(frame.target, auth.sub).all<{ value: string }>();
+      await Promise.all(peers.results.map(({ value: userId }) => realtime.publish({ scope: `user:${userId}`,
+        event: "clan:typing:update", delivery: "ephemeral",
+        data: { clanId: frame.target, userId: auth.sub, typing: frame.typing } })));
     }
   }
 

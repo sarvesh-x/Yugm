@@ -1,28 +1,13 @@
 name: Cloudflare Pages admin
 
-# Deployment is manual while the Worker migration is being validated. The
-# staging and production environments must use separate Pages projects.
 on:
   workflow_dispatch:
-    inputs:
-      target:
-        description: Pages environment
-        required: true
-        type: choice
-        options:
-          - cloudflare-staging
-          - cloudflare-production
-      production_validation:
-        description: Confirm staging acceptance is complete (required for production)
-        required: true
-        type: boolean
-        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: cloudflare-pages-${{ inputs.target }}
+  group: cloudflare-pages-production
   cancel-in-progress: false
 
 jobs:
@@ -30,7 +15,7 @@ jobs:
     name: Build and deploy admin
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment: ${{ inputs.target }}
+    environment: cloudflare-production
     defaults:
       run:
         working-directory: backend-server
@@ -40,8 +25,6 @@ jobs:
       CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT }}
       VITE_ADMIN_API_URL: ${{ vars.YUGM_ADMIN_API_URL }}
       VITE_ADMIN_BASE_PATH: /
-      DEPLOY_TARGET: ${{ inputs.target }}
-      PRODUCTION_VALIDATION: ${{ inputs.production_validation }}
       CLOUDFLARE_PAGES_READY: ${{ vars.CLOUDFLARE_PAGES_READY }}
     steps:
       - name: Check deployment configuration
@@ -52,15 +35,11 @@ jobs:
             echo "Set CLOUDFLARE_PAGES_READY=true in this GitHub environment after validating its backend and Pages project."
             exit 1
           fi
-          if [[ "$DEPLOY_TARGET" == "cloudflare-production" && "$PRODUCTION_VALIDATION" != "true" ]]; then
-            echo "Production requires confirmed staging acceptance and the protected production environment."
-            exit 1
-          fi
           if [[ -z "$CLOUDFLARE_ACCOUNT_ID" || -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_PAGES_PROJECT" ]]; then
             echo "Configure the Cloudflare account ID, API token, and Pages project in this GitHub environment."
             exit 1
           fi
-          node -e 'const u = new URL(process.env.VITE_ADMIN_API_URL); if (u.protocol !== "https:" || u.username || u.password || u.hostname.endsWith(".onrender.com") || !u.pathname.replace(/\/$/, "").endsWith("/api/admin")) process.exit(1)'
+          node -e 'const u = new URL(process.env.VITE_ADMIN_API_URL); if (u.protocol !== "https:" || u.username || u.password || u.hostname.endsWith(".onrender.com") || u.hostname.startsWith("yugm-api-staging.") || u.hostname.endsWith(".invalid") || u.pathname.replace(/\/$/, "") !== "/api/admin") process.exit(1)'
 
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

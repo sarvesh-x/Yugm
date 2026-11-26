@@ -1,5 +1,9 @@
 # Development progress
 
+## 2026-11-26 — One hosted Worker and native WebSockets
+
+- Removed the legacy Cloudflare staging runtime and put production deployments on `yugm-api-production`. GitHub workflow source now verifies D1/R2, applies hosted migrations, and deploys the single API Worker. Android account and room connections use authenticated WebSockets. Worker fixtures, shared protocol tests, and Android room socket lifecycle tests passed. [Deployment and realtime verification](handoffs/2026-11-26-single-worker-native-realtime.md)
+
 ## 2026-11-26 — Production D1 and R2 deployment
 
 - Applied hosted `yugm` migrations `0003`–`0041`, confirmed the reference catalogs and no pending migrations, and deployed the production Worker with all five existing R2 buckets. Removed the legacy Render blueprint and stopped Android release from falling back to the staging Worker. Public traffic requires the production hostname and Worker credentials. [Deployment and verification](handoffs/2026-11-26-production-d1-r2.md)

@@ -10,5 +10,5 @@
     "resolveJsonModule": true,
     "types": ["@cloudflare/workers-types", "node"]
   },
-  "include": ["src/index.ts", "src/socketBridge.ts", "src/runtime.types.ts", "src/nativeRealtimeDo.ts"]
+  "include": ["src/nativeRealtimeDo.ts"]
 }

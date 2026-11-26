@@ -35,19 +35,9 @@ jobs:
         run: npm run openapi:check
       - run: npm ci
       - run: npm run typecheck
-      - name: Run backend unit tests
-        env:
-          NODE_ENV: test
-          MONGODB_URI: mongodb://127.0.0.1:1/yugm_unit_tests
-        run: npm run test
-      - name: Isolated financial and gift authorization regressions
-        run: npm --workspace apps/api run test:hardening
-      - name: Bundle experimental Cloudflare Worker
-        run: npm --workspace apps/cloudflare-worker run dry-run:staging
-      - name: Verify MongoDB-free D1 Worker bundles and routes
-        run: node --test apps/cloudflare-worker/test/auth-worker.mjs apps/cloudflare-worker/test/production-worker.mjs
-      - name: Exercise Worker room sockets against isolated MongoDB
-        run: npm --workspace apps/cloudflare-worker run test:realtime
+      - run: npm test --workspace @yugm/shared
+      - name: Verify D1/R2 Worker bundles, routes and realtime
+        run: npm run test:d1-worker
 
   admin:
     name: Admin (typecheck + production build)

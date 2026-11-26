@@ -4,26 +4,19 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --config wrangler.jsonc",
+    "dev": "node ../../scripts/dev-d1-worker.mjs",
     "dev:auth": "node ../../scripts/dev-d1-worker.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.runtime.json",
     "test:production-worker": "node --test test/production-worker.mjs",
     "test:auth-worker": "node --test test/auth-worker.mjs",
     "test:restore-rehearsal": "tsx --test test/d1-restore-rehearsal.mts",
-    "test:realtime": "node test/realtime.mjs",
     "test:push-queue": "node --test test/push-queue.mjs",
-    "test:staging": "node test/staging-smoke.mjs --confirm-isolated-staging",
-    "test:staging-admin": "node test/staging-admin.mjs --confirm-isolated-staging",
-    "deploy:staging": "wrangler deploy --config wrangler.staging.jsonc",
-    "dry-run:staging": "wrangler deploy --dry-run --config wrangler.staging.jsonc",
     "dry-run:production": "wrangler deploy --dry-run --config wrangler.production.jsonc"
   },
   "dependencies": {
-    "iconv-lite-worker": "npm:iconv-lite@^0.7.3",
-    "mongoose": "^8.24.1"
+    "iconv-lite-worker": "npm:iconv-lite@^0.7.3"
   },
   "devDependencies": {
-    "miniflare": "5.20261117.0-beta",
-    "socket.io-client": "^4.8.1"
+    "miniflare": "5.20261117.0-beta"
   }
 }

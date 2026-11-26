@@ -10,8 +10,6 @@ import com.yugm.app.core.model.ClanMessage
 import com.yugm.app.core.model.DirectMessage
 import com.yugm.app.core.model.NotificationItem
 import com.yugm.app.core.model.VoiceRoomPresence
-import io.socket.client.IO
-import io.socket.client.Socket
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -47,7 +45,7 @@ sealed class SocketEvent {
 
 @Singleton
 class SocketManager @Inject constructor() {
-    private var socket: Socket? = null
+    @Volatile private var socket: RealtimeSocket? = null
     private val _events = MutableSharedFlow<SocketEvent>(
         extraBufferCapacity = 64,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
@@ -68,20 +66,15 @@ class SocketManager @Inject constructor() {
         val targetUrl = getBaseUrl().ifBlank { "http://10.0.2.2:4000" }
         val existing = socket
         if (existing != null && connectedToken == token) {
-            if (!existing.connected()) existing.connect()
+            existing.connect()
             return
         }
         disconnect()
         try {
-            val options = IO.Options().apply {
-                this.auth = mapOf("token" to token)
-                transports = arrayOf("websocket")
-            }
-
-            val connection = IO.socket(targetUrl, options)
+            val connection = WorkerRealtimeSocket(targetUrl, token)
             socket = connection
             connectedToken = token
-            socket?.on(Socket.EVENT_CONNECT) {
+            socket?.on(RealtimeSocket.CONNECT) {
                 if (socket !== connection) return@on
                 Timber.tag("SocketManager").d("Connected to $targetUrl")
                 _events.tryEmit(SocketEvent.Connected)
@@ -118,7 +111,7 @@ class SocketManager @Inject constructor() {
                     }
                 }
             }
-            socket?.on(Socket.EVENT_CONNECT_ERROR) { args ->
+            socket?.on(RealtimeSocket.CONNECT_ERROR) { args ->
                 if (socket !== connection) return@on
                 val message = (args.firstOrNull() as? Exception)?.message ?: args.firstOrNull()?.toString().orEmpty()
                 Timber.tag("SocketManager").w("Socket connect error: $message")
@@ -320,7 +313,7 @@ class SocketManager @Inject constructor() {
                 }
                 if (userId.isNotBlank()) _events.tryEmit(SocketEvent.UserOffline(userId))
             }
-            socket?.on(Socket.EVENT_DISCONNECT) { args ->
+            socket?.on(RealtimeSocket.DISCONNECT) { args ->
                 if (socket !== connection) return@on
                 val reason = args.firstOrNull()?.toString().orEmpty()
                 Timber.tag("SocketManager").d("Disconnected: $reason")

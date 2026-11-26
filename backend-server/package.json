@@ -22,6 +22,7 @@
     "build": "npm run build:admin && npm run build:api",
     "build:api": "npm --workspace apps/api run build",
     "test": "npm --workspaces --if-present run test",
+    "test:d1-worker": "node --test apps/cloudflare-worker/test/auth-worker.mjs apps/cloudflare-worker/test/production-worker.mjs",
     "typecheck": "npm --workspaces --if-present run typecheck",
     "load:test": "node scripts/load-test-api.mjs",
     "secrets:check": "node scripts/check-tracked-secrets.mjs",
@@ -41,9 +42,7 @@
     "test:worker-config": "node --test scripts/check-worker-config.test.mjs",
     "build:admin": "npm --workspace apps/admin run build",
     "deploy": "npm run deploy:production --",
-    "deploy:staging": "wrangler deploy --config apps/cloudflare-worker/wrangler.staging.jsonc",
     "deploy:production": "wrangler deploy --config apps/cloudflare-worker/wrangler.production.jsonc",
-    "deploy:dry-run:staging": "wrangler deploy --dry-run --config apps/cloudflare-worker/wrangler.staging.jsonc",
     "deploy:dry-run:production": "wrangler deploy --dry-run --config apps/cloudflare-worker/wrangler.production.jsonc"
   },
   "devDependencies": {

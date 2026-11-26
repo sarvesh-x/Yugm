@@ -68,6 +68,7 @@ The production audit documents explain their baselines and verification limits. 
 - [Local D1 Profile/social reads and writes](handoffs/2026-11-24-d1-profile-social-writes.md)
 - [Local D1 startup and automatic migrations](handoffs/2026-11-26-local-d1-startup.md)
 - [Production D1 and R2 deployment](handoffs/2026-11-26-production-d1-r2.md)
+- [Single hosted Worker and native WebSockets](handoffs/2026-11-26-single-worker-native-realtime.md)
 - [Release Google sign-in conflict investigation](handoffs/2026-11-24-release-google-auth-conflict-investigation.md)
 - [Local emulator Google sign-in conflict recovery](handoffs/2026-11-24-local-google-sign-in-conflict.md)
 - [D1 customer support routes](handoffs/2026-11-25-d1-customer-support.md)

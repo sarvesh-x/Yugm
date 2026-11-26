@@ -329,6 +329,57 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor, gamer = 
   assert.equal(await db.prepare("SELECT xp FROM users WHERE source_id = ?").bind(visitorId).first("xp"), visitorXpBeforeRoom + 10);
   assert.equal((await requestAs(visitor, prefix + "/" + lifecycleId + "/join", 200, { body: {} })).data.xpGrant, undefined);
 
+  if (worker) {
+    const upgrade = (account, roomId) => worker.dispatchFetch(`http://127.0.0.1/realtime${roomId ? `?roomId=${roomId}` : ""}`, {
+      headers: { Upgrade: "websocket", ...(account ? { Authorization: `Bearer ${account.accessToken}` } : {}) }
+    });
+    const nextFrame = socket => new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("Realtime frame timed out")), 3000);
+      socket.addEventListener("message", event => {
+        clearTimeout(timeout);
+        resolve(JSON.parse(event.data));
+      }, { once: true });
+    });
+    assert.equal((await upgrade()).status, 401);
+    assert.equal((await upgrade(visitor, privateVideo)).status, 403);
+    const roomUpgrade = await upgrade(owner, lifecycleId);
+    assert.equal(roomUpgrade.status, 101);
+    const roomSocket = roomUpgrade.webSocket;
+    try {
+      const ready = nextFrame(roomSocket);
+      roomSocket.accept();
+      assert.deepEqual(await ready, { v: 1, type: "ready", scope: `room:${lifecycleId}` });
+      const incoming = nextFrame(roomSocket);
+      const { data: { message } } = await requestAs(visitor, `${prefix}/${lifecycleId}/messages`, 201, {
+        body: { message: "Realtime room fixture" }
+      });
+      const frame = await incoming;
+      assert.equal(frame.event, "room:chat:message");
+      assert.deepEqual(frame.data.message, message);
+    } finally {
+      roomSocket.close(1000);
+    }
+    const userConnections = await Promise.all([upgrade(owner), upgrade(visitor)]);
+    assert.deepEqual(userConnections.map(response => response.status), [101, 101]);
+    const [senderSocket, receiverSocket] = userConnections.map(response => response.webSocket);
+    try {
+      const ready = [senderSocket, receiverSocket].map(socket => {
+        const frame = nextFrame(socket);
+        socket.accept();
+        return frame;
+      });
+      assert.deepEqual((await Promise.all(ready)).map(frame => frame.scope), [`user:${ownerId}`, `user:${visitorId}`]);
+      const typing = nextFrame(receiverSocket);
+      senderSocket.send(JSON.stringify({ v: 1, type: "typing", channel: "direct", target: visitorId, typing: true }));
+      const frame = await typing;
+      assert.equal(frame.event, "direct:typing:update");
+      assert.deepEqual(frame.data, { userId: ownerId, typing: true });
+    } finally {
+      senderSocket.close(1000);
+      receiverSocket.close(1000);
+    }
+  }
+
   const tokenPath = "/api/livekit/token";
   await request(tokenPath, 401, { body: { roomId: lifecycleId } });
   await requestAs(owner, tokenPath, 400, { body: { roomId: "bad" } });
@@ -705,8 +756,8 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor, gamer = 
   assert.equal(sent[0].data.message.read, false);
   assert.equal(sent[0].data.xpGrant.xpAwarded, 5);
   assert.equal(await db.prepare("SELECT xp FROM users WHERE source_id = ?").bind(ownerId).first("xp"), beforeXp + 10);
-  assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM battle_pass_xp_grants WHERE user_id = ? AND action_key LIKE 'CHAT_MESSAGE:message:%'")
-    .bind(ownerId).first("count"), 2);
+  assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM battle_pass_xp_grants WHERE user_id = ? AND action_key IN (?, ?)")
+    .bind(ownerId, ...sent.map(result => `CHAT_MESSAGE:message:${result.data.message._id}`)).first("count"), 2);
   const messageNotice = id => db.prepare("SELECT user_id FROM notifications WHERE type = 'MESSAGE' AND json_extract(data, '$.messageId') = ?")
     .bind(id).first("user_id");
   assert.equal(await messageNotice(sent[0].data.message._id), visitorId);
