@@ -1,5 +1,9 @@
 # Development progress
 
+## 2026-11-26 — Production D1 and R2 deployment
+
+- Applied hosted `yugm` migrations `0003`–`0041`, confirmed the reference catalogs and no pending migrations, and deployed the production Worker with all five existing R2 buckets. Removed the legacy Render blueprint and stopped Android release from falling back to the staging Worker. Public traffic requires the production hostname and Worker credentials. [Deployment and verification](handoffs/2026-11-26-production-d1-r2.md)
+
 ## 2026-11-26 — Local D1 startup
 
 - Updated both debug launch commands to apply pending `yugm` migrations before starting the Worker, using the same persistence directory in both steps. Verified the default and custom directories through `0041`, `/ready` HTTP 200, Google auth request validation with the emulator Host header, and the local Worker fixture. [Startup and verification](handoffs/2026-11-26-local-d1-startup.md)

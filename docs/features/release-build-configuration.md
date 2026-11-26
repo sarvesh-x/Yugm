@@ -5,9 +5,9 @@
 | Debug | `http://10.0.2.2:4000/api` for HTTP and `http://10.0.2.2:4000` for app events. Start the [loopback Wrangler Worker](../handoffs/2026-11-24-local-d1-auth-emulator.md) and run the app on the Android emulator. |
 | Release | Set `YUGM_PRODUCTION_ORIGIN` to the HTTPS origin of the production Cloudflare Worker. Gradle adds `/api` for HTTP and uses the same origin for app events. |
 
-Both Workers bind a D1 database named `yugm`. Debug uses simulated bindings with the recovered local schema at `0019`. Production targets hosted D1, with the base schema and reference seed recorded through `0002`. The remaining hosted migrations and live API acceptance are open. [Current schema and coverage](../handoffs/2026-11-25-d1-route-coverage-checkpoint.md)
+Both Workers bind a D1 database named `yugm`. Debug applies pending migrations on startup. The hosted D1 schema is applied through `0041`, and public production API acceptance is pending. [Production deployment](../handoffs/2026-11-26-production-d1-r2.md)
 
-The build type selects the environment. Gradle reads the production setting from a Gradle property, an environment variable, or ignored `android-client/local.properties`, in that order. Tagged builds read the GitHub repository variable of the same name. Missing settings leave the reserved `https://api.yugm.invalid` placeholder in generated configuration. Release packaging requires a configured production origin and upload signing. The runtime status is recorded in the [production setup handoff](../handoffs/2026-11-24-production-cloudflare-builds.md).
+The build type selects the environment. Gradle reads the production setting from a Gradle property, an environment variable, or ignored `android-client/local.properties`, in that order. For local artifact testing, a missing or rejected origin resolves to `https://api.yugm.invalid`. The legacy staging Worker and Render hosts are rejected. Tagged GitHub builds read the repository variable of the same name and require a valid production origin and upload signing.
 
 ## Local configuration
 

@@ -2,6 +2,8 @@
 
 The owner selected D1 and R2 for production storage, Firebase for identity and push, and RealtimeKit for the RTC migration on a $0 budget. The Android build type selects the environment. Existing Compose screens, navigation and gameplay rules remain the reference for parity.
 
+The production Worker has since been deployed and the hosted schema advanced through `0041`. The remaining settings and verification are recorded in the [current production handoff](2026-11-26-production-d1-r2.md).
+
 The later hosted R2 slice enables the five existing Standard buckets and extends the D1 routes. [Current configuration and verification](2026-11-24-hosted-r2-d1-endpoint-audit.md)
 
 ## Implemented

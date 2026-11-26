@@ -30,13 +30,15 @@ fun quoted(value: String): String {
 }
 
 val debugOrigin = "http://10.0.2.2:4000"
-val productionPlaceholder = "https://yugm-api-staging.sarveshkumar10101.workers.dev/"
+val productionPlaceholder = "https://api.yugm.invalid"
 val productionSetting = configValue("YUGM_PRODUCTION_ORIGIN")?.trim()?.trimEnd('/')
     ?.takeIf(String::isNotBlank) ?: productionPlaceholder
 val productionUri = runCatching { URI(productionSetting) }.getOrNull()
 val productionHost = productionUri?.host.orEmpty().lowercase()
 val validProductionOrigin = productionUri?.scheme == "https" && productionHost.contains('.') &&
     !productionHost.all { it.isDigit() || it == '.' } &&
+    !productionHost.endsWith(".invalid") && !productionHost.endsWith(".onrender.com") &&
+    !(productionHost.startsWith("yugm-api-staging.") && productionHost.endsWith(".workers.dev")) &&
     productionUri.rawUserInfo == null && productionUri.rawPath.isNullOrEmpty() &&
     productionUri.rawQuery == null && productionUri.rawFragment == null
 val productionOrigin = if (validProductionOrigin) productionSetting else productionPlaceholder
@@ -55,10 +57,10 @@ val uploadKeyPassword = configValue("YUGM_UPLOAD_KEY_PASSWORD")
 val hasUploadSigning = listOf(uploadKeystoreFile, uploadKeystorePassword, uploadKeyAlias, uploadKeyPassword)
     .all { !it.isNullOrBlank() }
 
-// Relaxed release checks for local release testing
-if (false && requestsReleaseArtifact) {
-    require(validProductionOrigin && !productionHost.endsWith(".invalid")) {
-        "Set YUGM_PRODUCTION_ORIGIN to the live Yugm HTTPS origin without a path, query, or credentials before packaging a release."
+// Local release testing can build with placeholders. Tagged CI publishes the APK.
+if (requestsReleaseArtifact && System.getenv("GITHUB_REF_TYPE") == "tag") {
+    require(validProductionOrigin) {
+        "Set YUGM_PRODUCTION_ORIGIN to the production Cloudflare HTTPS origin before publishing a release."
     }
     require(hasUploadSigning) {
         "Release builds require YUGM_UPLOAD_KEYSTORE_FILE, YUGM_UPLOAD_KEYSTORE_PASSWORD, YUGM_UPLOAD_KEY_ALIAS, and YUGM_UPLOAD_KEY_PASSWORD. Keep the upload keystore and passwords outside source control."
@@ -104,8 +106,7 @@ android {
                 keyPassword = uploadKeyPassword
             }
         } else {
-            // Debug builds do not need release signing. Release task validation above
-            // stops unsigned artifacts from being mistaken for Play-ready bundles.
+            // Local builds can skip release signing. Tagged CI validates the upload credentials.
             create("playUpload")
         }
     }
