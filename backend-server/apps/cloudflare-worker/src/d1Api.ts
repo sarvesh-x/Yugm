@@ -44,6 +44,7 @@ interface D1ApiEnv extends AuthRateLimitBindings {
   LIVEKIT_URL?: string;
   RAZORPAY_KEY_ID?: string;
   RAZORPAY_KEY_SECRET?: string;
+  RAZORPAY_WEBHOOK_SECRET?: string;
   GOOGLE_PLAY_PACKAGE_NAME?: string;
   GOOGLE_PLAY_CLIENT_EMAIL?: string;
   GOOGLE_PLAY_PRIVATE_KEY?: string;
@@ -178,7 +179,8 @@ async function startD1Runtime(env: D1ApiEnv, stage: ApiStage) {
     production: stage === "production",
     devRecharge: stage === "local",
     diamondsEnabled: env.MONETIZATION_DIAMONDS_ENABLED === "true" || env.MONETIZATION_DIAMONDS_ENABLED === "1",
-    payoutKycEncryptionKey: env.PAYOUT_KYC_ENCRYPTION_KEY
+    payoutKycEncryptionKey: env.PAYOUT_KYC_ENCRYPTION_KEY,
+    payoutWebhookSecret: env.RAZORPAY_WEBHOOK_SECRET
   }, {
     jwtSecret: env.ADMIN_JWT_SECRET ?? env.JWT_SECRET,
     refreshSecret: env.ADMIN_REFRESH_SECRET,

@@ -4,36 +4,9 @@ import { TrustVerification } from "../models/TrustVerification.js";
 import { User } from "../models/User.js";
 import { VoiceVerificationSubmission } from "../models/VoiceVerificationSubmission.js";
 import { ErrorCode, HttpError } from "../utils/http.js";
+import { TRUST_CONSENT_VERSION, nextVoicePrompt, publicTrustVerification } from "./trustVerificationShared.js";
 
-export const TRUST_CONSENT_VERSION = "trust-verification-v1";
-
-const voicePrompts = [
-  "My name is on Yugm, and I am verifying that I am a real person.",
-  "I am completing Yugm Trust Verification to show people I am real.",
-  "This is my real voice for Yugm Trust Verification."
-];
-
-export function publicTrustVerification(verification: any) {
-  return {
-    id: verification?._id?.toString?.() ?? verification?.id,
-    status: verification?.status ?? "NOT_STARTED",
-    level: verification?.level ?? "BASIC",
-    faceStatus: verification?.faceStatus ?? "NOT_SUBMITTED",
-    voiceStatus: verification?.voiceStatus ?? "NOT_SUBMITTED",
-    livenessStatus: verification?.livenessStatus ?? "NOT_SUBMITTED",
-    verificationScore: verification?.verificationScore ?? null,
-    riskScore: verification?.riskScore ?? null,
-    verifiedBadgeEnabled: Boolean(verification?.verifiedBadgeEnabled),
-    creatorTrustEnabled: Boolean(verification?.creatorTrustEnabled),
-    submittedAt: verification?.submittedAt ?? null,
-    reviewedAt: verification?.reviewedAt ?? null,
-    verifiedAt: verification?.verifiedAt ?? null,
-    rejectedAt: verification?.rejectedAt ?? null,
-    rejectionReason: verification?.rejectionReason ?? null,
-    consentVersion: verification?.consentVersion ?? null,
-    consentAcceptedAt: verification?.consentAcceptedAt ?? null
-  };
-}
+export { TRUST_CONSENT_VERSION, nextVoicePrompt, publicTrustVerification };
 
 export async function getOrCreateTrustVerification(userId: string) {
   return TrustVerification.findOneAndUpdate(
@@ -58,10 +31,6 @@ export async function acceptTrustConsent(userId: string, consentVersion = TRUST_
   verification.consentAcceptedAt = new Date();
   await verification.save();
   return verification;
-}
-
-export function nextVoicePrompt() {
-  return voicePrompts[Math.floor(Math.random() * voicePrompts.length)];
 }
 
 export async function submitFaceVerification(userId: string, input: {

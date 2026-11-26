@@ -22,7 +22,7 @@ The owner set the execution order below. Complete the local contract work for th
 | 4 | **Settings** | Preference and privacy persistence, notification settings, account verification and scoped security/account actions. |
 | 5 | **Chat** | Conversation visibility, send/history/read, mute/block, attachments and delivery through the supported legacy and native transports. Reuse the existing direct-message and push fixtures. |
 | 6 | **Rooms** | Discovery-to-join, permissions, seats, presence, voice/video, moderation, reconnect and PK lifecycle. |
-| Later | **Remaining journeys** | Order the remaining social, media, progression, commerce and admin journeys by their dependencies after the six above. Arcade score writes remain deferred at the owner's request. |
+| Later | **Remaining journeys** | Order the remaining social, media, progression, commerce and admin journeys by their dependencies after the six above. Arcade writes are mounted on the local D1 Worker; receiving-client realtime remains open. |
 
 ## Phase gates
 
@@ -90,6 +90,8 @@ Use these implementation details when the active journey reaches each dependency
 ### 3. D1 Free evaluation and data migration
 
 **Existing local read evidence.** The normal `GET /api/games/catalog` route passed the [shared HTTP fixture](../../backend-server/apps/api/src/routes/gamesCatalog.characterization.test.ts) with MongoDB and Wrangler's local D1 binding. The [Arcade handoff](../handoffs/2026-11-23-arcade-catalog-d1-parity.md) records scope and usage. Apply D1 evaluation to the active journey. Run an isolated remote pilot only after its approval, using generated data or an approved restored copy.
+
+**Latest local evidence.** The [user matching and private-call handoff](../handoffs/2026-11-26-d1-users-matching-and-calls.md) mounts friend-match state/cancel and private-call creation on local D1 with guarded room/DM commits. Live presence and Firebase identity deletion remain explicit boundaries, so MongoDB stays authoritative. The [AI wingman handoff](../handoffs/2026-11-26-d1-ai-wingman.md) moves ten stateless routes to a shared host-neutral generator with router-scoped auth and no provider call; D1 has no `sync:invalidate` emitter for their successful POSTs. The [trust verification handoff](../handoffs/2026-11-26-d1-trust-verification.md) mounts nine state routes with shared schemas/DTOs and guarded verification-plus-submission batches; private media stays legacy-only, the non-unique D1 user index needs imported-row reconciliation, and D1 has no `sync:invalidate` emitter for their successful POSTs.
 
 - Derive capacity evidence from the target implementation. Measure loaded database and index footprint, indexed query plans, actual D1 row reads/writes per workflow, largest relational rows, peak throughput, latency and Worker CPU. Include indexes, retries, maintenance and reconnect traffic. Record the fixture, scenario, admitted workload, date and provenance for every value. Pilot measurements bound the tested cohort. Production size, growth and traffic remain unknown until observed.
 - Use the [export CLI and local validation tooling](data-migration-tooling.md) with a disposable MongoDB or a separately approved restored copy. Existing Paid-oriented capacity tools remain useful for mapping and reconciliation, but their original readiness result cannot decide a Free launch.

@@ -8,6 +8,7 @@ import { presentGameCatalog } from "../services/gameCatalog.js";
 import { asyncHandler, HttpError, sendOk } from "../utils/http.js";
 import { responseError } from "../utils/responseError.js";
 import { createD1AccessSessionReader } from "./d1AccessSession.js";
+import { createD1AiWingmanRouter } from "./d1AiWingman.js";
 import { createD1AdminRouter } from "./d1AdminConfig.js";
 import { createD1AdminAccountsRouter } from "./d1AdminAccounts.js";
 import { createD1AdminAssetsRouter } from "./d1AdminAssets.js";
@@ -45,6 +46,7 @@ import { createD1ExperienceRouter } from "./d1Experience.js";
 import { createD1FeedRouter } from "./d1Feed.js";
 import { readD1GameCatalog } from "./d1GameCatalog.js";
 import { createD1GamesReadsRouter } from "./d1GamesReads.js";
+import { createD1GamesRouter } from "./d1Games.js";
 import { createD1GiftCatalogRouter } from "./d1GiftCatalog.js";
 import { createD1GroupsRouter } from "./d1Groups.js";
 import { createD1HighlightsRouter } from "./d1Highlights.js";
@@ -57,6 +59,7 @@ import { createD1NotificationRouter } from "./d1Notifications.js";
 import { createD1ProfileEditRouter } from "./d1ProfileEdits.js";
 import { createD1ProfileActivityRouter } from "./d1ProfileActivity.js";
 import { createD1UserDiscoveryRouter } from "./d1UserDiscovery.js";
+import { createD1UserMatchingRouter } from "./d1UserMatching.js";
 import { createD1ProgressionRouter } from "./d1Progression.js";
 import { createD1RecordingsRouter } from "./d1Recordings.js";
 import { createD1ReferralsRouter } from "./d1Referrals.js";
@@ -66,12 +69,14 @@ import { createD1RoomsRouter } from "./d1Rooms.js";
 import { createD1RoomInvitesRouter } from "./d1RoomInvites.js";
 import { createD1RoomReactionsRouter } from "./d1RoomReactions.js";
 import { createD1PaymentProviders, type D1PaymentConfig } from "./d1Payments.js";
+import { createD1PayoutWebhookHandler } from "./d1PayoutWebhook.js";
 import { createD1SocialRouter } from "./d1Social.js";
 import { createD1SocialFeaturesRouter } from "./d1SocialFeatures.js";
 import { createD1StoriesRouter } from "./d1Stories.js";
 import { createD1SubscriptionsRouter } from "./d1Subscriptions.js";
 import { createD1SupportRouter } from "./d1Support.js";
 import { createD1ThemesRouter } from "./d1Themes.js";
+import { createD1TrustVerificationRouter } from "./d1TrustVerification.js";
 import { createD1VibeRouter } from "./d1Vibe.js";
 import type { D1UserRateLimit } from "./d1UserRateLimit.js";
 import { createD1WalletRouter } from "./d1Wallet.js";
@@ -82,6 +87,7 @@ export interface D1WalletConfig extends D1PaymentConfig {
   devRecharge?: boolean;
   diamondsEnabled?: boolean;
   payoutKycEncryptionKey?: string;
+  payoutWebhookSecret?: string;
 }
 
 export function createD1App(
@@ -107,7 +113,28 @@ export function createD1App(
   app.use("/legal", legalRouter);
   // The managed upload PUT carries raw image bytes, not JSON.
   app.use("/api/media/uploads/:sessionId/bytes", express.raw({ type: () => true, limit: "6mb" }));
+  // Webhook route needs raw body for signature verification (before express.json).
+  app.post("/api/payments/webhook/payout", express.raw({ type: "application/json" }),
+    createD1PayoutWebhookHandler(db, wallet.payoutWebhookSecret));
   app.use(express.json({ limit: "1mb" }));
+  app.get("/api", (_req, res) => res.json({
+    ok: true,
+    service: "yugm-api",
+    version: "0.1.0",
+    environment: process.env.NODE_ENV,
+    uptimeSeconds: Math.round(process.uptime()),
+    health: "/api/health",
+    authentication: "Bearer <token> header required on protected routes",
+    endpointGroups: [
+      "POST /api/auth/* (register, login, otp, refresh, logout, me)",
+      "/api/users/*", "/api/rooms/*", "/api/feed", "/api/friends", "/api/clans", "/api/groups",
+      "/api/pk/*", "/api/games/*", "/api/livekit/*", "/api/wallet", "/api/gifts", "/api/events",
+      "/api/social/*", "/api/dating/*", "/api/creator/*", "/api/recordings", "/api/notifications/*",
+      "/api/reports", "/api/support/*", "/api/upload/*", "/api/missions", "/api/battle-pass",
+      "/api/vibe/*", "/api/ai/*", "/api/trust-verification/*", "/api/moderation/*", "/api/discover/*",
+      "/api/admin/* (admin panel)", "/api/payments/webhook/payout (webhook)"
+    ]
+  }));
   app.use("/api/auth", requireAppCheck, createD1AuthRouter(db, rateLimiters));
   app.use("/api/admin", createD1AdminSessionsRouter(db, adminRateLimiters, admin));
   app.use("/api/admin", createD1AdminAccountsRouter(db, adminRateLimiters, admin));
@@ -138,6 +165,7 @@ export function createD1App(
   app.use("/api/users", createD1ProfileEditRouter(db));
   app.use("/api/users", createD1ProfileActivityRouter(db));
   app.use("/api/users", createD1UserDiscoveryRouter(db));
+  app.use("/api/users", createD1UserMatchingRouter(db, limits.chat));
   app.use("/api", createD1ProgressionRouter(db));
   app.use("/api/users/messages", createD1InboxRouter(db, limits.chat));
   app.use("/api", createD1SocialRouter(db));
@@ -178,10 +206,13 @@ export function createD1App(
   app.use("/api", createD1ReferralsRouter(db));
   app.use("/api", createD1SubscriptionsRouter(db));
   app.use("/api", createD1VibeRouter(db));
+  app.use("/api/ai", createD1AiWingmanRouter(db));
+  app.use("/api/trust-verification", createD1TrustVerificationRouter(db));
   app.use("/api/bonds", createD1BondsRouter(db));
   app.use("/api/creator", createD1CreatorRouter(db, { payoutKycEncryptionKey: wallet.payoutKycEncryptionKey }));
   app.use("/api", createD1LiveKitRouter(db, livekit));
   app.use("/api", createD1GamesReadsRouter(db));
+  app.use("/api", createD1GamesRouter(db, limits.chat));
   const access = createD1AccessSessionReader(db, "http");
   app.get("/api/games/catalog", asyncHandler(async (req, res) => {
     const { user } = await requireHttpSession(req.headers.authorization, access);

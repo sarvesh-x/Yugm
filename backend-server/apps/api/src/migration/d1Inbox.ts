@@ -44,7 +44,7 @@ const visiblePeople = `${visiblePerson("sender", "?1")} AND ${visiblePerson("rec
 const activeActor = `EXISTS (SELECT 1 FROM users AS u WHERE ${d1LiveUserFilter} AND u.deletion_requested_at IS NULL)`;
 const chatActor = `EXISTS (SELECT 1 FROM users AS u WHERE ${d1LiveUserFilter} AND u.deletion_requested_at IS NULL
   AND (u.muted_until IS NULL OR u.muted_until <= ?) AND NOT ${chatRestricted})`;
-const messageList = `SELECT m.*, ${personJson("sender")} AS sender_json, ${personJson("receiver")} AS receiver_json,
+export const messageList = `SELECT m.*, ${personJson("sender")} AS sender_json, ${personJson("receiver")} AS receiver_json,
   (SELECT json_group_array(json_object('userId', user_id, 'type', type, 'createdAt', created_at))
    FROM (SELECT user_id, type, created_at FROM direct_message_reactions WHERE direct_messages_id = m.source_id ORDER BY position)
   ) AS reactions_json

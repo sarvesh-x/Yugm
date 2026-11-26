@@ -7,7 +7,7 @@ import { AVATAR_PART_KEYS } from "./authProfileFields.js";
 import { createD1AccessSessionReader } from "./d1AccessSession.js";
 
 type CountRow = { count: number };
-type ScoreRow = {
+export type ScoreRow = {
   source_id: string;
   user_id: string;
   game_id: string;
@@ -96,7 +96,7 @@ function presentChallenge(row: ChallengeRow, populated: { challenger: boolean; t
   return payload;
 }
 
-function presentScore(row: ScoreRow) {
+export function presentScore(row: ScoreRow) {
   return {
     ...JSON.parse(row.catalog_fields ?? "{}") as Record<string, unknown>,
     _id: row.source_id,

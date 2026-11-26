@@ -53,6 +53,7 @@ const pathFromHere = (relative) => fileURLToPath(new URL(relative, import.meta.u
 const project = "yugm-auth-workerd-fixture";
 const keyId = "fixture-firebase-key";
 const razorpaySecret = "fixture-razorpay-secret";
+const razorpayWebhookSecret = "fixture-razorpay-webhook-secret";
 const adminJwtSecret = "fixture-admin-jwt-secret";
 const googlePlayPackage = "com.yugm.fixture";
 const keysUrl = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
@@ -106,6 +107,7 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
         LIVEKIT_API_KEY: "fixture-livekit-key", LIVEKIT_API_SECRET: "fixture-livekit-secret",
         LIVEKIT_URL: "wss://livekit.fixture",
         RAZORPAY_KEY_ID: "rzp_test_fixture", RAZORPAY_KEY_SECRET: razorpaySecret,
+        RAZORPAY_WEBHOOK_SECRET: razorpayWebhookSecret,
         GOOGLE_PLAY_PACKAGE_NAME: googlePlayPackage, GOOGLE_PLAY_CLIENT_EMAIL: "gplay-fixture@yugm.test",
         GOOGLE_PLAY_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" })
       },
@@ -830,7 +832,8 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     const left = await request(`${clanRoot}/${leaveClan.id}/leave`, 200, { accessToken: visitor.accessToken, body: {} });
     assert.equal(left.data.clan, null);
     assert.equal(await db.prepare("SELECT 1 FROM clans WHERE source_id = ?").bind(leaveClan.id).first(), null);
-    await verifyD1AppEndpoints(db, request, returning, visitor);
+    const { data: gamer } = await signIn(true, project, 200, "games-writes-fixture");
+    await verifyD1AppEndpoints(db, request, returning, visitor, gamer);
     await verifyD1Bonds(db, request, returning, visitor);
     await verifyD1Wallet(db, request, returning, visitor);
     assert.equal(googleConsumes, 1);
@@ -857,7 +860,7 @@ test("isolated Worker serves Auth, Profile, media, cosmetics and clan membership
     await verifyD1RoomReactions(db, request, returning, visitor);
     const { data: chatHost } = await signIn(true, project, 200, "room-chat-host-fixture");
     const { data: chatGuest } = await signIn(true, project, 200, "room-chat-guest-fixture");
-    await verifyD1AdminAssets(db, worker, adminJwtSecret, avatarPng);
+    await verifyD1AdminAssets(db, worker, adminJwtSecret, avatarPng, razorpayWebhookSecret);
     assert.equal(googleRefunds, 1);
     const previousRole = await db.prepare("SELECT role FROM users WHERE source_id = ?").bind(chatHost.user.id).first("role");
     await db.prepare("UPDATE users SET role = 'MODERATOR' WHERE source_id = ?").bind(chatHost.user.id).run();

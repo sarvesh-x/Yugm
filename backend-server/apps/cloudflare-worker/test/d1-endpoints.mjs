@@ -14,9 +14,10 @@ function readLiveKitToken(token) {
   };
 }
 
-export async function verifyD1AppEndpoints(db, request, owner, visitor) {
+export async function verifyD1AppEndpoints(db, request, owner, visitor, gamer = owner) {
   const ownerId = owner.user.id;
   const visitorId = visitor.user.id;
+  const gamerId = gamer.user.id;
   const now = new Date();
   const time = now.toISOString();
   const beforeJoin = new Date(now.getTime() - 60_000).toISOString();
@@ -111,6 +112,93 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor) {
   assert.equal(games.games.find(game => game.id === "vibe_tap").best.score, 600);
   assert.equal(games.recent[0]._id, score);
   assert.deepEqual((await requestAs(visitor, "/api/games/catalog", 200)).data.recent, []);
+
+  // Arcade writes: score/XP persistence, challenge lifecycle and score sharing.
+  const gamesDay = new Date();
+  gamesDay.setUTCHours(0, 0, 0, 0);
+  const gamesDayKey = gamesDay.toISOString();
+  const gamesStart = new Date().toISOString();
+  const gamesScoreIds = [];
+  const gamesChallengeIds = [];
+  try {
+    const earnedBefore = Number((await db.prepare(`SELECT COALESCE(SUM(amount), 0) AS amount FROM xp_daily_caps
+      WHERE user_id = ? AND event = 'MINI_GAME_PLAY' AND day = ?`).bind(gamerId, gamesDayKey).first())?.amount ?? 0);
+    const gamerXpBefore = await db.prepare("SELECT xp FROM users WHERE source_id = ?").bind(gamerId).first("xp");
+    const expectedXp = Math.max(0, Math.min(8, 80 - earnedBefore));
+
+    await request("/api/games/scores", 401, { body: { gameId: "vibe_tap", score: 100 } });
+    const saved = (await requestAs(gamer, "/api/games/scores", 201, {
+      body: { gameId: "vibe_tap", score: 700, durationMs: 9000, rounds: 3, metadata: { streak: 4 } }
+    })).data;
+    const gamesScoreId = saved.score._id;
+    gamesScoreIds.push(gamesScoreId);
+    assert.equal(saved.score.score, 700);
+    assert.equal(saved.score.durationMs, 9000);
+    assert.deepEqual(saved.score.metadata, { streak: 4 });
+    assert.equal(saved.score.__v, 0);
+    assert.equal(saved.isPersonalBest, true);
+    assert.equal(saved.personalBest._id, gamesScoreId);
+    assert.equal(saved.reward.event, "MINI_GAME_PLAY");
+    assert.equal(saved.reward.xpAwarded, expectedXp);
+    assert.equal(await db.prepare("SELECT xp FROM users WHERE source_id = ?").bind(gamerId).first("xp"), gamerXpBefore + expectedXp);
+    assert.equal(await db.prepare(`SELECT COUNT(*) AS count FROM xp_grants
+      WHERE user_id = ? AND event = 'MINI_GAME_PLAY' AND action_key = ?`).bind(gamerId, `game-score:${gamesScoreId}`).first("count"), 1);
+    assert.equal(Number((await db.prepare(`SELECT COALESCE(SUM(amount), 0) AS amount FROM xp_daily_caps
+      WHERE user_id = ? AND event = 'MINI_GAME_PLAY' AND day = ?`).bind(gamerId, gamesDayKey).first())?.amount ?? 0),
+    earnedBefore + expectedXp);
+
+    await request("/api/games/challenges", 401, { body: { gameId: "vibe_tap", score: 100, targetUserId: visitorId } });
+    await requestAs(visitor, "/api/games/challenges/" + gamesScoreId + "/accept", 404, { body: {} });
+    const challenged = (await requestAs(gamer, "/api/games/challenges", 201, {
+      body: { gameId: "vibe_tap", score: 123, targetUserId: visitorId, message: "  fixture challenge  " }
+    })).data.challenge;
+    gamesChallengeIds.push(challenged._id);
+    assert.equal(challenged.challengerId, gamerId);
+    assert.equal(challenged.targetUserId, visitorId);
+    assert.equal(challenged.message, "fixture challenge");
+    assert.equal(challenged.expiresAt > new Date().toISOString(), true);
+    assert.equal(challenged.createdAt, challenged.updatedAt);
+    assert.equal(challenged.__v, 0);
+    assert.equal(await db.prepare(`SELECT COUNT(*) AS count FROM notifications
+      WHERE user_id = ? AND title = 'Arcade challenge'`).bind(visitorId).first("count"), 1);
+
+    const accepted = (await requestAs(visitor, "/api/games/challenges/" + challenged._id + "/accept", 200, { body: {} })).data;
+    assert.deepEqual(accepted, { accepted: true, gameId: "vibe_tap", score: 123, challengerId: gamerId });
+    assert.equal(await db.prepare("SELECT 1 FROM mini_game_challenges WHERE source_id = ?").bind(challenged._id).first(), null);
+    assert.equal(await db.prepare("SELECT message FROM direct_messages WHERE sender_id = ? AND receiver_id = ?")
+      .bind(visitorId, gamerId).first("message"), "Challenge accepted! I beat your score of 123 in Vibe Tap.");
+
+    const declinedId = newId();
+    const future = new Date(Date.now() + 86_400_000).toISOString();
+    await db.prepare(`INSERT INTO mini_game_challenges
+      (source_id, challenger_id, target_user_id, game_id, score, expires_at, created_at, updated_at)
+      VALUES (?, ?, ?, 'reflex_ring', 77, ?, ?, ?)`)
+      .bind(declinedId, gamerId, visitorId, future, gamesStart, gamesStart).run();
+    gamesChallengeIds.push(declinedId);
+    assert.deepEqual((await requestAs(visitor, "/api/games/challenges/" + declinedId + "/decline", 200, { body: {} })).data,
+      { declined: true });
+    assert.equal(await db.prepare("SELECT 1 FROM mini_game_challenges WHERE source_id = ?").bind(declinedId).first(), null);
+
+    await request("/api/games/scores/" + gamesScoreId + "/share", 401, { body: { targetUserId: visitorId } });
+    const shared = (await requestAs(gamer, "/api/games/scores/" + gamesScoreId + "/share", 200, {
+      body: { targetUserId: visitorId }
+    })).data.message;
+    assert.equal(shared.message, "Arcade score: 700 in Vibe Tap. Can you beat it?");
+    assert.equal(shared.senderId._id, gamerId);
+    assert.equal(shared.receiverId._id, visitorId);
+    assert.equal(await db.prepare(`SELECT COUNT(*) AS count FROM notifications
+      WHERE user_id = ? AND title = 'Arcade score shared'`).bind(visitorId).first("count"), 1);
+  } finally {
+    await db.batch([
+      ...gamesChallengeIds.map(challenge => db.prepare("DELETE FROM mini_game_challenges WHERE source_id = ?").bind(challenge)),
+      ...gamesScoreIds.map(score => db.prepare("DELETE FROM mini_game_scores WHERE source_id = ?").bind(score)),
+      db.prepare("DELETE FROM direct_messages WHERE message IN (?, ?)")
+        .bind("Challenge accepted! I beat your score of 123 in Vibe Tap.", "Arcade score: 700 in Vibe Tap. Can you beat it?"),
+      db.prepare("DELETE FROM notifications WHERE created_at >= ? AND title IN ('Arcade challenge', 'Arcade score shared', 'Level up!')")
+        .bind(gamesStart),
+      ...gamesScoreIds.map(score => db.prepare("DELETE FROM xp_grants WHERE action_key = ?").bind(`game-score:${score}`))
+    ]);
+  }
 
   const live = newId();
   const privateVideo = newId();
@@ -723,6 +811,114 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor) {
   const removedMedia = (await requestAs(owner, `/api/users/me/profile-media/${addedMedia.media._id}`, 200, { method: "DELETE" })).data;
   assert.ok(removedMedia.user);
 
+  // Durable friend-match state (search itself still needs live presence).
+  const matchRoomId = newId();
+  const matchRequestId = newId();
+  const matchExpiry = new Date(now.getTime() + 60_000).toISOString();
+  await db.batch([
+    db.prepare(`INSERT INTO rooms (source_id, title, description, type, host_id, category, tags, language, status,
+        visibility, max_speakers, participant_count, is_duet, livekit_room_name, allow_audience_mic_requests,
+        mic_locked, vip_only, created_at, updated_at)
+      VALUES (?, 'Match Room', 'desc', 'VOICE', ?, 'chill', '[]', 'en', 'LIVE', 'PRIVATE', 2, 2, 0, ?, 1, 0, 0, ?, ?)`)
+      .bind(matchRoomId, gamerId, matchRoomId, time, time),
+    db.prepare(`INSERT INTO friend_match_requests (source_id, user_id, status, matched_user_id, room_id, expires_at, created_at, updated_at)
+      VALUES (?, ?, 'MATCHED', ?, ?, ?, ?, ?)`)
+      .bind(matchRequestId, gamerId, ownerId, matchRoomId, matchExpiry, time, time)
+  ]);
+  try {
+    await request("/api/users/friend-match", 401);
+    const matched = (await requestAs(gamer, "/api/users/friend-match", 200)).data;
+    assert.equal(matched.status, "MATCHED");
+    assert.equal(matched.room._id, matchRoomId);
+    assert.equal(matched.room.hostId, gamerId);
+
+    const cancelMatched = (await requestAs(gamer, "/api/users/friend-match/cancel", 200, { body: {} })).data;
+    assert.equal(cancelMatched.cancelled, true);
+    assert.equal(await db.prepare("SELECT status FROM friend_match_requests WHERE source_id = ?").bind(matchRequestId).first("status"), "MATCHED");
+
+    await db.prepare("UPDATE friend_match_requests SET status = 'WAITING' WHERE source_id = ?").bind(matchRequestId).run();
+    const cancelWaiting = (await requestAs(gamer, "/api/users/friend-match/cancel", 200, { body: {} })).data;
+    assert.equal(cancelWaiting.cancelled, true);
+    assert.equal(await db.prepare("SELECT status FROM friend_match_requests WHERE source_id = ?").bind(matchRequestId).first("status"), "CANCELLED");
+
+    await db.prepare("UPDATE rooms SET status = 'ENDED' WHERE source_id = ?").bind(matchRoomId).run();
+    await db.prepare("UPDATE friend_match_requests SET status = 'MATCHED', expires_at = ? WHERE source_id = ?")
+      .bind(matchExpiry, matchRequestId).run();
+    const idle = (await requestAs(gamer, "/api/users/friend-match", 200)).data;
+    assert.equal(idle.status, "IDLE");
+    assert.equal(await db.prepare("SELECT status FROM friend_match_requests WHERE source_id = ?").bind(matchRequestId).first("status"), "CANCELLED");
+
+    // The read route keeps the legacy chat-limiter position after auth.
+    let rateLimited = false;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      try {
+        await requestAs(gamer, "/api/users/friend-match", 200);
+      } catch (error) {
+        if (!String(error?.message ?? error).includes("returned 429")) throw error;
+        rateLimited = true;
+        break;
+      }
+    }
+    assert.equal(rateLimited, true);
+  } finally {
+    await db.batch([
+      db.prepare("DELETE FROM friend_match_requests WHERE source_id = ?").bind(matchRequestId),
+      db.prepare("DELETE FROM rooms WHERE source_id = ?").bind(matchRoomId)
+    ]);
+  }
+
+  // Private call room, participants, DM and notification.
+  const callPriorVip = await db.prepare("SELECT vip_level, vip_tier, vip_expires_at, vip_frozen FROM users WHERE source_id = ?")
+    .bind(ownerId).first();
+  await db.prepare("UPDATE users SET vip_level = 1, vip_tier = 'VIP1', vip_expires_at = ?, vip_frozen = 0 WHERE source_id = ?")
+    .bind(new Date(now.getTime() + 86_400_000).toISOString(), ownerId).run();
+  let callRoomId;
+  try {
+    const callPath = `/api/users/messages/${visitorId}/call`;
+    await request(callPath, 401, { method: "POST", body: { type: "VOICE" } });
+    await requestAs(owner, callPath, 422, { method: "POST", body: { type: "AUDIO" } });
+    await requestAs(owner, "/api/users/messages/not-an-id/call", 400, { method: "POST", body: { type: "VOICE" } });
+    await requestAs(owner, `/api/users/messages/${ownerId}/call`, 400, { method: "POST", body: { type: "VOICE" } });
+
+    await db.prepare("UPDATE users SET vip_level = 0, vip_tier = NULL, vip_expires_at = NULL, vip_frozen = 0 WHERE source_id = ?")
+      .bind(ownerId).run();
+    await requestAs(owner, callPath, 403, { method: "POST", body: { type: "VOICE" } });
+    await db.prepare("UPDATE users SET vip_level = 1, vip_tier = 'VIP1', vip_expires_at = ?, vip_frozen = 0 WHERE source_id = ?")
+      .bind(new Date(now.getTime() + 86_400_000).toISOString(), ownerId).run();
+
+    const call = (await requestAs(owner, callPath, 201, { method: "POST", body: { type: "VIDEO" } })).data;
+    callRoomId = call.room._id;
+    assert.equal(call.room.type, "VIDEO");
+    assert.equal(call.room.hostId, ownerId);
+    assert.equal(call.room.participantCount, 2);
+    assert.deepEqual(call.room.speakerIds, [ownerId, visitorId]);
+    assert.equal(call.message.roomId, callRoomId);
+    assert.equal(call.message.message, "Private video call started");
+    assert.equal(call.message.senderId._id, ownerId);
+    assert.equal(call.message.receiverId._id, visitorId);
+
+    assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM room_participants WHERE room_id = ?").bind(callRoomId).first("count"), 2);
+    assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM room_speakers WHERE rooms_id = ?").bind(callRoomId).first("count"), 2);
+    assert.equal(await db.prepare("SELECT message FROM direct_messages WHERE room_id = ?").bind(callRoomId).first("message"), "Private video call started");
+    const callNotice = await db.prepare(`SELECT user_id, title, body FROM notifications
+      WHERE json_extract(data, '$.roomId') = ?`).bind(callRoomId).first();
+    assert.equal(callNotice.user_id, visitorId);
+    assert.equal(callNotice.title, "Private video call");
+    assert.equal(callNotice.body, `${await db.prepare("SELECT name FROM users WHERE source_id = ?").bind(ownerId).first("name")} started a private video call`);
+  } finally {
+    if (callRoomId) {
+      await db.batch([
+        db.prepare("DELETE FROM notifications WHERE json_extract(data, '$.roomId') = ?").bind(callRoomId),
+        db.prepare("DELETE FROM direct_messages WHERE room_id = ?").bind(callRoomId),
+        db.prepare("DELETE FROM room_speakers WHERE rooms_id = ?").bind(callRoomId),
+        db.prepare("DELETE FROM room_participants WHERE room_id = ?").bind(callRoomId),
+        db.prepare("DELETE FROM rooms WHERE source_id = ?").bind(callRoomId)
+      ]);
+    }
+    await db.prepare("UPDATE users SET vip_level = ?, vip_tier = ?, vip_expires_at = ?, vip_frozen = ? WHERE source_id = ?")
+      .bind(callPriorVip.vip_level, callPriorVip.vip_tier, callPriorVip.vip_expires_at, callPriorVip.vip_frozen, ownerId).run();
+  }
+
   await request("/api/creator/payout-kyc", 401);
   await requestAs(visitor, "/api/creator/payout-kyc", 403);
   await db.prepare("UPDATE users SET role = 'HOST' WHERE source_id = ?").bind(ownerId).run();
@@ -783,4 +979,253 @@ export async function verifyD1AppEndpoints(db, request, owner, visitor) {
     db.prepare("DELETE FROM gift_upgrade_paths WHERE gifts_id = ?").bind(giftId),
     db.prepare("DELETE FROM gifts WHERE source_id IN (?, ?)").bind(giftId, upgradeTargetId),
   ]);
+
+  const apiRoot = await requestAs(owner, "/api", 200);
+  assert.equal(apiRoot.service, "yugm-api");
+  assert.ok(Array.isArray(apiRoot.endpointGroups));
+
+  // v1 moderation report/appeal/status (D1)
+  await request("/api/v1/moderation/report", 401, { method: "POST", body: { roomId: live, category: "spam" } });
+  const report = await requestAs(owner, "/api/v1/moderation/report", 201, {
+    body: { roomId: live, category: "spam", description: "fixture report" }
+  });
+  assert.ok(report.data.reportId);
+  assert.equal(report.data.status, "PENDING");
+  assert.equal(await db.prepare("SELECT status FROM reports WHERE source_id = ?").bind(report.data.reportId).first("status"), "PENDING");
+  assert.equal(await db.prepare("SELECT target_type FROM moderation_queues WHERE source_id = ?").bind(report.data.queueId).first("target_type"), "ROOM");
+
+  const actionId = newId();
+  const actionNow = new Date().toISOString();
+  await db.prepare(`INSERT INTO moderation_actions (source_id, target_user_id, action, reason, automated, created_at, updated_at)
+    VALUES (?, ?, 'WARN', 'fixture action', 1, ?, ?)`).bind(actionId, ownerId, actionNow, actionNow).run();
+  const appeal = await requestAs(owner, "/api/v1/moderation/appeal", 200, {
+    body: { actionId, reason: "Please reconsider this moderation action" }
+  });
+  assert.equal(appeal.data.status, "PENDING_REVIEW");
+  assert.ok(appeal.data.appealId);
+  assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM moderation_queues WHERE source_id = ?").bind(appeal.data.appealId).first("count"), 1);
+  await requestAs(owner, "/api/v1/moderation/appeal", 404, { body: { actionId: newId(), reason: "Please reconsider this moderation action" } });
+
+  const moderationStatus = (await requestAs(owner, "/api/v1/moderation/status", 200)).data;
+  assert.ok(Array.isArray(moderationStatus.recentActions));
+  assert.equal(typeof moderationStatus.trustScore, "number");
+
+  await db.batch([
+    db.prepare("DELETE FROM moderation_queues WHERE report_id = ? OR source_id = ?").bind(report.data.reportId, appeal.data.appealId),
+    db.prepare("DELETE FROM reports WHERE source_id = ?").bind(report.data.reportId),
+    db.prepare("DELETE FROM moderation_actions WHERE source_id = ?").bind(actionId)
+  ]);
+
+  // AI wingman is stateless: auth still precedes validation, and the D1 router
+  // shares the legacy generators rather than calling an external provider.
+  const ai = "/api/ai/wingman";
+  await request(ai + "/bio/generate", 401, { body: { style: "invalid" } });
+  await requestAs(owner, ai + "/bio/generate", 422, { body: { style: "invalid" } });
+  const bioGenerated = (await requestAs(owner, ai + "/bio/generate", 200, {
+    body: { style: "warm", interests: ["music", "travel"] }
+  })).data;
+  assert.equal(bioGenerated.style, "warm");
+  assert.equal(bioGenerated.tips.length, 3);
+  assert.ok(bioGenerated.suggestion.includes("music and travel"));
+
+  await request(ai + "/bio/rate", 401, { body: { bio: 1 } });
+  await requestAs(owner, ai + "/bio/rate", 422, { body: { bio: 1 } });
+  const bioRated = (await requestAs(owner, ai + "/bio/rate", 200, {
+    body: { bio: "I love music and travel? 🔥" }
+  })).data;
+  assert.equal(bioRated.score, 100);
+  assert.equal(bioRated.rating, "🔥 Amazing!");
+  assert.equal(bioRated.feedback.length, 4);
+  assert.deepEqual(bioRated.suggestions, []);
+
+  await request(ai + "/opener", 401, { body: {} });
+  await requestAs(owner, ai + "/opener", 422, { body: {} });
+  const opener = (await requestAs(owner, ai + "/opener", 200, {
+    body: { style: "direct", targetUserContext: { name: "Asha", interests: ["music"], vibeScore: 88 } }
+  })).data;
+  assert.equal(opener.style, "direct");
+  assert.equal(opener.openers.length, 3);
+  assert.ok(opener.openers[0].includes("music"));
+  assert.equal(opener.tip, "Personalize the opener by referencing something specific from their profile.");
+
+  await request(ai + "/reply", 401, { body: { conversation: [] } });
+  await requestAs(owner, ai + "/reply", 422, { body: { conversation: [] } });
+  const aiReply = (await requestAs(owner, ai + "/reply", 200, {
+    body: { style: "funny", conversation: [{ role: "other", content: "I saw a very long message here that should be truncated for context" }] }
+  })).data;
+  assert.equal(aiReply.suggestions.length, 3);
+  assert.ok(aiReply.context.startsWith("Responding to: \"I saw a very long message"));
+  assert.equal(aiReply.deliveryTip, "Reply within 2-3 hours for best conversation flow.");
+
+  await request(ai + "/coach", 401, { body: { chatHistory: [] } });
+  await requestAs(owner, ai + "/coach", 422, { body: { chatHistory: [] } });
+  const coach = (await requestAs(owner, ai + "/coach", 200, {
+    body: { chatHistory: [
+      { role: "user", content: "Hi" },
+      { role: "other", content: "Hello there, this is a much longer reply" }
+    ] }
+  })).data;
+  assert.equal(coach.analysis.totalMessages, 2);
+  assert.equal(coach.analysis.yourMessageCount, 1);
+  assert.equal(coach.analysis.theirMessageCount, 1);
+  assert.equal(coach.tips[0], "You're giving short replies — try adding more thought to your responses.");
+  assert.equal(coach.redFlags, undefined);
+
+  await request(ai + "/photo/rate", 401, { body: { photoUrl: "bad" } });
+  await requestAs(owner, ai + "/photo/rate", 422, { body: { photoUrl: "bad" } });
+  const photo = (await requestAs(owner, ai + "/photo/rate", 200, {
+    body: { photoUrl: "https://example.test/photo.jpg" }
+  })).data;
+  assert.ok(photo.score >= 60 && photo.score <= 99);
+  assert.equal(photo.feedback.length, 3);
+  assert.equal(photo.suggestions.length, 3);
+
+  const ghostConversation = Array.from({ length: 5 }, () => ({ role: "user", content: "Still here" }));
+  ghostConversation.push({ role: "other", content: "I was here earlier" });
+  await request(ai + "/ghost/detect", 401, { body: { conversation: ghostConversation.slice(0, 1) } });
+  await requestAs(owner, ai + "/ghost/detect", 422, { body: { conversation: ghostConversation.slice(0, 1) } });
+  const ghost = (await requestAs(owner, ai + "/ghost/detect", 200, { body: { conversation: ghostConversation } })).data;
+  assert.equal(ghost.ghosting, true);
+  assert.equal(ghost.confidence, 0.85);
+  assert.equal(ghost.advice.length, 3);
+
+  await request(ai + "/date/plan", 401, { body: { preferences: { vibe: "invalid" } } });
+  await requestAs(owner, ai + "/date/plan", 422, { body: { preferences: { vibe: "invalid" } } });
+  const datePlan = (await requestAs(owner, ai + "/date/plan", 200, {
+    body: { preferences: { vibe: "foodie", budget: "low" } }
+  })).data;
+  assert.equal(datePlan.plan[0].name, "Virtual Chai Date");
+  assert.deepEqual(datePlan.preferences, { vibe: "foodie", budget: "low" });
+
+  await request(ai + "/gift/recommend", 401, { body: { budget: "invalid", recipientContext: {} } });
+  await requestAs(owner, ai + "/gift/recommend", 422, { body: { budget: "invalid", recipientContext: {} } });
+  const gifts = (await requestAs(owner, ai + "/gift/recommend", 200, {
+    body: { budget: "low", recipientContext: { relationship: "friend" } }
+  })).data;
+  assert.equal(gifts.recommendations.length, 4);
+  assert.ok(gifts.recommendations.every(gift => gift.reason.includes("friend")));
+
+  await request(ai + "/analytics", 401);
+  const analytics = (await requestAs(owner, ai + "/analytics", 200)).data;
+  assert.ok(analytics.totalHelped >= 5000);
+  assert.ok(analytics.conversationsAnalyzed >= 25000);
+  assert.deepEqual(analytics.topFeatures, ["Opener Generator", "Bio Coach", "Reply Assistant", "Ghost Detector"]);
+
+  // Trust verification state lives in D1; the private media route remains
+  // legacy-only because it needs legacy R2 authorization and provider semantics.
+  const trust = "/api/trust-verification";
+  const prompts = [
+    "My name is on Yugm, and I am verifying that I am a real person.",
+    "I am completing Yugm Trust Verification to show people I am real.",
+    "This is my real voice for Yugm Trust Verification."
+  ];
+  await request(trust + "/me", 401);
+  await request(trust + "/status", 401);
+  await request(trust + "/voice-prompt", 401);
+  await request(trust + "/consent", 401, { body: { consentVersion: "x" } });
+  await request(trust + "/face", 401, { body: { selfieImageUrl: 1 } });
+  await request(trust + "/voice", 401, { body: { audioUrl: "bad", promptText: "short" } });
+  await request(trust + "/submit-review", 401, { body: {} });
+  await request(trust + "/retry", 401, { body: {} });
+  await requestAs(owner, trust + "/consent", 422, { body: { consentVersion: "x" } });
+  await requestAs(owner, trust + "/face", 422, { body: { selfieImageUrl: 1 } });
+  await requestAs(owner, trust + "/voice", 422, { body: { audioUrl: "bad", promptText: "short" } });
+  // An empty face body passes the schema but fails the legacy business rule.
+  await requestAs(owner, trust + "/face", 400, { body: {} });
+
+  try {
+    const initial = (await requestAs(owner, trust + "/me", 200)).data;
+    assert.equal(initial.title, "Yugm Trust Verification");
+    assert.equal(initial.tagline, "Show people you're real.");
+    assert.equal(initial.verification.status, "NOT_STARTED");
+    assert.equal(initial.verification.level, "BASIC");
+    assert.equal(initial.verification.faceStatus, "NOT_SUBMITTED");
+    assert.equal(initial.verification.voiceStatus, "NOT_SUBMITTED");
+    assert.equal(initial.verification.verifiedBadgeEnabled, false);
+    assert.equal(initial.verification.creatorTrustEnabled, false);
+
+    const started = (await requestAs(owner, trust + "/start", 201, { body: {} })).data;
+    assert.equal(started.verification.id, initial.verification.id);
+    assert.equal(started.verification.status, "INCOMPLETE");
+
+    const consented = (await requestAs(owner, trust + "/consent", 200, { body: {} })).data;
+    assert.equal(consented.verification.status, "INCOMPLETE");
+    assert.equal(consented.verification.consentVersion, "trust-verification-v1");
+    assert.ok(consented.verification.consentAcceptedAt);
+
+    const prompted = (await requestAs(owner, trust + "/voice-prompt", 200)).data;
+    assert.ok(prompts.includes(prompted.promptText));
+
+    const face = (await requestAs(owner, trust + "/face", 201, {
+      body: {
+        selfieImageUrl: "https://example.test/selfie.jpg",
+        provider: "fixture-provider",
+        providerReferenceId: "fixture-ref",
+        providerResponse: { score: 91, internal: true }
+      }
+    })).data;
+    assert.equal(face.verification.faceStatus, "SUBMITTED");
+    assert.equal(face.verification.livenessStatus, "NOT_SUBMITTED");
+    assert.equal(face.submission.userId, ownerId);
+    assert.equal(face.submission.verificationId, face.verification.id);
+    assert.equal(face.submission.selfieImageUrl, "https://example.test/selfie.jpg");
+    assert.equal(face.submission.livenessVideoUrl, undefined);
+    assert.deepEqual(face.submission.providerResponse, { score: 91, internal: true });
+    assert.equal(face.submission.status, "SUBMITTED");
+    assert.equal(face.submission.__v, 0);
+
+    const voice = (await requestAs(owner, trust + "/voice", 201, {
+      body: {
+        audioUrl: "https://example.test/voice.m4a",
+        transcriptText: "Fixture transcript",
+        promptText: prompted.promptText,
+        providerResponse: ["ok"]
+      }
+    })).data;
+    assert.equal(voice.verification.voiceStatus, "SUBMITTED");
+    assert.equal(voice.submission.promptText, prompted.promptText);
+    assert.equal(voice.submission.transcriptText, "Fixture transcript");
+    assert.deepEqual(voice.submission.providerResponse, ["ok"]);
+    assert.equal(voice.submission.__v, 0);
+
+    const reviewed = (await requestAs(owner, trust + "/submit-review", 200, { body: {} })).data;
+    assert.equal(reviewed.verification.status, "PENDING_REVIEW");
+    assert.ok(reviewed.verification.submittedAt);
+    assert.equal((await requestAs(owner, trust + "/status", 200)).data.verification.status, "PENDING_REVIEW");
+
+    const retried = (await requestAs(owner, trust + "/retry", 200, { body: {} })).data;
+    assert.equal(retried.verification.status, "INCOMPLETE");
+    assert.equal(retried.verification.faceStatus, "NOT_SUBMITTED");
+    assert.equal(retried.verification.voiceStatus, "NOT_SUBMITTED");
+    assert.equal(retried.verification.livenessStatus, "NOT_SUBMITTED");
+    assert.equal(retried.verification.rejectionReason, null);
+    assert.equal(retried.verification.consentVersion, "trust-verification-v1");
+
+    const trustRow = await db.prepare("SELECT * FROM trust_verifications WHERE user_id = ?").bind(ownerId).first();
+    assert.equal(trustRow.source_id, initial.verification.id);
+    assert.equal(trustRow.status, "INCOMPLETE");
+    assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM face_verification_submissions WHERE verification_id = ?")
+      .bind(trustRow.source_id).first("count"), 1);
+    assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM voice_verification_submissions WHERE verification_id = ?")
+      .bind(trustRow.source_id).first("count"), 1);
+
+    // Guard ordering mirrors the legacy service: consent, face, then voice.
+    await requestAs(visitor, trust + "/submit-review", 400, { body: {} });
+    await requestAs(visitor, trust + "/consent", 200, { body: { consentVersion: "fixture-consent-v2" } });
+    await requestAs(visitor, trust + "/submit-review", 400, { body: {} });
+    const visitorFace = (await requestAs(visitor, trust + "/face", 201, {
+      body: { livenessVideoUrl: "https://example.test/liveness.mp4" }
+    })).data;
+    assert.equal(visitorFace.verification.livenessStatus, "SUBMITTED");
+    await requestAs(visitor, trust + "/submit-review", 400, { body: {} });
+  } finally {
+    await db.batch([
+      db.prepare("DELETE FROM face_verification_submissions WHERE user_id = ?").bind(ownerId),
+      db.prepare("DELETE FROM voice_verification_submissions WHERE user_id = ?").bind(ownerId),
+      db.prepare("DELETE FROM trust_verifications WHERE user_id = ?").bind(ownerId),
+      db.prepare("DELETE FROM face_verification_submissions WHERE user_id = ?").bind(visitorId),
+      db.prepare("DELETE FROM voice_verification_submissions WHERE user_id = ?").bind(visitorId),
+      db.prepare("DELETE FROM trust_verifications WHERE user_id = ?").bind(visitorId)
+    ]);
+  }
 }

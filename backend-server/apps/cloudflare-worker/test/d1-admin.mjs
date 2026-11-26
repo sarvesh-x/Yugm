@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { generate } from "otplib";
@@ -333,7 +333,7 @@ export async function verifyD1AdminSessions(db, request) {
   await as("/auth/me", 401, undefined, changed.accessToken, "GET");
 }
 
-export async function verifyD1AdminAssets(db, worker, secret, png) {
+export async function verifyD1AdminAssets(db, worker, secret, png, razorpayWebhookSecret) {
   const root = "http://127.0.0.1/api/admin";
   const adminId = id();
   const sessionId = id();
@@ -517,6 +517,84 @@ export async function verifyD1AdminAssets(db, worker, secret, png) {
   assert.equal(rejected.withdrawal.activeLock, false);
   await json(second.payoutPath + "/reject", 200, "POST", JSON.stringify({ rejectionReason: "Fixture rejection" }));
   await db.prepare("UPDATE users SET is_verified = ? WHERE source_id = ?").bind(user.is_verified, user.source_id).run();
+
+  // Razorpay payout webhook: signature, idempotency, and terminal transitions.
+  assert.ok(razorpayWebhookSecret);
+  const webhookPayoutId = "pout_webhook_fixture";
+  const webhookWithdrawalId = id();
+  const webhookReviewId = id();
+  await db.batch([
+    db.prepare(`INSERT INTO withdrawal_requests
+      (source_id, user_id, amount_coins, amount_inr, status, active_lock, metadata, created_at, updated_at)
+      VALUES (?, ?, 50, 5, 'PENDING_REVIEW', 1, '{}', ?, ?)`)
+      .bind(webhookWithdrawalId, user.source_id, time, time),
+    db.prepare(`INSERT INTO payout_reviews (source_id, user_id, withdrawal_request_id, status,
+      trust_verified, kyc_verified, wallet_safe, reports_safe, fraud_safe, risk_flags,
+      provider_payout_id, provider_status, created_at, updated_at)
+      VALUES (?, ?, ?, 'PENDING', 1, 1, 1, 1, 1, '[]', ?, 'PROCESSING', ?, ?)`)
+      .bind(webhookReviewId, user.source_id, webhookWithdrawalId, webhookPayoutId, time, time)
+  ]);
+  const webhook = (body, status, signature) => {
+    const raw = JSON.stringify(body);
+    const headers = { "content-type": "application/json" };
+    if (signature !== null) {
+      headers["X-Razorpay-Signature"] = signature ?? createHmac("sha256", razorpayWebhookSecret)
+        .update(raw).digest("hex");
+    }
+    const response = worker.dispatchFetch("http://127.0.0.1/api/payments/webhook/payout", {
+      method: "POST", headers, body: raw
+    });
+    return response.then(async received => {
+      const payload = await received.json();
+      assert.equal(received.status, status, `/api/payments/webhook/payout: ${JSON.stringify(payload)}`);
+      return payload;
+    });
+  };
+  const processedAt = 1_700_000_100;
+  const processedBody = { event: "payout.processed", payload: { payout: {
+    id: webhookPayoutId, status: "processed", amount: 500, currency: "INR",
+    created_at: 1_700_000_000, processed_at: processedAt
+  } } };
+  await webhook(processedBody, 401, "00");
+  const processedWebhook = await webhook(processedBody, 200);
+  assert.equal(processedWebhook.received, "payout.processed");
+  assert.equal((await webhook(processedBody, 200)).duplicate, true);
+  const processedReview = await db.prepare(`SELECT status, provider_status, processed_at
+    FROM payout_reviews WHERE source_id = ?`).bind(webhookReviewId).first();
+  assert.equal(processedReview.status, "PAID");
+  assert.equal(processedReview.provider_status, "PROCESSED");
+  assert.equal(processedReview.processed_at, new Date(processedAt * 1000).toISOString());
+  const paidWithdrawal = await db.prepare(`SELECT status, active_lock, paid_at, payout_reference
+    FROM withdrawal_requests WHERE source_id = ?`).bind(webhookWithdrawalId).first();
+  assert.equal(paidWithdrawal.status, "PAID");
+  assert.equal(paidWithdrawal.active_lock, 0);
+  assert.equal(paidWithdrawal.payout_reference, webhookPayoutId);
+  assert.equal(await db.prepare(`SELECT COUNT(*) AS count FROM admin_audit_logs
+    WHERE entity_id = ? AND action = 'PAYOUT_WEBHOOK_PROCESSED'`).bind(webhookReviewId).first("count"), 1);
+
+  const reversedBody = { event: "payout.reversed", payload: { payout: {
+    id: webhookPayoutId, status: "reversed", amount: 500, currency: "INR",
+    created_at: 1_700_000_000, failure_reason: "fixture reversal"
+  } } };
+  assert.equal((await webhook(reversedBody, 200)).received, "payout.reversed");
+  assert.equal((await webhook(reversedBody, 200)).duplicate, true);
+  const reversedReview = await db.prepare(`SELECT provider_status, failure_reason
+    FROM payout_reviews WHERE source_id = ?`).bind(webhookReviewId).first();
+  assert.equal(reversedReview.provider_status, "REVERSED");
+  assert.equal(reversedReview.failure_reason, "fixture reversal");
+  const reversedWithdrawal = await db.prepare(`SELECT status, active_lock, rejection_reason, metadata
+    FROM withdrawal_requests WHERE source_id = ?`).bind(webhookWithdrawalId).first();
+  assert.equal(reversedWithdrawal.status, "REJECTED");
+  assert.equal(reversedWithdrawal.active_lock, 0);
+  assert.equal(reversedWithdrawal.rejection_reason, "Payout reversed: fixture reversal");
+  assert.equal(JSON.parse(reversedWithdrawal.metadata).payoutProviderStatus, "REVERSED");
+  const missingPayoutBody = { event: "payout.processed", payload: {} };
+  await webhook(missingPayoutBody, 400);
+  await db.batch([
+    db.prepare("DELETE FROM admin_audit_logs WHERE entity_id = ?").bind(webhookReviewId),
+    db.prepare("DELETE FROM payout_reviews WHERE source_id = ?").bind(webhookReviewId),
+    db.prepare("DELETE FROM withdrawal_requests WHERE source_id = ?").bind(webhookWithdrawalId)
+  ]);
 
   const other = await db.prepare(`SELECT u.source_id FROM users u WHERE u.source_id <> ?1 AND NOT EXISTS (
     SELECT 1 FROM direct_messages m WHERE (m.sender_id = u.source_id AND m.receiver_id = ?1)

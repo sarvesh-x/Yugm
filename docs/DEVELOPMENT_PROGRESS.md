@@ -1288,44 +1288,110 @@ See [production/current-progress.md](production/current-progress.md) for the las
 
 ## 2026-11-25 - D1 recordings
 
-- Mounted all seven /api/recordings routes in the shared D1 Worker (ackend-server/apps/api/src/migration/d1Recordings.ts, mounted in d1App.ts) with auth-before-validation, host-only guards, LIVE-room start check, legacy DTO shape, pre-increment view response, and no D1 socket fan-out for ecording:started/ecording:stopped.
+- Mounted all seven /api/recordings routes in the shared D1 Worker (backend-server/apps/api/src/migration/d1Recordings.ts, mounted in d1App.ts) with auth-before-validation, host-only guards, LIVE-room start check, legacy DTO shape, pre-increment view response, and no D1 socket fan-out for ecording:started/ecording:stopped.
 - Added recordings coverage to pps/cloudflare-worker/test/d1-endpoints.mjs.
-- Verification: 
-pm.cmd run typecheck (backend-server) pass; 
-pm.cmd run audit:d1-endpoints -- --missing 638/555/549/89 with /api/recordings 7/0; 
-pm.cmd run test:auth-worker --workspace apps/cloudflare-worker pass on rerun (first run hit intermittent unrelated d1-reports count assertion); 
-pm.cmd run secrets:check:strict pass; scoped git diff --check pass.
+- Verification:
+npm.cmd run typecheck (backend-server) pass;
+npm.cmd run audit:d1-endpoints -- --missing 638/555/549/89 with /api/recordings 7/0;
+npm.cmd run test:auth-worker --workspace apps/cloudflare-worker pass on rerun (first run hit intermittent unrelated d1-reports count assertion);
+npm.cmd run secrets:check:strict pass; scoped git diff --check pass.
 - Boundaries: no new migration (uses oom_recordings in 0001_initial); no realtime recording broadcast; no hosted data ops/deploy/credentials. 89 legacy routes remain unmounted.
 
 ## 2026-11-25 - D1 user discovery and profile-media
 
-- Mounted 6 /api/users routes in the shared D1 Worker (ackend-server/apps/api/src/migration/d1UserDiscovery.ts, mounted in d1App.ts): search, hosts suggested, recommended chat, PK history, profile-media add/delete.
+- Mounted 6 /api/users routes in the shared D1 Worker (backend-server/apps/api/src/migration/d1UserDiscovery.ts, mounted in d1App.ts): search, hosts suggested, recommended chat, PK history, profile-media add/delete.
 - Preserved auth-before-validation, legacy search/profile-media validation, D1 profile-media position/slice behavior, and PK history via D1 battle presenter. ecommended-chat returns empty on D1 due no live presence source.
-- Verification: 
-pm.cmd run typecheck pass; 
-pm.cmd run audit:d1-endpoints -- --missing 638/561/555/83 with /api/users 48/5; 
-pm.cmd run test:auth-worker --workspace apps/cloudflare-worker pass on rerun (intermittent unrelated d1-reports count assertion on intermediate run); 
-pm.cmd run secrets:check:strict pass; scoped git diff --check pass.
+- Verification:
+npm.cmd run typecheck pass;
+npm.cmd run audit:d1-endpoints -- --missing 638/561/555/83 with /api/users 48/5;
+npm.cmd run test:auth-worker --workspace apps/cloudflare-worker pass on rerun (intermittent unrelated d1-reports count assertion on intermediate run);
+npm.cmd run secrets:check:strict pass; scoped git diff --check pass.
 - Boundaries: no new migration; live presence for recommended-chat remains legacy-only; remaining users routes are DELETE /me, friend-match (3), messages/:userId/call.
 
 ## 2026-11-25 - D1 creator payout-kyc and withdrawals
 
-- Mounted all 7 /api/creator routes in the shared D1 Worker (ackend-server/apps/api/src/migration/d1Creator.ts, mounted in d1App.ts, wired PAYOUT_KYC_ENCRYPTION_KEY in Worker env/config) for payout KYC, status, submit/update, withdrawal eligibility, list, and creation.
+- Mounted all 7 /api/creator routes in the shared D1 Worker (backend-server/apps/api/src/migration/d1Creator.ts, mounted in d1App.ts, wired PAYOUT_KYC_ENCRYPTION_KEY in Worker env/config) for payout KYC, status, submit/update, withdrawal eligibility, list, and creation.
 - Preserved auth-before-validation, creator role gates, legacy KYC validation, encrypted sensitive KYC fields, D1 fraud checks, and guarded withdrawal/review batch writes.
-- Verification: 
-pm.cmd run typecheck pass; 
-pm.cmd run audit:d1-endpoints -- --missing 638/568/562/76 with /api/creator 7/0; 
-pm.cmd run test:auth-worker --workspace apps/cloudflare-worker pass (1/1); 
-pm.cmd run secrets:check:strict pass; scoped git diff --check pass.
+- Verification:
+npm.cmd run typecheck pass;
+npm.cmd run audit:d1-endpoints -- --missing 638/568/562/76 with /api/creator 7/0;
+npm.cmd run test:auth-worker --workspace apps/cloudflare-worker pass (1/1);
+npm.cmd run secrets:check:strict pass; scoped git diff --check pass.
 - Boundaries: no new migration; D1 schema lacks Mongo partial unique indexes for creator KYC user and active withdrawal lock (guarded in code); MongoDB remains authoritative.
 
 ## 2026-11-25 - D1 gifts mutations
 
-- Mounted 5 /api/gifts mutation routes in shared D1 Worker (ackend-server/apps/api/src/migration/d1GiftCatalog.ts): purchase, combo, room-wide, surprise-box, upgrade.
+- Mounted 5 /api/gifts mutation routes in shared D1 Worker (backend-server/apps/api/src/migration/d1GiftCatalog.ts): purchase, combo, room-wide, surprise-box, upgrade.
 - Preserved auth/validation, wallet-frozen/insufficient-balance guards, guarded wallet/inventory writes, combo fail-closed 409, and room-wide pre-validation/compensation behavior.
-- Verification: 
-pm.cmd run typecheck pass; 
-pm.cmd run audit:d1-endpoints -- --missing 638/573/567/71 with /api/gifts 8/0; 
-pm.cmd run test:auth-worker --workspace apps/cloudflare-worker pass (1/1); 
-pm.cmd run secrets:check:strict pass; scoped git diff --check LF/CRLF warning only.
+- Verification:
+npm.cmd run typecheck pass;
+npm.cmd run audit:d1-endpoints -- --missing 638/573/567/71 with /api/gifts 8/0;
+npm.cmd run test:auth-worker --workspace apps/cloudflare-worker pass (1/1);
+npm.cmd run secrets:check:strict pass; scoped git diff --check LF/CRLF warning only.
 - Boundaries: no new migration; D1 gift_inventories lacks unique(user_id,gift_id) schema parity; room-wide XP grants not wired; mid-loop room-wide partial failures need reconciliation; MongoDB remains authoritative.
+
+## 2026-11-26 - D1 v1 moderation and API root
+
+- Mounted 3 /api/v1/moderation routes in backend-server/apps/api/src/migration/d1Moderation.ts (report, appeal, status) and the /api discovery root in d1App.ts.
+- Preserved auth-before-validation, legacy report + moderation queue inserts, appeal ownership/UNBAN checks, status field defaults/recent actions, and the legacy root payload.
+- Verification:
+npm.cmd run typecheck pass;
+npm.cmd run audit:d1-endpoints -- --missing 638/577/571/67 with /api/v1 5/0 and /api/ 1/0;
+npm.cmd run test:auth-worker --workspace apps/cloudflare-worker pass (1/1);
+npm.cmd run secrets:check:strict pass; scoped git diff --check LF/CRLF warning only.
+- Boundaries: report now requires a target (400 instead of D1 NOT NULL 500); no D1 push/socket side effects; no new migration; MongoDB remains authoritative.
+
+## 2026-11-26 - D1 payout webhook
+
+- Mounted POST /api/payments/webhook/payout in backend-server/apps/api/src/migration/d1PayoutWebhook.ts, registered before express.json() with express.raw for HMAC verification.
+- Preserved 501/401/400/200 responses, processed and reversed/rejected/failed transitions, idempotent duplicate replay, and linked withdrawal settlement/rejection; writes and audit rows commit in one D1 batch.
+- Verification:
+npm.cmd run typecheck pass;
+npm.cmd run audit:d1-endpoints -- --missing 638/578/572/66 with /api/payments 1/0;
+npm.cmd run test:auth-worker --workspace apps/cloudflare-worker pass (1/1);
+npm.cmd run secrets:check:strict pass; scoped git diff --check LF/CRLF warning only.
+- Boundaries: no new migration; MongoDB remains authoritative.
+
+## 2026-11-26 - D1 Arcade write routes
+
+- Mounted all 5 remaining /api/games write routes in backend-server/apps/api/src/migration/d1Games.ts (mounted in d1App.ts): score save, challenge create/accept/decline and score share. /api/games is now 9/9 in the HTTP inventory.
+- Preserved auth-before-work, chat limiter before validation, per-game score caps, legacy score/challenge/message DTOs, XP cap and idempotency key, personal best, block/self-message and clan guards, and guarded score/share/challenge commits.
+- Verification:
+npm.cmd run typecheck pass;
+npm.cmd run audit:d1-endpoints -- --missing 638/583/577/61 with /api/games 9/0;
+npm.cmd run test:auth-worker --workspace apps/cloudflare-worker pass (1/1) with games persistence and clean-bundle assertions;
+npm.cmd run secrets:check:strict pass; scoped git diff --check LF/CRLF warnings only.
+- Boundaries: no new migration; no D1 socket emitter for directMessageNew, score-share invalidation or challenge notification fan-out; deterministic personal-best tie order differs from legacy undefined order; MongoDB remains authoritative.
+
+## 2026-11-26 - D1 durable user matching and private calls
+
+- Mounted GET /api/users/friend-match, POST /api/users/friend-match/cancel and POST /api/users/messages/:userId/call in backend-server/apps/api/src/migration/d1UserMatching.ts (mounted in d1App.ts with limits.chat). /api/users is now 51/2.
+- Preserved auth-before-limiter ordering, legacy friend-match state/DTO behavior, WAITING-only cancel, stale MATCHED room cancellation, private-call muted/validation/ID/self/receiver/VIP/block order, legacy error messages, and guarded room/participant/speaker/DM batch with post-commit notification. The VIP check intentionally mirrors the legacy field selection (tier/expiry only).
+- Verification:
+npm.cmd run typecheck pass;
+npm.cmd run audit:d1-endpoints -- --missing 638/586/580/58 with /api/users 51/2;
+npm.cmd run test:auth-worker --workspace apps/cloudflare-worker pass (1/1) with unauthenticated ordering, 429 limiter behavior, friend-match persistence/cancel/stale-room checks, private-call room/participant/DM/notification rows and clean-bundle assertions;
+npm.cmd run secrets:check:strict pass; scoped git diff --check LF/CRLF warnings only.
+- Boundaries: no new migration; friend-match/search stays legacy-only pending live presence; DELETE /me stays legacy-only pending Firebase identity deletion and socket invalidation; no D1 socket emitter replaces private-call directMessageNew; MongoDB remains authoritative.
+
+## 2026-11-26 - D1 AI wingman routes
+
+- Mounted all ten /api/ai/wingman routes in backend-server/apps/api/src/migration/d1AiWingman.ts (mounted in d1App.ts at /api/ai). /api/ai is now 10/0.
+- Extracted schemas, defaults and response builders into backend-server/apps/api/src/services/aiWingman.ts; legacy routes/aiWingman.ts and the D1 router now share that service. Auth remains router scoped and precedes validation; no limiter was added. No external AI provider call or D1 write.
+- Verification:
+npm.cmd run typecheck pass;
+npm.cmd run audit:d1-endpoints -- --missing 638/596/590/48 with /api/ai 10/0;
+npm.cmd run test:auth-worker --workspace apps/cloudflare-worker pass (1/1) with unauthenticated 401-before-validation, 422 boundaries and response shapes for all ten patterns plus clean-bundle assertions;
+npm.cmd run secrets:check:strict pass; scoped git diff --check LF/CRLF warnings only.
+- Boundaries: random values remain per-request as in legacy; fixture asserts deterministic fields and ranges. No new migration or D1 writes. Legacy emits sync:invalidate after successful AI POSTs; D1 has no socket emitter for it. MongoDB remains authoritative.
+
+## 2026-11-26 - D1 trust verification state routes
+
+- Mounted nine /api/trust-verification state routes in backend-server/apps/api/src/migration/d1TrustVerification.ts (mounted in d1App.ts at /api/trust-verification). /api/trust-verification is now 9/1; GET /media/:fileName stays legacy-only because it needs legacy R2 authorization and provider fallback.
+- Extracted schemas, consent version, voice prompts and public DTOs into backend-server/apps/api/src/services/trustVerificationShared.ts; the legacy service/router and D1 router now share them. Auth precedes validation, no limiter was added, lazy creation uses a conditional insert, and verification plus submission writes commit in guarded batches. No new migration or external provider call.
+- Verification:
+npm.cmd run typecheck pass;
+npm.cmd run audit:d1-endpoints -- --missing 638/605/599/39 with /api/trust-verification 9/1;
+npm.cmd run test:auth-worker --workspace apps/cloudflare-worker pass (1/1) with unauthenticated 401-before-validation, 422 boundaries, empty-face 400, all nine response shapes, consent/face/voice guard order, review/retry transitions, submission DTOs and persisted rows plus clean-bundle assertions;
+npm.cmd run secrets:check:strict pass; scoped git diff --check LF/CRLF warnings only.
+- Boundaries: the D1 user index is non-unique, so imported duplicate rows need reconciliation; D1 has no sync:invalidate emitter for successful POSTs. MongoDB remains authoritative.

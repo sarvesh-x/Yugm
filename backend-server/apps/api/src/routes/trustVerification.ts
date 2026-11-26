@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { z } from "zod";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
 import { asyncHandler, ErrorCode, HttpError, sendOk } from "../utils/http.js";
@@ -15,6 +14,7 @@ import {
   submitVoiceVerification,
   TRUST_CONSENT_VERSION
 } from "../services/trustVerification.js";
+import { consentSchema, faceSchema, voiceSchema } from "../services/trustVerificationShared.js";
 import { assertTrustMediaFileName, loadTrustVerificationFile } from "../services/storage.js";
 
 export const trustVerificationRouter = Router();
@@ -33,28 +33,6 @@ trustVerificationRouter.get("/media/:fileName", asyncHandler(async (req: AuthReq
   if ("filePath" in media && media.filePath) return res.sendFile(media.filePath);
   res.type(media.contentType ?? "application/octet-stream").send(media.body);
 }));
-
-const consentSchema = z.object({
-  consentVersion: z.string().min(3).max(80).optional()
-});
-
-const faceSchema = z.object({
-  selfieImageUrl: z.string().url().optional(),
-  selfieVideoUrl: z.string().url().optional(),
-  livenessVideoUrl: z.string().url().optional(),
-  provider: z.string().max(80).optional(),
-  providerReferenceId: z.string().max(160).optional(),
-  providerResponse: z.unknown().optional()
-});
-
-const voiceSchema = z.object({
-  audioUrl: z.string().url(),
-  transcriptText: z.string().max(2000).optional(),
-  promptText: z.string().min(8).max(500),
-  provider: z.string().max(80).optional(),
-  providerReferenceId: z.string().max(160).optional(),
-  providerResponse: z.unknown().optional()
-});
 
 trustVerificationRouter.get("/me", asyncHandler(async (req: AuthRequest, res) => {
   const verification = await getOrCreateTrustVerification(req.user!.id);
