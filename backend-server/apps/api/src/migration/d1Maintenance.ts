@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { rollVipCycle, vipCycleNotice, VIP_CYCLE_DAYS } from "../services/vip.js";
 import { closeExpiredD1Polls } from "./d1RoomPolls.js";
 import type { D1LiveKitConfig } from "./d1LiveKit.js";
+import type { D1MediaBuckets } from "./d1AccountDeletion.js";
 
 const dayMs = 86_400_000;
 const uploadGraceMs = 15 * 60_000;
@@ -101,7 +102,7 @@ async function endStaleRooms(db: D1Database, now: Date, livekit: D1LiveKitConfig
   return ended;
 }
 
-export async function runD1Maintenance(db: D1Database, now: Date, staging?: R2Bucket, livekit: D1LiveKitConfig = {}) {
+export async function runD1Maintenance(db: D1Database, now: Date, staging?: R2Bucket, livekit: D1LiveKitConfig = {}, buckets?: D1MediaBuckets) {
   // Load after the Worker runtime has set YUGM_RUNTIME=cloudflare; d1Bonds imports env.ts.
   const { runD1BondMaintenance } = await import("./d1Bonds.js");
   const { purgeExpiredD1Accounts } = await import("./d1AccountDeletion.js");
@@ -131,7 +132,7 @@ export async function runD1Maintenance(db: D1Database, now: Date, staging?: R2Bu
     rollExpiredVipCycles(db, now),
     staging ? sweepMediaUploads(db, staging, now) : Promise.resolve({ expired: 0, stagingCleaned: 0 }),
     endStaleRooms(db, now, livekit),
-    purgeExpiredD1Accounts(db, now)
+    purgeExpiredD1Accounts(db, now, undefined, buckets)
   ]);
 
   console.info("D1 scheduled maintenance", {

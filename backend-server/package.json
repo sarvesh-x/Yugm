@@ -17,7 +17,7 @@
     "build:api": "npm --workspace apps/api run build",
     "test": "npm --workspaces --if-present run test",
     "test:d1-worker": "node --test apps/cloudflare-worker/test/auth-worker.mjs apps/cloudflare-worker/test/production-worker.mjs apps/cloudflare-worker/test/user-domain-integrity.mjs",
-    "test:domain": "tsx --test apps/cloudflare-worker/test/vip-lifecycle.mts apps/cloudflare-worker/test/cosmetic-reward-cleanup.mts",
+    "test:domain": "tsx --test apps/cloudflare-worker/test/vip-lifecycle.mts apps/cloudflare-worker/test/cosmetic-reward-cleanup.mts apps/cloudflare-worker/test/relationship-level-notice.mts",
     "typecheck": "npm --workspaces --if-present run typecheck",
     "load:test": "node scripts/load-test-api.mjs",
     "secrets:check": "node scripts/check-tracked-secrets.mjs",

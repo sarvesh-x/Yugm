@@ -578,12 +578,18 @@ fun ProfileDetailScreen(
 
                 if (profile.isVip) {
                     item {
+                        val vipTier = profile.vip.vipLevel.takeIf { it > 0 } ?: profile.vipLevel
+                        val vipDetail = if (isOwnProfile && profile.vip.daysRemaining > 0) {
+                            "VIP$vipTier member · ${profile.vip.daysRemaining} days left in this cycle."
+                        } else {
+                            "This user has active profile boost and cosmetics priority."
+                        }
                         GlassCard(Modifier.fillMaxWidth()) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text("👑", fontSize = 18.sp)
                                 Column {
                                     Text("Premium VIP Member", color = Gold, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                    Text("This user has active profile boost and cosmetics priority.", color = TextMuted, fontSize = 12.sp)
+                                    Text(vipDetail, color = TextMuted, fontSize = 12.sp)
                                 }
                             }
                         }

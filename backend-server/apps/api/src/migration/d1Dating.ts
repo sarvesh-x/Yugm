@@ -7,7 +7,7 @@ import { validateBody } from "../middleware/validate.js";
 import { startOfUtcDay } from "../services/dailyWalletReward.js";
 import { calculateCompatibility } from "../services/datingCompatibility.js";
 import { datingPreferenceSchema } from "../services/datingPreferences.js";
-import { calculateRelationshipLevel, getRelationshipStatus, relationshipPairKey, relationshipStreak } from "../services/relationshipPresentation.js";
+import { calculateRelationshipLevel, getRelationshipStatus, relationshipLevelNotice, relationshipPairKey, relationshipStreak } from "../services/relationshipPresentation.js";
 import { getVipStatus } from "../services/vip.js";
 import { asyncHandler, ErrorCode, HttpError, isValidObjectId, sendOk } from "../utils/http.js";
 import { bindD1LiveUser, createD1AccessSessionReader, d1LiveUserFilter } from "./d1AccessSession.js";
@@ -386,10 +386,11 @@ export function createD1DatingRouter(db: D1Database, presence: D1PresencePort = 
         }
       }
       if (status.level > priorLevel) {
+        const notice = relationshipLevelNotice(status.level, status.title);
         for (const userId of [actorId, likedId]) {
           statements.push(db.prepare(`INSERT INTO notifications (source_id, user_id, type, title, body, data, read, created_at, updated_at)
             SELECT ?, ?, 'SYSTEM', ?, ?, ?, 0, ?, ? WHERE ${relationGuard} AND ${newMatch} AND ${claimed}`)
-            .bind(newId(), userId, "Relationship level up!", `Your bond reached Level ${status.level}: ${status.title}.`,
+            .bind(newId(), userId, notice.title, notice.body,
               JSON.stringify({ type: "RELATIONSHIP_LEVEL_UP", partnerIds: [actorId, likedId], level: status.level }),
               time, time, pair, versionAfter, pair, actorId, likedId, ...claimValues));
         }

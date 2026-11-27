@@ -27,55 +27,60 @@ fun JSONArray.toRooms(): List<Room> = buildList {
     }
 }
 
-fun JSONObject.toHost(): Host = Host(
-    id = optString("_id", optString("id", "")),
-    name = optString("name", ""),
-    username = optString("username", ""),
-    city = optString("city", ""),
-    state = optString("state", ""),
-    vibe = optString("bio", optString("vibeLine", "")),
-    vibeLine = optString("vibeLine", ""),
-    followers = optInt("followersCount", 0),
-    followingCount = optInt("followingCount", 0),
-    friendsCount = optInt("friendsCount", 0),
-    bondsCount = optInt("bondsCount", 0),
-    walletBalance = optInt("walletBalance", 0),
-    diamondBalance = optInt("diamondBalance", 0),
-    bio = optString("bio", ""),
-    avatar = if (has("avatar") && !isNull("avatar")) resolveMediaUrl(optString("avatar", "")) else null,
-    avatarType = optString("avatarType", "").takeIf { it.isNotBlank() },
-    avatarParts = optJSONObject("avatarParts")?.let { parts ->
-        com.yugm.app.core.model.AvatarPartsPayload(
-            background = parts.optInt("background", 0),
-            clothes = parts.optInt("clothes", 0),
-            head = parts.optInt("head", 0),
-            mouth = parts.optInt("mouth", 0),
-            eyes = parts.optInt("eyes", 0),
-            top = parts.optInt("top", 0)
-        )
-    },
-    isVip = optBoolean("isVip", false),
-    vipTier = optString("vipTier", ""),
-    vipLevel = optInt("vipLevel", 0),
-    level = optJSONObject("levelStatus")?.optInt("level", optInt("level", 1)) ?: optInt("level", 1),
-    levelTitle = optJSONObject("levelStatus")?.optString("title", optString("levelTitle", "New Vibe")) ?: optString("levelTitle", "New Vibe"),
-    xp = optJSONObject("levelStatus")?.optInt("xp", optInt("xp", 0)) ?: optInt("xp", 0),
-    levelStatus = optJSONObject("levelStatus")?.toLevelStatus() ?: LevelStatus(level = optInt("level", 1), title = optString("levelTitle", "New Vibe"), xp = optInt("xp", 0)),
-    activeCosmetics = optJSONObject("activeCosmetics")?.toActiveCosmetics() ?: ActiveCosmetics(),
-    isFollowing = optBoolean("isFollowing", false),
-    age = optInt("age", 0),
-    gender = optString("gender", ""),
-    vibeScore = optInt("vibeScore", 0),
-    interestedIn = optString("interestedIn", ""),
-    lookingFor = optString("lookingFor", ""),
-    languages = optJSONArray("languages")?.let { arr -> List(arr.length()) { arr.optString(it) } } ?: emptyList(),
-    interests = optJSONArray("interests")?.let { arr -> List(arr.length()) { arr.optString(it) } } ?: emptyList(),
-    hobbies = optJSONArray("hobbies")?.let { arr -> List(arr.length()) { arr.optString(it) } } ?: emptyList(),
-    isOnline = optBoolean("isOnline", false),
-    isVerified = optBoolean("isVerified", false),
-    verificationLevel = optString("verificationLevel", "NONE"),
-    voiceRoomPresence = (optJSONObject("voiceRoomPresence") ?: optJSONObject("voicePresence"))?.toVoiceRoomPresence()
-)
+fun JSONObject.toHost(): Host {
+    // Profile and discover responses send VIP fields flat; accept a nested object too.
+    val vip = optJSONObject("vip")?.toVipStatus() ?: toVipStatus()
+    return Host(
+        id = optString("_id", optString("id", "")),
+        name = optString("name", ""),
+        username = optString("username", ""),
+        city = optString("city", ""),
+        state = optString("state", ""),
+        vibe = optString("bio", optString("vibeLine", "")),
+        vibeLine = optString("vibeLine", ""),
+        followers = optInt("followersCount", 0),
+        followingCount = optInt("followingCount", 0),
+        friendsCount = optInt("friendsCount", 0),
+        bondsCount = optInt("bondsCount", 0),
+        walletBalance = optInt("walletBalance", 0),
+        diamondBalance = optInt("diamondBalance", 0),
+        bio = optString("bio", ""),
+        avatar = if (has("avatar") && !isNull("avatar")) resolveMediaUrl(optString("avatar", "")) else null,
+        avatarType = optString("avatarType", "").takeIf { it.isNotBlank() },
+        avatarParts = optJSONObject("avatarParts")?.let { parts ->
+            com.yugm.app.core.model.AvatarPartsPayload(
+                background = parts.optInt("background", 0),
+                clothes = parts.optInt("clothes", 0),
+                head = parts.optInt("head", 0),
+                mouth = parts.optInt("mouth", 0),
+                eyes = parts.optInt("eyes", 0),
+                top = parts.optInt("top", 0)
+            )
+        },
+        isVip = vip.isVip || optBoolean("isVip", false),
+        vipTier = vip.vipTier.ifBlank { optString("vipTier", "") },
+        vipLevel = if (vip.vipLevel > 0) vip.vipLevel else optInt("vipLevel", 0),
+        vip = vip,
+        level = optJSONObject("levelStatus")?.optInt("level", optInt("level", 1)) ?: optInt("level", 1),
+        levelTitle = optJSONObject("levelStatus")?.optString("title", optString("levelTitle", "New Vibe")) ?: optString("levelTitle", "New Vibe"),
+        xp = optJSONObject("levelStatus")?.optInt("xp", optInt("xp", 0)) ?: optInt("xp", 0),
+        levelStatus = optJSONObject("levelStatus")?.toLevelStatus() ?: LevelStatus(level = optInt("level", 1), title = optString("levelTitle", "New Vibe"), xp = optInt("xp", 0)),
+        activeCosmetics = optJSONObject("activeCosmetics")?.toActiveCosmetics() ?: ActiveCosmetics(),
+        isFollowing = optBoolean("isFollowing", false),
+        age = optInt("age", 0),
+        gender = optString("gender", ""),
+        vibeScore = optInt("vibeScore", 0),
+        interestedIn = optString("interestedIn", ""),
+        lookingFor = optString("lookingFor", ""),
+        languages = optJSONArray("languages")?.let { arr -> List(arr.length()) { arr.optString(it) } } ?: emptyList(),
+        interests = optJSONArray("interests")?.let { arr -> List(arr.length()) { arr.optString(it) } } ?: emptyList(),
+        hobbies = optJSONArray("hobbies")?.let { arr -> List(arr.length()) { arr.optString(it) } } ?: emptyList(),
+        isOnline = optBoolean("isOnline", false),
+        isVerified = optBoolean("isVerified", false),
+        verificationLevel = optString("verificationLevel", "NONE"),
+        voiceRoomPresence = (optJSONObject("voiceRoomPresence") ?: optJSONObject("voicePresence"))?.toVoiceRoomPresence()
+    )
+}
 
 fun JSONObject.toVoiceRoomPresence(): VoiceRoomPresence = VoiceRoomPresence(
     isLive = optBoolean("isLive", false),

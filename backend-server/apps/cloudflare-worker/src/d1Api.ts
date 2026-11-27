@@ -219,7 +219,13 @@ export function createD1ApiWorker(stage: ApiStage) {
           apiSecret: env.LIVEKIT_API_SECRET,
           url: env.LIVEKIT_URL,
           production: stage === "production"
-        });
+        }, mediaEnabled(env, stage) ? {
+          assets: env.ASSETS,
+          "public-media": env.PUBLIC_MEDIA,
+          "private-media": env.PRIVATE_MEDIA,
+          originals: env.ORIGINALS,
+          staging: env.STAGING
+        } : undefined);
       }
       if (controller.cron === "* * * * *" && env.YUGM_FCM_PUSH_ENABLED === "true" && env.FCM_PROJECT_ID &&
         env.FCM_CLIENT_EMAIL && env.FCM_PRIVATE_KEY) {

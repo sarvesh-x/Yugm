@@ -1525,3 +1525,28 @@ Removed MongoDB from the repository. Local and production both use the Cloudflar
 - `core/api` unit tests now put the real `org.json` implementation on the test classpath (test-only). Android's local unit-test stubs threw for `JSONObject` methods; with this change `:core:api:testDebugUnitTest` runs **41/41 with 0 failures** (previously 12 failures).
 - Verification: `:core:api:testDebugUnitTest` 41/41, targeted parser test 3/3, `:feature:auth` and `:feature:profile` Kotlin compile pass. No backend change in this slice.
 - Handoff: [2026-11-26-android-user-model-alignment.md](handoffs/2026-11-26-android-user-model-alignment.md).
+
+## 2026-11-26 — Account deletion R2/media cleanup
+
+- `purgeD1Account` now collects the deleted user's `media_objects`, `media_variants`, `media_upload_sessions` and `media_quota_reservations` before cascade deletion, removes those D1 rows, and deletes the underlying R2 objects from the appropriate buckets after commit.
+- `user_auth_profile` is now deleted on purge instead of nulling its primary key.
+- `runD1Maintenance` accepts and forwards the R2 bucket map; the Worker scheduled path passes all five buckets when media is enabled.
+- Verification: backend typecheck all workspaces pass; `test:d1-worker` 3/3.
+- Handoff: [2026-11-26-account-deletion-media-cleanup.md](handoffs/2026-11-26-account-deletion-media-cleanup.md).
+
+## 2026-11-26 — Relationship level-up copy
+
+- Relationship XP level-ups now use one shared `relationshipLevelNotice(level, title)` helper: "Your relationship reached Level N: Title." Both the dating match path and the message/gift/room-DM award path use it. Bond level-ups keep "Your bond reached a new level", so the two systems no longer sound identical.
+- Added `relationship-level-notice.mts` to `test:domain` (asserts both partner notifications from the award helper) and extended the D1 dating fixture to assert the stored Level 2 and Level 3 bodies.
+- The first fixture run failed a blanket `/bond/i` assertion because a real relationship tier is named "Warm Bond"; the test now checks the disambiguated "Your relationship reached" prefix instead.
+- Also verified the previously tracked D1 uniqueness gaps are already covered by `0039`/`0040` (gift inventory, KYC user, active withdrawal lock, trust verification) and asserted in the Worker migration fixture; the stale "still lacks" lines in `CURRENT_TASK.md` were corrected.
+- Verification: backend typecheck all workspaces pass; `test:domain` 4/4; `test:d1-worker` 3/3. No migration change, no hosted operation, deploy or commit.
+- Handoff: [2026-11-26-relationship-level-copy.md](handoffs/2026-11-26-relationship-level-copy.md).
+
+## 2026-11-26 — Host VIP status alignment
+
+- `Host` now carries the full `VipStatus` sent by `serializePublicProfile` (including `daysRemaining` and `vipExpiresAt`), not only `isVip`/`vipTier`/`vipLevel`. `toHost()` accepts a nested `vip` object and otherwise parses the flat profile fields, matching `toUser()`.
+- The own-profile VIP card now shows "VIPN member · X days left in this cycle." using the existing profile payload; other profiles keep the generic VIP description.
+- Extended `ProfileParserAlignmentTest` to assert `daysRemaining` and `vipExp` on the profile contract.
+- Verification: targeted parser test 3/3; full `:core:api:testDebugUnitTest` 41/41; `:feature:profile:compileDebugKotlin` pass. No backend change, hosted operation, deploy or commit.
+- Handoff: [2026-11-26-host-vip-alignment.md](handoffs/2026-11-26-host-vip-alignment.md).

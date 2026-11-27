@@ -30,6 +30,8 @@ data class Host(
     val isVip: Boolean = false,
     val vipTier: String = "",
     val vipLevel: Int = 0,
+    /** Full VIP status from profile/discover payloads (flat fields). */
+    val vip: VipStatus = VipStatus(),
     val level: Int = 1,
     val levelTitle: String = "New Vibe",
     val xp: Int = 0,

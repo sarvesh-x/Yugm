@@ -67,6 +67,8 @@ class ProfileParserAlignmentTest {
             {
               "_id": "user-3", "name": "Kabir", "username": "kabir",
               "isVip": true, "vipTier": "VIP4", "vipLevel": 4,
+              "vipExp": 3200, "vipExpRequired": 4000, "daysRemaining": 61,
+              "vipExpiresAt": "2027-01-26T00:00:00.000Z",
               "followersCount": 42, "followingCount": 13, "friendsCount": 5, "bondsCount": 2,
               "levelStatus": {"level": 9, "title": "Vibe Icon", "xp": 4200},
               "interests": ["Music"], "languages": ["Hindi"]
@@ -78,6 +80,8 @@ class ProfileParserAlignmentTest {
 
         assertEquals(4, host.vipLevel)
         assertEquals("VIP4", host.vipTier)
+        assertEquals(61, host.vip.daysRemaining)
+        assertEquals(3200, host.vip.vipExp)
         assertEquals(42, host.followers)
         assertEquals(2, host.bondsCount)
         assertEquals(9, host.levelStatus.level)

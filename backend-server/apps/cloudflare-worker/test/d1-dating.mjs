@@ -138,6 +138,10 @@ export async function verifyD1Dating(db, request, owner, visitor) {
       .bind(userId, "It's a Yugm!").first("count"), 1);
     assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND title = 'Relationship level up!'")
       .bind(userId).first("count"), 1);
+    const levelNotice = await db.prepare("SELECT body FROM notifications WHERE user_id = ? AND title = 'Relationship level up!'")
+      .bind(userId).first();
+    assert.match(levelNotice.body, /^Your relationship reached Level 2: .+\.$/);
+    assert.doesNotMatch(levelNotice.body, /^Your bond reached/);
   }
 
   const ownerMatches = await request("/api/dating/matches", 200, { accessToken: owner.accessToken });
@@ -182,6 +186,10 @@ export async function verifyD1Dating(db, request, owner, visitor) {
       .bind(userId).first("count"), 1);
     assert.equal(await db.prepare("SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND title = 'Duo streak!'")
       .bind(userId).first("count"), 1);
+    const levelNotice = await db.prepare("SELECT body FROM notifications WHERE user_id = ? AND title = 'Relationship level up!'")
+      .bind(userId).first();
+    assert.match(levelNotice.body, /^Your relationship reached Level 3: .+\.$/);
+    assert.doesNotMatch(levelNotice.body, /^Your bond reached/);
   }
   await clean();
 

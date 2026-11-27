@@ -39,6 +39,14 @@ export function calculateRelationshipLevel(xp = 0) {
   return current;
 }
 
+/** Copy for a relationship XP level-up; distinct from a Bond's own level. */
+export function relationshipLevelNotice(level: number, title: string) {
+  return {
+    title: "Relationship level up!",
+    body: `Your relationship reached Level ${level}: ${title}.`
+  };
+}
+
 export function getRelationshipStatus(relationship?: RelationshipLike | null) {
   const xp = Math.max(0, Number(relationship?.xp ?? 0));
   const current = calculateRelationshipLevel(xp);

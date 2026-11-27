@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { getRelationshipStatus, relationshipStreak } from "../services/relationshipPresentation.js";
+import { getRelationshipStatus, relationshipLevelNotice, relationshipStreak } from "../services/relationshipPresentation.js";
 import { ErrorCode, HttpError } from "../utils/http.js";
 import type { D1GuardedStatement } from "./d1XpGrant.js";
 
@@ -43,7 +43,7 @@ export function prepareRelationship(
 
   const notices = [];
   if (status.level > (prior?.level ?? 1)) notices.push({
-    title: "Relationship level up!", body: `Your bond reached Level ${status.level}: ${status.title}.`,
+    ...relationshipLevelNotice(status.level, status.title),
     data: { type: "RELATIONSHIP_LEVEL_UP", partnerIds: actors, level: status.level }
   });
   if (status.streakDays > 1 && status.streakDays % 7 === 0 && status.streakDays !== prior?.streakDays) notices.push({
