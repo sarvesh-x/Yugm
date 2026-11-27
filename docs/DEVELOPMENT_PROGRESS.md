@@ -14,7 +14,7 @@
 
 ## 2026-11-26 — Production D1 and R2 deployment
 
-- Applied hosted `yugm` migrations `0003`–`0041`, confirmed the reference catalogs and no pending migrations, and deployed the production Worker with all five existing R2 buckets. Removed the legacy Render blueprint and stopped Android release from falling back to the staging Worker. Public traffic requires the production hostname and Worker credentials. [Deployment and verification](handoffs/2026-11-26-production-d1-r2.md)
+- Applied hosted `yugm` migrations `0003`–`0042`, confirmed the reference catalogs and no pending migrations, and deployed the production Worker with all five existing R2 buckets. Removed the legacy Render blueprint and stopped Android release from falling back to the staging Worker. Public traffic requires the production hostname and Worker credentials. [Deployment and verification](handoffs/2026-11-26-production-d1-r2.md)
 
 ## 2026-11-26 — Local D1 startup
 
