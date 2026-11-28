@@ -173,6 +173,23 @@ async function purgeD1Account(db: D1Database, userId: string, cutoff: string, ti
   }
   for (const row of uploadSessions) collectR2("staging", row.staging_key);
 
+  // Remove the purged user's bond memberships, pending requests, and reward grants so
+  // no orphaned bond rows remain after the anonymized stub is retained.
+  const { results: bondUserRows } = await db.prepare(
+    "SELECT source_id FROM bond_users WHERE value = ?").bind(userId).all<{ source_id: string }>();
+  if (bondUserRows.length) addRoots(roots, "bond_users", bondUserRows.map(row => row.source_id));
+
+  const { results: bondRequestRows } = await db.prepare(
+    "SELECT source_id FROM bond_requests WHERE sender_id = ? OR recipient_id = ?").bind(userId, userId)
+    .all<{ source_id: string }>();
+  if (bondRequestRows.length) addRoots(roots, "bond_requests", bondRequestRows.map(row => row.source_id));
+
+  const { results: bondRewardRows } = await db.prepare(
+    "SELECT source_id FROM bond_rewards WHERE user_id = ?").bind(userId).all<{ source_id: string }>();
+  if (bondRewardRows.length) addRoots(roots, "bond_rewards", bondRewardRows.map(row => row.source_id));
+
+  await db.prepare("UPDATE bond_points SET actor_id = NULL WHERE actor_id = ?").bind(userId).run();
+
   const rooms = await db.prepare("SELECT source_id, status FROM rooms WHERE host_id = ?").bind(userId)
     .all<{ source_id: string; status: string }>();
   for (const room of rooms.results) {
